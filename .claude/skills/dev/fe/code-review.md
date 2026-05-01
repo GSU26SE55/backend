@@ -22,7 +22,9 @@
 - [ ] Không có `console.log` còn sót lại?
 
 ### UI / UX
-- [ ] Dùng đúng shadcn/ui components (Web), không tự custom lại những gì đã có?
+- [ ] UI primitive dùng từ `shared/components/ui` (shadcn generated components)?
+- [ ] Không tự custom Button/Input/Form/Dialog/Table/Badge/Skeleton nếu shadcn đã có?
+- [ ] Primitive mới được thêm bằng `npx shadcn@latest add <component>`?
 - [ ] Responsive trên mobile viewport (Web)?
 - [ ] Expo Router navigation đúng pattern (Mobile)?
 
@@ -53,7 +55,6 @@
 
 Sau khi có kết quả, lưu vào:
 ```
-logs/KAN-XX-ten-feature/review.md
+logs/KAN-XX/review.md
 ```
-Copy từ `logs/_template/review.md`, điền kết quả thực tế.
 Nếu folder chưa tồn tại → tạo mới.
