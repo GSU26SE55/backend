@@ -1,0 +1,15 @@
+dependencies:
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 65.5.0
+- name: loki-stack
+  repository: https://grafana.github.io/helm-charts
+  version: 2.10.2
+- name: prometheus-postgres-exporter
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 6.6.0
+- name: prometheus-redis-exporter
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 6.7.0
+digest: sha256:93c1e7e9a1513ac8acb7ad4121732bd5554ba7ade8142d8d6a8409ad86802622
+generated: "2026-04-30T04:18:18.930747+07:00"

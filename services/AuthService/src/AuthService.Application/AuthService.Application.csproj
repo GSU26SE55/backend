@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
+      <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
+      <ProjectReference Include="..\AuthService.Domain\AuthService.Domain.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MediatR" Version="12.2.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Http.Features" Version="5.0.17" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Consumers\" />
+      <Folder Include="CQRS\Command\Account\" />
+      <Folder Include="CQRS\Command\Role\" />
+      <Folder Include="CQRS\Handler\Account\" />
+      <Folder Include="CQRS\Handler\Role\" />
+      <Folder Include="CQRS\Query\Account\" />
+      <Folder Include="CQRS\Query\Auth\" />
+      <Folder Include="CQRS\Query\Role\" />
+      <Folder Include="DTOs\Response\Account\" />
+      <Folder Include="DTOs\Response\RefreshToken\" />
+      <Folder Include="DTOs\Response\Role\" />
+    </ItemGroup>
+
+</Project>

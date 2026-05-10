@@ -1,0 +1,31 @@
+# Auto-provision Prometheus datasource cho Grafana.
+# File này sẽ được Grafana đọc khi container start (volume mount /etc/grafana/provisioning/datasources/).
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus               # PIN UID — dashboards hardcode "prometheus", phải match.
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+
+  - name: Loki
+    uid: loki                     # PIN UID — dashboard reference "loki" (lowercase nhất quán).
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      # Derive field CorrelationId từ JSON log → click vào value sẽ jump sang query khác lấy log cùng correlation ID.
+      derivedFields:
+        - datasourceUid: loki
+          matcherRegex: "\"CorrelationId\":\"([^\"]+)\""
+          name: CorrelationId
+          url: "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bcontainer%3D~%5C%22solar-.*%5C%22%7D%20%7C%3D%20%5C%22$${__value.raw}%5C%22%22%7D%5D%7D"

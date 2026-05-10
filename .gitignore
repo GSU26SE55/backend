@@ -1,7 +1,35 @@
+# ---------- Environment files ----------
+# Local: .env (đang dùng cho dotnet run)
 .env
+# Docker: .env.Docker (gitignored vì có secret thật)
+.env.Docker
+.env.Production
+.env.Staging
 .env.local
-.claude/CLAUDE.local.md
-.claude/settings.local.json
+# COMMIT: .env.Docker.example (template, không có secret)
+
+# ---------- .NET build outputs ----------
+bin/
+obj/
+*.user
+*.suo
+
+# ---------- Test coverage ----------
+[Tt]est[Rr]esult*/
+*.coverage
+coverage/
+
+# ---------- IDE ----------
+.vs/
+.vscode/
+.idea/
+*.swp
 .DS_Store
-Thumbs.db
-logs/*.log
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Helm subchart cache (auto-download bằng `helm dependency update`) ----------
+deploy/helm/*/charts/
+

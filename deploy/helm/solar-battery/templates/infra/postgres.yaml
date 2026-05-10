@@ -1,0 +1,76 @@
+{{- if .Values.postgres.enabled -}}
+---
+# StatefulSet thay Deployment vì cần persistent volume + stable network identity.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres") | nindent 4 }}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: {{ .Values.postgres.image }}
+        # Tăng max_connections từ default 100 lên 300 — hỗ trợ:
+        # 5 service × 2 replica × pool 25 = 250 + buffer monitoring + backup.
+        args:
+        - "-c"
+        - "max_connections={{ .Values.postgres.maxConnections | default 300 }}"
+        - "-c"
+        - "shared_buffers=128MB"
+        ports:
+        - { name: pg, containerPort: 5432 }
+        env:
+        - name: POSTGRES_DB
+          value: {{ .Values.postgres.database | quote }}
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.username | quote }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+        - name: PGDATA                            # data subdir để PVC empty không lỗi
+          value: /var/lib/postgresql/data/pgdata
+        readinessProbe:
+          exec: { command: [pg_isready, -U, {{ .Values.postgres.username }}] }
+          periodSeconds: 5
+        livenessProbe:
+          exec: { command: [pg_isready, -U, {{ .Values.postgres.username }}] }
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.postgres.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.postgres.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres") | nindent 4 }}
+spec:
+  # Headless service — pod tên cố định postgres-0.postgres.namespace.svc
+  clusterIP: None
+  selector:
+    app.kubernetes.io/component: postgres
+  ports:
+  - { name: pg, port: 5432, targetPort: pg }
+{{- end }}

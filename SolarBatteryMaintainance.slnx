@@ -1,0 +1,74 @@
+<Solution>
+  <Folder Name="/ApiGateway/">
+    <Project Path="services/ApiGateway/src/ApiGateway/ApiGateway.csproj" />
+  </Folder>
+  <Folder Name="/Services/" />
+  <Folder Name="/Services/AIService/" />
+  <Folder Name="/Services/AuthService/">
+    <Project Path="services/AuthService/src/AuthService.Api/AuthService.Api.csproj" />
+    <Project Path="services/AuthService/src/AuthService.Application/AuthService.Application.csproj" />
+    <Project Path="services/AuthService/src/AuthService.Domain/AuthService.Domain.csproj" />
+    <Project Path="services/AuthService/src/AuthService.Infrastructure/AuthService.Infrastructure.csproj" />
+    <Project Path="services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj" />
+    <Project Path="services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/Services/EmailService/">
+    <Project Path="services/EmailService/src/EmailService.Api/EmailService.Api.csproj" />
+    <Project Path="services/EmailService/src/EmailService.Infrastructure/EmailService.Infrastructure.csproj" />
+    <Project Path="services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj" />
+    <Project Path="services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/Services/SmsService/">
+    <Project Path="services/SmsService/src/SmsService.Api/SmsService.Api.csproj" />
+    <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/FileStorageService/">
+    <Project Path="services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj" />
+    <Project Path="services/FileStorageService/src/FileStorageService.Application/FileStorageService.Application.csproj" />
+    <Project Path="services/FileStorageService/src/FileStorageService.Infrastructure/FileStorageService.Infrastructure.csproj" />
+    <Project Path="services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />
+    <Project Path="shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+    <Project Path="shared/src/SharedKernels/SharedKernels.csproj" />
+    <Project Path="shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/SolutionItems/" />
+  <Folder Name="/SolutionItems/Docker/">
+    <File Path="docker-compose.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/" />
+  <Folder Name="/SolutionItems/Monitoring/AlertManager/">
+    <File Path="monitoring\alertmanager\config.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Grafana/" />
+  <Folder Name="/SolutionItems/Monitoring/Grafana/Dashboards/">
+    <File Path="monitoring\grafana\dashboards\infrastructure.json" />
+    <File Path="monitoring\grafana\dashboards\logs-overview.json" />
+    <File Path="monitoring\grafana\dashboards\messaging-reliability.json" />
+    <File Path="monitoring\grafana\dashboards\services-overview.json" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Grafana/Provisioning/" />
+  <Folder Name="/SolutionItems/Monitoring/Grafana/Provisioning/Dashboards/">
+    <File Path="monitoring\grafana\provisioning\dashboards\dashboards.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Grafana/Provisioning/DataSources/">
+    <File Path="monitoring\grafana\provisioning\datasources\prometheus.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Loki/">
+    <File Path="monitoring\loki\loki-config.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Prometheus/">
+    <File Path="monitoring\prometheus\alert-rules.yml" />
+    <File Path="monitoring\prometheus\prometheus.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Promtail/">
+    <File Path="monitoring\promtail\promtail-config.yml" />
+  </Folder>
+  <Folder Name="/SolutionItems/Monitoring/Testing/">
+    <File Path="monitoring\README.md" />
+    <File Path="monitoring\test-monitoring.sh" />
+    <File Path="monitoring\test-scenarios.sh" />
+  </Folder>
+</Solution>

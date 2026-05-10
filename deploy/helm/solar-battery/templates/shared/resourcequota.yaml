@@ -1,0 +1,17 @@
+{{/*
+  ResourceQuota — cap tổng resource trong namespace.
+  Tránh trường hợp 1 service spawn nhiều replica vô tội vạ → ăn hết VPS RAM/CPU.
+*/}}
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: solar-quota
+spec:
+  hard:
+    requests.cpu: {{ .Values.resourceQuota.requestsCpu | quote }}
+    requests.memory: {{ .Values.resourceQuota.requestsMemory | quote }}
+    limits.cpu: {{ .Values.resourceQuota.limitsCpu | quote }}
+    limits.memory: {{ .Values.resourceQuota.limitsMemory | quote }}
+    persistentvolumeclaims: {{ .Values.resourceQuota.pvcs | quote }}
+{{- end }}

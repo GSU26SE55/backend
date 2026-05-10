@@ -1,0 +1,144 @@
+# =====================================================================
+# Prometheus Alert Rules — Solar Battery Maintenance
+# =====================================================================
+# 10 alert rules quan trọng. Severity: critical (page oncall) | warning (slack).
+# Mỗi rule có `for: <duration>` để tránh flapping (alert chỉ fire khi điều kiện
+# kéo dài qua khoảng thời gian đó).
+# =====================================================================
+
+groups:
+  # =====================================================================
+  # Service availability & error rates
+  # =====================================================================
+  - name: service-health
+    interval: 30s
+    rules:
+      # 1. Service down — Prometheus không scrape được /metrics qua 1 phút.
+      - alert: ServiceDown
+        expr: up{tier=~"backend|gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service }} is down"
+          description: "Prometheus failed to scrape {{ $labels.service }} for over 1 minute."
+
+      # 2. High HTTP 5xx error rate — > 5% requests trả 5xx trong 5 phút.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_received_total{code=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_received_total[5m])) by (service)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx rate on {{ $labels.service }} ({{ $value | humanizePercentage }})"
+          description: "More than 5% of requests are 5xx errors over the last 5 minutes."
+
+      # 3. High HTTP latency — p95 > 1s trong 5 phút.
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency on {{ $labels.service }} > 1s (currently {{ $value }}s)"
+          description: "Request latency degraded — investigate downstream calls."
+
+  # =====================================================================
+  # Messaging & Reliability patterns (Outbox / Inbox / Idempotency-Key)
+  # =====================================================================
+  - name: messaging-reliability
+    interval: 30s
+    rules:
+      # 4. Outbox backlog — > 100 messages chưa publish kéo dài 5 phút (RabbitMQ down hoặc relay job stuck).
+      - alert: OutboxBacklog
+        expr: outbox_messages_pending_count > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox backlog > 100 messages"
+          description: "{{ $value }} messages pending publish — RabbitMQ down or relay job stuck."
+
+      # 5. Outbox publish failure spike — > 1 fail/sec (RabbitMQ likely down).
+      - alert: OutboxPublishFailures
+        expr: rate(outbox_messages_failures_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Outbox publish failing at {{ $value }} msg/sec"
+          description: "Reasons: {{ $labels.reason }}. Likely RabbitMQ outage — check broker status."
+
+      # 6. Poison messages (RetryCount >= MaxRetries) — bất kỳ message nào bị skip → ngó ngay.
+      - alert: OutboxPoisonMessages
+        expr: increase(outbox_messages_skipped_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox skipped {{ $value }} poison messages"
+          description: "Messages reached MaxRetries — manual intervention required."
+
+      # 7. High Inbox duplicate rate — > 50% messages bị skip (consumer retry quá nhiều, có thể bug ack).
+      - alert: HighInboxDuplicateRate
+        expr: |
+          (
+            sum(rate(inbox_messages_skipped_duplicate_total[5m])) by (consumer)
+            /
+            (sum(rate(inbox_messages_processed_total[5m])) by (consumer)
+             + sum(rate(inbox_messages_skipped_duplicate_total[5m])) by (consumer))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer {{ $labels.consumer }} duplicate rate > 50%"
+          description: "Consumer is retrying too often — check ack logic or downstream errors."
+
+      # 8. Idempotency-Key conflicts spike — client retry parallel quá nhiều (UX issue).
+      - alert: IdempotencyConflictSpike
+        expr: rate(idempotency_key_conflicts_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Idempotency conflicts at {{ $value }}/sec"
+          description: "Client may be sending parallel duplicate requests with same key."
+
+  # =====================================================================
+  # Infrastructure
+  # =====================================================================
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # 9. Container memory usage > 90% limit — sắp OOM.
+      - alert: ContainerMemoryHigh
+        expr: |
+          (container_memory_working_set_bytes{name!=""}
+           / container_spec_memory_limit_bytes{name!=""}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} memory > 90%"
+          description: "Container approaching OOM — consider raising limits or investigating leak."
+
+      # 10. Postgres connections high — > 80% of max_connections.
+      - alert: PostgresConnectionsHigh
+        expr: |
+          (sum(pg_stat_activity_count) by (instance)
+           / sum(pg_settings_max_connections) by (instance)) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres connections at {{ $value | humanizePercentage }} of limit"
+          description: "Connection pool exhaustion risk — check for connection leaks."

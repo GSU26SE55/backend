@@ -1,0 +1,76 @@
+{{- if .Values.rabbitmq.enabled -}}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "rabbitmq") | nindent 4 }}
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: rabbitmq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: rabbitmq
+    spec:
+      containers:
+      - name: rabbitmq
+        image: {{ .Values.rabbitmq.image }}
+        ports:
+        - { name: amqp,    containerPort: 5672 }
+        - { name: mgmt,    containerPort: 15672 }
+        - { name: metrics, containerPort: 15692 }
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: {{ .Values.rabbitmq.username | quote }}
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: RabbitMQ__Password }
+        - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+          value: "-rabbitmq_prometheus return_per_object_metrics true"
+        # Enable plugin Prometheus + Management lúc start
+        command:
+        - bash
+        - -c
+        - |
+          rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management
+          rabbitmq-server
+        readinessProbe:
+          exec: { command: [rabbitmq-diagnostics, ping] }
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          exec: { command: [rabbitmq-diagnostics, ping] }
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.rabbitmq.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.rabbitmq.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/component: rabbitmq
+  ports:
+  - { name: amqp,    port: 5672,  targetPort: amqp }
+  - { name: mgmt,    port: 15672, targetPort: mgmt }
+  - { name: metrics, port: 15692, targetPort: metrics }
+{{- end }}
