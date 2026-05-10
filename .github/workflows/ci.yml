@@ -1,25 +1,213 @@
-name: CI — Backend
+name: CI — Build & Test
 
 on:
+  # Chỉ chạy CI khi push thẳng vào dev/main (sau merge PR).
+  push:
+    branches: [main, dev]
+    paths-ignore:
+      - '**.md'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  # PR tới dev/main — full lane (+ integration test).
+  # Feature branches (feat/*, fix/*, ...) KHÔNG trigger CI khi push.
+  # CI chỉ chạy khi tạo PR vào dev hoặc main.
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+# Cancel run cũ khi push commit mới lên cùng branch — tiết kiệm minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build & Test (.NET 8)
+  # ============================================================
+  # Detect changed paths để skip job không cần thiết.
+  # ============================================================
+  detect-changes:
+    name: Detect changes
     runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      apigateway: ${{ steps.filter.outputs.apigateway }}
+      authservice: ${{ steps.filter.outputs.authservice }}
+      emailservice: ${{ steps.filter.outputs.emailservice }}
+      smsservice: ${{ steps.filter.outputs.smsservice }}
+      filestorageservice: ${{ steps.filter.outputs.filestorageservice }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          dotnet-version: '8.0.x'
+          filters: |
+            shared:
+              - 'shared/**'
+              - '*.slnx'
+              - 'Directory.Packages.props'
+            apigateway:
+              - 'services/ApiGateway/**'
+            authservice:
+              - 'services/AuthService/**'
+            emailservice:
+              - 'services/EmailService/**'
+            smsservice:
+              - 'services/SmsService/**'
+            filestorageservice:
+              - 'services/FileStorageService/**'
+
+  # ============================================================
+  # Build — chỉ build service bị touch (hoặc tất cả nếu shared/ đổi).
+  # ============================================================
+  build:
+    name: Build ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.shared == 'true' ||
+      needs.detect-changes.outputs.apigateway == 'true' ||
+      needs.detect-changes.outputs.authservice == 'true' ||
+      needs.detect-changes.outputs.emailservice == 'true' ||
+      needs.detect-changes.outputs.smsservice == 'true' ||
+      needs.detect-changes.outputs.filestorageservice == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: ApiGateway,         path: services/ApiGateway/src/ApiGateway/ApiGateway.csproj,                          changed: needs.detect-changes.outputs.apigateway }
+          - { name: AuthService,        path: services/AuthService/src/AuthService.Api/AuthService.Api.csproj,               changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService,       path: services/EmailService/src/EmailService.Api/EmailService.Api.csproj,             changed: needs.detect-changes.outputs.emailservice }
+          - { name: SmsService,         path: services/SmsService/src/SmsService.Api/SmsService.Api.csproj,                   changed: needs.detect-changes.outputs.smsservice }
+          - { name: FileStorageService, path: services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj, changed: needs.detect-changes.outputs.filestorageservice }
+    steps:
+      - name: Skip if not affected
+        if: matrix.service.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
+        run: |
+          echo "Service ${{ matrix.service.name }} không bị touch. Skip."
+          exit 0
+
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore ${{ matrix.service.path }}
 
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
+      - name: Build (Release)
+        run: dotnet build ${{ matrix.service.path }} --no-restore -c Release
+
+  # ============================================================
+  # Unit tests — fast lane, chạy mọi push. Skip job nếu không touch service tương ứng.
+  # ============================================================
+  unit-tests:
+    name: Unit Tests — ${{ matrix.test.name }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - { name: SharedInfrastructure, path: shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj, changed: needs.detect-changes.outputs.shared }
+          - { name: AuthService,          path: services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj,    changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService,         path: services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj, changed: needs.detect-changes.outputs.emailservice }
+          - { name: SmsService,           path: services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj,        changed: needs.detect-changes.outputs.smsservice }
+    steps:
+      - name: Skip if not affected
+        if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
+        run: exit 0
+
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ${{ matrix.test.path }}
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal
+        run: |
+          dotnet test ${{ matrix.test.path }} \
+            --no-restore -c Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./TestResults
+
+      - name: Upload test results (only on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.test.name }}
+          path: ./TestResults
+          retention-days: 3
+
+  # ============================================================
+  # Integration tests — slow lane, CHỈ chạy khi PR open (không chạy mỗi push branch).
+  # Testcontainers tự spin up Postgres/Redis/RabbitMQ trong code (không cần services: block).
+  # ============================================================
+  integration-tests:
+    name: Integration Tests — ${{ matrix.test.name }}
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build]
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - { name: AuthService,  path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,  changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService, path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: needs.detect-changes.outputs.emailservice }
+    steps:
+      - name: Skip if not affected
+        if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
+        run: exit 0
+
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
+
+      - name: Restore
+        run: dotnet restore ${{ matrix.test.path }}
+
+      - name: Run integration tests (Testcontainers)
+        run: |
+          dotnet test ${{ matrix.test.path }} \
+            --no-restore -c Release \
+            --logger "trx;LogFileName=integration-results.trx" \
+            --results-directory ./TestResults
+
+      - name: Upload integration results (only on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results-${{ matrix.test.name }}
+          path: ./TestResults
+          retention-days: 3
