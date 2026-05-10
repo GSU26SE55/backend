@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="src/EmailService.Api/EmailService.Api.csproj" />
+  <Project Path="src/EmailService.Infrastructure/EmailService.Infrastructure.csproj" />
+</Solution>

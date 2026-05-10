@@ -1,0 +1,79 @@
+# Pod template cho Jenkins build agent — spawn ephemeral khi job chạy.
+# Mỗi container = 1 tool dùng cho 1 stage. JNLP container = control plane Jenkins.
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins-agent
+  containers:
+
+  # JNLP — Jenkins agent core. Bắt buộc để controller communicate.
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+
+  # .NET SDK — stage Lint, Build, Unit Tests
+  - name: dotnet
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    command: [sleep]
+    args: [infinity]
+    tty: true
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits:   { cpu: 2,    memory: 4Gi }
+
+  # Kaniko — build Docker image trong container KHÔNG cần privileged.
+  # An toàn hơn docker-in-docker.
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    command: [sleep]
+    args: [infinity]
+    tty: true
+    volumeMounts:
+    - name: docker-config
+      mountPath: /kaniko/.docker
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 2,    memory: 2Gi }
+
+  # Trivy — security scan image sau build
+  - name: trivy
+    image: aquasec/trivy:latest
+    command: [sleep]
+    args: [infinity]
+    tty: true
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+
+  # kubectl + helm — stage Deploy
+  - name: kubectl
+    image: alpine/k8s:1.29.0
+    command: [sleep]
+    args: [infinity]
+    tty: true
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+
+  # curl — stage Smoke Test
+  - name: curl
+    image: curlimages/curl:latest
+    command: [sleep]
+    args: [infinity]
+    tty: true
+    resources:
+      requests: { cpu: 50m,  memory: 64Mi }
+      limits:   { cpu: 200m, memory: 128Mi }
+
+  volumes:
+  # ghcr.io credentials cho kaniko push image.
+  # Tạo trước: kubectl create secret docker-registry ghcr-credentials \
+  #   --docker-server=ghcr.io --docker-username=USER --docker-password=PAT \
+  #   -n jenkins
+  - name: docker-config
+    secret:
+      secretName: ghcr-credentials
+      items:
+      - { key: .dockerconfigjson, path: config.json }

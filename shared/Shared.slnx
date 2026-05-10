@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="src/SharedKernels/SharedKernels.csproj" />
+</Solution>

@@ -1,0 +1,88 @@
+# =====================================================================
+# Jenkins Helm chart values
+# Cài: helm repo add jenkins https://charts.jenkins.io
+#      helm install jenkins jenkins/jenkins -n jenkins --create-namespace -f values.yaml
+# =====================================================================
+
+controller:
+  # Image + tag stable LTS
+  image: "jenkins/jenkins"
+  tag: "lts-jdk17"
+
+  # Resource cho controller (master)
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2,    memory: 4Gi }
+
+  # Admin user khởi tạo
+  adminUser: "admin"
+  # Để Jenkins generate password ngẫu nhiên lúc install:
+  # admin password lưu ở Secret jenkins/jenkins, key jenkins-admin-password
+  adminPassword: ""
+
+  # Persistent storage cho /var/jenkins_home — config, plugin, build history
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  # Plugin pre-install lúc startup
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest        # Pipeline + multibranch
+    - git:latest
+    - github:latest
+    - github-branch-source:latest        # Multibranch GitHub integration
+    - configuration-as-code:latest        # JCasC
+    - credentials-binding:latest
+    - blueocean:latest                    # UI đẹp hơn
+    - timestamper:latest
+    - ws-cleanup:latest
+    - docker-workflow:latest
+
+  # Service expose ra ngoài qua Ingress
+  serviceType: ClusterIP
+
+  # Ingress để truy cập UI qua jenkins.example.com
+  ingress:
+    enabled: true
+    apiVersion: "networking.k8s.io/v1"
+    hostName: jenkins.example.com         # ← ĐỔI sang domain thực
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-staging
+    tls:
+    - hosts: [jenkins.example.com]
+      secretName: jenkins-tls
+
+  # JCasC — config Jenkins bằng YAML thay vì click UI
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "Solar Battery — CI/CD Jenkins. Chỉ deploy branch staging."
+      kubernetes-cloud: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default"
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+
+# Build agent template (default fallback nếu pipeline không khai báo)
+agent:
+  enabled: true
+  defaultsProviderTemplate: ""
+
+# Cluster service account để Jenkins/agent có quyền thao tác
+serviceAccount:
+  create: true
+  name: jenkins
+serviceAccountAgent:
+  create: true
+  name: jenkins-agent
+
+rbac:
+  create: true
+  readSecrets: true                       # Đọc Secret để mount vào agent pod

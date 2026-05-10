@@ -1,0 +1,24 @@
+# Namespaces phân vùng cluster.
+# Apply 1 lần: kubectl apply -f deploy/k8s/00-namespaces.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: solar-staging
+  labels:
+    env: staging
+    managed-by: helm
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins
+  labels:
+    purpose: ci-cd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    purpose: tls-automation

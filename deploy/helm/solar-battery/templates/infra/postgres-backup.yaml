@@ -1,0 +1,68 @@
+{{- if .Values.postgres.enabled -}}
+---
+# CronJob backup Postgres mỗi 6h, ship lên Minio bucket "postgres-backups".
+# Retention 7 ngày — script tự xoá file cũ hơn.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres-backup") | nindent 4 }}
+spec:
+  schedule: "0 */6 * * *"                # mỗi 6 giờ
+  concurrencyPolicy: Forbid              # không chạy song song nếu lần trước chưa xong
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            # postgres:16-alpine có pg_dump sẵn, gzip có sẵn; cài thêm mc qua wget.
+            image: postgres:16-alpine
+            env:
+            - name: PGHOST
+              value: postgres
+            - name: PGUSER
+              value: {{ .Values.postgres.username | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+            - name: MC_HOST_minio
+              value: http://$(MC_USER):$(MC_PASS)@minio:9000
+            - name: MC_USER
+              valueFrom:
+                secretKeyRef: { name: solar-secrets, key: ObjectStorage__AccessKey }
+            - name: MC_PASS
+              valueFrom:
+                secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
+            command:
+            - sh
+            - -c
+            - |
+              set -e
+              # Cài mc — script ngắn, ~20MB binary
+              wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/local/bin/mc
+              chmod +x /usr/local/bin/mc
+
+              ts=$(date +%Y%m%d-%H%M%S)
+              file="auth_db_${ts}.sql.gz"
+
+              # Dump + gzip → /tmp
+              pg_dump -h "$PGHOST" -U "$PGUSER" "$PGDATABASE" | gzip > "/tmp/${file}"
+              echo "[dump] /tmp/${file} ($(du -h /tmp/${file} | cut -f1))"
+
+              # Ship lên Minio bucket postgres-backups
+              mc mb -p minio/postgres-backups 2>/dev/null || true
+              mc cp "/tmp/${file}" "minio/postgres-backups/${file}"
+
+              # Retention 7 ngày — CHỈ trong path postgres-backups, không ảnh hưởng bucket khác
+              mc rm --recursive --force --older-than 7d minio/postgres-backups/ || true
+
+              echo "[ok] backup ${file} shipped"
+{{- end }}

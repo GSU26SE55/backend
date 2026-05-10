@@ -1,0 +1,412 @@
+# =====================================================================
+# Solar Battery Maintenance — Docker Compose stack
+# =====================================================================
+# Khởi động:
+#   1. Copy template env và fill secret:
+#        cp .env.Docker.example .env.Docker
+#   2. docker compose up -d --build
+#
+# Truy cập:
+#   - ApiGateway:        http://localhost:4001
+#   - RabbitMQ UI:       http://localhost:15673  (guest/guest)
+#   - Minio Console:     http://localhost:9091   (minioadmin/minioadmin)
+#   - Postgres:          localhost:5433          (psql)
+#
+# Note: HTTP-only cho dev. Production đặt nginx/Caddy/Traefik phía trước
+# để terminate TLS với cert real.
+# =====================================================================
+
+networks:
+  solar-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  loki-data:
+
+services:
+  # ---------- Infrastructure ----------
+  postgres:
+    image: postgres:16-alpine
+    container_name: solar-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-auth_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Password12345@}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [solar-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: solar-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [solar-net]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: solar-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      # Enable Prometheus plugin (port 15692) + management plugin để Prometheus scrape /metrics.
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_prometheus return_per_object_metrics true"
+    ports:
+      - "5673:5672"      # AMQP
+      - "15673:15672"    # Management UI
+      - "15692:15692"    # Prometheus metrics
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    # Enable plugins on startup (rabbitmq_prometheus + rabbitmq_management).
+    command: >
+      bash -c "rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management &&
+               rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [solar-net]
+
+  minio:
+    image: minio/minio:latest
+    container_name: solar-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # MINIO_SERVER_URL = URL public mà browser truy cập → presigned URL Host header validate đúng.
+      MINIO_SERVER_URL: http://localhost:9090
+      # Cho Prometheus scrape /minio/v2/metrics/cluster không cần auth (dev only).
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    ports:
+      - "9090:9000"      # S3 API
+      - "9091:9001"      # Web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [solar-net]
+
+  # Init container — tạo bucket + set anonymous read policy 1 lần sau khi minio healthy.
+  # Sau đó URL http://localhost:9090/solar-battery-files/<objectKey> truy cập trực tiếp được trên browser.
+  minio-init:
+    image: minio/mc:latest
+    container_name: solar-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/solar-battery-files 2>/dev/null || true &&
+      mc anonymous set download local/solar-battery-files &&
+      echo 'Bucket public read policy applied' &&
+      exit 0
+      "
+    networks: [solar-net]
+    restart: "no"
+
+  # ---------- Application Services ----------
+  authservice:
+    container_name: solar-authservice
+    build:
+      context: .
+      dockerfile: services/AuthService/src/AuthService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      # Build connection string từ cùng biến với postgres → đảm bảo password match.
+      # Override ConnectionStrings__AuthDb từ .env.Docker (env block có priority cao hơn env_file).
+      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+    ports:
+      - "4002:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  emailservice:
+    container_name: solar-emailservice
+    build:
+      context: .
+      dockerfile: services/EmailService/src/EmailService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4003:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  smsservice:
+    container_name: solar-smsservice
+    build:
+      context: .
+      dockerfile: services/SmsService/src/SmsService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4004:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  filestorageservice:
+    container_name: solar-filestorageservice
+    build:
+      context: .
+      dockerfile: services/FileStorageService/src/FileStorageService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      # HARDCODE — match minio container credentials. KHÔNG đọc từ .env.Docker để tránh mismatch.
+      ObjectStorage__ServiceUrl: http://minio:9000              # internal API calls (filestorage container → minio)
+      ObjectStorage__PublicServiceUrl: http://localhost:9090    # presigned URL signed cho browser
+      ObjectStorage__PublicBaseUrl: http://localhost:9090/solar-battery-files  # direct public URL trả về sau upload
+      ObjectStorage__AccessKey: minioadmin
+      ObjectStorage__SecretKey: minioadmin
+    ports:
+      - "4005:8080"
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # ---------- Gateway (HTTP only — production dùng reverse proxy ngoài cho HTTPS) ----------
+  apigateway:
+    container_name: solar-apigateway
+    build:
+      context: .
+      dockerfile: services/ApiGateway/src/ApiGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4001:8080"
+    depends_on:
+      - authservice
+      - emailservice
+      - smsservice
+      - filestorageservice
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # =====================================================================
+  # ---------- Monitoring Stack (Prometheus + Grafana + Exporters) ----------
+  # =====================================================================
+  # UIs:
+  #   - Prometheus:    http://localhost:9094
+  #   - Grafana:       http://localhost:3001  (admin/admin)
+  #   - Alertmanager:  http://localhost:9095
+  # =====================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: solar-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"      # Cho phép curl POST /-/reload reload config không cần restart.
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9094:9090"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: solar-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Single source of truth — dashboards JSON nằm chung với Helm chart cho K8s,
+      # docker-compose mount path này luôn để tránh duplicate.
+      - ./deploy/helm/solar-battery/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks: [solar-net]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: solar-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9095:9093"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # Relay convert Alertmanager webhook JSON → Discord native JSON.
+  # Discord /slack endpoint từ chối format attachments của Alertmanager.
+  # Service này nhỏ (~10MB) chỉ làm reformatter.
+  alertmanager-discord:
+    image: benjojo/alertmanager-discord:latest
+    container_name: solar-alertmanager-discord
+    # `env_file` inject trực tiếp DISCORD_WEBHOOK từ .env.Docker vào container env
+    # (relay đợi đúng tên DISCORD_WEBHOOK, không phải DISCORD_WEBHOOK_URL).
+    # Lưu ý: ${VAR} trong YAML chỉ resolve từ .env (root) hoặc shell, KHÔNG từ .env.Docker.
+    env_file:
+      - .env.Docker
+    networks: [solar-net]
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: solar-node-exporter
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9100:9100"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: solar-cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8081:8080"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: solar-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Password12345@}@postgres:5432/${POSTGRES_DB:-auth_db}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: solar-redis-exporter
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # =====================================================================
+  # ---------- Logging Stack (Loki + Promtail) ----------
+  # =====================================================================
+  # Truy cập:
+  #   - Loki:     http://localhost:3100/ready    (health check)
+  #   - Promtail: http://localhost:9080          (UI + targets)
+  # Grafana auto-load Loki làm datasource thứ 2 (xem provisioning/datasources/).
+  # =====================================================================
+
+  loki:
+    image: grafana/loki:latest
+    container_name: solar-loki
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./monitoring/loki:/etc/loki:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    # Loki image là distroless — không có shell/wget/curl → không thể CMD-SHELL.
+    # Bỏ healthcheck, dùng depends_on without condition (chỉ đợi container start).
+    networks: [solar-net]
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: solar-promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./monitoring/promtail:/etc/promtail:ro
+      # Đọc Docker daemon API để discover containers + đọc log streams.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Đọc log files (fallback nếu Docker daemon API không stream được).
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    ports:
+      - "9080:9080"          # /metrics + /targets UI cho debug
+    depends_on:
+      - loki
+    networks: [solar-net]
+    restart: unless-stopped

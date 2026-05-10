@@ -1,0 +1,26 @@
+{{/* ConfigMap chứa toàn bộ non-secret config — mọi service envFrom block này */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solar-config
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+data:
+  ASPNETCORE_ENVIRONMENT: {{ .Values.global.aspnetEnvironment | quote }}
+  ASPNETCORE_URLS: "http://+:8080"
+
+  # Connection string Postgres — Npgsql pool 25 (mỗi pod). Tổng = replicas × 25 < max_connections (300).
+  ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database={{ .Values.postgres.database }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size=25;Minimum Pool Size=2"
+
+  # Object Storage URLs build từ domain
+  ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"
+  ObjectStorage__PublicBaseUrl: "https://files.{{ .Values.global.domain }}/{{ .Values.minio.bucketName }}"
+
+  # Google OAuth callback — build theo domain
+  GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/auth-service/api/auth/google/callback"
+  GoogleOAuth__FrontendCallbackUrl: "https://{{ .Values.global.domain }}/auth/google-callback"
+
+  # Tất cả entry còn lại lấy từ .Values.config map
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
