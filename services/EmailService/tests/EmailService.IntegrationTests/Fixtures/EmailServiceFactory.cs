@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using SharedInfrastructure.Idempotency;
 
 namespace EmailService.IntegrationTests.Fixtures;
 
@@ -96,7 +97,11 @@ public class EmailServiceFactory : WebApplicationFactory<Program>
             services.RemoveAll<IEmailTemplateRenderer>();
             services.AddSingleton<IEmailTemplateRenderer>(Renderer);
 
-            // 3. Replace HttpClient của EmailSenderService → wired tới FakeHttpMessageHandler.
+            // 3. Replace Redis inbox → in-memory store so consumers do not need Redis in CI.
+            services.RemoveAll<IInboxStore>();
+            services.AddSingleton<IInboxStore, InMemoryInboxStore>();
+
+            // 4. Replace HttpClient của EmailSenderService → wired tới FakeHttpMessageHandler.
             // EmailSenderService được register qua AddHttpClient<>; thay primary handler.
             services.RemoveAll<EmailSenderService>();
             services.AddHttpClient<EmailSenderService>()
