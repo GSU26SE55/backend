@@ -1,0 +1,100 @@
+{{- if .Values.minio.enabled -}}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "minio") | nindent 4 }}
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: minio
+    spec:
+      containers:
+      - name: minio
+        image: {{ .Values.minio.image }}
+        args: [server, /data, --console-address, ":9001"]
+        ports:
+        - { name: s3,      containerPort: 9000 }
+        - { name: console, containerPort: 9001 }
+        env:
+        - name: MINIO_ROOT_USER
+          value: {{ .Values.minio.rootUser | quote }}
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
+        - name: MINIO_PROMETHEUS_AUTH_TYPE
+          value: public
+        - name: MINIO_SERVER_URL
+          value: "https://files.{{ .Values.global.domain }}"
+        readinessProbe:
+          httpGet: { path: /minio/health/live, port: s3 }
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /minio/health/live, port: s3 }
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.minio.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.minio.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: minio
+  ports:
+  - { name: s3,      port: 9000, targetPort: s3 }
+  - { name: console, port: 9001, targetPort: console }
+---
+# Init Job — tạo bucket + set anonymous read policy lần đầu (idempotent).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mc
+        image: minio/mc:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Đợi minio sẵn sàng
+          until mc alias set local http://minio:9000 {{ .Values.minio.rootUser }} "$MINIO_ROOT_PASSWORD"; do
+            echo "waiting minio..."; sleep 3
+          done
+          mc mb -p local/{{ .Values.minio.bucketName }} 2>/dev/null || true
+          mc anonymous set download local/{{ .Values.minio.bucketName }}
+          echo "Bucket {{ .Values.minio.bucketName }} ready"
+        env:
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
+{{- end }}

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="src/SmsService.Api/SmsService.Api.csproj" />
+  <Project Path="src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
+</Solution>

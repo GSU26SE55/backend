@@ -1,0 +1,23 @@
+{{/*
+  ConfigMap chứa 4 dashboard JSON (Services Overview, Messaging & Reliability,
+  Infrastructure, Logs Overview).
+
+  Grafana sidecar (built-in trong kube-prometheus-stack) auto-discover ConfigMap
+  có label `grafana_dashboard: "1"` rồi load vào Grafana.
+
+  File JSON nằm trong monitoring/grafana/dashboards/ — Helm dùng .Files.Glob load.
+*/}}
+{{- if .Values.monitoring.grafanaDashboards.enabled -}}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ $path | base | trimSuffix ".json" }}
+  labels:
+    grafana_dashboard: "1"            # ← Sidecar discover bằng label này
+data:
+  {{ $path | base }}: |-
+    {{ $.Files.Get $path | nindent 4 }}
+{{- end }}
+{{- end }}

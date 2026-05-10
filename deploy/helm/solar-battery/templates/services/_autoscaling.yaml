@@ -1,0 +1,44 @@
+{{/*
+  HPA + PDB cho mọi service có autoscaling.enabled=true.
+  Loop qua .Values.services map.
+*/}}
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.enabled $svc.autoscaling.enabled }}
+---
+# HPA — auto scale {{ $name }} theo CPU utilization.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $svc.autoscaling.minReplicas }}
+  maxReplicas: {{ $svc.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ $svc.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # Đợi 5 phút trước khi scale down (tránh flapping)
+    scaleUp:
+      stabilizationWindowSeconds: 60
+---
+# PDB — guarantee tối thiểu 1 pod luôn live khi maintenance/upgrade.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $name }}
+{{- end }}
+{{- end }}

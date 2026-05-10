@@ -1,0 +1,91 @@
+# =====================================================================
+# values-staging.yaml — override cho môi trường STAGING trên VPS
+# Dùng: helm upgrade solar . -f values.yaml -f values-staging.yaml -n solar-staging
+# =====================================================================
+
+global:
+  namespace: solar-staging
+  domain: staging.example.com         # ← BẠN ĐỔI tên domain thực tế
+  aspnetEnvironment: Staging
+  tlsIssuer: letsencrypt-staging      # đổi sang letsencrypt-prod khi tin tưởng cert đúng
+
+services:
+  apigateway:
+    replicas: 1
+    resources:
+      requests: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+
+  authservice:
+    replicas: 2                        # 2 replica để test rolling update
+    resources:
+      requests: { cpu: 200m, memory: 384Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  emailservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+
+  smsservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+
+  filestorageservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+
+postgres:
+  storage: 10Gi                       # staging cần data persist nhiều hơn dev
+
+rabbitmq:
+  storage: 5Gi
+
+minio:
+  storage: 20Gi
+
+# Bật full monitoring stack trong staging
+monitoring:
+  alertmanagerDiscord:
+    enabled: true                     # cần kubectl patch secret + DISCORD_WEBHOOK trước
+  prometheusRules:
+    enabled: true
+  grafanaDashboards:
+    enabled: true
+
+kube-prometheus-stack:
+  enabled: true
+  grafana:
+    adminPassword: "changeme-strong"  # ← ĐỔI password
+    ingress:
+      enabled: true
+      hosts:
+      - grafana.staging.example.com   # ← ĐỔI domain
+
+loki-stack:
+  enabled: true
+
+postgres-exporter:
+  enabled: true
+
+redis-exporter:
+  enabled: true
+
+# Quota staging — tổng cluster cap, an toàn không OOM cả VPS
+resourceQuota:
+  enabled: true
+  requestsCpu: "6"
+  requestsMemory: "12Gi"
+  limitsCpu: "10"
+  limitsMemory: "20Gi"
+  pvcs: "15"

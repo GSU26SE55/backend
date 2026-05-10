@@ -1,0 +1,56 @@
+# =====================================================================
+# Alertmanager — route alert tới destination phù hợp.
+# Local dev: log ra stdout (default webhook). Production: thay bằng Slack/PagerDuty/Email.
+# =====================================================================
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # Critical → có thể route tới PagerDuty/Slack #oncall
+    - matchers:
+        - severity = "critical"
+      receiver: critical
+      continue: true
+
+    # Warning → Slack #alerts
+    - matchers:
+        - severity = "warning"
+      receiver: warning
+
+# Discord webhook (Slack-compatible) — append "/slack" để dùng format Slack.
+# WARNING: webhook URL = secret. KHÔNG commit file này lên public repo.
+# Production: move URL sang env var + dùng init container với envsubst.
+# Tất cả receiver gửi tới relay alertmanager-discord (port 9094 internal).
+# Relay tự convert payload Alertmanager → Discord embeds với màu sắc đúng theo status.
+# Body của message là raw payload của Alertmanager (relay parse, không cần template ở đây).
+receivers:
+  - name: default
+    webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+
+  - name: critical
+    webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+
+  - name: warning
+    webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+
+inhibit_rules:
+  # Nếu service down, không alert thêm các vấn đề downstream khác cùng service.
+  - source_matchers:
+      - alertname = "ServiceDown"
+    target_matchers:
+      - alertname =~ "HighErrorRate|HighLatencyP95"
+    equal: ["service"]

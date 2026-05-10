@@ -1,0 +1,296 @@
+# =====================================================================
+# values.yaml — Default config (dev profile, dùng làm baseline)
+# Override bằng values-staging.yaml hoặc values-prod.yaml.
+# =====================================================================
+
+# --------------------------------------------------------------------
+# Global config — apply cho tất cả service
+# --------------------------------------------------------------------
+global:
+  # Image registry. Jenkins push image với tag = git SHA về đây.
+  imageRegistry: ghcr.io/your-org
+
+  # Tag mặc định. Jenkins override `--set global.imageTag=abc1234` lúc deploy.
+  imageTag: latest
+
+  # Always khi tag là floating (latest, main, staging, dev) — đảm bảo pull image mới nhất.
+  # IfNotPresent khi tag là git SHA / semver pinned → tận dụng cache.
+  # Jenkins luôn deploy với SHA → IfNotPresent là đủ. Nhưng manual deploy với :latest
+  # cần Always để không bị stuck cache. Trade-off: chọn Always cho an toàn.
+  imagePullPolicy: Always
+
+  # Namespace mặc định. Jenkins set `-n solar-staging` lúc helm upgrade.
+  namespace: solar-dev
+
+  # Domain public dùng cho Ingress của ApiGateway.
+  # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
+  domain: dev.example.com
+
+  # ASP.NET environment — Development / Staging / Production
+  aspnetEnvironment: Development
+
+  # cert-manager ClusterIssuer — staging dùng letsencrypt-staging (rate limit cao),
+  # production dùng letsencrypt-prod.
+  tlsIssuer: letsencrypt-staging
+
+  # ghcr.io credentials secret — phải tạo trước khi helm install:
+  #   kubectl create secret docker-registry ghcr-pull \
+  #     --namespace solar-staging \
+  #     --docker-server=ghcr.io --docker-username=USER --docker-password=PAT
+  imagePullSecret: ghcr-pull
+
+# --------------------------------------------------------------------
+# 5 service ASP.NET
+# --------------------------------------------------------------------
+services:
+  apigateway:
+    enabled: true
+    image: apigateway          # image tên `ghcr.io/.../apigateway:<tag>`
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+    # Chỉ apigateway expose ra public qua Ingress
+    ingress:
+      enabled: true
+      path: /
+    # Auto-scale theo CPU (chỉ kích hoạt khi replicas >= 2)
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  authservice:
+    enabled: true
+    image: authservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  emailservice:
+    enabled: true
+    image: emailservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 50m,  memory: 128Mi }
+      limits:   { cpu: 300m, memory: 256Mi }
+
+  smsservice:
+    enabled: true
+    image: smsservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 50m,  memory: 128Mi }
+      limits:   { cpu: 300m, memory: 256Mi }
+
+  filestorageservice:
+    enabled: true
+    image: filestorageservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+
+# --------------------------------------------------------------------
+# Infrastructure (chạy trong cluster — production tốt nhất dùng managed Postgres/Redis)
+# --------------------------------------------------------------------
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  database: auth_db
+  username: postgres
+  storage: 5Gi
+  # Tăng max_connections để hỗ trợ pool nhiều service × replica.
+  # Công thức: max_connections >= sum(replicas × poolSize) + buffer
+  maxConnections: 300
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+
+rabbitmq:
+  enabled: true
+  image: rabbitmq:3-management-alpine
+  username: guest
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+minio:
+  enabled: true
+  image: minio/minio:latest
+  rootUser: minioadmin
+  bucketName: solar-battery-files
+  storage: 10Gi
+  resources:
+    requests: { cpu: 50m,  memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+# --------------------------------------------------------------------
+# Non-secret config — chuyển vào ConfigMap (mọi service envFrom)
+# Tương đương các biến không nhạy cảm trong .env.Docker
+# --------------------------------------------------------------------
+config:
+  Logging__LogLevel__Default: Information
+  Logging__LogLevel__Microsoft.AspNetCore: Warning
+  Logging__Console__FormatterName: json
+  Logging__Console__FormatterOptions__SingleLine: "true"
+  Logging__Console__FormatterOptions__IncludeScopes: "true"
+  Logging__Console__FormatterOptions__TimestampFormat: "yyyy-MM-ddTHH:mm:ss.fffZ"
+  Logging__Console__FormatterOptions__UseUtcTimestamp: "true"
+
+  # Tên service trong Docker network = host. K8s tương tự — Service name resolve qua CoreDNS.
+  ConnectionStrings__Redis: "redis:6379"
+  RabbitMQ__Host: rabbitmq
+  RabbitMQ__Username: guest
+
+  MailJet__FromEmail: thangbpse180445@fpt.edu.vn
+  MailJet__DisplayName: Solar Panel Battery Maintainance
+  MailJet__SendEndpoint: https://api.mailjet.com/v3.1/send
+
+  EmailTemplates__Path: wwwroot/email-templates
+  EmailTemplates__CacheDisabled: "false"
+
+  ObjectStorage__Provider: Minio
+  ObjectStorage__ServiceUrl: http://minio:9000
+  ObjectStorage__BucketName: solar-battery-files
+  ObjectStorage__Region: us-east-1
+  ObjectStorage__ForcePathStyle: "true"
+  ObjectStorage__CreateBucketIfNotExists: "true"
+  ObjectStorage__MaxFileSizeBytes: "10485760"
+
+  Sms__Provider: Fake
+  Sms__From: SolarBattery
+
+  Outbox__BatchSize: "50"
+  Outbox__PollIntervalSeconds: "2"
+  Outbox__MaxRetries: "10"
+
+  Idempotency__Enabled: "true"
+  Idempotency__TtlHours: "24"
+
+  Inbox__TtlDays: "7"
+  Inbox__FailOpenWhenRedisDown: "false"
+
+  GoogleOAuth__Scope: openid email profile
+
+  ADMIN_EMAIL: admin@example.com
+
+# --------------------------------------------------------------------
+# Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).
+# Dùng `kubectl create secret` hoặc Sealed Secrets thay thế.
+# Xem deploy/README.md hướng dẫn cách inject secret.
+# --------------------------------------------------------------------
+secrets:
+  # Set externalSecretName nếu dùng Sealed Secrets / External Secrets Operator.
+  # externalSecretName: solar-secrets
+  externalSecretName: ""
+
+# --------------------------------------------------------------------
+# Monitoring — alertmanager-discord relay (convert AM webhook → Discord)
+# Subchart kube-prometheus-stack + loki-stack đề xuất cài SAU khi stack chạy ổn,
+# không bao gồm trong chart này để giữ chart nhẹ + linh hoạt.
+# --------------------------------------------------------------------
+monitoring:
+  alertmanagerDiscord:
+    enabled: false              # bật khi đã cài Alertmanager + có DISCORD_WEBHOOK trong Secret
+
+  prometheusRules:
+    enabled: false              # bật khi đã cài kube-prometheus-stack (CRD PrometheusRule)
+
+  grafanaDashboards:
+    enabled: false              # bật khi đã cài Grafana với sidecar dashboard discovery
+
+# --------------------------------------------------------------------
+# Subchart values — cover 8 monitoring service từ docker-compose
+# Default: TẮT vì chart core nhẹ. Bật trong values-staging.yaml nếu cần.
+# --------------------------------------------------------------------
+kube-prometheus-stack:
+  enabled: false
+  fullnameOverride: monitoring     # service name ngắn (monitoring-prometheus, monitoring-grafana...)
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits:   { cpu: 1,    memory: 2Gi }
+      # Auto-discover ServiceMonitor + PrometheusRule từ chart này
+      ruleSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+  grafana:
+    enabled: true
+    adminPassword: changeme        # ← override trong values-staging
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard   # match label trong grafana-dashboards-cm.yaml
+    ingress:
+      enabled: true
+      ingressClassName: traefik
+      hosts: []                    # ← set trong values-staging
+  alertmanager:
+    config:
+      route:
+        receiver: discord
+      receivers:
+      - name: discord
+        webhook_configs:
+        - url: http://alertmanager-discord:9094
+          send_resolved: true
+
+loki-stack:
+  enabled: false
+  loki:
+    persistence:
+      enabled: true
+      size: 10Gi
+  promtail:
+    enabled: true
+
+postgres-exporter:
+  enabled: false
+  config:
+    datasource:
+      host: postgres
+      user: postgres
+      passwordSecret:
+        name: solar-secrets
+        key: POSTGRES_PASSWORD
+      database: auth_db
+      sslmode: disable
+
+redis-exporter:
+  enabled: false
+  redisAddress: redis://redis:6379
+
+# --------------------------------------------------------------------
+# ResourceQuota — cap tổng resource trong namespace solar-staging.
+# Tính toán: 5 service × (limits 500m × 512Mi) + infra 2 vCPU × 4Gi + monitoring 2 vCPU × 4Gi
+# = ~6.5 vCPU × ~10Gi cho dev. Staging upgrade lên trong values-staging.yaml.
+# --------------------------------------------------------------------
+resourceQuota:
+  enabled: false              # bật trong values-staging
+  requestsCpu: "4"
+  requestsMemory: "8Gi"
+  limitsCpu: "8"
+  limitsMemory: "16Gi"
+  pvcs: "10"

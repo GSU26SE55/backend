@@ -1,0 +1,33 @@
+@AuthService.Api_HostAddress = https://localhost:7000
+
+### Login - happy path
+POST {{AuthService.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "Admin@123"
+}
+
+### Login - missing fields (validation error)
+POST {{AuthService.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "",
+  "password": ""
+}
+
+### Login - wrong password
+POST {{AuthService.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "WrongPassword!"
+}
+
+###

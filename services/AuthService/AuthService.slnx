@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="../../shared/src/SharedKernels/SharedKernels.csproj" />
+  <Project Path="src/AuthService.Api/AuthService.Api.csproj" />
+  <Project Path="src/AuthService.Application/AuthService.Application.csproj" />
+  <Project Path="src/AuthService.Domain/AuthService.Domain.csproj" />
+  <Project Path="src/AuthService.Infrastructure/AuthService.Infrastructure.csproj" />
+</Solution>

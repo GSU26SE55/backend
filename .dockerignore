@@ -1,0 +1,36 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# Test results
+**/TestResults/
+**/coverage/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Env / secrets — KHÔNG copy vào image
+.env
+.env.Development
+.env.Docker
+.env.Production
+.env.local
+
+# Node
+node_modules/
+package-lock.json
+
+# Misc
+*.log
+.DS_Store
+.git/
+.github/
+.alexagent/
+
+# Docs / planning (không cần trong image)
+*.md
+!README.md

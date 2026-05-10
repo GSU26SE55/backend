@@ -1,0 +1,86 @@
+# =====================================================================
+# Promtail — log collector cho Solar Battery Maintenance
+# =====================================================================
+# Đọc Docker container logs qua Docker socket → parse JSON → ship Loki.
+# Auto-discover container mới (refresh 5s) qua docker_sd_configs.
+# Skip Loki/Promtail/Grafana/Prometheus tự thân để tránh vòng lặp.
+# =====================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml         # nhớ vị trí đã đọc tới đâu (resume sau restart)
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+scrape_configs:
+  # =================================================================
+  # Docker Service Discovery — auto pick up tất cả container chạy.
+  # =================================================================
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    relabel_configs:
+      # 1. Container name → label `container` (vd "solar-authservice")
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+
+      # 2. Image name → label `image`
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: stream
+
+      # 3. Compose project label
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: compose_project
+
+      # 4. Compose service label (rút gọn không có prefix solar-)
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+
+      # 5. KEEP filter — chỉ scrape container app + infra cần xem log.
+      #    Skip monitoring stack tự thân (grafana, loki, promtail, prometheus, alertmanager,
+      #    cadvisor, *-exporter, minio-init) để tránh log lặp/noise.
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|apigateway|postgres|redis|rabbitmq|minio)"
+        action: keep
+
+    pipeline_stages:
+      # 1. Parse JSON log từ ASP.NET → expose field cho LogQL.
+      #    Schema từ JsonConsoleFormatter:
+      #    { Timestamp, EventId, LogLevel, Category, Message, Scopes: [...] }
+      - json:
+          expressions:
+            level: LogLevel
+            category: Category
+            timestamp: Timestamp
+            message: Message
+            event_id: EventId
+
+      # 2. Set timestamp từ chính log entry thay vì lúc Promtail đọc.
+      #    Sai lệch timestamp gây sort log lung tung khi multi-service.
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+            - "2006-01-02T15:04:05.999Z07:00"
+
+      # 3. Promote `level` thành label để filter siêu nhanh.
+      #    KHÔNG promote `category` thành label vì cardinality cao (>100 values) → cardinality bomb.
+      - labels:
+          level:
+
+      # 4. Output stage — `message` thành line chính (đỡ noise).
+      - output:
+          source: message

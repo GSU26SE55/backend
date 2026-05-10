@@ -1,0 +1,60 @@
+{{/*
+  EF Core migration Job — chạy 1 lần TRƯỚC khi authservice deployment apply.
+  Tránh race condition khi 2+ replica AuthService cùng migrate song song.
+
+  Image dùng cùng image authservice:tag — chỉ override entrypoint thành migration command.
+  ASP.NET trong project này chạy migrate trong Program.cs:48 — Helm pre-upgrade hook
+  sẽ apply migration trước khi pod chính start.
+
+  KHUYẾN NGHỊ tốt hơn (không bao gồm trong template này): tách migration ra subcommand riêng
+  (vd `dotnet AuthService.Api.dll --migrate-only`). Hiện tại job dùng image gốc + chạy migrate
+  qua dotnet ef CLI nếu có, hoặc set env flag MIGRATE_ONLY=true cho service.
+*/}}
+{{- if .Values.services.authservice.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: authservice-migration-{{ .Values.global.imageTag | trunc 12 | lower | replace "_" "-" }}
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-migration
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300            # auto-cleanup sau 5 phút
+  template:
+    spec:
+      restartPolicy: OnFailure
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecret }}
+      initContainers:
+      - name: wait-postgres
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          until nc -z postgres 5432; do
+            echo "waiting postgres..."; sleep 2
+          done
+      containers:
+      - name: migrate
+        image: {{ include "solar.image" (dict "Values" .Values "image" "authservice") }}
+        # Override CMD — chạy migration qua flag MIGRATE_ONLY (cần code support).
+        # Nếu code chưa support flag → AuthService startup sẽ tự migrate (như hiện tại).
+        # Job này chạy trước, nhưng AuthService Program.cs.Migrate() là idempotent — OK.
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: Migration
+        - name: MIGRATE_ONLY
+          value: "true"
+        envFrom:
+        - configMapRef: { name: solar-config }
+        - secretRef:    { name: solar-secrets }
+        resources:
+          requests: { cpu: 100m, memory: 256Mi }
+          limits:   { cpu: 500m, memory: 512Mi }
+{{- end }}
