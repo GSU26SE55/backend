@@ -44,7 +44,7 @@ Ngoài ra: `ESCALATED` (từ P1/P2 breach hoặc Staff request) · `CLOSED_REJEC
 ├── CLAUDE.md              ← file này — bộ não dự án
 ├── CLAUDE.local.md        ← ghi chú cá nhân, không push lên Git
 ├── settings.json          ← permissions + hooks (commit được)
-├── settings.local.json    ← MCP servers + settings private
+├── settings.local.json    ← permissions + hooks private (không commit)
 ├── memory.md              ← thông tin dự án chi tiết
 ├── hooks/                 ← safety gates + quality checks theo role
 │   ├── be/                         ← hooks cho BE role repo (.cs files)
