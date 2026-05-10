@@ -8,26 +8,67 @@ namespace EmailService.IntegrationTests.Fixtures;
 /// </summary>
 public class FakeHttpMessageHandler : HttpMessageHandler
 {
-    public List<CapturedRequest> Requests { get; } = new();
+    private readonly List<CapturedRequest> _requests = new();
+    private readonly object _gate = new();
+
+    public IReadOnlyList<CapturedRequest> Requests
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _requests.ToList();
+            }
+        }
+    }
+
     public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
     public string ResponseBody { get; set; } = "{\"Sent\":[]}";
 
-    public CapturedRequest? LastRequest => Requests.LastOrDefault();
-    public int CallCount => Requests.Count;
+    public CapturedRequest? LastRequest
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _requests.LastOrDefault();
+            }
+        }
+    }
 
-    public void Clear() => Requests.Clear();
+    public int CallCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _requests.Count;
+            }
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _requests.Clear();
+        }
+    }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-        Requests.Add(new CapturedRequest
+        lock (_gate)
         {
-            Method = request.Method,
-            Uri = request.RequestUri,
-            AuthorizationScheme = request.Headers.Authorization?.Scheme,
-            AuthorizationParameter = request.Headers.Authorization?.Parameter,
-            Body = body
-        });
+            _requests.Add(new CapturedRequest
+            {
+                Method = request.Method,
+                Uri = request.RequestUri,
+                AuthorizationScheme = request.Headers.Authorization?.Scheme,
+                AuthorizationParameter = request.Headers.Authorization?.Parameter,
+                Body = body
+            });
+        }
 
         return new HttpResponseMessage(ResponseStatus)
         {

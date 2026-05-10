@@ -1,15 +1,20 @@
+using System.Threading.RateLimiting;
+using AuthService.Api.Extensions;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Idempotency;
 using Testcontainers.PostgreSql;
 
 namespace AuthService.IntegrationTests.Fixtures;
@@ -61,7 +66,7 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // Inject test config — override mọi key environment có thể đã set sẵn từ .env.
             var testConfig = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:DefaultConnection"] = ConnectionString,
+                ["ConnectionStrings:AuthDb"] = ConnectionString,
                 ["ConnectionStrings:Redis"] = "localhost:9999", // dummy, sẽ remove Redis service ở dưới
                 // Match values với .env để token signing/validation consistent
                 // bất chấp ASP.NET Core configuration provider priority.
@@ -110,15 +115,29 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.RemoveAll<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
             services.AddDistributedMemoryCache();
 
-            // 3. Replace IMessageProducerService với capture stub.
+            // 3. Replace Redis idempotency store → InMemory store.
+            services.RemoveAll<IIdempotencyKeyStore>();
+            services.AddSingleton<IIdempotencyKeyStore, InMemoryIdempotencyKeyStore>();
+
+            // 4. Replace IMessageProducerService với capture stub.
             services.RemoveAll<IMessageProducerService>();
             services.AddSingleton<IMessageProducerService>(Producer);
 
-            // 4. Replace IGoogleOAuthHelper với stub.
+            // 5. Replace IGoogleOAuthHelper với stub.
             services.RemoveAll<IGoogleOAuthHelper>();
             services.AddSingleton<IGoogleOAuthHelper>(GoogleOAuth);
 
-            // 5. Đảm bảo DB Test đã migrate xong khi factory build.
+            // 6. Disable endpoint rate limits for integration tests.
+            services.RemoveAll<IConfigureOptions<RateLimiterOptions>>();
+            services.Configure<RateLimiterOptions>(options =>
+            {
+                options.AddPolicy(RateLimitingExtensions.PolicyAnonOtp, _ =>
+                    RateLimitPartition.GetNoLimiter("test-anon-otp"));
+                options.AddPolicy(RateLimitingExtensions.PolicyAuthOtp, _ =>
+                    RateLimitPartition.GetNoLimiter("test-auth-otp"));
+            });
+
+            // 7. Đảm bảo DB Test đã migrate xong khi factory build.
             using var scope = services.BuildServiceProvider().CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.Database.Migrate();
@@ -152,6 +171,42 @@ public class CapturingMessageProducer : IMessageProducerService
         return Task.CompletedTask;
     }
     public void Clear() => Published.Clear();
+}
+
+public class InMemoryIdempotencyKeyStore : IIdempotencyKeyStore
+{
+    private readonly Dictionary<string, CachedIdempotencyResponse?> _entries = new();
+    private readonly object _gate = new();
+
+    public Task<bool> TryReserveAsync(string key, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (_entries.ContainsKey(key))
+                return Task.FromResult(false);
+
+            _entries[key] = null;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task SaveResponseAsync(string key, int statusCode, string body, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            _entries[key] = new CachedIdempotencyResponse(statusCode, body);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<CachedIdempotencyResponse?> TryGetResponseAsync(string key, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult(_entries.GetValueOrDefault(key));
+        }
+    }
 }
 
 /// <summary>Stub IGoogleOAuthHelper — test set ValidateResult / ExchangeResult / AuthorizationUrl trước.</summary>

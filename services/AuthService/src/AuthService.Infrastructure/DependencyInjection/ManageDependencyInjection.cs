@@ -45,7 +45,7 @@ public static class ManageDependencyInjection
 
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException(
-                "Missing connection string. Expected ConnectionStrings__DefaultConnection, DEFAULT_CONNECTION, POSTGRES_CONNECTION_STRING, DATABASE_URL, or ConnectionStrings:DefaultConnection.");
+                "Missing connection string. Expected ConnectionStrings__AuthDb, AuthDb, Auth_Db, Auth_DB, AUTH_DB, or AUTH_Db.");
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
