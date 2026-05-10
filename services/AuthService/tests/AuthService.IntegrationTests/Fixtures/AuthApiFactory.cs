@@ -49,14 +49,12 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _pgContainer.StartAsync();
-        Environment.SetEnvironmentVariable("ConnectionStrings__AuthDb", ConnectionString);
-        Environment.SetEnvironmentVariable("AuthDb", ConnectionString);
+        SetTestEnvironmentVariables();
     }
 
     public new async Task DisposeAsync()
     {
-        Environment.SetEnvironmentVariable("ConnectionStrings__AuthDb", null);
-        Environment.SetEnvironmentVariable("AuthDb", null);
+        ClearTestEnvironmentVariables();
         await _pgContainer.DisposeAsync();
         await base.DisposeAsync();
     }
@@ -68,26 +66,7 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.ConfigureAppConfiguration((ctx, config) =>
         {
             // Inject test config — override mọi key environment có thể đã set sẵn từ .env.
-            var testConfig = new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AuthDb"] = ConnectionString,
-                ["ConnectionStrings:Redis"] = "localhost:9999", // dummy, sẽ remove Redis service ở dưới
-                // Match values với .env để token signing/validation consistent
-                // bất chấp ASP.NET Core configuration provider priority.
-                ["JwtSettings:SecretKey"] = "xynbqiydczvhbcomoewzcldjrqnwrwii",
-                ["JwtSettings:Issuer"] = "https://localhost",
-                ["JwtSettings:Audience"] = "https://localhost",
-                ["RabbitMQ:Host"] = "localhost",
-                ["RabbitMQ:Username"] = "guest",
-                ["RabbitMQ:Password"] = "guest",
-                ["GoogleOAuth:ClientId"] = "test-client-id.apps.googleusercontent.com",
-                ["GoogleOAuth:ClientSecret"] = "test-client-secret",
-                ["GoogleOAuth:RedirectUri"] = "https://test.local/api/auth/google/callback",
-                ["GoogleOAuth:Scope"] = "openid email profile",
-                ["AdminSeed:Email"] = "admin@test.local",
-                ["AdminSeed:Password"] = "Admin123@"
-            };
-            config.AddInMemoryCollection(testConfig);
+            config.AddInMemoryCollection(CreateTestConfiguration());
         });
 
         builder.ConfigureServices(services =>
@@ -162,6 +141,39 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.Database.ExecuteSqlRawAsync(
             "TRUNCATE TABLE refresh_tokens, account_roles, accounts, roles RESTART IDENTITY CASCADE;");
+    }
+
+    private Dictionary<string, string?> CreateTestConfiguration() => new()
+    {
+        ["ConnectionStrings:AuthDb"] = ConnectionString,
+        ["ConnectionStrings:Redis"] = "localhost:9999", // dummy, sẽ remove Redis service ở dưới
+        ["AuthDb"] = ConnectionString,
+        // Match values với .env để token signing/validation consistent
+        // bất chấp ASP.NET Core configuration provider priority.
+        ["JwtSettings:SecretKey"] = "xynbqiydczvhbcomoewzcldjrqnwrwii",
+        ["JwtSettings:Issuer"] = "https://localhost",
+        ["JwtSettings:Audience"] = "https://localhost",
+        ["RabbitMQ:Host"] = "localhost",
+        ["RabbitMQ:Username"] = "guest",
+        ["RabbitMQ:Password"] = "guest",
+        ["GoogleOAuth:ClientId"] = "test-client-id.apps.googleusercontent.com",
+        ["GoogleOAuth:ClientSecret"] = "test-client-secret",
+        ["GoogleOAuth:RedirectUri"] = "https://test.local/api/auth/google/callback",
+        ["GoogleOAuth:Scope"] = "openid email profile",
+        ["AdminSeed:Email"] = "admin@test.local",
+        ["AdminSeed:Password"] = "Admin123@"
+    };
+
+    private void SetTestEnvironmentVariables()
+    {
+        foreach (var (key, value) in CreateTestConfiguration())
+            Environment.SetEnvironmentVariable(key.Replace(":", "__"), value);
+    }
+
+    private void ClearTestEnvironmentVariables()
+    {
+        foreach (var key in CreateTestConfiguration().Keys)
+            Environment.SetEnvironmentVariable(key.Replace(":", "__"), null);
     }
 }
 
