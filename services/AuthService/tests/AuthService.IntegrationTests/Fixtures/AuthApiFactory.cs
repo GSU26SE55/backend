@@ -49,10 +49,14 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _pgContainer.StartAsync();
+        Environment.SetEnvironmentVariable("ConnectionStrings__AuthDb", ConnectionString);
+        Environment.SetEnvironmentVariable("AuthDb", ConnectionString);
     }
 
     public new async Task DisposeAsync()
     {
+        Environment.SetEnvironmentVariable("ConnectionStrings__AuthDb", null);
+        Environment.SetEnvironmentVariable("AuthDb", null);
         await _pgContainer.DisposeAsync();
         await base.DisposeAsync();
     }
