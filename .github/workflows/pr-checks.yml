@@ -47,18 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Fetch base branch
-        run: git fetch --no-tags origin +refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+          fetch-depth: 50
 
       - name: Check await on void Update/DeleteAsync
         run: |
           # Project rule: UpdateAsync/DeleteAsync return void → KHÔNG được await.
           DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- '*.cs')
-          if echo "$DIFF" | grep -E '^\+.*await\s+(_unitOfWork(\.\w+)+|[A-Za-z_][A-Za-z0-9_]*(Repository|Repo))\.(UpdateAsync|DeleteAsync)\s*\('; then
-            echo "❌ Phát hiện 'await' trên repository UpdateAsync/DeleteAsync — 2 method này void."
-            echo "Bỏ 'await' trước repository UpdateAsync/DeleteAsync."
+          if echo "$DIFF" | grep -E '^\+.*await\s+\w+(\.\w+)*\.(UpdateAsync|DeleteAsync)\s*\('; then
+            echo "❌ Phát hiện 'await ...UpdateAsync(' hoặc 'await ...DeleteAsync(' — 2 method này void."
+            echo "Bỏ 'await' trước UpdateAsync/DeleteAsync."
             exit 1
           fi
           echo "✅ Không có await trên void UpdateAsync/DeleteAsync"
@@ -67,7 +64,7 @@ jobs:
         run: |
           # Project rule: GetAllAsync trả IQueryable → KHÔNG await.
           DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- '*.cs')
-          if echo "$DIFF" | grep -E '^\+.*await\s+(_unitOfWork(\.\w+)+|[A-Za-z_][A-Za-z0-9_]*(Repository|Repo))\.GetAllAsync\s*\('; then
+          if echo "$DIFF" | grep -E '^\+.*await\s+\w+(\.\w+)*\.GetAllAsync\s*\('; then
             echo "❌ Phát hiện 'await ...GetAllAsync(' — method trả IQueryable, không phải Task."
             exit 1
           fi
@@ -98,10 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Fetch base branch
-        run: git fetch --no-tags origin +refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+          fetch-depth: 50
 
       - name: Check PR size
         run: |
