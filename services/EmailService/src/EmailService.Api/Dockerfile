@@ -1,6 +1,6 @@
 # Multi-stage build cho EmailService (consumer-only, không có Application/Domain layer).
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["services/EmailService/src/EmailService.Api/EmailService.Api.csproj", "services/EmailService/src/EmailService.Api/"]
