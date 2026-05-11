@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload test results (only on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.test.name }}
           path: ./TestResults
@@ -210,7 +210,7 @@ jobs:
 
       - name: Upload integration results (only on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-results-${{ matrix.test.name }}
           path: ./TestResults
