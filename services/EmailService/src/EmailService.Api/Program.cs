@@ -12,8 +12,18 @@ EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Register EmailSender (MailJet via HttpClient)
-builder.Services.AddHttpClient<EmailSenderService>();
+// 1. Register EmailSender (MailJet via HttpClient) with explicit Timeout (Resilience pattern #13)
+// Default 100s là quá dài → hanging request khi Mailjet API slow/down.
+// Bind từ HttpClientTimeouts__MailjetSeconds, fallback 30s.
+builder.Services.Configure<HttpClientTimeoutOptions>(
+    builder.Configuration.GetSection(HttpClientTimeoutOptions.SectionName));
+var httpTimeouts = new HttpClientTimeoutOptions();
+builder.Configuration.GetSection(HttpClientTimeoutOptions.SectionName).Bind(httpTimeouts);
+
+builder.Services.AddHttpClient<EmailSenderService>(c =>
+{
+    c.Timeout = httpTimeouts.Mailjet;
+});
 
 // 2. Register Email template renderer (file-based, cached)
 builder.Services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();

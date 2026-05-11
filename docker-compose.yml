@@ -75,10 +75,30 @@ services:
       - "15692:15692"    # Prometheus metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-    # Enable plugins on startup (rabbitmq_prometheus + rabbitmq_management).
+    # Enable 3 plugins on startup:
+    # 1. rabbitmq_prometheus — expose /metrics (port 15692) cho Prometheus scrape.
+    # 2. rabbitmq_management — Management UI + HTTP API.
+    # 3. rabbitmq_delayed_message_exchange — community plugin cho MassTransit Scheduled Redelivery
+    #    (Resilience Layer 2). Plugin .ez file phải download từ GitHub release vì alpine image
+    #    KHÔNG ship sẵn. Container restart → re-download nếu file đã bị mất.
+    #
+    # Plugin version 3.13.0 tương thích RabbitMQ 3.12+ (current image: rabbitmq:3-management-alpine = 3.13.x).
+    # Khi upgrade RabbitMQ major version (4.x), cần update plugin version tương ứng.
     command: >
-      bash -c "rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management &&
-               rabbitmq-server"
+      bash -c "
+      PLUGIN_FILE=/opt/rabbitmq/plugins/rabbitmq_delayed_message_exchange-3.13.0.ez;
+      if [ ! -f \"$$PLUGIN_FILE\" ]; then
+        echo '[init] Downloading rabbitmq_delayed_message_exchange 3.13.0 ...';
+        wget -q -O \"$$PLUGIN_FILE\" https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v3.13.0/rabbitmq_delayed_message_exchange-3.13.0.ez ||
+        { echo '[init] Plugin download FAILED — Layer 2 redelivery sẽ disabled. Service vẫn chạy nhưng tắt Resilience__ScheduledRedelivery__Enabled trong .env'; rm -f \"$$PLUGIN_FILE\"; };
+      fi;
+      if [ -f \"$$PLUGIN_FILE\" ]; then
+        rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management rabbitmq_delayed_message_exchange;
+      else
+        rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management;
+      fi &&
+      rabbitmq-server
+      "
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s

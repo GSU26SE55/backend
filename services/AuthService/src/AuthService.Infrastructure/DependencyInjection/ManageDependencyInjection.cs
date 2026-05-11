@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
@@ -73,7 +74,20 @@ public static class ManageDependencyInjection
     {
         service.AddScoped<IAuthUnitOfWork, UnitOfWork>();
         service.AddScoped<IJwtHelper, JwtHelper>();
-        service.AddHttpClient<IGoogleOAuthHelper, GoogleOAuthHelper>();
+
+        // ============== HTTP Client Timeout (Resilience pattern #13) ==============
+        // Bind options 1 lần để dùng trong nhiều AddHttpClient call.
+        // Default 100s của HttpClient.Timeout quá dài → request hanging gần 2 phút.
+        // Đặt 15s cho Google OAuth (expected < 3s) là an toàn + fail-fast khi peer down.
+        service.Configure<HttpClientTimeoutOptions>(configuration.GetSection(HttpClientTimeoutOptions.SectionName));
+        var httpTimeouts = new HttpClientTimeoutOptions();
+        configuration.GetSection(HttpClientTimeoutOptions.SectionName).Bind(httpTimeouts);
+
+        service.AddHttpClient<IGoogleOAuthHelper, GoogleOAuthHelper>(c =>
+        {
+            c.Timeout = httpTimeouts.GoogleOAuth;
+        });
+
         service.AddSingleton<IPasswordHasher, PasswordHasher>();
         service.AddScoped<AuthDataSeeder>();
         service.AddHttpContextAccessor();
