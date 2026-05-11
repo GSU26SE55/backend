@@ -1,6 +1,6 @@
 # Multi-stage build cho SmsService (consumer-only).
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["services/SmsService/src/SmsService.Api/SmsService.Api.csproj", "services/SmsService/src/SmsService.Api/"]
