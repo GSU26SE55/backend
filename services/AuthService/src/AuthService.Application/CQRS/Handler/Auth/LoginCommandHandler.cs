@@ -1,4 +1,8 @@
+using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
+using AuthService.Application.CQRS.Notification.Login;
+using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -20,17 +24,20 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IJwtHelper _jwtHelper;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IPublisher _publisher;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public LoginCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IJwtHelper jwtHelper,
         IPasswordHasher passwordHasher,
+        IPublisher publisher,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
         _passwordHasher = passwordHasher;
+        _publisher = publisher;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -45,23 +52,64 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
 
         if (account == null)
+        {
+            await PublishAudit(AuditActionEnum.LoginFailedWrongPassword,
+                targetAccountId: null,
+                isSuccess: false,
+                targetEmail: normalizedEmail,
+                reason: "Email không tồn tại trong hệ thống.",
+                cancellationToken: cancellationToken);
+            await PublishLoginAttempt(null, normalizedEmail,
+                LoginAttemptResult.AccountNotFound,
+                note: "Email không tồn tại.",
+                cancellationToken: cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Fail(401, "Email hoặc mật khẩu không chính xác.");
+        }
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
         {
             var minutesLeft = (int)Math.Ceiling((account.LockoutEndAt.Value - DateTime.UtcNow).TotalMinutes);
+            await PublishAudit(AuditActionEnum.LoginFailedAccountLocked, account.Id, isSuccess: false,
+                targetEmail: account.Email,
+                reason: $"Account đang lockout, còn {minutesLeft} phút.",
+                cancellationToken: cancellationToken);
+            await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountLocked,
+                note: $"Lockout còn {minutesLeft} phút.",
+                cancellationToken: cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Fail(423, $"Tài khoản đang bị khóa. Vui lòng thử lại sau {minutesLeft} phút.");
         }
 
         switch (account.Status)
         {
             case AccountStatusEnum.PendingVerification:
+                await PublishAudit(AuditActionEnum.LoginFailedNotVerified, account.Id, false,
+                    targetEmail: account.Email, cancellationToken: cancellationToken);
+                await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountNotVerified,
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return Fail(403, "Tài khoản chưa được xác thực. Vui lòng kiểm tra email.");
             case AccountStatusEnum.Inactive:
+                await PublishAudit(AuditActionEnum.LoginFailedAccountInactive, account.Id, false,
+                    targetEmail: account.Email, cancellationToken: cancellationToken);
+                await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountInactive,
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return Fail(403, "Tài khoản đã bị vô hiệu hóa.");
             case AccountStatusEnum.Suspended:
+                await PublishAudit(AuditActionEnum.LoginFailedAccountSuspended, account.Id, false,
+                    targetEmail: account.Email, cancellationToken: cancellationToken);
+                await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountSuspended,
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return Fail(403, "Tài khoản đang bị đình chỉ.");
             case AccountStatusEnum.Banned:
+                await PublishAudit(AuditActionEnum.LoginFailedAccountBanned, account.Id, false,
+                    targetEmail: account.Email, cancellationToken: cancellationToken);
+                await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountBanned,
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return Fail(403, "Tài khoản đã bị cấm.");
             case AccountStatusEnum.Locked:
                 if (!account.LockoutEndAt.HasValue || account.LockoutEndAt.Value <= DateTime.UtcNow)
@@ -72,6 +120,11 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 }
                 else
                 {
+                    await PublishAudit(AuditActionEnum.LoginFailedAccountLocked, account.Id, false,
+                        targetEmail: account.Email, cancellationToken: cancellationToken);
+                    await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountLocked,
+                        cancellationToken: cancellationToken);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
                     return Fail(423, "Tài khoản đang bị khóa tạm thời.");
                 }
                 break;
@@ -82,21 +135,50 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         if (!passwordValid)
         {
             account.FailedLoginAttempts += 1;
+            var wasJustLocked = false;
 
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
             {
                 account.Status = AccountStatusEnum.Locked;
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
+                wasJustLocked = true;
             }
 
             _unitOfWork.Accounts.UpdateAsync(account);
+
+            await PublishAudit(AuditActionEnum.LoginFailedWrongPassword, account.Id, false,
+                targetEmail: account.Email,
+                reason: $"Sai mật khẩu lần {account.FailedLoginAttempts}/{MaxFailedAttempts}.",
+                metadata: new Dictionary<string, object?>
+                {
+                    ["failedAttempts"] = account.FailedLoginAttempts,
+                    ["maxAttempts"] = MaxFailedAttempts
+                },
+                cancellationToken: cancellationToken);
+
+            if (wasJustLocked)
+            {
+                await PublishAudit(AuditActionEnum.AccountAutoLocked, account.Id, true,
+                    targetEmail: account.Email,
+                    reason: $"Auto-lock {LockoutDurationMinutes} phút sau {MaxFailedAttempts} lần sai mật khẩu.",
+                    metadata: new Dictionary<string, object?>
+                    {
+                        ["lockoutMinutes"] = LockoutDurationMinutes,
+                        ["lockoutEndAt"] = account.LockoutEndAt
+                    },
+                    cancellationToken: cancellationToken);
+            }
+
+            await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,
+                note: $"Sai mật khẩu lần {account.FailedLoginAttempts}/{MaxFailedAttempts}." +
+                      (wasJustLocked ? " Auto-locked." : ""),
+                cancellationToken: cancellationToken);
+
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            if (account.Status == AccountStatusEnum.Locked)
-            {
+            if (wasJustLocked)
                 return Fail(423,
                     $"Sai mật khẩu quá {MaxFailedAttempts} lần. Tài khoản bị khóa {LockoutDurationMinutes} phút.");
-            }
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
             return Fail(401, $"Email hoặc mật khẩu không chính xác. Còn {remaining} lần thử.");
@@ -115,7 +197,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             .Select(ar => ar.Role.Name)
             .ToList();
 
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames);
+        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
@@ -132,6 +215,23 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         };
 
         await _unitOfWork.RefreshTokens.AddAsync(refreshToken);
+
+        // Enforce concurrent session limit (FIFO revoke oldest if exceeded).
+        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
+
+        await PublishAudit(AuditActionEnum.LoginSuccess, account.Id, true,
+            targetEmail: account.Email,
+            actorAccountIdOverride: account.Id,
+            metadata: new Dictionary<string, object?>
+            {
+                ["roles"] = roleNames,
+                ["sessionId"] = refreshToken.Id
+            },
+            cancellationToken: cancellationToken);
+
+        await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.Success,
+            cancellationToken: cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new LoginResponse
@@ -145,6 +245,33 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 RefreshToken = refreshTokenValue
             }
         };
+    }
+
+    private Task PublishAudit(
+        AuditActionEnum action,
+        Guid? targetAccountId,
+        bool isSuccess,
+        string? targetEmail = null,
+        string? reason = null,
+        IReadOnlyDictionary<string, object?>? metadata = null,
+        Guid? actorAccountIdOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _publisher.Publish(new AuditTrailNotification(
+            action, targetAccountId, isSuccess, targetEmail, reason, metadata, actorAccountIdOverride),
+            cancellationToken);
+    }
+
+    private Task PublishLoginAttempt(
+        Guid? accountId,
+        string attemptedEmail,
+        LoginAttemptResult result,
+        string? note = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _publisher.Publish(new LoginAttemptNotification(
+            accountId, attemptedEmail, result, Method: "Password", note),
+            cancellationToken);
     }
 
     private static LoginResponse Fail(int statusCode, string message, string field = "Auth")

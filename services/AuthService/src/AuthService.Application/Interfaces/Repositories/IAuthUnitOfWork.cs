@@ -9,4 +9,8 @@ public interface IAuthUnitOfWork : IUnitOfWork
     IGenericRepository<RefreshToken> RefreshTokens { get; }
     IGenericRepository<Role> Roles { get; }
     IGenericRepository<AccountRole> AccountRoles { get; }
+    IGenericRepository<AuditLog> AuditLogs { get; }
+    IGenericRepository<LoginAttempt> LoginAttempts { get; }
+    IGenericRepository<Permission> Permissions { get; }
+    IGenericRepository<RolePermission> RolePermissions { get; }
 }

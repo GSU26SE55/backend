@@ -20,6 +20,10 @@ public class UnitOfWork : IAuthUnitOfWork
     public IGenericRepository<Role> Roles => new GenericRepository<Role>(_context);
     public IGenericRepository<RefreshToken> RefreshTokens => new GenericRepository<RefreshToken>(_context);
     public IGenericRepository<AccountRole> AccountRoles => new GenericRepository<AccountRole>(_context);
+    public IGenericRepository<AuditLog> AuditLogs => new GenericRepository<AuditLog>(_context);
+    public IGenericRepository<LoginAttempt> LoginAttempts => new GenericRepository<LoginAttempt>(_context);
+    public IGenericRepository<Permission> Permissions => new GenericRepository<Permission>(_context);
+    public IGenericRepository<RolePermission> RolePermissions => new GenericRepository<RolePermission>(_context);
 
     public async Task BeginTransactionAsync()
     {

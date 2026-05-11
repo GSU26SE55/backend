@@ -20,7 +20,7 @@ public class CreateAccountCommandHandlerTests
     public async Task Create_NewEmail_NoRoles_CreatesActiveAccount()
     {
         var (uow, accounts, _, _, accountRoles) = MockUnitOfWork.Build();
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -50,7 +50,7 @@ public class CreateAccountCommandHandlerTests
             FullName = "U"
         };
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -74,7 +74,7 @@ public class CreateAccountCommandHandlerTests
             PhoneNumber = "0900111"
         };
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -93,7 +93,7 @@ public class CreateAccountCommandHandlerTests
         var roleA = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "A", NormalizedName = "A", Status = RoleStatusEnum.Active };
         var roleB = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "B", NormalizedName = "B", Status = RoleStatusEnum.Active };
         var (uow, _, _, _, accountRoles) = MockUnitOfWork.Build(roleSeed: new[] { roleA, roleB });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -111,7 +111,7 @@ public class CreateAccountCommandHandlerTests
     public async Task Create_WithMissingRole_Returns400()
     {
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {

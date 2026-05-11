@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Session;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -10,10 +11,12 @@ namespace AuthService.Application.CQRS.Handler.Session;
 public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRevokeAccountSessionsCommand, SessionActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;
 
-    public AdminRevokeAccountSessionsCommandHandler(IAuthUnitOfWork unitOfWork)
+    public AdminRevokeAccountSessionsCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<SessionActionResponse> Handle(AdminRevokeAccountSessionsCommand request, CancellationToken cancellationToken)
@@ -45,6 +48,11 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
             session.RevokedReason = reason;
             _unitOfWork.RefreshTokens.UpdateAsync(session);
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AdminForceLogout, request.AccountId, IsSuccess: true,
+            Reason: request.Reason,
+            Metadata: new Dictionary<string, object?> { ["revokedSessions"] = sessions.Count }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -53,6 +53,15 @@ public class Account : AuditableEntity
 
     public string? Provider { get; set; }
 
+    /// <summary>
+    /// Token dùng cho admin invite flow. Khi admin tạo account ở chế độ invite (không set password sẵn),
+    /// hệ thống sinh token này và gửi email mời. User truy cập link <c>?token=...</c> để kích hoạt
+    /// và đặt password lần đầu. Clear sau khi accept invite thành công.
+    /// </summary>
+    public string? InvitationToken { get; set; }
+
+    public DateTime? InvitationExpiredAt { get; set; }
+
     public ICollection<AccountRole> AccountRoles { get; set; } = new List<AccountRole>();
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

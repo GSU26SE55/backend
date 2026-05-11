@@ -19,4 +19,6 @@ public class Role : AuditableEntity
     public bool IsSystemRole { get; set; } = false;
 
     public ICollection<AccountRole> AccountRoles { get; set; } = new List<AccountRole>();
+
+    public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
 }

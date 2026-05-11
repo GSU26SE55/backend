@@ -302,6 +302,11 @@ services:
   # Service này nhỏ (~10MB) chỉ làm reformatter.
   alertmanager-discord:
     image: benjojo/alertmanager-discord:latest
+    # Image upstream chỉ có build cho linux/amd64 (không multi-arch).
+    # Khai báo platform explicit để Docker emulate qua Rosetta trên Mac M-series
+    # mà không phát sinh warning "platform mismatch" mỗi lần up.
+    # Trade-off: slower 2-5x so với native ARM64 nhưng acceptable vì relay nhỏ và idle hầu hết thời gian.
+    platform: linux/amd64
     container_name: solar-alertmanager-discord
     # `env_file` inject trực tiếp DISCORD_WEBHOOK từ .env.Docker vào container env
     # (relay đợi đúng tên DISCORD_WEBHOOK, không phải DISCORD_WEBHOOK_URL).

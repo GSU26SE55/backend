@@ -15,7 +15,7 @@ public class VerifyOtpCommandHandlerTests
 
     public VerifyOtpCommandHandlerTests()
     {
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>())).ReturnsAsync("access-token");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("access-token");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("refresh-token-value");
     }
 
@@ -41,7 +41,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount();
         var (uow, accounts, refreshTokens, _, accountRoles) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -73,7 +73,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount(otp: "999999");
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -94,7 +94,7 @@ public class VerifyOtpCommandHandlerTests
         account.FailedLoginAttempts = 4;
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -113,7 +113,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount(otpExpired: DateTime.UtcNow.AddMinutes(-1));
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -131,7 +131,7 @@ public class VerifyOtpCommandHandlerTests
         account.Status = AccountStatusEnum.Active;
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -147,7 +147,7 @@ public class VerifyOtpCommandHandlerTests
     {
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, _jwt.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "ghost@example.com",
