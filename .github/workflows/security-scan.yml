@@ -58,11 +58,13 @@ jobs:
   # ============================================================
   # CodeQL — chậm (~5-10 phút), CHỈ chạy trên main hoặc lịch weekly.
   # KHÔNG chạy trên mỗi PR (tốn time).
+  # Private repo cần GitHub Advanced Security để upload code scanning SARIF.
+  # Nếu đã bật GHAS cho repo private, đặt repository variable CODEQL_ENABLED=true.
   # ============================================================
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: ${{ (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && (!github.event.repository.private || vars.CODEQL_ENABLED == 'true') }}
     permissions:
       actions: read
       contents: read
@@ -71,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: csharp
           queries: security-and-quality
@@ -94,6 +96,6 @@ jobs:
           done
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: csharp
