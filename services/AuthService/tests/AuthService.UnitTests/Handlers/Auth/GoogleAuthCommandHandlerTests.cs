@@ -15,7 +15,7 @@ public class GoogleAuthCommandHandlerTests
 
     public GoogleAuthCommandHandlerTests()
     {
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>())).ReturnsAsync("acc");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("acc");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("rt");
         _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("HASH");
     }
@@ -31,7 +31,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "google-sub-1"
         });
         var (uow, accounts, refreshTokens, _, accountRoles) = MockUnitOfWork.Build();
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "good-token" }, CancellationToken.None);
 
@@ -67,7 +67,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "google-sub-2"
         });
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
 
@@ -96,7 +96,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "g3"
         });
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
 
@@ -124,7 +124,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "different-google-id"
         });
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
 
@@ -136,7 +136,7 @@ public class GoogleAuthCommandHandlerTests
     {
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((GoogleUserInfo?)null);
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "bad" }, CancellationToken.None);
 
@@ -153,7 +153,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "g"
         });
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
 

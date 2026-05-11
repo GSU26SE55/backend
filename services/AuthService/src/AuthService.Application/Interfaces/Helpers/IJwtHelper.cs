@@ -4,7 +4,14 @@ namespace AuthService.Application.Interfaces.Helpers;
 
 public interface IJwtHelper
 {
-    Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles);
+    /// <summary>
+    /// Sinh access token chứa claims: NameIdentifier, AccountId, Email, FullName, role(s), permission(s).
+    /// </summary>
+    /// <param name="account">Account entity.</param>
+    /// <param name="roles">Role name list.</param>
+    /// <param name="permissions">Permission code list (vd: ["battery.view", "ticket.assign"]). Có thể null/empty.</param>
+    Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles, IEnumerable<string>? permissions = null);
+
     string GenerateRefreshToken();
     bool IsTokenValid(string token);
     DateTime ConvertUnixTimeToDateTime(long utcExpiredDate);

@@ -2,7 +2,10 @@ using AuthService.Api.Extensions;
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Query.Account;
+using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.DTOs.Response.Login;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -490,6 +493,52 @@ public class AccountsController : ControllerBase
 
         var result = await _mediator.Send(new DeleteMeCommand { AccountId = userId.Value }, cancellationToken);
         return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xem lịch sử login của tài khoản đang đăng nhập.
+    /// </summary>
+    /// <remarks>
+    /// Trả về các login attempt (thành công + thất bại) của chính user, sort theo thời gian giảm dần.
+    /// Mỗi entry kèm IP, User-Agent, DeviceId, lý do nếu fail.
+    ///
+    /// Use case:
+    /// - Trang "Hoạt động đăng nhập" giúp user phát hiện thiết bị/IP lạ.
+    /// - Filter <c>onlyFailed=true</c> để xem các attempt bị chặn.
+    /// </remarks>
+    /// <response code="200">Lấy login history thành công.</response>
+    /// <response code="400">Filter không hợp lệ (FromUtc >= ToUtc).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpGet("me/login-history")]
+    [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyLoginHistory(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] LoginAttemptResult? result = null,
+        [FromQuery] bool? onlyFailed = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new LoginAttemptListResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var query = new GetLoginHistoryQuery
+        {
+            AccountId = userId.Value,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            Result = result,
+            OnlyFailed = onlyFailed,
+            FromUtc = fromUtc,
+            ToUtc = toUtc
+        };
+
+        var response = await _mediator.Send(query, cancellationToken);
+        return StatusCode(response.StatusCode, response);
     }
 
     private Guid? GetCurrentUserId()

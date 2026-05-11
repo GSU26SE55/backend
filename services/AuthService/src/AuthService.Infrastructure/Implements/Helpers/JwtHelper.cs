@@ -13,6 +13,9 @@ public class JwtHelper : IJwtHelper
     private const string ResetTokenPurposeClaim = "purpose";
     private const string ResetTokenPurposeValue = "password-reset";
 
+    /// <summary>Default TTL khi config <c>JwtSettings:AccessTokenExpirationMinutes</c> không set.</summary>
+    private const int DefaultAccessTokenExpirationMinutes = 60;
+
     private readonly IConfiguration _configuration;
 
     public JwtHelper(IConfiguration configuration)
@@ -21,7 +24,10 @@ public class JwtHelper : IJwtHelper
 
     }
 
-    public Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles)
+    /// <summary>Claim type cho permission code (compact để giảm size JWT).</summary>
+    public const string PermissionClaimType = "perm";
+
+    public Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles, IEnumerable<string>? permissions = null)
     {
         var SecretKey = _configuration["JwtSettings:SecretKey"];
         var Issuer = _configuration["JwtSettings:Issuer"];
@@ -45,10 +51,18 @@ public class JwtHelper : IJwtHelper
                 claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
+        foreach (var permission in (permissions ?? Enumerable.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(permission))
+                claims.Add(new Claim(PermissionClaimType, permission));
+        }
+
+        var expirationMinutes = ResolveAccessTokenExpirationMinutes();
+
         var TokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddHours(1),
+            Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
             Issuer = Issuer,
             Audience = Audience,
             SigningCredentials =
@@ -64,6 +78,23 @@ public class JwtHelper : IJwtHelper
     public string GenerateRefreshToken()
     {
         return Guid.NewGuid().ToString("N");
+    }
+
+    /// <summary>
+    /// Đọc TTL access token từ <c>JwtSettings:AccessTokenExpirationMinutes</c>.
+    /// Map từ env var <c>JwtSettings__AccessTokenExpirationMinutes</c> trong .env / .env.Docker.
+    /// Trả về <see cref="DefaultAccessTokenExpirationMinutes"/> (60) nếu config thiếu, parse fail hoặc &lt;= 0.
+    /// </summary>
+    private int ResolveAccessTokenExpirationMinutes()
+    {
+        var raw = _configuration["JwtSettings:AccessTokenExpirationMinutes"];
+        if (string.IsNullOrWhiteSpace(raw))
+            return DefaultAccessTokenExpirationMinutes;
+
+        if (!int.TryParse(raw, out var minutes) || minutes <= 0)
+            return DefaultAccessTokenExpirationMinutes;
+
+        return minutes;
     }
 
     public bool IsTokenValid(string token)

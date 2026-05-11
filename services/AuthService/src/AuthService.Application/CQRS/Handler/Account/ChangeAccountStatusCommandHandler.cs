@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -10,10 +11,12 @@ namespace AuthService.Application.CQRS.Handler.Account;
 public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountStatusCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;
 
-    public ChangeAccountStatusCommandHandler(IAuthUnitOfWork unitOfWork)
+    public ChangeAccountStatusCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(ChangeAccountStatusCommand request, CancellationToken cancellationToken)
@@ -40,6 +43,7 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
             };
         }
 
+        var oldStatus = account.Status;
         account.Status = request.Status;
 
         if (request.Status != AccountStatusEnum.Locked)
@@ -58,6 +62,7 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
             AccountStatusEnum.Locked
         };
 
+        var revokedCount = 0;
         if (revokeStatuses.Contains(request.Status))
         {
             var activeTokens = await _unitOfWork.RefreshTokens
@@ -72,7 +77,21 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
                 rt.RevokedReason = $"Account status changed to {request.Status}. {request.Reason ?? string.Empty}".Trim();
                 _unitOfWork.RefreshTokens.UpdateAsync(rt);
             }
+            revokedCount = activeTokens.Count;
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountStatusChanged, account.Id, IsSuccess: true,
+            TargetEmail: account.Email,
+            Reason: request.Reason,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["oldStatus"] = (int)oldStatus,
+                ["oldStatusName"] = oldStatus.ToString(),
+                ["newStatus"] = (int)request.Status,
+                ["newStatusName"] = request.Status.ToString(),
+                ["revokedSessions"] = revokedCount
+            }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

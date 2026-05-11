@@ -23,6 +23,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# dorny/paths-filter cần pull-requests: read để gọi listFiles API trên PR event.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   # ============================================================
   # Detect changed paths để skip job không cần thiết.

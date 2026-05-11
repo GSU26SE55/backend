@@ -83,6 +83,15 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("google_id");
 
+                    b.Property<DateTime?>("InvitationExpiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invitation_expired_at");
+
+                    b.Property<string>("InvitationToken")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("invitation_token");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -172,6 +181,9 @@ namespace AuthService.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"google_id\" IS NOT NULL");
 
+                    b.HasIndex("InvitationToken")
+                        .HasFilter("\"invitation_token\" IS NOT NULL");
+
                     b.HasIndex("IsDeleted");
 
                     b.HasIndex("PhoneNumber")
@@ -252,6 +264,189 @@ namespace AuthService.Infrastructure.Migrations
                     b.ToTable("account_roles", (string)null);
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_account_id");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("device_id");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsSuccess")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_success");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("text")
+                        .HasColumnName("metadata_json");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("TargetAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_account_id");
+
+                    b.Property<string>("TargetEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("target_email");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("user_agent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action")
+                        .HasDatabaseName("ix_audit_logs_action");
+
+                    b.HasIndex("ActorAccountId")
+                        .HasDatabaseName("ix_audit_logs_actor_account_id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_audit_logs_created_at");
+
+                    b.HasIndex("TargetAccountId")
+                        .HasDatabaseName("ix_audit_logs_target_account_id");
+
+                    b.HasIndex("TargetAccountId", "CreatedAt")
+                        .HasDatabaseName("ix_audit_logs_target_created_at");
+
+                    b.ToTable("audit_logs", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("AttemptedEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("attempted_email");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("device_id");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("integer")
+                        .HasColumnName("result");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("user_agent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_login_attempts_account_id");
+
+                    b.HasIndex("AttemptedEmail")
+                        .HasDatabaseName("ix_login_attempts_attempted_email");
+
+                    b.HasIndex("IpAddress")
+                        .HasDatabaseName("ix_login_attempts_ip_address");
+
+                    b.HasIndex("AccountId", "CreatedAt")
+                        .HasDatabaseName("ix_login_attempts_account_created_at");
+
+                    b.ToTable("login_attempts", (string)null);
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -316,6 +511,67 @@ namespace AuthService.Infrastructure.Migrations
                         .HasDatabaseName("ix_outbox_messages_processed_at_occurred_at");
 
                     b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.Permission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsSystemPermission")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system_permission");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("module");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Module");
+
+                    b.ToTable("permissions", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.RefreshToken", b =>
@@ -539,6 +795,66 @@ namespace AuthService.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<Guid?>("AssignedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("permission_id");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PermissionId")
+                        .HasDatabaseName("ix_role_permissions_permission_id");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_role_permissions_role_id");
+
+                    b.HasIndex("RoleId", "PermissionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_role_permissions_role_permission_active")
+                        .HasFilter("\"is_deleted\" = false");
+
+                    b.ToTable("role_permissions", (string)null);
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.AccountRole", b =>
                 {
                     b.HasOne("AuthService.Domain.Entities.Account", "Account")
@@ -558,6 +874,16 @@ namespace AuthService.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.RefreshToken", b =>
                 {
                     b.HasOne("AuthService.Domain.Entities.Account", "Account")
@@ -569,6 +895,25 @@ namespace AuthService.Infrastructure.Migrations
                     b.Navigation("Account");
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AuthService.Domain.Entities.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
                 {
                     b.Navigation("AccountRoles");
@@ -576,9 +921,16 @@ namespace AuthService.Infrastructure.Migrations
                     b.Navigation("RefreshTokens");
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.Role", b =>
                 {
                     b.Navigation("AccountRoles");
+
+                    b.Navigation("RolePermissions");
                 });
 #pragma warning restore 612, 618
         }

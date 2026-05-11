@@ -22,7 +22,7 @@ public class UpdateAccountCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new UpdateAccountCommandHandler(uow.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UpdateAccountCommand
         {
@@ -52,7 +52,7 @@ public class UpdateAccountCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new UpdateAccountCommandHandler(uow.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UpdateAccountCommand
         {
@@ -87,7 +87,7 @@ public class UpdateAccountCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, other });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new UpdateAccountCommandHandler(uow.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UpdateAccountCommand
         {
@@ -104,7 +104,7 @@ public class UpdateAccountCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new UpdateAccountCommandHandler(uow.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UpdateAccountCommand
         {
