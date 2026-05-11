@@ -1,4 +1,6 @@
+using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -17,15 +19,18 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IJwtHelper _jwtHelper;
+    private readonly IPublisher _publisher;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public RefreshTokenCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IJwtHelper jwtHelper,
+        IPublisher publisher,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
+        _publisher = publisher;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -82,7 +87,8 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             .Select(ar => ar.Role.Name)
             .ToList();
 
-        var newAccessToken = await _jwtHelper.GenerateAccessToken(account, roleNames);
+        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
+        var newAccessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
         var newRefreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         var newRefreshToken = new RefreshToken
@@ -107,6 +113,9 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         account.LastLoginAt = DateTime.UtcNow;
         account.LastLoginIp = ipAddress;
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        // Rotation tạo new session → enforce limit. Existing token vừa chuyển Used không tính active.
+        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

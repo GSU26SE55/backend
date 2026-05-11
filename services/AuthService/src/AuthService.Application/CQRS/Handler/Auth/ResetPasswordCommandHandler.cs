@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -13,15 +14,18 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtHelper _jwtHelper;
+    private readonly IPublisher _publisher;
 
     public ResetPasswordCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
-        IJwtHelper jwtHelper)
+        IJwtHelper jwtHelper,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _jwtHelper = jwtHelper;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
@@ -54,6 +58,12 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
             rt.RevokedReason = "Password reset";
             _unitOfWork.RefreshTokens.UpdateAsync(rt);
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.PasswordReset, account.Id, IsSuccess: true,
+            TargetEmail: account.Email,
+            ActorAccountIdOverride: account.Id,
+            Metadata: new Dictionary<string, object?> { ["revokedSessions"] = activeTokens.Count }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

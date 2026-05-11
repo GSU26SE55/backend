@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
@@ -12,10 +13,12 @@ namespace AuthService.Application.CQRS.Handler.Account;
 public class AssignRoleTemporaryCommandHandler : IRequestHandler<AssignRoleTemporaryCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;
 
-    public AssignRoleTemporaryCommandHandler(IAuthUnitOfWork unitOfWork)
+    public AssignRoleTemporaryCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(AssignRoleTemporaryCommand request, CancellationToken cancellationToken)
@@ -53,6 +56,16 @@ public class AssignRoleTemporaryCommandHandler : IRequestHandler<AssignRoleTempo
                 IsActive = true
             });
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.RoleTemporaryAssigned, request.AccountId, IsSuccess: true,
+            TargetEmail: account.Email,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["roleId"] = request.RoleId.ToString(),
+                ["roleName"] = role.Name,
+                ["expiredAt"] = request.ExpiredAt
+            }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

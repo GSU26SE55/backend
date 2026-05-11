@@ -16,7 +16,7 @@ public class AssignRolesCommandHandlerTests
         var roleB = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "B", NormalizedName = "B", Status = RoleStatusEnum.Active };
         var account = new global::AuthService.Domain.Entities.Account { Id = accountId, Email = "u@e.com", PasswordHash = "x", FullName = "U" };
         var (uow, _, _, _, accountRoles) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { roleA, roleB });
-        var handler = new AssignRolesCommandHandler(uow.Object);
+        var handler = new AssignRolesCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRolesCommand
         {
@@ -32,7 +32,7 @@ public class AssignRolesCommandHandlerTests
     public async Task Assign_AccountNotFound_Returns404()
     {
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new AssignRolesCommandHandler(uow.Object);
+        var handler = new AssignRolesCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRolesCommand
         {
@@ -49,7 +49,7 @@ public class AssignRolesCommandHandlerTests
         var account = new global::AuthService.Domain.Entities.Account { Id = Guid.NewGuid(), Email = "u@e.com", PasswordHash = "x", FullName = "U" };
         var roleA = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "A", NormalizedName = "A", Status = RoleStatusEnum.Active };
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { roleA });
-        var handler = new AssignRolesCommandHandler(uow.Object);
+        var handler = new AssignRolesCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRolesCommand
         {
@@ -78,7 +78,7 @@ public class AssignRolesCommandHandlerTests
             accountSeed: new[] { account },
             roleSeed: new[] { role },
             accountRoleSeed: new[] { existingAssignment });
-        var handler = new AssignRolesCommandHandler(uow.Object);
+        var handler = new AssignRolesCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRolesCommand
         {
@@ -107,7 +107,7 @@ public class RevokeRoleCommandHandlerTests
             IsActive = true
         };
         var (uow, _, _, _, accountRoles) = MockUnitOfWork.Build(accountRoleSeed: new[] { assignment });
-        var handler = new RevokeRoleCommandHandler(uow.Object);
+        var handler = new RevokeRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new RevokeRoleCommand
         {
@@ -123,7 +123,7 @@ public class RevokeRoleCommandHandlerTests
     public async Task Revoke_NotFound_Returns404()
     {
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new RevokeRoleCommandHandler(uow.Object);
+        var handler = new RevokeRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new RevokeRoleCommand
         {
@@ -144,7 +144,7 @@ public class AssignRoleTemporaryCommandHandlerTests
         var role = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "R", NormalizedName = "R", Status = RoleStatusEnum.Active };
         var (uow, accounts, _, _, accountRoles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new AssignRoleTemporaryCommandHandler(uow.Object);
+        var handler = new AssignRoleTemporaryCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var expiredAt = DateTime.UtcNow.AddDays(7);
         var resp = await handler.Handle(new AssignRoleTemporaryCommand
@@ -169,7 +169,7 @@ public class AssignRoleTemporaryCommandHandlerTests
         var account = new global::AuthService.Domain.Entities.Account { Id = Guid.NewGuid(), Email = "u@e.com", PasswordHash = "x", FullName = "U" };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new AssignRoleTemporaryCommandHandler(uow.Object);
+        var handler = new AssignRoleTemporaryCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRoleTemporaryCommand
         {
@@ -186,7 +186,7 @@ public class AssignRoleTemporaryCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new AssignRoleTemporaryCommandHandler(uow.Object);
+        var handler = new AssignRoleTemporaryCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AssignRoleTemporaryCommand
         {
@@ -216,7 +216,7 @@ public class UnlockAccountCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new UnlockAccountCommandHandler(uow.Object);
+        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new UnlockAccountCommand { Id = account.Id }, CancellationToken.None);
 
@@ -231,7 +231,7 @@ public class UnlockAccountCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new UnlockAccountCommandHandler(uow.Object);
+        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new UnlockAccountCommand { Id = Guid.NewGuid() }, CancellationToken.None);
 
@@ -294,7 +294,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new DeleteMeCommandHandler(uow.Object);
+        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -320,7 +320,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeleteMeCommandHandler(uow.Object);
+        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteMeCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
 

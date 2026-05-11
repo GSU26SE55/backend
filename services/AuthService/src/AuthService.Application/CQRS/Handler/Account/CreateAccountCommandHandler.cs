@@ -7,6 +7,8 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
@@ -14,11 +16,16 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IMessageProducerService _messageProducer;
 
-    public CreateAccountCommandHandler(IAuthUnitOfWork unitOfWork, IPasswordHasher passwordHasher)
+    public CreateAccountCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher,
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
@@ -106,6 +113,21 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
                 IsActive = true
             });
         }
+
+        var roleNames = await _unitOfWork.Roles
+            .GetAllAsync()
+            .Where(r => validRoleIds.Contains(r.Id))
+            .Select(r => r.Name)
+            .ToListAsync(cancellationToken);
+
+        // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges → atomic với business data.
+        await _messageProducer.PublishAsync(new AccountActivatedEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            roleNames,
+            CreationSource: "AdminCreate"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

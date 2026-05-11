@@ -85,7 +85,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
         var t2 = new RefreshToken { Id = Guid.NewGuid(), AccountId = account.Id, Token = "b", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) };
 
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { t1, t2, otherUserToken });
-        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object);
+        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = account.Id, Reason = "Suspected breach" }, CancellationToken.None);
 
@@ -101,7 +101,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
     public async Task AccountNotFound_Returns404()
     {
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
-        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object);
+        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
 
@@ -120,7 +120,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object);
+        var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = account.Id }, CancellationToken.None);
 

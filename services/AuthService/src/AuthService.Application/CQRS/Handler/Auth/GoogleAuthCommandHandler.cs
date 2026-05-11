@@ -1,4 +1,6 @@
+using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -8,6 +10,8 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -21,6 +25,8 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
     private readonly IJwtHelper _jwtHelper;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IGoogleOAuthHelper _googleOAuthHelper;
+    private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public GoogleAuthCommandHandler(
@@ -28,12 +34,16 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         IJwtHelper jwtHelper,
         IPasswordHasher passwordHasher,
         IGoogleOAuthHelper googleOAuthHelper,
+        IMessageProducerService messageProducer,
+        IPublisher publisher,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
         _passwordHasher = passwordHasher;
         _googleOAuthHelper = googleOAuthHelper;
+        _messageProducer = messageProducer;
+        _publisher = publisher;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -127,7 +137,8 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         if (!roleNames.Contains("Customer"))
             roleNames.Add("Customer");
 
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames);
+        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
@@ -142,6 +153,19 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             UserAgent = userAgent,
             DeviceId = deviceId
         });
+
+        if (isNewAccount)
+        {
+            await _messageProducer.PublishAsync(new AccountActivatedEvent(
+                account.Id,
+                account.Email,
+                account.FullName,
+                account.PhoneNumber,
+                roleNames,
+                CreationSource: "GoogleOAuth"), cancellationToken);
+        }
+
+        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

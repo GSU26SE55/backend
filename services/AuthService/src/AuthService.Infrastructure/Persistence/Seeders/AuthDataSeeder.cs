@@ -34,7 +34,88 @@ public class AuthDataSeeder
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var roles = await SeedRolesAsync(cancellationToken);
+        var permissionsByCode = await SeedPermissionsAsync(cancellationToken);
+        await SeedRolePermissionsAsync(roles, permissionsByCode, cancellationToken);
         await SeedAdminAccountAsync(roles["ADMIN"], cancellationToken);
+    }
+
+    private async Task<Dictionary<string, Permission>> SeedPermissionsAsync(CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.Permissions
+            .IgnoreQueryFilters()
+            .ToDictionaryAsync(p => p.Code, StringComparer.OrdinalIgnoreCase, cancellationToken);
+
+        foreach (var item in PermissionSeed.All)
+        {
+            if (existing.TryGetValue(item.Code, out var current))
+            {
+                current.Module = item.Module;
+                current.Description = item.Description;
+                current.IsSystemPermission = true;
+                current.IsDeleted = false;
+                current.DeletedAt = null;
+                continue;
+            }
+
+            var entity = PermissionSeed.BuildEntity(item, Guid.NewGuid());
+            _dbContext.Permissions.Add(entity);
+            existing[item.Code] = entity;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return existing;
+    }
+
+    private async Task SeedRolePermissionsAsync(
+        IReadOnlyDictionary<string, Role> roles,
+        IReadOnlyDictionary<string, Permission> permissionsByCode,
+        CancellationToken cancellationToken)
+    {
+        var roleIds = roles.Values.Select(r => r.Id).ToList();
+        var existing = await _dbContext.RolePermissions
+            .IgnoreQueryFilters()
+            .Where(rp => roleIds.Contains(rp.RoleId))
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+
+        foreach (var pair in PermissionSeed.RoleDefaults)
+        {
+            if (!roles.TryGetValue(pair.Key, out var role))
+                continue;
+
+            foreach (var code in pair.Value)
+            {
+                if (!permissionsByCode.TryGetValue(code, out var permission))
+                {
+                    _logger.LogWarning("Permission {Code} không tồn tại khi seed role {Role}.", code, pair.Key);
+                    continue;
+                }
+
+                var current = existing.FirstOrDefault(rp =>
+                    rp.RoleId == role.Id && rp.PermissionId == permission.Id);
+
+                if (current is null)
+                {
+                    _dbContext.RolePermissions.Add(new RolePermission
+                    {
+                        Id = Guid.NewGuid(),
+                        RoleId = role.Id,
+                        PermissionId = permission.Id,
+                        AssignedAt = now,
+                        CreatedAt = now,
+                        IsDeleted = false
+                    });
+                }
+                else if (current.IsDeleted)
+                {
+                    current.IsDeleted = false;
+                    current.DeletedAt = null;
+                }
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<Dictionary<string, Role>> SeedRolesAsync(CancellationToken cancellationToken)

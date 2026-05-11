@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
@@ -11,10 +12,12 @@ namespace AuthService.Application.CQRS.Handler.Account;
 public class AssignRolesCommandHandler : IRequestHandler<AssignRolesCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;
 
-    public AssignRolesCommandHandler(IAuthUnitOfWork unitOfWork)
+    public AssignRolesCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(AssignRolesCommand request, CancellationToken cancellationToken)
@@ -78,6 +81,14 @@ public class AssignRolesCommandHandler : IRequestHandler<AssignRolesCommand, Acc
                 });
             }
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.RoleAssigned, request.AccountId, IsSuccess: true,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["roleIds"] = validRoleIds.Select(id => id.ToString()).ToList(),
+                ["expiredAt"] = request.ExpiredAt
+            }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

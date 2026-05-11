@@ -4,12 +4,14 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
+using MediatR;
 
 namespace AuthService.UnitTests.Handlers.Accounts;
 
 public class ChangePasswordCommandHandlerTests
 {
     private readonly Mock<IPasswordHasher> _hasher = new();
+    private readonly Mock<IPublisher> _publisher = MockPublisher.NoOp();
 
     [Fact]
     public async Task ChangePassword_CorrectCurrent_UpdatesHash_RevokesAllSessions()
@@ -36,7 +38,7 @@ public class ChangePasswordCommandHandlerTests
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
-        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object);
+        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
         var resp = await handler.Handle(new ChangePasswordCommand
         {
             AccountId = account.Id,
@@ -66,7 +68,7 @@ public class ChangePasswordCommandHandlerTests
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
-        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object);
+        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
         var resp = await handler.Handle(new ChangePasswordCommand
         {
             AccountId = account.Id,
@@ -83,7 +85,7 @@ public class ChangePasswordCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object);
+        var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangePasswordCommand
         {
@@ -99,6 +101,8 @@ public class ChangePasswordCommandHandlerTests
 
 public class ChangeAccountStatusCommandHandlerTests
 {
+    private readonly Mock<IPublisher> _publisher = MockPublisher.NoOp();
+
     private static global::AuthService.Domain.Entities.Account WithStatus(AccountStatusEnum status, int failed = 3) => new()
     {
         Id = Guid.NewGuid(),
@@ -116,7 +120,7 @@ public class ChangeAccountStatusCommandHandlerTests
         var account = WithStatus(AccountStatusEnum.Locked);
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
 
@@ -141,7 +145,7 @@ public class ChangeAccountStatusCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Locked, Reason = "violation" }, CancellationToken.None);
 
@@ -156,7 +160,7 @@ public class ChangeAccountStatusCommandHandlerTests
         var account = WithStatus(AccountStatusEnum.Active);
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
 
@@ -169,7 +173,7 @@ public class ChangeAccountStatusCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = Guid.NewGuid(), Status = AccountStatusEnum.Active }, CancellationToken.None);
 
@@ -201,7 +205,7 @@ public class DeleteAccountCommandHandlerTests
         };
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
-        var handler = new DeleteAccountCommandHandler(uow.Object);
+        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
 
@@ -216,7 +220,7 @@ public class DeleteAccountCommandHandlerTests
     {
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeleteAccountCommandHandler(uow.Object);
+        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteAccountCommand { Id = Guid.NewGuid() }, CancellationToken.None);
 
