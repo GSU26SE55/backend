@@ -38,7 +38,7 @@ jobs:
       smsservice: ${{ steps.filter.outputs.smsservice }}
       filestorageservice: ${{ steps.filter.outputs.filestorageservice }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -89,7 +89,7 @@ jobs:
           echo "Service ${{ matrix.service.name }} không bị touch. Skip."
           exit 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -129,7 +129,7 @@ jobs:
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -181,7 +181,7 @@ jobs:
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
