@@ -24,7 +24,10 @@ public class InviteAccountCommandHandlerTests
     {
         var role = new global::AuthService.Domain.Entities.Role
         {
-            Id = Guid.NewGuid(), Name = "Staff", NormalizedName = "STAFF", Status = RoleStatusEnum.Active
+            Id = Guid.NewGuid(),
+            Name = "Staff",
+            NormalizedName = "STAFF",
+            Status = RoleStatusEnum.Active
         };
         global::AuthService.Domain.Entities.Account? captured = null;
         var (uow, accounts, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
@@ -88,7 +91,10 @@ public class InviteAccountCommandHandlerTests
     {
         var inactiveRole = new global::AuthService.Domain.Entities.Role
         {
-            Id = Guid.NewGuid(), Name = "Old", NormalizedName = "OLD", Status = RoleStatusEnum.Deprecated
+            Id = Guid.NewGuid(),
+            Name = "Old",
+            NormalizedName = "OLD",
+            Status = RoleStatusEnum.Deprecated
         };
         var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { inactiveRole });
         var handler = new InviteAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object, _publisher.Object);

@@ -53,7 +53,8 @@ public class GetAuditLogsQueryHandlerTests
 
         var resp = await handler.Handle(new GetAuditLogsQuery
         {
-            PageNumber = 1, PageSize = 10,
+            PageNumber = 1,
+            PageSize = 10,
             Action = AuditActionEnum.PasswordChanged
         }, CancellationToken.None);
 
@@ -72,7 +73,8 @@ public class GetAuditLogsQueryHandlerTests
 
         var resp = await handler.Handle(new GetAuditLogsQuery
         {
-            PageNumber = 1, PageSize = 10,
+            PageNumber = 1,
+            PageSize = 10,
             TargetAccountId = targetId
         }, CancellationToken.None);
 
@@ -90,7 +92,8 @@ public class GetAuditLogsQueryHandlerTests
 
         var resp = await handler.Handle(new GetAuditLogsQuery
         {
-            PageNumber = 1, PageSize = 10,
+            PageNumber = 1,
+            PageSize = 10,
             IsSuccess = false
         }, CancellationToken.None);
 
@@ -109,7 +112,8 @@ public class GetAuditLogsQueryHandlerTests
 
         var resp = await handler.Handle(new GetAuditLogsQuery
         {
-            PageNumber = 1, PageSize = 10,
+            PageNumber = 1,
+            PageSize = 10,
             FromUtc = new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc),
             ToUtc = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc)
         }, CancellationToken.None);
