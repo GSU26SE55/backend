@@ -24,7 +24,7 @@
         <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
         <PackageReference Include="RestSharp" Version="112.1.0" />
         <PackageReference Include="Grpc.Net.ClientFactory" Version="2.60.0" />
-        <PackageReference Include="Grpc.AspNetCore" Version="2.60.0" />
+        <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
     </ItemGroup>
 
     <ItemGroup>

@@ -17,7 +17,7 @@
         <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
 
-        <PackageReference Include="Grpc.AspNetCore" Version="2.60.0" />
+        <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
     </ItemGroup>
 
     <ItemGroup>
