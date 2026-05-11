@@ -1,7 +1,7 @@
 # Multi-stage build cho ApiGateway (YARP reverse proxy).
 # HTTP only — production đặt reverse proxy (nginx/Caddy/Traefik) phía trước cho HTTPS.
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["services/ApiGateway/src/ApiGateway/ApiGateway.csproj", "services/ApiGateway/src/ApiGateway/"]
