@@ -98,6 +98,11 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "mcr.microsoft.com/dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcr.microsoft.com/dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/services/AuthService/src/AuthService.Api"
@@ -107,6 +112,11 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "mcr.microsoft.com/dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcr.microsoft.com/dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/services/EmailService/src/EmailService.Api"
@@ -116,6 +126,11 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "mcr.microsoft.com/dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcr.microsoft.com/dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/services/SmsService/src/SmsService.Api"
@@ -125,6 +140,11 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "mcr.microsoft.com/dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcr.microsoft.com/dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/services/FileStorageService/src/FileStorageService.Api"
@@ -134,3 +154,8 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "mcr.microsoft.com/dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mcr.microsoft.com/dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
