@@ -11,7 +11,7 @@ namespace AuthService.Api.Controllers.Admin;
 /// Module admin quản lý Permission system + assignment role↔permission.
 /// </summary>
 [ApiController]
-[Route("api/admin")]
+[Route("api/admin/permissions")]
 [Produces("application/json")]
 [ApiExplorerSettings(GroupName = "admin")]
 [Authorize(Roles = "Admin")]
@@ -29,7 +29,7 @@ public class AdminPermissionsController : ControllerBase
     /// </summary>
     /// <response code="200">Lấy danh sách permission thành công.</response>
     /// <response code="403">Không có role Admin.</response>
-    [HttpGet("permissions")]
+    [HttpGet]
     [ProducesResponseType(typeof(PermissionListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllPermissions(
         [FromQuery] string? module = null,
@@ -44,7 +44,7 @@ public class AdminPermissionsController : ControllerBase
     /// </summary>
     /// <response code="200">Lấy danh sách thành công.</response>
     /// <response code="404">Role không tồn tại.</response>
-    [HttpGet("roles/{roleId:guid}/permissions")]
+    [HttpGet("{roleId:guid}/roles")]
     [ProducesResponseType(typeof(RolePermissionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(RolePermissionsResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetRolePermissions(
@@ -68,7 +68,7 @@ public class AdminPermissionsController : ControllerBase
     /// <response code="200">Set permission thành công.</response>
     /// <response code="400">Permission không tồn tại / Cố modify system role mà không allowSystemRole.</response>
     /// <response code="404">Role không tồn tại.</response>
-    [HttpPut("roles/{roleId:guid}/permissions")]
+    [HttpPut("{roleId:guid}/roles")]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status404NotFound)]
