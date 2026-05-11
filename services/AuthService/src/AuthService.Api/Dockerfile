@@ -3,7 +3,7 @@
 # Lệnh build: docker build -f services/AuthService/src/AuthService.Api/Dockerfile -t auth-service .
 # Hoặc: docker compose build authservice (đã set context: . trong docker-compose.yml)
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj trước để tận dụng Docker layer cache cho dotnet restore
