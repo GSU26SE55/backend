@@ -23,6 +23,7 @@
 - [Claude Code](https://claude.ai/code) — bắt buộc
 - Node.js 18+
 - Git 2.30+
+- [GitHub CLI](https://cli.github.com/) — bắt buộc
 
 ### Bước 2 — Clone repo
 
@@ -43,28 +44,15 @@ MSSV: [MSSV của bạn]
 ---
 ```
 
-### Bước 4 — Tạo file .env
-
-Tạo file `.env` ở root folder (file này **không được commit**):
-
-```
-JIRA_BASE_URL=https://fpt-team-d7rg7yak.atlassian.net
-JIRA_EMAIL=<email fpt của bạn>
-JIRA_API_TOKEN=<token Jira của bạn>
-```
-
-**Lấy Jira API Token:**
-1. Vào https://id.atlassian.com/manage-profile/security/api-tokens
-2. Nhấn **Create API token** → đặt tên → Copy token
-
-### Bước 5 — Setup Jira MCP
+### Bước 4 — Xác thực GitHub CLI
 
 ```bash
-npx -y @rui.branco/jira-mcp setup "<email fpt>" "<API token>" "https://fpt-team-d7rg7yak.atlassian.net"
-claude mcp add --transport stdio jira -- npx -y @rui.branco/jira-mcp
+gh auth login
 ```
 
-### Bước 6 — Mở Claude Code
+Chọn **GitHub.com** → **HTTPS** → xác thực qua browser.
+
+### Bước 5 — Mở Claude Code
 
 ```bash
 claude
@@ -74,19 +62,19 @@ Gõ `/kltn` để xem toàn bộ lệnh → sẵn sàng làm việc.
 
 ---
 
-## Luồng làm việc mỗi ticket
+## Luồng làm việc mỗi issue
 
 ```
-1. git pull origin main                          ← lấy code mới nhất
-2. git checkout -b feature/KAN-XX-ten-ngan       ← tạo branch
-3. /kltn-task KAN-XX                             ← đọc ticket, lập plan
+1. git pull origin main                              ← lấy code mới nhất
+2. git checkout -b feature/GH-[number]-ten-ngan      ← tạo branch
+3. /kltn-implement [number]                          ← đọc issue, lập plan
 4. [review plan] → gõ "ok" để xác nhận
 5. code...
-6. /kltn-reviewcode                              ← review trước khi test
-7. /kltn-test KAN-XX                             ← chạy test
-8. /kltn-ship KAN-XX                             ← tạo PR + cập nhật Jira
+6. /kltn-reviewcode                                  ← review trước khi test
+7. /kltn-test [number]                               ← chạy test
+8. /kltn-ship [number]                               ← tạo PR + cập nhật issue
 9. Đồng đội /kltn-reviewpr → approve
-10. Leader merge PR vào main
+10. /kltn-complete [number]                          ← merge PR + close issue
 ```
 
 ---
@@ -95,8 +83,8 @@ Gõ `/kltn` để xem toàn bộ lệnh → sẵn sàng làm việc.
 
 - Không push thẳng lên `main` — luôn qua PR
 - Không merge PR của chính mình — cần ≥ 1 người approve
-- 1 ticket = 1 branch: `feature/KAN-XX-ten-ngan`
-- Commit format: `feat(KAN-XX): mô tả` / `fix` / `refactor` / `test`
+- 1 issue = 1 branch: `feature/GH-[number]-ten-ngan`
+- Commit format: `feat(#[number]): mô tả` / `fix` / `refactor` / `test`
 - Không commit `.env` và `.claude/CLAUDE.local.md`
 
 ---
