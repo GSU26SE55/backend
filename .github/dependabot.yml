@@ -16,10 +16,8 @@ updates:
     labels:
       - "dependencies"
       - "nuget"
-    commit-message:
-      prefix: "chore(deps)"
     groups:
-      # Microsoft.Extensions.* — giữ cùng major với .NET runtime hiện tại.
+      # Microsoft.Extensions.* — ít risk break
       microsoft-extensions:
         patterns:
           - "Microsoft.Extensions.*"
@@ -43,32 +41,13 @@ updates:
       masstransit:
         patterns:
           - "MassTransit*"
-    # Bỏ qua major version bumps cho các package critical.
-    # Backend đang target net8.0, nên major upgrade (9.x/10.x) cần làm thủ công.
+    # Bỏ qua major version bumps cho các package critical (manual upgrade)
     ignore:
       - dependency-name: "Microsoft.AspNetCore.*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "Microsoft.EntityFrameworkCore*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "Microsoft.Extensions.*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "MassTransit*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "Microsoft.NET.Test.Sdk"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "xunit*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "Moq"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "FluentAssertions"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "MockQueryable*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "coverlet.*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "Testcontainers*"
         update-types: ["version-update:semver-major"]
 
   # ============================================================
@@ -83,8 +62,6 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
-    commit-message:
-      prefix: "chore(deps)"
 
   # ============================================================
   # Docker base images — update mỗi tuần.

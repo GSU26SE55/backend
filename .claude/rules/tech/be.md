@@ -287,7 +287,7 @@ public class BatteryCreateCommand : IRequest<BatteryCreateResponse>, IValidatabl
 |-------|---------|
 | Email | `[\w.+-]+@[\w-]+\.[\w]{2,}` |
 | Password | `^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$` |
-| Phone VN | `^(0[3\|5\|7\|8\|9])[0-9]{8}$` |
+| Phone VN | `^(0[35789])[0-9]{8}$` |
 
 **Pipeline:** `Request → ValidationBehavior → nếu !IsSuccess → return ngay (skip handler)`
 
@@ -457,3 +457,11 @@ migrationBuilder.AlterColumn<int>("status", "batteries", nullable: false, defaul
 - Private fields: `_camelCase`
 - Parameters: camelCase
 - Routes: `api/batteries`, `api/battery-readings` (lowercase, plural, kebab-case)
+
+---
+
+## Nguyên tắc viết code
+
+**Simplicity First:** Chỉ tạo Command/Query/Entity mà issue yêu cầu — không thêm overload, optional param, hoặc business rule "phòng hờ".
+
+**Surgical Changes:** Chỉ sửa files trong plan.md. Không refactor handler khác, không thêm index DB, không đổi naming convention ngoài scope task.
