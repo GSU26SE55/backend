@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Query.Account;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedInfrastructure.Services;
@@ -35,6 +36,9 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Accou
             .AsNoTracking()
             .Include(a => a.AccountRoles.Where(ar => ar.IsActive))
                 .ThenInclude(ar => ar.Role)
+            .Include(a => a.Profile)
+            .Include(a => a.StaffProfile!)
+                .ThenInclude(sp => sp.Skills)
             .FirstOrDefaultAsync(a => a.Id == userId, cancellationToken);
 
         if (account == null)
@@ -51,24 +55,7 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Accou
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new AccountDto
-            {
-                Id = account.Id,
-                Email = account.Email,
-                PhoneNumber = account.PhoneNumber,
-                FullName = account.FullName,
-                AvatarUrl = account.AvatarUrl,
-                DateOfBirth = account.DateOfBirth,
-                Address = account.Address,
-                EmailConfirmed = account.EmailConfirmed,
-                PhoneConfirmed = account.PhoneConfirmed,
-                TwoFactorEnabled = account.TwoFactorEnabled,
-                Status = account.Status,
-                LastLoginAt = account.LastLoginAt,
-                CreatedAt = account.CreatedAt,
-                UpdatedAt = account.UpdatedAt,
-                Roles = account.AccountRoles.Select(ar => ar.Role.Name).ToList()
-            }
+            Data = AccountProfileMapper.ToAccountDto(account)
         };
     }
 }

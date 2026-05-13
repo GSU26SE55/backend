@@ -49,6 +49,22 @@ internal static class PermissionSeed
         new(PermissionCodes.TicketClose, "Ticket", "Đóng ticket"),
         new(PermissionCodes.TicketEscalate, "Ticket", "Escalate ticket lên Manager"),
 
+        // Notification
+        new(PermissionCodes.NotificationView, "Notification", "Xem thông báo"),
+        new(PermissionCodes.NotificationSend, "Notification", "Gửi thông báo vận hành"),
+        new(PermissionCodes.NotificationManageTemplate, "Notification", "Quản lý template thông báo"),
+
+        // KnowledgeBase
+        new(PermissionCodes.KnowledgeBaseView, "KnowledgeBase", "Xem bài viết knowledge base"),
+        new(PermissionCodes.KnowledgeBaseCreate, "KnowledgeBase", "Tạo bài viết knowledge base"),
+        new(PermissionCodes.KnowledgeBaseUpdate, "KnowledgeBase", "Cập nhật bài viết knowledge base"),
+        new(PermissionCodes.KnowledgeBaseDelete, "KnowledgeBase", "Xóa bài viết knowledge base"),
+        new(PermissionCodes.KnowledgeBasePublish, "KnowledgeBase", "Publish/unpublish bài viết knowledge base"),
+
+        // Reports
+        new(PermissionCodes.ReportsView, "Reports", "Xem báo cáo vận hành"),
+        new(PermissionCodes.ReportsExport, "Reports", "Export báo cáo"),
+
         // Audit
         new(PermissionCodes.AuditView, "Audit", "Xem audit log"),
     };
@@ -67,6 +83,10 @@ internal static class PermissionSeed
                 PermissionCodes.BatteryView, PermissionCodes.BatteryAssign, PermissionCodes.BatteryConfigure,
                 PermissionCodes.TicketViewAll, PermissionCodes.TicketAssign,
                 PermissionCodes.TicketClose, PermissionCodes.TicketEscalate,
+                PermissionCodes.NotificationView, PermissionCodes.NotificationSend,
+                PermissionCodes.KnowledgeBaseView, PermissionCodes.KnowledgeBaseCreate,
+                PermissionCodes.KnowledgeBaseUpdate, PermissionCodes.KnowledgeBasePublish,
+                PermissionCodes.ReportsView, PermissionCodes.ReportsExport,
                 PermissionCodes.AuditView,
             },
 
@@ -75,12 +95,16 @@ internal static class PermissionSeed
                 PermissionCodes.UserView,
                 PermissionCodes.BatteryView, PermissionCodes.BatteryUpdate,
                 PermissionCodes.TicketView, PermissionCodes.TicketResolve,
+                PermissionCodes.NotificationView,
+                PermissionCodes.KnowledgeBaseView,
             },
 
             ["CUSTOMER"] = new[]
             {
                 PermissionCodes.BatteryView,
                 PermissionCodes.TicketView, PermissionCodes.TicketCreate,
+                PermissionCodes.NotificationView,
+                PermissionCodes.KnowledgeBaseView,
             }
         };
 

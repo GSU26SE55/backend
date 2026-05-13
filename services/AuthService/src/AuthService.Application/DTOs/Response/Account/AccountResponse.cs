@@ -7,3 +7,7 @@ public class AccountResponse : CommonResponse<AccountDto> { }
 public class AccountListResponse : CommonResponse<PaginationResponse<AccountDto>> { }
 
 public class AccountActionResponse : CommonResponse<Guid> { }
+
+public class StaffAssignmentProfileResponse : CommonResponse<StaffAssignmentProfileDto> { }
+
+public class StaffAssignmentProfileListResponse : CommonResponse<List<StaffAssignmentProfileDto>> { }

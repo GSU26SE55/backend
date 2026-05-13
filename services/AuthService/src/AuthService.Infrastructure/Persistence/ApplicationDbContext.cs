@@ -26,6 +26,9 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<LoginAttempt> LoginAttempts { get; set; }
     public virtual DbSet<Permission> Permissions { get; set; }
     public virtual DbSet<RolePermission> RolePermissions { get; set; }
+    public virtual DbSet<AccountProfile> AccountProfiles { get; set; }
+    public virtual DbSet<StaffProfile> StaffProfiles { get; set; }
+    public virtual DbSet<StaffSkill> StaffSkills { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder.AddInterceptors(_auditableEntityInterceptor);

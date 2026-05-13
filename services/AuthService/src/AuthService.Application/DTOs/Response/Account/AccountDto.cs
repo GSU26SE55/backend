@@ -19,4 +19,7 @@ public class AccountDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public List<string> Roles { get; set; } = new();
+    public AccountProfileDto? Profile { get; set; }
+    public StaffProfileDto? StaffProfile { get; set; }
+    public string? DisplayAvatarUrl { get; set; }
 }
