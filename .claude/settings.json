@@ -18,16 +18,6 @@
       "Bash(cp:*)",
       "Bash(mv:*)",
       "Bash(dotnet:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(node:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(pip:*)",
-      "Bash(pip3:*)",
-      "Bash(ruff:*)",
-      "Bash(uvicorn:*)",
-      "Bash(pytest:*)",
       "Bash(jq:*)"
     ]
   },
@@ -92,30 +82,6 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/be/check-build.sh",
             "timeout": 60,
             "statusMessage": "Building .NET project..."
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/fe/post-edit-feedback.sh",
-            "timeout": 10,
-            "statusMessage": "Checking FE code patterns..."
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/fe/check-build.sh",
-            "timeout": 60,
-            "statusMessage": "TypeScript type check..."
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ai/check-ruff.sh",
-            "timeout": 15,
-            "statusMessage": "Ruff lint + format check..."
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ai/check-random-seed.sh",
-            "timeout": 5,
-            "statusMessage": "Checking random seed in training script..."
           }
         ]
       }
