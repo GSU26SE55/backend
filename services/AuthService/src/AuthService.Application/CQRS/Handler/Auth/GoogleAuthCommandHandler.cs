@@ -62,6 +62,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             .GetAllAsync()
             .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
                 .ThenInclude(ar => ar.Role)
+            .Include(a => a.Profile)
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
@@ -88,6 +89,16 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 LockoutEndAt = null
             };
             await _unitOfWork.Accounts.AddAsync(account);
+            account.Profile = new AccountProfile
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                ExternalAvatarUrl = NormalizeGooglePicture(googleUser.Picture),
+                AvatarSource = string.IsNullOrWhiteSpace(googleUser.Picture)
+                    ? AvatarSourceEnum.None
+                    : AvatarSourceEnum.Google
+            };
+            await _unitOfWork.AccountProfiles.AddAsync(account.Profile);
             await _unitOfWork.AccountRoles.AddAsync(new AccountRole
             {
                 Id = Guid.NewGuid(),
@@ -123,6 +134,8 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             account.LockoutEndAt = null;
             if (account.Status == AccountStatusEnum.Locked)
                 account.Status = AccountStatusEnum.Active;
+
+            await UpsertGoogleAvatarProfileAsync(account, googleUser.Picture);
             _unitOfWork.Accounts.UpdateAsync(account);
         }
 
@@ -189,4 +202,36 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         Message = message,
         ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
+
+    private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)
+    {
+        var normalizedPicture = NormalizeGooglePicture(pictureUrl);
+        if (normalizedPicture is null)
+            return;
+
+        var profile = account.Profile ?? new AccountProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = account.Id
+        };
+
+        profile.ExternalAvatarUrl = normalizedPicture;
+        if (profile.AvatarFileId is null)
+            profile.AvatarSource = AvatarSourceEnum.Google;
+
+        if (account.Profile is null)
+        {
+            account.Profile = profile;
+            await _unitOfWork.AccountProfiles.AddAsync(profile);
+        }
+        else
+        {
+            _unitOfWork.AccountProfiles.UpdateAsync(profile);
+        }
+    }
+
+    private static string? NormalizeGooglePicture(string? pictureUrl)
+    {
+        return string.IsNullOrWhiteSpace(pictureUrl) ? null : pictureUrl.Trim();
+    }
 }

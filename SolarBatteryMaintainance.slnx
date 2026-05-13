@@ -25,6 +25,7 @@
   <Folder Name="/Services/FileStorageService/">
     <Project Path="services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Application/FileStorageService.Application.csproj" />
+    <Project Path="services/FileStorageService/src/FileStorageService.Domain/FileStorageService.Domain.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Infrastructure/FileStorageService.Infrastructure.csproj" />
     <Project Path="services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj" />
   </Folder>

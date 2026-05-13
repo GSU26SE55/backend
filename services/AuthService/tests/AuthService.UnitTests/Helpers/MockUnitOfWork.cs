@@ -23,7 +23,10 @@ public static class MockUnitOfWork
             IEnumerable<RefreshToken>? tokenSeed = null,
             IEnumerable<Role>? roleSeed = null,
             IEnumerable<AccountRole>? accountRoleSeed = null,
-            IEnumerable<AuditLog>? auditLogSeed = null)
+            IEnumerable<AuditLog>? auditLogSeed = null,
+            IEnumerable<AccountProfile>? accountProfileSeed = null,
+            IEnumerable<StaffProfile>? staffProfileSeed = null,
+            IEnumerable<StaffSkill>? staffSkillSeed = null)
     {
         var accounts = new Mock<IGenericRepository<Account>>();
         accounts.Setup(r => r.GetAllAsync()).Returns((accountSeed ?? Array.Empty<Account>()).AsQueryable().BuildMock());
@@ -49,6 +52,15 @@ public static class MockUnitOfWork
         var rolePermissions = new Mock<IGenericRepository<RolePermission>>();
         rolePermissions.Setup(r => r.GetAllAsync()).Returns(Array.Empty<RolePermission>().AsQueryable().BuildMock());
 
+        var accountProfiles = new Mock<IGenericRepository<AccountProfile>>();
+        accountProfiles.Setup(r => r.GetAllAsync()).Returns((accountProfileSeed ?? Array.Empty<AccountProfile>()).AsQueryable().BuildMock());
+
+        var staffProfiles = new Mock<IGenericRepository<StaffProfile>>();
+        staffProfiles.Setup(r => r.GetAllAsync()).Returns((staffProfileSeed ?? Array.Empty<StaffProfile>()).AsQueryable().BuildMock());
+
+        var staffSkills = new Mock<IGenericRepository<StaffSkill>>();
+        staffSkills.Setup(r => r.GetAllAsync()).Returns((staffSkillSeed ?? Array.Empty<StaffSkill>()).AsQueryable().BuildMock());
+
         var uow = new Mock<IAuthUnitOfWork>();
         uow.SetupGet(u => u.Accounts).Returns(accounts.Object);
         uow.SetupGet(u => u.RefreshTokens).Returns(refreshTokens.Object);
@@ -58,6 +70,9 @@ public static class MockUnitOfWork
         uow.SetupGet(u => u.LoginAttempts).Returns(loginAttempts.Object);
         uow.SetupGet(u => u.Permissions).Returns(permissions.Object);
         uow.SetupGet(u => u.RolePermissions).Returns(rolePermissions.Object);
+        uow.SetupGet(u => u.AccountProfiles).Returns(accountProfiles.Object);
+        uow.SetupGet(u => u.StaffProfiles).Returns(staffProfiles.Object);
+        uow.SetupGet(u => u.StaffSkills).Returns(staffSkills.Object);
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);

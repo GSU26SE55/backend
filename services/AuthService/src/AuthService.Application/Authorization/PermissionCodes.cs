@@ -44,6 +44,22 @@ public static class PermissionCodes
     public const string TicketClose = "ticket.close";
     public const string TicketEscalate = "ticket.escalate";
 
+    // Notification (notification.*)
+    public const string NotificationView = "notification.view";
+    public const string NotificationSend = "notification.send";
+    public const string NotificationManageTemplate = "notification.manage_template";
+
+    // Knowledge base (knowledge_base.*)
+    public const string KnowledgeBaseView = "knowledge_base.view";
+    public const string KnowledgeBaseCreate = "knowledge_base.create";
+    public const string KnowledgeBaseUpdate = "knowledge_base.update";
+    public const string KnowledgeBaseDelete = "knowledge_base.delete";
+    public const string KnowledgeBasePublish = "knowledge_base.publish";
+
+    // Reports (reports.*)
+    public const string ReportsView = "reports.view";
+    public const string ReportsExport = "reports.export";
+
     // Audit (audit.*)
     public const string AuditView = "audit.view";
 }

@@ -24,6 +24,9 @@ public class UnitOfWork : IAuthUnitOfWork
     public IGenericRepository<LoginAttempt> LoginAttempts => new GenericRepository<LoginAttempt>(_context);
     public IGenericRepository<Permission> Permissions => new GenericRepository<Permission>(_context);
     public IGenericRepository<RolePermission> RolePermissions => new GenericRepository<RolePermission>(_context);
+    public IGenericRepository<AccountProfile> AccountProfiles => new GenericRepository<AccountProfile>(_context);
+    public IGenericRepository<StaffProfile> StaffProfiles => new GenericRepository<StaffProfile>(_context);
+    public IGenericRepository<StaffSkill> StaffSkills => new GenericRepository<StaffSkill>(_context);
 
     public async Task BeginTransactionAsync()
     {
