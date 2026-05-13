@@ -29,7 +29,7 @@ jobs:
     name: Trivy filesystem
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
@@ -68,7 +68,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -97,6 +97,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: csharp
-          # Repo private chưa bật GitHub Advanced Security → không upload SARIF được.
-          # Giữ analysis chạy để bắt issue trong log; bật lại "always" khi có GHAS.
-          upload: never

@@ -23,11 +23,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# dorny/paths-filter cần pull-requests: read để gọi listFiles API trên PR event.
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
   # ============================================================
   # Detect changed paths để skip job không cần thiết.
@@ -43,9 +38,9 @@ jobs:
       smsservice: ${{ steps.filter.outputs.smsservice }}
       filestorageservice: ${{ steps.filter.outputs.filestorageservice }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
@@ -94,7 +89,7 @@ jobs:
           echo "Service ${{ matrix.service.name }} không bị touch. Skip."
           exit 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -102,7 +97,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
@@ -134,7 +129,7 @@ jobs:
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -142,7 +137,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
@@ -186,7 +181,7 @@ jobs:
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -194,7 +189,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
