@@ -20,8 +20,8 @@
         <PackageReference Include="MockQueryable.Moq" Version="7.0.1" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.2" />
         <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.8" />
         <PackageReference Include="MassTransit.TestFramework" Version="8.5.9" />
         <PackageReference Include="coverlet.collector" Version="6.0.2">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
