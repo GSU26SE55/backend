@@ -1,3 +1,5 @@
+using AuthService.Application.Authorization;
+using AuthService.Application.Configuration;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Infrastructure.BackgroundJobs;
@@ -6,6 +8,7 @@ using AuthService.Infrastructure.Implements.Repositories;
 using AuthService.Infrastructure.Implements.Services;
 using AuthService.Infrastructure.Persistence;
 using AuthService.Infrastructure.Persistence.Seeders;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +34,17 @@ public static class ManageDependencyInjection
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
         services.AddHostedService<OutboxRelayBackgroundService>();
+
+        // Concurrent session limit policy. Bind từ section "Session" hoặc dùng default (5).
+        services.Configure<SessionOptions>(configuration.GetSection(SessionOptions.SectionName));
+
+        // Granular permission authorization:
+        // [HasPermission("battery.view")] -> policy "perm:battery.view"
+        // -> PermissionPolicyProvider tạo policy on-the-fly
+        // -> PermissionAuthorizationHandler verify claim "perm".
+        services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+
         return services;
     }
 

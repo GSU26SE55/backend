@@ -1,4 +1,6 @@
+using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -8,6 +10,8 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -20,15 +24,21 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IJwtHelper _jwtHelper;
+    private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public VerifyOtpCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IJwtHelper jwtHelper,
+        IMessageProducerService messageProducer,
+        IPublisher publisher,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
+        _messageProducer = messageProducer;
+        _publisher = publisher;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -113,7 +123,8 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
         if (!roleNames.Contains("Customer"))
             roleNames.Add("Customer");
 
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames);
+        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
@@ -130,6 +141,19 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
         };
 
         await _unitOfWork.RefreshTokens.AddAsync(refreshToken);
+
+        // Enforce concurrent session limit.
+        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
+
+        // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges để event đi cùng transaction.
+        await _messageProducer.PublishAsync(new AccountActivatedEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            roleNames,
+            CreationSource: "SelfRegister"), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new LoginResponse

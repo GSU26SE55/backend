@@ -22,6 +22,10 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
     public virtual DbSet<AccountRole> AccountRoles { get; set; }
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
+    public virtual DbSet<AuditLog> AuditLogs { get; set; }
+    public virtual DbSet<LoginAttempt> LoginAttempts { get; set; }
+    public virtual DbSet<Permission> Permissions { get; set; }
+    public virtual DbSet<RolePermission> RolePermissions { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder.AddInterceptors(_auditableEntityInterceptor);

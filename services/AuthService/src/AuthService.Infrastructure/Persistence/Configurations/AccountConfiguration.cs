@@ -107,6 +107,13 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasColumnName("provider")
             .HasMaxLength(50);
 
+        builder.Property(a => a.InvitationToken)
+            .HasColumnName("invitation_token")
+            .HasMaxLength(128);
+
+        builder.Property(a => a.InvitationExpiredAt)
+            .HasColumnName("invitation_expired_at");
+
         builder.Property(a => a.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
@@ -129,6 +136,7 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.HasIndex(a => a.GoogleId).IsUnique().HasFilter("\"google_id\" IS NOT NULL");
         builder.HasIndex(a => a.Status);
         builder.HasIndex(a => a.IsDeleted);
+        builder.HasIndex(a => a.InvitationToken).HasFilter("\"invitation_token\" IS NOT NULL");
 
         builder.HasQueryFilter(a => !a.IsDeleted);
 

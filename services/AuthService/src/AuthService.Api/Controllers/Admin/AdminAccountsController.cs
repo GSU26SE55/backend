@@ -1,6 +1,8 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Query.Account;
+using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.DTOs.Response.Login;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -166,6 +168,39 @@ public class AdminAccountsController : ControllerBase
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateAccountCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin mời 1 user mới qua email (chế độ invite, không set password sẵn).
+    /// </summary>
+    /// <remarks>
+    /// Khác với <c>POST /api/admin/accounts</c> (direct create + set password), endpoint này:
+    /// - Không yêu cầu admin nhập password cho user.
+    /// - Tạo account ở Status=PendingVerification.
+    /// - Sinh invitation token (24h TTL), gửi email mời qua NotificationService.
+    /// - User click link trong email → gọi <c>POST /api/auth/accept-invite</c> để đặt mật khẩu lần đầu và kích hoạt.
+    ///
+    /// Quyền truy cập: chỉ role Admin.
+    ///
+    /// Body request:
+    /// - <c>Email</c>: bắt buộc, đúng định dạng.
+    /// - <c>FullName</c>: bắt buộc.
+    /// - <c>PhoneNumber</c>: tùy chọn.
+    /// - <c>RoleIds</c>: bắt buộc, ít nhất 1 role.
+    /// </remarks>
+    /// <response code="201">Đã tạo account + gửi email invite.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc role không tồn tại.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="409">Email hoặc số điện thoại đã được sử dụng.</response>
+    [HttpPost("invite")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Invite([FromBody] InviteAccountCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -553,5 +588,43 @@ public class AdminAccountsController : ControllerBase
         command.AccountId = id;
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin xem login history của 1 account bất kỳ.
+    /// </summary>
+    /// <remarks>
+    /// Dùng để điều tra incident: ai đã login khi nào, từ IP nào, device nào, fail bao nhiêu lần.
+    /// </remarks>
+    /// <response code="200">Lấy login history thành công.</response>
+    /// <response code="400">Filter không hợp lệ.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin hoặc Manager.</response>
+    [HttpGet("{id:guid}/login-history")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetLoginHistory(
+        Guid id,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] LoginAttemptResult? result = null,
+        [FromQuery] bool? onlyFailed = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetLoginHistoryQuery
+        {
+            AccountId = id,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            Result = result,
+            OnlyFailed = onlyFailed,
+            FromUtc = fromUtc,
+            ToUtc = toUtc
+        };
+
+        var response = await _mediator.Send(query, cancellationToken);
+        return StatusCode(response.StatusCode, response);
     }
 }

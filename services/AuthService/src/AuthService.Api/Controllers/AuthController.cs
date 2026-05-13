@@ -413,6 +413,35 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Chấp nhận invitation token (do admin gửi qua email) và đặt mật khẩu lần đầu.
+    /// </summary>
+    /// <remarks>
+    /// Endpoint anonymous — user lần đầu truy cập hệ thống.
+    ///
+    /// Body request:
+    /// - <c>InvitationToken</c>: token nhận từ email invite.
+    /// - <c>Password</c>: mật khẩu lần đầu — tối thiểu 8 ký tự, có chữ hoa/thường/số/ký tự đặc biệt.
+    /// - <c>ConfirmPassword</c>: phải khớp Password.
+    ///
+    /// Sau khi accept thành công:
+    /// - Account chuyển sang Active, EmailConfirmed=true.
+    /// - Token bị clear (single-use).
+    /// - Hệ thống issue luôn cặp AccessToken + RefreshToken để login tự động.
+    /// </remarks>
+    /// <response code="200">Accept invite thành công, trả token đăng nhập.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc account đã active trước đó.</response>
+    /// <response code="401">Token không hợp lệ hoặc đã hết hạn.</response>
+    [HttpPost("accept-invite")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
     ///// <summary>
     ///// Đăng nhập / đăng ký bằng Google ID token. Auto-link nếu email đã tồn tại + EmailConfirmed=true,
     ///// auto-create nếu email chưa tồn tại (gán role Customer, EmailConfirmed=true ngay).

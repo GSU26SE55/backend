@@ -4,16 +4,20 @@ using AuthService.Application.Interfaces.Repositories;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IMessageProducerService _messageProducer;
 
-    public UpdateAccountCommandHandler(IAuthUnitOfWork unitOfWork)
+    public UpdateAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(UpdateAccountCommand request, CancellationToken cancellationToken)
@@ -64,6 +68,14 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
         account.Address = request.Address?.Trim();
 
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        await _messageProducer.PublishAsync(new AccountProfileUpdatedEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            account.AvatarUrl), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse

@@ -183,7 +183,7 @@ public class ResetPasswordCommandHandlerTests
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync(account);
         _jwt.Setup(j => j.ValidateResetToken("good-token")).Returns((accountId, (string?)null));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "good-token", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
@@ -200,7 +200,7 @@ public class ResetPasswordCommandHandlerTests
         var (uow, _, _, _, _) = MockUnitOfWork.Build();
         _jwt.Setup(j => j.ValidateResetToken(It.IsAny<string>())).Returns(((Guid?)null, "invalid"));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "bad", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(401);
@@ -214,7 +214,7 @@ public class ResetPasswordCommandHandlerTests
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync((Account?)null);
         _jwt.Setup(j => j.ValidateResetToken("good")).Returns((accountId, (string?)null));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "good", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(404);

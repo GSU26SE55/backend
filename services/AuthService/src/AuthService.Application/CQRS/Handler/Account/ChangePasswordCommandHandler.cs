@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -13,11 +14,16 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IPublisher _publisher;
 
-    public ChangePasswordCommandHandler(IAuthUnitOfWork unitOfWork, IPasswordHasher passwordHasher)
+    public ChangePasswordCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
@@ -35,6 +41,11 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
 
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
         {
+            await _publisher.Publish(new AuditTrailNotification(
+                AuditActionEnum.PasswordChanged, account.Id, IsSuccess: false,
+                TargetEmail: account.Email,
+                Reason: "Mật khẩu hiện tại không chính xác."), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return new AccountActionResponse
             {
                 IsSuccess = false,
@@ -59,6 +70,11 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             rt.RevokedReason = "Password changed";
             _unitOfWork.RefreshTokens.UpdateAsync(rt);
         }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.PasswordChanged, account.Id, IsSuccess: true,
+            TargetEmail: account.Email,
+            Metadata: new Dictionary<string, object?> { ["revokedSessions"] = activeTokens.Count }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

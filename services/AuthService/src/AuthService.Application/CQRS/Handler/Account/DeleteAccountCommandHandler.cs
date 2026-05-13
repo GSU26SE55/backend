@@ -4,16 +4,20 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IMessageProducerService _messageProducer;
 
-    public DeleteAccountCommandHandler(IAuthUnitOfWork unitOfWork)
+    public DeleteAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(DeleteAccountCommand request, CancellationToken cancellationToken)
@@ -43,6 +47,10 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
         }
 
         _unitOfWork.Accounts.DeleteAsync(account);
+
+        await _messageProducer.PublishAsync(new AccountDeletedEvent(
+            account.Id, account.Email, DeletionSource: "AdminDelete"), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse
