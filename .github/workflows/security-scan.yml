@@ -97,3 +97,6 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: csharp
+          # Repo private chưa bật GitHub Advanced Security → không upload SARIF được.
+          # Giữ analysis chạy để bắt issue trong log; bật lại "always" khi có GHAS.
+          upload: never
