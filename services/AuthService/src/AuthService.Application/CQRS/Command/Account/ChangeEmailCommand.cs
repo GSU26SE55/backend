@@ -3,6 +3,7 @@ using AuthService.Application.DTOs.Response.Account;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
@@ -12,6 +13,7 @@ public class ChangeEmailCommand : IRequest<AccountActionResponse>, IValidatable<
         @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string NewEmail { get; set; } = string.Empty;
     public string CurrentPassword { get; set; } = string.Empty;

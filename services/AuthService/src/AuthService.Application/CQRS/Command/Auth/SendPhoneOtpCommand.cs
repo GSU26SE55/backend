@@ -1,12 +1,14 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Auth;
 
 public class SendPhoneOtpCommand : IRequest<CommonResponse<string>>, IValidatable<CommonResponse<string>>
 {
     /// <summary>Lấy từ JWT claim, controller gán.</summary>
+    [JsonIgnore]
     public Guid AccountId { get; set; }
 
     public Task<CommonResponse<string>> ValidateAsync()

@@ -2,11 +2,13 @@ using AuthService.Application.DTOs.Response.Account;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
 public class UpdateAccountCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }

@@ -1,11 +1,13 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Auth;
 
 public class Enable2FACommand : IRequest<CommonResponse<TwoFactorSecretDto>>, IValidatable<CommonResponse<TwoFactorSecretDto>>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
 
     public Task<CommonResponse<TwoFactorSecretDto>> ValidateAsync()

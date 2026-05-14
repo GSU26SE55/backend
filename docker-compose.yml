@@ -8,6 +8,7 @@
 #
 # Truy cập:
 #   - ApiGateway:        http://localhost:4001
+#   - BatteryService:    http://localhost:4006
 #   - RabbitMQ UI:       http://localhost:15673  (guest/guest)
 #   - Minio Console:     http://localhost:9091   (minioadmin/minioadmin)
 #   - Postgres:          localhost:5433          (psql)
@@ -62,12 +63,15 @@ services:
       - .env.Docker
     environment:
       POSTGRES_HOST: postgres
+      # Container-to-container traffic uses the Postgres container port.
+      # The host mapping above keeps Docker Postgres reachable from macOS at localhost:5433.
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Password12345@}
       AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
       FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
+      BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -253,6 +257,36 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  batteryservice:
+    container_name: solar-batteryservice
+    build:
+      context: .
+      dockerfile: services/BatteryService/src/BatteryService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      ApiKeys__SensorIngest: ${BATTERY_SENSOR_INGEST_API_KEY:-dev-battery-ingest-key}
+    ports:
+      - "4006:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
   # ---------- Gateway (HTTP only — production dùng reverse proxy ngoài cho HTTPS) ----------
   apigateway:
     container_name: solar-apigateway
@@ -269,6 +303,7 @@ services:
       - emailservice
       - smsservice
       - filestorageservice
+      - batteryservice
     networks: [solar-net]
     restart: unless-stopped
 

@@ -2,11 +2,13 @@ using AuthService.Application.DTOs.Response.Account;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
 public class ChangePasswordCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string CurrentPassword { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;

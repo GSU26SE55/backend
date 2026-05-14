@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="../../shared/src/SharedKernels/SharedKernels.csproj" />
+  <Project Path="src/BatteryService.Api/BatteryService.Api.csproj" />
+  <Project Path="src/BatteryService.Application/BatteryService.Application.csproj" />
+  <Project Path="src/BatteryService.Domain/BatteryService.Domain.csproj" />
+  <Project Path="src/BatteryService.Infrastructure/BatteryService.Infrastructure.csproj" />
+  <Project Path="tests/BatteryService.IntegrationTests/BatteryService.IntegrationTests.csproj" />
+  <Project Path="tests/BatteryService.UnitTests/BatteryService.UnitTests.csproj" />
+</Solution>

@@ -76,7 +76,7 @@ public class AuthControllerTests
     public async Task VerifyOtp_FailureStatus_PropagatedToResponse()
     {
         _mediator.Setup(m => m.Send(It.IsAny<VerifyOtpCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new LoginResponse { IsSuccess = false, StatusCode = 423, Message = "Locked" });
+            .ReturnsAsync(new CommonResponse<string> { IsSuccess = false, StatusCode = 423, Message = "Locked" });
 
         var result = await NewCtrl().VerifyOtp(new VerifyOtpCommand(), CancellationToken.None) as ObjectResult;
 

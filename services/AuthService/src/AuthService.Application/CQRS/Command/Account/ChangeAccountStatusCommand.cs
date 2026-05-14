@@ -3,11 +3,13 @@ using AuthService.Domain.Enums;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
 public class ChangeAccountStatusCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public AccountStatusEnum Status { get; set; }
     public string? Reason { get; set; }

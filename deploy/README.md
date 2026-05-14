@@ -197,7 +197,7 @@ deploy/
 │   └── templates/
 │       ├── _helpers.tpl
 │       ├── shared/            # ConfigMap + Secret + NetworkPolicy + ResourceQuota
-│       ├── services/          # 5 ASP.NET service (deployment + service + servicemonitor + hpa + pdb)
+│       ├── services/          # 6 ASP.NET service (deployment + service + servicemonitor + hpa + pdb)
 │       ├── infra/             # Postgres + Redis + RabbitMQ + Minio + backup CronJob
 │       └── monitoring/        # Alert rules + Dashboards CM + AM-Discord relay
 ├── k8s/                       # Cluster-level setup (apply 1 lần)
@@ -297,11 +297,11 @@ kubectl exec -i postgres-0 -n solar-staging -- \
 | 2 | Subchart CRD timing | 2-phase install: CRD trước, full chart sau |
 | 3 | Jenkins shallow clone | depth=50 + fetch origin/main |
 | 4 | NetworkPolicy chặn Prometheus | Allow rule prometheus + kubelet + DNS egress |
-| 5 | DB migration race | Helm pre-install Job |
+| 5 | DB migration race | Database-init Job + service initContainers đợi DB riêng |
 | 6 | Smoke test endpoint sai | Align /metrics |
 | 7 | Postgres backup image bloat | postgres:16-alpine + scope retention |
 | 8 | PrometheusRule label | release: monitoring match subchart |
-| 9 | Init container 80MB | busybox 5MB |
+| 9 | App start trước khi DB riêng tồn tại | postgres client initContainer kiểm tra database existence |
 | 10 | imagePullPolicy default | Always cho floating tag |
 | 11 | Resource OOM cluster | ResourceQuota cap |
 | 12 | DB connection exhausted | max_connections 300 + pool 25/pod |
@@ -311,4 +311,6 @@ kubectl exec -i postgres-0 -n solar-staging -- \
 ASP.NET dùng `__` thay `:` trong env var (chuẩn Microsoft):
 - `Logging__Console__FormatterName` ↔ `Logging:Console:FormatterName`
 - `ConnectionStrings__AuthDb` ↔ `ConnectionStrings:AuthDb`
+- `ConnectionStrings__FileStorageDb` ↔ `ConnectionStrings:FileStorageDb`
+- `ConnectionStrings__BatteryDb` ↔ `ConnectionStrings:BatteryDb`
 - `JwtSettings__SecretKey` ↔ `JwtSettings:SecretKey`

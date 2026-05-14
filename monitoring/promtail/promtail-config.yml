@@ -52,7 +52,7 @@ scrape_configs:
       #    Skip monitoring stack tự thân (grafana, loki, promtail, prometheus, alertmanager,
       #    cadvisor, *-exporter, minio-init) để tránh log lặp/noise.
       - source_labels: ["__meta_docker_container_name"]
-        regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|apigateway|postgres|redis|rabbitmq|minio)"
+        regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|batteryservice|apigateway|postgres|redis|rabbitmq|minio)"
         action: keep
 
     pipeline_stages:

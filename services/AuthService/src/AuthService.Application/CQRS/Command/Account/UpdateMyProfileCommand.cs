@@ -2,11 +2,13 @@ using AuthService.Application.DTOs.Response.Account;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
 public class UpdateMyProfileCommand : IRequest<AccountResponse>, IValidatable<AccountResponse>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
 
     public string FullName { get; set; } = string.Empty;

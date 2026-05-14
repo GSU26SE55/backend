@@ -89,6 +89,7 @@ jobs:
             services/EmailService/src/EmailService.Api/EmailService.Api.csproj \
             services/SmsService/src/SmsService.Api/SmsService.Api.csproj \
             services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj \
+            services/BatteryService/src/BatteryService.Api/BatteryService.Api.csproj \
             services/ApiGateway/src/ApiGateway/ApiGateway.csproj; do
             dotnet build "$csproj" -c Release --no-incremental
           done

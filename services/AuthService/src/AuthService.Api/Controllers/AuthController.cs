@@ -125,7 +125,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Xác thực OTP đăng ký để kích hoạt tài khoản và đăng nhập lần đầu.
+    /// Xác thực OTP đăng ký để kích hoạt tài khoản.
     /// </summary>
     /// <remarks>
     /// Endpoint này được gọi sau khi người dùng đăng ký và nhận OTP qua email.
@@ -139,26 +139,28 @@ public class AuthController : ControllerBase
     /// - Tìm account đang chờ xác thực.
     /// - Kiểm tra OTP còn hạn, đúng mục đích đăng ký và chưa dùng.
     /// - Nếu OTP đúng, kích hoạt account, xác nhận email và gán role mặc định <c>Customer</c>.
-    /// - Sau khi kích hoạt, hệ thống cấp access token và refresh token để người dùng đăng nhập ngay.
+    /// - Publish <c>AccountActivatedEvent</c> để các service khác sync.
     ///
     /// Lưu ý:
+    /// - Endpoint này KHÔNG cấp token. Sau khi verify thành công, client phải tự gọi
+    ///   <c>POST /api/auth/login</c> để đăng nhập và nhận token.
     /// - Nếu nhập sai OTP nhiều lần, tài khoản có thể bị khóa tạm thời.
     /// - OTP đăng ký không dùng cho reset password hoặc xác minh số điện thoại.
     /// </remarks>
     /// <param name="command">Email và OTP đăng ký.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns><see cref="LoginResponse"/> chứa cặp token nếu xác thực thành công.</returns>
-    /// <response code="200">Verify thành công, trả AccessToken + RefreshToken.</response>
+    /// <returns><see cref="CommonResponse{T}"/> thông báo kết quả xác thực.</returns>
+    /// <response code="200">Verify thành công. Tài khoản đã kích hoạt, client tự gọi login để lấy token.</response>
     /// <response code="400">OTP hết hạn / không phải dành cho register / đã verify.</response>
     /// <response code="401">OTP sai (kèm số lần thử còn lại).</response>
     /// <response code="404">Tài khoản không tồn tại.</response>
     /// <response code="423">Bị khóa do sai OTP nhiều lần.</response>
     [HttpPost("verify-otp")]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status423Locked)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status423Locked)]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);

@@ -71,7 +71,7 @@ pipeline {
       steps {
         script {
           // Output: list service tên (vd "apigateway authservice")
-          // Empty hoặc shared change → build tất cả 5 service.
+          // Empty hoặc shared change → build tất cả service.
           def changed = sh(
             script: "BASE_REF=origin/main bash ci/scripts/detect-changes.sh",
             returnStdout: true
@@ -146,7 +146,8 @@ pipeline {
               authservice:        'services/AuthService/src/AuthService.Api/Dockerfile',
               emailservice:       'services/EmailService/src/EmailService.Api/Dockerfile',
               smsservice:         'services/SmsService/src/SmsService.Api/Dockerfile',
-              filestorageservice: 'services/FileStorageService/src/FileStorageService.Api/Dockerfile'
+              filestorageservice: 'services/FileStorageService/src/FileStorageService.Api/Dockerfile',
+              batteryservice:     'services/BatteryService/src/BatteryService.Api/Dockerfile'
             ]
             def changed = env.CHANGED_SERVICES.trim().split(/\s+/) as List
             echo "Building images for: ${changed}"

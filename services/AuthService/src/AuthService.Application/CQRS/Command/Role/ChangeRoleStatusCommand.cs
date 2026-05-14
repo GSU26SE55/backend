@@ -3,11 +3,13 @@ using AuthService.Domain.Enums;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Role;
 
 public class ChangeRoleStatusCommand : IRequest<RoleActionResponse>, IValidatable<RoleActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public RoleStatusEnum Status { get; set; }
 

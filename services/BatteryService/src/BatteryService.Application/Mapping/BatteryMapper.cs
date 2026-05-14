@@ -1,0 +1,145 @@
+using BatteryService.Application.DTOs;
+using BatteryService.Domain.Entities;
+using BatteryService.Domain.Enums;
+
+namespace BatteryService.Application.Mapping;
+
+public static class BatteryMapper
+{
+    public static BatteryTypeDto ToDto(BatteryType batteryType)
+    {
+        return new BatteryTypeDto
+        {
+            Id = batteryType.Id,
+            Name = batteryType.Name,
+            Manufacturer = batteryType.Manufacturer,
+            NominalCapacityAh = batteryType.NominalCapacityAh,
+            NominalVoltage = batteryType.NominalVoltage,
+            Chemistry = batteryType.Chemistry,
+            MaxCycleCount = batteryType.MaxCycleCount,
+            Description = batteryType.Description,
+            CreatedAt = batteryType.CreatedAt
+        };
+    }
+
+    public static BatteryAssetDto ToDto(BatteryAsset asset)
+    {
+        return new BatteryAssetDto
+        {
+            Id = asset.Id,
+            SerialNumber = asset.SerialNumber,
+            BatteryTypeId = asset.BatteryTypeId,
+            BatteryTypeName = asset.BatteryType?.Name ?? string.Empty,
+            SiteId = asset.SiteId,
+            SiteName = asset.Site?.Name,
+            BatteryGroupId = asset.BatteryGroupId,
+            BatteryGroupName = asset.BatteryGroup?.Name,
+            CustomerId = asset.CustomerId,
+            InstallDate = asset.InstallDate,
+            WarrantyEndDate = asset.WarrantyEndDate,
+            WarrantyStatus = asset.WarrantyStatus,
+            Location = asset.Location,
+            Latitude = asset.Latitude,
+            Longitude = asset.Longitude,
+            Status = asset.Status,
+            Notes = asset.Notes,
+            LastSensorReadingAt = asset.LastSensorReadingAt,
+            CreatedAt = asset.CreatedAt
+        };
+    }
+
+    public static SiteDto ToDto(Site site)
+    {
+        return new SiteDto
+        {
+            Id = site.Id,
+            Name = site.Name,
+            CustomerId = site.CustomerId,
+            Address = site.Address,
+            Latitude = site.Latitude,
+            Longitude = site.Longitude,
+            CapacityKw = site.CapacityKw,
+            InstallDate = site.InstallDate,
+            Status = site.Status,
+            ContactPersonName = site.ContactPersonName,
+            ContactPersonPhone = site.ContactPersonPhone,
+            BatteryGroupCount = site.BatteryGroups.Count(group => !group.IsDeleted),
+            BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
+            ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == BatteryStatusEnum.Active),
+            CreatedAt = site.CreatedAt
+        };
+    }
+
+    public static BatteryGroupDto ToDto(BatteryGroup group)
+    {
+        return new BatteryGroupDto
+        {
+            Id = group.Id,
+            SiteId = group.SiteId,
+            SiteName = group.Site?.Name ?? string.Empty,
+            Name = group.Name,
+            BatteryTypeId = group.BatteryTypeId,
+            BatteryTypeName = group.BatteryType?.Name ?? string.Empty,
+            BatteryCount = group.BatteryCount,
+            CreatedAt = group.CreatedAt
+        };
+    }
+
+    public static ThresholdConfigDto ToDto(ThresholdConfig config)
+    {
+        return new ThresholdConfigDto
+        {
+            Id = config.Id,
+            BatteryTypeId = config.BatteryTypeId,
+            BatteryTypeName = config.BatteryType?.Name ?? string.Empty,
+            VoltageMin = config.VoltageMin,
+            VoltageMax = config.VoltageMax,
+            TemperatureMax = config.TemperatureMax,
+            TemperatureMin = config.TemperatureMin,
+            SocWarningThreshold = config.SocWarningThreshold,
+            SocCriticalThreshold = config.SocCriticalThreshold,
+            CurrentMaxCharge = config.CurrentMaxCharge,
+            CurrentMaxDischarge = config.CurrentMaxDischarge,
+            EffectiveFromUtc = config.EffectiveFromUtc,
+            IsActive = config.IsActive
+        };
+    }
+
+    public static SensorReadingDto ToDto(SensorReading reading)
+    {
+        return new SensorReadingDto
+        {
+            Time = reading.Time,
+            BatteryAssetId = reading.BatteryAssetId,
+            Voltage = reading.Voltage,
+            Current = reading.Current,
+            Temperature = reading.Temperature,
+            SocPercent = reading.SocPercent,
+            CycleCount = reading.CycleCount,
+            SourceDeviceId = reading.SourceDeviceId
+        };
+    }
+
+    public static AlertDto ToDto(Alert alert)
+    {
+        return new AlertDto
+        {
+            Id = alert.Id,
+            BatteryAssetId = alert.BatteryAssetId,
+            BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,
+            AnomalyType = alert.AnomalyType,
+            Severity = alert.Severity,
+            ThresholdValue = alert.ThresholdValue,
+            ActualValue = alert.ActualValue,
+            Unit = alert.Unit,
+            DetectedAt = alert.DetectedAt,
+            Status = alert.Status,
+            TicketId = alert.TicketId,
+            AcknowledgedByUserId = alert.AcknowledgedByUserId,
+            AcknowledgedAt = alert.AcknowledgedAt,
+            ResolvedAt = alert.ResolvedAt,
+            DedupWindowEndUtc = alert.DedupWindowEndUtc,
+            CreatedAt = alert.CreatedAt
+        };
+    }
+}

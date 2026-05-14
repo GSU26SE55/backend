@@ -2,11 +2,13 @@ using AuthService.Application.DTOs.Response.Role;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Role;
 
 public class UpdateRoleCommand : IRequest<RoleActionResponse>, IValidatable<RoleActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
