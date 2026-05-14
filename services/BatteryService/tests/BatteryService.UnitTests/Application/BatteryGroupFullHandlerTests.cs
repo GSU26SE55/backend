@@ -35,7 +35,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Create_Duplicate_409()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t, "Same");
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryTypes(t).WithBatteryGroups(g);
         var r = await new CreateBatteryGroupCommandHandler(b.Build()).Handle(new CreateBatteryGroupCommand { SiteId = s.Id, Name = "same", BatteryTypeId = t.Id }, default);
@@ -45,7 +46,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Create_Happy_201()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryTypes(t);
         var r = await new CreateBatteryGroupCommandHandler(b.Build()).Handle(new CreateBatteryGroupCommand { SiteId = s.Id, Name = "G1", BatteryTypeId = t.Id }, default);
         r.StatusCode.Should().Be(201);
@@ -61,7 +63,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Update_ChangeWithAssets_409()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t);
         var newSite = MakeSite();
         var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "A", BatteryTypeId = t.Id, CustomerId = Cust, BatteryGroupId = g.Id, InstallDate = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
@@ -73,7 +76,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Update_DuplicateName_409()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g1 = MakeGroup(s, t, "A");
         var g2 = MakeGroup(s, t, "B");
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryTypes(t).WithBatteryGroups(g1, g2);
@@ -84,7 +88,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Update_Happy_200()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t, "A");
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryTypes(t).WithBatteryGroups(g);
         var r = await new UpdateBatteryGroupCommandHandler(b.Build()).Handle(new UpdateBatteryGroupCommand { Id = g.Id, SiteId = s.Id, Name = "A2", BatteryTypeId = t.Id }, default);
@@ -101,7 +106,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Delete_HasAssets_409()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t);
         var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "A", BatteryTypeId = t.Id, CustomerId = Cust, BatteryGroupId = g.Id, InstallDate = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithBatteryGroups(g).WithBatteryAssets(asset);
@@ -112,7 +118,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Delete_Happy()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t);
         var b = new MockUnitOfWorkBuilder().WithBatteryGroups(g);
         var r = await new DeleteBatteryGroupCommandHandler(b.Build()).Handle(new DeleteBatteryGroupCommand { Id = g.Id }, default);
@@ -129,7 +136,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Restore_SiteDeleted_409()
     {
-        var s = MakeSite(deleted: true); var t = MakeType();
+        var s = MakeSite(deleted: true);
+        var t = MakeType();
         var dead = MakeGroup(s, t, deleted: true);
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(dead);
         var r = await new RestoreBatteryGroupCommandHandler(b.Build()).Handle(new RestoreBatteryGroupCommand { Id = dead.Id }, default);
@@ -139,7 +147,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Restore_DuplicateName_409()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var dead = MakeGroup(s, t, "A", deleted: true);
         var alive = MakeGroup(s, t, "A");
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(dead, alive);
@@ -150,7 +159,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task Restore_Happy()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var dead = MakeGroup(s, t, deleted: true);
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(dead);
         var r = await new RestoreBatteryGroupCommandHandler(b.Build()).Handle(new RestoreBatteryGroupCommand { Id = dead.Id }, default);
@@ -168,7 +178,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task GetById_Found_Dto()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t);
         var b = new MockUnitOfWorkBuilder().WithBatteryGroups(g);
         var r = await new GetBatteryGroupByIdQueryHandler(b.Build()).Handle(new GetBatteryGroupByIdQuery { Id = g.Id }, default);
@@ -178,7 +189,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task GetList_Filters()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t, "Alpha");
         var b = new MockUnitOfWorkBuilder().WithBatteryGroups(g);
         var r = await new GetBatteryGroupsQueryHandler(b.Build()).Handle(new GetBatteryGroupsQuery { Keyword = "alpha", SiteId = s.Id, BatteryTypeId = t.Id }, default);
@@ -188,7 +200,8 @@ public class BatteryGroupFullHandlerTests
     [Fact]
     public async Task GetList_IncludeDeleted()
     {
-        var s = MakeSite(); var t = MakeType();
+        var s = MakeSite();
+        var t = MakeType();
         var g = MakeGroup(s, t, deleted: true);
         var b = new MockUnitOfWorkBuilder().WithBatteryGroups(g);
         var r = await new GetBatteryGroupsQueryHandler(b.Build()).Handle(new GetBatteryGroupsQuery { IncludeDeleted = true }, default);

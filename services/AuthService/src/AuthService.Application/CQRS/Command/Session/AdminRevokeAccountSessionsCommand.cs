@@ -1,8 +1,8 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Session;
 

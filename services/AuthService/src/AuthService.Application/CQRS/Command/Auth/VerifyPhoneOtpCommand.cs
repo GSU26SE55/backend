@@ -1,8 +1,8 @@
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Auth;
 

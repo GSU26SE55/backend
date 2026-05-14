@@ -148,9 +148,12 @@ public class AlertThresholdSensorHandlerTests
         var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = Guid.NewGuid(),
-            VoltageMin = 10, VoltageMax = 20,
-            TemperatureMin = -10, TemperatureMax = 40,
-            SocWarningThreshold = 30, SocCriticalThreshold = 10
+            VoltageMin = 10,
+            VoltageMax = 20,
+            TemperatureMin = -10,
+            TemperatureMax = 40,
+            SocWarningThreshold = 30,
+            SocCriticalThreshold = 10
         }, default);
         r.StatusCode.Should().Be(404);
     }
@@ -163,11 +166,15 @@ public class AlertThresholdSensorHandlerTests
         var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = t.Id,
-            VoltageMin = 10, VoltageMax = 20,
-            TemperatureMin = -10, TemperatureMax = 40,
-            SocWarningThreshold = 30, SocCriticalThreshold = 10,
+            VoltageMin = 10,
+            VoltageMax = 20,
+            TemperatureMin = -10,
+            TemperatureMax = 40,
+            SocWarningThreshold = 30,
+            SocCriticalThreshold = 10,
             EffectiveFromUtc = DateTime.UtcNow,
-            CurrentMaxCharge = 5, CurrentMaxDischarge = 5
+            CurrentMaxCharge = 5,
+            CurrentMaxDischarge = 5
         }, default);
         r.IsSuccess.Should().BeTrue();
         b.ThresholdConfigs.Verify(x => x.AddAsync(It.IsAny<ThresholdConfig>()), Times.Once);
@@ -182,9 +189,12 @@ public class AlertThresholdSensorHandlerTests
         var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = t.Id,
-            VoltageMin = 11, VoltageMax = 22,
-            TemperatureMin = -10, TemperatureMax = 40,
-            SocWarningThreshold = 30, SocCriticalThreshold = 10
+            VoltageMin = 11,
+            VoltageMax = 22,
+            TemperatureMin = -10,
+            TemperatureMax = 40,
+            SocWarningThreshold = 30,
+            SocCriticalThreshold = 10
         }, default);
         r.IsSuccess.Should().BeTrue();
         existing.VoltageMin.Should().Be(11);

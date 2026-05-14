@@ -210,10 +210,14 @@ public class CommandValidationFullTests
         var r = await new UpsertThresholdConfigCommand
         {
             BatteryTypeId = Guid.NewGuid(),
-            VoltageMin = 10, VoltageMax = 14,
-            TemperatureMin = -10, TemperatureMax = 60,
-            SocWarningThreshold = 30, SocCriticalThreshold = 10,
-            CurrentMaxCharge = 5, CurrentMaxDischarge = 5
+            VoltageMin = 10,
+            VoltageMax = 14,
+            TemperatureMin = -10,
+            TemperatureMax = 60,
+            SocWarningThreshold = 30,
+            SocCriticalThreshold = 10,
+            CurrentMaxCharge = 5,
+            CurrentMaxDischarge = 5
         }.ValidateAsync();
         r.IsSuccess.Should().BeTrue();
     }

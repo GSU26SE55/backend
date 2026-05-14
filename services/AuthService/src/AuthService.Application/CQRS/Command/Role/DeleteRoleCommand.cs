@@ -1,6 +1,6 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Role;
 using MediatR;
-using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Role;
 

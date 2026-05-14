@@ -1,9 +1,9 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Domain.Enums;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using System.Text.Json.Serialization;
 
 namespace AuthService.Application.CQRS.Command.Account;
 

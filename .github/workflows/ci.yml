@@ -18,6 +18,12 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
+# `dorny/paths-filter@v3` cần `pull-requests: read` để gọi GitHub API list-files trong PR.
+# `contents: read` cho actions/checkout. Quyền hẹp, không cấp write trừ khi job yêu cầu.
+permissions:
+  contents: read
+  pull-requests: read
+
 # Cancel run cũ khi push commit mới lên cùng branch — tiết kiệm minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -190,8 +196,9 @@ jobs:
       fail-fast: false
       matrix:
         test:
-          - { name: AuthService,  path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,  changed: "${{ needs.detect-changes.outputs.authservice }}" }
-          - { name: EmailService, path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: "${{ needs.detect-changes.outputs.emailservice }}" }
+          - { name: AuthService,    path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,    changed: "${{ needs.detect-changes.outputs.authservice }}" }
+          - { name: EmailService,   path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: "${{ needs.detect-changes.outputs.emailservice }}" }
+          - { name: BatteryService, path: services/BatteryService/tests/BatteryService.IntegrationTests/BatteryService.IntegrationTests.csproj, changed: "${{ needs.detect-changes.outputs.batteryservice }}" }
     steps:
       - name: Skip if not affected
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
