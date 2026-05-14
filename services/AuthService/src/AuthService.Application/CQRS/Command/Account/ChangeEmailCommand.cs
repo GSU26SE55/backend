@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Account;
 using MediatR;
@@ -12,6 +13,7 @@ public class ChangeEmailCommand : IRequest<AccountActionResponse>, IValidatable<
         @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string NewEmail { get; set; } = string.Empty;
     public string CurrentPassword { get; set; } = string.Empty;

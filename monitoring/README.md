@@ -85,7 +85,7 @@ Plus auto-collected from `prometheus-net.AspNetCore`:
 
 ### Cách hoạt động
 
-5 service ASP.NET ghi log dạng **JSON structured** ra stdout (cấu hình qua env var `Logging__Console__FormatterName=json` trong `.env` / `.env.Docker` — không sửa appsettings.json hay code). Promtail đọc Docker logs qua Docker socket → parse JSON → ship Loki. Loki lưu local filesystem 7 ngày.
+6 service ASP.NET ghi log dạng **JSON structured** ra stdout (cấu hình qua env var `Logging__Console__FormatterName=json` trong `.env` / `.env.Docker` — không sửa appsettings.json hay code). Promtail đọc Docker logs qua Docker socket → parse JSON → ship Loki. Loki lưu local filesystem 7 ngày.
 
 ### LogQL examples
 
@@ -165,7 +165,7 @@ Sửa regex `keep` trong `monitoring/promtail/promtail-config.yml`:
 
 ```yaml
 - source_labels: ["__meta_docker_container_name"]
-  regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|apigateway|postgres|redis|rabbitmq|minio)"
+  regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|batteryservice|apigateway|postgres|redis|rabbitmq|minio)"
   action: keep
 ```
 

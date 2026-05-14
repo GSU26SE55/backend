@@ -118,7 +118,7 @@ echo "  ApiGateway Information logs (last 5min): $gw"
 echo ""
 echo "  Tổng log volume cross-service (5 phút):"
 curl -s -G "http://localhost:3100/loki/api/v1/query" \
-  --data-urlencode 'query=sum by (container) (count_over_time({container=~"solar-(authservice|emailservice|smsservice|apigateway|filestorageservice)"}[5m]))' \
+    --data-urlencode 'query=sum by (container) (count_over_time({container=~"solar-(authservice|emailservice|smsservice|apigateway|filestorageservice|batteryservice)"}[5m]))' \
   | python3 -c "
 import sys, json
 for r in json.load(sys.stdin).get('data', {}).get('result', []):

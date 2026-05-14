@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -8,6 +9,7 @@ namespace AuthService.Application.CQRS.Command.Account;
 
 public class ChangeAccountStatusCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public AccountStatusEnum Status { get; set; }
     public string? Reason { get; set; }

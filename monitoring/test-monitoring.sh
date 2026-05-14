@@ -37,7 +37,8 @@ section "1. Container status"
 # ─────────────────────────────────────────────────────────────────────
 for c in solar-prometheus solar-grafana solar-alertmanager solar-loki solar-promtail \
          solar-node-exporter solar-cadvisor solar-postgres-exporter solar-redis-exporter \
-         solar-authservice solar-emailservice solar-smsservice solar-filestorageservice solar-apigateway; do
+         solar-authservice solar-emailservice solar-smsservice solar-filestorageservice \
+         solar-batteryservice solar-apigateway; do
   status=$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null || echo "missing")
   check "$c running" "true" "$status"
 done
@@ -87,6 +88,7 @@ ports=(
   "emailservice:4003"
   "smsservice:4004"
   "filestorageservice:4005"
+  "batteryservice:4006"
   "apigateway:4001"
 )
 for entry in "${ports[@]}"; do
@@ -108,7 +110,7 @@ done
 section "4. Prometheus targets UP"
 # ─────────────────────────────────────────────────────────────────────
 targets_json=$(curl -s "http://localhost:9094/api/v1/targets?state=active" 2>&1)
-for job in prometheus apigateway authservice emailservice smsservice filestorageservice \
+for job in prometheus apigateway authservice emailservice smsservice filestorageservice batteryservice \
            node-exporter cadvisor postgres-exporter redis-exporter rabbitmq minio; do
   health=$(echo "$targets_json" | python3 -c "
 import sys, json
@@ -197,13 +199,13 @@ print('found' if d.get('dashboard') else 'missing')
 done
 
 # ─────────────────────────────────────────────────────────────────────
-section "9. Loki receiving logs from all 5 services"
+section "9. Loki receiving logs from all backend/gateway services"
 # ─────────────────────────────────────────────────────────────────────
 end_ns=$(($(date +%s) * 1000000000))
 start_ns=$(($(date +%s) - 900))   # 15 phút trước
 start_ns=$((start_ns * 1000000000))
 
-for svc in apigateway authservice emailservice smsservice filestorageservice; do
+for svc in apigateway authservice emailservice smsservice filestorageservice batteryservice; do
   count=$(curl -s -G "http://localhost:3100/loki/api/v1/query" \
     --data-urlencode "query=sum(count_over_time({container=\"solar-${svc}\"}[15m]))" \
     --data-urlencode "time=$end_ns" 2>&1 \

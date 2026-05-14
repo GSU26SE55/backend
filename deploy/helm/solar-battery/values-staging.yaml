@@ -45,6 +45,12 @@ services:
       requests: { cpu: 200m, memory: 256Mi }
       limits:   { cpu: 1,    memory: 1Gi }
 
+  batteryservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+
 postgres:
   storage: 10Gi                       # staging cần data persist nhiều hơn dev
 

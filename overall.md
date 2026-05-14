@@ -179,11 +179,11 @@
 ### 0bis.3. Quy ước route tổng (cập nhật cho gateway aggregation)
 ```
 /api/v1/auth/*               → AuthService          (port 5001)
-/api/v1/battery-assets/*     → BatteryService       (port 5002)
-/api/v1/battery-types/*      → BatteryService
-/api/v1/thresholds/*         → BatteryService
-/api/v1/sensor-readings/*    → BatteryService
-/api/v1/alerts/*             → BatteryService
+/api/battery-assets/*     → BatteryService       (port 5002)
+/api/battery-types/*      → BatteryService
+/api/thresholds/*         → BatteryService
+/api/sensor-readings/*    → BatteryService
+/api/alerts/*             → BatteryService
 /api/v1/tickets/*            → TicketService        (port 5003)
 /api/v1/comments/*           → TicketService
 /api/v1/maintenance-logs/*   → TicketService
@@ -659,50 +659,50 @@ public record BatteryAssetTransferredEvent : IntegrationEvent {
 #### Endpoint list đầy đủ
 ```
 # BatteryAsset
-POST   /api/v1/battery-assets                            (Admin)
-GET    /api/v1/battery-assets?customerId=&status=&page=  (Admin/Manager)
-GET    /api/v1/battery-assets/{id}                       (Admin/Manager — Customer own)
-PUT    /api/v1/battery-assets/{id}                       (Admin)
-DELETE /api/v1/battery-assets/{id}                       (Admin)
-PATCH  /api/v1/battery-assets/{id}/restore               (Admin)
-PUT    /api/v1/battery-assets/{id}/transfer-owner        (Admin)
-GET    /api/v1/battery-assets/me                         (Customer — own list)
-GET    /api/v1/battery-assets/{id}/realtime              (Customer own — Staff/Manager)
-GET    /api/v1/battery-assets/{id}/history?from=&to=&granularity= (Customer own — Staff/Manager)
-GET    /api/v1/battery-assets/{id}/alerts                (— same auth as above —)
+POST   /api/battery-assets                            (Admin)
+GET    /api/battery-assets?customerId=&status=&page=  (Admin/Manager)
+GET    /api/battery-assets/{id}                       (Admin/Manager — Customer own)
+PUT    /api/battery-assets/{id}                       (Admin)
+DELETE /api/battery-assets/{id}                       (Admin)
+PATCH  /api/battery-assets/{id}/restore               (Admin)
+PUT    /api/battery-assets/{id}/transfer-owner        (Admin)
+GET    /api/battery-assets/me                         (Customer — own list)
+GET    /api/battery-assets/{id}/realtime              (Customer own — Staff/Manager)
+GET    /api/battery-assets/{id}/history?from=&to=&granularity= (Customer own — Staff/Manager)
+GET    /api/battery-assets/{id}/alerts                (— same auth as above —)
 
 # BatteryType
-POST   /api/v1/battery-types                             (Admin)
-GET    /api/v1/battery-types                             (Admin/Manager)
-GET    /api/v1/battery-types/{id}                        (Admin/Manager)
-PUT    /api/v1/battery-types/{id}                        (Admin)
-DELETE /api/v1/battery-types/{id}                        (Admin)
+POST   /api/battery-types                             (Admin)
+GET    /api/battery-types                             (Admin/Manager)
+GET    /api/battery-types/{id}                        (Admin/Manager)
+PUT    /api/battery-types/{id}                        (Admin)
+DELETE /api/battery-types/{id}                        (Admin)
 
 # Threshold
-GET    /api/v1/thresholds                                (Admin/Manager)
-GET    /api/v1/thresholds/by-type/{batteryTypeId}        (Admin/Manager/internal)
-PUT    /api/v1/thresholds/by-type/{batteryTypeId}        (Admin) — upsert
+GET    /api/thresholds                                (Admin/Manager)
+GET    /api/thresholds/by-type/{batteryTypeId}        (Admin/Manager/internal)
+PUT    /api/thresholds/by-type/{batteryTypeId}        (Admin) — upsert
 
 # Sensor Reading
-POST   /api/v1/sensor-readings/batch                     (ApiKey — IoT gateway)
-GET    /api/v1/sensor-readings?assetId=&from=&to=        (Customer own — Staff/Manager)
+POST   /api/sensor-readings/batch                     (ApiKey — IoT gateway)
+GET    /api/sensor-readings?assetId=&from=&to=        (Customer own — Staff/Manager)
 
 # Alert
-GET    /api/v1/alerts?severity=&status=&assetId=&page=   (Customer own — Staff/Manager)
-GET    /api/v1/alerts/{id}                               (— same —)
-PATCH  /api/v1/alerts/{id}/acknowledge                   (Customer own — Staff)
-PATCH  /api/v1/alerts/{id}/resolve                       (Staff/Manager)
+GET    /api/alerts?severity=&status=&assetId=&page=   (Customer own — Staff/Manager)
+GET    /api/alerts/{id}                               (— same —)
+PATCH  /api/alerts/{id}/acknowledge                   (Customer own — Staff)
+PATCH  /api/alerts/{id}/resolve                       (Staff/Manager)
 
 # Dashboard
-GET    /api/v1/battery/dashboard/stats                   (Admin/Manager)
+GET    /api/battery/dashboard/stats                   (Admin/Manager)
 
 # Health
-GET    /api/v1/battery/health                            (Internal — for k8s probes)
+GET    /api/battery/health                            (Internal — for k8s probes)
 ```
 
 #### Sample request/response
 
-**POST /api/v1/battery-assets**
+**POST /api/battery-assets**
 ```json
 // Request
 {
@@ -734,7 +734,7 @@ GET    /api/v1/battery/health                            (Internal — for k8s p
 }
 ```
 
-**GET /api/v1/battery-assets/{id}/realtime**
+**GET /api/battery-assets/{id}/realtime**
 ```json
 {
   "isSuccess": true,
@@ -2224,7 +2224,7 @@ tempo:
 Middleware `IdempotencyKeyMiddleware` đã có. Apply cho:
 - `POST /api/v1/tickets` (Customer mobile có thể retry)
 - `POST /api/v1/tickets/{id}/comments`
-- `POST /api/v1/sensor-readings/batch`
+- `POST /api/sensor-readings/batch`
 - `POST /api/v1/notifications/mark-read-bulk`
 
 Header: `Idempotency-Key: <uuid>` → server lưu response 24h trong Redis.
@@ -2338,7 +2338,7 @@ services.AddRateLimiter(opts => {
 - `/api/v1/auth/login`: 5 req/min per IP
 - `/api/v1/auth/forgot-password`: 3 req/hour per IP
 - `/api/v1/tickets` POST: 30 req/min per user
-- `/api/v1/sensor-readings/batch`: 1000 req/min per ApiKey
+- `/api/sensor-readings/batch`: 1000 req/min per ApiKey
 
 ### 10.3. CORS
 ```csharp
@@ -2799,21 +2799,26 @@ GitHub Actions step:
 ### Sprint 2 (25/5–7/6/2026)
 **Goal:** BatteryService MVP (no anomaly detection yet).
 **Tasks:**
-- [ ] Tạo solution skeleton `services/BatteryService/`
-- [ ] Migration: `InitialBatterySchema` (BatteryType, ThresholdConfig, BatteryAsset, Alert)
-- [ ] Migration: SensorReading hypertable
-- [ ] CQRS BatteryType CRUD (4 commands + 2 queries)
-- [ ] CQRS BatteryAsset CRUD + TransferOwner (5 commands + 4 queries)
-- [ ] CQRS ThresholdConfig Upsert + Get
-- [ ] Consumer `AccountActivatedConsumer`
-- [ ] Unit tests + integration tests (coverage ≥ 80%)
-- [ ] Update docker-compose + ApiGateway route
-- [ ] Seed BatteryType + 3 sample asset
+- [x] Tạo solution skeleton `services/BatteryService/`
+- [x] Migration: `InitialBatterySchema` (BatteryType, ThresholdConfig, BatteryAsset, Alert)
+- [x] Migration: SensorReading table + TimescaleDB hypertable SQL
+- [x] Migration: `CustomerAccount` read-model cache cho Auth account sync
+- [x] CQRS BatteryType CRUD (4 commands + 2 queries)
+- [x] CQRS BatteryAsset CRUD + TransferOwner (5 commands + 4 queries)
+- [x] CQRS ThresholdConfig Upsert + Get
+- [x] Consumer `AccountActivatedConsumer` + `AccountDeletedConsumer` + `AccountStatusChangedConsumer`
+- [x] Validate `CustomerId` qua local `CustomerAccount` read-model khi tạo Site/BatteryAsset và TransferOwner
+- [x] Unit tests + focused integration tests cho BatteryService critical paths
+- [x] Coverage ≥ 80% report/enforcement (đạt 95.8% line coverage trên Application + Infrastructure, exclude Migrations/Factory/Seeders/DTO/Mapping; `services/BatteryService/scripts/check-coverage.sh` enforce threshold)
+- [x] Migration rollback test trên TimescaleDB (script `services/BatteryService/scripts/test-migration-rollback.sh` — apply/rollback/re-apply cycle PASS, hypertable metadata auto-cleaned)
+- [x] Update docker-compose + ApiGateway route
+- [x] Seed BatteryType + 3 sample asset + sample customer/site/group
+- [x] Site + BatteryGroup entities/CRUD + asset link/filter/dashboard MVP
 
 ### Sprint 3 (8/6–21/6/2026)
 **Goal:** BatteryService anomaly engine + alert pipeline.
 **Tasks:**
-- [ ] `SensorReadingBatchIngestCommand` + endpoint với ApiKey auth
+- [x] `SensorReadingBatchIngestCommand` + endpoint với ApiKey auth (done early in Sprint 2)
 - [ ] `ThresholdAnomalyDetector` service + unit tests (7 anomaly types)
 - [ ] `AlertDeduplicationService` + unit tests (BR-03)
 - [ ] `ThresholdCheckBackgroundService` (30s tick)
@@ -3575,9 +3580,9 @@ public record BatteryAnomalyDetectedEvent : IntegrationEvent {
 ### 30.7. New endpoints
 
 ```
-GET    /api/v1/battery-assets/{id}/soh-prediction              (Customer own / Staff / Manager)
-GET    /api/v1/battery-assets/{id}/soh-history?from=&to=       (— same —)
-GET    /api/v1/battery-assets/{id}/anomaly-classifications     (— same —)
+GET    /api/battery-assets/{id}/soh-prediction              (Customer own / Staff / Manager)
+GET    /api/battery-assets/{id}/soh-history?from=&to=       (— same —)
+GET    /api/battery-assets/{id}/anomaly-classifications     (— same —)
 POST   /api/v1/anomaly-classifications/{id}/feedback           (Staff — confirm correct / false positive)
 GET    /api/v1/ai/model-info                                   (Admin — current model version + last retrain)
 GET    /api/v1/ai/inference-latency-stats                      (Admin — P50/P95/P99 latency)
@@ -3687,10 +3692,10 @@ GET    /api/v1/sites/{id}/alerts                          (all alerts của site
 PUT    /api/v1/sites/{id}
 DELETE /api/v1/sites/{id}                                 (block nếu còn asset)
 
-POST   /api/v1/battery-groups                             (Admin)
-GET    /api/v1/battery-groups?siteId=
-PUT    /api/v1/battery-groups/{id}
-DELETE /api/v1/battery-groups/{id}
+POST   /api/battery-groups                             (Admin)
+GET    /api/battery-groups?siteId=
+PUT    /api/battery-groups/{id}
+DELETE /api/battery-groups/{id}
 
 GET    /api/v1/customers/me/sites                         (Customer — list sites mình sở hữu)
 ```
@@ -3953,7 +3958,7 @@ GET    /api/v1/realtime/topics                          (list available topics)
 
 #### Bulk import battery assets (Admin)
 ```
-POST   /api/v1/battery-assets/bulk-import
+POST   /api/battery-assets/bulk-import
 Content-Type: multipart/form-data
   file: assets.csv
   fileFormat: csv | xlsx
@@ -4003,7 +4008,7 @@ PUT    /api/v1/tickets/bulk-reassign
 
 #### Customer claim
 ```
-POST   /api/v1/battery-assets/claim
+POST   /api/battery-assets/claim
 {
   "claimCode": "eyJhbGc..."
 }
@@ -4020,13 +4025,13 @@ POST   /api/v1/battery-assets/claim
 
 ### 35.3. Endpoints summary
 ```
-POST   /api/v1/battery-assets/bulk-import                (Admin)
+POST   /api/battery-assets/bulk-import                (Admin)
 POST   /api/v1/auth/users/bulk-invite                    (Admin)
 PUT    /api/v1/tickets/bulk-reassign                     (Manager)
 PUT    /api/v1/tickets/bulk-priority                     (Manager — chỉ cho ticket Open chưa assigned)
-POST   /api/v1/battery-assets/{id}/generate-claim-code   (Admin — re-gen QR)
-GET    /api/v1/battery-assets/{id}/claim-code-qr.png     (Admin — render QR PNG)
-POST   /api/v1/battery-assets/claim                      (Customer)
+POST   /api/battery-assets/{id}/generate-claim-code   (Admin — re-gen QR)
+GET    /api/battery-assets/{id}/claim-code-qr.png     (Admin — render QR PNG)
+POST   /api/battery-assets/claim                      (Customer)
 ```
 
 ### 35.4. Tests
@@ -4135,7 +4140,7 @@ Tương tự:
 
 ### 37.4. Endpoints
 ```
-POST   /api/v1/alerts/{id}/snooze                       (Customer — own)
+POST   /api/alerts/{id}/snooze                       (Customer — own)
 {
   "durationMinutes": 60,
   "reason": "Đang sửa"
@@ -4148,7 +4153,7 @@ DELETE /api/v1/alert-silence-rules/{id}
 
 ### 37.5. Group alerts dashboard
 - Mobile/Web hiển thị "5 cảnh báo overheat tại Site An Giang" thay vì 5 row riêng.
-- Backend: `GET /api/v1/alerts/grouped?groupBy=site,anomaly` returns grouped response.
+- Backend: `GET /api/alerts/grouped?groupBy=site,anomaly` returns grouped response.
 
 ---
 
@@ -4427,8 +4432,8 @@ Sample structure:
 
 ### 41.3. Endpoints
 ```
-POST   /api/v1/battery-assets/{id}/maintenance-schedules     (Manager)
-GET    /api/v1/battery-assets/{id}/maintenance-schedules
+POST   /api/battery-assets/{id}/maintenance-schedules     (Manager)
+GET    /api/battery-assets/{id}/maintenance-schedules
 GET    /api/v1/maintenance-schedules/upcoming?within=30d     (Manager)
 PUT    /api/v1/maintenance-schedules/{id}/complete           (Staff — mark done, updates LastPerformedAt)
 DELETE /api/v1/maintenance-schedules/{id}
@@ -5144,7 +5149,7 @@ X-Device-Code: GW-001234
 ### 52.5. Sensor ingest endpoint (updated)
 
 ```http
-POST /api/v1/sensor-readings/batch
+POST /api/sensor-readings/batch
 X-Api-Key: ...
 X-Device-Code: GW-001234
 Idempotency-Key: <uuid>           # tránh duplicate khi gateway retry
@@ -5260,7 +5265,7 @@ POST   /api/v1/iot-devices/provision                     (one-time)
 POST   /api/v1/iot-devices/heartbeat
 GET    /api/v1/iot-devices/firmware-check
 PUT    /api/v1/iot-devices/firmware-update-log/{id}
-POST   /api/v1/sensor-readings/batch
+POST   /api/sensor-readings/batch
 
 # Calibration
 POST   /api/v1/iot-devices/{id}/calibrations             (Staff/Admin)
@@ -5407,11 +5412,11 @@ Cấu trúc tương tự nhưng aggregate theo site.
 
 ```
 # Customer dashboard
-GET    /api/v1/battery-assets/{id}/energy/today
-GET    /api/v1/battery-assets/{id}/energy/this-month
-GET    /api/v1/battery-assets/{id}/energy/daily?from=&to=
-GET    /api/v1/battery-assets/{id}/cycles                # cycle history
-GET    /api/v1/battery-assets/{id}/savings               # cost + CO2 cumulative
+GET    /api/battery-assets/{id}/energy/today
+GET    /api/battery-assets/{id}/energy/this-month
+GET    /api/battery-assets/{id}/energy/daily?from=&to=
+GET    /api/battery-assets/{id}/cycles                # cycle history
+GET    /api/battery-assets/{id}/savings               # cost + CO2 cumulative
 
 # Site dashboard (Customer/Manager)
 GET    /api/v1/sites/{id}/energy/today
@@ -5432,7 +5437,7 @@ GET    /api/v1/reports/top-assets-by-energy
 
 ### 53.6. Sample response
 
-`GET /api/v1/battery-assets/{id}/savings`
+`GET /api/battery-assets/{id}/savings`
 ```json
 {
   "isSuccess": true,
@@ -5476,7 +5481,7 @@ GET    /api/v1/reports/top-assets-by-energy
 - Background service phân tích pattern → gợi ý cho Customer:
   - "Nên sạc trong giờ thấp điểm (22h-4h) — tiết kiệm thêm 15%"
   - "Pin của bạn xả nhiều trong giờ cao điểm — đang tối ưu rồi"
-- Endpoint `GET /api/v1/battery-assets/{id}/recommendations`.
+- Endpoint `GET /api/battery-assets/{id}/recommendations`.
 
 ### 53.10. Tests
 - EnergyCalculation: simulate 1h sensor data → assert kWh đúng (within 1%)
@@ -6004,7 +6009,7 @@ Backend logic:
 
 Một số endpoint trả về payload nhẹ hơn cho mobile:
 ```
-GET    /api/v1/battery-assets/{id}/realtime-lite        (chỉ V, I, T, SOC — bỏ metadata)
+GET    /api/battery-assets/{id}/realtime-lite        (chỉ V, I, T, SOC — bỏ metadata)
 GET    /api/v1/tickets/me/lite                          (preview list, không includes)
 ```
 

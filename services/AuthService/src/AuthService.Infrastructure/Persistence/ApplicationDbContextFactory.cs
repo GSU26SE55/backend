@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
+using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 
@@ -10,6 +11,8 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
+        EnvFileLoader.LoadIfExists();
+
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("services/AuthService/src/AuthService.Api/appsettings.json", optional: true)
@@ -19,7 +22,7 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 
         var connectionString = configuration.GetConnectionString("AuthDb")
                                ?? configuration["AuthDb"]
-                               ?? "Host=localhost;Port=5433;Database=auth_db;Username=postgres;Password=Password12345@";
+                               ?? "Host=localhost;Port=5432;Database=auth_db;Username=postgres;Password=Password12345@";
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(connectionString)

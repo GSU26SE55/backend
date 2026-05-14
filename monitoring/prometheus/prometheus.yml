@@ -70,6 +70,14 @@ scrape_configs:
           service: filestorageservice
           tier: backend
 
+  - job_name: batteryservice
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["batteryservice:8080"]
+        labels:
+          service: batteryservice
+          tier: backend
+
   # ---------- Infrastructure exporters ----------
   - job_name: node-exporter
     static_configs:

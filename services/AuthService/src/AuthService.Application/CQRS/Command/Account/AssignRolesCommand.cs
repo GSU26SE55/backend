@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
 using MediatR;
 using SharedContracts.Common.Responses;
@@ -7,6 +8,7 @@ namespace AuthService.Application.CQRS.Command.Account;
 
 public class AssignRolesCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public List<Guid> RoleIds { get; set; } = new();
     public DateTime? ExpiredAt { get; set; }
