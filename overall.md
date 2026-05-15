@@ -70,6 +70,7 @@
   - [50. Updated sprint backlog impact](#50-updated-sprint-backlog-impact)
 - [Phần VIII — Bổ sung lần 2 (Final completeness)](#phần-viii--bổ-sung-lần-2-final-completeness)
   - [52. IoT Gateway & Device Management](#52-iot-gateway--device-management--p0)
+  - [52bis. IoT implementation plan](#52bis-iot-implementation-plan)
   - [53. Solar Energy Business Metrics](#53-solar-energy-business-metrics--p0)
   - [54. Production Deployment (K8s + Helm)](#54-production-deployment-k8s--helm--p1)
   - [55. Mobile/Web App Management](#55-mobileweb-app-management--p1)
@@ -113,6 +114,7 @@
 | Service / Module | Priority | Section | Effort ước tính |
 |------------------|----------|---------|-----------------|
 | `BatteryService` (4 dự án, 30+ files CQRS) | 🔴 P0 | §1 | 3 sprint |
+| IoT Gateway backend + Device Management | 🔴 P0 | §52/§52bis + `iot.md` | 1 sprint song song + hardware track |
 | `TicketService` (4 dự án, 50+ files CQRS, state machine) | 🔴 P0 | §2 | 4 sprint |
 | `NotificationService` (4 dự án, consumers + Expo push) | 🟠 P1 | §3 | 2 sprint |
 | KnowledgeBase (module nội bộ TicketService) | 🟡 P2 | §4 | 0.5 sprint |
@@ -1158,7 +1160,11 @@ services/TicketService/
 │   │   │   └── StaffAssignmentService.cs
 │   │   └── Consumers/
 │   │       ├── BatteryAnomalyDetectedConsumer.cs
-│   │       └── AccountStatusChangedConsumer.cs
+│   │       ├── AccountActivatedConsumer.cs            ← upsert CustomerAccount/StaffAccount khi tài khoản kích hoạt
+│   │       ├── AccountStatusChangedConsumer.cs        ← cập nhật Status (Active/Disabled/Locked) → suspend ticket nếu Customer
+│   │       ├── AccountProfileUpdatedConsumer.cs       ← đồng bộ FullName/Email/Avatar
+│   │       ├── StaffProfileUpdatedConsumer.cs         ← đồng bộ IsAvailable, MaxConcurrentTickets, EmployeeCode
+│   │       └── StaffSkillsUpdatedConsumer.cs          ← đồng bộ SkillCodes (skill match khi assign)
 │   ├── TicketService.Domain/Entities/
 │   │   ├── Ticket.cs
 │   │   ├── TicketActivity.cs
@@ -1168,6 +1174,8 @@ services/TicketService/
 │   │   ├── SlaPauseEvent.cs
 │   │   ├── TicketAttachment.cs
 │   │   ├── KnowledgeBaseArticle.cs           ← §4
+│   │   ├── CustomerAccount.cs                ← read-model cache từ AuthService (xem §2.7 Read-model)
+│   │   ├── StaffAccount.cs                   ← read-model cache từ AuthService (xem §2.7 Read-model)
 │   │   └── OutboxMessage.cs
 │   ├── TicketService.Domain/Enums/
 │   │   ├── TicketStatusEnum.cs
@@ -1525,15 +1533,121 @@ public record TicketAssignedEvent : IntegrationEvent {
 }
 ```
 
-#### Consume (2 events)
+#### Read-model: `CustomerAccount` và `StaffAccount`
+
+**Lý do tồn tại.** TicketService cần biết Customer/Staff là ai để (a) validate `CustomerId` lúc tạo ticket — chủ pin có còn active không, (b) validate `AssignedStaffId` lúc Manager assign — staff active + có skill phù hợp + chưa vượt `MaxConcurrentTickets`, (c) hiển thị tên/email trên queue cho Manager mà không phải call sang AuthService mỗi lần load list. Nếu sync-call HTTP sang AuthService → tạo **circular dependency** (AuthService publish event xuống TicketService consume; TicketService lại sync-call ngược lại) và phá nguyên tắc *database per service*.
+
+→ Pattern dùng: giữ một bản **read-model cục bộ** trong DB của TicketService, đồng bộ qua integration events (giống `CustomerAccount` đã áp dụng ở BatteryService — xem checklist Sprint 2).
+
+**Phạm vi.** Read-model này CHỈ dùng cho business validate + hiển thị. KHÔNG dùng để authorize request (token vẫn validate qua JWT signature + Auth introspect như cũ) và KHÔNG dùng cho audit cần real-time chính xác.
+
+##### `CustomerAccount` (read-model, kế thừa `AuditableEntity`)
+
+| Field | Type | Constraint | Note |
+|-------|------|-----------|------|
+| `AccountId` | `Guid` | PK | = `Account.Id` bên AuthService |
+| `Email` | `string(256)` | NOT NULL, INDEX | Hiển thị trong queue + tìm kiếm |
+| `FullName` | `string(200)` | NOT NULL | — |
+| `PhoneNumber` | `string(20)?` | nullable | Liên hệ khi cần escalate |
+| `Status` | `AccountStatusEnum` | NOT NULL | 1=Active, 2=Disabled, 3=Locked |
+| `LastSyncedAt` | `DateTime` | NOT NULL | UTC — debug/audit consistency lag |
+
+**Index:** `(Status, IsDeleted)` — query "list customer active".
+
+##### `StaffAccount` (read-model, kế thừa `AuditableEntity`)
+
+| Field | Type | Constraint | Note |
+|-------|------|-----------|------|
+| `AccountId` | `Guid` | PK | = `Account.Id` bên AuthService |
+| `Email` | `string(256)` | NOT NULL, INDEX | — |
+| `FullName` | `string(200)` | NOT NULL | — |
+| `EmployeeCode` | `string(50)?` | nullable | Hiển thị trên queue |
+| `Status` | `AccountStatusEnum` | NOT NULL | — |
+| `IsAvailable` | `bool` | NOT NULL default true | Staff bật/tắt nhận ticket |
+| `MaxConcurrentTickets` | `int` | NOT NULL default 10 | Cap workload |
+| `SkillCodes` | `string[]` (jsonb) | NOT NULL default `[]` | E.g. `["BMS","HV","TH"]` — match `Ticket.Category` |
+| `LastSyncedAt` | `DateTime` | NOT NULL | — |
+
+**Index:** `(Status, IsAvailable, IsDeleted)` — query staff khả dụng để assign.
+
+##### Event sync (5 consumer ở §2.7 Consume)
+
+| Event nguồn (AuthService) | Consumer trong TicketService | Hành động |
+|--------------------------|------------------------------|-----------|
+| `AccountActivatedEvent` | `AccountActivatedConsumer` | Upsert `CustomerAccount` (nếu role=Customer) hoặc `StaffAccount` (nếu role=Staff). Bỏ qua role khác (Admin/Manager) |
+| `AccountStatusChangedEvent` | `AccountStatusChangedConsumer` | Update `Status`. Nếu Customer chuyển Disabled → publish `CustomerSuspendedDomainEvent` nội bộ → suspend ticket đang mở |
+| `AccountProfileUpdatedEvent` | `AccountProfileUpdatedConsumer` | Update `Email`, `FullName`, `PhoneNumber` |
+| `StaffProfileUpdatedEvent` | `StaffProfileUpdatedConsumer` | Update `EmployeeCode`, `IsAvailable`, `MaxConcurrentTickets` |
+| `StaffSkillsUpdatedEvent` | `StaffSkillsUpdatedConsumer` | Replace `SkillCodes[]` |
+
+Mọi consumer đều: (a) qua `IInboxStore` để dedup theo `MessageId` (§8.2), (b) set `LastSyncedAt = UtcNow`, (c) dùng upsert (insert nếu chưa có — bảo vệ trường hợp event ra trước khi consumer kịp xử lý event activate).
+
+##### Rule validate
+
+```csharp
+// TicketCreateCommandHandler — validate CustomerId
+var customer = await _uow.CustomerAccounts.GetAllAsync()
+    .Where(x => x.AccountId == request.CustomerId && !x.IsDeleted)
+    .FirstOrDefaultAsync();
+if (customer == null)
+    return Fail("Customer không tồn tại trong hệ thống");
+if (customer.Status != AccountStatusEnum.Active)
+    return Fail("Customer đang bị disabled/locked, không thể tạo ticket");
+
+// TicketAssignCommandHandler — validate AssignedStaffId
+var staff = await _uow.StaffAccounts.GetAllAsync()
+    .Where(x => x.AccountId == request.AssignedStaffId && !x.IsDeleted)
+    .FirstOrDefaultAsync();
+if (staff == null || staff.Status != AccountStatusEnum.Active)
+    return Fail("Staff không khả dụng");
+if (!staff.IsAvailable)
+    return Fail("Staff đang tắt nhận ticket");
+
+// Check skill match (cảnh báo, không block — Manager có quyền override)
+var requiredSkill = MapCategoryToSkill(ticket.Category);
+if (requiredSkill != null && !staff.SkillCodes.Contains(requiredSkill))
+    response.Warnings.Add($"Staff thiếu skill {requiredSkill} cho ticket category {ticket.Category}");
+
+// Check workload (đếm trên DB cục bộ TicketService — xem §7.5)
+var activeCount = await _uow.Tickets.GetAllAsync()
+    .CountAsync(t => t.AssignedStaffId == staff.AccountId
+                  && t.Status >= TicketStatusEnum.Assigned
+                  && t.Status <= TicketStatusEnum.WaitingOnsiteSchedule
+                  && !t.IsDeleted);
+if (activeCount >= staff.MaxConcurrentTickets)
+    return Fail($"Staff đã đạt cap {staff.MaxConcurrentTickets} ticket active");
+```
+
+##### Eventual consistency note
+
+Read-model có thể **trễ vài giây** so với state thật bên AuthService (RabbitMQ delivery + consumer lag). Hệ quả & cách xử lý:
+
+- **Edge case 1 — Customer mới activate, Manager assign ticket ngay:** event `AccountActivatedEvent` chưa tới TicketService → validate fail "không tồn tại". Mitigate: ApiGateway nên publish `AccountActivatedEvent` *trước khi* return 200 cho client activate request, và FE chờ 1–2s trước khi mở màn tạo ticket. Nếu vẫn miss: error rõ ràng "đồng bộ chưa hoàn tất, thử lại sau 5s" — KHÔNG fallback gọi HTTP sang Auth.
+- **Edge case 2 — Account vừa bị disabled, ticket vẫn được tạo:** event `AccountStatusChangedEvent` chưa tới → validate cho qua. Sau vài giây consumer xử lý → ticket vẫn tồn tại nhưng customer không truy cập được. Acceptable cho capstone scope (background job sẽ flag).
+- **KHÔNG dùng read-model cho:** (a) authorization (JWT vẫn là source of truth), (b) compliance/audit log cần state real-time, (c) report tài chính.
+- Health check cần thiết: endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` per bảng — alert nếu > 60s liên tiếp 5 phút (consumer chết).
+
+#### Consume (6 events)
+
 1. `BatteryAnomalyDetectedConsumer`:
    ```csharp
    public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> ctx) {
        var evt = ctx.Message;
-       // BR-02: chỉ auto-create nếu chưa có ticket Open/Assigned/InProgress cho cùng asset + anomaly
+
+       // BR-02 dedup: chỉ auto-create nếu CHƯA có ticket active cho cùng (BatteryAsset + Category).
+       // Tại sao dedup theo Category, KHÔNG theo OriginAlertId?
+       //   - BatteryService có thể đã dedup/merge alert phía nó trước khi publish event
+       //     (BR-02 phía BatteryService): cùng pin + cùng anomaly type → 1 alert duy nhất.
+       //     Vì vậy `evt.AlertId` không ổn định: alert thứ 2 cùng loại có thể bị gộp vào alert đầu,
+       //     hoặc tạo alert mới với Id khác cho cùng vấn đề.
+       //   - Dedup theo (BatteryAssetId + Category + status active) là đúng nghiệp vụ:
+       //     "cùng pin + cùng loại sự cố + đang xử lý" thì không tạo ticket mới.
+       //   - Mapping anomaly→category dùng CHUNG hàm `MapAnomalyToCategory(evt.AnomalyType)`
+       //     cho cả dedup query và lúc tạo ticket → logic nhất quán.
+       var category = MapAnomalyToCategory(evt.AnomalyType);
        var existing = await _uow.Tickets.GetAllAsync()
            .Where(t => t.BatteryAssetId == evt.BatteryAssetId
-                    && t.OriginAlertId != null  // hoặc match anomaly type qua category mapping
+                    && t.Category == category
                     && t.Status >= TicketStatusEnum.Open
                     && t.Status <= TicketStatusEnum.WaitingOnsiteSchedule
                     && !t.IsDeleted)
@@ -1546,10 +1660,10 @@ public record TicketAssignedEvent : IntegrationEvent {
            CustomerId = evt.CustomerId,
            Title = $"[{evt.Severity}] {evt.AnomalyType} detected on {evt.AssetSerialNumber}",
            Description = $"Auto-detected: {evt.AnomalyType} (threshold {evt.ThresholdValue}{evt.Unit}, actual {evt.ActualValue}{evt.Unit})",
-           Category = MapAnomalyToCategory(evt.AnomalyType),
+           Category = category,
            Status = TicketStatusEnum.Open,
            Origin = TicketOriginEnum.AutoFromAlert,
-           OriginAlertId = evt.AlertId
+           OriginAlertId = evt.AlertId   // vẫn lưu để traceability/audit, KHÔNG dùng cho dedup
        };
        await _uow.Tickets.AddAsync(ticket);
        await _activity.LogAsync(ticket.Id, ActivityActionEnum.Created, actorRole: ActorRoleEnum.System);
@@ -1557,7 +1671,11 @@ public record TicketAssignedEvent : IntegrationEvent {
        await _uow.CommitTransactionAsync();
    }
    ```
-2. `AccountStatusChangedConsumer` (Customer disabled → suspend tickets)
+2. `AccountActivatedConsumer` — upsert `CustomerAccount` / `StaffAccount` read-model theo role.
+3. `AccountStatusChangedConsumer` — update `Status`; Customer disabled → suspend ticket đang mở.
+4. `AccountProfileUpdatedConsumer` — sync `Email`, `FullName`, `PhoneNumber`.
+5. `StaffProfileUpdatedConsumer` — sync `EmployeeCode`, `IsAvailable`, `MaxConcurrentTickets`.
+6. `StaffSkillsUpdatedConsumer` — replace `SkillCodes[]`.
 
 ### 2.8. REST API contract
 
@@ -1638,7 +1756,10 @@ Response includes computed `slaDueAt`.
 - `TicketResolveCommandHandlerTests`: 4 cases
 - `TicketReopenCommandHandlerTests`: 5 cases (within 7d ok, >7d rejected, reopen count++, escalate on 2nd reopen, escalate on 3rd+)
 - `SlaCalculatorTests`: 8 cases (compute due, pause/resume, total paused, breach detection)
-- `BatteryAnomalyDetectedConsumerTests`: 4 cases (auto-create, dedup existing, dedup deleted ticket skip, mapping anomaly→category)
+- `BatteryAnomalyDetectedConsumerTests`: 6 cases (auto-create, dedup existing same-category active ticket, dedup KHÔNG kích hoạt khi khác Category dù cùng asset, dedup KHÔNG kích hoạt với ticket đã Closed/Resolved, soft-deleted ticket được bỏ qua, mapping anomaly→category đúng)
+- `CustomerAccountSyncConsumerTests`: 4 cases (upsert mới khi chưa có, update khi đã có, bỏ qua role Admin/Manager, idempotent qua Inbox)
+- `StaffAccountSyncConsumerTests`: 5 cases (upsert StaffAccount, update IsAvailable + MaxConcurrentTickets, replace SkillCodes, status Disabled cập nhật, idempotent qua Inbox)
+- `TicketAssignCommandHandler__SkillWorkloadTests`: 4 cases (skill match warning, skill miss vẫn cho assign, workload cap block, staff không Active block)
 
 #### Integration tests
 - POST create → GET list returns
@@ -3024,6 +3145,8 @@ GitHub Actions step:
 /scaffold-entity TicketService SlaTimer
 /scaffold-entity TicketService SlaPauseEvent
 /scaffold-entity TicketService TicketAttachment
+/scaffold-entity TicketService CustomerAccount         # read-model — xem §2.7
+/scaffold-entity TicketService StaffAccount            # read-model — xem §2.7
 
 # 12+ commands cho state machine
 /scaffold-cqrs-command TicketService Ticket Assign
@@ -3050,9 +3173,13 @@ GitHub Actions step:
 /scaffold-cqrs-query TicketService Sla GetStatus
 /scaffold-cqrs-query TicketService Staff Workload
 
-# Consumer auto-create
+# Consumer auto-create + read-model sync (xem §2.7 Read-model)
 /scaffold-consumer TicketService BatteryAnomalyDetectedEvent
+/scaffold-consumer TicketService AccountActivatedEvent
 /scaffold-consumer TicketService AccountStatusChangedEvent
+/scaffold-consumer TicketService AccountProfileUpdatedEvent
+/scaffold-consumer TicketService StaffProfileUpdatedEvent
+/scaffold-consumer TicketService StaffSkillsUpdatedEvent
 
 # Events publish
 /scaffold-integration-event TicketCreatedEvent
@@ -3113,7 +3240,7 @@ GitHub Actions step:
 
 ---
 
-## 17. Sprint backlog — 8 sprint chi tiết + Sprint 5B tách riêng
+## 17. Sprint backlog — 8 sprint chi tiết + Sprint 5B + Sprint IoT-1
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -3180,7 +3307,7 @@ GitHub Actions step:
 **Goal:** TicketService foundation only — service skeleton, schema, state machine, basic lifecycle commands/queries. Không phát triển song song BatteryService advanced monitoring trong sprint này.
 **Tasks:**
 - [ ] Tạo solution skeleton `services/TicketService/` — #83
-- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage) — #83
+- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
 - [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
 - [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
 - [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
@@ -3200,7 +3327,10 @@ GitHub Actions step:
 - [ ] Incident commands — #98
 - [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
 - [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
-- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create ticket + dedup BR-02 — #142
+- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create ticket + dedup BR-02 theo `(BatteryAssetId + Category + status active)` — KHÔNG dùng `OriginAlertId` cho dedup (xem §2.7) — #142
+- [ ] **5 read-model sync consumers** cho TicketService (`AccountActivatedConsumer`, `AccountStatusChangedConsumer`, `AccountProfileUpdatedConsumer`, `StaffProfileUpdatedConsumer`, `StaffSkillsUpdatedConsumer`) → upsert `CustomerAccount`/`StaffAccount` qua Inbox idempotency (xem §2.7 Read-model) — #142
+- [ ] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
+- [ ] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
 - [ ] MaintenanceLog + comments + attachments workflow trong TicketService — #143
 
 ### Sprint 5B (20/7–26/7/2026)
@@ -3233,6 +3363,23 @@ GitHub Actions step:
 - [ ] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
 - [ ] Coverage ≥ 80% maintain — #105
 
+### Sprint IoT-1 (song song Sprint 6: 27/7–9/8/2026)
+**Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị gateway simulator/hardware path cho demo.
+**Scope note:** Sprint này có owner riêng để không block NotificationService Sprint 6. Nếu thiếu nhân lực, giữ `IotFirmware*` ở backlog và vẫn phải hoàn thành provision + heartbeat + ingest + offline.
+**Tasks:**
+- [x] Tạo tài liệu triển khai riêng `iot.md`: kiến trúc, thiết bị phần cứng, backend backlog, gateway software, sprint plan.
+- [ ] Entity + migration `AddIotDeviceManagement`: `IotDevice`, `IotDeviceHeartbeat` hypertable, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`.
+- [ ] Thiết kế API key per-device: sinh key khi admin tạo device, chỉ lưu hash, hỗ trợ rotate/revoke, scope `sensor.ingest` + `device.heartbeat`.
+- [ ] Admin endpoints: `POST/GET/PUT/DELETE /api/v1/admin/iot-devices`, `POST/GET /api/v1/admin/iot-firmware-releases`.
+- [ ] Device endpoints: `POST /api/v1/iot-devices/provision`, `POST /api/v1/iot-devices/heartbeat`, `GET /api/v1/iot-devices/firmware-check`, `PUT /api/v1/iot-devices/firmware-update-log/{id}`.
+- [ ] Update `POST /api/sensor-readings/batch`: nhận thêm `X-Device-Code`, `Idempotency-Key`, `deviceTimestamp`, hỗ trợ mapping `batteryAssetSerial` nhưng vẫn giữ legacy `batteryAssetId` cho simulator/MVP.
+- [ ] Validate IoT-specific: clock skew <= 5 phút, reject sensor outlier, apply calibration offset/scale, update `IotDevice.LastSeenAt`.
+- [ ] `IotDeviceOfflineDetectionBackgroundService`: device Active mất heartbeat > 5 phút => mark Offline, tạo `DeviceOffline` alert cho battery liên quan, publish event notification.
+- [ ] Gateway simulator script: gửi heartbeat + sensor batch định kỳ, queue local khi backend down, retry với `Idempotency-Key`.
+- [ ] Gateway hardware pilot guide: Raspberry Pi + RS485/CAN path, mapping BMS register sang payload backend.
+- [ ] Gateway route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*`.
+- [ ] Unit/integration tests: provision, heartbeat, offline detection, ingest dedup, clock skew, outlier, calibration, firmware check happy path.
+
 ### Sprint 6 (27/7–9/8/2026)
 **Goal:** NotificationService + KnowledgeBase + Environmental notification routing.
 **Tasks:**
@@ -3262,15 +3409,19 @@ GitHub Actions step:
 - [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency — #118
 - [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example — #119
 - [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle) — #119
+- [ ] IoT hardware pilot E2E: Raspberry Pi/gateway simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng gateway tạo `DeviceOffline` alert — #127
+- [ ] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #126
 
-### Sprint 8 (24/8–13/9/2026)
+### Sprint 8 (24/8–6/9/2026)
 **Goal:** Demo prep + polish.
 **Tasks:**
 - [ ] Performance testing + tuning per §13.4 SLAs — #120
 - [ ] Security audit (OWASP checklist §14.7) — #121
 - [ ] Documentation: API contracts final, README per service, postman collection — #122
+- [ ] Documentation: IoT runbook final (`iot.md`), gateway setup checklist, Postman/curl collection cho provision/heartbeat/ingest — #122
 - [ ] Final seed data với scenarios realistic — #123
 - [ ] Demo script: walkthrough end-to-end flow trên Mobile + Web — #123
+- [ ] Demo script IoT: simulator path + hardware path, normal reading, overheat/low SOC alert, stop heartbeat => `DeviceOffline` — #123
 - [ ] Bug bash + bug fix — #124
 - [ ] Final coverage push — #125
 
@@ -5278,6 +5429,7 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, không đưa vào sprint này | 1.0× |
 | Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment | 1.3× |
 | Sprint 5B | BatteryService advanced monitoring riêng | + Ambient monitoring, EnvironmentalIncident, Tier 2 sensor health | 1.0× sprint riêng |
+| Sprint IoT-1 | IoT Gateway backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, gateway simulator/hardware guide | 1.0× sprint song song Sprint 6 |
 | Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB** | 1.5× |
 | Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management** | 1.3× |
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report** | giữ nguyên |
@@ -5290,8 +5442,9 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 3. Edge case rules (§38) — Sprint 4-5 (lúc implement state machine)
 4. SLA pause limits (§33) — Sprint 5
 5. BatteryService advanced monitoring (§1 ambient/environmental/tier-2) — Sprint 5B
-6. SSE realtime (§34) — Sprint 6
-7. ADR + Runbook (§40) — Sprint 7-8
+6. IoT Gateway backend + device lifecycle (§52/§52bis, `iot.md`) — Sprint IoT-1
+7. SSE realtime (§34) — Sprint 6
+8. ADR + Runbook (§40) — Sprint 7-8
 
 **Nên có nếu kịp (SHOULD):**
 1. Ticket relations (§32) — Backlog sau Sprint 5, không đưa vào Sprint 4 foundation
@@ -5656,6 +5809,96 @@ iot_firmware_updates_total{from_version, to_version, status}
 
 ---
 
+## 52bis. IoT implementation plan
+
+> Chi tiết triển khai phần cứng, gateway software, payload mẫu, checklist mua thiết bị và runbook demo nằm ở [`iot.md`](./iot.md). Section này chỉ giữ phần backend work cần phản ánh trong master roadmap.
+
+### 52bis.1. Current backend state
+
+Đã có nền tảng để demo IoT MVP:
+- `POST /api/sensor-readings/batch` dùng `X-Api-Key` global cho ingest.
+- `SensorReading` lưu TimescaleDB hypertable.
+- `BatteryAsset.LastSensorReadingAt` được cập nhật khi ingest thành công.
+- `ThresholdCheckBackgroundService` quét reading mới, tạo `Alert`, dedup, outbox `BatteryAnomalyDetectedEvent` cho alert Critical.
+
+Chưa đủ cho hệ thống IoT thật:
+- Chưa có `IotDevice` / device lifecycle.
+- Chưa có provision gateway.
+- Chưa có heartbeat và offline detection theo device.
+- Chưa có API key riêng từng device, rotate/revoke key.
+- Chưa có `X-Device-Code`, `deviceTimestamp`, `Idempotency-Key` trong contract ingest production.
+- Chưa có calibration, firmware OTA, gateway simulator/hardware runbook.
+
+### 52bis.2. Implementation tracks
+
+| Track | Mục tiêu | Deliverable |
+|-------|----------|-------------|
+| IoT MVP | Chạy được flow backend bằng simulator/laptop/RPi mock | Simulator gửi batch vào endpoint hiện có, dashboard thấy latest/history/alert |
+| IoT Backend Production | Quản lý gateway thật | `IotDevice`, provision, heartbeat, per-device auth, offline detection |
+| IoT Hardware Pilot | Thay simulator bằng Raspberry Pi đọc BMS/cảm biến | Gateway đọc Modbus/CAN hoặc mock hardware adapter và gửi production payload |
+| IoT Hardening | Sẵn sàng demo/production-lite | Retry/idempotency, local queue, calibration, metrics, runbook |
+
+### 52bis.3. Backend tasks to add
+
+1. **Data model**
+   - `IotDevice`: device code, model, firmware, site, status, battery asset mapping, config JSON, last seen.
+   - `IotDeviceHeartbeat`: hypertable 30 ngày retention.
+   - `IotDeviceCalibration`: offset/scale theo metric voltage/current/temperature.
+   - `IotFirmwareRelease` + `IotFirmwareUpdateLog`: OTA pull model.
+   - API key hash table hoặc embedded key metadata, không lưu plaintext key.
+
+2. **API contract**
+   - Admin create/list/update/decommission IoT device.
+   - Device provision one-time.
+   - Device heartbeat mỗi 60 giây.
+   - Sensor ingest production với `X-Device-Code`, `Idempotency-Key`, `deviceTimestamp`, readings theo `batteryAssetSerial` hoặc mapped asset.
+   - Firmware check/report progress.
+
+3. **Processing**
+   - Validate device status Active trước khi ingest/heartbeat.
+   - Reject clock skew > 5 phút.
+   - Reject outlier sensor value rõ ràng.
+   - Apply calibration offset/scale trước khi insert `sensor_readings`.
+   - Update `IotDevice.LastSeenAt` và metric ingest count.
+   - Giữ backward compatibility cho MVP payload dùng `batteryAssetId`.
+
+4. **Background jobs**
+   - `IotDeviceOfflineDetectionBackgroundService`: Active + `LastSeenAt < now - 5 phút` => Offline.
+   - Tạo `DeviceOffline` alert cho các battery thuộc device.
+   - Publish `IotDeviceWentOfflineEvent` cho NotificationService.
+   - Calibration expiry notification cho Manager.
+
+5. **Observability**
+   - `iot_device_heartbeats_total`
+   - `iot_devices_online_count`
+   - `iot_sensor_readings_ingested_total`
+   - `iot_sensor_readings_rejected_total{reason}`
+   - dashboard riêng cho gateway uptime, queue depth, reject reason.
+
+### 52bis.4. Sprint placement
+
+| Sprint | Scope |
+|--------|-------|
+| Sprint 3 | Đã có ingest MVP + anomaly engine. Dùng simulator để test flow end-to-end. |
+| Sprint 5B | Bổ sung ambient/environmental/tier-2 sensor field để IoT có thêm dữ liệu sức khỏe pin/site. |
+| Sprint IoT-1 | Backend device management + gateway simulator/prototype. |
+| Sprint 7 | Hardware pilot + Grafana IoT metrics + E2E test. |
+| Sprint 8 | IoT demo runbook, polish, failure scenario: stop heartbeat => `DeviceOffline`. |
+
+### 52bis.5. Acceptance checklist
+
+- [ ] Admin tạo device, nhận `deviceCode` + API key một lần.
+- [ ] Gateway provision thành công và nhận config.
+- [ ] Gateway gửi heartbeat, backend cập nhật `LastSeenAt`.
+- [ ] Gateway gửi sensor batch, backend lưu TimescaleDB.
+- [ ] Reading vượt threshold tạo Alert.
+- [ ] Critical alert publish event cho Ticket/Notification flow.
+- [ ] Dừng gateway > 5 phút tạo `DeviceOffline`.
+- [ ] Gateway retry cùng `Idempotency-Key` không tạo duplicate.
+- [ ] Runbook `iot.md` đủ để người khác setup simulator và Raspberry Pi pilot.
+
+---
+
 ## 53. Solar Energy Business Metrics — P0
 
 > Đây là **giá trị kinh doanh** của solar battery monitoring system mà overall ban đầu thiếu hoàn toàn. Customer/Manager cần thấy "tiết kiệm bao nhiêu kWh, bao nhiêu tiền, bao nhiêu CO2".
@@ -5856,6 +6099,13 @@ GET    /api/v1/reports/top-assets-by-energy
 - **Local dev:** docker compose (giữ nguyên).
 - **Demo / staging:** Kubernetes (k3s / minikube / managed).
 - **Helm charts:** một chart umbrella chứa tất cả services.
+
+> ⚠️ **Sprint risk — K8s không nằm trong backlog Sprint 7/8 ban đầu.** §54 đánh nhãn P1 và checklist "K8s Helm charts per service" trong §60 nhưng Sprint 7 (Reports + Gateway + Observability) và Sprint 8 (demo prep + bug bash) đều full. Quyết định:
+> 1. Thêm task `[Optional P1] Deploy staging K8s` vào **cuối Sprint 7** (xem §17 Sprint 7) — best effort, không block các task P0 khác.
+> 2. **Fallback:** nếu Sprint 7 không kịp → Sprint 8 demo bằng `docker compose -f docker-compose.staging.yml` trên 1 VM. Điểm chức năng capstone không bị ảnh hưởng (rubric không bắt buộc K8s).
+> 3. Helm chart per service vẫn được viết Sprint 7 dù không deploy — để có artifact cho hồ sơ "production-ready".
+>
+> Team **PHẢI** quyết định fallback hay full-K8s **trước ngày 17/8/2026** (giữa Sprint 7) để Sprint 8 không bị bất ngờ.
 
 ### 54.2. Cấu trúc deploy folder
 
