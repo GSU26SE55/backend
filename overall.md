@@ -3161,20 +3161,20 @@ GitHub Actions step:
 **Goal:** BatteryService anomaly engine + alert pipeline + Tier 1 extended battery health (SOH).
 **Tasks:**
 - [x] `SensorReadingBatchIngestCommand` + endpoint với ApiKey auth (done early in Sprint 2)
-- [ ] **Migration** `ExtendSensorReadingTierOne`: thêm `SohPercent`, `ChargingState` vào `sensor_readings` (nullable, không backfill) — #75
-- [ ] **Migration** `ExtendThresholdConfigSoh`: thêm `SohWarningThreshold`, `SohCriticalThreshold` vào `threshold_configs` — #75
-- [ ] Update `SensorReadingItem` + validation (SOH 0-100, ChargingState enum) — #80
-- [ ] Update `UpsertThresholdConfigCommand` validation (SOH critical < warning) — #80
-- [ ] `ThresholdAnomalyDetector` service + unit tests (**8 anomaly types**: 7 cũ + `SohDegradation`) — #76
-- [ ] `AlertDeduplicationService` + unit tests (BR-03) — #76
-- [ ] `ThresholdCheckBackgroundService` (30s tick) — #77
-- [ ] `AlertEscalationBackgroundService` (publish event) — #77
-- [ ] `OutboxRelayBackgroundService` + Outbox entity — #78
-- [ ] Publish `BatteryAnomalyDetectedEvent` — #78
-- [ ] Realtime + History query endpoint — #79
-- [ ] Extend `BatteryAssetRealtimeDto` thêm `SohPercent` + `ChargingState` — #79
-- [ ] Seed sensor data với pre-built anomaly scenarios (gồm SOH degradation scenario) — #81
-- [ ] Integration test end-to-end: ingest → detect → publish event (TestHarness) — #82
+- [x] **Migration** `ExtendSensorReadingTierOne`: thêm `SohPercent`, `ChargingState` vào `sensor_readings` (nullable, không backfill) — #75
+- [x] **Migration** `ExtendThresholdConfigSoh`: thêm `SohWarningThreshold`, `SohCriticalThreshold` vào `threshold_configs` — #75
+- [x] Update `SensorReadingItem` + validation (SOH 0-100, ChargingState enum) — #80
+- [x] Update `UpsertThresholdConfigCommand` validation (SOH critical < warning) — #80
+- [x] `ThresholdAnomalyDetector` service + unit tests (**8 anomaly types**: 7 cũ + `SohDegradation`) — #76
+- [x] `AlertDeduplicationService` + unit tests (BR-03) — #76
+- [x] `ThresholdCheckBackgroundService` (30s tick) — #77
+- [x] `AlertEscalationBackgroundService` (publish event) — #77
+- [x] `OutboxRelayBackgroundService` + Outbox entity — #78
+- [x] Publish `BatteryAnomalyDetectedEvent` — #78
+- [x] Realtime + History query endpoint — #79
+- [x] Extend `BatteryAssetRealtimeDto` thêm `SohPercent` + `ChargingState` — #79
+- [x] Seed sensor data với pre-built anomaly scenarios (gồm SOH degradation scenario) — #81
+- [x] Integration test end-to-end: ingest → detect → publish event (TestHarness) — #82
 
 ### Sprint 4 (22/6–5/7/2026)
 **Goal:** TicketService MVP — state machine + basic flow. **BatteryService parallel track:** Environmental monitoring (Ambient).
