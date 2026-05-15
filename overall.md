@@ -3113,7 +3113,7 @@ GitHub Actions step:
 
 ---
 
-## 17. Sprint backlog — 8 sprint chi tiết
+## 17. Sprint backlog — 8 sprint chi tiết + Sprint 5B tách riêng
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -3177,19 +3177,35 @@ GitHub Actions step:
 - [x] Integration test end-to-end: ingest → detect → publish event (TestHarness) — #82
 
 ### Sprint 4 (22/6–5/7/2026)
-**Goal:** TicketService MVP — state machine + basic flow. **BatteryService parallel track:** Environmental monitoring (Ambient).
-**Tasks (TicketService — chính):**
+**Goal:** TicketService foundation only — service skeleton, schema, state machine, basic lifecycle commands/queries. Không phát triển song song BatteryService advanced monitoring trong sprint này.
+**Tasks:**
 - [ ] Tạo solution skeleton `services/TicketService/` — #83
 - [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage) — #83
 - [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
 - [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
 - [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
 - [ ] Code generation utility (TKT-YYMM-NNNN) — #87
-- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create (BR-02) — #87
 - [ ] Outbox + relay service — #88
 - [ ] Coverage ≥ 80% — #88
 
-**Tasks (BatteryService parallel — Hồng Thái hoặc 1 BE phụ):**
+### Sprint 5 (6/7–19/7/2026)
+**Goal:** TicketService workflow integration — SLA, pause/resume, auto-create from Battery anomaly, maintenance log/comment/attachment.
+**Tasks:**
+- [ ] `SlaCalculator` service + unit tests — #94
+- [ ] `SlaTimerBackgroundService` (60s tick — warning + breach) — #94
+- [ ] Pause/Resume commands (3 commands cho 3 Waiting* states) — #95
+- [ ] `EscalationBackgroundService` event-driven — #96
+- [ ] Reopen + Rate commands (Customer flow) — #97
+- [ ] `AutoCloseBackgroundService` (7d auto-close) — #98
+- [ ] Incident commands — #98
+- [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
+- [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
+- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create ticket + dedup BR-02 — #142
+- [ ] MaintenanceLog + comments + attachments workflow trong TicketService — #143
+
+### Sprint 5B (20/7–26/7/2026)
+**Goal:** BatteryService advanced monitoring riêng — ambient/environmental/tier-2 sensor health. Sprint này tách khỏi TicketService để tránh phát triển song song hai domain lớn.
+**Tasks:**
 - [ ] Entity `AmbientReading` (hypertable) + `AmbientThresholdConfig` (per Site, regular table) — #89
 - [ ] Migration `AddAmbientMonitoring`: tạo bảng + hypertable + index — #89
 - [ ] `IOpenMeteoClient` interface + `OpenMeteoClient` HTTP impl (Polly retry, 10s timeout) — #90
@@ -3201,22 +3217,6 @@ GitHub Actions step:
 - [ ] Update `appsettings.json`: tách `ApiKeys:SensorIngest` và `ApiKeys:EnvironmentalIngest`, thêm `Weather:*` config — #92
 - [ ] Unit tests OpenMeteoClient (HttpMessageHandler stub) + WeatherSyncBackgroundService (mock client) + 3 anomaly types mới — #93
 - [ ] Integration test: ingest ambient → query latest, combo threshold → alert — #93
-- [ ] Coverage ≥ 80% maintain — #93
-
-### Sprint 5 (6/7–19/7/2026)
-**Goal:** TicketService SLA engine + escalation. **BatteryService parallel:** Environmental Incident + Tier 2 sensor health.
-**Tasks (TicketService — chính):**
-- [ ] `SlaCalculator` service + unit tests — #94
-- [ ] `SlaTimerBackgroundService` (60s tick — warning + breach) — #94
-- [ ] Pause/Resume commands (3 commands cho 3 Waiting* states) — #95
-- [ ] `EscalationBackgroundService` event-driven — #96
-- [ ] Reopen + Rate commands (Customer flow) — #97
-- [ ] `AutoCloseBackgroundService` (7d auto-close) — #98
-- [ ] Incident commands — #98
-- [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
-- [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
-
-**Tasks (BatteryService parallel — 1 BE phụ):**
 - [ ] Entity `EnvironmentalIncident` (regular table với lifecycle) — #100
 - [ ] Migration `AddEnvironmentalIncidentAndAlertSiteLevel`: tạo bảng `environmental_incidents` + relax `alerts.battery_asset_id` thành nullable + thêm `alerts.site_id` + `alerts.environmental_incident_id` + check constraint + index — #100
 - [ ] Migration `ExtendSensorReadingTierTwo`: thêm `InternalResistanceMilliohm`, `CellVoltageDeltaMv` vào `sensor_readings` — #101
@@ -3233,7 +3233,7 @@ GitHub Actions step:
 - [ ] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
 - [ ] Coverage ≥ 80% maintain — #105
 
-### Sprint 6 (20/7–2/8/2026)
+### Sprint 6 (27/7–9/8/2026)
 **Goal:** NotificationService + KnowledgeBase + Environmental notification routing.
 **Tasks:**
 - [ ] Tạo solution `services/NotificationService/` — #106
@@ -3249,7 +3249,7 @@ GitHub Actions step:
 - [ ] Seed 5 KB articles — #112
 - [ ] Coverage ≥ 80% — #112
 
-### Sprint 7 (3/8–16/8/2026)
+### Sprint 7 (10/8–23/8/2026)
 **Goal:** Reports + Gateway hardening + Observability + Tier 3 sensor finalize.
 **Tasks:**
 - [ ] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
@@ -3263,7 +3263,7 @@ GitHub Actions step:
 - [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example — #119
 - [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle) — #119
 
-### Sprint 8 (17/8–6/9/2026)
+### Sprint 8 (24/8–13/9/2026)
 **Goal:** Demo prep + polish.
 **Tasks:**
 - [ ] Performance testing + tuning per §13.4 SLAs — #120
@@ -5275,8 +5275,9 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 1 | Stabilize foundations | + ADR setup, Edge case doc | 1.1× |
 | Sprint 2 | BatteryService MVP | + **Site/BatteryGroup entities**, + **AI Bridge client skeleton** | 1.4× — cần thêm 1 dev hoặc kéo dài 3 ngày |
 | Sprint 3 | BatteryService anomaly engine | + **AI Hybrid pipeline**, + **AlertSilence + Snooze**, + **Bulk import**, + **QR claim** | 1.6× — cân nhắc tách thành Sprint 3a + 3b |
-| Sprint 4 | TicketService MVP | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** | 1.3× |
-| Sprint 5 | TicketService SLA engine | + **SLA pause limits**, + **Preventive maintenance schedule** | 1.2× |
+| Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, không đưa vào sprint này | 1.0× |
+| Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment | 1.3× |
+| Sprint 5B | BatteryService advanced monitoring riêng | + Ambient monitoring, EnvironmentalIncident, Tier 2 sensor health | 1.0× sprint riêng |
 | Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB** | 1.5× |
 | Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management** | 1.3× |
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report** | giữ nguyên |
@@ -5288,13 +5289,14 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 2. Site entity (§31) — Sprint 2
 3. Edge case rules (§38) — Sprint 4-5 (lúc implement state machine)
 4. SLA pause limits (§33) — Sprint 5
-5. SSE realtime (§34) — Sprint 6
-6. ADR + Runbook (§40) — Sprint 7-8
+5. BatteryService advanced monitoring (§1 ambient/environmental/tier-2) — Sprint 5B
+6. SSE realtime (§34) — Sprint 6
+7. ADR + Runbook (§40) — Sprint 7-8
 
 **Nên có nếu kịp (SHOULD):**
-1. Ticket relations (§32) — Sprint 4
+1. Ticket relations (§32) — Backlog sau Sprint 5, không đưa vào Sprint 4 foundation
 2. QR onboarding (§35) — Sprint 3
-3. Comment edit/mention (§36) — Sprint 4
+3. Comment edit/mention (§36) — Backlog sau Sprint 5, chỉ làm comment cơ bản ở #143
 4. Alert silence/snooze (§37) — Sprint 3
 5. GDPR endpoints (§39) — Sprint 7
 6. AI feedback loop (§48) — Sprint 8
@@ -5306,18 +5308,6 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 4. Webhook outbound (§45)
 5. Chaos testing (§46.3)
 6. Mutation testing (§46.4)
-
-### Updated team allocation (sprint 2-3 tập trung)
-
-| Sprint 2-3 | Phúc Duy | Phước Thắng | Hồng Thái |
-|------------|----------|-------------|-----------|
-| BatteryService core | ✅ Entity, CQRS asset/type/threshold | — | — |
-| TimescaleDB + SensorReading | — | — | ✅ Migration + ingest pipeline |
-| Anomaly engine threshold + dedup | — | ✅ Detector + dedup + background jobs | — |
-| **AI Bridge client** (new) | — | ✅ HTTP client + Polly + tests | — |
-| **Site/BatteryGroup** (new) | ✅ entity + CRUD | — | — |
-| **Bulk import + QR claim** (new) | — | — | ✅ Import + signed token |
-| **Alert silence/snooze** (new) | — | ✅ rule + scheduler | — |
 
 ### Updated Definition of Done (DOD)
 Thêm vào §18:
