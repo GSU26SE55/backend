@@ -18,12 +18,6 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
-# `dorny/paths-filter@v3` cần `pull-requests: read` để gọi GitHub API list-files trong PR.
-# `contents: read` cho actions/checkout. Quyền hẹp, không cấp write trừ khi job yêu cầu.
-permissions:
-  contents: read
-  pull-requests: read
-
 # Cancel run cũ khi push commit mới lên cùng branch — tiết kiệm minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -43,7 +37,6 @@ jobs:
       emailservice: ${{ steps.filter.outputs.emailservice }}
       smsservice: ${{ steps.filter.outputs.smsservice }}
       filestorageservice: ${{ steps.filter.outputs.filestorageservice }}
-      batteryservice: ${{ steps.filter.outputs.batteryservice }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,8 +58,6 @@ jobs:
               - 'services/SmsService/**'
             filestorageservice:
               - 'services/FileStorageService/**'
-            batteryservice:
-              - 'services/BatteryService/**'
 
   # ============================================================
   # Build — chỉ build service bị touch (hoặc tất cả nếu shared/ đổi).
@@ -81,18 +72,16 @@ jobs:
       needs.detect-changes.outputs.authservice == 'true' ||
       needs.detect-changes.outputs.emailservice == 'true' ||
       needs.detect-changes.outputs.smsservice == 'true' ||
-      needs.detect-changes.outputs.filestorageservice == 'true' ||
-      needs.detect-changes.outputs.batteryservice == 'true'
+      needs.detect-changes.outputs.filestorageservice == 'true'
     strategy:
       fail-fast: false
       matrix:
         service:
-          - { name: ApiGateway,         path: services/ApiGateway/src/ApiGateway/ApiGateway.csproj,                          changed: "${{ needs.detect-changes.outputs.apigateway }}" }
-          - { name: AuthService,        path: services/AuthService/src/AuthService.Api/AuthService.Api.csproj,               changed: "${{ needs.detect-changes.outputs.authservice }}" }
-          - { name: EmailService,       path: services/EmailService/src/EmailService.Api/EmailService.Api.csproj,             changed: "${{ needs.detect-changes.outputs.emailservice }}" }
-          - { name: SmsService,         path: services/SmsService/src/SmsService.Api/SmsService.Api.csproj,                   changed: "${{ needs.detect-changes.outputs.smsservice }}" }
-          - { name: FileStorageService, path: services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj, changed: "${{ needs.detect-changes.outputs.filestorageservice }}" }
-          - { name: BatteryService,     path: services/BatteryService/src/BatteryService.Api/BatteryService.Api.csproj,       changed: "${{ needs.detect-changes.outputs.batteryservice }}" }
+          - { name: ApiGateway,         path: services/ApiGateway/src/ApiGateway/ApiGateway.csproj,                          changed: needs.detect-changes.outputs.apigateway }
+          - { name: AuthService,        path: services/AuthService/src/AuthService.Api/AuthService.Api.csproj,               changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService,       path: services/EmailService/src/EmailService.Api/EmailService.Api.csproj,             changed: needs.detect-changes.outputs.emailservice }
+          - { name: SmsService,         path: services/SmsService/src/SmsService.Api/SmsService.Api.csproj,                   changed: needs.detect-changes.outputs.smsservice }
+          - { name: FileStorageService, path: services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj, changed: needs.detect-changes.outputs.filestorageservice }
     steps:
       - name: Skip if not affected
         if: matrix.service.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
@@ -101,16 +90,13 @@ jobs:
           exit 0
 
       - uses: actions/checkout@v4
-        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
 
       - name: Setup .NET
-        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -118,11 +104,9 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
 
       - name: Restore
-        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: dotnet restore ${{ matrix.service.path }}
 
       - name: Build (Release)
-        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: dotnet build ${{ matrix.service.path }} --no-restore -c Release
 
   # ============================================================
@@ -136,27 +120,23 @@ jobs:
       fail-fast: false
       matrix:
         test:
-          - { name: SharedInfrastructure, path: shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj, changed: "${{ needs.detect-changes.outputs.shared }}" }
-          - { name: AuthService,          path: services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj,    changed: "${{ needs.detect-changes.outputs.authservice }}" }
-          - { name: EmailService,         path: services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj, changed: "${{ needs.detect-changes.outputs.emailservice }}" }
-          - { name: SmsService,           path: services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj,        changed: "${{ needs.detect-changes.outputs.smsservice }}" }
-          - { name: BatteryService,       path: services/BatteryService/tests/BatteryService.UnitTests/BatteryService.UnitTests.csproj, changed: "${{ needs.detect-changes.outputs.batteryservice }}" }
+          - { name: SharedInfrastructure, path: shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj, changed: needs.detect-changes.outputs.shared }
+          - { name: AuthService,          path: services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj,    changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService,         path: services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj, changed: needs.detect-changes.outputs.emailservice }
+          - { name: SmsService,           path: services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj,        changed: needs.detect-changes.outputs.smsservice }
     steps:
       - name: Skip if not affected
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
       - uses: actions/checkout@v4
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
 
       - name: Setup .NET
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -164,11 +144,9 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
 
       - name: Restore
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: dotnet restore ${{ matrix.test.path }}
 
       - name: Test
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: |
           dotnet test ${{ matrix.test.path }} \
             --no-restore -c Release \
@@ -176,7 +154,7 @@ jobs:
             --results-directory ./TestResults
 
       - name: Upload test results (only on failure)
-        if: failure() && (matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true')
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.test.name }}
@@ -196,36 +174,30 @@ jobs:
       fail-fast: false
       matrix:
         test:
-          - { name: AuthService,    path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,    changed: "${{ needs.detect-changes.outputs.authservice }}" }
-          - { name: EmailService,   path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: "${{ needs.detect-changes.outputs.emailservice }}" }
-          - { name: BatteryService, path: services/BatteryService/tests/BatteryService.IntegrationTests/BatteryService.IntegrationTests.csproj, changed: "${{ needs.detect-changes.outputs.batteryservice }}" }
+          - { name: AuthService,  path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,  changed: needs.detect-changes.outputs.authservice }
+          - { name: EmailService, path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: needs.detect-changes.outputs.emailservice }
     steps:
       - name: Skip if not affected
         if: matrix.test.changed != 'true' && needs.detect-changes.outputs.shared != 'true'
         run: exit 0
 
       - uses: actions/checkout@v4
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
 
       - name: Setup .NET
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
 
       - name: Restore
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: dotnet restore ${{ matrix.test.path }}
 
       - name: Run integration tests (Testcontainers)
-        if: matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
         run: |
           dotnet test ${{ matrix.test.path }} \
             --no-restore -c Release \
@@ -233,7 +205,7 @@ jobs:
             --results-directory ./TestResults
 
       - name: Upload integration results (only on failure)
-        if: failure() && (matrix.test.changed == 'true' || needs.detect-changes.outputs.shared == 'true')
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: integration-results-${{ matrix.test.name }}

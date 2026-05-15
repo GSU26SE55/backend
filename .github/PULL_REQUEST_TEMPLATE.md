@@ -28,7 +28,6 @@ PR title nên theo Conventional Commits:
 - [ ] EmailService
 - [ ] SmsService
 - [ ] FileStorageService
-- [ ] BatteryService
 - [ ] ApiGateway
 - [ ] SharedInfrastructure / SharedContracts / SharedKernels
 

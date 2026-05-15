@@ -35,7 +35,6 @@ jobs:
           - { name: email-service,        dockerfile: services/EmailService/src/EmailService.Api/Dockerfile }
           - { name: sms-service,          dockerfile: services/SmsService/src/SmsService.Api/Dockerfile }
           - { name: file-storage-service, dockerfile: services/FileStorageService/src/FileStorageService.Api/Dockerfile }
-          - { name: battery-service,      dockerfile: services/BatteryService/src/BatteryService.Api/Dockerfile }
 
     steps:
       - uses: actions/checkout@v4

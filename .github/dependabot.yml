@@ -101,10 +101,3 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies", "docker"]
-
-  - package-ecosystem: "docker"
-    directory: "/services/BatteryService/src/BatteryService.Api"
-    target-branch: "dev"
-    schedule:
-      interval: "weekly"
-    labels: ["dependencies", "docker"]

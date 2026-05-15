@@ -47,9 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 để có toàn bộ history, đảm bảo `git diff origin/${base_ref}...HEAD` luôn hoạt động.
-          # fetch-depth: 50 không đủ khi base branch và PR branch diverge xa hoặc base chưa được fetch.
-          fetch-depth: 0
+          fetch-depth: 50
 
       - name: Check await on void Update/DeleteAsync
         run: |
@@ -79,10 +77,6 @@ jobs:
           FAILED=0
           for file in $NEW_ENTITIES; do
             if [ -f "$file" ] && ! grep -qE 'class\s+\w+\s*:\s*(\w+\s*,\s*)*AuditableEntity' "$file"; then
-              if grep -q 'intentionally does not inherit AuditableEntity' "$file"; then
-                echo "⚠️ $file: documented AuditableEntity exception"
-                continue
-              fi
               # Cho phép class abstract hoặc enum
               if ! grep -qE '^(\s*public\s+)?(abstract|enum|interface)' "$file"; then
                 echo "❌ $file: entity mới phải extend AuditableEntity"
@@ -101,9 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 để có toàn bộ history, đảm bảo `git diff origin/${base_ref}...HEAD` luôn hoạt động.
-          # fetch-depth: 50 không đủ khi base branch và PR branch diverge xa hoặc base chưa được fetch.
-          fetch-depth: 0
+          fetch-depth: 50
 
       - name: Check PR size
         run: |
