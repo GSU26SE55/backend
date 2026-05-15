@@ -35,6 +35,8 @@ public class ApplicationDbContext : DbContext
 
     public virtual DbSet<Alert> Alerts { get; set; }
 
+    public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (_auditableEntityInterceptor is not null)

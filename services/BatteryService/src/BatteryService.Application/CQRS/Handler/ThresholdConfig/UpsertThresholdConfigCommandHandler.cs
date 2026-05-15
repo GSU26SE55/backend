@@ -66,6 +66,8 @@ public class UpsertThresholdConfigCommandHandler : IRequestHandler<UpsertThresho
         entity.SocCriticalThreshold = request.SocCriticalThreshold;
         entity.CurrentMaxCharge = request.CurrentMaxCharge;
         entity.CurrentMaxDischarge = request.CurrentMaxDischarge;
+        entity.SohWarningThreshold = request.SohWarningThreshold;
+        entity.SohCriticalThreshold = request.SohCriticalThreshold;
         entity.EffectiveFromUtc = effectiveFrom;
         entity.IsActive = true;
 

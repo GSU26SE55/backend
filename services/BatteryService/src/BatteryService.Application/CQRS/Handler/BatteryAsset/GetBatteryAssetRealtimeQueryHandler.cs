@@ -65,6 +65,8 @@ public class GetBatteryAssetRealtimeQueryHandler : IRequestHandler<GetBatteryAss
                 Temperature = latest?.Temperature,
                 SocPercent = latest?.SocPercent,
                 CycleCount = latest?.CycleCount,
+                SohPercent = latest?.SohPercent,
+                ChargingState = latest?.ChargingState,
                 ActiveAlerts = activeAlerts
             }
         };

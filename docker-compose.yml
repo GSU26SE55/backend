@@ -273,6 +273,13 @@ services:
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
       ApiKeys__SensorIngest: ${BATTERY_SENSOR_INGEST_API_KEY:-dev-battery-ingest-key}
+      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-30}
+      AnomalyEngine__DedupWindowMinutes: ${BATTERY_ANOMALY_DEDUP_WINDOW_MINUTES:-30}
+      AnomalyEngine__OfflineThresholdMinutes: ${BATTERY_ANOMALY_OFFLINE_THRESHOLD_MINUTES:-10}
+      AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-5}
+      AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
+      AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
+      AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
     ports:
       - "4006:8080"
     depends_on:

@@ -33,6 +33,8 @@ public class UnitOfWork : IBatteryUnitOfWork
 
     public IGenericRepository<Alert> Alerts => new GenericRepository<Alert>(_context);
 
+    public IGenericRepository<OutboxMessage> OutboxMessages => new GenericRepository<OutboxMessage>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

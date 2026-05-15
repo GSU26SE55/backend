@@ -43,6 +43,14 @@ public class SensorReadingConfiguration : IEntityTypeConfiguration<SensorReading
         builder.Property(reading => reading.CycleCount)
             .HasColumnName("cycle_count");
 
+        builder.Property(reading => reading.SohPercent)
+            .HasColumnName("soh_percent")
+            .HasPrecision(5, 2);
+
+        builder.Property(reading => reading.ChargingState)
+            .HasColumnName("charging_state")
+            .HasConversion<int?>();
+
         builder.Property(reading => reading.SourceDeviceId)
             .HasColumnName("source_device_id")
             .HasMaxLength(64);

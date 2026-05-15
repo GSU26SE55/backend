@@ -22,5 +22,9 @@ public class BatteryAssetRealtimeDto
 
     public int? CycleCount { get; set; }
 
+    public decimal? SohPercent { get; set; }
+
+    public ChargingStateEnum? ChargingState { get; set; }
+
     public int ActiveAlerts { get; set; }
 }

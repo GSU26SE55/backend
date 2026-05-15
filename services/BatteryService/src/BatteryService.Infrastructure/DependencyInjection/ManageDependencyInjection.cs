@@ -1,4 +1,7 @@
+using BatteryService.Application.Anomaly;
 using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
+using BatteryService.Infrastructure.BackgroundServices;
 using BatteryService.Infrastructure.Consumers;
 using BatteryService.Infrastructure.Implements.Repositories;
 using BatteryService.Infrastructure.Persistence;
@@ -22,6 +25,20 @@ public static class ManageDependencyInjection
         services.AddSharedInfrastructure(configuration, "BatteryService.Application", "Battery Service API");
         services.AddMessageBus(configuration, typeof(AccountActivatedConsumer).Assembly);
         services.AddInboxIdempotency(configuration);
+
+        // Anomaly engine config (Sprint 3) — service/AnomalyRules dùng options này
+        services.Configure<AnomalyEngineOptions>(configuration.GetSection(AnomalyEngineOptions.SectionName));
+
+        // Background-only services — CQRS không cần thiết vì không expose qua REST.
+        // Background worker chỉ làm cron trigger, logic ở service này.
+        services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
+        services.AddScoped<IAlertEscalationService, AlertEscalationService>();
+        services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+
+        services.AddHostedService<ThresholdCheckBackgroundService>();
+        services.AddHostedService<AlertEscalationBackgroundService>();
+        services.AddHostedService<OutboxRelayBackgroundService>();
+
         return services;
     }
 

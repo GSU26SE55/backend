@@ -8,5 +8,6 @@ public enum AnomalyTypeEnum
     LowSoc = 4,
     RapidDischarge = 5,
     AbnormalCharging = 6,
-    DeviceOffline = 7
+    DeviceOffline = 7,
+    SohDegradation = 8        // SOH dưới ngưỡng — pin xuống cấp tiến đến EOL
 }
