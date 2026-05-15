@@ -3,7 +3,7 @@ namespace BatteryService.Domain.Entities;
 /// <summary>
 /// Outbox pattern: event được ghi trong CÙNG transaction với entity gốc (Alert), sau đó
 /// background relay đọc và publish lên RabbitMQ → đảm bảo exactly-once delivery.
-/// Không kế thừa AuditableEntity vì là technical entity, không cần audit user.
+/// Non-auditable entity exception: technical outbox rows do not need user audit fields.
 /// </summary>
 public class OutboxMessage
 {

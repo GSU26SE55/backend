@@ -18,6 +18,10 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
+permissions:
+  contents: read
+  pull-requests: read
+
 # Cancel run cũ khi push commit mới lên cùng branch — tiết kiệm minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,6 +38,7 @@ jobs:
       shared: ${{ steps.filter.outputs.shared }}
       apigateway: ${{ steps.filter.outputs.apigateway }}
       authservice: ${{ steps.filter.outputs.authservice }}
+      batteryservice: ${{ steps.filter.outputs.batteryservice }}
       emailservice: ${{ steps.filter.outputs.emailservice }}
       smsservice: ${{ steps.filter.outputs.smsservice }}
       filestorageservice: ${{ steps.filter.outputs.filestorageservice }}
@@ -52,6 +57,8 @@ jobs:
               - 'services/ApiGateway/**'
             authservice:
               - 'services/AuthService/**'
+            batteryservice:
+              - 'services/BatteryService/**'
             emailservice:
               - 'services/EmailService/**'
             smsservice:
@@ -70,6 +77,7 @@ jobs:
       needs.detect-changes.outputs.shared == 'true' ||
       needs.detect-changes.outputs.apigateway == 'true' ||
       needs.detect-changes.outputs.authservice == 'true' ||
+      needs.detect-changes.outputs.batteryservice == 'true' ||
       needs.detect-changes.outputs.emailservice == 'true' ||
       needs.detect-changes.outputs.smsservice == 'true' ||
       needs.detect-changes.outputs.filestorageservice == 'true'
@@ -79,6 +87,7 @@ jobs:
         service:
           - { name: ApiGateway,         path: services/ApiGateway/src/ApiGateway/ApiGateway.csproj,                          changed: needs.detect-changes.outputs.apigateway }
           - { name: AuthService,        path: services/AuthService/src/AuthService.Api/AuthService.Api.csproj,               changed: needs.detect-changes.outputs.authservice }
+          - { name: BatteryService,     path: services/BatteryService/src/BatteryService.Api/BatteryService.Api.csproj,       changed: needs.detect-changes.outputs.batteryservice }
           - { name: EmailService,       path: services/EmailService/src/EmailService.Api/EmailService.Api.csproj,             changed: needs.detect-changes.outputs.emailservice }
           - { name: SmsService,         path: services/SmsService/src/SmsService.Api/SmsService.Api.csproj,                   changed: needs.detect-changes.outputs.smsservice }
           - { name: FileStorageService, path: services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj, changed: needs.detect-changes.outputs.filestorageservice }
@@ -122,6 +131,7 @@ jobs:
         test:
           - { name: SharedInfrastructure, path: shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj, changed: needs.detect-changes.outputs.shared }
           - { name: AuthService,          path: services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj,    changed: needs.detect-changes.outputs.authservice }
+          - { name: BatteryService,       path: services/BatteryService/tests/BatteryService.UnitTests/BatteryService.UnitTests.csproj, changed: needs.detect-changes.outputs.batteryservice }
           - { name: EmailService,         path: services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj, changed: needs.detect-changes.outputs.emailservice }
           - { name: SmsService,           path: services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj,        changed: needs.detect-changes.outputs.smsservice }
     steps:
@@ -175,6 +185,7 @@ jobs:
       matrix:
         test:
           - { name: AuthService,  path: services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj,  changed: needs.detect-changes.outputs.authservice }
+          - { name: BatteryService, path: services/BatteryService/tests/BatteryService.IntegrationTests/BatteryService.IntegrationTests.csproj, changed: needs.detect-changes.outputs.batteryservice }
           - { name: EmailService, path: services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj, changed: needs.detect-changes.outputs.emailservice }
     steps:
       - name: Skip if not affected

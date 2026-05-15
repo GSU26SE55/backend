@@ -24,20 +24,20 @@ public class AlertEscalationServiceTests
     private static Alert MakeAlert(DateTime detectedAt,
         AlertSeverityEnum severity = AlertSeverityEnum.Critical,
         AlertStatusEnum status = AlertStatusEnum.Open) => new()
-    {
-        Id = Guid.NewGuid(),
-        BatteryAssetId = AssetId,
-        BatteryAsset = MakeAsset(),
-        AnomalyType = AnomalyTypeEnum.Overheat,
-        Severity = severity,
-        Status = status,
-        ThresholdValue = 50,
-        ActualValue = 60,
-        Unit = "°C",
-        DetectedAt = detectedAt,
-        DedupWindowEndUtc = detectedAt.AddMinutes(30),
-        CreatedAt = detectedAt
-    };
+        {
+            Id = Guid.NewGuid(),
+            BatteryAssetId = AssetId,
+            BatteryAsset = MakeAsset(),
+            AnomalyType = AnomalyTypeEnum.Overheat,
+            Severity = severity,
+            Status = status,
+            ThresholdValue = 50,
+            ActualValue = 60,
+            Unit = "°C",
+            DetectedAt = detectedAt,
+            DedupWindowEndUtc = detectedAt.AddMinutes(30),
+            CreatedAt = detectedAt
+        };
 
     [Fact]
     public async Task Escalate_NoStaleAlerts_ReturnsZero()
