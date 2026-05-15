@@ -48,6 +48,8 @@ public class GetThresholdConfigsQueryHandler : IRequestHandler<GetThresholdConfi
                 SocCriticalThreshold = config.SocCriticalThreshold,
                 CurrentMaxCharge = config.CurrentMaxCharge,
                 CurrentMaxDischarge = config.CurrentMaxDischarge,
+                SohWarningThreshold = config.SohWarningThreshold,
+                SohCriticalThreshold = config.SohCriticalThreshold,
                 EffectiveFromUtc = config.EffectiveFromUtc,
                 IsActive = config.IsActive
             })

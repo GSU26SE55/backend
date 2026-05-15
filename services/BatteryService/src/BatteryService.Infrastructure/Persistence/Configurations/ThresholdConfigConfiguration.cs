@@ -58,6 +58,14 @@ public class ThresholdConfigConfiguration : IEntityTypeConfiguration<ThresholdCo
             .HasColumnName("current_max_discharge")
             .HasPrecision(8, 2);
 
+        builder.Property(config => config.SohWarningThreshold)
+            .HasColumnName("soh_warning_threshold")
+            .HasPrecision(5, 2);
+
+        builder.Property(config => config.SohCriticalThreshold)
+            .HasColumnName("soh_critical_threshold")
+            .HasPrecision(5, 2);
+
         builder.Property(config => config.EffectiveFromUtc)
             .HasColumnName("effective_from_utc")
             .IsRequired();

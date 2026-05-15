@@ -16,6 +16,7 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IGenericRepository<ThresholdConfig>> ThresholdConfigs { get; } = new();
     public Mock<IGenericRepository<SensorReading>> SensorReadings { get; } = new();
     public Mock<IGenericRepository<Alert>> Alerts { get; } = new();
+    public Mock<IGenericRepository<OutboxMessage>> OutboxMessages { get; } = new();
 
     public MockUnitOfWorkBuilder()
     {
@@ -27,6 +28,7 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.ThresholdConfigs).Returns(ThresholdConfigs.Object);
         UnitOfWork.SetupGet(x => x.SensorReadings).Returns(SensorReadings.Object);
         UnitOfWork.SetupGet(x => x.Alerts).Returns(Alerts.Object);
+        UnitOfWork.SetupGet(x => x.OutboxMessages).Returns(OutboxMessages.Object);
         UnitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         UnitOfWork.Setup(x => x.BeginTransactionAsync()).Returns(Task.CompletedTask);
         UnitOfWork.Setup(x => x.CommitTransactionAsync()).Returns(Task.CompletedTask);
@@ -40,6 +42,7 @@ public sealed class MockUnitOfWorkBuilder
         Seed(ThresholdConfigs, Array.Empty<ThresholdConfig>());
         Seed(SensorReadings, Array.Empty<SensorReading>());
         Seed(Alerts, Array.Empty<Alert>());
+        Seed(OutboxMessages, Array.Empty<OutboxMessage>());
     }
 
     public MockUnitOfWorkBuilder WithBatteryTypes(params BatteryType[] data) { Seed(BatteryTypes, data); return this; }
@@ -50,6 +53,7 @@ public sealed class MockUnitOfWorkBuilder
     public MockUnitOfWorkBuilder WithThresholdConfigs(params ThresholdConfig[] data) { Seed(ThresholdConfigs, data); return this; }
     public MockUnitOfWorkBuilder WithSensorReadings(params SensorReading[] data) { Seed(SensorReadings, data); return this; }
     public MockUnitOfWorkBuilder WithAlerts(params Alert[] data) { Seed(Alerts, data); return this; }
+    public MockUnitOfWorkBuilder WithOutboxMessages(params OutboxMessage[] data) { Seed(OutboxMessages, data); return this; }
 
     public IBatteryUnitOfWork Build() => UnitOfWork.Object;
 

@@ -35,8 +35,7 @@
 - [Phần V — Lập kế hoạch](#phần-v--lập-kế-hoạch)
   - [16. Scaffold workflow](#16-scaffold-workflow-cho-từng-service)
   - [17. Sprint backlog 8 sprint](#17-sprint-backlog--8-sprint-chi-tiết)
-  - [18. Phân công team](#18-phân-công-team-gợi-ý)
-  - [19. Definition of Done](#19-definition-of-done)
+  - [18. Definition of Done](#18-definition-of-done)
 - [Phần VI — Phụ lục](#phần-vi--phụ-lục)
   - [20. Permission matrix](#20-permission-matrix-đầy-đủ)
   - [21. Error code catalog](#21-error-code-catalog)
@@ -425,12 +424,17 @@ services/BatteryService/
 | `SocCriticalThreshold` | `decimal(5,2)` | NOT NULL, 0–100 | % |
 | `CurrentMaxCharge` | `decimal(8,2)?` | nullable | A |
 | `CurrentMaxDischarge` | `decimal(8,2)?` | nullable | A |
+| `SohWarningThreshold` | `decimal(5,2)?` | nullable, 0–100 | %, vd 85 → cảnh báo pin xuống cấp |
+| `SohCriticalThreshold` | `decimal(5,2)?` | nullable, 0–100 | %, vd 75 → EOL sắp tới |
+| `InternalResistanceMaxMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
+| `CellVoltageDeltaMaxMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV, vd 100 — pack imbalance threshold |
 | `EffectiveFromUtc` | `DateTime` | NOT NULL | — |
 | `IsActive` | `bool` | NOT NULL default true | Chỉ 1 record active per type |
 
 **Validation:**
 - `SocCriticalThreshold < SocWarningThreshold`.
 - `TemperatureMin < TemperatureMax`.
+- Nếu cả 2 SOH threshold không null: `SohCriticalThreshold < SohWarningThreshold`.
 
 #### 1.3.4. `SensorReading` (KHÔNG kế thừa `AuditableEntity` — time-series append-only)
 
@@ -440,26 +444,35 @@ services/BatteryService/
 | `BatteryAssetId` | `Guid` | NOT NULL | btree composite |
 | `Voltage` | `decimal(6,2)` | NOT NULL | — |
 | `Current` | `decimal(8,2)` | NOT NULL | — |
-| `Temperature` | `decimal(5,2)` | NOT NULL | — |
+| `Temperature` | `decimal(5,2)` | NOT NULL | °C — đo trên thân/BMS pin |
 | `SocPercent` | `decimal(5,2)` | NOT NULL, 0–100 | — |
 | `CycleCount` | `int?` | nullable | — |
+| `SohPercent` | `decimal(5,2)?` | nullable, 0–100 | **Target chính của AI module** |
+| `ChargingState` | `ChargingStateEnum?` | nullable | 1=Idle, 2=Charging, 3=Discharging, 4=Float, 5=Bypass |
+| `InternalResistanceMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
+| `CellVoltageDeltaMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV — chênh lệch Vmax-Vmin giữa các cell |
+| `BmsErrorCode` | `string(64)?` | nullable | Mã lỗi BMS raw (vd `0x0A`, `OverCurrent,CellImbalance`) |
 | `SourceDeviceId` | `string(64)?` | — | IoT gateway ID |
 
 **Compound index:** `(BatteryAssetId, Time DESC)` cho realtime/history queries.
 **Hypertable interval:** 1 day chunks.
 **Retention policy:** 90 ngày raw, 1 năm 1h-aggregate, 5 năm 1d-aggregate.
 
+**Lưu ý:** 5 field SOH/ChargingState/IR/CellDelta/BmsErrorCode đều **nullable** — backfill data cũ không cần. BMS có thì gửi, không có thì để null.
+
 #### 1.3.5. `Alert` (kế thừa `AuditableEntity`)
 
 | Field | Type | Constraint | Note |
 |-------|------|-----------|------|
 | `Id` | `Guid` | PK | — |
-| `BatteryAssetId` | `Guid` | FK, NOT NULL | btree |
-| `AnomalyType` | `AnomalyTypeEnum` | NOT NULL | 1=Overheat, 2=Overvoltage, 3=Undervoltage, 4=LowSoc, 5=RapidDischarge, 6=AbnormalCharging, 7=DeviceOffline |
+| `BatteryAssetId` | `Guid?` | FK, **nullable** | btree — alert per-pin |
+| `SiteId` | `Guid?` | FK, **nullable** | btree — alert per-site (ambient/incident) |
+| `EnvironmentalIncidentId` | `Guid?` | FK, **nullable** | Link tới incident nếu alert được tạo từ smoke/water |
+| `AnomalyType` | `AnomalyTypeEnum` | NOT NULL | 1–14 (xem §1.3.6, mở rộng từ 7 → 14) |
 | `Severity` | `AlertSeverityEnum` | NOT NULL | 1=Info, 2=Warning, 3=Critical |
-| `ThresholdValue` | `decimal(10,4)` | NOT NULL | — |
-| `ActualValue` | `decimal(10,4)` | NOT NULL | — |
-| `Unit` | `string(10)` | NOT NULL | V/A/°C/% |
+| `ThresholdValue` | `decimal(10,4)?` | nullable | NULL cho incident-based alert (smoke/water không có threshold) |
+| `ActualValue` | `decimal(10,4)?` | nullable | NULL như trên |
+| `Unit` | `string(10)?` | nullable | V/A/°C/%/RH (nullable cho incident) |
 | `DetectedAt` | `DateTime` | NOT NULL | UTC |
 | `Status` | `AlertStatusEnum` | NOT NULL | 1=Open, 2=Acknowledged, 3=Merged, 4=Resolved |
 | `MergedIntoAlertId` | `Guid?` | self-FK, nullable | BR-03 dedup |
@@ -469,20 +482,137 @@ services/BatteryService/
 | `ResolvedAt` | `DateTime?` | — | — |
 | `DedupWindowEndUtc` | `DateTime` | NOT NULL | `DetectedAt + DedupWindowMinutes` |
 
-**Composite index:** `(BatteryAssetId, AnomalyType, Status, DedupWindowEndUtc)` cho dedup query.
+**Check constraint:** `BatteryAssetId IS NOT NULL OR SiteId IS NOT NULL` — alert phải có ít nhất 1 chủ thể.
+
+**Composite index:** `(BatteryAssetId, AnomalyType, Status, DedupWindowEndUtc) WHERE BatteryAssetId IS NOT NULL` cho dedup query per-pin.
+**Composite index:** `(SiteId, AnomalyType, Status, DedupWindowEndUtc) WHERE SiteId IS NOT NULL` cho dedup query per-site.
 
 #### 1.3.6. Enum values
 ```csharp
 public enum BatteryStatusEnum { Active = 1, Inactive = 2, Decommissioned = 3 }
 public enum WarrantyStatusEnum { Active = 1, Expired = 2, Void = 3 }
 public enum BatteryChemistryEnum { LiFePO4 = 1, NMC = 2, NCA = 3, LCO = 4 }
-public enum AnomalyTypeEnum {
-    Overheat = 1, Overvoltage = 2, Undervoltage = 3,
-    LowSoc = 4, RapidDischarge = 5, AbnormalCharging = 6, DeviceOffline = 7
+
+// Sensor reading context
+public enum ChargingStateEnum
+{
+    Idle = 1, Charging = 2, Discharging = 3, Float = 4, Bypass = 5
 }
+
+// Anomaly classification - mở rộng 7 → 14 giá trị
+public enum AnomalyTypeEnum {
+    // Pin-level cũ (1-7)
+    Overheat = 1, Overvoltage = 2, Undervoltage = 3,
+    LowSoc = 4, RapidDischarge = 5, AbnormalCharging = 6, DeviceOffline = 7,
+    // Pin-level mới (8-10) - degradation / aging
+    SohDegradation = 8,
+    HighInternalResistance = 9,
+    CellImbalance = 10,
+    // Site-level (11-14) - ambient + incident
+    HighAmbientTemp = 11,
+    HighHumidity = 12,
+    HighTempHumidityCombo = 13,
+    EnvironmentalIncident = 14
+}
+
 public enum AlertSeverityEnum { Info = 1, Warning = 2, Critical = 3 }
 public enum AlertStatusEnum { Open = 1, Acknowledged = 2, Merged = 3, Resolved = 4 }
+
+// Ambient reading source - phân biệt từ IoT thật vs Weather API
+public enum AmbientReadingSourceEnum { IotSensor = 1, WeatherApi = 2 }
+
+// Environmental incident (smoke, water leak, ...)
+public enum IncidentTypeEnum
+{
+    SmokeDetected = 1,
+    WaterLeak = 2
+    // Mở rộng tương lai: PowerLoss = 3, DoorOpen = 4, ...
+}
+public enum IncidentSeverityEnum { Warning = 1, High = 2, Critical = 3 }
+public enum IncidentStatusEnum
+{
+    Detected = 1,         // mới phát hiện, chưa ack
+    Acknowledged = 2,     // staff/manager đã thấy
+    Resolved = 3,         // xử lý xong
+    FalseAlarm = 4        // không phải sự cố thật
+}
 ```
+
+#### 1.3.7. `AmbientReading` (KHÔNG kế thừa `AuditableEntity` — time-series append-only)
+
+Chuỗi đo định kỳ điều kiện môi trường tại Site. Có thể đến từ cảm biến IoT thật hoặc từ Weather API (OpenMeteo).
+
+| Field | Type | Constraint | Index | Note |
+|-------|------|-----------|-------|------|
+| `Time` | `DateTime` | NOT NULL | TimescaleDB hypertable column | UTC |
+| `SiteId` | `Guid` | NOT NULL, FK → Site.Id | btree composite | Bắt buộc |
+| `BatteryGroupId` | `Guid?` | nullable, FK → BatteryGroup.Id | btree (filter) | Hybrid override: khi 1 site có nhiều group khác môi trường (vd indoor vs outdoor) |
+| `AmbientTemperature` | `decimal(5,2)` | NOT NULL | — | °C — nhiệt độ MÔI TRƯỜNG (≠ Temperature của pin) |
+| `Humidity` | `decimal(5,2)?` | nullable, 0–100 | — | % RH |
+| `SolarIrradiance` | `decimal(8,2)?` | nullable, ≥ 0 | — | W/m² (`shortwave_radiation` từ OpenMeteo hoặc pyranometer) |
+| `Source` | `AmbientReadingSourceEnum` | NOT NULL | btree | 1=IotSensor, 2=WeatherApi |
+| `SourceDeviceId` | `string(64)?` | nullable | — | DeviceId IoT, hoặc "openmeteo" |
+
+**PK composite:** `(Time, SiteId)` (giống `sensor_readings`).
+**Hypertable interval:** 7 day chunks.
+**Index:** `(SiteId, Time DESC)`; `(BatteryGroupId, Time DESC) WHERE battery_group_id IS NOT NULL`.
+**Retention:** 90 ngày raw, 1 năm 1h-aggregate (Sprint sau).
+
+**Query rule cho consumer (AnomalyDetector):**
+Để lấy ambient cho 1 BatteryAsset → tra theo `BatteryGroupId` của asset trước. Nếu Group có reading riêng (latest trong N phút) thì dùng. Nếu không, fallback dùng latest reading của Site.
+
+#### 1.3.8. `AmbientThresholdConfig` (per Site, kế thừa `AuditableEntity`)
+
+Tách riêng khỏi `ThresholdConfig` (vốn per BatteryType) vì threshold môi trường là đặc tính của địa điểm.
+
+| Field | Type | Constraint | Note |
+|-------|------|-----------|------|
+| `Id` | `Guid` | PK | — |
+| `SiteId` | `Guid` | FK, NOT NULL | One-active-config per site |
+| `AmbientTempMax` | `decimal(5,2)?` | nullable | °C, vd 40 — vượt → HighAmbientTemp anomaly |
+| `AmbientTempMin` | `decimal(5,2)?` | nullable | °C, vd 5 — lạnh quá pin xả chậm |
+| `HumidityMax` | `decimal(5,2)?` | nullable, 0–100 | %RH, vd 85 — vượt → HighHumidity anomaly |
+| `HumidityComboTempMax` | `decimal(5,2)?` | nullable | °C, vd 35 — trigger COMBO nếu cả 2 vượt |
+| `HumidityComboHumidityMax` | `decimal(5,2)?` | nullable, 0–100 | %RH, vd 80 — pair với ComboTempMax |
+| `EffectiveFromUtc` | `DateTime` | NOT NULL | — |
+| `IsActive` | `bool` | NOT NULL default true | — |
+
+**Unique:** `(SiteId) WHERE IsActive = true AND IsDeleted = false`.
+
+**Validation:**
+- Nếu cả `AmbientTempMin` và `AmbientTempMax` không null: `Min < Max`.
+- Nếu set combo: cả `HumidityComboTempMax` và `HumidityComboHumidityMax` đều phải có giá trị.
+
+#### 1.3.9. `EnvironmentalIncident` (event-driven, kế thừa `AuditableEntity`)
+
+Sự kiện an toàn (smoke/water leak/...) với lifecycle Detected → Resolved. KHÔNG phải time-series (mỗi event = 1 record với start/end time).
+
+| Field | Type | Constraint | Note |
+|-------|------|-----------|------|
+| `Id` | `Guid` | PK | — |
+| `SiteId` | `Guid` | FK, NOT NULL | btree |
+| `BatteryGroupId` | `Guid?` | FK, nullable | Khi cảm biến gắn cho group cụ thể |
+| `IncidentType` | `IncidentTypeEnum` | NOT NULL | 1=SmokeDetected, 2=WaterLeak |
+| `Severity` | `IncidentSeverityEnum` | NOT NULL | 1=Warning, 2=High, 3=Critical |
+| `Status` | `IncidentStatusEnum` | NOT NULL default `Detected` | 1=Detected, 2=Acknowledged, 3=Resolved, 4=FalseAlarm |
+| `DetectedAt` | `DateTime` | NOT NULL | UTC |
+| `AcknowledgedAt` | `DateTime?` | — | — |
+| `AcknowledgedByUserId` | `Guid?` | — | UserId từ AuthService |
+| `ResolvedAt` | `DateTime?` | — | — |
+| `ResolvedByUserId` | `Guid?` | — | — |
+| `Description` | `string(1000)?` | nullable | Note thêm khi report (ví dụ vị trí cảm biến cụ thể) |
+| `SourceDeviceId` | `string(64)?` | nullable | DeviceId IoT báo về |
+
+**Index:** `(SiteId, Status, DetectedAt DESC)`, `(IncidentType, Status)`.
+
+**Flow event-driven:**
+1. IoT cảm biến phát hiện → POST `/api/environmental-incidents` (ApiKey).
+2. Handler tạo record với `Status=Detected`.
+3. Handler tạo Alert kèm theo (`SiteId`, `EnvironmentalIncidentId`, `AnomalyType=EnvironmentalIncident`).
+4. Publish `EnvironmentalIncidentDetectedEvent` → NotificationService push notification Critical.
+5. Staff/Manager gọi `PATCH /{id}/acknowledge` → `Status=Acknowledged`, `AcknowledgedAt`.
+6. Khi xử lý xong: `PATCH /{id}/resolve` → `Status=Resolved`, đóng Alert liên kết.
+7. Nếu false-positive: `PATCH /{id}/false-alarm` → `Status=FalseAlarm`, đóng Alert.
 
 ### 1.4. CQRS — Command catalog đầy đủ
 
@@ -499,9 +629,15 @@ public enum AlertStatusEnum { Open = 1, Acknowledged = 2, Merged = 3, Resolved =
 | `BatteryTypeUpdateCommand` | Id, ... | Admin | — |
 | `BatteryTypeDeleteCommand` | Id | Admin | — |
 | `ThresholdConfigUpsertCommand` | BatteryTypeId, all threshold values, EffectiveFromUtc | Admin | — |
-| `SensorReadingBatchIngestCommand` | List<SensorReadingItem> (BatteryAssetId, Time, V, I, T, SOC, ...) | ApiKey (IoT) | `CommonResponse<BatchIngestResult>` |
+| `SensorReadingBatchIngestCommand` | List<SensorReadingItem> (BatteryAssetId, Time, V, I, T, SOC, SOH?, ChargingState?, IR?, CellDelta?, BmsErrorCode?) | ApiKey (`SensorIngest`) | `CommonResponse<BatchIngestResult>` |
 | `AlertAcknowledgeCommand` | Id, Note? | Customer (own), Staff | — |
 | `AlertResolveCommand` | Id, ResolutionNote | Staff, Manager | — |
+| `AmbientReadingBatchIngestCommand` | List<AmbientReadingItem> (SiteId, Time, AmbientTemp, Humidity?, SolarIrradiance?, BatteryGroupId?) | ApiKey (`EnvironmentalIngest`) | `CommonResponse<BatchIngestResult>` |
+| `UpsertAmbientThresholdConfigCommand` | SiteId, TempMax?, TempMin?, HumidityMax?, ComboTemp?, ComboHumidity?, EffectiveFromUtc | Admin | `CommonResponse<AmbientThresholdConfigDto>` |
+| `ReportEnvironmentalIncidentCommand` | SiteId, BatteryGroupId?, IncidentType, Severity, DetectedAt, Description?, SourceDeviceId? | ApiKey (`EnvironmentalIngest`) | `CommonResponse<EnvironmentalIncidentDto>` |
+| `AcknowledgeEnvironmentalIncidentCommand` | Id | Admin, Manager, Staff | — |
+| `ResolveEnvironmentalIncidentCommand` | Id, ResolutionNote? | Admin, Manager, Staff | — |
+| `MarkFalseAlarmEnvironmentalIncidentCommand` | Id, Reason | Admin, Manager | — |
 
 #### Sample command class
 
@@ -568,6 +704,13 @@ public class BatteryAssetCreateCommand
 | `ActiveAlertsByAssetQuery` | AssetId | — | Redis 30s |
 | `BatteryDashboardStatsQuery` | (none — admin/manager view) | Admin/Manager | Redis 60s |
 | `ThresholdConfigGetByTypeQuery` | BatteryTypeId | Admin/Manager | Redis 600s |
+| `AmbientReadingHistoryQuery` | SiteId, From, To, BatteryGroupId? | Admin/Manager/Staff/Customer (own site) | Redis 60s |
+| `AmbientReadingLatestQuery` | SiteId, BatteryGroupId? | — same — | Redis 30s |
+| `AmbientThresholdConfigBySiteQuery` | SiteId | Admin/Manager | Redis 600s |
+| `AmbientThresholdConfigGetListQuery` | Pagination + SiteId? + IsActive? | Admin/Manager | None |
+| `EnvironmentalIncidentGetListQuery` | Pagination + SiteId? + Type? + Status? + DateRange | Admin/Manager/Staff/Customer (own site) | None |
+| `EnvironmentalIncidentGetByIdQuery` | Id | — same — | Redis 60s |
+| `ActiveEnvironmentalIncidentsBySiteQuery` | SiteId | — same — | Redis 30s |
 
 ### 1.6. Background services — chi tiết
 
@@ -617,6 +760,97 @@ while (!ct.IsCancellationRequested) {
 #### `OutboxRelayBackgroundService`
 - Mỗi 5 giây: scan `OutboxMessage` `IsProcessed=false`, publish lên RabbitMQ, mark processed.
 
+#### `WeatherSyncBackgroundService`
+
+Pull dữ liệu thời tiết từ OpenMeteo cho mỗi Site (lat/lon đã set), insert vào `AmbientReading` với `Source=WeatherApi`.
+
+```csharp
+// Pseudo-code
+public class WeatherSyncBackgroundService : BackgroundService
+{
+    private readonly IServiceScopeFactory _scopeFactory;   // KHÔNG inject UoW (Scoped) trực tiếp
+    private readonly WeatherSyncOptions _options;
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
+            var weatherClient = scope.ServiceProvider.GetRequiredService<IOpenMeteoClient>();
+
+            var sites = await uow.Sites.GetAllAsync()
+                .Where(s => !s.IsDeleted && s.Status == SiteStatusEnum.Active
+                    && s.Latitude != null && s.Longitude != null)
+                .ToListAsync(ct);
+
+            foreach (var site in sites)
+            {
+                // Dedup: skip nếu reading WeatherApi gần nhất < DedupMinutes
+                var cutoff = DateTime.UtcNow.AddMinutes(-_options.DedupMinutes);
+                var hasRecent = await uow.AmbientReadings.GetAllAsync()
+                    .AnyAsync(r => r.SiteId == site.Id
+                                && r.Source == AmbientReadingSourceEnum.WeatherApi
+                                && r.Time >= cutoff, ct);
+                if (hasRecent) continue;
+
+                try
+                {
+                    var snapshot = await weatherClient.GetCurrentAsync(site.Latitude!.Value, site.Longitude!.Value, ct);
+                    if (snapshot is null) continue;
+
+                    await uow.AmbientReadings.AddAsync(new AmbientReading
+                    {
+                        Time = snapshot.ObservedAtUtc,
+                        SiteId = site.Id,
+                        AmbientTemperature = snapshot.Temperature,
+                        Humidity = snapshot.Humidity,
+                        SolarIrradiance = snapshot.ShortwaveRadiation,
+                        Source = AmbientReadingSourceEnum.WeatherApi,
+                        SourceDeviceId = "openmeteo"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Weather sync failed for site {SiteId}", site.Id);
+                    // Không throw — 1 site fail không chặn site khác
+                }
+            }
+
+            await uow.SaveChangesAsync(ct);
+            await Task.Delay(TimeSpan.FromMinutes(_options.SyncIntervalMinutes), ct);
+        }
+    }
+}
+```
+
+**Config (`Weather:` section trong appsettings):**
+- `OpenMeteoBaseUrl`: `https://api.open-meteo.com/v1/forecast`.
+- `SyncIntervalMinutes`: default 15.
+- `DedupMinutes`: default 10 — site đã có reading WeatherApi trong N phút → skip.
+- `TimeoutSeconds`: 10 — HTTP timeout.
+
+**Rate limit:** OpenMeteo free tier 10,000 calls/day. 1 site/15min = 96 calls/day → 100 sites OK.
+
+#### `ThresholdAnomalyDetector` (extend cho 14 anomaly types)
+
+Đã có trong Sprint 3 plan. Update logic:
+
+| Anomaly | Input source | Threshold source | Severity quy ước |
+|---------|-------------|------------------|------------------|
+| `Overheat` | SensorReading.Temperature | ThresholdConfig.TemperatureMax | Critical nếu > +5°C ngưỡng, ngược lại Warning |
+| `Overvoltage` / `Undervoltage` | Voltage | VoltageMax / VoltageMin | Critical |
+| `LowSoc` | SocPercent | SocCritical / SocWarning | Critical / Warning |
+| `RapidDischarge` / `AbnormalCharging` | Current | CurrentMaxDischarge / CurrentMaxCharge | Critical |
+| `DeviceOffline` | LastSensorReadingAt | > 10 phút không có reading | Warning |
+| `SohDegradation` | SensorReading.SohPercent | SohWarning / SohCritical | Critical / Warning |
+| `HighInternalResistance` | SensorReading.InternalResistanceMilliohm | ThresholdConfig.InternalResistanceMaxMilliohm | Warning |
+| `CellImbalance` | SensorReading.CellVoltageDeltaMv | ThresholdConfig.CellVoltageDeltaMaxMv | Warning |
+| `HighAmbientTemp` | AmbientReading.AmbientTemperature | AmbientThresholdConfig.AmbientTempMax | Warning |
+| `HighHumidity` | AmbientReading.Humidity | AmbientThresholdConfig.HumidityMax | Warning |
+| `HighTempHumidityCombo` | Cả 2 cùng vượt ngưỡng combo | HumidityComboTempMax + HumidityComboHumidityMax | High (severity 2 = nguy hiểm hơn Warning) |
+| `EnvironmentalIncident` | Trigger từ `EnvironmentalIncident.Detected` event | n/a | Critical (smoke/water đều Critical) |
+
 ### 1.7. Integration events
 
 #### Publish
@@ -646,6 +880,28 @@ public record BatteryAssetTransferredEvent : IntegrationEvent {
     public Guid OldCustomerId { get; init; }
     public Guid NewCustomerId { get; init; }
     public string Reason { get; init; } = string.Empty;
+}
+
+// Tách khỏi BatteryAnomalyDetectedEvent vì payload khác (site-level, không có assetSerial).
+// NotificationService consume cả 2 nhưng template + routing khác.
+public record EnvironmentalIncidentDetectedEvent : IntegrationEvent {
+    public Guid IncidentId { get; init; }
+    public Guid SiteId { get; init; }
+    public Guid? BatteryGroupId { get; init; }
+    public Guid CustomerId { get; init; }           // chủ Site, lookup khi publish
+    public IncidentTypeEnum IncidentType { get; init; }
+    public IncidentSeverityEnum Severity { get; init; }
+    public DateTime DetectedAt { get; init; }
+    public string SiteName { get; init; } = string.Empty;   // denormalize cho notification template
+    public string? Description { get; init; }
+}
+
+public record EnvironmentalIncidentResolvedEvent : IntegrationEvent {
+    public Guid IncidentId { get; init; }
+    public Guid SiteId { get; init; }
+    public DateTime ResolvedAt { get; init; }
+    public Guid ResolvedByUserId { get; init; }
+    public bool WasFalseAlarm { get; init; }
 }
 ```
 
@@ -684,14 +940,33 @@ GET    /api/thresholds/by-type/{batteryTypeId}        (Admin/Manager/internal)
 PUT    /api/thresholds/by-type/{batteryTypeId}        (Admin) — upsert
 
 # Sensor Reading
-POST   /api/sensor-readings/batch                     (ApiKey — IoT gateway)
+POST   /api/sensor-readings/batch                     (ApiKey `SensorIngest` — IoT gateway)
 GET    /api/sensor-readings?assetId=&from=&to=        (Customer own — Staff/Manager)
+GET    /api/sensor-readings/latest?assetId=           (— same —)
 
 # Alert
-GET    /api/alerts?severity=&status=&assetId=&page=   (Customer own — Staff/Manager)
+GET    /api/alerts?severity=&status=&assetId=&siteId=&page=   (Customer own — Staff/Manager)
 GET    /api/alerts/{id}                               (— same —)
 PATCH  /api/alerts/{id}/acknowledge                   (Customer own — Staff)
 PATCH  /api/alerts/{id}/resolve                       (Staff/Manager)
+
+# Ambient Reading (NEW)
+POST   /api/ambient-readings/batch                    (ApiKey `EnvironmentalIngest` — IoT)
+GET    /api/ambient-readings?siteId=&from=&to=&batteryGroupId=  (— same auth as alerts —)
+GET    /api/ambient-readings/latest?siteId=&batteryGroupId=     (— same —)
+
+# Ambient Threshold (NEW)
+GET    /api/ambient-thresholds                        (Admin/Manager)
+GET    /api/ambient-thresholds/by-site/{siteId}       (Admin/Manager)
+PUT    /api/ambient-thresholds/by-site/{siteId}       (Admin) — upsert
+
+# Environmental Incident (NEW)
+POST   /api/environmental-incidents                   (ApiKey `EnvironmentalIngest` — IoT cảm biến smoke/water)
+GET    /api/environmental-incidents?siteId=&type=&status=&from=&to=&page=  (— same auth —)
+GET    /api/environmental-incidents/{id}              (— same —)
+PATCH  /api/environmental-incidents/{id}/acknowledge  (Admin/Manager/Staff)
+PATCH  /api/environmental-incidents/{id}/resolve      (Admin/Manager/Staff)
+PATCH  /api/environmental-incidents/{id}/false-alarm  (Admin/Manager)
 
 # Dashboard
 GET    /api/battery/dashboard/stats                   (Admin/Manager)
@@ -699,6 +974,12 @@ GET    /api/battery/dashboard/stats                   (Admin/Manager)
 # Health
 GET    /api/battery/health                            (Internal — for k8s probes)
 ```
+
+**ApiKey policy update:**
+- Tách thành 2 key trong `appsettings.json`:
+  - `ApiKeys:SensorIngest` — chỉ cho `/api/sensor-readings/batch`
+  - `ApiKeys:EnvironmentalIngest` — cho `/api/ambient-readings/batch` + `/api/environmental-incidents`
+- Lý do: nếu IoT gateway smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
 
 #### Sample request/response
 
@@ -753,19 +1034,80 @@ GET    /api/battery/health                            (Internal — for k8s prob
 
 ### 1.9. Test catalog (BatteryService) — bắt buộc trước ship
 
-#### Unit tests
+#### Unit tests — core (pin)
 - `BatteryAssetCreateCommandHandlerTests`: 6 cases (success, missing serial, duplicate serial, invalid type, customer not exist, install date future)
 - `BatteryAssetCreateCommandValidationTests`: 8 cases (each field validation)
 - `AlertCreateCommandHandlerTests`: 4 cases (new alert, dedup merge into existing, critical → publish event, info severity → no event)
 - `AlertDeduplicationServiceTests`: 5 cases (within window same type → merge, outside window → new, different anomaly → new, status not Open → new, multiple recent → merge to most recent)
-- `ThresholdAnomalyDetectorTests`: 7 cases (1 per AnomalyTypeEnum value)
+- `ThresholdAnomalyDetectorTests`: 14 cases (1 per AnomalyTypeEnum value, gồm 7 cũ + 7 mới SOH/IR/Imbalance/Ambient/Combo/Incident/DeviceOffline)
 - `BatteryAssetGetListQueryHandlerTests`: filtering, paging, soft-delete exclusion
+
+#### Unit tests — environmental + extended battery health
+- `AmbientReadingBatchIngestCommandHandlerTests`: 4 cases (success, invalid site, dedup with WeatherApi source, mix IoT + API ok)
+- `UpsertAmbientThresholdConfigCommandHandlerTests`: 5 cases (create new, update existing, invalid combo, min > max, missing site)
+- `ReportEnvironmentalIncidentCommandHandlerTests`: 4 cases (success → alert created + event published, missing site, duplicate within 1 min same type → merge, critical severity → publish notification)
+- `AcknowledgeEnvironmentalIncidentCommandHandlerTests`: 3 cases (success, already resolved, false alarm)
+- `ResolveEnvironmentalIncidentCommandHandlerTests`: 3 cases (success closes linked alert, already false-alarm 409, missing user 401)
+- `OpenMeteoClientTests`: 4 cases (success parse, 4xx error returns null, timeout returns null, malformed JSON returns null) — dùng `HttpMessageHandler` stub
+- `WeatherSyncBackgroundServiceTests`: 4 cases (site with lat/lon → insert reading, site missing lat/lon → skip, dedup window → skip, OpenMeteo fail → continue next site)
+- `SensorReadingNewFieldsValidationTests`: 5 cases (SOH out of range, IR ≤ 0, CellDelta < 0, BmsErrorCode too long, ChargingState invalid enum)
 
 #### Integration tests (TestContainers postgres + timescaledb image)
 - POST asset → query list returns it
 - POST sensor batch → background scan detects anomaly → alert created → event published (assert via MassTransit TestHarness)
 - DELETE asset → soft delete (IsDeleted=true), list excludes
 - Auth: Customer A cannot GET asset of Customer B
+- **NEW:** POST ambient batch → query latest returns insert
+- **NEW:** POST sensor batch với SOH < threshold → detector tạo `SohDegradation` alert
+- **NEW:** Ambient reading vượt cả temp + humidity combo → tạo alert `HighTempHumidityCombo` Severity=High
+- **NEW:** POST `/api/environmental-incidents` (smoke) → record incident + alert Critical + publish `EnvironmentalIncidentDetectedEvent`
+- **NEW:** PATCH `/false-alarm` đóng cả incident và alert liên kết
+- **NEW:** Migration rollback bao gồm ambient_readings + ambient_threshold_configs + environmental_incidents
+
+### 1.10. External integrations
+
+#### OpenMeteo (weather data)
+
+| Item | Value |
+|------|-------|
+| Base URL | `https://api.open-meteo.com/v1/forecast` |
+| Auth | None (free tier) |
+| Rate limit | 10,000 calls/day |
+| Cost | Free |
+| Variables used | `temperature_2m`, `relative_humidity_2m`, `shortwave_radiation` |
+
+**Client interface (trong Application layer):**
+```csharp
+public interface IOpenMeteoClient
+{
+    Task<WeatherSnapshot?> GetCurrentAsync(decimal latitude, decimal longitude, CancellationToken ct);
+}
+
+public record WeatherSnapshot(
+    DateTime ObservedAtUtc,
+    decimal Temperature,                // °C
+    decimal? Humidity,                  // % RH
+    decimal? ShortwaveRadiation);       // W/m² ~ solar irradiance proxy
+```
+
+**Implementation:** `OpenMeteoClient` dùng `HttpClient` injected qua `IHttpClientFactory`. Polly retry policy 3 lần exponential backoff. Timeout 10s. Mọi error → log warning + return null (không throw để không chặn WeatherSync).
+
+**Sample call:**
+```
+GET https://api.open-meteo.com/v1/forecast?latitude=10.776&longitude=106.701&current=temperature_2m,relative_humidity_2m,shortwave_radiation&timezone=UTC
+```
+
+**DI registration** (`ManageDependencyInjection.cs` BatteryService.Infrastructure):
+```csharp
+services.AddHttpClient<IOpenMeteoClient, OpenMeteoClient>(client =>
+{
+    client.BaseAddress = new Uri(configuration["Weather:OpenMeteoBaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(10);
+}).AddPolicyHandler(GetRetryPolicy());
+
+services.AddHostedService<WeatherSyncBackgroundService>();
+services.Configure<WeatherSyncOptions>(configuration.GetSection("Weather"));
+```
 
 ---
 
@@ -2793,8 +3135,8 @@ GitHub Actions step:
   - [x] Update endpoint metadata/presigned/download/delete để dùng `fileId`.
 - [x] **Decision:** giữ `Account` sạch, thêm extension tables `AccountProfile`, `StaffProfile`, `StaffSkill` trong AuthService → migration `AddAccountProfileExtensionTables`
 - [x] AuthService: hỗ trợ avatar 2 nguồn (`AvatarFileId` nội bộ, `ExternalAvatarUrl` từ Google) và trả `displayAvatarUrl` cho FE
-- [ ] Update CLAUDE.md memory + tài liệu API contract initial cho FE team (controller XML docs đã cập nhật, file doc riêng còn pending)
-- [ ] Migration rollback test cho `AddUploadedFileMetadata` và `AddAccountProfileExtensionTables`
+- [ ] Update CLAUDE.md memory + tài liệu API contract initial cho FE team (controller XML docs đã cập nhật, file doc riêng còn pending) — #64
+- [ ] Migration rollback test cho `AddUploadedFileMetadata` và `AddAccountProfileExtensionTables` — #64
 
 ### Sprint 2 (25/5–7/6/2026)
 **Goal:** BatteryService MVP (no anomaly detection yet).
@@ -2816,102 +3158,127 @@ GitHub Actions step:
 - [x] Site + BatteryGroup entities/CRUD + asset link/filter/dashboard MVP
 
 ### Sprint 3 (8/6–21/6/2026)
-**Goal:** BatteryService anomaly engine + alert pipeline.
+**Goal:** BatteryService anomaly engine + alert pipeline + Tier 1 extended battery health (SOH).
 **Tasks:**
 - [x] `SensorReadingBatchIngestCommand` + endpoint với ApiKey auth (done early in Sprint 2)
-- [ ] `ThresholdAnomalyDetector` service + unit tests (7 anomaly types)
-- [ ] `AlertDeduplicationService` + unit tests (BR-03)
-- [ ] `ThresholdCheckBackgroundService` (30s tick)
-- [ ] `AlertEscalationBackgroundService` (publish event)
-- [ ] `OutboxRelayBackgroundService` + Outbox entity
-- [ ] Publish `BatteryAnomalyDetectedEvent`
-- [ ] Realtime + History query endpoint
-- [ ] Seed sensor data với pre-built anomaly scenarios
-- [ ] Integration test end-to-end: ingest → detect → publish event (TestHarness)
+- [ ] **Migration** `ExtendSensorReadingTierOne`: thêm `SohPercent`, `ChargingState` vào `sensor_readings` (nullable, không backfill) — #75
+- [ ] **Migration** `ExtendThresholdConfigSoh`: thêm `SohWarningThreshold`, `SohCriticalThreshold` vào `threshold_configs` — #75
+- [ ] Update `SensorReadingItem` + validation (SOH 0-100, ChargingState enum) — #80
+- [ ] Update `UpsertThresholdConfigCommand` validation (SOH critical < warning) — #80
+- [ ] `ThresholdAnomalyDetector` service + unit tests (**8 anomaly types**: 7 cũ + `SohDegradation`) — #76
+- [ ] `AlertDeduplicationService` + unit tests (BR-03) — #76
+- [ ] `ThresholdCheckBackgroundService` (30s tick) — #77
+- [ ] `AlertEscalationBackgroundService` (publish event) — #77
+- [ ] `OutboxRelayBackgroundService` + Outbox entity — #78
+- [ ] Publish `BatteryAnomalyDetectedEvent` — #78
+- [ ] Realtime + History query endpoint — #79
+- [ ] Extend `BatteryAssetRealtimeDto` thêm `SohPercent` + `ChargingState` — #79
+- [ ] Seed sensor data với pre-built anomaly scenarios (gồm SOH degradation scenario) — #81
+- [ ] Integration test end-to-end: ingest → detect → publish event (TestHarness) — #82
 
 ### Sprint 4 (22/6–5/7/2026)
-**Goal:** TicketService MVP — state machine + basic flow.
-**Tasks:**
-- [ ] Tạo solution skeleton `services/TicketService/`
-- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage)
-- [ ] `TicketStateMachine` class + 30+ transition unit tests
-- [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands)
-- [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6)
-- [ ] Code generation utility (TKT-YYMM-NNNN)
-- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create (BR-02)
-- [ ] Outbox + relay service
-- [ ] Coverage ≥ 80%
+**Goal:** TicketService MVP — state machine + basic flow. **BatteryService parallel track:** Environmental monitoring (Ambient).
+**Tasks (TicketService — chính):**
+- [ ] Tạo solution skeleton `services/TicketService/` — #83
+- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage) — #83
+- [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
+- [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
+- [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
+- [ ] Code generation utility (TKT-YYMM-NNNN) — #87
+- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create (BR-02) — #87
+- [ ] Outbox + relay service — #88
+- [ ] Coverage ≥ 80% — #88
+
+**Tasks (BatteryService parallel — Hồng Thái hoặc 1 BE phụ):**
+- [ ] Entity `AmbientReading` (hypertable) + `AmbientThresholdConfig` (per Site, regular table) — #89
+- [ ] Migration `AddAmbientMonitoring`: tạo bảng + hypertable + index — #89
+- [ ] `IOpenMeteoClient` interface + `OpenMeteoClient` HTTP impl (Polly retry, 10s timeout) — #90
+- [ ] `WeatherSyncBackgroundService` (15min interval, dedup 10min, per-site lat/lon) — #90
+- [ ] `BatchIngestAmbientReadingsCommand` + endpoint (ApiKey `EnvironmentalIngest`) — #91
+- [ ] `GetAmbientReadingHistoryQuery` + `GetLatestAmbientReadingQuery` + endpoints — #91
+- [ ] `UpsertAmbientThresholdConfigCommand` + 2 query (by-site, list) + endpoints — #92
+- [ ] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighAmbientTemp`, `HighHumidity`, `HighTempHumidityCombo` — #93
+- [ ] Update `appsettings.json`: tách `ApiKeys:SensorIngest` và `ApiKeys:EnvironmentalIngest`, thêm `Weather:*` config — #92
+- [ ] Unit tests OpenMeteoClient (HttpMessageHandler stub) + WeatherSyncBackgroundService (mock client) + 3 anomaly types mới — #93
+- [ ] Integration test: ingest ambient → query latest, combo threshold → alert — #93
+- [ ] Coverage ≥ 80% maintain — #93
 
 ### Sprint 5 (6/7–19/7/2026)
-**Goal:** TicketService SLA engine + escalation.
-**Tasks:**
-- [ ] `SlaCalculator` service + unit tests
-- [ ] `SlaTimerBackgroundService` (60s tick — warning + breach)
-- [ ] Pause/Resume commands (3 commands cho 3 Waiting* states)
-- [ ] `EscalationBackgroundService` event-driven
-- [ ] Reopen + Rate commands (Customer flow)
-- [ ] `AutoCloseBackgroundService` (7d auto-close)
-- [ ] Incident commands
-- [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.)
-- [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking
+**Goal:** TicketService SLA engine + escalation. **BatteryService parallel:** Environmental Incident + Tier 2 sensor health.
+**Tasks (TicketService — chính):**
+- [ ] `SlaCalculator` service + unit tests — #94
+- [ ] `SlaTimerBackgroundService` (60s tick — warning + breach) — #94
+- [ ] Pause/Resume commands (3 commands cho 3 Waiting* states) — #95
+- [ ] `EscalationBackgroundService` event-driven — #96
+- [ ] Reopen + Rate commands (Customer flow) — #97
+- [ ] `AutoCloseBackgroundService` (7d auto-close) — #98
+- [ ] Incident commands — #98
+- [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
+- [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
+
+**Tasks (BatteryService parallel — 1 BE phụ):**
+- [ ] Entity `EnvironmentalIncident` (regular table với lifecycle) — #100
+- [ ] Migration `AddEnvironmentalIncidentAndAlertSiteLevel`: tạo bảng `environmental_incidents` + relax `alerts.battery_asset_id` thành nullable + thêm `alerts.site_id` + `alerts.environmental_incident_id` + check constraint + index — #100
+- [ ] Migration `ExtendSensorReadingTierTwo`: thêm `InternalResistanceMilliohm`, `CellVoltageDeltaMv` vào `sensor_readings` — #101
+- [ ] Migration `ExtendThresholdConfigTierTwo`: thêm `InternalResistanceMaxMilliohm`, `CellVoltageDeltaMaxMv` vào `threshold_configs` — #101
+- [ ] `ReportEnvironmentalIncidentCommand` (ApiKey `EnvironmentalIngest`) — tạo incident + alert + publish event — #102
+- [ ] `AcknowledgeEnvironmentalIncidentCommand` + `ResolveEnvironmentalIncidentCommand` + `MarkFalseAlarmEnvironmentalIncidentCommand` — #102
+- [ ] `GetEnvironmentalIncidentsQuery` (list + filter) + `GetEnvironmentalIncidentByIdQuery` + `ActiveEnvironmentalIncidentsBySiteQuery` — #103
+- [ ] Endpoints `/api/environmental-incidents` (6 endpoint) — #103
+- [ ] Integration event `EnvironmentalIncidentDetectedEvent` + `EnvironmentalIncidentResolvedEvent` — #104
+- [ ] Extend Alert table — handler tạo alert cho cả site-level (chỉnh `AlertCreateCommandHandler` + dedup logic) — #104
+- [ ] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighInternalResistance`, `CellImbalance`, `EnvironmentalIncident` — #105
+- [ ] Update `SensorReadingItem` + validation (IR > 0, CellDelta ≥ 0) — #105
+- [ ] Unit tests cho mọi command/handler + Tier 2 anomaly types — #105
+- [ ] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
+- [ ] Coverage ≥ 80% maintain — #105
 
 ### Sprint 6 (20/7–2/8/2026)
-**Goal:** NotificationService + KnowledgeBase.
+**Goal:** NotificationService + KnowledgeBase + Environmental notification routing.
 **Tasks:**
-- [ ] Tạo solution `services/NotificationService/`
-- [ ] 13 consumers cho mọi events
-- [ ] `ExpoPushChannel` + integration test (sandbox token)
-- [ ] `EmailBusChannel`, `SmsBusChannel`, `InAppChannel`
-- [ ] `NotificationDispatcher` + preference + quiet hours
-- [ ] DeviceToken endpoints
-- [ ] KnowledgeBase module trong TicketService (CRUD + suggest endpoint)
-- [ ] Email templates 12 file `.hbs`
-- [ ] Seed 5 KB articles
-- [ ] Coverage ≥ 80%
+- [ ] Tạo solution `services/NotificationService/` — #106
+- [ ] **15 consumers** cho mọi events (13 cũ + `EnvironmentalIncidentDetectedConsumer` + `EnvironmentalIncidentResolvedConsumer`) — #107
+- [ ] `ExpoPushChannel` + integration test (sandbox token) — #108
+- [ ] `EmailBusChannel`, `SmsBusChannel`, `InAppChannel` — #108
+- [ ] `NotificationDispatcher` + preference + quiet hours — #109
+- [ ] DeviceToken endpoints — #110
+- [ ] KnowledgeBase module trong TicketService (CRUD + suggest endpoint) — #112
+- [ ] Email templates **14 file `.hbs`** (12 cũ + `environmental-incident-detected.hbs` + `environmental-incident-resolved.hbs`) — #111
+- [ ] Push template: `EnvironmentalIncidentCritical` (smoke/water → page Manager + Admin) — #111
+- [ ] Routing rule: incident Critical → Critical channel (push + email + SMS), bypass quiet hours — #109
+- [ ] Seed 5 KB articles — #112
+- [ ] Coverage ≥ 80% — #112
 
 ### Sprint 7 (3/8–16/8/2026)
-**Goal:** Reports + Gateway hardening + Observability.
+**Goal:** Reports + Gateway hardening + Observability + Tier 3 sensor finalize.
 **Tasks:**
-- [ ] Reports endpoints (Ticket: 8 endpoints, Battery: 5 endpoints) + CSV/XLSX export
-- [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger
-- [ ] OpenTelemetry tracing setup → Tempo
-- [ ] Grafana dashboards (SLA Ops, Battery Health, System Health)
-- [ ] AlertManager rules
-- [ ] Full seed data script (`tools/seed.sh`)
-- [ ] End-to-end test scenarios (golden path + SLA breach + reopen)
+- [ ] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
+- [ ] Update `SensorReadingItem` + validation (`BmsErrorCode` ≤ 64 chars) — #113
+- [ ] Reports endpoints (Ticket: 8 endpoints, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
+- [ ] CSV/XLSX export — #114
+- [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger — #115
+- [ ] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident flow) — #116
+- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, System Health — #117
+- [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency — #118
+- [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example — #119
+- [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle) — #119
 
 ### Sprint 8 (17/8–6/9/2026)
 **Goal:** Demo prep + polish.
 **Tasks:**
-- [ ] Performance testing + tuning per §13.4 SLAs
-- [ ] Security audit (OWASP checklist §14.7)
-- [ ] Documentation: API contracts final, README per service, postman collection
-- [ ] Final seed data với scenarios realistic
-- [ ] Demo script: walkthrough end-to-end flow trên Mobile + Web
-- [ ] Bug bash + bug fix
-- [ ] Final coverage push
+- [ ] Performance testing + tuning per §13.4 SLAs — #120
+- [ ] Security audit (OWASP checklist §14.7) — #121
+- [ ] Documentation: API contracts final, README per service, postman collection — #122
+- [ ] Final seed data với scenarios realistic — #123
+- [ ] Demo script: walkthrough end-to-end flow trên Mobile + Web — #123
+- [ ] Bug bash + bug fix — #124
+- [ ] Final coverage push — #125
 
 ---
 
-## 18. Phân công team (gợi ý)
+## 18. Definition of Done
 
-### Theo memory.md (5 thành viên: 3 BE + 2 FE)
-
-| Người | Role chính | Tập trung Sprint 2-3 | Sprint 4-5 | Sprint 6-7 |
-|-------|-----------|---------------------|------------|------------|
-| Phúc Duy | BE | BatteryService core (entity/CQRS) | TicketService state machine | NotificationService |
-| Phước Thắng | BE | BatteryService background jobs + anomaly | TicketService SLA engine | Reports + Gateway |
-| Hồng Thái | BE | BatteryService events + TimescaleDB migration | TicketService consumers + reopen flow | Observability + KnowledgeBase |
-| Minh Trí | FE Leader | API contract review, Mobile skeleton | Mobile alert + ticket flow | Mobile notification + polish |
-| Nhật Minh | FE | Web Admin pages | Web Manager pages | Web Staff + Customer pages |
-
-> Mỗi BE dev có thể coverage cross-service nếu cần, theo `kltn-team` skill leader chạy weekly.
-
----
-
-## 19. Definition of Done
-
-### 19.1. Per ticket (theo `workflow.md`)
+### 18.1. Per ticket (theo `workflow.md`)
 - [ ] `/kltn-task KAN-XX` đã viết `logs/KAN-XX/plan.md`
 - [ ] User approve plan
 - [ ] Code implement
@@ -2921,7 +3288,7 @@ GitHub Actions step:
 - [ ] Reviewer chạy `/kltn-reviewpr KAN-XX` → APPROVE
 - [ ] Author chạy `/kltn-complete` → merge
 
-### 19.2. Per service (production-ready demo)
+### 18.2. Per service (production-ready demo)
 - [ ] All CQRS handlers có unit test
 - [ ] All endpoints có integration test
 - [ ] Coverage ≥ 80% line
@@ -2933,7 +3300,7 @@ GitHub Actions step:
 - [ ] Startup < 10s in container
 - [ ] README per service với run local + run test instructions
 
-### 19.3. Per system (end-to-end demo)
+### 18.3. Per system (end-to-end demo)
 1. `docker compose --env-file .env.Docker up -d --build` chạy tất cả service xanh trong < 60s.
 2. `tools/seed.sh` populate đầy đủ data.
 3. End-to-end scenario chạy được:
@@ -4953,7 +5320,7 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | **Alert silence/snooze** (new) | — | ✅ rule + scheduler | — |
 
 ### Updated Definition of Done (DOD)
-Thêm vào §19:
+Thêm vào §18:
 - [ ] **ADR cập nhật** cho mọi quyết định kiến trúc lớn.
 - [ ] **Edge case rule** từ §38 có test cover.
 - [ ] **AI integration** smoke test (BatteryService gọi AI predict thành công).

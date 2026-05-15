@@ -25,6 +25,10 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
 
     public decimal? CurrentMaxDischarge { get; set; }
 
+    public decimal? SohWarningThreshold { get; set; }
+
+    public decimal? SohCriticalThreshold { get; set; }
+
     public DateTime EffectiveFromUtc { get; set; }
 
     public Task<CommonResponse<ThresholdConfigDto>> ValidateAsync()
@@ -57,6 +61,16 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
 
         if (CurrentMaxDischarge.HasValue && CurrentMaxDischarge <= 0)
             AddError(response, nameof(CurrentMaxDischarge), "Dòng xả tối đa phải lớn hơn 0.");
+
+        if (SohWarningThreshold is < 0 or > 100)
+            AddError(response, nameof(SohWarningThreshold), "Ngưỡng SOH cảnh báo phải nằm trong khoảng 0-100.");
+
+        if (SohCriticalThreshold is < 0 or > 100)
+            AddError(response, nameof(SohCriticalThreshold), "Ngưỡng SOH nghiêm trọng phải nằm trong khoảng 0-100.");
+
+        if (SohWarningThreshold.HasValue && SohCriticalThreshold.HasValue
+            && SohCriticalThreshold.Value >= SohWarningThreshold.Value)
+            AddError(response, nameof(SohCriticalThreshold), "Ngưỡng SOH nghiêm trọng phải nhỏ hơn ngưỡng cảnh báo.");
 
         return Task.FromResult(response);
     }

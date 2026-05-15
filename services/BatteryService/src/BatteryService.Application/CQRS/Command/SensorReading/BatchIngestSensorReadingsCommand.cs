@@ -1,4 +1,5 @@
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -43,6 +44,12 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
 
             if (item.SourceDeviceId?.Length > 64)
                 AddError(response, $"{prefix}.{nameof(item.SourceDeviceId)}", "Id thiết bị nguồn tối đa 64 ký tự.");
+
+            if (item.SohPercent is < 0 or > 100)
+                AddError(response, $"{prefix}.{nameof(item.SohPercent)}", "SOH phải nằm trong khoảng 0-100.");
+
+            if (item.ChargingState.HasValue && !Enum.IsDefined(typeof(ChargingStateEnum), item.ChargingState.Value))
+                AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "ChargingState không hợp lệ.");
         }
 
         return Task.FromResult(response);
@@ -72,6 +79,10 @@ public class SensorReadingItem
     public decimal SocPercent { get; set; }
 
     public int? CycleCount { get; set; }
+
+    public decimal? SohPercent { get; set; }
+
+    public ChargingStateEnum? ChargingState { get; set; }
 
     public string? SourceDeviceId { get; set; }
 }

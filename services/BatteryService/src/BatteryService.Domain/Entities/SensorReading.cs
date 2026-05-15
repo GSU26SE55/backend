@@ -1,3 +1,5 @@
+using BatteryService.Domain.Enums;
+
 namespace BatteryService.Domain.Entities;
 
 /// <summary>
@@ -18,6 +20,10 @@ public class SensorReading
     public decimal SocPercent { get; set; }
 
     public int? CycleCount { get; set; }
+
+    public decimal? SohPercent { get; set; }
+
+    public ChargingStateEnum? ChargingState { get; set; }
 
     public string? SourceDeviceId { get; set; }
 

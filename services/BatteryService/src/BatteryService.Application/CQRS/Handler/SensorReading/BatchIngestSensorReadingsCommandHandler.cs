@@ -49,6 +49,8 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 Temperature = item.Temperature,
                 SocPercent = item.SocPercent,
                 CycleCount = item.CycleCount,
+                SohPercent = item.SohPercent,
+                ChargingState = item.ChargingState,
                 SourceDeviceId = item.SourceDeviceId?.Trim()
             });
 

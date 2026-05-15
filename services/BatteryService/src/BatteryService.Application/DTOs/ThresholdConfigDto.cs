@@ -24,6 +24,10 @@ public class ThresholdConfigDto
 
     public decimal? CurrentMaxDischarge { get; set; }
 
+    public decimal? SohWarningThreshold { get; set; }
+
+    public decimal? SohCriticalThreshold { get; set; }
+
     public DateTime EffectiveFromUtc { get; set; }
 
     public bool IsActive { get; set; }

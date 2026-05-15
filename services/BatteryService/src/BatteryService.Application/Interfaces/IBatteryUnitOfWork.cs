@@ -20,4 +20,6 @@ public interface IBatteryUnitOfWork : IUnitOfWork
     IGenericRepository<SensorReading> SensorReadings { get; }
 
     IGenericRepository<Alert> Alerts { get; }
+
+    IGenericRepository<OutboxMessage> OutboxMessages { get; }
 }
