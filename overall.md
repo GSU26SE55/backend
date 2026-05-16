@@ -430,6 +430,9 @@ services/BatteryService/
 | `SohCriticalThreshold` | `decimal(5,2)?` | nullable, 0–100 | %, vd 75 → EOL sắp tới |
 | `InternalResistanceMaxMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
 | `CellVoltageDeltaMaxMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV, vd 100 — pack imbalance threshold |
+| `NoiseSuppressionCount` | `int` | NOT NULL default 5 | **B1** — số lần breach tối thiểu trong window để escalate thành Alert (xem §1.6.5) |
+| `NoiseSuppressionWindowHours` | `int` | NOT NULL default 24 | **B1** — cửa sổ thời gian đếm breach (giờ) |
+| `NoiseSuppressionEnabled` | `bool` | NOT NULL default true | **B1** — tắt khi loại pin yêu cầu alert tức thì (vd chemistry nhạy nhiệt) |
 | `EffectiveFromUtc` | `DateTime` | NOT NULL | — |
 | `IsActive` | `bool` | NOT NULL default true | Chỉ 1 record active per type |
 
@@ -437,6 +440,7 @@ services/BatteryService/
 - `SocCriticalThreshold < SocWarningThreshold`.
 - `TemperatureMin < TemperatureMax`.
 - Nếu cả 2 SOH threshold không null: `SohCriticalThreshold < SohWarningThreshold`.
+- `NoiseSuppressionCount` ≥ 1 và ≤ 50, `NoiseSuppressionWindowHours` ≥ 1 và ≤ 168 (7 ngày).
 
 #### 1.3.4. `SensorReading` (KHÔNG kế thừa `AuditableEntity` — time-series append-only)
 
@@ -454,13 +458,21 @@ services/BatteryService/
 | `InternalResistanceMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
 | `CellVoltageDeltaMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV — chênh lệch Vmax-Vmin giữa các cell |
 | `BmsErrorCode` | `string(64)?` | nullable | Mã lỗi BMS raw (vd `0x0A`, `OverCurrent,CellImbalance`) |
-| `SourceDeviceId` | `string(64)?` | — | IoT gateway ID |
+| `SourceDeviceId` | `string(64)?` | — | IoT gateway ID hoặc BMS module ID |
+| `SourceType` | `SensorReadingSourceTypeEnum` | NOT NULL default `IotGateway` | **B9** — 1=Bms, 2=IotGateway, 3=External. Phân biệt nguồn đo |
 
 **Compound index:** `(BatteryAssetId, Time DESC)` cho realtime/history queries.
 **Hypertable interval:** 1 day chunks.
 **Retention policy:** 90 ngày raw, 1 năm 1h-aggregate, 5 năm 1d-aggregate.
 
 **Lưu ý:** 5 field SOH/ChargingState/IR/CellDelta/BmsErrorCode đều **nullable** — backfill data cũ không cần. BMS có thì gửi, không có thì để null.
+
+**Cross-source validation (B9 + B10):**
+Khi cùng 1 `BatteryAssetId` có reading từ **cả BMS và IoT Gateway** trong cùng cửa sổ 60s, `ThresholdAnomalyDetector` phải so sánh:
+- |Voltage_bms − Voltage_iot| > 0.5V → kích hoạt anomaly `SensorMismatch` (severity Warning).
+- |Temperature_bms − Temperature_iot| > 5°C → `SensorMismatch` (Warning).
+- Đây là tín hiệu BMS hoặc cảm biến IoT đang đo sai → cần Staff check.
+Xem chi tiết logic ở §1.6.6 (Cross-source validation).
 
 #### 1.3.5. `Alert` (kế thừa `AuditableEntity`)
 
@@ -501,7 +513,7 @@ public enum ChargingStateEnum
     Idle = 1, Charging = 2, Discharging = 3, Float = 4, Bypass = 5
 }
 
-// Anomaly classification - mở rộng 7 → 14 giá trị
+// Anomaly classification - mở rộng 7 → 15 giá trị
 public enum AnomalyTypeEnum {
     // Pin-level cũ (1-7)
     Overheat = 1, Overvoltage = 2, Undervoltage = 3,
@@ -514,7 +526,16 @@ public enum AnomalyTypeEnum {
     HighAmbientTemp = 11,
     HighHumidity = 12,
     HighTempHumidityCombo = 13,
-    EnvironmentalIncident = 14
+    EnvironmentalIncident = 14,
+    // Cross-source validation (15) - B10
+    SensorMismatch = 15   // BMS reading vs IoT reading lệch quá ngưỡng
+}
+
+// Nguồn đo của SensorReading (B9) - phân biệt BMS vs IoT Gateway
+public enum SensorReadingSourceTypeEnum {
+    Bms = 1,         // Từ BMS gắn trực tiếp trong pack
+    IotGateway = 2,  // Từ IoT gateway (Raspberry Pi + sensor ngoài)
+    External = 3     // Manual import, third-party feed
 }
 
 public enum AlertSeverityEnum { Info = 1, Warning = 2, Critical = 3 }
@@ -852,6 +873,132 @@ public class WeatherSyncBackgroundService : BackgroundService
 | `HighHumidity` | AmbientReading.Humidity | AmbientThresholdConfig.HumidityMax | Warning |
 | `HighTempHumidityCombo` | Cả 2 cùng vượt ngưỡng combo | HumidityComboTempMax + HumidityComboHumidityMax | High (severity 2 = nguy hiểm hơn Warning) |
 | `EnvironmentalIncident` | Trigger từ `EnvironmentalIncident.Detected` event | n/a | Critical (smoke/water đều Critical) |
+| `SensorMismatch` | So sánh reading BMS vs IoT (xem §1.6.6) | Hard-coded delta (0.5V hoặc 5°C) | Warning |
+
+#### 1.6.5. Noise Suppression Logic (B1) — phân biệt Noise vs Bất thường thật
+
+**Bối cảnh:** Cảm biến IoT có thể có nhiễu (electrical spike, EMI, lỗi ADC tạm thời) → breach threshold lẻ tẻ nhưng KHÔNG phải bất thường thật. Nếu mỗi breach đều tạo Alert → spam false-positive.
+
+**Quy tắc nghiệp vụ:**
+- Một breach ĐƠN LẺ trong cửa sổ `NoiseSuppressionWindowHours` (default 24h) = **Noise** → KHÔNG tạo Alert, chỉ log internal.
+- ≥ `NoiseSuppressionCount` (default 5) breach cùng `AnomalyType` cùng asset trong cửa sổ = **Bất thường thật** → tạo Alert thật + publish event.
+
+**Logic flow trong `ThresholdAnomalyDetector`:**
+
+```csharp
+// Pseudo-code
+foreach (var reading in batch)
+{
+    foreach (var rule in DetectAllAnomalies(reading))   // 14 rule check
+    {
+        // Lookup ThresholdConfig của BatteryType
+        if (!config.NoiseSuppressionEnabled)
+        {
+            await CreateAlertImmediate(rule);  // bypass — alert tức thì
+            continue;
+        }
+
+        // Đếm breach trong window
+        var windowStart = DateTime.UtcNow.AddHours(-config.NoiseSuppressionWindowHours);
+        var breachCount = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
+            .Where(x => !x.IsDeleted
+                && x.BatteryAssetId == reading.BatteryAssetId
+                && x.AnomalyType == rule.AnomalyType
+                && x.OccurredAt >= windowStart)
+            .CountAsync();
+
+        // Log breach event mới (luôn luôn lưu để đếm)
+        await _unitOfWork.NoiseBreachEvents.AddAsync(new NoiseBreachEvent
+        {
+            BatteryAssetId = reading.BatteryAssetId,
+            AnomalyType = rule.AnomalyType,
+            ActualValue = rule.ActualValue,
+            ThresholdValue = rule.ThresholdValue,
+            OccurredAt = DateTime.UtcNow
+        });
+
+        // Quyết định escalate
+        if (breachCount + 1 >= config.NoiseSuppressionCount)
+        {
+            await CreateAlertImmediate(rule);  // Đạt ngưỡng → tạo Alert
+            // Optional: mark các NoiseBreachEvent cũ là "promoted" để audit
+        }
+        // else: chỉ log breach, không tạo Alert
+    }
+}
+```
+
+**New entity `NoiseBreachEvent`** (KHÔNG kế thừa `AuditableEntity` — append-only time-series):
+
+| Field | Type | Constraint | Index |
+|-------|------|-----------|-------|
+| `Id` | Guid | PK | clustered |
+| `BatteryAssetId` | Guid | NOT NULL, FK | btree composite |
+| `AnomalyType` | AnomalyTypeEnum | NOT NULL | btree composite |
+| `ActualValue` | decimal(10,4) | NOT NULL | — |
+| `ThresholdValue` | decimal(10,4) | NOT NULL | — |
+| `OccurredAt` | DateTime | NOT NULL | btree DESC |
+| `PromotedToAlertId` | Guid? | nullable | — |
+| `SourceType` | SensorReadingSourceTypeEnum | NOT NULL | — |
+
+**Composite index:** `(BatteryAssetId, AnomalyType, OccurredAt DESC)` cho query đếm breach trong window.
+**Retention:** xóa sau 7 ngày (cron). Nếu được promoted → giữ vĩnh viễn (audit).
+
+**Hai cấp lọc noise:**
+
+| Cấp | Loại noise | Vị trí lọc | Ngưỡng |
+|-----|-----------|------------|--------|
+| **Cấp 1: Hardware noise** | Voltage = 9999V, Current âm bất thường, timestamp future | `SensorReadingBatchIngestCommandHandler` (trước khi lưu) | Hard-coded outlier bounds (đã có trong Sprint IoT-1 §52.4) |
+| **Cấp 2: Frequency-based** | Threshold breach lẻ tẻ < 5 lần/24h | `ThresholdAnomalyDetector` (sau khi lưu sensor reading) | Configurable per BatteryType qua `ThresholdConfig` |
+
+> Cấp 1 ngăn data rác vào DB. Cấp 2 ngăn alert spam khi data hợp lệ nhưng intermittent.
+
+**Critical anomaly bypass noise filter:**
+- `EnvironmentalIncident` (smoke, water) — `NoiseSuppressionEnabled = false` mặc định
+- `Overheat` với `ActualValue > TemperatureMax + 10°C` — bypass (an toàn cao hơn noise tradeoff)
+
+#### 1.6.6. Cross-source validation (B9 + B10)
+
+Khi 1 `BatteryAsset` có cả BMS và IoT Gateway cùng đẩy reading:
+
+```csharp
+// Logic chạy trong ThresholdCheckBackgroundService mỗi 30s
+foreach (var asset in assetsWithMultipleSources)
+{
+    var latestBms = await _unitOfWork.SensorReadings.GetAllAsync()
+        .Where(x => x.BatteryAssetId == asset.Id
+            && x.SourceType == SensorReadingSourceTypeEnum.Bms
+            && x.Time >= DateTime.UtcNow.AddSeconds(-60))
+        .OrderByDescending(x => x.Time)
+        .FirstOrDefaultAsync();
+
+    var latestIot = await _unitOfWork.SensorReadings.GetAllAsync()
+        .Where(x => x.BatteryAssetId == asset.Id
+            && x.SourceType == SensorReadingSourceTypeEnum.IotGateway
+            && x.Time >= DateTime.UtcNow.AddSeconds(-60))
+        .OrderByDescending(x => x.Time)
+        .FirstOrDefaultAsync();
+
+    if (latestBms == null || latestIot == null) continue;  // không đủ 2 nguồn
+
+    if (Math.Abs(latestBms.Voltage - latestIot.Voltage) > 0.5m
+        || Math.Abs(latestBms.Temperature - latestIot.Temperature) > 5m)
+    {
+        await _detector.RaiseAnomalyAsync(new AnomalyContext
+        {
+            BatteryAssetId = asset.Id,
+            AnomalyType = AnomalyTypeEnum.SensorMismatch,
+            Severity = AlertSeverityEnum.Warning,
+            ActualValue = latestIot.Voltage,
+            ThresholdValue = latestBms.Voltage,
+            Unit = "V",
+            DetectedAt = DateTime.UtcNow
+        });
+    }
+}
+```
+
+> SensorMismatch CŨNG đi qua noise suppression (nếu lệch lẻ tẻ 1 lần do timing → không alert). 5 lần lệch trong 24h mới tạo Alert.
 
 ### 1.7. Integration events
 
@@ -1214,7 +1361,9 @@ services/TicketService/
 | `Title` | `string(200)` | NOT NULL | — |
 | `Description` | `string(4000)` | NOT NULL | — |
 | `Category` | `TicketCategoryEnum` | NOT NULL | 1=Charging, 2=Overheat, 3=NoPower, 4=Performance, 5=Other |
-| `Priority` | `TicketPriorityEnum?` | nullable until ASSIGNED | 1=P1Critical, 2=P2High, 3=P3Normal |
+| `Priority` | `TicketPriorityEnum?` | nullable until ASSIGNED | 1=P1Critical, 2=P2High, 3=P3Normal — **derived từ ImpactScope × UrgencyLevel** (xem §2.10) |
+| `ImpactScope` | `ImpactScopeEnum?` | nullable until ASSIGNED | **B3** — 1=SingleAsset, 2=BatteryGroup, 3=Site, 4=MultiSite. Manager gán lúc triage |
+| `UrgencyLevel` | `UrgencyLevelEnum?` | nullable until ASSIGNED | **B3** — 1=Low, 2=Medium, 3=High. Manager gán lúc triage |
 | `Status` | `TicketStatusEnum` | NOT NULL default `NEW` | xem §2.4 |
 | `Origin` | `TicketOriginEnum` | NOT NULL | 1=ManualByCustomer, 2=AutoFromAlert, 3=CreatedByStaff |
 | `OriginAlertId` | `Guid?` | nullable | Link với Alert nếu auto |
@@ -1392,6 +1541,41 @@ public enum TicketStatusEnum {
 | `ClosedPendingRate` → `Open` | Customer (within 7d) | `ReopenReason` | ReopenCount++, BR-07 check, Activity Reopened |
 | `Closed` → `Open` | ❌ NOT ALLOWED | — | Must create new ticket |
 
+#### 2.4.2.bis. Escalation closure rule (B7)
+
+**Quy tắc nghiệp vụ:** Khi ticket đã `Escalated` → chỉ Staff được escalate-tới (`Ticket.AssignedStaffId` sau khi Manager reassign sang `Tier2/Tier3`) mới được transition sang `Resolved`. Staff tầng dưới (Tier 1) KHÔNG được resolve thay.
+
+**Enforcement trong `TicketResolveCommandHandler`:**
+
+```csharp
+public async Task<CommonResponse<TicketResolveResponse>> Handle(
+    TicketResolveCommand request, CancellationToken ct)
+{
+    var ticket = await _unitOfWork.Tickets.GetByIdAsync(request.TicketId);
+    if (ticket == null) return Fail("Ticket not found");
+
+    // B7: nếu ticket đã từng escalated → bắt buộc actor là current AssignedStaff
+    if (ticket.EscalatedAt.HasValue && ticket.AssignedStaffId != request.ActorUserId)
+    {
+        return Fail("Ticket đã escalated — chỉ Staff được assign sau escalation mới có thể resolve");
+    }
+
+    // B7: enforce staff tier ≥ tier yêu cầu của escalation reason
+    if (ticket.EscalationReason == EscalationReasonEnum.SkillGap)
+    {
+        var staff = await _unitOfWork.StaffAccounts.GetByIdAsync(request.ActorUserId);
+        if (staff?.SkillTier < StaffSkillTierEnum.ModuleSpecialist)
+        {
+            return Fail("Escalation lý do SkillGap → cần Staff Tier 2 (ModuleSpecialist) trở lên");
+        }
+    }
+
+    // ... rest of resolve logic
+}
+```
+
+**Activity log bổ sung:** `ActivityActionEnum.ResolvedByEscalatedStaff = 23` để audit trail rõ "ai mới được resolve sau escalation".
+
 #### 2.4.3. State machine class skeleton
 ```csharp
 public interface ITicketStateMachine {
@@ -1412,6 +1596,107 @@ public sealed class TransitionResult {
     public List<DomainEvent> RaisedEvents { get; init; } = new();
 }
 ```
+
+### 2.4bis. Priority Calculation Matrix (B3) — Impact × Urgency
+
+**Bối cảnh:** Việc Manager gán Priority `P1/P2/P3` cần dựa trên **framework có cơ sở**, không tùy tiện. Áp dụng mô hình **ITIL 4 Service Value System — Incident Prioritization** (xem `docs/adr/0005-b2b-itil-stance.md` cho stance B2B).
+
+**Công thức:**
+
+```
+Priority = f(ImpactScope, UrgencyLevel)
+```
+
+**Impact Scope (B3) — phạm vi ảnh hưởng kỹ thuật:**
+
+| Giá trị | Tên | Mô tả | Ví dụ |
+|---------|-----|------|-------|
+| 1 | `SingleAsset` | 1 BatteryAsset đơn lẻ | 1 pin overheat |
+| 2 | `BatteryGroup` | Cả 1 group/cluster trong site | 1 string A bị low SOC |
+| 3 | `Site` | Cả 1 site (≥ 50% asset bị ảnh hưởng) | Site An Giang mất điện |
+| 4 | `MultiSite` | Nhiều site cùng nhà cung cấp/khu vực | Lô pin LFP batch X gặp lỗi hàng loạt |
+
+**Urgency Level (B3) — mức độ khẩn cấp nghiệp vụ:**
+
+| Giá trị | Tên | Mô tả | Trigger |
+|---------|-----|------|---------|
+| 1 | `Low` | Có thể đợi lịch bảo trì định kỳ | SOH giảm chậm, tỉ lệ < 5%/tháng |
+| 2 | `Medium` | Cần xử lý trong vài ngày, chưa ảnh hưởng dịch vụ | Cell imbalance không lan rộng |
+| 3 | `High` | Đe doạ dịch vụ ngay hoặc nguy cơ an toàn | Overheat, smoke detected, mất điện |
+
+**Priority Matrix (gán Priority từ 2 chiều):**
+
+| ↓ Impact / Urgency → | Low (1) | Medium (2) | High (3) |
+|---|---|---|---|
+| **SingleAsset (1)** | P3 | P3 | P2 |
+| **BatteryGroup (2)** | P3 | P2 | P2 |
+| **Site (3)** | P2 | P2 | **P1** |
+| **MultiSite (4)** | P2 | **P1** | **P1** |
+
+**Service implementation:**
+
+```csharp
+public interface IPriorityCalculator
+{
+    TicketPriorityEnum Calculate(ImpactScopeEnum impact, UrgencyLevelEnum urgency);
+}
+
+public class PriorityCalculator : IPriorityCalculator
+{
+    public TicketPriorityEnum Calculate(ImpactScopeEnum impact, UrgencyLevelEnum urgency)
+    {
+        // Matrix lookup — không có if-else lằng nhằng
+        if (impact == ImpactScopeEnum.MultiSite && urgency >= UrgencyLevelEnum.Medium)
+            return TicketPriorityEnum.P1Critical;
+        if (impact == ImpactScopeEnum.Site && urgency == UrgencyLevelEnum.High)
+            return TicketPriorityEnum.P1Critical;
+        if (impact >= ImpactScopeEnum.Site
+            || (impact == ImpactScopeEnum.BatteryGroup && urgency >= UrgencyLevelEnum.Medium)
+            || (impact == ImpactScopeEnum.SingleAsset && urgency == UrgencyLevelEnum.High))
+            return TicketPriorityEnum.P2High;
+        return TicketPriorityEnum.P3Normal;
+    }
+}
+```
+
+**Áp dụng trong `TicketAssignCommand`:**
+- Manager gán `ImpactScope` + `UrgencyLevel` → `PriorityCalculator` tự tính `Priority`.
+- Manager KHÔNG gán `Priority` trực tiếp nữa (sai framework).
+- Override: nếu Manager muốn override (rare, vd safety override) → require justification field `PriorityOverrideReason` ghi vào `TicketActivity`.
+
+**Auto-derivation cho AUTO-CREATE ticket (BR-02 từ BatteryAnomalyDetectedEvent):**
+
+| Anomaly | Default ImpactScope | Default UrgencyLevel | → Priority |
+|---------|--------------------|--------------------|-----------|
+| `EnvironmentalIncident` (smoke/water) | Site | High | P1 |
+| `Overheat` (Critical severity) | SingleAsset | High | P2 |
+| `HighAmbientTemp` | Site | Medium | P2 |
+| `SohDegradation` | SingleAsset | Low | P3 |
+| `SensorMismatch` | SingleAsset | Medium | P3 |
+| Khác | SingleAsset | Medium | P3 |
+
+> Manager có thể re-triage sau khi auto-create, nhưng Priority phải tính lại qua matrix — không nhập thẳng.
+
+**Enum bổ sung:**
+
+```csharp
+public enum ImpactScopeEnum {
+    SingleAsset = 1,
+    BatteryGroup = 2,
+    Site = 3,
+    MultiSite = 4
+}
+
+public enum UrgencyLevelEnum {
+    Low = 1,
+    Medium = 2,
+    High = 3
+}
+```
+
+**References:**
+- ITIL 4 Foundation, Service Value System — Incident Management Practice
+- Xem `.claude/docs/ai-research-references.md` mục "SLA & Priority frameworks" cho cite paper đầy đủ.
 
 ### 2.5. CQRS — đầy đủ command + query
 
@@ -1962,6 +2247,7 @@ public class ExpoPushChannel : INotificationChannel {
 | Field | Type | Note |
 |-------|------|------|
 | `Id` | Guid | — |
+| `Code` | `string(20)` | **B8** NOT NULL UNIQUE — format `KB-YYYY-NNNN` (auto-gen, reset hàng năm) |
 | `Category` | `TicketCategoryEnum` | Match với ticket category để suggest |
 | `Title` | string(200) | — |
 | `Symptoms` | string(2000) | Markdown |
@@ -1974,6 +2260,38 @@ public class ExpoPushChannel : INotificationChannel {
 | `ViewCount` | int | Analytics |
 | `HelpfulCount` | int | Staff vote helpful |
 | `CreatedByUserId` | Guid | — |
+
+### 4.2bis. Entity `TicketKbReference` (B8) — link KB ↔ Ticket
+
+Many-to-many: 1 ticket có thể tham chiếu nhiều KB article, 1 KB có thể được dùng cho nhiều ticket.
+
+| Field | Type | Note |
+|-------|------|------|
+| `Id` | Guid | PK |
+| `TicketId` | Guid | FK → Ticket, indexed |
+| `KbArticleId` | Guid | FK → KnowledgeBaseArticle, indexed |
+| `KbArticleCode` | string(20) | denormalize cho query không join |
+| `ReferencedByUserId` | Guid | Staff đã dùng KB này |
+| `ReferenceType` | enum | 1=ConsultedDuringResolve, 2=ProvidedToCustomer, 3=GeneratedAfterResolve |
+| `Note` | string(500)? | Optional — Staff ghi chú "đã làm theo step 3-5" |
+| `CreatedAt` | DateTime | indexed DESC |
+
+**Composite unique constraint:** `(TicketId, KbArticleId, ReferenceType)` — tránh duplicate.
+
+**Logic:**
+- Khi Staff resolve ticket bằng KB → frontend gọi `POST /api/v1/tickets/{id}/kb-references` với `KbArticleId` + `ReferenceType=ConsultedDuringResolve`.
+- Khi Manager đóng ticket → có thể tạo KB mới và link với `ReferenceType=GeneratedAfterResolve` để audit "ticket này sinh ra KB mới".
+- Analytics: `GET /api/v1/knowledge-base/{id}/usage-stats` đếm số lần được tham chiếu.
+
+**MaintenanceLog cũng có** field `RelatedKbArticleIds` (JSON array Guid) — Staff log "đã dùng KB nào trong quá trình bảo trì".
+
+**Endpoints bổ sung:**
+```
+POST   /api/v1/tickets/{id}/kb-references                (Staff)
+DELETE /api/v1/tickets/{id}/kb-references/{refId}        (Staff)
+GET    /api/v1/tickets/{id}/kb-references                (mọi role internal)
+GET    /api/v1/knowledge-base/{id}/usage-stats           (Manager/Admin — count + recent tickets)
+```
 
 ### 4.3. Endpoints
 ```
@@ -2323,8 +2641,27 @@ AuthService vẫn là owner của identity/profile metadata. `Account` giữ vai
 | `Department` | string(100)? | bộ phận |
 | `MaxConcurrentTickets` | int | default 10, TicketService dùng để validate assign |
 | `IsAvailable` | bool | Manager có thể tạm ẩn Staff khỏi assignment queue |
+| `SkillTier` | `StaffSkillTierEnum` | **B6** NOT NULL default `Generalist` — phân tầng cho SLA escalation routing |
 | `Notes` | string(500)? | ghi chú nội bộ |
 | `CreatedAt`, `UpdatedAt` | DateTime | audit nhẹ |
+
+```csharp
+// B6 — Staff skill tier theo SLA escalation tier
+public enum StaffSkillTierEnum
+{
+    Generalist = 1,        // Tier 1 — xử lý ticket toàn diện scope SingleAsset, P3/P2
+    ModuleSpecialist = 2,  // Tier 2 — chuyên 1 module (BMS, charging, thermal) — P2/P1 module
+    SeniorSpecialist = 3   // Tier 3 — chuyên sâu lĩnh vực (LiFePO4 chemistry, NMC failure analysis) — P1 site/multi-site
+}
+```
+
+**Routing logic (TicketService assign):**
+- Auto-create ticket có Priority được tính từ Matrix §2.4bis:
+  - `P3` → ưu tiên gán `Tier1 (Generalist)`
+  - `P2` → `Tier2 (ModuleSpecialist)`, fallback Tier 1 nếu Tier 2 không có ai available
+  - `P1` → `Tier3 (SeniorSpecialist)`, fallback Tier 2
+- Khi `Ticket.EscalatedAt` set + `EscalationReason = SkillGap` → Manager BẮT BUỘC gán Staff Tier ≥ Tier 2.
+- Sau escalation, chỉ Staff Tier match mới được resolve (xem §2.4.2.bis B7).
 
 #### `StaffSkill` (nhiều skill cho 1 Staff)
 | Field | Type | Note |
@@ -2336,6 +2673,10 @@ AuthService vẫn là owner của identity/profile metadata. `Account` giữ vai
 | `CertifiedUntil` | DateTime? | optional |
 
 **Constraint:** unique `(StaffAccountId, SkillCode)`.
+
+> **Phân biệt `SkillTier` (StaffProfile) vs `SkillLevel` (StaffSkill):**
+> - `SkillTier` = **tầng năng lực tổng quát** (Generalist/Specialist/Senior) — quyết định routing SLA.
+> - `SkillLevel` = **độ thành thạo từng skill cụ thể** (LiFePO4 Basic vs Advanced) — để Manager match đúng người cho ticket cụ thể.
 
 #### Avatar source rule
 ```csharp
@@ -3264,6 +3605,9 @@ GitHub Actions step:
 - [x] AuthService: hỗ trợ avatar 2 nguồn (`AvatarFileId` nội bộ, `ExternalAvatarUrl` từ Google) và trả `displayAvatarUrl` cho FE
 - [ ] Update CLAUDE.md memory + tài liệu API contract initial cho FE team (controller XML docs đã cập nhật, file doc riêng còn pending) — #64
 - [ ] Migration rollback test cho `AddUploadedFileMetadata` và `AddAccountProfileExtensionTables` — #64
+- [ ] **B5** — Tạo `docs/adr/0005-b2b-itil-stance.md` chốt B2B/B2C scope + ITIL 4 SVS stance — #146
+- [ ] **B2-draft** — Tạo skeleton `.claude/docs/ai-research-references.md` (paper citation cho 15 anomaly types + IsolationForest hyperparameters + B2B SLA frameworks) — #147
+- [ ] **B11** — Cập nhật §26 References (clarify ITIL 4 SVS B2B) — đã hoàn thành trong overall.md commit — #148
 
 ### Sprint 2 (25/5–7/6/2026)
 **Goal:** BatteryService MVP (no anomaly detection yet).
@@ -3314,6 +3658,7 @@ GitHub Actions step:
 - [ ] Code generation utility (TKT-YYMM-NNNN) — #87
 - [ ] Outbox + relay service — #88
 - [ ] Coverage ≥ 80% — #88
+- [ ] **B3** — Priority Calculation Matrix: thêm `ImpactScopeEnum`, `UrgencyLevelEnum`, field `Ticket.ImpactScope` + `Ticket.UrgencyLevel`, `IPriorityCalculator` + impl, áp dụng trong `TicketAssignCommand`. Schema PHẢI vào migration `InitialTicketSchema` ngay từ Sprint này (xem §2.4bis) — #149
 
 ### Sprint 5 (6/7–19/7/2026)
 **Goal:** TicketService workflow integration — SLA, pause/resume, auto-create from Battery anomaly, maintenance log/comment/attachment.
@@ -3332,6 +3677,8 @@ GitHub Actions step:
 - [ ] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
 - [ ] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
 - [ ] MaintenanceLog + comments + attachments workflow trong TicketService — #143
+- [ ] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
+- [ ] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
 
 ### Sprint 5B (20/7–26/7/2026)
 **Goal:** BatteryService advanced monitoring riêng — ambient/environmental/tier-2 sensor health. Sprint này tách khỏi TicketService để tránh phát triển song song hai domain lớn.
@@ -3362,6 +3709,8 @@ GitHub Actions step:
 - [ ] Unit tests cho mọi command/handler + Tier 2 anomaly types — #105
 - [ ] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
 - [ ] Coverage ≥ 80% maintain — #105
+- [ ] **B1** — Noise Suppression Logic: entity `NoiseBreachEvent` (hypertable) + migration nhét vào `ExtendThresholdConfigTierTwo` (thêm `NoiseSuppressionCount`/`WindowHours`/`Enabled`) + frequency-based logic trong `ThresholdAnomalyDetector` + bypass cho EnvironmentalIncident và Critical Overheat + retention job 7 ngày (xem §1.6.5) — #152
+- [ ] **B2-finalize** — Hoàn thiện `.claude/docs/ai-research-references.md` với paper cite đầy đủ cho 15 anomaly types — #153
 
 ### Sprint IoT-1 (song song Sprint 6: 27/7–9/8/2026)
 **Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị gateway simulator/hardware path cho demo.
@@ -3379,6 +3728,7 @@ GitHub Actions step:
 - [ ] Gateway hardware pilot guide: Raspberry Pi + RS485/CAN path, mapping BMS register sang payload backend.
 - [ ] Gateway route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*`.
 - [ ] Unit/integration tests: provision, heartbeat, offline detection, ingest dedup, clock skew, outlier, calibration, firmware check happy path.
+- [ ] **B9** — Thêm `SensorReadingSourceTypeEnum` + field `SensorReading.SourceType` (NOT NULL default IotGateway) vào migration `AddIotDeviceManagement` + update ingest endpoint accept `sourceType` per item (BMS/IotGateway/External) (xem §1.3.4 + §1.3.6) — #154
 
 ### Sprint 6 (27/7–9/8/2026)
 **Goal:** NotificationService + KnowledgeBase + Environmental notification routing.
@@ -3395,6 +3745,7 @@ GitHub Actions step:
 - [ ] Routing rule: incident Critical → Critical channel (push + email + SMS), bypass quiet hours — #109
 - [ ] Seed 5 KB articles — #112
 - [ ] Coverage ≥ 80% — #112
+- [ ] **B8** — Thêm `KnowledgeBaseArticle.Code` (format `KB-YYYY-NNNN` auto-gen) + entity `TicketKbReference` (many-to-many ticket↔KB) + 4 endpoints + analytics `usage-stats` (xem §4.2 + §4.2bis) — #155
 
 ### Sprint 7 (10/8–23/8/2026)
 **Goal:** Reports + Gateway hardening + Observability + Tier 3 sensor finalize.
@@ -3411,6 +3762,8 @@ GitHub Actions step:
 - [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle) — #119
 - [ ] IoT hardware pilot E2E: Raspberry Pi/gateway simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng gateway tạo `DeviceOffline` alert — #127
 - [ ] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #126
+- [ ] **B4** — Cascade Risk Assessment rule-based: field `BatteryAsset.CascadeRiskScore`/`CascadeRiskUpdatedAt`/`ElectricalTopology` + migration `AddCascadeRiskFields` + `CascadeRiskCalculator` + `CascadeRiskBackgroundService` (5min) + 3 endpoint + integration với Priority Matrix (xem §31.7) — #156
+- [ ] **B10** — `AnomalyTypeEnum.SensorMismatch = 15` + cross-source validation logic trong `ThresholdCheckBackgroundService` (BMS vs IoT delta 0.5V/5°C) + migration value bổ sung enum + 3 unit test (xem §1.6.6) — #157
 
 ### Sprint 8 (24/8–6/9/2026)
 **Goal:** Demo prep + polish.
@@ -3761,14 +4114,32 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | **Inbox** | Pattern dedup message ở consumer để idempotent |
 
 ### References
-- ITIL 4 Incident Management — basis của ticket lifecycle
-- ITIL 4 Problem Management — basis của Incident flag
+
+**Service management & SLA framework (B5 + B11):**
+- **ITIL 4 Service Value System (SVS) — Incident Management Practice** — cho B2B customer-facing service.
+  > **Lưu ý stance (B5):** Hệ thống GSU26SE55 phục vụ **B2B** (doanh nghiệp vận hành solar farm + B2C end-user). KHÔNG áp dụng ITIL 4 phiên bản internal-IT — sử dụng ITIL 4 SVS với góc nhìn Service Provider → External Customer. Xem `docs/adr/0005-b2b-itil-stance.md` cho quyết định đầy đủ.
+- **ITIL 4 Foundation — Incident Prioritization (Impact × Urgency matrix)** — cơ sở của Priority Matrix §2.4bis.
+- **ITIL 4 Problem Management** — cơ sở của Incident flag.
+- **ISO/IEC 20000-1:2018** — service management requirements (cho B2B).
+- **B2B SaaS SLA frameworks** — Atlassian/Jira Service Management SLA best practices (B2B field service).
+
+**Security & compliance:**
 - OWASP Top 10 2021 — security checklist §14.7
+- GDPR Articles 15–22 — data subject rights §39
+
+**Architecture & patterns:**
 - Clean Architecture — Robert C. Martin, layered structure
 - Microsoft Microservices Patterns — Outbox, Saga
 - MassTransit docs — consumer + retry/circuit breaker
 - TimescaleDB docs — hypertable, continuous aggregate
 - Expo Push docs — https://docs.expo.dev/push-notifications/sending-notifications/
+
+**AI & battery research (B2):**
+- Xem `.claude/docs/ai-research-references.md` cho danh sách paper đầy đủ cite cho 15 anomaly types, IsolationForest hyperparameter justification, NASA dataset spec.
+
+**ADRs:**
+- `docs/adr/0005-b2b-itil-stance.md` — B2B/B2C scope + ITIL stance (B5)
+- (các ADR khác bổ sung khi triển khai)
 
 ---
 
@@ -4245,6 +4616,107 @@ GET /api/v1/sites/{id}/dashboard
 ### 31.6. Migration impact
 - `BatteryAsset` migration `AddSiteAndGroup` (Sprint 2 hoặc 3).
 - Seed: tạo Site mặc định "Default Site" cho Customer chưa có site, gán assets cũ vào đó.
+
+### 31.7. Cascade Risk Assessment (B4) — rule-based propagation analysis
+
+**Bối cảnh:** Văn bản yêu cầu AI phân tích "pin hỏng có lây lan sang pin khác không?". Ví dụ: 10 pin/site, 1 cục hỏng → P3. Nhưng nếu cục hỏng đó lây ảnh hưởng sang cục khác → upgrade P1 ngay.
+
+**Approach:** Rule-based (không phải ML — out-of-scope capstone). Trigger sau khi 1 Alert/Anomaly được tạo, đánh giá risk lan rộng.
+
+**New field trong `BatteryAsset` (B4):**
+
+| Field | Type | Note |
+|-------|------|------|
+| `CascadeRiskScore` | `decimal(4,3)` NOT NULL default 0 | 0.0–1.0, computed |
+| `CascadeRiskUpdatedAt` | `DateTime?` | Khi nào tính lần cuối |
+| `ElectricalTopology` | `ElectricalTopologyEnum` NOT NULL default `Independent` | 1=Independent, 2=SeriesString, 3=ParallelBank, 4=SeriesParallel |
+
+**Logic tính score:**
+
+```csharp
+public class CascadeRiskCalculator : ICascadeRiskCalculator
+{
+    public async Task<decimal> CalculateAsync(Guid assetId, CancellationToken ct)
+    {
+        var asset = await _unitOfWork.BatteryAssets.GetByIdAsync(assetId);
+        if (asset == null) return 0m;
+
+        decimal score = 0m;
+
+        // Rule 1: Topology factor — series = mất 1 pin có thể ngắt cả string
+        score += asset.ElectricalTopology switch
+        {
+            ElectricalTopologyEnum.Independent => 0.0m,
+            ElectricalTopologyEnum.ParallelBank => 0.2m,
+            ElectricalTopologyEnum.SeriesString => 0.6m,
+            ElectricalTopologyEnum.SeriesParallel => 0.4m,
+            _ => 0m
+        };
+
+        // Rule 2: Proximity — đếm asset cùng BatteryGroup có anomaly trong 1h
+        if (asset.BatteryGroupId.HasValue)
+        {
+            var siblingAnomalies = await _unitOfWork.Alerts.GetAllAsync()
+                .Where(a => !a.IsDeleted
+                    && a.Status == AlertStatusEnum.Open
+                    && a.DetectedAt >= DateTime.UtcNow.AddHours(-1)
+                    && a.BatteryAssetId != assetId
+                    && _unitOfWork.BatteryAssets.GetAllAsync()
+                        .Any(b => b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
+                .CountAsync();
+
+            if (siblingAnomalies >= 1) score += 0.2m;
+            if (siblingAnomalies >= 3) score += 0.2m;  // cumulative
+        }
+
+        // Rule 3: Thermal proximity — overheat lây lan
+        var hasThermalRunaway = await _unitOfWork.Alerts.GetAllAsync()
+            .Where(a => a.BatteryAssetId == assetId
+                && a.AnomalyType == AnomalyTypeEnum.Overheat
+                && a.Severity == AlertSeverityEnum.Critical
+                && a.Status == AlertStatusEnum.Open)
+            .AnyAsync();
+        if (hasThermalRunaway) score += 0.3m;
+
+        return Math.Min(1.0m, score);  // clamp
+    }
+}
+```
+
+**Background service `CascadeRiskBackgroundService`:**
+- Frequency: 5 phút.
+- Scan toàn bộ asset có Open Alert → recompute `CascadeRiskScore`.
+- Nếu score cross threshold:
+  - `>= 0.7` → publish `BatteryCascadeRiskHighEvent` → upgrade Priority ticket liên quan lên P1 (auto)
+  - `>= 0.5` → notify Manager dashboard, không auto-upgrade
+
+**Integration với Priority Matrix (§2.4bis):**
+- Khi `CascadeRiskScore >= 0.7` → override `ImpactScope` lên ít nhất `BatteryGroup` → `Priority` tính lại qua matrix.
+- Group Alert (§31.4): nếu N asset cùng group có score cao → tạo Group Alert + ticket parent-child.
+
+**Endpoint:**
+```
+GET    /api/v1/battery-assets/{id}/cascade-risk         (Manager/Staff/Customer own)
+GET    /api/v1/sites/{id}/cascade-risk-summary          (Manager — heat map cho site)
+POST   /api/v1/battery-assets/{id}/topology             (Admin — set electrical topology)
+```
+
+**Enum:**
+
+```csharp
+public enum ElectricalTopologyEnum {
+    Independent = 1,     // Pin đơn lẻ, không kết nối với pin khác
+    SeriesString = 2,    // Mắc nối tiếp (string voltage)
+    ParallelBank = 3,    // Mắc song song (bank capacity)
+    SeriesParallel = 4   // Hỗn hợp
+}
+```
+
+**Out-of-scope capstone (post-graduation):**
+- Graph Neural Network train trên cascade failure dataset (cần thực data, không khả thi).
+- Real-time thermal simulation.
+
+> **Lưu ý implementation:** B4 phụ thuộc Site/BatteryGroup (đã có Sprint 2). Đặt vào Sprint 7 cùng Reports + Observability.
 
 ---
 
@@ -5423,16 +5895,26 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 
 | Sprint | Original scope | Bổ sung | Tổng effort |
 |--------|---------------|---------|-------------|
-| Sprint 1 | Stabilize foundations | + ADR setup, Edge case doc | 1.1× |
+| Sprint 1 | Stabilize foundations | + ADR setup, Edge case doc, **B5 (ADR-0005 ITIL stance), B2-draft (AI refs skeleton), B11 (§26 ref update)** | 1.2× |
 | Sprint 2 | BatteryService MVP | + **Site/BatteryGroup entities**, + **AI Bridge client skeleton** | 1.4× — cần thêm 1 dev hoặc kéo dài 3 ngày |
 | Sprint 3 | BatteryService anomaly engine | + **AI Hybrid pipeline**, + **AlertSilence + Snooze**, + **Bulk import**, + **QR claim** | 1.6× — cân nhắc tách thành Sprint 3a + 3b |
-| Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, không đưa vào sprint này | 1.0× |
-| Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment | 1.3× |
-| Sprint 5B | BatteryService advanced monitoring riêng | + Ambient monitoring, EnvironmentalIncident, Tier 2 sensor health | 1.0× sprint riêng |
-| Sprint IoT-1 | IoT Gateway backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, gateway simulator/hardware guide | 1.0× sprint song song Sprint 6 |
-| Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB** | 1.5× |
-| Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management** | 1.3× |
+| Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, + **B3 (Priority Matrix Impact×Urgency)** | 1.2× |
+| Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment, + **B6 (StaffSkillTierEnum), B7 (Escalation closure rule)** | 1.4× |
+| Sprint 5B | BatteryService advanced monitoring riêng | + Ambient monitoring, EnvironmentalIncident, Tier 2 sensor health, + **B1 (Noise Suppression frequency-based), B2-finalize (AI refs paper cite)** | **1.3× — overload risk, xem mục cuối** |
+| Sprint IoT-1 | IoT Gateway backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, gateway simulator/hardware guide, + **B9 (SensorReading.SourceType BMS/IoT)** | 1.1× sprint song song Sprint 6 |
+| Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB**, + **B8 (KB Code + TicketKbReference)** | 1.5× |
+| Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management**, + **B4 (Cascade Risk rule-based), B10 (SensorMismatch anomaly)** | 1.5× |
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report** | giữ nguyên |
+
+### ⚠️ Sprint overload mitigation (B1-B11 impact)
+
+**Sprint 5B effort 1.3×** — đã 1.0× với ambient + tier-2 + environmental. Thêm B1 + B2-finalize → có thể overflow. Mitigation:
+- Giảm scope EnvironmentalIncident: bỏ `MarkFalseAlarmEnvironmentalIncidentCommand` (defer Sprint 6).
+- HOẶC kéo Sprint 5B từ 7 ngày lên 9 ngày (lấn vào Sprint 6 đầu).
+
+**Sprint 7 effort 1.5×** — đã 1.3× với GDPR + Webhook + API key. Thêm B4 + B10 → cân nhắc:
+- B10 (SensorMismatch) chỉ tốn ~0.1× — không vấn đề.
+- B4 (Cascade Risk) ~0.3× — nếu Sprint 7 quá tải → defer Webhook outbound (§45.1) sang post-capstone backlog.
 
 ### Re-prioritization recommendation
 
