@@ -591,7 +591,7 @@ flowchart TD
     AlertFlow --> AS{Hành động}
     AS -->|Đóng alert| Idle
     AS -->|Tạo ticket| CreateT
-    AS -->|Đã xử lý tự| Dismiss[Mark as resolved<br/>by self]
+    AS -->|Đã tự xử lý| Dismiss[Mark as resolved<br/>by self]
 
     CreateT[Tạo Ticket] --> CT0[Confirm battery asset<br/>đúng serial/thiết bị]
     CT0 --> CT1[Chọn loại sự cố<br/>Charging · Overheat · No power ...]
