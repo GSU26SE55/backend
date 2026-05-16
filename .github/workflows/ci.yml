@@ -18,6 +18,10 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
+permissions:
+  contents: read
+  pull-requests: read
+
 # Cancel run cũ khi push commit mới lên cùng branch — tiết kiệm minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
