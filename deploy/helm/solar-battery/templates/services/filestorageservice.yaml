@@ -9,6 +9,11 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "filestorageservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable | quote }}
+      maxSurge: {{ .Values.global.rollingUpdate.maxSurge | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/component: filestorageservice
@@ -57,7 +62,7 @@ spec:
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
         - name: ConnectionStrings__FileStorageDb
-          value: "Host=postgres;Port=5432;Database={{ .Values.postgres.fileStorageDatabase }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size=25;Minimum Pool Size=2"
+          value: "Host=postgres;Port=5432;Database={{ .Values.postgres.fileStorageDatabase }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size={{ .Values.postgres.connectionPool.maximumPoolSize }};Minimum Pool Size={{ .Values.postgres.connectionPool.minimumPoolSize }}"
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }

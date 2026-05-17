@@ -8,6 +8,12 @@
 #     -f docker-compose.prod.yml \
 #     --env-file /opt/solar/.env.prod \
 #     up -d
+#
+# Monitoring is kept but optional on a 2 vCPU / 4GB VPS:
+#   IMAGE_TAG=staging docker compose \
+#     -f docker-compose.prod.yml \
+#     --env-file /opt/solar/.env.prod \
+#     --profile monitoring up -d
 # =====================================================================
 
 networks:
@@ -32,6 +38,9 @@ services:
   postgres:
     image: timescale/timescaledb:latest-pg16
     container_name: solar-postgres
+    command: ["postgres", "-c", "max_connections=100", "-c", "shared_buffers=64MB"]
+    mem_limit: 768m
+    cpus: "0.50"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-solarbatterymaintainance}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -51,6 +60,8 @@ services:
   postgres-init:
     image: postgres:16-alpine
     container_name: solar-postgres-init
+    mem_limit: 128m
+    cpus: "0.25"
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -72,6 +83,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: solar-redis
+    mem_limit: 128m
+    cpus: "0.15"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -83,10 +96,12 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: solar-rabbitmq
+    mem_limit: 768m
+    cpus: "0.70"
     environment:
       RABBITMQ_DEFAULT_USER: ${RabbitMQ__Username:-guest}
       RABBITMQ_DEFAULT_PASS: ${RabbitMQ__Password:-guest}
-      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_prometheus return_per_object_metrics true"
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_prometheus return_per_object_metrics false"
     ports:
       - "15672:15672"
     volumes:
@@ -105,6 +120,8 @@ services:
   minio:
     image: minio/minio:latest
     container_name: solar-minio
+    mem_limit: 512m
+    cpus: "0.50"
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${ObjectStorage__AccessKey:-minioadmin}
@@ -127,6 +144,8 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: solar-minio-init
+    mem_limit: 128m
+    cpus: "0.25"
     depends_on:
       minio:
         condition: service_healthy
@@ -149,12 +168,16 @@ services:
   authservice:
     image: ghcr.io/gsu26se55/authservice:${IMAGE_TAG:-staging}
     container_name: solar-authservice
+    mem_limit: 512m
+    cpus: "0.60"
     env_file:
       - /opt/solar/.env.prod
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
     ports:
       - "4002:8080"
     depends_on:
@@ -172,11 +195,15 @@ services:
   emailservice:
     image: ghcr.io/gsu26se55/emailservice:${IMAGE_TAG:-staging}
     container_name: solar-emailservice
+    mem_limit: 256m
+    cpus: "0.20"
     env_file:
       - /opt/solar/.env.prod
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
     ports:
       - "4003:8080"
     depends_on:
@@ -190,11 +217,15 @@ services:
   smsservice:
     image: ghcr.io/gsu26se55/smsservice:${IMAGE_TAG:-staging}
     container_name: solar-smsservice
+    mem_limit: 256m
+    cpus: "0.20"
     env_file:
       - /opt/solar/.env.prod
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
     ports:
       - "4004:8080"
     depends_on:
@@ -208,6 +239,8 @@ services:
   filestorageservice:
     image: ghcr.io/gsu26se55/filestorageservice:${IMAGE_TAG:-staging}
     container_name: solar-filestorageservice
+    mem_limit: 384m
+    cpus: "0.50"
     env_file:
       - /opt/solar/.env.prod
     environment:
@@ -215,7 +248,9 @@ services:
       ASPNETCORE_URLS: http://+:8080
       # Override để dùng internal minio hostname (container-to-container)
       ObjectStorage__ServiceUrl: http://minio:9000
-      ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
     ports:
       - "4005:8080"
     depends_on:
@@ -231,12 +266,16 @@ services:
   batteryservice:
     image: ghcr.io/gsu26se55/batteryservice:${IMAGE_TAG:-staging}
     container_name: solar-batteryservice
+    mem_limit: 512m
+    cpus: "0.60"
     env_file:
       - /opt/solar/.env.prod
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
     ports:
       - "4006:8080"
     depends_on:
@@ -254,11 +293,15 @@ services:
   apigateway:
     image: ghcr.io/gsu26se55/apigateway:${IMAGE_TAG:-staging}
     container_name: solar-apigateway
+    mem_limit: 256m
+    cpus: "0.30"
     env_file:
       - /opt/solar/.env.prod
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
     ports:
       - "4001:8080"
     depends_on:
@@ -277,6 +320,9 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: solar-prometheus
+    profiles: ["monitoring"]
+    mem_limit: 512m
+    cpus: "0.50"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -293,6 +339,9 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: solar-grafana
+    profiles: ["monitoring"]
+    mem_limit: 384m
+    cpus: "0.30"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -311,6 +360,9 @@ services:
   alertmanager:
     image: prom/alertmanager:latest
     container_name: solar-alertmanager
+    profiles: ["monitoring"]
+    mem_limit: 128m
+    cpus: "0.20"
     command:
       - "--config.file=/etc/alertmanager/config.yml"
       - "--storage.path=/alertmanager"

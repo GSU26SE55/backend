@@ -140,6 +140,50 @@ public class SensorReadingsController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy dữ liệu SensorReading đã được gộp theo khoảng thời gian (aggregate) cho chart.
+    /// </summary>
+    /// <remarks>
+    /// Query parameters:
+    /// - <c>batteryAssetId</c>: bắt buộc trên route.
+    /// - <c>From</c>: tùy chọn, UTC, lọc <c>Time &gt;= From</c>.
+    /// - <c>To</c>: tùy chọn, UTC, lọc <c>Time &lt;= To</c>.
+    /// - <c>Interval</c>: khoảng bucket — <c>1m</c>, <c>5m</c>, <c>15m</c>, <c>1h</c>, <c>1d</c>. Mặc định <c>1h</c>.
+    ///
+    /// Cách hoạt động:
+    /// - Filter theo asset + time range.
+    /// - Gộp readings theo <c>Interval</c>, tính AVG cho từng metric (Voltage, Current, Temperature, SocPercent, SohPercent).
+    /// - Trả danh sách bucket sắp xếp tăng dần theo thời gian.
+    ///
+    /// Use case:
+    /// - FE/Mobile vẽ biểu đồ SOC/Voltage/Temperature theo thời gian.
+    /// - Thay thế <c>/history</c> khi time range lớn (> 1 ngày) để tránh quá nhiều data points.
+    ///
+    /// Lưu ý:
+    /// - <c>AvgSohPercent</c> là nullable; trả <c>null</c> nếu không có reading nào có SohPercent trong bucket.
+    /// - Không trả totalItems — FE dùng độ dài mảng <c>items</c>.
+    /// </remarks>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
+    /// <param name="query">Filter + interval.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa danh sách <see cref="SensorReadingAggregateDto"/>.</returns>
+    /// <response code="200">Trả aggregate data.</response>
+    /// <response code="400">Query không hợp lệ (interval không đúng, time range ngược).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role phù hợp.</response>
+    [HttpGet("{batteryAssetId:guid}/aggregate")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAggregate(Guid batteryAssetId, [FromQuery] GetSensorReadingAggregateQuery query, CancellationToken cancellationToken)
+    {
+        query.BatteryAssetId = batteryAssetId;
+        var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Lấy SensorReading mới nhất của một BatteryAsset.
     /// </summary>
     /// <remarks>

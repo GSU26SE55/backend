@@ -91,7 +91,8 @@ if (!EF.IsDesignTime)
         });
     }
 
-    if (!app.Environment.IsEnvironment("Docker"))
+    if (!app.Environment.IsEnvironment("Docker")
+        && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
         app.UseHttpsRedirection();
 
     app.UseCors("AllowAll");

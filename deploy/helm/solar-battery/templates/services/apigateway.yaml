@@ -13,8 +13,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable | quote }}
+      maxSurge: {{ .Values.global.rollingUpdate.maxSurge | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/component: apigateway
@@ -39,10 +39,10 @@ spec:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }
         readinessProbe:
-          httpGet: { path: /metrics, port: http }
+          httpGet: { path: /health, port: http }
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /metrics, port: http }
+          httpGet: { path: /health, port: http }
           periodSeconds: 10
           initialDelaySeconds: 20
         resources:

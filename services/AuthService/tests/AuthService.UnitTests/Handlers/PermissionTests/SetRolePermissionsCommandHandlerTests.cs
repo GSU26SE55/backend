@@ -186,8 +186,9 @@ public class GetRolePermissionsQueryHandlerTests
         var resp = await handler.Handle(new GetRolePermissionsQuery { RoleId = role.Id }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.Should().HaveCount(2);
-        resp.Data.Select(p => p.Code).Should().Contain(new[] { "a.view", "b.view" });
+        var permissions = resp.Data!;
+        permissions.Should().HaveCount(2);
+        permissions.Select(p => p.Code).Should().Contain(new[] { "a.view", "b.view" });
     }
 
     [Fact]
