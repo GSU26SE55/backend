@@ -405,9 +405,12 @@ public class BatteryAssetFullHandlerTests
     {
         var asset = MakeAsset();
         asset.BatteryType = MakeType();
-        var b = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
+        var b = new MockUnitOfWorkBuilder()
+            .WithCustomerAccounts(Customer())
+            .WithBatteryAssets(asset);
         var r = await new GetBatteryAssetByIdQueryHandler(b.Build()).Handle(new GetBatteryAssetByIdQuery { Id = asset.Id }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
+        r.Data!.CustomerName.Should().Be("x");
     }
 
     [Fact]
@@ -415,7 +418,9 @@ public class BatteryAssetFullHandlerTests
     {
         var asset = MakeAsset();
         asset.BatteryType = MakeType();
-        var b = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
+        var b = new MockUnitOfWorkBuilder()
+            .WithCustomerAccounts(Customer())
+            .WithBatteryAssets(asset);
         var r = await new GetBatteryAssetsQueryHandler(b.Build()).Handle(new GetBatteryAssetsQuery
         {
             Keyword = "abc",
@@ -425,6 +430,7 @@ public class BatteryAssetFullHandlerTests
         }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.Data!.TotalItems.Should().Be(1);
+        r.Data.Items[0].CustomerName.Should().Be("x");
     }
 
     [Fact]

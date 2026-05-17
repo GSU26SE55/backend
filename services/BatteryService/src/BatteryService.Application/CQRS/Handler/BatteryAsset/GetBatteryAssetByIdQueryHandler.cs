@@ -37,11 +37,18 @@ public class GetBatteryAssetByIdQueryHandler : IRequestHandler<GetBatteryAssetBy
             };
         }
 
+        var customerName = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => account.Id == entity.CustomerId && !account.IsDeleted)
+            .Select(account => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         return new CommonResponse<BatteryAssetDto>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = BatteryMapper.ToDto(entity)
+            Data = BatteryMapper.ToDto(entity, customerName)
         };
     }
 }

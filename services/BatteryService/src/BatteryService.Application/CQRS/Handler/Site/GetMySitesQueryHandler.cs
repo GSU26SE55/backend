@@ -38,6 +38,13 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
             .Include(site => site.BatteryAssets)
             .Where(site => site.CustomerId == customerId && !site.IsDeleted);
 
+        var customerName = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => account.Id == customerId && !account.IsDeleted)
+            .Select(account => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(site => site.CreatedAt)
@@ -48,6 +55,7 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
                 Id = site.Id,
                 Name = site.Name,
                 CustomerId = site.CustomerId,
+                CustomerName = customerName,
                 Address = site.Address,
                 Latitude = site.Latitude,
                 Longitude = site.Longitude,

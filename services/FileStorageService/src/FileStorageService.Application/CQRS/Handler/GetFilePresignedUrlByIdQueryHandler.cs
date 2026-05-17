@@ -11,11 +11,16 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
 {
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public GetFilePresignedUrlByIdQueryHandler(IObjectStorageService objectStorageService, IFileStorageUnitOfWork unitOfWork)
+    public GetFilePresignedUrlByIdQueryHandler(
+        IObjectStorageService objectStorageService,
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<string>> Handle(GetFilePresignedUrlByIdQuery request, CancellationToken cancellationToken)
@@ -32,6 +37,9 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
         if (file is null)
             return NotFound();
 
+        if (!_fileAuthorizationService.CanRead(file))
+            return Forbidden();
+
         if (file.Status == FileStatusEnum.Quarantined)
         {
             return new CommonResponse<string>
@@ -39,6 +47,16 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "File đang bị cách ly và không thể tải."
+            };
+        }
+
+        if (file.Status == FileStatusEnum.Processing)
+        {
+            return new CommonResponse<string>
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "File đang được xử lý, vui lòng thử lại sau."
             };
         }
 
@@ -61,5 +79,12 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
         IsSuccess = false,
         StatusCode = 404,
         Message = "Không tìm thấy file."
+    };
+
+    private static CommonResponse<string> Forbidden() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 403,
+        Message = "Không có quyền tạo presigned URL cho file này."
     };
 }

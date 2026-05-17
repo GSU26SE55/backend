@@ -924,7 +924,6 @@ PATCH  /api/battery-assets/{id}/restore               (Admin)
 PUT    /api/battery-assets/{id}/transfer-owner        (Admin)
 GET    /api/battery-assets/me                         (Customer — own list)
 GET    /api/battery-assets/{id}/realtime              (Customer own — Staff/Manager)
-GET    /api/battery-assets/{id}/history?from=&to=&granularity= (Customer own — Staff/Manager)
 GET    /api/battery-assets/{id}/alerts                (— same auth as above —)
 
 # BatteryType
@@ -941,8 +940,9 @@ PUT    /api/thresholds/by-type/{batteryTypeId}        (Admin) — upsert
 
 # Sensor Reading
 POST   /api/sensor-readings/batch                     (ApiKey `SensorIngest` — IoT gateway)
-GET    /api/sensor-readings?assetId=&from=&to=        (Customer own — Staff/Manager)
-GET    /api/sensor-readings/latest?assetId=           (— same —)
+GET    /api/sensor-readings/{batteryAssetId}/history?from=&to=&limit=&cursor= (cursor-based, no total count)
+GET    /api/sensor-readings/{batteryAssetId}/latest   (Customer own — Staff/Manager)
+GET    /api/sensor-readings/{batteryAssetId}/aggregate?from=&to=&interval=1h  (Sprint 7)
 
 # Alert
 GET    /api/alerts?severity=&status=&assetId=&siteId=&page=   (Customer own — Staff/Manager)
@@ -2017,9 +2017,11 @@ SELECT add_continuous_aggregate_policy('sensor_readings_hourly',
 ```
 
 ### 6.4. Query strategy
-- `granularity=1m` → query raw `sensor_readings`
-- `granularity=1h` → query `sensor_readings_hourly`
-- `granularity=1d` → manual aggregate hoặc continuous aggregate `_daily`
+- Raw history endpoint dùng cursor timestamp: `GET /api/sensor-readings/{batteryAssetId}/history?from=&to=&limit=&cursor=`.
+- `interval=1m` → query raw `sensor_readings` bằng `time_bucket('1 minute', time)`
+- `interval=1h` → query `sensor_readings_hourly`
+- `interval=1d` → manual aggregate hoặc continuous aggregate `_daily`
+- Aggregate chart endpoint planned Sprint 7: `GET /api/sensor-readings/{batteryAssetId}/aggregate?from=&to=&interval=1m|5m|15m|1h|1d`.
 
 ---
 
@@ -3171,6 +3173,7 @@ GitHub Actions step:
 - [x] CQRS ThresholdConfig Upsert + Get
 - [x] Consumer `AccountActivatedConsumer` + `AccountDeletedConsumer` + `AccountStatusChangedConsumer`
 - [x] Validate `CustomerId` qua local `CustomerAccount` read-model khi tạo Site/BatteryAsset và TransferOwner
+- [x] Expose `customerName` trong `BatteryAssetDto` và `SiteDto` từ local `CustomerAccount` read-model để FE không phải gọi cross-service
 - [x] Unit tests + focused integration tests cho BatteryService critical paths
 - [x] Coverage ≥ 80% report/enforcement (đạt 95.8% line coverage trên Application + Infrastructure, exclude Migrations/Factory/Seeders/DTO/Mapping; `services/BatteryService/scripts/check-coverage.sh` enforce threshold)
 - [x] Migration rollback test trên TimescaleDB (script `services/BatteryService/scripts/test-migration-rollback.sh` — apply/rollback/re-apply cycle PASS, hypertable metadata auto-cleaned)
@@ -3192,7 +3195,7 @@ GitHub Actions step:
 - [x] `AlertEscalationBackgroundService` (publish event) — #77
 - [x] `OutboxRelayBackgroundService` + Outbox entity — #78
 - [x] Publish `BatteryAnomalyDetectedEvent` — #78
-- [x] Realtime + History query endpoint — #79
+- [x] Realtime + cursor-based History query endpoint (`/api/sensor-readings/{batteryAssetId}/history`) — #79
 - [x] Extend `BatteryAssetRealtimeDto` thêm `SohPercent` + `ChargingState` — #79
 - [x] Seed sensor data với pre-built anomaly scenarios (gồm SOH degradation scenario) — #81
 - [x] Integration test end-to-end: ingest → detect → publish event (TestHarness) — #82
@@ -3275,6 +3278,7 @@ GitHub Actions step:
 **Tasks:**
 - [ ] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
 - [ ] Update `SensorReadingItem` + validation (`BmsErrorCode` ≤ 64 chars) — #113
+- [ ] `GET /api/sensor-readings/{batteryAssetId}/aggregate` với `interval=1m|5m|15m|1h|1d`, response AVG voltage/current/temperature/SOC/SOH theo bucket — #114
 - [ ] Reports endpoints (Ticket: 8 endpoints, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
 - [ ] CSV/XLSX export — #114
 - [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger — #115

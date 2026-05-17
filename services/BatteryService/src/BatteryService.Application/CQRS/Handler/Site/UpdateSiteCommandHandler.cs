@@ -68,6 +68,13 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
         entity.ContactPersonName = request.ContactPersonName?.Trim();
         entity.ContactPersonPhone = request.ContactPersonPhone?.Trim();
 
+        var customerName = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => account.Id == entity.CustomerId && !account.IsDeleted)
+            .Select(account => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         _unitOfWork.Sites.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -76,7 +83,7 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
             IsSuccess = true,
             StatusCode = 200,
             Message = "Cập nhật site thành công.",
-            Data = BatteryMapper.ToDto(entity)
+            Data = BatteryMapper.ToDto(entity, customerName)
         };
     }
 

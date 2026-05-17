@@ -12,11 +12,16 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
 {
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public UploadFileCommandHandler(IObjectStorageService objectStorageService, IFileStorageUnitOfWork unitOfWork)
+    public UploadFileCommandHandler(
+        IObjectStorageService objectStorageService,
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<FileUploadResponse>> Handle(UploadFileCommand request, CancellationToken cancellationToken)
@@ -24,6 +29,16 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
         var validation = await request.ValidateAsync();
         if (!validation.IsSuccess)
             return validation;
+
+        if (!_fileAuthorizationService.CanUpload(request.Purpose))
+        {
+            return new CommonResponse<FileUploadResponse>
+            {
+                IsSuccess = false,
+                StatusCode = 403,
+                Message = "Không có quyền upload file với purpose này."
+            };
+        }
 
         await using var stream = request.File!.OpenReadStream();
         var result = await _objectStorageService.UploadAsync(
@@ -44,7 +59,8 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
             FolderName = string.IsNullOrWhiteSpace(request.FolderName) ? "default" : request.FolderName.Trim(),
             Purpose = request.Purpose,
             Status = FileStatusEnum.Ready,
-            PublicUrl = result.PublicUrl
+            PublicUrl = result.PublicUrl,
+            CreatedBy = _fileAuthorizationService.CurrentUserId
         };
 
         try

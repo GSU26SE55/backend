@@ -7,7 +7,7 @@ using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Handler.SensorReading;
 
-public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorReadingHistoryQuery, CommonResponse<PaginationResponse<SensorReadingDto>>>
+public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorReadingHistoryQuery, CommonResponse<SensorReadingHistoryResponseDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
 
@@ -16,7 +16,7 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CommonResponse<PaginationResponse<SensorReadingDto>>> Handle(GetSensorReadingHistoryQuery request, CancellationToken cancellationToken)
+    public async Task<CommonResponse<SensorReadingHistoryResponseDto>> Handle(GetSensorReadingHistoryQuery request, CancellationToken cancellationToken)
     {
         var query = _unitOfWork.SensorReadings
             .GetAllAsync()
@@ -35,11 +35,16 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
             query = query.Where(reading => reading.Time <= to);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        if (request.Cursor.HasValue)
+        {
+            var cursor = ToUtc(request.Cursor.Value);
+            query = query.Where(reading => reading.Time < cursor);
+        }
+
+        var limit = Math.Clamp(request.Limit, 1, GetSensorReadingHistoryQuery.MaxLimit);
+        var page = await query
             .OrderByDescending(reading => reading.Time)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Take(limit + 1)
             .Select(reading => new SensorReadingDto
             {
                 Time = reading.Time,
@@ -53,16 +58,18 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
             })
             .ToListAsync(cancellationToken);
 
-        return new CommonResponse<PaginationResponse<SensorReadingDto>>
+        var hasMore = page.Count > limit;
+        var items = hasMore ? page.Take(limit).ToList() : page;
+
+        return new CommonResponse<SensorReadingHistoryResponseDto>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<SensorReadingDto>
+            Data = new SensorReadingHistoryResponseDto
             {
                 Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
+                NextCursor = hasMore ? items[^1].Time : null,
+                HasMore = hasMore
             }
         };
     }

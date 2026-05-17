@@ -122,14 +122,10 @@ public class S3CompatibleFileStorageService : IObjectStorageService
     {
         if (size <= 0)
             throw new ArgumentException("Uploaded file is empty.", nameof(size));
-        if (size > _options.MaxFileSizeBytes)
-            throw new InvalidOperationException($"File size exceeds the limit of {_options.MaxFileSizeBytes} bytes.");
 
         var extension = Path.GetExtension(originalFileName).ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(extension))
             throw new InvalidOperationException("File extension is required.");
-        if (_options.AllowedExtensions.Length > 0 && !_options.AllowedExtensions.Contains(extension))
-            throw new InvalidOperationException($"File extension '{extension}' is not allowed.");
     }
 
     private string? BuildPublicUrl(string objectKey)
@@ -166,11 +162,15 @@ public class S3CompatibleFileStorageService : IObjectStorageService
             ".jpg" or ".jpeg" => "image/jpeg",
             ".png" => "image/png",
             ".webp" => "image/webp",
+            ".gif" => "image/gif",
             ".pdf" => "application/pdf",
             ".doc" => "application/msword",
             ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ".xls" => "application/vnd.ms-excel",
             ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".txt" => "text/plain",
+            ".csv" => "text/csv",
+            ".bin" or ".hex" or ".fw" => "application/octet-stream",
             _ => "application/octet-stream"
         };
     }

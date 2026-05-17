@@ -1,3 +1,4 @@
+using FileStorageService.Application.Authorization;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Domain.Enums;
 using MediatR;
@@ -18,13 +19,7 @@ public class UploadFileCommand : IRequest<CommonResponse<FileUploadResponse>>, I
     public Task<CommonResponse<FileUploadResponse>> ValidateAsync()
     {
         var response = new CommonResponse<FileUploadResponse>();
-        if (File is null)
-        {
-            response.IsSuccess = false;
-            response.StatusCode = 400;
-            response.Message = "File là bắt buộc.";
-            response.ListErrors.Add(new Errors { Field = nameof(File), Detail = "File là bắt buộc." });
-        }
+        FileUploadPolicy.Validate(File, Purpose, response);
 
         return Task.FromResult(response);
     }

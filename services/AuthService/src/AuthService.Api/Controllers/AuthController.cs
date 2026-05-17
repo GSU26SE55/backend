@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using System.Security.Cryptography;
 using AuthService.Api.Extensions;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
@@ -41,7 +43,8 @@ public class AuthController : ControllerBase
     ///
     /// Body request:
     /// - <c>Email</c>: email đăng nhập, bắt buộc, tối đa 256 ký tự và phải đúng định dạng email.
-    /// - <c>Password</c>: mật khẩu, bắt buộc, từ 6 đến 100 ký tự và không chứa khoảng trắng.
+    /// - <c>Password</c>: mật khẩu, bắt buộc, không rỗng. Login không áp dụng strong-password regex;
+    ///   server chỉ dùng giá trị này để so khớp password hash.
     ///
     /// Cách hoạt động:
     /// - Hệ thống validate email/mật khẩu đầu vào.
@@ -249,13 +252,17 @@ public class AuthController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng cho logout thông thường trên một thiết bị hoặc một browser.
+    /// Khác refresh-token rotation, logout yêu cầu access token hợp lệ để đảm bảo refresh token
+    /// được revoke bởi đúng account sở hữu session đó.
     ///
     /// Body request:
-    /// - <c>RefreshToken</c>: refresh token của phiên cần đăng xuất.
+    /// - Header <c>Authorization: Bearer {accessToken}</c>: xác định account đang gọi logout.
+    /// - Body <c>RefreshToken</c>: refresh token của phiên cần đăng xuất.
     ///
     /// Cách hoạt động:
-    /// - Validate refresh token không rỗng.
+    /// - Validate access token và refresh token không rỗng.
     /// - Tìm session tương ứng với refresh token.
+    /// - Kiểm tra session phải thuộc account lấy từ access token.
     /// - Đánh dấu refresh token là revoked để không thể dùng refresh token đó xin access token mới.
     ///
     /// Lưu ý:
@@ -267,10 +274,21 @@ public class AuthController : ControllerBase
     /// <returns>Thông báo kết quả đăng xuất.</returns>
     /// <response code="200">Đăng xuất thành công hoặc refresh token đã được xử lý theo nghiệp vụ.</response>
     /// <response code="400">Thiếu refresh token.</response>
+    /// <response code="401">Thiếu hoặc sai access token.</response>
+    /// <response code="403">Refresh token không thuộc account hiện tại.</response>
     [HttpPost("logout")]
+    [Authorize]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Logout([FromBody] LogoutCommand command, CancellationToken cancellationToken)
     {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
@@ -599,4 +617,10 @@ public class AuthController : ControllerBase
         Message = message,
         ListErrors = new List<Errors> { new Errors { Field = "Auth", Detail = message } }
     };
+
+    private Guid? GetCurrentUserId()
+    {
+        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(raw, out var id) ? id : null;
+    }
 }

@@ -11,11 +11,16 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
 {
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public DeleteFileByIdCommandHandler(IObjectStorageService objectStorageService, IFileStorageUnitOfWork unitOfWork)
+    public DeleteFileByIdCommandHandler(
+        IObjectStorageService objectStorageService,
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<string>> Handle(DeleteFileByIdCommand request, CancellationToken cancellationToken)
@@ -30,6 +35,9 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
 
         if (file is null)
             return NotFound();
+
+        if (!_fileAuthorizationService.CanDelete(file))
+            return Forbidden();
 
         await _objectStorageService.DeleteAsync(file.ObjectKey, cancellationToken);
 
@@ -51,5 +59,12 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
         IsSuccess = false,
         StatusCode = 404,
         Message = "Không tìm thấy file."
+    };
+
+    private static CommonResponse<string> Forbidden() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 403,
+        Message = "Không có quyền xóa file này."
     };
 }

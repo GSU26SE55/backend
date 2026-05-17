@@ -406,11 +406,11 @@ Sensor readings (voltage, current, temperature) lưu trong TimescaleDB hypertabl
 
 **Entity:**
 ```csharp
-public class SensorReading : AuditableEntity
+public class SensorReading
 {
-    public Guid BatteryId { get; set; }
-    public Battery? Battery { get; set; }
-    public DateTime Timestamp { get; set; }    // UTC — partition key cho TimescaleDB
+    public Guid BatteryAssetId { get; set; }
+    public BatteryAsset? BatteryAsset { get; set; }
+    public DateTime Time { get; set; }         // UTC — partition key cho TimescaleDB
     public double Voltage { get; set; }        // V
     public double Current { get; set; }        // A
     public double Temperature { get; set; }    // °C
@@ -419,10 +419,10 @@ public class SensorReading : AuditableEntity
 
 **Pagination — cursor-based (không dùng offset cho time-series):**
 ```csharp
-// Query: GET /api/batteries/{id}/readings?from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z&limit=100&cursor=lastTimestamp
+// Query: GET /api/sensor-readings/{batteryAssetId}/history?from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z&limit=100&cursor=lastTimestamp
 public class SensorReadingGetListQuery : IRequest<SensorReadingGetListResponse>
 {
-    public Guid BatteryId { get; set; }
+    public Guid BatteryAssetId { get; set; }
     public DateTime? From { get; set; }    // UTC filter từ
     public DateTime? To { get; set; }      // UTC filter đến
     public int Limit { get; set; } = 100;  // max 1000
@@ -437,26 +437,25 @@ public class SensorReadingGetListQuery : IRequest<SensorReadingGetListResponse>
   "data": {
     "items": [
       {
-        "timestamp": "2026-01-01T00:00:00Z",
+        "time": "2026-01-01T00:00:00Z",
         "voltage": 3.72,
         "current": 1.50,
         "temperature": 25.3
       }
     ],
     "nextCursor": "2026-01-01T00:01:40Z",
-    "hasMore": true,
-    "totalCount": null
+    "hasMore": true
   }
 }
 ```
 
 > **Không dùng offset pagination** cho sensor readings — TimescaleDB có thể có hàng triệu rows, offset sẽ full scan. Dùng cursor (timestamp) để scroll hiệu quả.
 
-> `totalCount` luôn `null` cho time-series — đếm full count rất tốn kém. FE chỉ dùng `hasMore`.
+> Không trả `totalItems`/`totalCount` cho time-series — đếm full count rất tốn kém. FE chỉ dùng `hasMore` và `nextCursor`.
 
 **Aggregation endpoint (dashboard/chart):**
 ```
-GET /api/batteries/{id}/readings/aggregate?from=...&to=...&interval=1h
+GET /api/sensor-readings/{batteryAssetId}/aggregate?from=...&to=...&interval=1h
 ```
 
 - `interval`: `1m`, `5m`, `15m`, `1h`, `1d` — TimescaleDB `time_bucket()`

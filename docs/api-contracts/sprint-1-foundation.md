@@ -69,6 +69,14 @@ File endpoints vẫn giữ nhóm file storage đã khai báo riêng.
 
 Fields: `file`, `folderName`, `purpose`.
 
+Current Sprint 1 rules:
+
+- File binary max size is 20 MB for every purpose.
+- Upload stores metadata with status `Ready`.
+- `Firmware` (`purpose=5`) can be uploaded only by Admin.
+- `KbImage` (`purpose=4`) can be uploaded only by Admin or Manager.
+- Extension whitelist is purpose-based; see `docs/api-filestorage.md` for the full table.
+
 ```json
 {
   "isSuccess": true,
@@ -91,6 +99,8 @@ Metadata and access endpoints:
 - `GET /api/files/{id}/presigned-url?expiresInMinutes=15`
 - `GET /api/files/{id}/download`
 - `DELETE /api/files/{id}`
+
+Prefer `fileId` endpoints for new FE/service flows. Legacy `objectKey` endpoints still exist, but they now look up metadata, enforce owner/role/status, and return `404` when metadata is missing or deleted.
 
 ## Staff Assignment
 
