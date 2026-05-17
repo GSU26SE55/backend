@@ -12,11 +12,16 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
 {
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public DownloadFileByIdQueryHandler(IObjectStorageService objectStorageService, IFileStorageUnitOfWork unitOfWork)
+    public DownloadFileByIdQueryHandler(
+        IObjectStorageService objectStorageService,
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<FileDownloadResponse>> Handle(DownloadFileByIdQuery request, CancellationToken cancellationToken)
@@ -33,6 +38,9 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
         if (file is null)
             return NotFound();
 
+        if (!_fileAuthorizationService.CanRead(file))
+            return Forbidden();
+
         if (file.Status == FileStatusEnum.Quarantined)
         {
             return new CommonResponse<FileDownloadResponse>
@@ -40,6 +48,16 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "File đang bị cách ly và không thể tải."
+            };
+        }
+
+        if (file.Status == FileStatusEnum.Processing)
+        {
+            return new CommonResponse<FileDownloadResponse>
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "File đang được xử lý, vui lòng thử lại sau."
             };
         }
 
@@ -59,5 +77,12 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
         IsSuccess = false,
         StatusCode = 404,
         Message = "Không tìm thấy file."
+    };
+
+    private static CommonResponse<FileDownloadResponse> Forbidden() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 403,
+        Message = "Không có quyền tải file này."
     };
 }

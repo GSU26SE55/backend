@@ -46,7 +46,7 @@ public class FilesController : ControllerBase
     ///
     /// Cách hoạt động:
     /// - Hệ thống kiểm tra request có file hay không.
-    /// - File được kiểm tra theo cấu hình lưu trữ hiện tại, gồm dung lượng tối đa và danh sách phần mở rộng được phép.
+    /// - File được kiểm tra theo purpose, gồm dung lượng tối đa 20 MB và danh sách phần mở rộng được phép.
     /// - Nếu hợp lệ, file được upload vào bucket đang cấu hình.
     /// - Tên file trong storage không giữ nguyên tên gốc; hệ thống tạo một tên mới bằng GUID để tránh trùng file.
     /// - Sau khi upload binary thành công, hệ thống tạo record <c>UploadedFile</c> trong database metadata.
@@ -67,20 +67,25 @@ public class FilesController : ControllerBase
     /// - <c>publicUrl</c>: URL public nếu hệ thống có cấu hình PublicBaseUrl; ngược lại có thể là null.
     ///
     /// Các lỗi thường gặp:
-    /// - HTTP 400 nếu không gửi file.
-    /// - Lỗi validation hoặc exception nếu file rỗng, vượt quá dung lượng tối đa, thiếu phần mở rộng, hoặc phần mở rộng không được cho phép.
+    /// - HTTP 400 nếu không gửi file, file rỗng, thiếu phần mở rộng hoặc phần mở rộng không được cho phép theo purpose.
+    /// - HTTP 403 nếu role hiện tại không được upload purpose yêu cầu, ví dụ Firmware không phải Admin.
+    /// - HTTP 413 nếu file vượt quá 20 MB.
     /// </remarks>
     /// <param name="request">Thông tin upload file được gửi bằng form-data.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server cần dừng xử lý.</param>
     /// <returns>Thông tin file sau khi upload thành công, bao gồm <c>fileId</c> và <c>objectKey</c>.</returns>
     /// <response code="201">Upload file thành công và trả về thông tin file đã lưu.</response>
     /// <response code="400">Request không hợp lệ, ví dụ thiếu file hoặc dữ liệu upload không đạt điều kiện validation.</response>
+    /// <response code="403">Không đủ quyền upload với purpose yêu cầu.</response>
+    /// <response code="413">File vượt quá giới hạn 20 MB.</response>
     /// <response code="500">Có lỗi khi ghi file vào object storage hoặc lỗi hệ thống ngoài dự kiến.</response>
     [HttpPost("upload")]
-    [RequestSizeLimit(20 * 1024 * 1024)]
+    [RequestSizeLimit(21 * 1024 * 1024)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CommonResponse<FileUploadResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CommonResponse<FileUploadResponse>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<FileUploadResponse>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<FileUploadResponse>), StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Upload([FromForm] UploadFileRequest request, CancellationToken cancellationToken = default)
     {
@@ -105,8 +110,8 @@ public class FilesController : ControllerBase
     /// - <c>id</c>: <c>fileId</c> nhận được từ response upload.
     ///
     /// Dữ liệu metadata trả về gồm:
-    /// - <c>id</c>, <c>objectKey</c>, <c>originalFileName</c>, <c>storedFileName</c>.
-    /// - <c>contentType</c>, <c>size</c>, <c>bucketName</c>.
+    /// - <c>fileId</c>, <c>objectKey</c>, <c>fileName</c>.
+    /// - <c>contentType</c>, <c>size</c>, <c>folderName</c>.
     /// - <c>purpose</c> và <c>status</c> để service khác biết file dùng cho nghiệp vụ nào và hiện có tải được không.
     /// - <c>publicUrl</c> nếu hệ thống có cấu hình public base URL.
     /// - Audit fields như created/updated nếu DTO đang expose.
@@ -114,6 +119,7 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Validate <c>fileId</c> khác empty GUID.
     /// - Chỉ trả file chưa bị xóa. File có trạng thái Deleted hoặc đã bị soft-delete sẽ trả 404.
+    /// - Enforce quyền truy cập theo owner/role/purpose của file.
     /// - Không trả binary stream, không tạo presigned URL và không thay đổi trạng thái file.
     ///
     /// Use case:
@@ -126,11 +132,13 @@ public class FilesController : ControllerBase
     /// <response code="200">Lấy metadata file thành công.</response>
     /// <response code="400">FileId không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
+    /// <response code="403">Không có quyền xem metadata file này.</response>
     /// <response code="404">Không tìm thấy metadata file hoặc file đã bị xóa.</response>
     [HttpGet("{id:guid}/metadata")]
     [ProducesResponseType(typeof(CommonResponse<FileMetadataResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<FileMetadataResponse>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<FileMetadataResponse>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<FileMetadataResponse>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<FileMetadataResponse>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMetadata(Guid id, CancellationToken cancellationToken = default)
     {
@@ -151,7 +159,7 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Hệ thống kiểm tra <c>objectKey</c> không được rỗng.
     /// - <c>objectKey</c> được chuẩn hóa để loại bỏ ký tự slash ở đầu và chặn path traversal như <c>..</c>.
-    /// - File được đọc từ bucket đang cấu hình.
+    /// - Service lookup metadata DB, enforce owner/status, rồi mới đọc file từ bucket đang cấu hình.
     /// - Nếu đọc thành công, API trả về nội dung file với <c>Content-Type</c> và tên file phù hợp.
     ///
     /// Khi thành công, response không bọc trong <c>CommonResponse</c> mà trả về file stream trực tiếp.
@@ -159,7 +167,9 @@ public class FilesController : ControllerBase
     ///
     /// Các lỗi thường gặp:
     /// - HTTP 400 nếu thiếu <c>objectKey</c>.
-    /// - HTTP 404 hoặc lỗi từ provider lưu trữ nếu file không tồn tại trong bucket.
+    /// - HTTP 403 nếu file không thuộc quyền truy cập của account hiện tại.
+    /// - HTTP 404 nếu không tìm thấy metadata hoặc file đã bị xóa.
+    /// - HTTP 409 nếu file đang Processing hoặc Quarantined.
     /// - HTTP 500 nếu object storage không khả dụng hoặc có lỗi hệ thống.
     /// </remarks>
     /// <param name="objectKey">Khóa định danh file trong object storage.</param>
@@ -167,12 +177,16 @@ public class FilesController : ControllerBase
     /// <returns>Binary stream của file nếu tìm thấy; JSON lỗi nếu request không hợp lệ hoặc không tải được file.</returns>
     /// <response code="200">Tải file thành công. Response body là nội dung binary của file.</response>
     /// <response code="400">Thiếu hoặc truyền <c>objectKey</c> không hợp lệ.</response>
-    /// <response code="404">Không tìm thấy file tương ứng trong object storage.</response>
+    /// <response code="403">Không có quyền tải file này.</response>
+    /// <response code="404">Không tìm thấy metadata hoặc file đã bị xóa.</response>
+    /// <response code="409">File đang Processing hoặc Quarantined.</response>
     /// <response code="500">Có lỗi khi đọc file từ object storage hoặc lỗi hệ thống ngoài dự kiến.</response>
     [HttpGet("download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Download([FromQuery] string objectKey, CancellationToken cancellationToken = default)
     {
@@ -196,7 +210,8 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Validate <c>fileId</c> khác empty GUID.
     /// - Tìm record <c>UploadedFile</c> chưa bị xóa.
-    /// - Nếu file đang ở trạng thái <c>Quarantined</c>, trả 409 và không tải binary.
+    /// - Enforce quyền truy cập theo owner/role/purpose.
+    /// - Nếu file đang ở trạng thái <c>Processing</c> hoặc <c>Quarantined</c>, trả 409 và không tải binary.
     /// - Nếu hợp lệ, dùng <c>objectKey</c> trong metadata để đọc stream từ object storage.
     /// - Response thành công trả binary stream trực tiếp với content type và file name phù hợp.
     ///
@@ -206,8 +221,9 @@ public class FilesController : ControllerBase
     ///
     /// Lỗi thường gặp:
     /// - HTTP 400 nếu fileId không hợp lệ.
+    /// - HTTP 403 nếu file không thuộc quyền truy cập của account hiện tại.
     /// - HTTP 404 nếu không tìm thấy metadata hoặc file đã bị xóa.
-    /// - HTTP 409 nếu file đang bị cách ly.
+    /// - HTTP 409 nếu file đang xử lý hoặc bị cách ly.
     /// </remarks>
     /// <param name="id">FileId cần tải binary.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
@@ -215,12 +231,14 @@ public class FilesController : ControllerBase
     /// <response code="200">Tải file thành công. Response body là nội dung binary của file.</response>
     /// <response code="400">FileId không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
+    /// <response code="403">Không có quyền tải file này.</response>
     /// <response code="404">Không tìm thấy file.</response>
-    /// <response code="409">File đang bị cách ly và không thể tải.</response>
+    /// <response code="409">File đang xử lý hoặc bị cách ly và không thể tải.</response>
     [HttpGet("{id:guid}/download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(CommonResponse<FileDownloadResponse>), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DownloadById(Guid id, CancellationToken cancellationToken = default)
@@ -249,6 +267,7 @@ public class FilesController : ControllerBase
     ///
     /// Cách hoạt động:
     /// - Hệ thống chuẩn hóa và kiểm tra <c>objectKey</c>.
+    /// - Service lookup metadata DB, enforce owner/status, rồi mới cấp URL.
     /// - Tạo URL tạm thời dùng HTTP GET.
     /// - URL hết hạn sau khoảng thời gian đã truyền vào <c>expiresInMinutes</c>.
     ///
@@ -256,6 +275,7 @@ public class FilesController : ControllerBase
     /// - Bất kỳ ai có URL trong thời gian còn hiệu lực đều có thể tải file.
     /// - Không nên log hoặc chia sẻ presigned URL ở nơi công khai.
     /// - Với file nhạy cảm, nên dùng thời gian hết hạn ngắn.
+    /// - Nếu file bị quarantine sau khi URL đã cấp, URL hiện hành vẫn sống đến khi hết hạn.
     ///
     /// Response thành công là <c>CommonResponse&lt;string&gt;</c>, trong đó <c>data</c> là presigned URL.
     /// </remarks>
@@ -265,10 +285,16 @@ public class FilesController : ControllerBase
     /// <returns>URL tạm thời để tải file trực tiếp từ object storage.</returns>
     /// <response code="200">Tạo presigned URL thành công.</response>
     /// <response code="400">Thiếu <c>objectKey</c> hoặc <c>expiresInMinutes</c> nằm ngoài khoảng hợp lệ.</response>
+    /// <response code="403">Không có quyền tạo presigned URL cho file này.</response>
+    /// <response code="404">Không tìm thấy metadata hoặc file đã bị xóa.</response>
+    /// <response code="409">File đang Processing hoặc Quarantined.</response>
     /// <response code="500">Có lỗi khi tạo URL từ object storage hoặc lỗi hệ thống ngoài dự kiến.</response>
     [HttpGet("presigned-url")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetPresignedUrl(
         [FromQuery] string objectKey,
@@ -300,12 +326,14 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Validate <c>fileId</c> và <c>expiresInMinutes</c>.
     /// - Tìm metadata file chưa bị xóa.
-    /// - Nếu file đang ở trạng thái <c>Quarantined</c>, trả 409 và không cấp URL.
+    /// - Enforce quyền truy cập theo owner/role/purpose.
+    /// - Nếu file đang ở trạng thái <c>Processing</c> hoặc <c>Quarantined</c>, trả 409 và không cấp URL.
     /// - Tạo URL tạm thời để client gọi trực tiếp object storage bằng HTTP GET.
     ///
     /// Lưu ý bảo mật:
     /// - Presigned URL là bearer URL; ai có URL trong thời gian còn hiệu lực đều có thể tải file.
     /// - Không log URL này ở client hoặc server nếu file nhạy cảm.
+    /// - Nếu file bị quarantine sau khi URL đã cấp, URL hiện hành vẫn sống đến khi hết hạn.
     /// - Với avatar hoặc file nhỏ cần kiểm soát auth qua gateway, có thể dùng endpoint download theo fileId thay vì presigned URL.
     /// </remarks>
     /// <param name="id">FileId cần tạo presigned URL.</param>
@@ -315,12 +343,14 @@ public class FilesController : ControllerBase
     /// <response code="200">Tạo presigned URL thành công.</response>
     /// <response code="400">FileId hoặc expiresInMinutes không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
+    /// <response code="403">Không có quyền tạo presigned URL cho file này.</response>
     /// <response code="404">Không tìm thấy file.</response>
-    /// <response code="409">File đang bị cách ly và không thể tải.</response>
+    /// <response code="409">File đang xử lý hoặc bị cách ly và không thể tải.</response>
     [HttpGet("{id:guid}/presigned-url")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetPresignedUrlById(
@@ -338,10 +368,10 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa file khỏi object storage bằng <c>objectKey</c>.
+    /// Xóa file bằng <c>objectKey</c>.
     /// </summary>
     /// <remarks>
-    /// Endpoint này xóa object tương ứng trong bucket lưu trữ.
+    /// Endpoint legacy này lookup metadata theo objectKey, enforce quyền xóa, xóa object trong bucket và soft-delete metadata.
     /// Client cần truyền đúng <c>objectKey</c> đã nhận được từ endpoint upload hoặc đang lưu trong database nghiệp vụ.
     ///
     /// Tham số query:
@@ -350,19 +380,23 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Hệ thống kiểm tra <c>objectKey</c> không được rỗng.
     /// - <c>objectKey</c> được chuẩn hóa để chặn path traversal.
+    /// - Lookup metadata DB và enforce quyền xóa theo owner/role/purpose.
     /// - Gửi lệnh xóa object tới storage provider.
+    /// - Đánh dấu metadata là Deleted/soft-delete.
     ///
     /// Kết quả thành công:
     /// - API trả HTTP 204 No Content.
     /// - Response body rỗng theo chuẩn của HTTP 204.
     ///
     /// Lưu ý nghiệp vụ:
-    /// - Endpoint này chỉ xóa file vật lý trong object storage.
-    /// - Nếu service khác đang lưu metadata hoặc quan hệ tới file, service đó cần tự cập nhật/xóa dữ liệu liên quan.
+    /// - FE/service mới nên dùng endpoint theo fileId thay vì objectKey.
+    /// - Nếu service khác đang lưu quan hệ tới file, service đó cần clear reference trước rồi mới gọi FileStorage cleanup.
     /// - Sau khi xóa, các <c>objectKey</c> hoặc presigned URL cũ không còn dùng để tải file được nữa.
     ///
     /// Các lỗi thường gặp:
     /// - HTTP 400 nếu thiếu <c>objectKey</c>.
+    /// - HTTP 403 nếu không có quyền xóa file này.
+    /// - HTTP 404 nếu không tìm thấy metadata hoặc file đã bị xóa.
     /// - HTTP 500 nếu object storage không khả dụng hoặc có lỗi hệ thống.
     /// </remarks>
     /// <param name="objectKey">Khóa định danh file cần xóa trong object storage.</param>
@@ -370,15 +404,22 @@ public class FilesController : ControllerBase
     /// <returns>HTTP 204 nếu xóa thành công.</returns>
     /// <response code="204">Xóa file thành công, response body rỗng.</response>
     /// <response code="400">Thiếu hoặc truyền <c>objectKey</c> không hợp lệ.</response>
+    /// <response code="403">Không có quyền xóa file này.</response>
+    /// <response code="404">Không tìm thấy metadata hoặc file đã bị xóa.</response>
     /// <response code="500">Có lỗi khi xóa file từ object storage hoặc lỗi hệ thống ngoài dự kiến.</response>
     [HttpDelete]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Delete([FromQuery] string objectKey, CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new DeleteFileCommand { ObjectKey = objectKey }, cancellationToken);
-        return StatusCode(result.StatusCode);
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, result);
+
+        return StatusCode(StatusCodes.Status204NoContent);
     }
 
     /// <summary>
@@ -394,6 +435,7 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Validate <c>fileId</c> khác empty GUID.
     /// - Tìm record <c>UploadedFile</c> chưa bị xóa.
+    /// - Enforce quyền xóa theo owner/role/purpose.
     /// - Gửi lệnh xóa object vật lý trong object storage theo <c>objectKey</c>.
     /// - Đánh dấu metadata file là Deleted/soft-delete để các endpoint metadata, download và presigned-url không trả file này nữa.
     ///
@@ -402,8 +444,7 @@ public class FilesController : ControllerBase
     /// - Response body rỗng theo chuẩn HTTP 204.
     ///
     /// Lưu ý nghiệp vụ:
-    /// - Endpoint này không tự gỡ tham chiếu ở service khác. Ví dụ nếu <c>AccountProfile.AvatarFileId</c> đang trỏ tới file này,
-    ///   AuthService cần cập nhật profile nếu nghiệp vụ muốn bỏ avatar.
+    /// - Endpoint này không tự gỡ tham chiếu ở service khác. Service sở hữu resource phải clear reference trước, rồi gọi FileStorage cleanup.
     /// - Nếu xóa object storage thành công nhưng lưu metadata thất bại, request sẽ fail theo exception hiện tại và cần retry/cleanup thủ công.
     /// - Pipeline quarantine/virus scan chưa nằm trong Sprint 1; trạng thái Deleted là nền cho lifecycle sau này.
     /// </remarks>
@@ -413,15 +454,20 @@ public class FilesController : ControllerBase
     /// <response code="204">Xóa file thành công, response body rỗng.</response>
     /// <response code="400">FileId không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
+    /// <response code="403">Không có quyền xóa file này.</response>
     /// <response code="404">Không tìm thấy file hoặc file đã bị xóa.</response>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteById(Guid id, CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new DeleteFileByIdCommand { Id = id }, cancellationToken);
-        return StatusCode(result.StatusCode);
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, result);
+
+        return StatusCode(StatusCodes.Status204NoContent);
     }
 }
