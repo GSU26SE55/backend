@@ -1,0 +1,323 @@
+# =====================================================================
+# Solar Battery — Production Docker Compose (VPS)
+# Dùng pre-built images từ GHCR thay vì build từ source.
+# Env vars đọc từ /opt/solar/.env.prod (đặt tay trên VPS, không commit git).
+#
+# Jenkins chạy tự động. Chạy thủ công:
+#   IMAGE_TAG=staging docker compose \
+#     -f docker-compose.prod.yml \
+#     --env-file /opt/solar/.env.prod \
+#     up -d
+# =====================================================================
+
+networks:
+  solar-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  loki-data:
+
+services:
+
+  # ===================================================================
+  # Infrastructure
+  # ===================================================================
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: solar-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-solarbatterymaintainance}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [solar-net]
+    restart: unless-stopped
+
+  postgres-init:
+    image: postgres:16-alpine
+    container_name: solar-postgres-init
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-solarbatterymaintainance}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
+      FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
+      BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
+    volumes:
+      - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
+    command: ["/bin/sh", "/scripts/create-service-databases.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    container_name: solar-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [solar-net]
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: solar-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RabbitMQ__Username:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RabbitMQ__Password:-guest}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_prometheus return_per_object_metrics true"
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    command: >
+      bash -c "rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management &&
+               rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [solar-net]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: solar-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${ObjectStorage__AccessKey:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${ObjectStorage__SecretKey:-minioadmin}
+      MINIO_SERVER_URL: http://${VPS_IP:-152.42.167.222}:9090
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    ports:
+      - "9090:9000"
+      - "9091:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [solar-net]
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: solar-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${ObjectStorage__AccessKey:-minioadmin} ${ObjectStorage__SecretKey:-minioadmin} &&
+      mc mb -p local/${ObjectStorage__BucketName:-solar-battery-files} 2>/dev/null || true &&
+      mc anonymous set download local/${ObjectStorage__BucketName:-solar-battery-files} &&
+      exit 0
+      "
+    networks: [solar-net]
+    restart: "no"
+
+  # ===================================================================
+  # Application Services — images từ GHCR (build bởi Jenkins)
+  # Dùng env_file để pass toàn bộ config (giống dev compose).
+  # Chỉ override những gì khác nhau giữa các service.
+  # ===================================================================
+
+  authservice:
+    image: ghcr.io/gsu26se55/authservice:${IMAGE_TAG:-staging}
+    container_name: solar-authservice
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+    ports:
+      - "4002:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  emailservice:
+    image: ghcr.io/gsu26se55/emailservice:${IMAGE_TAG:-staging}
+    container_name: solar-emailservice
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4003:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  smsservice:
+    image: ghcr.io/gsu26se55/smsservice:${IMAGE_TAG:-staging}
+    container_name: solar-smsservice
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4004:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  filestorageservice:
+    image: ghcr.io/gsu26se55/filestorageservice:${IMAGE_TAG:-staging}
+    container_name: solar-filestorageservice
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      # Override để dùng internal minio hostname (container-to-container)
+      ObjectStorage__ServiceUrl: http://minio:9000
+      ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+    ports:
+      - "4005:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  batteryservice:
+    image: ghcr.io/gsu26se55/batteryservice:${IMAGE_TAG:-staging}
+    container_name: solar-batteryservice
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+    ports:
+      - "4006:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  apigateway:
+    image: ghcr.io/gsu26se55/apigateway:${IMAGE_TAG:-staging}
+    container_name: solar-apigateway
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "4001:8080"
+    depends_on:
+      - authservice
+      - emailservice
+      - smsservice
+      - filestorageservice
+      - batteryservice
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # ===================================================================
+  # Monitoring
+  # ===================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: solar-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9094:9090"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: solar-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/helm/solar-battery/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks: [solar-net]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: solar-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9095:9093"
+    networks: [solar-net]
+    restart: unless-stopped
