@@ -213,6 +213,11 @@ pipeline {
               --from-env-file=${ENV_FILE} \
               --dry-run=client -o yaml | kubectl apply -f -
 
+            # Add helm repos (idempotent)
+            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+            helm repo add grafana https://grafana.github.io/helm-charts || true
+            helm repo update || true
+
             # Build helm chart dependencies nếu có subchart
             helm dependency build deploy/helm/solar-battery || true
 
