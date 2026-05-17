@@ -30,12 +30,12 @@ public class JwtHelperTests
         _sut = new JwtHelper(config);
     }
 
-    private static Account MakeAccount(Guid? id = null, string email = "user@test.com", string? fullName = "User Test")
+    private static Account MakeAccount(Guid? id = null, string? email = "user@test.com", string? fullName = "User Test")
         => new()
         {
             Id = id ?? Guid.NewGuid(),
-            Email = email,
-            FullName = fullName,
+            Email = email!,
+            FullName = fullName!,
             PasswordHash = "h",
             Status = AuthService.Domain.Enums.AccountStatusEnum.Active
         };
@@ -139,7 +139,7 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void ValidateToken_TokenSignedWithOtherKey_Throws()
+    public async Task ValidateToken_TokenSignedWithOtherKey_Throws()
     {
         var otherConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -150,7 +150,7 @@ public class JwtHelperTests
             })
             .Build();
         var other = new JwtHelper(otherConfig);
-        var token = other.GenerateAccessToken(MakeAccount(), Array.Empty<string>()).Result;
+        var token = await other.GenerateAccessToken(MakeAccount(), Array.Empty<string>());
 
         var act = () => _sut.ValidateToken(token);
         act.Should().Throw<Exception>();
@@ -208,10 +208,10 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void ValidateResetToken_WrongPurpose_ReturnsError()
+    public async Task ValidateResetToken_WrongPurpose_ReturnsError()
     {
         // Generate access token (not reset token) — không có purpose claim.
-        var access = _sut.GenerateAccessToken(MakeAccount(), Array.Empty<string>()).Result;
+        var access = await _sut.GenerateAccessToken(MakeAccount(), Array.Empty<string>());
 
         var (id, err) = _sut.ValidateResetToken(access);
 

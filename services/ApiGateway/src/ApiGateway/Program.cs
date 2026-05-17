@@ -84,7 +84,8 @@ if (!app.Environment.IsProduction())
 
 // HTTPS redirect chỉ áp dụng khi gateway listen HTTPS.
 // Trong Docker (HTTP-only), bỏ qua để tránh redirect loop.
-if (!app.Environment.IsEnvironment("Docker"))
+if (!app.Environment.IsEnvironment("Docker")
+    && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
 {
     app.UseHttpsRedirection();
 }
@@ -92,6 +93,7 @@ if (!app.Environment.IsEnvironment("Docker"))
 //app.UseWebSockets();
 
 app.UseCors("AllowAll");
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 app.MapReverseProxy();
 
 // Expose /metrics cho Prometheus scrape — đặt sau MapReverseProxy để không bị YARP route capture.

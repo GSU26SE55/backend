@@ -6,7 +6,7 @@ namespace AuthService.Infrastructure.Persistence;
 
 public class ApplicationDbContext : DbContext
 {
-    private readonly AuditableEntityInterceptor _auditableEntityInterceptor;
+    private readonly AuditableEntityInterceptor? _auditableEntityInterceptor;
 
     public ApplicationDbContext()
     {
@@ -31,7 +31,8 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<StaffSkill> StaffSkills { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.AddInterceptors(_auditableEntityInterceptor);
+        if (_auditableEntityInterceptor is not null)
+            optionsBuilder.AddInterceptors(_auditableEntityInterceptor);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

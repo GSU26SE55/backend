@@ -59,7 +59,8 @@ if (!app.Environment.IsProduction())
     app.UseSwaggerUI();
 }
 
-if (!app.Environment.IsEnvironment("Docker"))
+if (!app.Environment.IsEnvironment("Docker")
+    && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
 {
     app.UseHttpsRedirection();
 }

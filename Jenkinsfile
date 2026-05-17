@@ -1,26 +1,21 @@
 // =====================================================================
-// Solar Battery — Full CI/CD Pipeline (VPS + k3s + Helm)
+// Solar Battery - CI/CD Pipeline (Jenkins + VPS + k3s + Helm)
 //
-// CI  — chạy trên MỌI branch và PR (feature/*, dev, staging, main)
-// CD  — chỉ chạy khi push vào branch `staging` hoặc `main`
+// CI runs on dev, staging, main and pull requests.
+// CD runs only when pushing to staging.
 //
-// Credentials cần tạo 1 lần trên Jenkins UI:
-//   ghcr-token   : Secret text  — GitHub PAT scope write:packages
-//   github-token : Username/pass — GitHub username + PAT scope repo
+// Jenkins credential required:
+//   GHCR_TOKEN: Secret text, GitHub PAT with write:packages
 //
-// VPS cần cài thêm (1 lần — xem docs/jenkins-deploy-digitalocean.md):
-//   dotnet-sdk-8.0  — để chạy dotnet format, build, test
-//   trivy           — để chạy security scan
-//   k3s             — lightweight Kubernetes
-//   helm            — Kubernetes package manager
-//   kubeconfig      — copy sang /var/lib/jenkins/.kube/config
+// VPS tools required:
+//   dotnet-sdk-9.0, docker, trivy, k3s/kubectl, helm, curl
 // =====================================================================
 
 pipeline {
   agent any
 
   options {
-    timeout(time: 45, unit: 'MINUTES')
+    timeout(time: 60, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '10'))
     disableConcurrentBuilds()
     timestamps()
@@ -31,133 +26,238 @@ pipeline {
   }
 
   environment {
-    REGISTRY   = 'ghcr.io/gsu26se55'
-    SHA        = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-    ENV_FILE   = '/opt/solar/.env.prod'
+    REGISTRY = 'ghcr.io/gsu26se55'
+    SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    ENV_FILE = '/opt/solar/.env.prod'
     KUBECONFIG = '/var/lib/jenkins/.kube/config'
+    NUGET_PACKAGES = '/var/lib/jenkins/.nuget/packages'
+    TRIVY_CACHE_DIR = '/var/lib/jenkins/.cache/trivy'
+    DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+    DOCKER_BUILDKIT = '1'
+    COMPOSE_DOCKER_CLI_BUILD = '1'
   }
 
   stages {
-
     // =================================================================
-    // CI — chỉ chạy trên dev / staging / main và PR
+    // CI
     // =================================================================
 
-    stage('1. Format Check') {
+    stage('0. CI Preflight') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
-          dotnet restore SolarBatteryMaintainance.slnx
+          set -eu
+
+          for tool in git dotnet trivy; do
+            command -v "$tool" >/dev/null 2>&1 || {
+              echo "FAIL: missing required CI tool: $tool"
+              exit 1
+            }
+          done
+
+          mkdir -p "$NUGET_PACKAGES" "$TRIVY_CACHE_DIR"
+
+          DOTNET_VERSION="$(dotnet --version)"
+          DOTNET_MAJOR="${DOTNET_VERSION%%.*}"
+          if [ "$DOTNET_MAJOR" -lt 9 ]; then
+            echo "FAIL: SolarBatteryMaintainance.slnx requires .NET SDK 9.x or newer on Jenkins. Current: ${DOTNET_VERSION}"
+            exit 1
+          fi
+
+          echo "CI preflight OK. dotnet=${DOTNET_VERSION}"
+        '''
+      }
+    }
+
+    stage('1. Restore') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
+      steps {
+        sh 'dotnet restore SolarBatteryMaintainance.slnx --packages "$NUGET_PACKAGES"'
+      }
+    }
+
+    stage('2. Format Check') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
+      steps {
+        sh '''
           dotnet format SolarBatteryMaintainance.slnx \
             --verify-no-changes --severity error --no-restore
         '''
       }
     }
 
-    stage('2. Build') {
+    stage('3. Build') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh 'dotnet build SolarBatteryMaintainance.slnx -c Release --no-restore'
       }
     }
 
-    stage('3. Unit Tests') {
+    stage('4. Unit Tests') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
           dotnet test SolarBatteryMaintainance.slnx -c Release --no-build \
             --filter "FullyQualifiedName!~IntegrationTests" \
-            --logger "trx;LogFileName=unit.trx" \
+            --logger "trx" \
             --results-directory ./TestResults
         '''
       }
       post {
         always {
-          junit allowEmptyResults: true, testResults: 'TestResults/*.trx'
+          archiveArtifacts allowEmptyArchive: true, artifacts: 'TestResults/*.trx'
         }
       }
     }
 
-    stage('4. Project Rule Checks') {
+    stage('5. Project Rule Checks') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         script {
-          // CHANGE_TARGET là target branch khi đây là PR build (vd: dev, main)
-          // Khi push thẳng vào branch, fallback về dev để so sánh
           def baseRef = env.CHANGE_TARGET ?: 'dev'
           sh """
+            set -eu
             git fetch origin ${baseRef}:refs/remotes/origin/${baseRef} 2>/dev/null || true
 
             DIFF=\$(git diff origin/${baseRef}...HEAD -- '*.cs' 2>/dev/null || git diff HEAD~1...HEAD -- '*.cs' 2>/dev/null || echo "")
 
-            # Rule 1: UpdateAsync/DeleteAsync là void — KHÔNG được await
             if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.(UpdateAsync|DeleteAsync)\\s*\\('; then
-              echo "FAIL: await UpdateAsync/DeleteAsync — 2 method nay void, khong await."
+              echo "FAIL: UpdateAsync/DeleteAsync are void in this repo. Do not await them."
               exit 1
             fi
-            echo "PASS: Khong co await tren void UpdateAsync/DeleteAsync"
+            echo "PASS: no await on void UpdateAsync/DeleteAsync"
 
-            # Rule 2: GetAllAsync tra IQueryable — KHONG await
             if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.GetAllAsync\\s*\\('; then
-              echo "FAIL: await GetAllAsync — method tra IQueryable khong phai Task."
+              echo "FAIL: GetAllAsync returns IQueryable in this repo. Do not await it."
               exit 1
             fi
-            echo "PASS: Khong co await tren GetAllAsync"
+            echo "PASS: no await on GetAllAsync"
 
-            # Rule 3: Entity moi trong Domain/Entities phai extend AuditableEntity
             NEW_ENTITIES=\$(git diff origin/${baseRef}...HEAD --name-only --diff-filter=A 2>/dev/null | grep -E 'Domain/Entities/.*\\.cs\$' || true)
             FAILED=0
             for file in \$NEW_ENTITIES; do
               if [ -f "\$file" ] && ! grep -qE 'class\\s+\\w+\\s*:\\s*(\\w+\\s*,\\s*)*AuditableEntity' "\$file"; then
                 if ! grep -qE '^(\\s*public\\s+)?(abstract|enum|interface)' "\$file"; then
-                  echo "FAIL: \$file — entity moi phai extend AuditableEntity"
+                  echo "FAIL: \$file must extend AuditableEntity"
                   FAILED=1
                 fi
               fi
             done
-            [ \$FAILED -eq 0 ] && echo "PASS: Tat ca entity moi extend AuditableEntity" || exit 1
+            [ \$FAILED -eq 0 ] && echo "PASS: new domain entities extend AuditableEntity" || exit 1
           """
         }
       }
     }
 
-    stage('5. Security Scan (Trivy)') {
+    stage('6. Security Scan') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
           trivy fs \
+            --cache-dir "$TRIVY_CACHE_DIR" \
+            --quiet \
+            --scanners vuln \
             --severity CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
-            --skip-dirs "**/bin,**/obj,.git" \
+            --skip-dirs .git \
+            --skip-dirs TestResults \
             .
         '''
       }
     }
 
-    // Integration tests chỉ chạy trên PR (changeRequest()) — chậm, dùng Testcontainers
-    stage('6. Integration Tests') {
-      when { changeRequest() }
+    stage('7. Integration Tests') {
+      when { anyOf { branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
+          command -v docker >/dev/null 2>&1 || {
+            echo "FAIL: integration tests require Docker/Testcontainers."
+            exit 1
+          }
+          docker info >/dev/null 2>&1 || {
+            echo "FAIL: Docker daemon is not reachable for integration tests."
+            exit 1
+          }
+
           dotnet test SolarBatteryMaintainance.slnx -c Release --no-build \
             --filter "FullyQualifiedName~IntegrationTests" \
-            --logger "trx;LogFileName=integration.trx" \
-            --results-directory ./TestResults || true
+            --logger "trx" \
+            --results-directory ./TestResults
         '''
       }
       post {
         always {
-          junit allowEmptyResults: true, testResults: 'TestResults/*.trx'
+          archiveArtifacts allowEmptyArchive: true, artifacts: 'TestResults/*.trx'
         }
       }
     }
 
     // =================================================================
-    // CD — chỉ chạy khi push vào staging hoặc main
+    // CD
     // =================================================================
 
-    stage('7. Login GHCR') {
+    stage('8. CD Preflight') {
+      when { branch 'staging' }
+      steps {
+        sh '''
+          set -eu
+
+          for tool in docker kubectl helm curl; do
+            command -v "$tool" >/dev/null 2>&1 || {
+              echo "FAIL: missing required CD tool: $tool"
+              exit 1
+            }
+          done
+
+          docker info >/dev/null 2>&1 || {
+            echo "FAIL: Docker daemon is not reachable by Jenkins."
+            exit 1
+          }
+
+          kubectl version --client >/dev/null
+          helm version >/dev/null
+
+          [ -r "$ENV_FILE" ] || {
+            echo "FAIL: runtime env file does not exist or is not readable: $ENV_FILE"
+            exit 1
+          }
+
+          REQUIRED_KEYS="
+          POSTGRES_PASSWORD
+          RabbitMQ__Password
+          JwtSettings__SecretKey
+          JwtSettings__Issuer
+          JwtSettings__Audience
+          ObjectStorage__AccessKey
+          ObjectStorage__SecretKey
+          MailJet__ApiKey
+          MailJet__ApiSecret
+          GoogleOAuth__ClientId
+          GoogleOAuth__ClientSecret
+          ADMIN_PASSWORD
+          "
+
+          for key in $REQUIRED_KEYS; do
+            if ! grep -q "^${key}=" "$ENV_FILE"; then
+              echo "FAIL: missing required key in $ENV_FILE: ${key}"
+              exit 1
+            fi
+          done
+
+          FREE_KB="$(df -Pk "$WORKSPACE" | awk 'NR==2 {print $4}')"
+          if [ "$FREE_KB" -lt 8388608 ]; then
+            echo "FAIL: less than 8GiB free disk is available for Docker build cache."
+            exit 1
+          fi
+
+          echo "CD preflight OK. Secrets were checked by key name only."
+        '''
+      }
+    }
+
+    stage('9. Login GHCR') {
       when { branch 'staging' }
       steps {
         withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
@@ -166,7 +266,7 @@ pipeline {
       }
     }
 
-    stage('8. Build Docker Images') {
+    stage('10. Build Docker Images') {
       when { branch 'staging' }
       steps {
         script {
@@ -178,9 +278,11 @@ pipeline {
             [name: 'filestorageservice', dockerfile: 'services/FileStorageService/src/FileStorageService.Api/Dockerfile'],
             [name: 'batteryservice',     dockerfile: 'services/BatteryService/src/BatteryService.Api/Dockerfile'],
           ]
+
           services.each { svc ->
             sh """
-              DOCKER_BUILDKIT=1 docker build \
+              docker pull ${REGISTRY}/${svc.name}:${BRANCH_NAME} || true
+              docker build \
                 -f ${svc.dockerfile} \
                 -t ${REGISTRY}/${svc.name}:${SHA} \
                 -t ${REGISTRY}/${svc.name}:${BRANCH_NAME} \
@@ -193,7 +295,7 @@ pipeline {
       }
     }
 
-    stage('9. Push to GHCR') {
+    stage('11. Push to GHCR') {
       when { branch 'staging' }
       steps {
         script {
@@ -205,16 +307,42 @@ pipeline {
       }
     }
 
-    stage('10. Deploy') {
+    stage('12. Helm Validate') {
+      when { branch 'staging' }
+      steps {
+        sh '''
+          set -eu
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+          helm repo add grafana https://grafana.github.io/helm-charts || true
+          helm repo update
+          helm dependency build deploy/helm/solar-battery
+
+          helm lint deploy/helm/solar-battery \
+            -f deploy/helm/solar-battery/values.yaml \
+            -f deploy/helm/solar-battery/values-staging.yaml \
+            -f deploy/helm/solar-battery/values-vps-small.yaml \
+            --set-string global.imageTag="$SHA"
+
+          helm template solar deploy/helm/solar-battery \
+            --namespace solar-staging \
+            -f deploy/helm/solar-battery/values.yaml \
+            -f deploy/helm/solar-battery/values-staging.yaml \
+            -f deploy/helm/solar-battery/values-vps-small.yaml \
+            --set-string global.imageTag="$SHA" \
+            >/tmp/solar-helm-rendered.yaml
+        '''
+      }
+    }
+
+    stage('13. Deploy') {
       when { branch 'staging' }
       steps {
         script {
-          def namespace  = 'solar-staging'
-          def valuesFile = 'values-staging.yaml'
+          def namespace = 'solar-staging'
 
-          // Step 1: Namespace + secrets
           withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
             sh """
+              set -eu
               kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
 
               kubectl create secret generic solar-secrets \
@@ -231,22 +359,15 @@ pipeline {
             """
           }
 
-          // Step 2: Build helm deps
           sh """
-            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
-            helm repo add grafana https://grafana.github.io/helm-charts || true
-            helm repo update || true
-            helm dependency build deploy/helm/solar-battery || true
-          """
-
-          // Step 3: Phase 1 — Infra only (postgres, redis, rabbitmq, minio)
-          sh """
-            echo '=== Phase 1: Deploy infra ==='
+            set -eu
+            echo '=== Phase 1: deploy infra ==='
             helm upgrade --install solar deploy/helm/solar-battery \
               --namespace ${namespace} \
               --create-namespace \
               -f deploy/helm/solar-battery/values.yaml \
-              -f deploy/helm/solar-battery/${valuesFile} \
+              -f deploy/helm/solar-battery/values-staging.yaml \
+              -f deploy/helm/solar-battery/values-vps-small.yaml \
               --set-string global.imageTag=${SHA} \
               --set services.apigateway.enabled=false \
               --set services.authservice.enabled=false \
@@ -256,21 +377,17 @@ pipeline {
               --set services.batteryservice.enabled=false \
               --wait --timeout 12m
 
-            echo '=== Waiting for DB init job ==='
-            kubectl wait job \
-              -l app.kubernetes.io/component=postgres-database-init \
+            kubectl wait job/postgres-database-init-${SHA} \
               --for=condition=Complete \
               --namespace ${namespace} \
-              --timeout=120s || echo 'DB init job already cleaned up — continuing'
-          """
+              --timeout=180s
 
-          // Step 4: Phase 2 — Full deploy (all services)
-          sh """
-            echo '=== Phase 2: Deploy all services ==='
+            echo '=== Phase 2: deploy application services ==='
             helm upgrade --install solar deploy/helm/solar-battery \
               --namespace ${namespace} \
               -f deploy/helm/solar-battery/values.yaml \
-              -f deploy/helm/solar-battery/${valuesFile} \
+              -f deploy/helm/solar-battery/values-staging.yaml \
+              -f deploy/helm/solar-battery/values-vps-small.yaml \
               --set-string global.imageTag=${SHA} \
               --atomic --wait --timeout 15m
           """
@@ -278,26 +395,27 @@ pipeline {
       }
     }
 
-    stage('11. Smoke Test') {
+    stage('14. Smoke Test') {
       when { branch 'staging' }
       steps {
-        retry(6) {
-          sleep(time: 10, unit: 'SECONDS')
-          sh 'curl -fsSk https://api.capstonegsu26se55.mooo.com/health || curl -fsSk https://api.capstonegsu26se55.mooo.com/swagger/index.html'
-        }
+        sh './ci/scripts/smoke-test.sh https://api.capstonegsu26se55.mooo.com'
       }
     }
   }
 
   post {
     success {
-      echo "Pipeline success — ${env.BRANCH_NAME} — ${env.SHA}"
+      echo "Pipeline success - ${env.BRANCH_NAME} - ${env.SHA}"
     }
     failure {
-      echo "Pipeline FAILED — ${env.BRANCH_NAME} — build #${env.BUILD_NUMBER}"
+      echo "Pipeline FAILED - ${env.BRANCH_NAME} - build #${env.BUILD_NUMBER}"
       script {
         if (env.BRANCH_NAME == 'staging') {
-          sh "helm rollback solar --namespace solar-staging || true"
+          sh '''
+            if helm history solar --namespace solar-staging >/dev/null 2>&1; then
+              helm rollback solar --namespace solar-staging || true
+            fi
+          '''
         }
       }
     }

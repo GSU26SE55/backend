@@ -39,6 +39,12 @@ global:
   #     --docker-server=ghcr.io --docker-username=USER --docker-password=PAT
   imagePullSecret: ghcr-pull
 
+  # Default rolling update keeps zero downtime on larger nodes.
+  # VPS-small overlay changes this to avoid temporary double memory usage.
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
 # --------------------------------------------------------------------
 # ASP.NET services
 # --------------------------------------------------------------------
@@ -132,6 +138,10 @@ postgres:
   # Tăng max_connections để hỗ trợ pool nhiều service × replica.
   # Công thức: max_connections >= sum(replicas × poolSize) + buffer
   maxConnections: 300
+  sharedBuffers: 128MB
+  connectionPool:
+    maximumPoolSize: 25
+    minimumPoolSize: 2
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
@@ -148,6 +158,7 @@ rabbitmq:
   image: rabbitmq:3-management-alpine
   username: guest
   storage: 2Gi
+  returnPerObjectMetrics: true
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }

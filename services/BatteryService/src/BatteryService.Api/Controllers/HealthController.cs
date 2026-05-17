@@ -3,16 +3,16 @@ using Microsoft.AspNetCore.Mvc;
 namespace BatteryService.Api.Controllers;
 
 /// <summary>
-/// Endpoint health check liveness cho BatteryService.
+/// Liveness health check endpoint for BatteryService.
 /// </summary>
 /// <remarks>
-/// Dùng cho:
+/// Used for:
 /// <list type="bullet">
-///   <item><description>Docker / Kubernetes liveness probe.</description></item>
+///   <item><description>Docker or Kubernetes liveness probes.</description></item>
 ///   <item><description>ApiGateway aggregated health UI.</description></item>
-///   <item><description>Monitoring uptime của service.</description description></item>
+///   <item><description>Service uptime monitoring.</description></item>
 /// </list>
-/// Endpoint anonymous - không yêu cầu auth, không return dữ liệu nhạy cảm.
+/// This endpoint is anonymous and does not return sensitive data.
 /// </remarks>
 [ApiController]
 [Route("api/battery/health")]
@@ -20,23 +20,14 @@ namespace BatteryService.Api.Controllers;
 public class HealthController : ControllerBase
 {
     /// <summary>
-    /// Trả về trạng thái Healthy + tên service + timestamp UTC hiện tại.
+    /// Returns Healthy status, service name, and current UTC timestamp.
     /// </summary>
     /// <remarks>
-    /// Đây là liveness check đơn giản: nếu request đến được endpoint và app đang chạy → trả 200.
-    /// KHÔNG check DB / RabbitMQ / Redis - nếu cần readiness probe đầy đủ, dùng <c>/health/ready</c> sẽ được thêm Sprint 7.
-    ///
-    /// Response body:
-    /// <code>
-    /// {
-    ///   "status": "Healthy",
-    ///   "service": "BatteryService",
-    ///   "timestamp": "2026-05-14T13:45:00.000Z"
-    /// }
-    /// </code>
+    /// This is a simple liveness check. If the request reaches the endpoint and the app is running,
+    /// it returns 200. It does not validate database, RabbitMQ, or Redis connectivity.
     /// </remarks>
-    /// <returns>JSON với 3 field <c>status</c>, <c>service</c>, <c>timestamp</c>.</returns>
-    /// <response code="200">Service đang chạy.</response>
+    /// <returns>JSON payload with <c>status</c>, <c>service</c>, and <c>timestamp</c>.</returns>
+    /// <response code="200">Service is running.</response>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Get()

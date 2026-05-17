@@ -3,6 +3,7 @@
 .env
 # Docker: .env.Docker (gitignored vì có secret thật)
 .env.Docker
+.env.prod
 .env.Production
 .env.Staging
 .env.local

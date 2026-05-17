@@ -31,7 +31,7 @@ spec:
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: RabbitMQ__Password }
         - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
-          value: "-rabbitmq_prometheus return_per_object_metrics true"
+          value: "-rabbitmq_prometheus return_per_object_metrics {{ ternary "true" "false" .Values.rabbitmq.returnPerObjectMetrics }}"
         # Enable plugin Prometheus + Management lúc start
         command:
         - bash

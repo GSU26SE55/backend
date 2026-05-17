@@ -51,11 +51,12 @@ public class DataShaperTests
 
         var dict = result as IDictionary<string, object>;
         dict.Should().NotBeNull();
-        dict!.Should().HaveCount(2);
-        dict["Name"].Should().Be("Alice");
-        dict["Age"].Should().Be(30);
-        dict.Should().NotContainKey("Id");
-        dict.Should().NotContainKey("Email");
+        var shaped = dict!;
+        shaped.Should().HaveCount(2);
+        shaped["Name"].Should().Be("Alice");
+        shaped["Age"].Should().Be(30);
+        shaped.Should().NotContainKey("Id");
+        shaped.Should().NotContainKey("Email");
     }
 
     [Fact]
@@ -66,9 +67,10 @@ public class DataShaperTests
         var result = DataShaper.ShapeData(p, "name,AGE");
         var dict = result as IDictionary<string, object>;
 
-        dict!.Should().ContainKey("Name");
-        dict.Should().ContainKey("Age");
-        dict["Name"].Should().Be("Bob");
+        var shaped = dict!;
+        shaped.Should().ContainKey("Name");
+        shaped.Should().ContainKey("Age");
+        shaped["Name"].Should().Be("Bob");
     }
 
     [Fact]
@@ -79,9 +81,10 @@ public class DataShaperTests
         var result = DataShaper.ShapeData(p, "  Name  ,  Email  ");
         var dict = result as IDictionary<string, object>;
 
-        dict!.Should().HaveCount(2);
-        dict.Should().ContainKey("Name");
-        dict.Should().ContainKey("Email");
+        var shaped = dict!;
+        shaped.Should().HaveCount(2);
+        shaped.Should().ContainKey("Name");
+        shaped.Should().ContainKey("Email");
     }
 
     [Fact]
@@ -92,8 +95,9 @@ public class DataShaperTests
         var result = DataShaper.ShapeData(p, "Name,Foo,Age,Bar");
         var dict = result as IDictionary<string, object>;
 
-        dict!.Should().HaveCount(2);
-        dict["Name"].Should().Be("Dan");
-        dict["Age"].Should().Be(40);
+        var shaped = dict!;
+        shaped.Should().HaveCount(2);
+        shaped["Name"].Should().Be("Dan");
+        shaped["Age"].Should().Be(40);
     }
 }

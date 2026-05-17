@@ -21,13 +21,11 @@ spec:
       containers:
       - name: postgres
         image: {{ .Values.postgres.image }}
-        # Tăng max_connections từ default 100 lên 300 — hỗ trợ:
-        # 5 service × 2 replica × pool 25 = 250 + buffer monitoring + backup.
         args:
         - "-c"
         - "max_connections={{ .Values.postgres.maxConnections | default 300 }}"
         - "-c"
-        - "shared_buffers=128MB"
+        - "shared_buffers={{ .Values.postgres.sharedBuffers | default "128MB" }}"
         ports:
         - { name: pg, containerPort: 5432 }
         env:

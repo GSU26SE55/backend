@@ -26,8 +26,9 @@ public class GetAccountSessionsQueryHandlerTests
         var resp = await handler.Handle(new GetAccountSessionsQuery { AccountId = targetId, ActiveOnly = true }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.Should().HaveCount(1);
-        resp.Data[0].Status.Should().Be(RefreshTokenStatus.Active);
+        var sessions = resp.Data!;
+        sessions.Should().HaveCount(1);
+        sessions[0].Status.Should().Be(RefreshTokenStatus.Active);
     }
 
     [Fact]

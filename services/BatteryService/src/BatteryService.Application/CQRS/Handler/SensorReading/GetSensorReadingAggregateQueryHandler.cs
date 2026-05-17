@@ -67,12 +67,12 @@ public class GetSensorReadingAggregateQueryHandler : IRequestHandler<GetSensorRe
 
     private static DateTime TruncateTime(DateTime utc, string interval) => interval switch
     {
-        "1m"  => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, 0, DateTimeKind.Utc),
-        "5m"  => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute - (utc.Minute % 5), 0, DateTimeKind.Utc),
+        "1m" => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, 0, DateTimeKind.Utc),
+        "5m" => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute - (utc.Minute % 5), 0, DateTimeKind.Utc),
         "15m" => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute - (utc.Minute % 15), 0, DateTimeKind.Utc),
-        "1h"  => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc),
-        "1d"  => new DateTime(utc.Year, utc.Month, utc.Day, 0, 0, 0, DateTimeKind.Utc),
-        _     => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc)
+        "1h" => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc),
+        "1d" => new DateTime(utc.Year, utc.Month, utc.Day, 0, 0, 0, DateTimeKind.Utc),
+        _ => new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc)
     };
 
     private static DateTime ToUtc(DateTime value)

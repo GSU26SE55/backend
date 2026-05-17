@@ -9,6 +9,11 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "smsservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable | quote }}
+      maxSurge: {{ .Values.global.rollingUpdate.maxSurge | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/component: smsservice
