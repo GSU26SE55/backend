@@ -33,6 +33,17 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
             };
         }
 
+        if (existing.AccountId != request.AccountId)
+        {
+            return new CommonResponse<string>
+            {
+                IsSuccess = false,
+                StatusCode = 403,
+                Message = "Không có quyền đăng xuất session này.",
+                ListErrors = { new Errors { Field = nameof(request.RefreshToken), Detail = "Refresh token không thuộc tài khoản hiện tại." } }
+            };
+        }
+
         existing.Status = RefreshTokenStatus.Revoked;
         existing.RevokedAt = DateTime.UtcNow;
         existing.RevokedReason = "UserLogout";

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -24,17 +25,7 @@ public class ChangePasswordCommand : IRequest<AccountActionResponse>, IValidatab
         if (string.IsNullOrWhiteSpace(CurrentPassword))
             response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Mật khẩu hiện tại không được để trống." });
 
-        if (string.IsNullOrWhiteSpace(NewPassword))
-            response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu mới không được để trống." });
-        else
-        {
-            if (NewPassword.Length < 6)
-                response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu mới tối thiểu 6 ký tự." });
-            if (NewPassword.Length > 100)
-                response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu mới tối đa 100 ký tự." });
-            if (NewPassword.Contains(' '))
-                response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu không được chứa khoảng trắng." });
-        }
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "Mật khẩu mới");
 
         if (NewPassword != ConfirmPassword)
             response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });

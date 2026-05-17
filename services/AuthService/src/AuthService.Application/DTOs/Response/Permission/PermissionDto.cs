@@ -4,7 +4,7 @@ namespace AuthService.Application.DTOs.Response.Permission;
 
 public class PermissionDto
 {
-    public string Id { get; set; } = string.Empty;
+    public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Module { get; set; } = string.Empty;
     public string? Description { get; set; }

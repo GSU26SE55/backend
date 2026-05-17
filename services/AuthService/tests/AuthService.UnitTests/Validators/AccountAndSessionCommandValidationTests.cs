@@ -9,7 +9,7 @@ public class CreateAccountCommandValidationTests
     private static CreateAccountCommand Valid() => new()
     {
         Email = "u@e.com",
-        Password = "abc123",
+        Password = "Strong1Pass!",
         FullName = "U",
         PhoneNumber = "0900111",
         DateOfBirth = new DateTime(1990, 1, 1),
@@ -42,6 +42,18 @@ public class CreateAccountCommandValidationTests
     {
         var c = Valid();
         c.Password = "abc12";
+        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "Password");
+    }
+
+    [Theory]
+    [InlineData("alllowercase1!")]
+    [InlineData("ALLUPPERCASE1!")]
+    [InlineData("NoDigit!Pass")]
+    [InlineData("NoSpecial1Pass")]
+    public async Task Password_NotStrong_Fails(string password)
+    {
+        var c = Valid();
+        c.Password = password;
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "Password");
     }
 
@@ -131,8 +143,8 @@ public class ChangePasswordCommandValidationTests
     {
         AccountId = Guid.NewGuid(),
         CurrentPassword = "old123",
-        NewPassword = "new123",
-        ConfirmPassword = "new123"
+        NewPassword = "NewPass123!",
+        ConfirmPassword = "NewPass123!"
     };
 
     [Fact] public async Task Valid_Passes() => (await Valid().ValidateAsync()).IsSuccess.Should().BeTrue();
@@ -163,11 +175,11 @@ public class ChangePasswordCommandValidationTests
     }
 
     [Fact]
-    public async Task NewPassword_HasWhitespace_Fails()
+    public async Task NewPassword_NotStrong_Fails()
     {
         var c = Valid();
-        c.NewPassword = "abc 123";
-        c.ConfirmPassword = "abc 123";
+        c.NewPassword = "NoSpecial123";
+        c.ConfirmPassword = "NoSpecial123";
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "NewPassword");
     }
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AuthService.Api.Controllers;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
@@ -108,12 +109,32 @@ public class AuthControllerTests
     [Fact]
     public async Task Logout_DelegatesToMediator()
     {
+        var accountId = Guid.NewGuid();
+        var ctx = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim(ClaimTypes.NameIdentifier, accountId.ToString()) },
+                "TestAuth"))
+        };
+
         _mediator.Setup(m => m.Send(It.IsAny<LogoutCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommonResponse<string> { IsSuccess = true, StatusCode = 200 });
 
-        var result = await NewCtrl().Logout(new LogoutCommand(), CancellationToken.None) as ObjectResult;
+        var result = await NewCtrl(ctx).Logout(new LogoutCommand { RefreshToken = "rt" }, CancellationToken.None) as ObjectResult;
 
         result!.StatusCode.Should().Be(200);
+        _mediator.Verify(m => m.Send(
+            It.Is<LogoutCommand>(c => c.AccountId == accountId && c.RefreshToken == "rt"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Logout_WithoutUserClaim_Returns401()
+    {
+        var result = await NewCtrl().Logout(new LogoutCommand { RefreshToken = "rt" }, CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedObjectResult>();
+        _mediator.Verify(m => m.Send(It.IsAny<LogoutCommand>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

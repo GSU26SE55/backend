@@ -138,7 +138,7 @@ public class AdminAccountsController : ControllerBase
     ///
     /// Body request:
     /// - <c>Email</c>: bắt buộc, tối đa 256 ký tự, đúng định dạng email.
-    /// - <c>Password</c>: bắt buộc, từ 6 đến 100 ký tự.
+    /// - <c>Password</c>: bắt buộc, 8-100 ký tự và phải có chữ hoa, chữ thường, số, ký tự đặc biệt.
     /// - <c>FullName</c>: bắt buộc, tối đa 150 ký tự.
     /// - <c>PhoneNumber</c>: tùy chọn, tối đa 20 ký tự.
     /// - <c>DateOfBirth</c>: tùy chọn, không được ở tương lai.
@@ -341,7 +341,8 @@ public class AdminAccountsController : ControllerBase
     /// Gán nhiều role cho 1 tài khoản.
     /// </summary>
     /// <remarks>
-    /// Endpoint này gán một hoặc nhiều role cho account.
+    /// Endpoint này gán thêm hoặc cập nhật một hoặc nhiều role cho account. Các role hiện có nhưng
+    /// không nằm trong request sẽ được giữ nguyên; muốn thu hồi role dùng endpoint DELETE role riêng.
     ///
     /// Quyền truy cập:
     /// - Chỉ role <c>Admin</c>.

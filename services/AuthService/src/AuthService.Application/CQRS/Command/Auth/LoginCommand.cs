@@ -9,8 +9,6 @@ namespace AuthService.Application.CQRS.Command.Auth;
 public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
 {
     private const int EmailMaxLength = 256;
-    private const int PasswordMinLength = 6;
-    private const int PasswordMaxLength = 100;
 
     private static readonly Regex EmailRegex = new(
         @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
@@ -60,34 +58,6 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
                 Field = "Password",
                 Detail = "Mật khẩu không được để trống."
             });
-        }
-        else
-        {
-            if (Password.Length < PasswordMinLength)
-            {
-                response.ListErrors.Add(new Errors
-                {
-                    Field = "Password",
-                    Detail = $"Mật khẩu phải có ít nhất {PasswordMinLength} ký tự."
-                });
-            }
-            else if (Password.Length > PasswordMaxLength)
-            {
-                response.ListErrors.Add(new Errors
-                {
-                    Field = "Password",
-                    Detail = $"Mật khẩu không được vượt quá {PasswordMaxLength} ký tự."
-                });
-            }
-
-            if (Password.Contains(' '))
-            {
-                response.ListErrors.Add(new Errors
-                {
-                    Field = "Password",
-                    Detail = "Mật khẩu không được chứa khoảng trắng."
-                });
-            }
         }
 
         if (response.ListErrors.Count > 0)
