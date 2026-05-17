@@ -343,6 +343,16 @@ pipeline {
           def dumpDeployDiagnostics = {
             sh """
               set +e
+              print_job_diagnostics() {
+                job_name="\$1"
+                echo "--- describe job/\$job_name ---"
+                kubectl describe "job/\$job_name" --namespace ${namespace} || true
+                for pod in \$(kubectl get pods --namespace ${namespace} -l "job-name=\$job_name" -o name 2>/dev/null); do
+                  echo "--- logs \$pod for job/\$job_name ---"
+                  kubectl logs "\$pod" --namespace ${namespace} --all-containers --timestamps --tail=200 --request-timeout=15s || true
+                done
+              }
+
               echo '=== Helm status ==='
               helm status solar --namespace ${namespace} || true
 
@@ -359,9 +369,8 @@ pipeline {
               done
 
               echo '=== Job logs ==='
-              for job in \$(kubectl get jobs --namespace ${namespace} -o name 2>/dev/null); do
-                echo "--- logs \$job ---"
-                kubectl logs "\$job" --namespace ${namespace} --all-containers --tail=120 || true
+              for job in \$(kubectl get jobs --namespace ${namespace} -o name 2>/dev/null | sed 's#^.*/##'); do
+                print_job_diagnostics "\$job"
               done
 
               echo '=== Infra pod logs ==='
@@ -394,12 +403,23 @@ pipeline {
 
             sh """
               set -eu
+              print_active_job_logs() {
+                echo "--- active/failed job logs ---"
+                for job in \$(kubectl get jobs --namespace ${namespace} --no-headers 2>/dev/null | awk '\$2 != "Complete" {print \$1}'); do
+                  for pod in \$(kubectl get pods --namespace ${namespace} -l "job-name=\$job" -o name 2>/dev/null); do
+                    echo "--- logs \$pod for job/\$job ---"
+                    kubectl logs "\$pod" --namespace ${namespace} --all-containers --timestamps --tail=80 --request-timeout=10s || true
+                  done
+                done
+              }
+
               print_deploy_progress() {
                 label="\$1"
                 echo "=== \${label} progress \$(date -Iseconds) ==="
                 kubectl get pods,pvc,jobs --namespace ${namespace} -o wide || true
                 echo "--- recent events ---"
                 kubectl get events --namespace ${namespace} --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
+                print_active_job_logs
               }
 
               start_deploy_watcher() {
@@ -443,6 +463,13 @@ pipeline {
 
               start_deploy_watcher 'Postgres database init job'
               kubectl wait job/postgres-database-init-${SHA} \
+                --for=condition=Complete \
+                --namespace ${namespace} \
+                --timeout=10m
+              stop_deploy_watcher
+
+              start_deploy_watcher 'MinIO init job'
+              kubectl wait job/minio-init-${SHA} \
                 --for=condition=Complete \
                 --namespace ${namespace} \
                 --timeout=10m

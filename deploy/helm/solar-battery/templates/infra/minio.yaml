@@ -122,15 +122,17 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: minio-init
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+  name: minio-init-{{ .Values.global.imageTag | trunc 12 | lower | replace "_" "-" }}
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "minio-init") | nindent 4 }}
 spec:
-  backoffLimit: 5
-  activeDeadlineSeconds: {{ .Values.minio.initJob.activeDeadlineSeconds | default 180 }}
+  backoffLimit: 1
+  activeDeadlineSeconds: {{ .Values.minio.initJob.activeDeadlineSeconds | default 600 }}
   ttlSecondsAfterFinished: {{ .Values.minio.initJob.ttlSecondsAfterFinished | default 300 }}
   template:
+    metadata:
+      labels:
+        {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "minio-init") | nindent 8 }}
     spec:
       restartPolicy: OnFailure
       containers:
@@ -143,14 +145,48 @@ spec:
         - -c
         - |
           # Đợi minio sẵn sàng
-          until mc alias set local http://minio:9000 {{ .Values.minio.rootUser }} "$MINIO_ROOT_PASSWORD"; do
-            echo "waiting minio..."; sleep 3
+          set -eu
+          echo "MinIO init: waiting for MinIO service"
+          ready=0
+          for attempt in $(seq 1 120); do
+            if mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; then
+              if mc ready local >/dev/null 2>&1; then
+                echo "MinIO init: MinIO is ready after attempt ${attempt}"
+                ready=1
+                break
+              fi
+            fi
+            echo "MinIO init: waiting for MinIO (${attempt}/120)"
+            sleep 3
           done
-          mc mb -p local/{{ .Values.minio.bucketName }} 2>/dev/null || true
-          mc anonymous set download local/{{ .Values.minio.bucketName }}
-          echo "Bucket {{ .Values.minio.bucketName }} ready"
+
+          if [ "$ready" != "1" ]; then
+            echo "FAIL: MinIO did not become ready after 360 seconds"
+            exit 1
+          fi
+
+          echo "MinIO init: ensuring bucket ${MINIO_BUCKET_NAME}"
+          if mc ls "local/${MINIO_BUCKET_NAME}" >/dev/null 2>&1; then
+            echo "MinIO init: bucket ${MINIO_BUCKET_NAME} already exists"
+          else
+            echo "MinIO init: creating bucket ${MINIO_BUCKET_NAME}"
+            mc mb -p "local/${MINIO_BUCKET_NAME}"
+          fi
+
+          echo "MinIO init: setting anonymous download policy"
+          mc anonymous set download "local/${MINIO_BUCKET_NAME}"
+
+          echo "MinIO init: verifying bucket ${MINIO_BUCKET_NAME}"
+          mc ls "local/${MINIO_BUCKET_NAME}" >/dev/null
+          echo "MinIO init: bucket ${MINIO_BUCKET_NAME} ready"
         env:
+        - name: MINIO_ROOT_USER
+          value: {{ .Values.minio.rootUser | quote }}
         - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
+        - name: MINIO_BUCKET_NAME
+          value: {{ .Values.minio.bucketName | quote }}
+        - name: MC_CONFIG_DIR
+          value: /tmp/.mc
 {{- end }}
