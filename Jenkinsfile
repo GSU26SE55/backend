@@ -247,7 +247,7 @@ pipeline {
               --create-namespace \
               -f deploy/helm/solar-battery/values.yaml \
               -f deploy/helm/solar-battery/${valuesFile} \
-              --set global.imageTag=${SHA} \
+              --set-string global.imageTag=${SHA} \
               --set services.apigateway.enabled=false \
               --set services.authservice.enabled=false \
               --set services.emailservice.enabled=false \
@@ -271,7 +271,7 @@ pipeline {
               --namespace ${namespace} \
               -f deploy/helm/solar-battery/values.yaml \
               -f deploy/helm/solar-battery/${valuesFile} \
-              --set global.imageTag=${SHA} \
+              --set-string global.imageTag=${SHA} \
               --atomic --wait --timeout 15m
           """
         }

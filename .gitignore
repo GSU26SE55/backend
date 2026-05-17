@@ -32,4 +32,4 @@ logs/
 
 # ---------- Helm subchart cache (auto-download bằng `helm dependency update`) ----------
 deploy/helm/*/charts/
-
+env.prod.example
