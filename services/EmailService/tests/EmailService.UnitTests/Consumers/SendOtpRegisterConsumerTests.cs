@@ -6,6 +6,7 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 
@@ -43,6 +44,7 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
               .ReturnsAsync(true);
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton(_renderer.Object);
         services.AddSingleton(_inbox.Object);
@@ -105,8 +107,10 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         var evt = new SendOtpRegisterEvent("user@example.com", "123456");
         await _harness.Bus.Publish(evt);
 
-        (await _harness.Consumed.Any<SendOtpRegisterEvent>()).Should().BeTrue();
+        await Task.Delay(500);
 
+        // Inbox PHẢI được hỏi (consumer đã chạy)
+        _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         // Mailjet KHÔNG được gọi
         _fakeHandler.CallCount.Should().Be(0);
         // Template renderer cũng không được gọi (skip toàn bộ logic gửi)

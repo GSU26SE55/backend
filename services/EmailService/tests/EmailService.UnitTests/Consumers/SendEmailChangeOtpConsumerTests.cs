@@ -6,6 +6,7 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 
@@ -41,6 +42,7 @@ public class SendEmailChangeOtpConsumerTests : IAsyncLifetime
             }).Build();
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton(_renderer.Object);
         services.AddSingleton(_inbox.Object);
@@ -97,9 +99,9 @@ public class SendEmailChangeOtpConsumerTests : IAsyncLifetime
 
         await _harness.Bus.Publish(new SendEmailChangeOtpEvent("new@example.com", "111111"));
 
-        var consumerHarness = _harness.GetConsumerHarness<SendEmailChangeOtpConsumer>();
-        (await consumerHarness.Consumed.Any<SendEmailChangeOtpEvent>()).Should().BeTrue();
+        await Task.Delay(500);
 
+        _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendEmailChangeOtpConsumer), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _fakeHandler.CallCount.Should().Be(0);
     }
 }
