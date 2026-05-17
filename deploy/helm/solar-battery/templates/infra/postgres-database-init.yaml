@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/component: postgres-database-init
 spec:
   backoffLimit: 6
+  activeDeadlineSeconds: {{ .Values.postgres.initJob.activeDeadlineSeconds | default 180 }}
   ttlSecondsAfterFinished: 300
   template:
     metadata:
@@ -19,6 +20,8 @@ spec:
       containers:
       - name: create-service-databases
         image: {{ .Values.postgres.clientImage | default "postgres:16-alpine" }}
+        resources:
+          {{- toYaml .Values.postgres.initJob.resources | nindent 10 }}
         env:
         - name: POSTGRES_HOST
           value: postgres

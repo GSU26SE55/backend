@@ -128,12 +128,16 @@ metadata:
     helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
 spec:
   backoffLimit: 5
+  activeDeadlineSeconds: {{ .Values.minio.initJob.activeDeadlineSeconds | default 180 }}
+  ttlSecondsAfterFinished: {{ .Values.minio.initJob.ttlSecondsAfterFinished | default 300 }}
   template:
     spec:
       restartPolicy: OnFailure
       containers:
       - name: mc
         image: minio/mc:latest
+        resources:
+          {{- toYaml .Values.minio.initJob.resources | nindent 10 }}
         command:
         - sh
         - -c
