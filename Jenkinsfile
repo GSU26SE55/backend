@@ -155,7 +155,7 @@ pipeline {
     stage('7. Login GHCR') {
       when { anyOf { branch 'staging'; branch 'main' } }
       steps {
-        withCredentials([string(credentialsId: 'ghcr-token', variable: 'GHCR_TOKEN')]) {
+        withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
           sh 'echo "$GHCR_TOKEN" | docker login ghcr.io -u gsu26se55 --password-stdin'
         }
       }
