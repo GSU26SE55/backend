@@ -254,7 +254,7 @@ pipeline {
               --set services.smsservice.enabled=false \
               --set services.filestorageservice.enabled=false \
               --set services.batteryservice.enabled=false \
-              --wait --timeout 8m
+              --wait --timeout 12m
 
             echo '=== Waiting for DB init job ==='
             kubectl wait job \
