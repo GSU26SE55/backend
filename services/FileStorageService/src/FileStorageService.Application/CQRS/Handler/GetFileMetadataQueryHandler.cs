@@ -12,10 +12,14 @@ namespace FileStorageService.Application.CQRS.Handler;
 public class GetFileMetadataQueryHandler : IRequestHandler<GetFileMetadataQuery, CommonResponse<FileMetadataResponse>>
 {
     private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public GetFileMetadataQueryHandler(IFileStorageUnitOfWork unitOfWork)
+    public GetFileMetadataQueryHandler(
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<FileMetadataResponse>> Handle(GetFileMetadataQuery request, CancellationToken cancellationToken)
@@ -32,6 +36,9 @@ public class GetFileMetadataQueryHandler : IRequestHandler<GetFileMetadataQuery,
         if (file is null)
             return NotFound();
 
+        if (!_fileAuthorizationService.CanRead(file))
+            return Forbidden();
+
         return new CommonResponse<FileMetadataResponse>
         {
             IsSuccess = true,
@@ -46,5 +53,12 @@ public class GetFileMetadataQueryHandler : IRequestHandler<GetFileMetadataQuery,
         IsSuccess = false,
         StatusCode = 404,
         Message = "Không tìm thấy file."
+    };
+
+    private static CommonResponse<FileMetadataResponse> Forbidden() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 403,
+        Message = "Không có quyền truy cập metadata file này."
     };
 }

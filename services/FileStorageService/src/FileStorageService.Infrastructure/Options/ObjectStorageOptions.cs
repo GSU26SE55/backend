@@ -29,7 +29,7 @@ public class ObjectStorageOptions
 
     public string? PublicBaseUrl { get; set; }
 
-    public long MaxFileSizeBytes { get; set; } = 10 * 1024 * 1024;
+    public long MaxFileSizeBytes { get; set; } = 20 * 1024 * 1024;
 
     public string[] AllowedExtensions { get; set; } =
     [
@@ -37,10 +37,16 @@ public class ObjectStorageOptions
         ".jpeg",
         ".png",
         ".webp",
+        ".gif",
         ".pdf",
         ".doc",
         ".docx",
         ".xls",
-        ".xlsx"
+        ".xlsx",
+        ".txt",
+        ".csv",
+        ".bin",
+        ".hex",
+        ".fw"
     ];
 }
