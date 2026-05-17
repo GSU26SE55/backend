@@ -1,0 +1,79 @@
+name: Docker Build & Publish
+
+# Chỉ chạy SAU khi CI green trên main — đảm bảo image push lên GHCR luôn pass test.
+on:
+  workflow_run:
+    workflows: ["CI — Build & Test"]
+    types: [completed]
+    branches: [main]
+  # Tag release — build version-tagged image
+  push:
+    tags: ['v*']
+  # Manual trigger từ Actions tab
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    # Chỉ chạy nếu CI workflow run thành công (cho event workflow_run).
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: api-gateway,          dockerfile: services/ApiGateway/src/ApiGateway/Dockerfile }
+          - { name: auth-service,         dockerfile: services/AuthService/src/AuthService.Api/Dockerfile }
+          - { name: email-service,        dockerfile: services/EmailService/src/EmailService.Api/Dockerfile }
+          - { name: sms-service,          dockerfile: services/SmsService/src/SmsService.Api/Dockerfile }
+          - { name: file-storage-service, dockerfile: services/FileStorageService/src/FileStorageService.Api/Dockerfile }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service.name }}
+          # Tag strategy:
+          # - main branch → :latest + :sha-xxx
+          # - staging branch → :staging + :sha-xxx
+          # - tag v1.2.3 → :1.2.3 + :1.2 + :1
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Build and push (linux/amd64 only)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Chỉ build amd64 — VPS deploy là amd64. Bỏ arm64 (qua QEMU chậm 10x).
+          platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
