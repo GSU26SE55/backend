@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[BatteryService.Api]*,[BatteryService.Domain]*,[*]BatteryService.Infrastructure.Migrations.*,[*]BatteryService.Infrastructure.Persistence.ApplicationDbContextFactory,[*]BatteryService.Infrastructure.Persistence.Seeders.*,[*]BatteryService.Infrastructure.DependencyInjection.*,[*]BatteryService.Application.DependencyInjection.*,[*]BatteryService.Application.Mapping.*,[*]BatteryService.Application.DTOs.*,[*]SharedInfrastructure.*,[*]SharedContracts.*,[*]SharedKernels.*,[*]BatteryService.Domain.*</Exclude>
+          <ExcludeByFile>**/Migrations/*.cs,**/*ApplicationDbContextFactory.cs,**/*Seeder*.cs</ExcludeByFile>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

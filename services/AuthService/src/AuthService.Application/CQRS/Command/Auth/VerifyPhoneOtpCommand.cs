@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MediatR;
 using SharedContracts.Common.Responses;
@@ -9,6 +10,7 @@ public class VerifyPhoneOtpCommand : IRequest<CommonResponse<string>>, IValidata
 {
     private static readonly Regex OtpRegex = new(@"^\d{6}$", RegexOptions.Compiled);
 
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string Otp { get; set; } = string.Empty;
 

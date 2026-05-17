@@ -1,0 +1,72 @@
+{{- if .Values.postgres.enabled -}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-database-init-{{ .Values.global.imageTag | trunc 12 | lower | replace "_" "-" }}
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-database-init
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: postgres-database-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: create-service-databases
+        image: {{ .Values.postgres.clientImage | default "postgres:16-alpine" }}
+        env:
+        - name: POSTGRES_HOST
+          value: postgres
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: postgres
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.username | quote }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+        - name: AUTH_DB_NAME
+          value: {{ .Values.postgres.database | quote }}
+        - name: FILE_STORAGE_DB_NAME
+          value: {{ .Values.postgres.fileStorageDatabase | quote }}
+        - name: BATTERY_DB_NAME
+          value: {{ .Values.postgres.batteryDatabase | quote }}
+        command:
+        - sh
+        - -c
+        - |
+          set -eu
+          export PGPASSWORD="$POSTGRES_PASSWORD"
+          until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER"; do
+            echo "waiting postgres..."; sleep 2
+          done
+          create_database() {
+            db_name="$1"
+            [ -z "$db_name" ] && return 0
+            echo "Ensuring database exists: $db_name"
+            psql \
+              --host="$POSTGRES_HOST" \
+              --port="$POSTGRES_PORT" \
+              --username="$POSTGRES_USER" \
+              --dbname="$POSTGRES_DB" \
+              --set=db="$db_name" \
+              --set=owner="$POSTGRES_USER" \
+              --set=ON_ERROR_STOP=1 <<'SQL'
+          SELECT format('CREATE DATABASE %I OWNER %I', :'db', :'owner')
+          WHERE NOT EXISTS (
+              SELECT 1
+              FROM pg_database
+              WHERE datname = :'db'
+          )\gexec
+          SQL
+          }
+          create_database "$AUTH_DB_NAME"
+          create_database "$FILE_STORAGE_DB_NAME"
+          create_database "$BATTERY_DB_NAME"
+{{- end }}

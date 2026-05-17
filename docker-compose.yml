@@ -4,10 +4,11 @@
 # Khởi động:
 #   1. Copy template env và fill secret:
 #        cp .env.Docker.example .env.Docker
-#   2. docker compose up -d --build
+#   2. docker compose --env-file .env.Docker up -d --build
 #
 # Truy cập:
 #   - ApiGateway:        http://localhost:4001
+#   - BatteryService:    http://localhost:4006
 #   - RabbitMQ UI:       http://localhost:15673  (guest/guest)
 #   - Minio Console:     http://localhost:9091   (minioadmin/minioadmin)
 #   - Postgres:          localhost:5433          (psql)
@@ -32,10 +33,14 @@ volumes:
 services:
   # ---------- Infrastructure ----------
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: solar-postgres
+    env_file:
+      - .env.Docker
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-auth_db}
+      # Database quản trị để Postgres khởi tạo container.
+      # Database riêng của từng service được tạo bởi postgres-init bên dưới.
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Password12345@}
     ports:
@@ -43,11 +48,38 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 3s
       retries: 10
     networks: [solar-net]
+
+  # Tạo logical database riêng cho từng service.
+  # Chạy idempotent sau khi Postgres healthy, nên hoạt động cả với volume đã tồn tại.
+  postgres-init:
+    image: postgres:16-alpine
+    container_name: solar-postgres-init
+    env_file:
+      - .env.Docker
+    environment:
+      POSTGRES_HOST: postgres
+      # Container-to-container traffic uses the Postgres container port.
+      # The host mapping above keeps Docker Postgres reachable from macOS at localhost:5433.
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Password12345@}
+      AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
+      FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
+      BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
+    volumes:
+      - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
+    command: ["/bin/sh", "/scripts/create-service-databases.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: "no"
 
   redis:
     image: redis:7-alpine
@@ -139,14 +171,15 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
-      # Build connection string từ cùng biến với postgres → đảm bảo password match.
-      # Override ConnectionStrings__AuthDb từ .env.Docker (env block có priority cao hơn env_file).
-      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      # AuthService chỉ dùng database riêng của Auth.
+      ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
     ports:
       - "4002:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       rabbitmq:
@@ -210,10 +243,53 @@ services:
       ObjectStorage__PublicBaseUrl: http://localhost:9090/solar-battery-files  # direct public URL trả về sau upload
       ObjectStorage__AccessKey: minioadmin
       ObjectStorage__SecretKey: minioadmin
+      # FileStorageService chỉ dùng database riêng của FileStorage.
+      ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
     ports:
       - "4005:8080"
     depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
       minio:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  batteryservice:
+    container_name: solar-batteryservice
+    build:
+      context: .
+      dockerfile: services/BatteryService/src/BatteryService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      ApiKeys__SensorIngest: ${BATTERY_SENSOR_INGEST_API_KEY:-dev-battery-ingest-key}
+      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-30}
+      AnomalyEngine__DedupWindowMinutes: ${BATTERY_ANOMALY_DEDUP_WINDOW_MINUTES:-30}
+      AnomalyEngine__OfflineThresholdMinutes: ${BATTERY_ANOMALY_OFFLINE_THRESHOLD_MINUTES:-10}
+      AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-5}
+      AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
+      AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
+      AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
+    ports:
+      - "4006:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
@@ -234,6 +310,7 @@ services:
       - emailservice
       - smsservice
       - filestorageservice
+      - batteryservice
     networks: [solar-net]
     restart: unless-stopped
 
@@ -354,7 +431,7 @@ services:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: solar-postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Password12345@}@postgres:5432/${POSTGRES_DB:-auth_db}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Password12345@}@postgres:5432/${POSTGRES_DB:-postgres}?sslmode=disable"
     ports:
       - "9187:9187"
     depends_on:

@@ -12,6 +12,14 @@
     <Project Path="services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj" />
     <Project Path="services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj" />
   </Folder>
+  <Folder Name="/Services/BatteryService/">
+    <Project Path="services/BatteryService/src/BatteryService.Api/BatteryService.Api.csproj" />
+    <Project Path="services/BatteryService/src/BatteryService.Application/BatteryService.Application.csproj" />
+    <Project Path="services/BatteryService/src/BatteryService.Domain/BatteryService.Domain.csproj" />
+    <Project Path="services/BatteryService/src/BatteryService.Infrastructure/BatteryService.Infrastructure.csproj" />
+    <Project Path="services/BatteryService/tests/BatteryService.IntegrationTests/BatteryService.IntegrationTests.csproj" />
+    <Project Path="services/BatteryService/tests/BatteryService.UnitTests/BatteryService.UnitTests.csproj" />
+  </Folder>
   <Folder Name="/Services/EmailService/">
     <Project Path="services/EmailService/src/EmailService.Api/EmailService.Api.csproj" />
     <Project Path="services/EmailService/src/EmailService.Infrastructure/EmailService.Infrastructure.csproj" />
@@ -25,6 +33,7 @@
   <Folder Name="/Services/FileStorageService/">
     <Project Path="services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Application/FileStorageService.Application.csproj" />
+    <Project Path="services/FileStorageService/src/FileStorageService.Domain/FileStorageService.Domain.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Infrastructure/FileStorageService.Infrastructure.csproj" />
     <Project Path="services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj" />
   </Folder>

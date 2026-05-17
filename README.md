@@ -1,7 +1,7 @@
 # GSU26SE55 — Backend (ASP.NET Core Web API)
 
-**Dự án:** Solar Lithium-ion Battery Maintenance Management System  
-**Nhóm:** GSU26SE55 — GVHD: Trương Long  
+**Dự án:** Solar Lithium-ion Battery Maintenance Management System
+**Nhóm:** GSU26SE55 — GVHD: Trương Long
 **Timeline:** 11/5/2026 → 6/9/2026
 
 ---
@@ -71,7 +71,7 @@ Gõ `/kltn` để xem toàn bộ lệnh → sẵn sàng làm việc.
 4. [review plan] → gõ "ok" để xác nhận
 5. code...
 6. /kltn-reviewcode                                  ← review trước khi test
-7. /kltn-test [number]                               ← chạy test
+7. /kltn-test [number]                               ← chạy test (dotnet test)
 8. /kltn-ship [number]                               ← tạo PR + cập nhật issue
 9. Đồng đội /kltn-reviewpr → approve
 10. /kltn-complete [number]                          ← merge PR + close issue

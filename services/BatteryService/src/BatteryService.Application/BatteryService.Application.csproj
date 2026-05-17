@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MassTransit" Version="8.5.9" />
+        <PackageReference Include="MediatR" Version="12.2.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
+      <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
+      <ProjectReference Include="..\..\..\..\shared\src\SharedKernels\SharedKernels.csproj" />
+      <ProjectReference Include="..\BatteryService.Domain\BatteryService.Domain.csproj" />
+    </ItemGroup>
+
+</Project>

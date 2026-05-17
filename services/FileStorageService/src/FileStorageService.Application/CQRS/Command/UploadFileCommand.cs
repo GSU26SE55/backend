@@ -1,4 +1,5 @@
 using FileStorageService.Application.DTOs;
+using FileStorageService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using SharedContracts.Common.Responses;
@@ -11,6 +12,8 @@ public class UploadFileCommand : IRequest<CommonResponse<FileUploadResponse>>, I
     public IFormFile? File { get; set; }
 
     public string FolderName { get; set; } = "default";
+
+    public FilePurposeEnum Purpose { get; set; } = FilePurposeEnum.Other;
 
     public Task<CommonResponse<FileUploadResponse>> ValidateAsync()
     {

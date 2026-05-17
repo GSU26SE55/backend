@@ -49,6 +49,11 @@ Có **2 hệ thống tracking** chạy song song:
 > **Issues nằm trong từng sub-repo** — BE dev làm việc trong `backend`, FE dev làm việc trong `frontend`. Sprint Board tổng hợp tất cả.
 
 ```
+# 0. (Tùy chọn) Tự tạo issue mới nếu phát hiện task chưa được tạo
+/kltn-task                 ← Claude hỏi thông tin → xác nhận → tạo issue vào sub-repo
+                            ← Issue tự động xuất hiện trên Sprint Board
+                            ← Ghi nhớ số issue vừa tạo để dùng ở bước 3
+
 # 1. Xem task được assign
 Vào https://github.com/orgs/GSU26SE55/projects/3 → tab "My items"
 
@@ -97,6 +102,7 @@ claude
 
 | Lệnh | Khi nào dùng |
 |------|-------------|
+| `/kltn-task` | Tạo issue mới vào sub-repo — khi phát hiện task chưa được tạo trong sprint |
 | `/kltn-plan 123` | Lập plan cho ticket #123 — đọc issue, hỏi nếu chưa rõ, viết plan, chờ approve |
 | `/kltn-implement 123` | Implement — **yêu cầu plan đã approved** (chạy sau `/kltn-plan`) |
 | `/kltn-reviewcode` | Review code trước khi test |
@@ -142,20 +148,46 @@ dùng context7 tìm cách dùng useMutation trong TanStack Query v5
 
 ---
 
+## RTK — Token Saver
+
+RTK chạy tự động nhờ global hook trong `~/.claude/settings.json` — khi Claude Code gọi bất kỳ lệnh Bash nào, hook tự wrap qua `rtk` trước khi thực thi, không cần làm gì thêm.
+
+> Nếu bạn mới setup máy và chưa có hook này: xem Bước 5 trong `/kltn-setup`.
+
+**Khi bạn tự gõ lệnh trong terminal** (ngoài Claude Code), thêm `rtk` prefix để tiết kiệm token tương tự:
+
+| Lệnh | Thay vì | Tiết kiệm |
+|------|---------|-----------|
+| `rtk git diff` | `git diff` | ~80% |
+| `rtk git log` | `git log` | ~70% |
+| `rtk gh issue list` | `gh issue list` | ~80% |
+| `rtk gh pr view 42` | `gh pr view 42` | ~87% |
+| `rtk dotnet build` | `dotnet build` | ~80% |
+| `rtk pytest tests/` | `pytest tests/` | ~90% |
+| `rtk tsc --noEmit` | `tsc --noEmit` | ~83% |
+
+**Xem thống kê tiết kiệm:**
+```bash
+rtk gain           # tổng token đã tiết kiệm
+rtk gain --history # lịch sử theo lệnh
+```
+
+---
+
 ## Definition of Done
 
 Ticket chỉ được coi là **Done** khi đủ cả 3:
 
 1. `/kltn-reviewcode` → **PASS**
 2. `/kltn-test` → **PASS**
-3. PR được ≥ 1 người approve và **merged vào main**
+3. PR được ≥ 1 người approve và **merged vào dev**
 
 ---
 
 ## Quy tắc bắt buộc
 
 - **Không merge PR của chính mình** — cần ít nhất 1 người approve
-- **Không push thẳng lên main** — luôn qua PR
+- **Không push thẳng lên dev** — luôn qua PR
 - **1 issue = 1 branch** — `feature/GH-[number]-ten-ngan` (ví dụ: `feature/GH-42-battery-crud`)
 - **Commit format:** `feat(#42): mô tả` / `fix(#42)` / `refactor(#42)` / `test(#42)`
 - **PR body phải có** `Closes #[number]` — GitHub tự close issue khi merge
@@ -207,7 +239,7 @@ git push origin chore/ten-thay-doi
 # Mở PR → self-merge sau khi verify
 ```
 
-> **Lưu ý:** pre-commit hook chặn commit thẳng lên `main` — Leader cũng phải tạo branch và PR.
+> **Lưu ý:** pre-commit hook chặn commit thẳng lên `main` của `workflow-ai` — Leader cũng phải tạo branch và PR.
 
 Theo dõi Actions tại: https://github.com/GSU26SE55/workflow-ai/actions
 

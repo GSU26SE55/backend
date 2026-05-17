@@ -28,7 +28,7 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 3. ApiGateway → 4 service backend
+# 3. ApiGateway → backend services
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,7 +36,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice] }
   ingress:
   - from:
     - podSelector:
@@ -45,11 +45,11 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 4. AuthService → Postgres
+# 4. Database-backed services → Postgres
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-authservice-to-postgres
+  name: allow-services-to-postgres
 spec:
   podSelector:
     matchLabels:
@@ -57,8 +57,8 @@ spec:
   ingress:
   - from:
     - podSelector:
-        matchLabels:
-          app.kubernetes.io/component: authservice
+        matchExpressions:
+        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, postgres-database-init] }
     ports:
     - { protocol: TCP, port: 5432 }
 ---
@@ -116,7 +116,7 @@ spec:
     - { protocol: TCP, port: 9000 }
     - { protocol: TCP, port: 9001 }
 ---
-# 8. Prometheus scrape /metrics của 5 service.
+# 8. Prometheus scrape /metrics của backend/gateway services.
 # Cho phép kubelet probe nữa (kubelet đi từ node IP — empty selector match all).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -125,7 +125,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
   ingress:
   # Prometheus pod (kube-prometheus-stack)
   - from:

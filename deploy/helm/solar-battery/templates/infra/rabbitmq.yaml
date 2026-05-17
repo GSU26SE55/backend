@@ -73,4 +73,31 @@ spec:
   - { name: amqp,    port: 5672,  targetPort: amqp }
   - { name: mgmt,    port: 15672, targetPort: mgmt }
   - { name: metrics, port: 15692, targetPort: metrics }
+{{- if .Values.rabbitmq.ingress.enabled }}
+---
+# RabbitMQ Management UI — expose qua Ingress (chỉ bật staging/prod)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmq-mgmt
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.tlsIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts: ["rabbitmq.{{ .Values.global.domain }}"]
+    secretName: rabbitmq-tls
+  rules:
+  - host: "rabbitmq.{{ .Values.global.domain }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rabbitmq
+            port: { name: mgmt }
+{{- end }}
 {{- end }}

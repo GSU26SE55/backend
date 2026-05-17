@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -6,6 +7,7 @@ namespace AuthService.Application.CQRS.Command.Auth;
 
 public class Disable2FACommand : IRequest<CommonResponse<string>>, IValidatable<CommonResponse<string>>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
 
     public Task<CommonResponse<string>> ValidateAsync()

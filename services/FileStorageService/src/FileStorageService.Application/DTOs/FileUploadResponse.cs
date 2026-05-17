@@ -2,6 +2,8 @@ namespace FileStorageService.Application.DTOs;
 
 public class FileUploadResponse
 {
+    public Guid FileId { get; set; }
+
     public string ObjectKey { get; set; } = string.Empty;
 
     public string FileName { get; set; } = string.Empty;

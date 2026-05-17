@@ -65,4 +65,8 @@ public class Account : AuditableEntity
     public ICollection<AccountRole> AccountRoles { get; set; } = new List<AccountRole>();
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+
+    public AccountProfile? Profile { get; set; }
+
+    public StaffProfile? StaffProfile { get; set; }
 }

@@ -8,7 +8,7 @@
 # --------------------------------------------------------------------
 global:
   # Image registry. Jenkins push image với tag = git SHA về đây.
-  imageRegistry: ghcr.io/your-org
+  imageRegistry: ghcr.io/gsu26se55
 
   # Tag mặc định. Jenkins override `--set global.imageTag=abc1234` lúc deploy.
   imageTag: latest
@@ -24,7 +24,7 @@ global:
 
   # Domain public dùng cho Ingress của ApiGateway.
   # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
-  domain: dev.example.com
+  domain: capstonegsu26se55.mooo.com
 
   # ASP.NET environment — Development / Staging / Production
   aspnetEnvironment: Development
@@ -40,7 +40,7 @@ global:
   imagePullSecret: ghcr-pull
 
 # --------------------------------------------------------------------
-# 5 service ASP.NET
+# ASP.NET services
 # --------------------------------------------------------------------
 services:
   apigateway:
@@ -103,13 +103,30 @@ services:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 512Mi }
 
+  batteryservice:
+    enabled: true
+    image: batteryservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 150m, memory: 256Mi }
+      limits:   { cpu: 750m, memory: 768Mi }
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
 # --------------------------------------------------------------------
 # Infrastructure (chạy trong cluster — production tốt nhất dùng managed Postgres/Redis)
 # --------------------------------------------------------------------
 postgres:
   enabled: true
-  image: postgres:16-alpine
+  image: timescale/timescaledb:latest-pg16
+  clientImage: postgres:16-alpine
   database: auth_db
+  fileStorageDatabase: file_storage_db
+  batteryDatabase: battery_db
   username: postgres
   storage: 5Gi
   # Tăng max_connections để hỗ trợ pool nhiều service × replica.
@@ -134,6 +151,8 @@ rabbitmq:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose rabbitmq.{domain}
 
 minio:
   enabled: true
@@ -144,6 +163,8 @@ minio:
   resources:
     requests: { cpu: 50m,  memory: 128Mi }
     limits:   { cpu: 500m, memory: 512Mi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose files.{domain} + minio.{domain}
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)
@@ -285,7 +306,7 @@ redis-exporter:
 # --------------------------------------------------------------------
 # ResourceQuota — cap tổng resource trong namespace solar-staging.
 # Tính toán: 5 service × (limits 500m × 512Mi) + infra 2 vCPU × 4Gi + monitoring 2 vCPU × 4Gi
-# = ~6.5 vCPU × ~10Gi cho dev. Staging upgrade lên trong values-staging.yaml.
+# = ~7 vCPU × ~11Gi cho dev. Staging upgrade lên trong values-staging.yaml.
 # --------------------------------------------------------------------
 resourceQuota:
   enabled: false              # bật trong values-staging

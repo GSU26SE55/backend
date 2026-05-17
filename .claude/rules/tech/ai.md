@@ -87,7 +87,10 @@ BATCH_SIZE = 32
 ```python
 from sklearn.ensemble import IsolationForest
 
-# Hyperparameters (BẮT BUỘC)
+# Hyperparameters (BẮT BUỘC) — justification: xem .claude/docs/ai-research-references.md §2
+# - CONTAMINATION 0.1: Liu et al. ICDM 2008 đề xuất 0.05–0.15; NASA dataset ~12-15% near-EOL → 0.1 safe
+# - N_ESTIMATORS 100: Liu et al. 2008 — variance hội tụ ≥ 100 trees; thêm chỉ tăng latency
+# - RANDOM_STATE 42: reproducibility theo .claude/rules/tech/ai.md
 CONTAMINATION = 0.1     # ước tính 10% data là bất thường (NASA dataset)
 N_ESTIMATORS  = 100
 RANDOM_STATE  = 42      # BẮT BUỘC — seed cố định
@@ -117,6 +120,13 @@ import joblib
 joblib.dump(iso_forest, "models/weights/isolation_forest.pkl")
 # isolation_forest.pkl PHẢI commit vào Git (như scaler.pkl)
 ```
+
+> **Cơ sở khoa học (B2):** Mọi anomaly type và hyperparameter trong file này PHẢI cite paper hoặc industry standard. Xem `.claude/docs/ai-research-references.md`:
+> - Phụ lục B2 §1 — paper cho 15 AnomalyType (Overheat, Overvoltage, SOH EOL 80%, …)
+> - Phụ lục B2 §2 — IsolationForest hyperparameter justification
+> - Phụ lục B2 §3 — CNN-LSTM architecture justification (kernel_size, dropout, optimizer)
+>
+> Hội đồng KLTN sẽ hỏi "tại sao ngưỡng X?" — đừng tự đặt mà không cite.
 
 ---
 
@@ -217,19 +227,35 @@ torch.save({
 
 ```python
 # main.py — load 1 lần khi khởi động, không load lại per-request
+import os
 import joblib
 import torch
 
 SCALER_VERSION = "1.0"
 MODEL_VERSION  = "1.0"
 
-scaler_artifact = joblib.load("models/weights/scaler.pkl")
+SCALER_PATH      = "models/weights/scaler.pkl"
+LSTM_PATH        = f"models/weights/soh_lstm_v{MODEL_VERSION}.pth"
+ISO_FOREST_PATH  = f"models/weights/isolation_forest_v{MODEL_VERSION}.pkl"
+
+# ⚠️ Kiểm tra file tồn tại TRƯỚC khi load — cho phép báo lỗi rõ ràng thay vì traceback cryptic
+for path, label in [
+    (SCALER_PATH,     "MinMaxScaler"),
+    (LSTM_PATH,       "LSTM model"),
+    (ISO_FOREST_PATH, "Isolation Forest"),
+]:
+    assert os.path.exists(path), (
+        f"[STARTUP] {label} artifact not found at '{path}'. "
+        f"Run training script and commit all artifacts in models/weights/ before starting."
+    )
+
+scaler_artifact = joblib.load(SCALER_PATH)
 assert scaler_artifact["version"] == SCALER_VERSION, (
     f"Scaler version mismatch: expected {SCALER_VERSION}, got {scaler_artifact['version']}"
 )
 scaler = scaler_artifact["scaler"]
 
-checkpoint = torch.load("models/weights/soh_lstm_v1.0.pth", map_location="cpu")
+checkpoint = torch.load(LSTM_PATH, map_location="cpu")
 assert checkpoint["version"] == MODEL_VERSION, (
     f"Model version mismatch: expected {MODEL_VERSION}, got {checkpoint['version']}"
 )
@@ -237,7 +263,7 @@ soh_model = SOHPredictor()
 soh_model.load_state_dict(checkpoint["model_state_dict"])
 soh_model.eval()
 
-iso_model = joblib.load("models/weights/isolation_forest_v1.0.pkl")
+iso_model = joblib.load(ISO_FOREST_PATH)
 ```
 
 > **Tại sao cần metadata?** Nếu `scaler.pkl` được refit (v1.1) nhưng `soh_lstm_v1.0.pth` không được update, inference sẽ ra kết quả sai mà không có error. Version assertion bắt lỗi này ngay khi startup thay vì âm thầm predict sai.
@@ -265,3 +291,7 @@ git add .gitattributes
 - Scaler (MinMaxScaler) phải được lưu tại `models/weights/scaler.pkl` sau khi train — load lại khi inference, không fit lại trên production data
 - `scaler.pkl` và `isolation_forest.pkl` phải được commit vào Git — inference cần cùng artifacts với training
 - Inference latency **PHẢI** benchmark và đạt < 100ms trước khi merge
+
+**Simplicity First:** Chỉ implement model/endpoint mà issue yêu cầu — không thêm hyperparameter tuning, architecture variant, hoặc preprocessing step chưa được approve.
+
+**Surgical Changes:** Chỉ sửa files trong plan.md. Không refactor training script, không đổi hyperparameter, không thay đổi data split ngoài scope task.

@@ -48,6 +48,30 @@ public class GoogleAuthCommandHandlerTests
     }
 
     [Fact]
+    public async Task Google_NewEmail_StoresGooglePictureInAccountProfile()
+    {
+        _google.Setup(g => g.ValidateAsync("good-token", It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
+        {
+            Email = "new@gmail.com",
+            EmailVerified = true,
+            Name = "New User",
+            Subject = "google-sub-1",
+            Picture = "https://lh3.googleusercontent.com/a/avatar"
+        });
+        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var accountProfiles = Mock.Get(uow.Object.AccountProfiles);
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
+
+        var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "good-token" }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeTrue();
+        accountProfiles.Verify(r => r.AddAsync(It.Is<AccountProfile>(profile =>
+            profile.ExternalAvatarUrl == "https://lh3.googleusercontent.com/a/avatar" &&
+            profile.AvatarFileId == null &&
+            profile.AvatarSource == AvatarSourceEnum.Google)), Times.Once);
+    }
+
+    [Fact]
     public async Task Google_ExistingEmailConfirmed_AutoLinks()
     {
         var existing = new Account
@@ -74,6 +98,47 @@ public class GoogleAuthCommandHandlerTests
         resp.IsSuccess.Should().BeTrue();
         existing.GoogleId.Should().Be("google-sub-2");
         existing.Provider.Should().Be("Google");
+    }
+
+    [Fact]
+    public async Task Google_ExistingUploadedAvatar_DoesNotOverwriteUploadedAvatar()
+    {
+        var avatarFileId = Guid.NewGuid();
+        var profile = new AccountProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            AvatarFileId = avatarFileId,
+            AvatarSource = AvatarSourceEnum.Uploaded,
+            ExternalAvatarUrl = "https://old.google/avatar"
+        };
+        var existing = new Account
+        {
+            Id = profile.AccountId,
+            Email = "user@gmail.com",
+            PasswordHash = "x",
+            FullName = "U",
+            Status = AccountStatusEnum.Active,
+            EmailConfirmed = true,
+            Profile = profile,
+            AccountRoles = new List<AccountRole>()
+        };
+        _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
+        {
+            Email = "user@gmail.com",
+            EmailVerified = true,
+            Subject = "google-sub-2",
+            Picture = "https://new.google/avatar"
+        });
+        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing }, accountProfileSeed: new[] { profile });
+        var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
+
+        var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeTrue();
+        profile.AvatarFileId.Should().Be(avatarFileId);
+        profile.AvatarSource.Should().Be(AvatarSourceEnum.Uploaded);
+        profile.ExternalAvatarUrl.Should().Be("https://new.google/avatar");
     }
 
     [Fact]
@@ -182,8 +247,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "g-1"
         });
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
@@ -210,8 +274,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "g"
         });
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
@@ -245,8 +308,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "shared-google-id"
         });
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, another });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, another });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);

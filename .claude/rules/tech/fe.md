@@ -23,11 +23,43 @@
 
 ```bash
 npm install zod react-hook-form @hookform/resolvers sonner js-cookie jwt-decode next-themes recharts date-fns
-npm install -D @types/js-cookie
+npm install -D @types/js-cookie prettier
 
 # shadcn/ui setup
 npx shadcn@latest init
 npx shadcn@latest add button input label form card dialog dropdown-menu table badge avatar separator sheet skeleton
+```
+
+## Prettier — Code Formatting
+
+Cấu hình `.prettierrc` chuẩn dự án:
+
+```json
+{
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "bracketSpacing": true,
+  "arrowParens": "avoid"
+}
+```
+
+`.prettierignore`:
+```
+node_modules/
+dist/
+.next/
+src/shared/components/ui/
+```
+
+> `src/shared/components/ui/` bị ignore vì là code generate từ shadcn — không format tay.
+
+Chạy format trước khi commit:
+```bash
+npx prettier --write "src/**/*.{ts,tsx}"
+npx prettier --check "src/**/*.{ts,tsx}"  # CI check
 ```
 
 ---
@@ -86,11 +118,14 @@ src/
     │   └── useDebounce.ts
     ├── lib/
     │   ├── axios.ts                ← Axios instance + interceptors (token attach + refresh)
+    │   ├── errors.ts               ← HttpError, EntityError, handleErrorApi
     │   └── utils.ts                ← shadcn cn() utility
     ├── stores/
     │   └── sessionStore.ts         ← Zustand: token, user, setToken, logout
     ├── context/
     │   └── authContext.tsx         ← AuthProvider: hydrate sessionStore từ cookie khi boot
+    ├── utils/
+    │   └── queryKeys.ts            ← KEY (root) + QUERY_KEY (factories) cho TanStack Query
     └── types/
         ├── api.types.ts            ← ResponseData<T>, PaginationResponse<T>, ErrorEntity
         └── common.types.ts         ← BaseFilterPagination, shared query types
@@ -184,6 +219,82 @@ useEffect(() => {
 
 > **Lưu ý:** `staleTime: 0` không tự refetch theo interval — chỉ đánh dấu data là stale ngay khi fetch. Phải dùng `refetchInterval` để có auto-refetch thực sự. `setInterval` chỉ dùng cho UI countdown (giây đếm ngược) dựa trên deadline đã lấy từ server.
 
+### Retry Behavior — Query thất bại
+
+Default `retry: 1` (1 lần retry khi network error). Sau khi hết retry, query chuyển sang `status: 'error'` — **không loop vô tận**.
+
+Override cho từng trường hợp quan trọng:
+
+```tsx
+// SLA countdown — critical query, retry nhiều hơn
+const { data: ticket } = useQuery({
+  queryKey: QUERY_KEY.tickets.detail(id),
+  queryFn: () => ticketService.getById(id),
+  staleTime: 0,
+  refetchInterval: 30_000,
+  retry: 3,                // retry 3 lần trước khi báo lỗi
+  retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10_000), // exponential backoff
+});
+
+// Ticket queue — không retry quá nhiều (data thay đổi liên tục)
+const { data: tickets } = useQuery({
+  queryKey: QUERY_KEY.tickets.list(filters),
+  queryFn: () => ticketService.getList(filters),
+  staleTime: 30_000,
+  retry: 1,  // default
+});
+```
+
+**Xử lý error state khi retry hết:**
+```tsx
+const { data, isError, error, refetch } = useQuery({ ... });
+
+if (isError) {
+  return (
+    <div>
+      <p>Không tải được dữ liệu. <button onClick={() => refetch()}>Thử lại</button></p>
+    </div>
+  );
+}
+```
+
+> `refetchInterval` **tự dừng** khi query ở `status: 'error'` — không refetch khi đã fail. Muốn tiếp tục refetch dù error: thêm `refetchIntervalInBackground: true` và `retryOnMount: true`.
+
+### Query Key Convention — `shared/utils/queryKeys.ts`
+
+Hai cấp key: `KEY` (root dùng để invalidate broad) và `QUERY_KEY` (factory functions có params dùng trong `useQuery`).
+
+```ts
+// shared/utils/queryKeys.ts
+export const KEY = {
+  batteries: ['batteries'],
+  tickets:   ['tickets'],
+  users:     ['users'],
+} as const;
+
+export const QUERY_KEY = {
+  batteries: {
+    list:   (params: BatteryGetListParams) => [...KEY.batteries, 'list', params] as const,
+    detail: (id: string)                   => [...KEY.batteries, 'detail', id]  as const,
+  },
+  tickets: {
+    list:   (params: TicketGetListParams) => [...KEY.tickets, 'list', params] as const,
+    detail: (id: string)                  => [...KEY.tickets, 'detail', id]   as const,
+  },
+} as const;
+```
+
+```ts
+// useQuery — dùng QUERY_KEY factory
+queryKey: QUERY_KEY.batteries.list(params)
+
+// invalidateQueries broad — invalidate tất cả batteries queries
+queryClient.invalidateQueries({ queryKey: KEY.batteries })
+
+// invalidateQueries narrow — chỉ invalidate 1 detail
+queryClient.invalidateQueries({ queryKey: QUERY_KEY.batteries.detail(id) })
+```
+
 ---
 
 ## Feature Isolation — ESLint Enforcement
@@ -192,8 +303,7 @@ Rule `no-restricted-imports` trong `eslint.config.js` để tự động block i
 
 ```js
 // eslint.config.js
-import noRestrictedImports from 'eslint-plugin-no-relative-import-paths';
-
+// no-restricted-imports là built-in ESLint rule — không cần import plugin
 export default [
   {
     rules: {
@@ -219,6 +329,91 @@ export default [
 
 ---
 
+## Error Handling
+
+### Lớp lỗi — `shared/lib/errors.ts`
+
+Axios interceptor trong `shared/lib/axios.ts` nhận response `{ isSuccess, message, listErrors }` từ backend và throw typed errors:
+
+```ts
+// shared/lib/errors.ts
+import { toast } from 'sonner';
+import type { UseFormSetError } from 'react-hook-form';
+import type { ErrorEntity } from '@/shared/types/api.types';
+
+export class HttpError extends Error {
+  constructor(public readonly statusCode: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+// EntityError — lỗi validation field (listErrors từ backend)
+export class EntityError extends HttpError {
+  constructor(public readonly errors: ErrorEntity[]) {
+    super(422, 'Validation error');
+    this.name = 'EntityError';
+  }
+}
+
+interface HandleErrorParams {
+  error: unknown;
+  setError?: UseFormSetError<any>;
+}
+
+export const handleErrorApi = ({ error, setError }: HandleErrorParams) => {
+  if (error instanceof EntityError) {
+    if (setError) {
+      error.errors.forEach(err => setError(err.field, { type: 'server', message: err.detail }));
+    }
+    return;
+  }
+  if (error instanceof HttpError) {
+    toast.error(error.message);
+    return;
+  }
+  toast.error('Có lỗi không xác định xảy ra');
+};
+```
+
+### Dùng trong mutation (non-form)
+
+```ts
+const useDeleteBattery = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => batteryService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: KEY.batteries });
+      toast.success('Đã xóa');
+    },
+    onError: (error) => handleErrorApi({ error }),
+  });
+};
+```
+
+### Dùng trong form submit (try-catch + setError)
+
+```ts
+// Component có React Hook Form + mutation
+const { handleSubmit, setError } = useForm<BatteryCreatePayload>();
+const { mutateAsync } = useCreateBattery();
+
+const onSubmit = async (data: BatteryCreatePayload) => {
+  try {
+    await mutateAsync(data);
+    toast.success('Tạo thành công');
+  } catch (error) {
+    handleErrorApi({ error, setError }); // EntityError → setError từng field, HttpError → toast
+  }
+};
+```
+
+> **Rule:** `onError` trong mutation dùng cho non-form flows (cancel, delete, approve).
+> Form submit phải dùng `try-catch` + `setError` để map lỗi về đúng field.
+
+---
+
 ## Nguyên tắc
 
 - Không gọi API trong component — luôn qua `services/` → hook TanStack Query
@@ -230,3 +425,7 @@ export default [
 - Không tạo Axios instance mới — dùng `shared/lib/axios.ts`
 - Không dùng `localStorage` để lưu token — chỉ dùng cookie qua `js-cookie`
 - Không thêm package mới nếu stack hiện tại đủ giải quyết — hỏi Leader trước
+
+**Simplicity First:** Chỉ tạo component, hook, hoặc service mà issue yêu cầu — không extract abstraction sớm, không thêm props "phòng hờ".
+
+**Surgical Changes:** Chỉ sửa files trong plan.md. Không refactor component lân cận, không đổi tên biến, không format lại file ngoài scope task.
