@@ -82,7 +82,7 @@ minio:
     requests: { cpu: 80m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 512Mi }
   initJob:
-    activeDeadlineSeconds: 180
+    activeDeadlineSeconds: 600
     ttlSecondsAfterFinished: 300
     resources:
       requests: { cpu: 20m, memory: 64Mi }
