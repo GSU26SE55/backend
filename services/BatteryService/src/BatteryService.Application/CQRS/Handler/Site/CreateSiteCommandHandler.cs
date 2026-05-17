@@ -20,14 +20,14 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
 
     public async Task<CommonResponse<SiteDto>> Handle(CreateSiteCommand request, CancellationToken cancellationToken)
     {
-        var customerExists = await _unitOfWork.CustomerAccounts
+        var customer = await _unitOfWork.CustomerAccounts
             .GetAllAsync()
-            .AnyAsync(account =>
+            .FirstOrDefaultAsync(account =>
                 account.Id == request.CustomerId &&
                 account.IsActive &&
                 !account.IsDeleted, cancellationToken);
 
-        if (!customerExists)
+        if (customer is null)
         {
             return new CommonResponse<SiteDto>
             {
@@ -80,7 +80,7 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
             IsSuccess = true,
             StatusCode = 201,
             Message = "Tạo site thành công.",
-            Data = BatteryMapper.ToDto(entity)
+            Data = BatteryMapper.ToDto(entity, customer.FullName)
         };
     }
 

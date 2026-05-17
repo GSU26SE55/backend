@@ -109,6 +109,13 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
         if (relationError is not null)
             return relationError;
 
+        var customerName = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => account.Id == entity.CustomerId && !account.IsDeleted)
+            .Select(account => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         site ??= group?.Site;
 
         entity.SerialNumber = serial;
@@ -138,7 +145,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             IsSuccess = true,
             StatusCode = 200,
             Message = "Cập nhật tài sản pin thành công.",
-            Data = BatteryMapper.ToDto(entity)
+            Data = BatteryMapper.ToDto(entity, customerName)
         };
     }
 

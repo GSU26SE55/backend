@@ -285,6 +285,40 @@ public class AlertThresholdSensorHandlerTests
             From = now.AddDays(-2),
             To = now.AddHours(1)
         }, default);
-        r.Data!.TotalItems.Should().Be(1);
+        r.Data!.Items.Should().ContainSingle();
+        r.Data.HasMore.Should().BeFalse();
+        r.Data.NextCursor.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetHistory_UsesCursorAndLimit()
+    {
+        var assetId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var newest = new SensorReading { BatteryAssetId = assetId, Time = now, Voltage = 13, Current = 0, Temperature = 27, SocPercent = 70 };
+        var middle = new SensorReading { BatteryAssetId = assetId, Time = now.AddMinutes(-1), Voltage = 12, Current = 0, Temperature = 26, SocPercent = 60 };
+        var oldest = new SensorReading { BatteryAssetId = assetId, Time = now.AddMinutes(-2), Voltage = 11, Current = 0, Temperature = 25, SocPercent = 50 };
+        var b = new MockUnitOfWorkBuilder().WithSensorReadings(newest, middle, oldest);
+
+        var firstPage = await new GetSensorReadingHistoryQueryHandler(b.Build()).Handle(new GetSensorReadingHistoryQuery
+        {
+            BatteryAssetId = assetId,
+            Limit = 1
+        }, default);
+
+        firstPage.Data!.Items.Should().ContainSingle();
+        firstPage.Data.Items[0].Time.Should().Be(newest.Time);
+        firstPage.Data.HasMore.Should().BeTrue();
+        firstPage.Data.NextCursor.Should().Be(newest.Time);
+
+        var secondPage = await new GetSensorReadingHistoryQueryHandler(b.Build()).Handle(new GetSensorReadingHistoryQuery
+        {
+            BatteryAssetId = assetId,
+            Limit = 1,
+            Cursor = firstPage.Data.NextCursor
+        }, default);
+
+        secondPage.Data!.Items.Should().ContainSingle();
+        secondPage.Data.Items[0].Time.Should().Be(middle.Time);
     }
 }

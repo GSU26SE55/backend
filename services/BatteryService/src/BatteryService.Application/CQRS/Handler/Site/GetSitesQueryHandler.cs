@@ -34,16 +34,27 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
         if (request.Status.HasValue)
             query = query.Where(site => site.Status == request.Status.Value);
 
+        var customerAccounts = _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => !account.IsDeleted);
+
         var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var pageQuery = query
             .OrderByDescending(site => site.CreatedAt)
             .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(site => new SiteDto
+            .Take(request.PageSize);
+
+        var items = await (
+            from site in pageQuery
+            join account in customerAccounts on site.CustomerId equals account.Id into accountJoin
+            from account in accountJoin.DefaultIfEmpty()
+            select new SiteDto
             {
                 Id = site.Id,
                 Name = site.Name,
                 CustomerId = site.CustomerId,
+                CustomerName = account != null ? account.FullName : string.Empty,
                 Address = site.Address,
                 Latitude = site.Latitude,
                 Longitude = site.Longitude,
@@ -52,12 +63,11 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
                 Status = site.Status,
                 ContactPersonName = site.ContactPersonName,
                 ContactPersonPhone = site.ContactPersonPhone,
-                BatteryGroupCount = site.BatteryGroups.Count(group => !group.IsDeleted),
+                BatteryGroupCount = site.BatteryGroups.Count(batteryGroup => !batteryGroup.IsDeleted),
                 BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
                 ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = site.CreatedAt
-            })
-            .ToListAsync(cancellationToken);
+            }).ToListAsync(cancellationToken);
 
         return new CommonResponse<PaginationResponse<SiteDto>>
         {

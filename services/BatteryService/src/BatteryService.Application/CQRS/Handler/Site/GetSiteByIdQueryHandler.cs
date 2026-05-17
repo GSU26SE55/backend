@@ -18,15 +18,26 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
 
     public async Task<CommonResponse<SiteDto>> Handle(GetSiteByIdQuery request, CancellationToken cancellationToken)
     {
-        var dto = await _unitOfWork.Sites
+        var customerAccounts = _unitOfWork.CustomerAccounts
             .GetAllAsync()
             .AsNoTracking()
-            .Where(site => site.Id == request.Id && !site.IsDeleted)
-            .Select(site => new SiteDto
+            .Where(account => !account.IsDeleted);
+
+        var siteQuery = _unitOfWork.Sites
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(site => site.Id == request.Id && !site.IsDeleted);
+
+        var dto = await (
+            from site in siteQuery
+            join account in customerAccounts on site.CustomerId equals account.Id into accountJoin
+            from account in accountJoin.DefaultIfEmpty()
+            select new SiteDto
             {
                 Id = site.Id,
                 Name = site.Name,
                 CustomerId = site.CustomerId,
+                CustomerName = account != null ? account.FullName : string.Empty,
                 Address = site.Address,
                 Latitude = site.Latitude,
                 Longitude = site.Longitude,
@@ -35,12 +46,11 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
                 Status = site.Status,
                 ContactPersonName = site.ContactPersonName,
                 ContactPersonPhone = site.ContactPersonPhone,
-                BatteryGroupCount = site.BatteryGroups.Count(group => !group.IsDeleted),
+                BatteryGroupCount = site.BatteryGroups.Count(batteryGroup => !batteryGroup.IsDeleted),
                 BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
                 ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = site.CreatedAt
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+            }).FirstOrDefaultAsync(cancellationToken);
 
         if (dto is null)
         {

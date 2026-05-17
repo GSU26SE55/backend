@@ -24,12 +24,26 @@
   "isSuccess": true,
   "data": {
     "items": [...],
-    "totalCount": 100,
+    "totalItems": 100,
     "pageNumber": 1,
     "pageSize": 10
   }
 }
 ```
+
+**Cursor response cho time-series:**
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "items": [...],
+    "nextCursor": "2026-05-16T08:01:40Z",
+    "hasMore": true
+  }
+}
+```
+
+> Sensor readings là dữ liệu time-series, không dùng offset pagination và không trả `totalItems` vì full count trên TimescaleDB có thể rất tốn kém.
 
 ---
 
@@ -170,6 +184,15 @@ Base route: `/api/alerts`
 | `dedupWindowEndUtc` | `DateTime` | Không | Thời điểm kết thúc cửa sổ deduplication (Sprint 3) |
 | `createdAt` | `DateTime` | Không | Thời điểm tạo record (UTC) |
 
+### Logic Deduplication (Sprint 3)
+
+- Window mặc định: `30` phút, cấu hình qua `AnomalyEngine:DedupWindowMinutes`.
+- Điều kiện merge: cùng `batteryAssetId` + cùng `anomalyType`, alert gốc đang `Open` hoặc `Acknowledged`, và `dedupWindowEndUtc > now`.
+- Khi phát hiện anomaly trùng trong window, hệ thống tạo record alert mới với `status = Merged`, `mergedIntoAlertId = id alert gốc`, `dedupWindowEndUtc = dedupWindowEndUtc của alert gốc`.
+- Alert gốc chưa bị merge vẫn có `dedupWindowEndUtc = detectedAt + dedupWindow`.
+- `GET /api/alerts` hiện trả cả `Merged` nếu không truyền filter `status`; FE nên ẩn `Merged` trong list mặc định nếu chỉ muốn hiển thị alert gốc.
+- `assetsWithActiveAlerts` trong Site dashboard chỉ tính alert `Open` và `Acknowledged`, không tính `Merged` hoặc `Resolved`.
+
 ---
 
 ### `GET /api/alerts/{id}`
@@ -215,6 +238,13 @@ Base route: `/api/alerts`
 
 **Response thành công `200`:** `isSuccess = true`
 
+**State transition:** `Open → Resolved` hợp lệ, không bắt buộc phải qua `Acknowledged`. `Acknowledged → Resolved` cũng hợp lệ.
+
+**Lỗi thường gặp:**
+- `400` — `id` là empty GUID
+- `404` — Alert không tìm thấy hoặc đã bị soft-delete
+- `409 isSuccess=false` — Alert đang ở trạng thái `Merged`; phải resolve alert gốc thay vì alert đã merge
+
 ---
 
 ## Nhóm 2 — Battery Assets (Tài sản Pin)
@@ -225,9 +255,9 @@ Base route: `/api/battery-assets`
 
 ### `GET /api/battery-assets`
 
-**Mục đích:** Danh sách battery asset với phân trang và lọc (dành cho Admin/Manager/Staff).
+**Mục đích:** Danh sách battery asset với phân trang và lọc (dành cho Admin/Manager).
 
-**Auth:** Bắt buộc (Admin/Manager/Staff)
+**Auth:** Bắt buộc (Admin/Manager)
 
 **Query params:**
 
@@ -258,6 +288,7 @@ Base route: `/api/battery-assets`
 | `batteryGroupId` | `Guid?` | Null nếu không thuộc nhóm | ID nhóm pin |
 | `batteryGroupName` | `string?` | Null nếu không thuộc nhóm | Tên nhóm pin |
 | `customerId` | `Guid` | Không | ID khách hàng sở hữu |
+| `customerName` | `string` | Không | Tên khách hàng từ `CustomerAccount` read model |
 | `installDate` | `DateTime` | Không | Ngày lắp đặt (UTC) |
 | `warrantyEndDate` | `DateTime?` | Null nếu không có bảo hành | Ngày hết bảo hành (UTC) |
 | `warrantyStatus` | `WarrantyStatusEnum` | Không | Trạng thái bảo hành (xem enum) |
@@ -271,7 +302,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `GET /api/battery-assets/my`
+### `GET /api/battery-assets/me`
 
 **Mục đích:** Danh sách battery asset của Customer đang đăng nhập.
 
@@ -287,7 +318,7 @@ Base route: `/api/battery-assets`
 
 **Mục đích:** Xem chi tiết một battery asset.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
 **Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
 
@@ -297,7 +328,7 @@ Base route: `/api/battery-assets`
 
 **Mục đích:** Lấy snapshot realtime của pin: trạng thái hiện tại + sensor reading mới nhất + số alert đang mở.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
 **Path param:** `id` — Guid của battery asset
 
@@ -345,7 +376,7 @@ Base route: `/api/battery-assets`
 
 **Mục đích:** Tạo battery asset mới (đăng ký pin vào hệ thống).
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin)
 
 **Request body:**
 
@@ -363,7 +394,7 @@ Base route: `/api/battery-assets`
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
 | `notes` | `string?` | Không | Max 1000 ký tự | Ghi chú |
 
-**Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
+**Response thành công `201`:** `CommonResponse<BatteryAssetDto>`
 
 ---
 
@@ -371,7 +402,7 @@ Base route: `/api/battery-assets`
 
 **Mục đích:** Cập nhật thông tin battery asset.
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin)
 
 **Path param:** `id` — Guid của asset
 
@@ -406,11 +437,11 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `PATCH /api/battery-assets/{id}/transfer`
+### `PUT /api/battery-assets/{id}/transfer-owner`
 
 **Mục đích:** Chuyển quyền sở hữu battery asset sang khách hàng khác.
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin)
 
 **Request body:**
 
@@ -433,7 +464,7 @@ Base route: `/api/battery-groups`
 
 **Mục đích:** Danh sách nhóm pin với phân trang và lọc.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff)
 
 **Query params:**
 
@@ -467,6 +498,8 @@ Base route: `/api/battery-groups`
 
 **Mục đích:** Xem chi tiết một nhóm pin.
 
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
 **Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
 
 ---
@@ -475,7 +508,7 @@ Base route: `/api/battery-groups`
 
 **Mục đích:** Tạo nhóm pin mới trong một site.
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin)
 
 **Request body:**
 
@@ -485,7 +518,7 @@ Base route: `/api/battery-groups`
 | `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên nhóm |
 | `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin trong nhóm |
 
-**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
+**Response thành công `201`:** `CommonResponse<BatteryGroupDto>`
 
 ---
 
@@ -493,7 +526,21 @@ Base route: `/api/battery-groups`
 
 **Mục đích:** Cập nhật thông tin nhóm pin.
 
-**Request body:** Giống POST thêm `id` từ route.
+**Auth:** Bắt buộc (Admin)
+
+**Path param:** `id` — Guid của nhóm pin.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `siteId` | `Guid` | **Bắt buộc** | Khác empty GUID | Site chứa nhóm |
+| `name` | `string` | **Bắt buộc** | Max 100 ký tự, unique trong site | Tên nhóm |
+| `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin trong nhóm |
+
+**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
+
+**Lưu ý:** Nếu group đang có asset, BE trả `409` khi caller đổi `siteId` hoặc `batteryTypeId`.
 
 ---
 
@@ -509,6 +556,8 @@ Base route: `/api/battery-groups`
 
 **Mục đích:** Khôi phục nhóm pin đã xóa.
 
+**Auth:** Bắt buộc (Admin)
+
 ---
 
 ## Nhóm 4 — Battery Types (Loại Pin)
@@ -521,7 +570,7 @@ Base route: `/api/battery-types`
 
 **Mục đích:** Danh sách loại pin với phân trang.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager)
 
 **Query params:**
 
@@ -552,6 +601,8 @@ Base route: `/api/battery-types`
 
 ### `GET /api/battery-types/{id}`
 
+**Auth:** Bắt buộc (Admin/Manager)
+
 **Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
 
 ---
@@ -572,11 +623,31 @@ Base route: `/api/battery-types`
 | `maxCycleCount` | `int` | Không (mặc định 2000) | > 0 | Số chu kỳ tối đa |
 | `description` | `string?` | Không | Max 1000 ký tự | Mô tả |
 
+**Response thành công `201`:** `CommonResponse<BatteryTypeDto>`
+
 ---
 
 ### `PUT /api/battery-types/{id}`
 
-Giống POST, thêm `id` từ route.
+**Auth:** Bắt buộc (Admin)
+
+**Path param:** `id` — Guid của loại pin.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `name` | `string` | **Bắt buộc** | Max 100 ký tự, unique | Tên model |
+| `manufacturer` | `string?` | Không | Max 100 ký tự | Nhà sản xuất |
+| `nominalCapacityAh` | `decimal` | **Bắt buộc** | > 0 | Dung lượng danh định (Ah) |
+| `nominalVoltage` | `decimal` | **Bắt buộc** | > 0 | Điện áp danh định (V) |
+| `chemistry` | `BatteryChemistryEnum` | Không | — | Loại hóa học |
+| `maxCycleCount` | `int` | Không | > 0 | Số chu kỳ tối đa |
+| `description` | `string?` | Không | Max 1000 ký tự | Mô tả |
+
+**Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
+
+**Lưu ý:** Đây là PUT full update; field optional không gửi sẽ bị reset về `null`.
 
 ---
 
@@ -584,11 +655,15 @@ Giống POST, thêm `id` từ route.
 
 Soft delete loại pin.
 
+**Auth:** Bắt buộc (Admin)
+
 ---
 
 ### `PATCH /api/battery-types/{id}/restore`
 
 Khôi phục loại pin đã xóa.
+
+**Auth:** Bắt buộc (Admin)
 
 ---
 
@@ -604,7 +679,7 @@ Base route: `/api/sensor-readings`
 
 **Mục đích:** Lấy sensor reading mới nhất của một pin.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
 **Path param:** `batteryAssetId` — Guid của battery asset
 
@@ -642,22 +717,61 @@ Base route: `/api/sensor-readings`
 
 ### `GET /api/sensor-readings/{batteryAssetId}/history`
 
-**Mục đích:** Lịch sử sensor readings của một pin trong khoảng thời gian, có phân trang theo cursor.
+**Mục đích:** Lịch sử sensor readings của một pin trong khoảng thời gian, phân trang theo cursor timestamp.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Path param:** `batteryAssetId` — Guid của battery asset
 
 **Query params:**
 
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `pageNumber` | `int` | Không | Không dùng cho time-series (dùng cursor thay thế) |
-| `pageSize` | `int` | Không (mặc định 100) | Số record mỗi trang, max khuyến nghị 1000 |
 | `from` | `DateTime?` | Không | Từ thời điểm (UTC) |
 | `to` | `DateTime?` | Không | Đến thời điểm (UTC) |
+| `limit` | `int` | Không (mặc định 100) | Số record mỗi trang, range `1–1000` |
+| `cursor` | `DateTime?` | Không | Timestamp của record cuối trang trước; BE lấy record có `time < cursor` |
 
-**Response thành công `200`:** `PaginationResponse<SensorReadingDto>`
+**Response thành công `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": {
+    "items": [
+      {
+        "time": "2026-05-16T08:00:00Z",
+        "batteryAssetId": "guid",
+        "voltage": 52.3,
+        "current": -2.5,
+        "temperature": 28.4,
+        "socPercent": 78.5,
+        "cycleCount": 234,
+        "sourceDeviceId": "DEVICE-001"
+      }
+    ],
+    "nextCursor": "2026-05-16T08:00:00Z",
+    "hasMore": true
+  }
+}
+```
 
-**Lưu ý hiệu suất:** TimescaleDB có thể chứa hàng triệu rows. Luôn truyền `from`/`to` để giới hạn scan range. FE dùng endpoint này cho hiển thị chart lịch sử, không dùng để hiển thị realtime (dùng `/latest` thay vì).
+**Chi tiết `SensorReadingHistoryResponseDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `items` | `SensorReadingDto[]` | Không | Danh sách reading, sort `time` giảm dần |
+| `nextCursor` | `DateTime?` | Null nếu hết data | Truyền lại vào query `cursor` để lấy trang tiếp theo |
+| `hasMore` | `bool` | Không | `true` nếu còn dữ liệu sau trang hiện tại |
+
+**Lỗi thường gặp:**
+- `400` — `batteryAssetId` empty, `limit` ngoài `1–1000`, hoặc `from > to`
+
+**Lưu ý hiệu suất:** TimescaleDB có thể chứa hàng triệu rows. Luôn truyền `from`/`to` để giới hạn scan range. Endpoint này không trả `totalItems`. FE dùng `hasMore`/`nextCursor` để infinite scroll; không render pagination kiểu page number.
+
+### `GET /api/sensor-readings/{batteryAssetId}/aggregate` — Planned Sprint 7
+
+Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3. FE không dùng raw `/history` để tự aggregate chart dài hạn; task này được đưa vào Sprint 7 để implement bằng TimescaleDB `time_bucket()`.
 
 ---
 
@@ -670,7 +784,7 @@ Base route: `/api/sensor-readings`
 **Request body:**
 ```json
 {
-  "readings": [
+  "items": [
     {
       "batteryAssetId": "guid",
       "time": "2026-05-16T08:00:00Z",
@@ -716,7 +830,7 @@ Base route: `/api/sensor-readings`
 |---|---|---|
 | `totalReceived` | `int` | Tổng số reading nhận được trong batch |
 | `inserted` | `int` | Số reading đã insert thành công vào TimescaleDB |
-| `skipped` | `int` | Số reading bị bỏ qua (duplicate timestamp hoặc validation fail) |
+| `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc đã xóa |
 
 ---
 
@@ -728,9 +842,9 @@ Base route: `/api/sites`
 
 ### `GET /api/sites`
 
-**Mục đích:** Danh sách site với phân trang và lọc (Admin/Manager/Staff).
+**Mục đích:** Danh sách site với phân trang và lọc (Admin/Manager).
 
-**Auth:** Bắt buộc (Admin/Manager/Staff)
+**Auth:** Bắt buộc (Admin/Manager)
 
 **Query params:**
 
@@ -752,6 +866,7 @@ Base route: `/api/sites`
 | `id` | `Guid` | Không | ID site |
 | `name` | `string` | Không | Tên site (e.g., `Nhà máy mặt trời An Giang 1`) |
 | `customerId` | `Guid` | Không | ID khách hàng sở hữu |
+| `customerName` | `string` | Không | Tên khách hàng từ `CustomerAccount` read model |
 | `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ |
 | `latitude` | `decimal?` | Null nếu không có tọa độ | Vĩ độ (-90 đến 90) |
 | `longitude` | `decimal?` | Null nếu không có tọa độ | Kinh độ (-180 đến 180) |
@@ -767,7 +882,7 @@ Base route: `/api/sites`
 
 ---
 
-### `GET /api/sites/my`
+### `GET /api/sites/me`
 
 **Mục đích:** Danh sách site của Customer đang đăng nhập.
 
@@ -781,6 +896,8 @@ Base route: `/api/sites`
 
 **Mục đích:** Xem chi tiết một site.
 
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
 **Response thành công `200`:** `CommonResponse<SiteDto>`
 
 ---
@@ -789,7 +906,7 @@ Base route: `/api/sites`
 
 **Mục đích:** Dashboard tổng hợp cho site: số pin, số alert, health score.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
 **Response thành công `200`:**
 ```json
@@ -821,7 +938,28 @@ Base route: `/api/sites`
 | `assetsWithActiveAlerts` | `int` | Không | Số pin có ít nhất 1 alert Open/Acknowledged |
 | `totalCapacityKw` | `decimal?` | Null nếu site chưa có `capacityKw` | Tổng công suất (kW) |
 | `lastAlertAt` | `DateTime?` | Null nếu chưa có alert nào | Thời điểm alert gần nhất (UTC) |
-| `healthScore` | `int` | Không | Điểm sức khỏe hệ thống 0–100 (tính từ SOH và alert) |
+| `healthScore` | `int` | Không | Điểm sức khỏe hệ thống 0–100, tính theo công thức bên dưới |
+
+**Công thức `healthScore` hiện tại (Sprint 3):**
+
+```text
+healthScore = 100
+            - ((totalAssets - activeAssets) * 5)
+            - (assetsWithActiveAlerts * 10)
+
+healthScore được clamp về [0, 100].
+Nếu site không có asset nào, healthScore = 100.
+```
+
+`assetsWithActiveAlerts` chỉ tính asset có alert `Open` hoặc `Acknowledged`, không tính `Merged` hoặc `Resolved`.
+
+**Ngưỡng màu khuyến nghị FE/Mobile:**
+
+| healthScore | Màu | Label |
+|---|---|---|
+| `80–100` | Xanh lá | Tốt |
+| `50–79` | Vàng | Cần theo dõi |
+| `0–49` | Đỏ | Nguy hiểm |
 
 ---
 
@@ -829,7 +967,7 @@ Base route: `/api/sites`
 
 **Mục đích:** Danh sách battery asset thuộc một site.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
 **Query params:**
 
@@ -848,7 +986,7 @@ Base route: `/api/sites`
 
 **Mục đích:** Tạo site mới.
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin)
 
 **Request body:**
 
@@ -871,11 +1009,15 @@ Base route: `/api/sites`
 
 Cập nhật thông tin site. Giống POST thêm `id` từ route.
 
+**Auth:** Bắt buộc (Admin)
+
 ---
 
 ### `DELETE /api/sites/{id}`
 
 Soft delete site.
+
+**Auth:** Bắt buộc (Admin)
 
 ---
 
@@ -883,17 +1025,19 @@ Soft delete site.
 
 Khôi phục site đã xóa.
 
+**Auth:** Bắt buộc (Admin)
+
 ---
 
 ## Nhóm 7 — Threshold Configs (Ngưỡng Cảnh báo)
 
-Base route: `/api/threshold-configs`
+Base route: `/api/thresholds`
 
 > ThresholdConfig định nghĩa ngưỡng cho từng `BatteryType`. Khi sensor reading vượt ngưỡng, AnomalyDetector tạo Alert tự động.
 
 ---
 
-### `GET /api/threshold-configs`
+### `GET /api/thresholds`
 
 **Mục đích:** Danh sách cấu hình ngưỡng có phân trang.
 
@@ -932,11 +1076,11 @@ Base route: `/api/threshold-configs`
 
 ---
 
-### `GET /api/threshold-configs/by-battery-type/{batteryTypeId}`
+### `GET /api/thresholds/by-type/{batteryTypeId}`
 
 **Mục đích:** Lấy cấu hình ngưỡng đang active cho một loại pin.
 
-**Auth:** Bắt buộc
+**Auth:** Bắt buộc (Admin/Manager)
 
 **Query params:**
 
@@ -948,7 +1092,7 @@ Base route: `/api/threshold-configs`
 
 ---
 
-### `PUT /api/threshold-configs`
+### `PUT /api/thresholds/by-type/{batteryTypeId}`
 
 **Mục đích:** Upsert (tạo mới hoặc cập nhật) cấu hình ngưỡng cho một loại pin.
 
@@ -958,7 +1102,6 @@ Base route: `/api/threshold-configs`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin |
 | `voltageMin` | `decimal` | **Bắt buộc** | > 0 | Điện áp tối thiểu (V) |
 | `voltageMax` | `decimal` | **Bắt buộc** | > `voltageMin` | Điện áp tối đa (V) |
 | `temperatureMax` | `decimal` | **Bắt buộc** | > `temperatureMin` | Nhiệt độ tối đa (°C) |
@@ -971,9 +1114,11 @@ Base route: `/api/threshold-configs`
 | `sohCriticalThreshold` | `decimal?` | Không | < `sohWarningThreshold` nếu cả hai truyền | SOH Critical (%) |
 | `effectiveFromUtc` | `DateTime` | Không (mặc định `UtcNow`) | — | Thời điểm có hiệu lực |
 
+**Path param:** `batteryTypeId` — Guid của loại pin cần cấu hình.
+
 **Cách hoạt động:**
 - Nếu chưa có config cho `batteryTypeId` → tạo mới với `isActive = true`
-- Nếu đã có config đang active → deactivate config cũ + tạo config mới
+- Nếu đã có config active → ghi đè các field threshold trên record đó
 
 **Response thành công `200`:** `CommonResponse<ThresholdConfigDto>`
 
@@ -987,39 +1132,39 @@ Base route: `/api/threshold-configs`
 | GET | `/api/alerts/{id}` | Chi tiết cảnh báo | Mọi role |
 | PATCH | `/api/alerts/{id}/acknowledge` | Acknowledge cảnh báo | Mọi role |
 | PATCH | `/api/alerts/{id}/resolve` | Resolve cảnh báo | Admin/Manager/Staff |
-| GET | `/api/battery-assets` | Danh sách pin (admin) | Admin/Manager/Staff |
-| GET | `/api/battery-assets/my` | Danh sách pin (customer) | Customer |
+| GET | `/api/battery-assets` | Danh sách pin (admin) | Admin/Manager |
+| GET | `/api/battery-assets/me` | Danh sách pin (customer) | Customer |
 | GET | `/api/battery-assets/{id}` | Chi tiết pin | Mọi role |
 | GET | `/api/battery-assets/{id}/realtime` | Realtime snapshot pin | Mọi role |
-| POST | `/api/battery-assets` | Tạo pin | Admin/Manager |
-| PUT | `/api/battery-assets/{id}` | Cập nhật pin | Admin/Manager |
+| POST | `/api/battery-assets` | Tạo pin | Admin |
+| PUT | `/api/battery-assets/{id}` | Cập nhật pin | Admin |
 | DELETE | `/api/battery-assets/{id}` | Xóa pin | Admin |
 | PATCH | `/api/battery-assets/{id}/restore` | Khôi phục pin | Admin |
-| PATCH | `/api/battery-assets/{id}/transfer` | Chuyển chủ sở hữu | Admin/Manager |
-| GET | `/api/battery-groups` | Danh sách nhóm pin | Mọi role |
-| GET | `/api/battery-groups/{id}` | Chi tiết nhóm pin | Mọi role |
-| POST | `/api/battery-groups` | Tạo nhóm pin | Admin/Manager |
-| PUT | `/api/battery-groups/{id}` | Cập nhật nhóm pin | Admin/Manager |
+| PUT | `/api/battery-assets/{id}/transfer-owner` | Chuyển chủ sở hữu | Admin |
+| GET | `/api/battery-groups` | Danh sách nhóm pin | Admin/Manager/Staff |
+| GET | `/api/battery-groups/{id}` | Chi tiết nhóm pin | Admin/Manager/Staff/Customer |
+| POST | `/api/battery-groups` | Tạo nhóm pin | Admin |
+| PUT | `/api/battery-groups/{id}` | Cập nhật nhóm pin | Admin |
 | DELETE | `/api/battery-groups/{id}` | Xóa nhóm pin | Admin |
 | PATCH | `/api/battery-groups/{id}/restore` | Khôi phục nhóm pin | Admin |
-| GET | `/api/battery-types` | Danh sách loại pin | Mọi role |
-| GET | `/api/battery-types/{id}` | Chi tiết loại pin | Mọi role |
+| GET | `/api/battery-types` | Danh sách loại pin | Admin/Manager |
+| GET | `/api/battery-types/{id}` | Chi tiết loại pin | Admin/Manager |
 | POST | `/api/battery-types` | Tạo loại pin | Admin |
 | PUT | `/api/battery-types/{id}` | Cập nhật loại pin | Admin |
 | DELETE | `/api/battery-types/{id}` | Xóa loại pin | Admin |
 | PATCH | `/api/battery-types/{id}/restore` | Khôi phục loại pin | Admin |
 | GET | `/api/sensor-readings/{id}/latest` | Reading mới nhất | Mọi role |
-| GET | `/api/sensor-readings/{id}/history` | Lịch sử readings | Mọi role |
+| GET | `/api/sensor-readings/{id}/history` | Lịch sử readings cursor-based | Mọi role |
 | POST | `/api/sensor-readings/batch` | Ingest batch (IoT) | API Key |
-| GET | `/api/sites` | Danh sách site | Admin/Manager/Staff |
-| GET | `/api/sites/my` | Site của customer | Customer |
+| GET | `/api/sites` | Danh sách site | Admin/Manager |
+| GET | `/api/sites/me` | Site của customer | Customer |
 | GET | `/api/sites/{id}` | Chi tiết site | Mọi role |
 | GET | `/api/sites/{id}/dashboard` | Dashboard site | Mọi role |
 | GET | `/api/sites/{siteId}/assets` | Pin tại site | Mọi role |
-| POST | `/api/sites` | Tạo site | Admin/Manager |
-| PUT | `/api/sites/{id}` | Cập nhật site | Admin/Manager |
+| POST | `/api/sites` | Tạo site | Admin |
+| PUT | `/api/sites/{id}` | Cập nhật site | Admin |
 | DELETE | `/api/sites/{id}` | Xóa site | Admin |
 | PATCH | `/api/sites/{id}/restore` | Khôi phục site | Admin |
-| GET | `/api/threshold-configs` | Danh sách ngưỡng | Admin/Manager |
-| GET | `/api/threshold-configs/by-battery-type/{id}` | Ngưỡng theo loại pin | Mọi role |
-| PUT | `/api/threshold-configs` | Upsert ngưỡng | Admin |
+| GET | `/api/thresholds` | Danh sách ngưỡng | Admin/Manager |
+| GET | `/api/thresholds/by-type/{id}` | Ngưỡng theo loại pin | Admin/Manager |
+| PUT | `/api/thresholds/by-type/{id}` | Upsert ngưỡng | Admin |

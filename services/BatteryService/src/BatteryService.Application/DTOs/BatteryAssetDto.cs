@@ -22,6 +22,8 @@ public class BatteryAssetDto
 
     public Guid CustomerId { get; set; }
 
+    public string CustomerName { get; set; } = string.Empty;
+
     public DateTime InstallDate { get; set; }
 
     public DateTime? WarrantyEndDate { get; set; }

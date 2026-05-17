@@ -10,6 +10,8 @@ public class SiteDto
 
     public Guid CustomerId { get; set; }
 
+    public string CustomerName { get; set; } = string.Empty;
+
     public string? Address { get; set; }
 
     public decimal? Latitude { get; set; }

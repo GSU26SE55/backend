@@ -160,9 +160,12 @@ public class SiteFullHandlerTests
     public async Task GetList_AppliesFilters()
     {
         var s = MakeSite();
-        var b = new MockUnitOfWorkBuilder().WithSites(s);
+        var b = new MockUnitOfWorkBuilder()
+            .WithCustomerAccounts(Customer())
+            .WithSites(s);
         var r = await new GetSitesQueryHandler(b.Build()).Handle(new GetSitesQuery { Keyword = "s1", CustomerId = Cust, Status = SiteStatusEnum.Active }, default);
         r.Data!.TotalItems.Should().Be(1);
+        r.Data.Items[0].CustomerName.Should().Be("c");
     }
 
     [Fact]
@@ -187,11 +190,14 @@ public class SiteFullHandlerTests
     public async Task GetMySites_Happy()
     {
         var s = MakeSite();
-        var b = new MockUnitOfWorkBuilder().WithSites(s);
+        var b = new MockUnitOfWorkBuilder()
+            .WithCustomerAccounts(Customer())
+            .WithSites(s);
         var c = new Mock<ICurrentUserService>();
         c.SetupGet(x => x.UserId).Returns(Cust.ToString());
         var r = await new GetMySitesQueryHandler(b.Build(), c.Object).Handle(new GetMySitesQuery(), default);
         r.Data!.TotalItems.Should().Be(1);
+        r.Data.Items[0].CustomerName.Should().Be("c");
     }
 
     [Fact]
