@@ -40,10 +40,11 @@ pipeline {
   stages {
 
     // =================================================================
-    // CI — chạy trên MỌI branch / PR
+    // CI — chỉ chạy trên dev / staging / main và PR
     // =================================================================
 
     stage('1. Format Check') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
           dotnet restore SolarBatteryMaintainance.slnx
@@ -54,12 +55,14 @@ pipeline {
     }
 
     stage('2. Build') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh 'dotnet build SolarBatteryMaintainance.slnx -c Release --no-restore'
       }
     }
 
     stage('3. Unit Tests') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
           dotnet test SolarBatteryMaintainance.slnx -c Release --no-build \
@@ -76,6 +79,7 @@ pipeline {
     }
 
     stage('4. Project Rule Checks') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         script {
           // CHANGE_TARGET là target branch khi đây là PR build (vd: dev, main)
@@ -118,6 +122,7 @@ pipeline {
     }
 
     stage('5. Security Scan (Trivy)') {
+      when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         sh '''
           trivy fs \
@@ -153,7 +158,7 @@ pipeline {
     // =================================================================
 
     stage('7. Login GHCR') {
-      when { anyOf { branch 'staging'; branch 'main' } }
+      when { branch 'staging' }
       steps {
         withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
           sh 'echo "$GHCR_TOKEN" | docker login ghcr.io -u gsu26se55 --password-stdin'
@@ -162,7 +167,7 @@ pipeline {
     }
 
     stage('8. Build Docker Images') {
-      when { anyOf { branch 'staging'; branch 'main' } }
+      when { branch 'staging' }
       steps {
         script {
           def services = [
@@ -189,7 +194,7 @@ pipeline {
     }
 
     stage('9. Push to GHCR') {
-      when { anyOf { branch 'staging'; branch 'main' } }
+      when { branch 'staging' }
       steps {
         script {
           ['apigateway', 'authservice', 'emailservice', 'smsservice', 'filestorageservice', 'batteryservice'].each { svc ->
@@ -201,11 +206,11 @@ pipeline {
     }
 
     stage('10. Deploy') {
-      when { anyOf { branch 'staging'; branch 'main' } }
+      when { branch 'staging' }
       steps {
         script {
-          def namespace  = env.BRANCH_NAME == 'main' ? 'solar-production' : 'solar-staging'
-          def valuesFile = env.BRANCH_NAME == 'main' ? 'values-prod.yaml'    : 'values-staging.yaml'
+          def namespace  = 'solar-staging'
+          def valuesFile = 'values-staging.yaml'
 
           // Step 1: Namespace + secrets
           withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
@@ -274,7 +279,7 @@ pipeline {
     }
 
     stage('11. Smoke Test') {
-      when { anyOf { branch 'staging'; branch 'main' } }
+      when { branch 'staging' }
       steps {
         retry(6) {
           sleep(time: 10, unit: 'SECONDS')
@@ -291,9 +296,8 @@ pipeline {
     failure {
       echo "Pipeline FAILED — ${env.BRANCH_NAME} — build #${env.BUILD_NUMBER}"
       script {
-        if (env.BRANCH_NAME in ['staging', 'main']) {
-          def namespace = env.BRANCH_NAME == 'main' ? 'solar-production' : 'solar-staging'
-          sh "helm rollback solar --namespace ${namespace} || true"
+        if (env.BRANCH_NAME == 'staging') {
+          sh "helm rollback solar --namespace solar-staging || true"
         }
       }
     }
