@@ -47,13 +47,44 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
         if (request.Status.HasValue)
             query = query.Where(asset => asset.Status == request.Status.Value);
 
+        var customerAccounts = _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => !account.IsDeleted);
+
         var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var pageQuery = query
             .OrderByDescending(asset => asset.CreatedAt)
             .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(asset => BatteryMapper.ToDto(asset))
-            .ToListAsync(cancellationToken);
+            .Take(request.PageSize);
+
+        var items = await (
+            from asset in pageQuery
+            join account in customerAccounts on asset.CustomerId equals account.Id into accountJoin
+            from account in accountJoin.DefaultIfEmpty()
+            select new BatteryAssetDto
+            {
+                Id = asset.Id,
+                SerialNumber = asset.SerialNumber,
+                BatteryTypeId = asset.BatteryTypeId,
+                BatteryTypeName = asset.BatteryType.Name,
+                SiteId = asset.SiteId,
+                SiteName = asset.Site != null ? asset.Site.Name : null,
+                BatteryGroupId = asset.BatteryGroupId,
+                BatteryGroupName = asset.BatteryGroup != null ? asset.BatteryGroup.Name : null,
+                CustomerId = asset.CustomerId,
+                CustomerName = account != null ? account.FullName : string.Empty,
+                InstallDate = asset.InstallDate,
+                WarrantyEndDate = asset.WarrantyEndDate,
+                WarrantyStatus = asset.WarrantyStatus,
+                Location = asset.Location,
+                Latitude = asset.Latitude,
+                Longitude = asset.Longitude,
+                Status = asset.Status,
+                Notes = asset.Notes,
+                LastSensorReadingAt = asset.LastSensorReadingAt,
+                CreatedAt = asset.CreatedAt
+            }).ToListAsync(cancellationToken);
 
         return new CommonResponse<PaginationResponse<BatteryAssetDto>>
         {

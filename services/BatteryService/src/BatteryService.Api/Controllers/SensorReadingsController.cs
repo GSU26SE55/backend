@@ -96,14 +96,16 @@ public class SensorReadingsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Query parameters:
-    /// - <c>BatteryAssetId</c>: bắt buộc, asset cần xem history.
+    /// - <c>batteryAssetId</c>: bắt buộc trên route, asset cần xem history.
     /// - <c>From</c>: tùy chọn, UTC, lọc <c>Time &gt;= From</c>.
     /// - <c>To</c>: tùy chọn, UTC, lọc <c>Time &lt;= To</c>.
-    /// - <c>PageNumber</c>, <c>PageSize</c>: phân trang (max page size 100).
+    /// - <c>Limit</c>: số record mỗi trang, mặc định 100, tối đa 1000.
+    /// - <c>Cursor</c>: timestamp của record cuối trang trước; dùng để lấy trang tiếp theo.
     ///
     /// Cách hoạt động:
     /// - Filter theo asset + time range.
     /// - Sort <c>Time</c> giảm dần (đo mới nhất lên đầu).
+    /// - Nếu có <c>Cursor</c>, chỉ lấy record có <c>Time &lt; Cursor</c>.
     /// - Projection thẳng sang <see cref="SensorReadingDto"/>.
     /// - Tận dụng TimescaleDB chunk pruning để query time range nhanh.
     ///
@@ -113,21 +115,26 @@ public class SensorReadingsController : ControllerBase
     ///
     /// Lưu ý:
     /// - Endpoint <b>chưa</b> enforce server-side rằng Customer chỉ xem được history của asset mình sở hữu - phải kiểm tra ở FE/Mobile hoặc bổ sung trong sprint sau.
-    /// - Với time range lớn (ví dụ 1 năm) và pin có tần số đo cao (mỗi 30s), TotalItems có thể rất lớn; nên giới hạn time range hợp lý hoặc dùng aggregation (sẽ làm Sprint 7).
+    /// - Không trả <c>TotalItems</c> cho time-series vì count full range rất tốn kém. FE dùng <c>HasMore</c> và <c>NextCursor</c>.
+    /// - Với time range lớn (ví dụ 1 năm) và pin có tần số đo cao (mỗi 30s), nên dùng aggregation (sẽ làm Sprint 7) thay vì raw history.
     /// </remarks>
-    /// <param name="query">Filter time range + phân trang.</param>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
+    /// <param name="query">Filter time range + cursor paging.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="SensorReadingDto"/>.</returns>
+    /// <returns><see cref="CommonResponse{T}"/> chứa items + next cursor.</returns>
     /// <response code="200">Trả history.</response>
+    /// <response code="400">Query không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role phù hợp.</response>
-    [HttpGet]
+    [HttpGet("{batteryAssetId:guid}/history")]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
-    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SensorReadingDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingHistoryResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingHistoryResponseDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetHistory([FromQuery] GetSensorReadingHistoryQuery query, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetHistory(Guid batteryAssetId, [FromQuery] GetSensorReadingHistoryQuery query, CancellationToken cancellationToken)
     {
+        query.BatteryAssetId = batteryAssetId;
         var result = await _mediator.Send(query, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
@@ -136,8 +143,8 @@ public class SensorReadingsController : ControllerBase
     /// Lấy SensorReading mới nhất của một BatteryAsset.
     /// </summary>
     /// <remarks>
-    /// Query parameter:
-    /// - <c>assetId</c>: bắt buộc, Id BatteryAsset.
+    /// Route parameter:
+    /// - <c>batteryAssetId</c>: bắt buộc, Id BatteryAsset.
     ///
     /// Cách hoạt động:
     /// - Filter <c>BatteryAssetId = assetId</c>, <c>OrderByDescending(Time).FirstOrDefault()</c>.
@@ -148,22 +155,22 @@ public class SensorReadingsController : ControllerBase
     /// - Nếu chỉ cần snapshot tổng quan (reading + alert count), dùng <c>GET /api/battery-assets/{id}/realtime</c> sẽ thuận tiện hơn.
     /// - Endpoint này phù hợp khi chỉ muốn raw reading, không cần asset metadata.
     /// </remarks>
-    /// <param name="assetId">Id BatteryAsset.</param>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SensorReadingDto"/>.</returns>
     /// <response code="200">Trả reading mới nhất.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role phù hợp.</response>
     /// <response code="404">Asset chưa có reading nào.</response>
-    [HttpGet("latest")]
+    [HttpGet("{batteryAssetId:guid}/latest")]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     [ProducesResponseType(typeof(CommonResponse<SensorReadingDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<SensorReadingDto>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetLatest([FromQuery] Guid assetId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetLatest(Guid batteryAssetId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetLatestSensorReadingQuery { BatteryAssetId = assetId }, cancellationToken);
+        var result = await _mediator.Send(new GetLatestSensorReadingQuery { BatteryAssetId = batteryAssetId }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 }

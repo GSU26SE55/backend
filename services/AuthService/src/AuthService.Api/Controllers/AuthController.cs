@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using AuthService.Api.Extensions;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;

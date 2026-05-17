@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
+using FileStorageService.Application.Authorization;
 using FileStorageService.Application.CQRS.Command;
 using FileStorageService.Application.CQRS.Handler;
 using FileStorageService.Application.CQRS.Query;
-using FileStorageService.Application.Authorization;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
 using FileStorageService.Domain.Entities;

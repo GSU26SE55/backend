@@ -22,7 +22,7 @@ public static class BatteryMapper
         };
     }
 
-    public static BatteryAssetDto ToDto(BatteryAsset asset)
+    public static BatteryAssetDto ToDto(BatteryAsset asset, string customerName = "")
     {
         return new BatteryAssetDto
         {
@@ -35,6 +35,7 @@ public static class BatteryMapper
             BatteryGroupId = asset.BatteryGroupId,
             BatteryGroupName = asset.BatteryGroup?.Name,
             CustomerId = asset.CustomerId,
+            CustomerName = customerName,
             InstallDate = asset.InstallDate,
             WarrantyEndDate = asset.WarrantyEndDate,
             WarrantyStatus = asset.WarrantyStatus,
@@ -48,13 +49,14 @@ public static class BatteryMapper
         };
     }
 
-    public static SiteDto ToDto(Site site)
+    public static SiteDto ToDto(Site site, string customerName = "")
     {
         return new SiteDto
         {
             Id = site.Id,
             Name = site.Name,
             CustomerId = site.CustomerId,
+            CustomerName = customerName,
             Address = site.Address,
             Latitude = site.Latitude,
             Longitude = site.Longitude,

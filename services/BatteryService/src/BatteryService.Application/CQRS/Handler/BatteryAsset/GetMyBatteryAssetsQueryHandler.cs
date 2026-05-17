@@ -39,6 +39,13 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
             .Include(asset => asset.BatteryGroup)
             .Where(asset => asset.CustomerId == customerId && !asset.IsDeleted);
 
+        var customerName = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(account => account.Id == customerId && !account.IsDeleted)
+            .Select(account => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(asset => asset.CreatedAt)
@@ -55,6 +62,7 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
                 BatteryGroupId = asset.BatteryGroupId,
                 BatteryGroupName = asset.BatteryGroup != null ? asset.BatteryGroup.Name : null,
                 CustomerId = asset.CustomerId,
+                CustomerName = customerName,
                 InstallDate = asset.InstallDate,
                 WarrantyEndDate = asset.WarrantyEndDate,
                 WarrantyStatus = asset.WarrantyStatus,
