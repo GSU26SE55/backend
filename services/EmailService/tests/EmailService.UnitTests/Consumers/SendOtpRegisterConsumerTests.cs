@@ -12,6 +12,7 @@ using SharedInfrastructure.Idempotency;
 
 namespace EmailService.UnitTests.Consumers;
 
+[Collection("EmailConsumerTests")]
 public class SendOtpRegisterConsumerTests : IAsyncLifetime
 {
     private ITestHarness _harness = null!;
