@@ -15,7 +15,7 @@ pipeline {
   agent any
 
   options {
-    timeout(time: 60, unit: 'MINUTES')
+    timeout(time: 120, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '10'))
     disableConcurrentBuilds()
     timestamps()
@@ -340,57 +340,131 @@ pipeline {
         script {
           def namespace = 'solar-staging'
 
-          withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
+          def dumpDeployDiagnostics = {
             sh """
-              set -eu
-              kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
+              set +e
+              echo '=== Helm status ==='
+              helm status solar --namespace ${namespace} || true
 
-              kubectl create secret generic solar-secrets \
-                --namespace ${namespace} \
-                --from-env-file=${ENV_FILE} \
-                --dry-run=client -o yaml | kubectl apply -f -
+              echo '=== Kubernetes resources ==='
+              kubectl get pods,pvc,jobs --namespace ${namespace} -o wide || true
 
-              kubectl create secret docker-registry ghcr-pull \
-                --namespace ${namespace} \
-                --docker-server=ghcr.io \
-                --docker-username=gsu26se55 \
-                --docker-password=\${GHCR_TOKEN} \
-                --dry-run=client -o yaml | kubectl apply -f -
+              echo '=== Recent events ==='
+              kubectl get events --namespace ${namespace} --sort-by=.lastTimestamp 2>/dev/null | tail -120 || true
+
+              echo '=== Describe non-ready pods ==='
+              for pod in \$(kubectl get pods --namespace ${namespace} --no-headers 2>/dev/null | awk '{split(\$2,a,"/"); if (a[1] != a[2] || \$3 != "Running") print "pod/"\$1}'); do
+                echo "--- describe \$pod ---"
+                kubectl describe "\$pod" --namespace ${namespace} || true
+              done
+
+              echo '=== Job logs ==='
+              for job in \$(kubectl get jobs --namespace ${namespace} -o name 2>/dev/null); do
+                echo "--- logs \$job ---"
+                kubectl logs "\$job" --namespace ${namespace} --all-containers --tail=120 || true
+              done
+
+              echo '=== Infra pod logs ==='
+              for pod in postgres-0 rabbitmq-0 minio-0; do
+                echo "--- logs pod/\$pod ---"
+                kubectl logs "pod/\$pod" --namespace ${namespace} --all-containers --tail=120 || true
+              done
             """
           }
 
-          sh """
-            set -eu
-            echo '=== Phase 1: deploy infra ==='
-            helm upgrade --install solar deploy/helm/solar-battery \
-              --namespace ${namespace} \
-              --create-namespace \
-              -f deploy/helm/solar-battery/values.yaml \
-              -f deploy/helm/solar-battery/values-staging.yaml \
-              -f deploy/helm/solar-battery/values-vps-small.yaml \
-              --set-string global.imageTag=${SHA} \
-              --set services.apigateway.enabled=false \
-              --set services.authservice.enabled=false \
-              --set services.emailservice.enabled=false \
-              --set services.smsservice.enabled=false \
-              --set services.filestorageservice.enabled=false \
-              --set services.batteryservice.enabled=false \
-              --wait --timeout 12m
+          try {
+            withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
+              sh """
+                set -eu
+                kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
 
-            kubectl wait job/postgres-database-init-${SHA} \
-              --for=condition=Complete \
-              --namespace ${namespace} \
-              --timeout=180s
+                kubectl create secret generic solar-secrets \
+                  --namespace ${namespace} \
+                  --from-env-file=${ENV_FILE} \
+                  --dry-run=client -o yaml | kubectl apply -f -
 
-            echo '=== Phase 2: deploy application services ==='
-            helm upgrade --install solar deploy/helm/solar-battery \
-              --namespace ${namespace} \
-              -f deploy/helm/solar-battery/values.yaml \
-              -f deploy/helm/solar-battery/values-staging.yaml \
-              -f deploy/helm/solar-battery/values-vps-small.yaml \
-              --set-string global.imageTag=${SHA} \
-              --atomic --wait --timeout 15m
-          """
+                kubectl create secret docker-registry ghcr-pull \
+                  --namespace ${namespace} \
+                  --docker-server=ghcr.io \
+                  --docker-username=gsu26se55 \
+                  --docker-password=\${GHCR_TOKEN} \
+                  --dry-run=client -o yaml | kubectl apply -f -
+              """
+            }
+
+            sh """
+              set -eu
+              print_deploy_progress() {
+                label="\$1"
+                echo "=== \${label} progress \$(date -Iseconds) ==="
+                kubectl get pods,pvc,jobs --namespace ${namespace} -o wide || true
+                echo "--- recent events ---"
+                kubectl get events --namespace ${namespace} --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
+              }
+
+              start_deploy_watcher() {
+                label="\$1"
+                (
+                  while true; do
+                    print_deploy_progress "\$label"
+                    sleep 30
+                  done
+                ) &
+                WATCHER_PID=\$!
+              }
+
+              stop_deploy_watcher() {
+                if [ -n "\${WATCHER_PID:-}" ]; then
+                  kill "\$WATCHER_PID" 2>/dev/null || true
+                  wait "\$WATCHER_PID" 2>/dev/null || true
+                  unset WATCHER_PID
+                fi
+              }
+
+              trap 'stop_deploy_watcher' EXIT
+
+              echo '=== Phase 1: deploy infra ==='
+              start_deploy_watcher 'Phase 1 infra'
+              helm upgrade --install solar deploy/helm/solar-battery \
+                --namespace ${namespace} \
+                --create-namespace \
+                -f deploy/helm/solar-battery/values.yaml \
+                -f deploy/helm/solar-battery/values-staging.yaml \
+                -f deploy/helm/solar-battery/values-vps-small.yaml \
+                --set-string global.imageTag=${SHA} \
+                --set services.apigateway.enabled=false \
+                --set services.authservice.enabled=false \
+                --set services.emailservice.enabled=false \
+                --set services.smsservice.enabled=false \
+                --set services.filestorageservice.enabled=false \
+                --set services.batteryservice.enabled=false \
+                --debug --wait --wait-for-jobs --timeout 60m
+              stop_deploy_watcher
+
+              start_deploy_watcher 'Postgres database init job'
+              kubectl wait job/postgres-database-init-${SHA} \
+                --for=condition=Complete \
+                --namespace ${namespace} \
+                --timeout=10m
+              stop_deploy_watcher
+
+              echo '=== Phase 2: deploy application services ==='
+              start_deploy_watcher 'Phase 2 application services'
+              helm upgrade --install solar deploy/helm/solar-battery \
+                --namespace ${namespace} \
+                -f deploy/helm/solar-battery/values.yaml \
+                -f deploy/helm/solar-battery/values-staging.yaml \
+                -f deploy/helm/solar-battery/values-vps-small.yaml \
+                --set-string global.imageTag=${SHA} \
+                --debug --atomic --wait --wait-for-jobs --timeout 60m
+              stop_deploy_watcher
+              trap - EXIT
+            """
+          } catch (err) {
+            echo 'Deploy failed - collecting Kubernetes diagnostics'
+            dumpDeployDiagnostics()
+            throw err
+          }
         }
       }
     }
