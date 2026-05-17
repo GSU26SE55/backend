@@ -206,31 +206,68 @@ pipeline {
         script {
           def namespace  = env.BRANCH_NAME == 'main' ? 'solar-production' : 'solar-staging'
           def valuesFile = env.BRANCH_NAME == 'main' ? 'values-prod.yaml'    : 'values-staging.yaml'
-          sh """
-            # Sync env file vào K8s Secret (idempotent)
-            kubectl create secret generic solar-secrets \
-              --namespace ${namespace} \
-              --from-env-file=${ENV_FILE} \
-              --dry-run=client -o yaml | kubectl apply -f -
 
-            # Add helm repos (idempotent)
+          // Step 1: Namespace + secrets
+          withCredentials([string(credentialsId: 'GHCR_TOKEN', variable: 'GHCR_TOKEN')]) {
+            sh """
+              kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl create secret generic solar-secrets \
+                --namespace ${namespace} \
+                --from-env-file=${ENV_FILE} \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl create secret docker-registry ghcr-pull \
+                --namespace ${namespace} \
+                --docker-server=ghcr.io \
+                --docker-username=gsu26se55 \
+                --docker-password=\${GHCR_TOKEN} \
+                --dry-run=client -o yaml | kubectl apply -f -
+            """
+          }
+
+          // Step 2: Build helm deps
+          sh """
             helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
             helm repo add grafana https://grafana.github.io/helm-charts || true
             helm repo update || true
-
-            # Build helm chart dependencies nếu có subchart
             helm dependency build deploy/helm/solar-battery || true
+          """
 
-            # Deploy — atomic: rollback tự động nếu pod không Ready trong timeout
+          // Step 3: Phase 1 — Infra only (postgres, redis, rabbitmq, minio)
+          sh """
+            echo '=== Phase 1: Deploy infra ==='
             helm upgrade --install solar deploy/helm/solar-battery \
               --namespace ${namespace} \
               --create-namespace \
               -f deploy/helm/solar-battery/values.yaml \
               -f deploy/helm/solar-battery/${valuesFile} \
               --set global.imageTag=${SHA} \
-              --atomic \
-              --wait \
-              --timeout 10m
+              --set services.apigateway.enabled=false \
+              --set services.authservice.enabled=false \
+              --set services.emailservice.enabled=false \
+              --set services.smsservice.enabled=false \
+              --set services.filestorageservice.enabled=false \
+              --set services.batteryservice.enabled=false \
+              --wait --timeout 8m
+
+            echo '=== Waiting for DB init job ==='
+            kubectl wait job \
+              -l app.kubernetes.io/component=postgres-database-init \
+              --for=condition=Complete \
+              --namespace ${namespace} \
+              --timeout=120s || echo 'DB init job already cleaned up — continuing'
+          """
+
+          // Step 4: Phase 2 — Full deploy (all services)
+          sh """
+            echo '=== Phase 2: Deploy all services ==='
+            helm upgrade --install solar deploy/helm/solar-battery \
+              --namespace ${namespace} \
+              -f deploy/helm/solar-battery/values.yaml \
+              -f deploy/helm/solar-battery/${valuesFile} \
+              --set global.imageTag=${SHA} \
+              --atomic --wait --timeout 15m
           """
         }
       }
