@@ -30,7 +30,7 @@ public class GetAllPermissionsQueryHandler : IRequestHandler<GetAllPermissionsQu
             .ThenBy(p => p.Code)
             .Select(p => new PermissionDto
             {
-                Id = p.Id.ToString(),
+                Id = p.Id,
                 Code = p.Code,
                 Module = p.Module,
                 Description = p.Description,

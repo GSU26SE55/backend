@@ -96,8 +96,8 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
             JsonContent.Create(new
             {
                 CurrentPassword = "OldPass123",
-                NewPassword = "NewPass456",
-                ConfirmPassword = "NewPass456"
+                NewPassword = "NewPass456!",
+                ConfirmPassword = "NewPass456!"
             }));
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 

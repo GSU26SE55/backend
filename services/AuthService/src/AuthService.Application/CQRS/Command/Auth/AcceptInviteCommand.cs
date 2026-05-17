@@ -1,5 +1,5 @@
-using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Auth;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -12,10 +12,6 @@ namespace AuthService.Application.CQRS.Command.Auth;
 /// </summary>
 public class AcceptInviteCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
 {
-    private static readonly Regex PasswordRegex = new(
-        @"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$",
-        RegexOptions.Compiled);
-
     public string InvitationToken { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
@@ -27,16 +23,7 @@ public class AcceptInviteCommand : IRequest<LoginResponse>, IValidatable<LoginRe
         if (string.IsNullOrWhiteSpace(InvitationToken))
             response.ListErrors.Add(new Errors { Field = "InvitationToken", Detail = "Token không được để trống." });
 
-        if (string.IsNullOrWhiteSpace(Password))
-            response.ListErrors.Add(new Errors { Field = "Password", Detail = "Mật khẩu không được để trống." });
-        else if (Password.Length > 100)
-            response.ListErrors.Add(new Errors { Field = "Password", Detail = "Mật khẩu tối đa 100 ký tự." });
-        else if (!PasswordRegex.IsMatch(Password))
-            response.ListErrors.Add(new Errors
-            {
-                Field = "Password",
-                Detail = "Mật khẩu tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt."
-            });
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Mật khẩu");
 
         if (Password != ConfirmPassword)
             response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });

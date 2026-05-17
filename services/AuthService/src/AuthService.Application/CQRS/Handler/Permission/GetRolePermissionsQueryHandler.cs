@@ -48,7 +48,7 @@ public class GetRolePermissionsQueryHandler : IRequestHandler<GetRolePermissions
                     orderby permission.Module, permission.Code
                     select new PermissionDto
                     {
-                        Id = permission.Id.ToString(),
+                        Id = permission.Id,
                         Code = permission.Code,
                         Module = permission.Module,
                         Description = permission.Description,

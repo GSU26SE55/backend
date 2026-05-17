@@ -26,6 +26,16 @@
 | `data` | `T?` | Dữ liệu trả về, `null` khi thất bại |
 | `listErrors` | `Errors[]` | Danh sách lỗi validation — mỗi phần tử có `field` và `detail` |
 
+**Lỗi HTTP chung:**
+- `400` — Validation hoặc input không hợp lệ, body vẫn theo `CommonResponse<T>` nếu lỗi đi qua application validation
+- `401` — Token thiếu/hết hạn/không hợp lệ hoặc credential sai
+- `403` — Có token nhưng không đủ quyền hoặc resource không thuộc user hiện tại
+- `404` — Không tìm thấy resource
+- `409` — Xung đột dữ liệu/nghiệp vụ
+- `423` — Account bị lockout tạm thời
+- `429` — Bị rate limit
+- `500` — Lỗi server ngoài dự kiến
+
 ---
 
 ## Enums
@@ -39,7 +49,9 @@
 | `Locked` | 2 | Bị khóa tạm thời (nhập sai mật khẩu nhiều lần) |
 | `Inactive` | 3 | Bị vô hiệu hóa bởi Admin |
 | `Suspended` | 4 | Bị đình chỉ do vi phạm chính sách |
-| `Banned` | 5 | Bị xóa/banned (soft delete cho mục đích nghiệp vụ) |
+| `Banned` | 5 | Bị cấm theo nghiệp vụ/quản trị |
+
+**Lưu ý:** `PendingVerification = 0` là exception có chủ đích vì đây là trạng thái mặc định của account mới tạo trước khi verify OTP/accept invite. FE phải xem `status = 0` là giá trị hợp lệ, không coi là missing data. User tự xóa `DELETE /api/accounts/me` dùng soft delete (`IsDeleted = true`), không dùng `Banned` để biểu diễn lý do tự xóa.
 
 ### `RefreshTokenStatus`
 
@@ -159,7 +171,9 @@ Base route: `/api/auth`
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
 | `email` | `string` | Bắt buộc | Max 256 ký tự, đúng định dạng email | Email đăng ký tài khoản |
-| `password` | `string` | Bắt buộc | 6–100 ký tự, không chứa khoảng trắng | Mật khẩu |
+| `password` | `string` | Bắt buộc | Không rỗng | Mật khẩu |
+
+**Lưu ý:** Login chỉ validate password ở mức sanity check để tránh gửi field rỗng. Đây không phải security gate; server vẫn verify password bằng hash hiện có và không áp dụng regex strong-password tại endpoint login.
 
 **Response thành công `200`:**
 ```json
@@ -179,8 +193,10 @@ Base route: `/api/auth`
 | `data.refreshToken` | `string` | Có thể null khi lỗi | Refresh token, thời hạn 7 ngày, lưu trong Redis |
 
 **Lỗi thường gặp:**
-- `400` — Dữ liệu không hợp lệ (email sai định dạng, mật khẩu thiếu ký tự)
-- `200 isSuccess=false` — Sai mật khẩu, tài khoản bị khóa/banned/chưa verify
+- `400` — Dữ liệu không hợp lệ (email sai định dạng, password rỗng)
+- `401` — Email hoặc mật khẩu không chính xác
+- `403` — Tài khoản chưa verify, inactive, suspended hoặc banned
+- `423` — Tài khoản bị khóa tạm thời do sai mật khẩu quá số lần cho phép
 
 ---
 
@@ -245,6 +261,8 @@ Base route: `/api/auth`
 }
 ```
 
+**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP tối đa 5 lần. Khi vượt quá giới hạn, account bị lock 15 phút và API trả `423 Locked`. Nếu verify thành công, account chuyển sang `Active` nhưng không trả token; FE cần gọi `POST /api/auth/login`.
+
 ---
 
 ### `POST /api/auth/resend-otp`
@@ -260,6 +278,8 @@ Base route: `/api/auth`
 | `email` | `string` | Bắt buộc | Email đã đăng ký nhưng chưa verify |
 
 **Response thành công `200`:** `isSuccess = true`, message xác nhận.
+
+**Rate limit / cooldown:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Ngoài ra resend OTP đăng ký có cooldown 60 giây dựa trên lần gửi gần nhất; gọi quá sớm trả `429`.
 
 ---
 
@@ -308,7 +328,9 @@ Base route: `/api/auth`
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `data.resetToken` | `string` | Không | Token ngắn hạn dùng để đặt lại mật khẩu (bước sau) |
-| `data.expiresInSeconds` | `int` | Không | Thời gian hết hạn của resetToken (thường 10 phút) |
+| `data.expiresInSeconds` | `int` | Không | Thời gian hết hạn của resetToken (900 giây = 15 phút) |
+
+**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP reset tối đa 5 lần. Khi đạt giới hạn, account bị lock 15 phút; các request trong thời gian lockout trả `423 Locked`.
 
 ---
 
@@ -323,6 +345,8 @@ Base route: `/api/auth`
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `email` | `string` | Bắt buộc | Email đang trong luồng reset password |
+
+**Rate limit / cooldown:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Nếu account đang trong luồng reset password, resend reset OTP có cooldown 60 giây; gọi quá sớm trả `429`. OTP reset password có TTL 10 phút. Response vẫn tránh tiết lộ email tồn tại hay không.
 
 ---
 
@@ -374,7 +398,7 @@ Base route: `/api/auth`
 
 **Mục đích:** Đăng xuất, thu hồi refresh token hiện tại. Access token vẫn còn hiệu lực đến khi hết hạn (không dùng blacklist).
 
-**Auth:** Không yêu cầu (chỉ cần refresh token)
+**Auth:** Bắt buộc — `Authorization: Bearer {accessToken}`
 
 **Request body:**
 
@@ -384,43 +408,21 @@ Base route: `/api/auth`
 
 **Response thành công `200`:** `isSuccess = true`, token đã bị revoke.
 
+**Lưu ý bảo mật:** Backend lấy `accountId` từ access token trong header và chỉ revoke refresh token thuộc account đó. Nếu refresh token thuộc account khác, API trả `403 Forbidden`. Access token đã cấp vẫn valid đến khi hết hạn vì hệ thống không dùng blacklist; FE phải clear cả access token và refresh token khỏi cookie/local state ngay khi logout thành công.
+
 ---
 
-### `GET /api/auth/google`
+### `GET /api/auth/google/login`
 
-**Mục đích:** Khởi tạo OAuth flow với Google. Trả về URL redirect đến trang đăng nhập Google.
+**Mục đích:** Khởi tạo OAuth flow với Google. Backend redirect browser sang trang đăng nhập Google.
 
 **Auth:** Không yêu cầu
 
 **Query params:** Không có
 
-**Response thành công `200`:**
-```json
-{
-  "isSuccess": true,
-  "data": "https://accounts.google.com/o/oauth2/auth?..."
-}
-```
+**Response thành công `302`:** Redirect sang Google OAuth consent screen.
 
-| Field | Mô tả |
-|---|---|
-| `data` | URL redirect đến Google OAuth consent screen |
-
----
-
-### `POST /api/auth/google/token`
-
-**Mục đích:** Đăng nhập / đăng ký bằng Google ID token (Mobile/SPA flow). Tự động tạo account nếu chưa có.
-
-**Auth:** Không yêu cầu
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `idToken` | `string` | Bắt buộc | Google ID token lấy từ Google Sign-In SDK |
-
-**Response thành công `200`:** Giống `POST /api/auth/login` — trả về `accessToken` + `refreshToken`.
+**Lưu ý bảo mật:** Redirect URI không nhận từ query/body của client. Whitelist hiện tại là redirect URI cố định trong cấu hình `GoogleOAuth:RedirectUri` hoặc `GOOGLE_REDIRECT_URI` đã đăng ký với Google; request không thể truyền URI khác. Backend đồng thời sinh cookie HttpOnly `g_oauth_state` để chống CSRF OAuth.
 
 ---
 
@@ -435,9 +437,12 @@ Base route: `/api/auth`
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `code` | `string` | Bắt buộc | Authorization code từ Google |
-| `redirectUri` | `string` | Bắt buộc | Redirect URI đã đăng ký với Google |
+| `state` | `string` | Bắt buộc | State Google trả về, phải khớp cookie `g_oauth_state` |
+| `error` | `string` | Không | Lỗi Google trả về nếu user hủy hoặc OAuth fail |
 
 **Response thành công `200`:** Giống `POST /api/auth/login`.
+
+**Lưu ý bảo mật:** Endpoint callback không accept `redirectUri` từ query param. Backend exchange code bằng redirect URI cố định trong whitelist cấu hình; request không thể override redirect URI nên không mở hướng open redirect theo input từ FE.
 
 ---
 
@@ -463,6 +468,12 @@ Base route: `/api/auth`
 
 Base route: `/api/accounts`
 Header: `Authorization: Bearer {accessToken}`
+
+**Lỗi thường gặp cho nhóm này:**
+- `401` — Token không hợp lệ, hết hạn hoặc JWT thiếu account id
+- `403` — Route id không thuộc account hiện tại hoặc không đủ quyền
+- `404` — Account/session/resource không tồn tại
+- `409` — Dữ liệu cập nhật xung đột với account khác hoặc rule nghiệp vụ
 
 ---
 
@@ -576,7 +587,7 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-### `PUT /api/accounts/me/avatar`
+### `POST /api/auth/me/avatar`
 
 **Mục đích:** Đặt avatar bằng `fileId` đã upload lên FileStorageService.
 
@@ -586,15 +597,17 @@ Header: `Authorization: Bearer {accessToken}`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `fileId` | `Guid` | Bắt buộc | FileId từ FileStorageService (phải là file type `Avatar`) |
+| `avatarFileId` | `Guid` | Bắt buộc | FileId từ FileStorageService (phải là file type `Avatar`) |
 
 **Response thành công `200`:** `isSuccess = true`.
 
 **Lưu ý:** Sau khi set avatar, `displayAvatarUrl` của account sẽ trỏ về `/api/files/{fileId}/download`.
 
+**Lưu ý contract:** Avatar upload thuộc controller `AuthProfilesController`, base route thật là `/api/auth`. Field request body hiện tại là `avatarFileId`; FE upload file qua FileStorageService trước, sau đó gọi endpoint này để gắn file vào profile. FE luôn dùng `displayAvatarUrl` để render avatar; `avatarUrl` là legacy/direct URL, không phải field ưu tiên hiển thị.
+
 ---
 
-### `POST /api/accounts/me/change-password`
+### `PATCH /api/accounts/me/password`
 
 **Mục đích:** Đổi mật khẩu khi đang đăng nhập.
 
@@ -605,10 +618,12 @@ Header: `Authorization: Bearer {accessToken}`
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
 | `currentPassword` | `string` | Bắt buộc | Không rỗng | Mật khẩu hiện tại |
-| `newPassword` | `string` | Bắt buộc | 6–100 ký tự, không chứa khoảng trắng | Mật khẩu mới |
+| `newPassword` | `string` | Bắt buộc | 8–100 ký tự, có chữ hoa/thường/số/ký tự đặc biệt | Mật khẩu mới |
 | `confirmPassword` | `string` | Bắt buộc | Phải trùng với `newPassword` | Xác nhận mật khẩu mới |
 
 **Response thành công `200`:** `isSuccess = true`.
+
+**Lưu ý bảo mật:** Rule mật khẩu mới đồng bộ với register/reset/accept-invite. Khi đổi mật khẩu thành công, tất cả refresh token của account bị revoke. Access token hiện tại vẫn valid đến khi hết hạn; FE phải clear token và redirect về login sau khi nhận response thành công.
 
 ---
 
@@ -673,7 +688,7 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-### `POST /api/accounts/me/enable-2fa`
+### `POST /api/accounts/me/2fa/enable`
 
 **Mục đích:** Bật xác thực hai yếu tố (TOTP). Trả về secret và URI để quét QR code với Google Authenticator.
 
@@ -697,9 +712,11 @@ Header: `Authorization: Bearer {accessToken}`
 | `data.secret` | `string` | Secret key (Base32) để nhập thủ công vào app authenticator |
 | `data.otpAuthUri` | `string` | URI để tạo QR code, quét bằng Google Authenticator / Authy |
 
+**Lưu ý:** 2FA được kích hoạt ngay sau khi endpoint này thành công. Hiện backend chưa có bước confirm TOTP riêng; user cần lưu/scan secret trước khi rời màn hình.
+
 ---
 
-### `POST /api/accounts/me/disable-2fa`
+### `POST /api/accounts/me/2fa/disable`
 
 **Mục đích:** Tắt xác thực hai yếu tố.
 
@@ -727,7 +744,7 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-### `DELETE /api/accounts/me/unlink-google`
+### `POST /api/accounts/me/unlink-google`
 
 **Mục đích:** Hủy liên kết với tài khoản Google.
 
@@ -747,15 +764,21 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Response thành công `200`:** `isSuccess = true`.
 
+**Session sau khi deactivate:** Tất cả refresh token của tài khoản bị revoke ngay lập tức. Access token hiện tại vẫn valid đến khi hết hạn; FE phải clear token và redirect về login ngay sau khi gọi thành công.
+
 ---
 
 ### `DELETE /api/accounts/me`
 
-**Mục đích:** Tự xóa tài khoản của mình (soft delete). Tài khoản chuyển sang `Banned`.
+**Mục đích:** Tự xóa tài khoản của mình theo cơ chế soft delete (`IsDeleted = true`).
 
 **Auth:** Bắt buộc (mọi role)
 
 **Response thành công `200`:** `isSuccess = true`.
+
+**Session sau khi delete:** Tất cả refresh token của tài khoản bị revoke ngay lập tức. Access token hiện tại vẫn valid đến khi hết hạn; FE phải clear token và redirect về login ngay sau khi gọi thành công.
+
+**Lưu ý trạng thái:** User tự xóa không nên được FE hiển thị như "bị banned". `Banned` là trạng thái quản trị/nghiệp vụ riêng; self-delete phân biệt bằng context endpoint `DELETE /api/accounts/me` và soft-delete flag ở backend.
 
 ---
 
@@ -821,80 +844,127 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-## Nhóm 3 — Profile Staff & Auth Profile
+## Nhóm 3 — Auth Profile & Staff Assignment
 
-### `GET /api/auth-profiles/me`
+Base route self profile: `/api/auth`
+Base route staff assignment read: `/api/staff`
+Base route admin staff profile: `/api/admin/staff`
+Header: `Authorization: Bearer {accessToken}`
 
-**Mục đích:** Lấy thông tin profile mở rộng (AccountProfile) của tài khoản hiện tại.
+**Lưu ý:** Các route `/api/auth-profiles/*` và `/api/staff-profiles/*` không phải route hiện tại trong controller. FE dùng các route bên dưới để tránh 404.
+
+---
+
+### `GET /api/auth/me`
+
+**Mục đích:** Lấy profile tổng hợp của tài khoản hiện tại, cùng shape với `GET /api/accounts/me`.
 
 **Auth:** Bắt buộc (mọi role)
 
-**Response thành công `200`:** `data` là `AccountProfileDto` (xem phần GET `/api/accounts/me`).
+**Response thành công `200`:** `data` là `AccountDto`, gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
 
 ---
 
-### `PUT /api/auth-profiles/me`
+### `PUT /api/auth/me/profile`
 
-**Mục đích:** Cập nhật profile mở rộng (địa chỉ, ngày sinh, timezone).
+**Mục đích:** Cập nhật profile mở rộng của user hiện tại. Endpoint không dùng để đổi email, mật khẩu, role, status hoặc dữ liệu staff-specific.
 
 **Auth:** Bắt buộc (mọi role)
-
-**Request body:** Các field của `AccountProfileDto` (không bao gồm avatar — dùng endpoint riêng).
-
----
-
-### `GET /api/staff-profiles/me`
-
-**Mục đích:** Lấy thông tin staff profile của bản thân (chỉ Staff).
-
-**Auth:** Bắt buộc (Role Staff)
-
-**Response thành công `200`:** `data` là `StaffProfileDto`.
-
----
-
-### `PUT /api/staff-profiles/me`
-
-**Mục đích:** Cập nhật staff profile của bản thân (availability, notes).
-
-**Auth:** Bắt buộc (Role Staff)
 
 **Request body:**
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `isAvailable` | `bool` | Không | — | Có sẵn sàng nhận ticket không |
-| `notes` | `string?` | Không | Max 500 ký tự | Ghi chú |
+| `fullName` | `string` | Bắt buộc | Không rỗng, max 150 ký tự | Họ và tên |
+| `phoneNumber` | `string?` | Tùy chọn | Max 20 ký tự | Số điện thoại |
+| `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
+| `birthDate` | `DateTime?` | Tùy chọn | Không ở tương lai, năm >= 1900 | Ngày sinh |
+| `timeZone` | `string?` | Tùy chọn | Max 100 ký tự | Timezone, ví dụ `Asia/Ho_Chi_Minh` |
+
+**Response thành công `200`:** `data` là `AccountDto` mới sau khi cập nhật.
+
+**Lỗi thường gặp:**
+- `400` — Dữ liệu không hợp lệ
+- `401` — Token không hợp lệ hoặc hết hạn
+- `404` — Account trong token không tồn tại
+- `409` — Phone hoặc dữ liệu có ràng buộc bị trùng theo rule nghiệp vụ
 
 ---
 
-### `POST /api/staff-profiles/me/skills`
+### `POST /api/auth/me/avatar`
 
-**Mục đích:** Thêm kỹ năng vào profile Staff.
+**Mục đích:** Gắn avatar upload vào `AccountProfile`.
 
-**Auth:** Bắt buộc (Role Staff)
+**Auth:** Bắt buộc (mọi role)
 
 **Request body:**
 
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `skillCode` | `string` | Bắt buộc | Mã kỹ năng |
-| `skillLevel` | `int` | Bắt buộc | Mức độ kỹ năng (1–5) |
-| `certifiedUntil` | `DateTime?` | Không | Ngày hết hạn chứng chỉ |
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `avatarFileId` | `Guid` | Bắt buộc | Guid khác rỗng | FileId từ FileStorageService |
+
+**Response thành công `200`:** `data` là `AccountDto` mới, FE render avatar bằng `displayAvatarUrl`.
 
 ---
 
-### `DELETE /api/staff-profiles/me/skills/{skillCode}`
+### `GET /api/staff`
 
-**Mục đích:** Xóa kỹ năng khỏi profile Staff.
+**Mục đích:** Admin/Manager lấy danh sách staff phục vụ màn hình phân công ticket.
 
-**Auth:** Bắt buộc (Role Staff)
+**Auth:** Bắt buộc (Role Admin hoặc Manager)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `skill` | `string?` | Không | Lọc staff có skill code tương ứng |
+
+**Response thành công `200`:** `List<StaffAssignmentProfileDto>`.
+
+**Chi tiết `StaffAssignmentProfileDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `accountId` | `Guid` | Không | ID tài khoản staff |
+| `email` | `string` | Không | Email staff |
+| `fullName` | `string` | Không | Họ tên staff |
+| `phoneNumber` | `string?` | Null nếu không có | Số điện thoại |
+| `department` | `string?` | Null nếu chưa gán | Phòng ban |
+| `maxConcurrentTickets` | `int` | Không | Số ticket tối đa |
+| `isAvailable` | `bool` | Không | Đang sẵn sàng không |
+| `displayAvatarUrl` | `string?` | Null nếu không có avatar | URL avatar FE nên render |
+| `skills` | `StaffSkillDto[]` | Không | Danh sách kỹ năng |
+
+---
+
+### `GET /api/staff/{id}/assignment-profile`
+
+**Mục đích:** Admin/Manager xem hồ sơ phân công chi tiết của một staff.
+
+**Auth:** Bắt buộc (Role Admin hoặc Manager)
+
+**Path param:** `id` — AccountId của staff.
+
+**Lỗi thường gặp:**
+- `400` — `id` không hợp lệ
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin/Manager
+- `404` — Account không có staff profile tương ứng
 
 ---
 
 ## Nhóm 4 — Quản lý Session
 
 Base route: `/api/sessions`
+Header: `Authorization: Bearer {accessToken}`
+
+**Session limit:** Mặc định tối đa 5 session active/account (`Session:MaxConcurrentSessions`). Khi vượt quá giới hạn, session active cũ nhất bị revoke tự động với audit action `SessionLimitExceededOldestRevoked`. Nếu cấu hình `MaxConcurrentSessions <= 0`, giới hạn này bị tắt.
+
+**Lỗi thường gặp cho nhóm này:**
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Session không thuộc account hiện tại
+- `404` — Không tìm thấy session
+- `200 isSuccess=false` — Session đã không còn active hoặc không có session nào cần revoke
 
 ---
 
@@ -958,9 +1028,11 @@ Base route: `/api/sessions`
 
 **Response thành công `200`:** `data` là số session đã revoke.
 
+**Lưu ý bảo mật:** Backend kiểm tra `sessionId` phải thuộc account hiện tại. Nếu session thuộc account khác, API trả `403 Forbidden`.
+
 ---
 
-### `DELETE /api/sessions/me/all`
+### `POST /api/sessions/revoke-all`
 
 **Mục đích:** Thu hồi tất cả session, có thể giữ lại session hiện tại.
 
@@ -973,12 +1045,23 @@ Base route: `/api/sessions`
 | `exceptCurrent` | `bool` | Mặc định `true` — giữ session hiện tại, chỉ logout các thiết bị khác |
 | `currentRefreshToken` | `string?` | Refresh token hiện tại (dùng khi `exceptCurrent = true`) |
 
+**Response thành công `200`:** `data` là số session đã revoke.
+
+**Lưu ý:** Chỉ refresh token bị revoke. Access token đã cấp vẫn valid đến khi hết TTL.
+
 ---
 
 ## Nhóm 5 — Admin: Quản lý Tài khoản
 
 Base route: `/api/admin/accounts`
 **Auth:** Bắt buộc (Role Admin hoặc Manager, tùy endpoint)
+
+**Lỗi thường gặp cho nhóm này:**
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không đủ quyền theo role của endpoint
+- `404` — Không tìm thấy account, role hoặc session
+- `409` — Email/phone/unique field bị trùng hoặc trạng thái nghiệp vụ xung đột
+- `200 isSuccess=false` — Thao tác hợp lệ về HTTP nhưng không thay đổi dữ liệu theo rule nghiệp vụ
 
 ---
 
@@ -1047,7 +1130,8 @@ Base route: `/api/admin/accounts`
 |---|---|---|---|
 | `email` | `string` | Bắt buộc | Email cần mời |
 | `fullName` | `string` | Bắt buộc | Họ tên |
-| `roleIds` | `Guid[]?` | Không | Role gán sẵn |
+| `phoneNumber` | `string?` | Không | Số điện thoại |
+| `roleIds` | `Guid[]` | Bắt buộc | Role gán sẵn, ít nhất 1 role |
 
 **Luồng:** Sau khi invite, user nhận email chứa link với `invitationToken`. User truy cập link và gọi `POST /api/auth/accept-invite` để đặt mật khẩu và kích hoạt.
 
@@ -1059,7 +1143,17 @@ Base route: `/api/admin/accounts`
 
 **Auth:** Admin hoặc Manager
 
-**Request body:** Tương tự `PUT /api/accounts/me` nhưng Admin có thể sửa thêm một số field.
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `fullName` | `string` | Bắt buộc | Không rỗng, max 150 ký tự | Họ và tên |
+| `phoneNumber` | `string?` | Tùy chọn | Max 20 ký tự | Số điện thoại |
+| `avatarUrl` | `string?` | Tùy chọn | Max 500 ký tự | URL avatar legacy/direct |
+| `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai | Ngày sinh |
+| `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
+
+**Lưu ý:** Endpoint này chỉ sửa profile/account fields ở trên. Admin không sửa role/status/emailConfirmed trong body này; role dùng endpoint `/roles`, status dùng `PATCH /status`, session dùng `/sessions/*`.
 
 ---
 
@@ -1075,6 +1169,8 @@ Base route: `/api/admin/accounts`
 |---|---|---|---|
 | `status` | `AccountStatusEnum` | Bắt buộc | Trạng thái mới |
 | `reason` | `string?` | Không | Lý do thay đổi (ghi vào audit log) |
+
+**Status transition hiện tại:** Backend cho phép chuyển giữa các giá trị enum hợp lệ. Nếu chuyển sang `Inactive`, `Suspended`, `Banned` hoặc `Locked`, toàn bộ refresh token active của account bị revoke. Nếu chuyển sang `Active`, backend reset failed login attempts và lockout. Nếu cần matrix chặt hơn cho production, BE cần bổ sung rule ở `ChangeAccountStatusCommandHandler`.
 
 ---
 
@@ -1094,9 +1190,9 @@ Base route: `/api/admin/accounts`
 
 ---
 
-### `POST /api/admin/accounts/{id}/assign-roles`
+### `POST /api/admin/accounts/{id}/roles`
 
-**Mục đích:** Gán danh sách role cho tài khoản (replace semantics — thay toàn bộ).
+**Mục đích:** Gán thêm hoặc cập nhật danh sách role cho tài khoản.
 
 **Auth:** Admin
 
@@ -1104,7 +1200,10 @@ Base route: `/api/admin/accounts`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `roleIds` | `Guid[]` | Bắt buộc | Danh sách role ID mới |
+| `roleIds` | `Guid[]` | Bắt buộc | Danh sách role ID cần gán hoặc cập nhật |
+| `expiredAt` | `DateTime?` | Không | Thời điểm hết hạn chung cho các role được gán |
+
+**Lưu ý semantics:** Endpoint này là additive/upsert, không phải replace toàn bộ. Role hiện có nhưng không nằm trong request vẫn được giữ nguyên; muốn thu hồi role, FE gọi `DELETE /api/admin/accounts/{id}/roles/{roleId}`.
 
 ---
 
@@ -1116,7 +1215,7 @@ Base route: `/api/admin/accounts`
 
 ---
 
-### `POST /api/admin/accounts/{id}/assign-role-temporary`
+### `POST /api/admin/accounts/{id}/roles/temporary`
 
 **Mục đích:** Gán role tạm thời cho tài khoản trong khoảng thời gian xác định.
 
@@ -1143,7 +1242,7 @@ Base route: `/api/admin/accounts`
 
 ---
 
-### `DELETE /api/admin/accounts/{id}/sessions`
+### `POST /api/admin/accounts/{id}/sessions/revoke-all`
 
 **Mục đích:** Admin thu hồi tất cả session của tài khoản (force logout).
 
@@ -1169,19 +1268,16 @@ Base route: `/api/admin/accounts`
 
 ## Nhóm 6 — Admin: Staff Profiles
 
-### `GET /api/admin/staff-profiles/{accountId}`
-
-**Mục đích:** Admin xem staff profile của một nhân viên.
-
-**Auth:** Admin hoặc Manager
+Base route: `/api/admin/staff`
+**Auth:** Admin
 
 ---
 
-### `PUT /api/admin/staff-profiles/{accountId}`
+### `PUT /api/admin/staff/{id}/profile`
 
-**Mục đích:** Admin cập nhật staff profile (employee code, department, max tickets).
+**Mục đích:** Admin tạo hoặc cập nhật staff profile cho một account.
 
-**Auth:** Admin hoặc Manager
+**Auth:** Admin
 
 **Request body:**
 
@@ -1189,47 +1285,42 @@ Base route: `/api/admin/accounts`
 |---|---|---|
 | `employeeCode` | `string?` | Mã nhân viên |
 | `department` | `string?` | Phòng ban |
-| `maxConcurrentTickets` | `int` | Số ticket tối đa đồng thời |
+| `maxConcurrentTickets` | `int` | Số ticket tối đa đồng thời, 1–50 |
 | `isAvailable` | `bool` | Trạng thái sẵn sàng |
 | `notes` | `string?` | Ghi chú |
 
 ---
 
-### `GET /api/admin/accounts/staff`
+### `POST /api/admin/staff/{id}/skills`
 
-**Mục đích:** Lấy danh sách staff kèm profile assignment (dùng cho dropdown giao việc).
+**Mục đích:** Admin thêm, cập nhật hoặc khôi phục kỹ năng của một staff.
 
-**Auth:** Admin hoặc Manager
+**Auth:** Admin
 
-**Query params:**
+**Request body:**
 
-| Param | Type | Mô tả |
-|---|---|---|
-| `skill` | `string?` | Lọc theo kỹ năng cụ thể |
-
-**Response:** `List<StaffAssignmentProfileDto>`
-
-**Chi tiết `StaffAssignmentProfileDto`:**
-
-| Field | Type | Nullable | Mô tả |
+| Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `accountId` | `Guid` | Không | ID tài khoản staff |
-| `email` | `string` | Không | Email staff |
-| `fullName` | `string` | Không | Họ tên staff |
-| `phoneNumber` | `string?` | Null nếu không có | Số điện thoại |
-| `department` | `string?` | Null nếu chưa gán | Phòng ban |
-| `maxConcurrentTickets` | `int` | Không | Số ticket tối đa |
-| `isAvailable` | `bool` | Không | Đang sẵn sàng không |
-| `displayAvatarUrl` | `string?` | Null nếu không có avatar | URL avatar |
-| `skills` | `StaffSkillDto[]` | Không | Danh sách kỹ năng |
+| `skillCode` | `string` | Bắt buộc | Mã kỹ năng, max 64 ký tự |
+| `skillLevel` | `int` | Bắt buộc | Mức độ kỹ năng, 1–5 |
+| `certifiedUntil` | `DateTime?` | Không | Ngày hết hạn chứng chỉ |
 
 ---
 
-### `GET /api/admin/accounts/staff/{staffAccountId}/assignment-profile`
+### `DELETE /api/admin/staff/{id}/skills/{skillCode}`
 
-**Mục đích:** Lấy thông tin chi tiết staff phục vụ bài toán giao ticket (assignment).
+**Mục đích:** Admin xóa mềm một kỹ năng khỏi staff profile.
 
-**Auth:** Admin hoặc Manager
+**Auth:** Admin
+
+**Lỗi thường gặp:**
+- `400` — `id`, `skillCode` hoặc body không hợp lệ
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin
+- `404` — Không tìm thấy account/staff skill
+- `409` — `employeeCode` trùng với staff khác
+
+**Lưu ý route:** Staff assignment read nằm ở `/api/staff` và `/api/staff/{id}/assignment-profile`, không nằm dưới `/api/admin/accounts/staff`. Các route dynamic trong admin accounts đều có constraint `{id:guid}`, nên literal route như `invite` không bị match nhầm làm id.
 
 ---
 
@@ -1343,7 +1434,7 @@ Base route: `/api/admin/permissions`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `string` | Không | ID permission |
+| `id` | `Guid` | Không | ID permission |
 | `code` | `string` | Không | Code dạng `module.action` (e.g., `battery.view`) |
 | `module` | `string` | Không | Module thuộc về |
 | `description` | `string?` | Null nếu không có | Mô tả |
@@ -1370,6 +1461,8 @@ Base route: `/api/admin/permissions`
 |---|---|---|---|
 | `permissionIds` | `Guid[]` | Bắt buộc | Danh sách ID permission cần gán |
 | `allowSystemRole` | `bool` | Không (mặc định `false`) | Cho phép modify system role |
+
+**Cảnh báo replace semantics:** Gửi `permissionIds: []` sẽ xóa toàn bộ permission khỏi role đó. FE phải fetch danh sách hiện tại, merge với thay đổi, rồi gửi toàn bộ list mong muốn.
 
 ---
 

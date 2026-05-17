@@ -235,7 +235,8 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
             await TestDataSeeder.SeedActiveAccountAsync(db, "logout@example.com", "MyPass123",
                 roleId: TestDataSeeder.CustomerRoleId);
 
-        var (_, refresh) = await TestDataSeeder.LoginAsync(_client, "logout@example.com", "MyPass123");
+        var (access, refresh) = await TestDataSeeder.LoginAsync(_client, "logout@example.com", "MyPass123");
+        _client.WithBearer(access);
 
         var resp = await _client.PostAsJsonAsync("/api/auth/logout", new { RefreshToken = refresh });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -244,5 +245,20 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         var rt = await db2.RefreshTokens.FirstAsync(r => r.Token == refresh);
         rt.Status.Should().Be(RefreshTokenStatus.Revoked);
         rt.RevokedReason.Should().Be("UserLogout");
+    }
+
+    [Fact]
+    public async Task Logout_WithoutBearer_Returns401()
+    {
+        using (var db = _factory.CreateDbContext())
+            await TestDataSeeder.SeedActiveAccountAsync(db, "logout-no-bearer@example.com", "MyPass123",
+                roleId: TestDataSeeder.CustomerRoleId);
+
+        var (_, refresh) = await TestDataSeeder.LoginAsync(_client, "logout-no-bearer@example.com", "MyPass123");
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        var resp = await _client.PostAsJsonAsync("/api/auth/logout", new { RefreshToken = refresh });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -31,15 +32,7 @@ public class CreateAccountCommand : IRequest<AccountActionResponse>, IValidatabl
         else if (!EmailRegex.IsMatch(Email.Trim()))
             response.ListErrors.Add(new Errors { Field = "Email", Detail = "Email không đúng định dạng." });
 
-        if (string.IsNullOrWhiteSpace(Password))
-            response.ListErrors.Add(new Errors { Field = "Password", Detail = "Mật khẩu không được để trống." });
-        else
-        {
-            if (Password.Length < 6)
-                response.ListErrors.Add(new Errors { Field = "Password", Detail = "Mật khẩu tối thiểu 6 ký tự." });
-            if (Password.Length > 100)
-                response.ListErrors.Add(new Errors { Field = "Password", Detail = "Mật khẩu tối đa 100 ký tự." });
-        }
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Mật khẩu");
 
         if (string.IsNullOrWhiteSpace(FullName))
             response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Họ tên không được để trống." });

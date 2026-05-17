@@ -138,18 +138,13 @@ public class LoginCommandValidationTests
         r.ListErrors.Should().Contain(e => e.Field == "Password");
     }
 
-    [Fact]
-    public async Task Password_TooShort_Fails()
+    [Theory]
+    [InlineData("abc12")]
+    [InlineData("abc 123")]
+    public async Task Password_NonEmptyOnly_Passes(string password)
     {
-        var r = await new LoginCommand { Email = "u@e.com", Password = "abc12" }.ValidateAsync();
-        r.ListErrors.Should().Contain(e => e.Field == "Password");
-    }
-
-    [Fact]
-    public async Task Password_HasWhitespace_Fails()
-    {
-        var r = await new LoginCommand { Email = "u@e.com", Password = "abc 123" }.ValidateAsync();
-        r.ListErrors.Should().Contain(e => e.Field == "Password");
+        var r = await new LoginCommand { Email = "u@e.com", Password = password }.ValidateAsync();
+        r.IsSuccess.Should().BeTrue();
     }
 }
 
@@ -279,11 +274,20 @@ public class LogoutCommandValidationTests
 {
     [Fact]
     public async Task Valid_Passes() =>
-        (await new LogoutCommand { RefreshToken = "tok" }.ValidateAsync()).IsSuccess.Should().BeTrue();
+        (await new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "tok" }.ValidateAsync()).IsSuccess.Should().BeTrue();
 
     [Fact]
     public async Task Empty_Fails() =>
-        (await new LogoutCommand { RefreshToken = "" }.ValidateAsync()).IsSuccess.Should().BeFalse();
+        (await new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "" }.ValidateAsync()).IsSuccess.Should().BeFalse();
+
+    [Fact]
+    public async Task MissingAccountId_Fails401()
+    {
+        var result = await new LogoutCommand { RefreshToken = "tok" }.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(401);
+    }
 }
 
 public class GoogleAuthCommandValidationTests

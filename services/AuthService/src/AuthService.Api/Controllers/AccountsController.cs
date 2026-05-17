@@ -168,7 +168,8 @@ public class AccountsController : ControllerBase
     ///
     /// Body request:
     /// - <c>CurrentPassword</c>: mật khẩu hiện tại, bắt buộc.
-    /// - <c>NewPassword</c>: mật khẩu mới, bắt buộc, từ 6 đến 100 ký tự và không chứa khoảng trắng.
+    /// - <c>NewPassword</c>: mật khẩu mới, bắt buộc, 8-100 ký tự và phải có chữ hoa,
+    ///   chữ thường, số, ký tự đặc biệt.
     /// - <c>ConfirmPassword</c>: phải khớp với <c>NewPassword</c>.
     ///
     /// Cách hoạt động:
@@ -296,7 +297,7 @@ public class AccountsController : ControllerBase
     ///
     /// Lưu ý:
     /// - Secret cần được bảo vệ như thông tin nhạy cảm.
-    /// - Tùy logic handler, trạng thái 2FA có thể được bật ngay hoặc cần thêm bước xác nhận mã TOTP đầu tiên.
+    /// - 2FA được bật ngay sau khi endpoint này thành công. Hiện chưa có bước confirm TOTP riêng.
     ///
     /// Idempotency:
     /// - Client NÊN gửi header <c>Idempotency-Key</c> (UUID v4) để chống bật 2FA trùng (sinh secret mới). Cache 24h.
