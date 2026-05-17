@@ -6,6 +6,7 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 
@@ -41,6 +42,7 @@ public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
             }).Build();
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton(_renderer.Object);
         services.AddSingleton(_inbox.Object);
