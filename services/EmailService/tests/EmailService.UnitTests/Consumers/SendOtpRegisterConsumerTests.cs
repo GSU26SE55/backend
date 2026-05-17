@@ -135,7 +135,8 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
-            if (consumerHarness.Consumed.Select<SendOtpRegisterEvent>().Count() >= 5) break;
+            if (consumerHarness.Consumed.Select<SendOtpRegisterEvent>().Count() >= 5)
+                break;
             await Task.Delay(100);
         }
 
