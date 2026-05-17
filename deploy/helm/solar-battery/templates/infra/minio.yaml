@@ -65,6 +65,58 @@ spec:
   ports:
   - { name: s3,      port: 9000, targetPort: s3 }
   - { name: console, port: 9001, targetPort: console }
+{{- if .Values.minio.ingress.enabled }}
+---
+# MinIO S3 API — files.* dùng cho ObjectStorage__PublicBaseUrl (client download)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-s3
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.tlsIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts: ["files.{{ .Values.global.domain }}"]
+    secretName: minio-s3-tls
+  rules:
+  - host: "files.{{ .Values.global.domain }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port: { name: s3 }
+---
+# MinIO Console — minio.* dùng để quản lý bucket qua UI
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-console
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.tlsIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts: ["minio.{{ .Values.global.domain }}"]
+    secretName: minio-console-tls
+  rules:
+  - host: "minio.{{ .Values.global.domain }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port: { name: console }
+{{- end }}
 ---
 # Init Job — tạo bucket + set anonymous read policy lần đầu (idempotent).
 apiVersion: batch/v1

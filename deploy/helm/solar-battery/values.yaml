@@ -8,7 +8,7 @@
 # --------------------------------------------------------------------
 global:
   # Image registry. Jenkins push image với tag = git SHA về đây.
-  imageRegistry: ghcr.io/your-org
+  imageRegistry: ghcr.io/gsu26se55
 
   # Tag mặc định. Jenkins override `--set global.imageTag=abc1234` lúc deploy.
   imageTag: latest
@@ -24,7 +24,7 @@ global:
 
   # Domain public dùng cho Ingress của ApiGateway.
   # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
-  domain: dev.example.com
+  domain: capstonegsu26se55.mooo.com
 
   # ASP.NET environment — Development / Staging / Production
   aspnetEnvironment: Development
@@ -151,6 +151,8 @@ rabbitmq:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose rabbitmq.{domain}
 
 minio:
   enabled: true
@@ -161,6 +163,8 @@ minio:
   resources:
     requests: { cpu: 50m,  memory: 128Mi }
     limits:   { cpu: 500m, memory: 512Mi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose files.{domain} + minio.{domain}
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)

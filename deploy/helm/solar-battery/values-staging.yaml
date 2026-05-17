@@ -5,7 +5,7 @@
 
 global:
   namespace: solar-staging
-  domain: staging.example.com         # ← BẠN ĐỔI tên domain thực tế
+  domain: capstonegsu26se55.mooo.com
   aspnetEnvironment: Staging
   tlsIssuer: letsencrypt-staging      # đổi sang letsencrypt-prod khi tin tưởng cert đúng
 
@@ -17,15 +17,12 @@ services:
       limits:   { cpu: 1,    memory: 1Gi }
 
   authservice:
-    replicas: 2                        # 2 replica để test rolling update
+    replicas: 1                        # single VPS — 2 replica không có lợi
     resources:
       requests: { cpu: 200m, memory: 384Mi }
       limits:   { cpu: 1,    memory: 1Gi }
     autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 5
-      targetCPUUtilizationPercentage: 70
+      enabled: false                   # HPA vô nghĩa trên single node
 
   emailservice:
     replicas: 1
@@ -52,46 +49,54 @@ services:
       limits:   { cpu: 1,    memory: 1Gi }
 
 postgres:
-  storage: 10Gi                       # staging cần data persist nhiều hơn dev
+  storage: 10Gi
 
 rabbitmq:
   storage: 5Gi
+  ingress:
+    enabled: true   # rabbitmq.capstonegsu26se55.mooo.com → Management UI
 
 minio:
   storage: 20Gi
+  ingress:
+    enabled: true   # files.capstonegsu26se55.mooo.com → S3 API
+                    # minio.capstonegsu26se55.mooo.com → Console
 
-# Bật full monitoring stack trong staging
+# Monitoring nhẹ — chỉ bật alertmanager-discord relay.
+# kube-prometheus-stack và loki-stack tốn ~3-4GB RAM — tắt cho VPS 4GB.
+# Bật sau khi stack chạy ổn và đã nâng cấp VPS.
 monitoring:
   alertmanagerDiscord:
-    enabled: true                     # cần kubectl patch secret + DISCORD_WEBHOOK trước
+    enabled: false                     # bật khi Alertmanager đã chạy
   prometheusRules:
-    enabled: true
+    enabled: false
   grafanaDashboards:
-    enabled: true
+    enabled: false
 
 kube-prometheus-stack:
-  enabled: true
+  enabled: false                       # quá nặng cho VPS 4GB — bật khi upgrade
   grafana:
-    adminPassword: "changeme-strong"  # ← ĐỔI password
+    adminPassword: "Admin@123"         # đồng bộ với GRAFANA_ADMIN_PASSWORD trong secret
     ingress:
       enabled: true
+      ingressClassName: traefik
       hosts:
-      - grafana.staging.example.com   # ← ĐỔI domain
+      - grafana.capstonegsu26se55.mooo.com
 
 loki-stack:
-  enabled: true
+  enabled: false                       # quá nặng — bật sau
 
 postgres-exporter:
-  enabled: true
+  enabled: false
 
 redis-exporter:
-  enabled: true
+  enabled: false
 
-# Quota staging — tổng cluster cap, an toàn không OOM cả VPS
+# Quota an toàn cho VPS 4GB RAM (k3s system ~0.5GB, headroom còn ~3.5GB)
 resourceQuota:
   enabled: true
-  requestsCpu: "6"
-  requestsMemory: "12Gi"
-  limitsCpu: "10"
-  limitsMemory: "20Gi"
-  pvcs: "15"
+  requestsCpu: "3"
+  requestsMemory: "3Gi"
+  limitsCpu: "6"
+  limitsMemory: "6Gi"
+  pvcs: "10"
