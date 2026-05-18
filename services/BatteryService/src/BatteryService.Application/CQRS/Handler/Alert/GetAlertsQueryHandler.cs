@@ -32,6 +32,8 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
 
         if (request.Status.HasValue)
             query = query.Where(alert => alert.Status == request.Status.Value);
+        else if (request.ExcludeMerged)
+            query = query.Where(alert => alert.Status != Domain.Enums.AlertStatusEnum.Merged);
 
         if (request.From.HasValue)
         {
@@ -52,8 +54,8 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             .Take(request.PageSize)
             .Select(alert => new AlertDto
             {
-                Id = alert.Id,
-                BatteryAssetId = alert.BatteryAssetId,
+                Id = alert.Id.ToString(),
+                BatteryAssetId = alert.BatteryAssetId.ToString(),
                 BatterySerialNumber = alert.BatteryAsset.SerialNumber,
                 AnomalyType = alert.AnomalyType,
                 Severity = alert.Severity,
@@ -62,8 +64,8 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
                 Unit = alert.Unit,
                 DetectedAt = alert.DetectedAt,
                 Status = alert.Status,
-                TicketId = alert.TicketId,
-                AcknowledgedByUserId = alert.AcknowledgedByUserId,
+                TicketId = alert.TicketId.HasValue ? alert.TicketId.Value.ToString() : null,
+                AcknowledgedByUserId = alert.AcknowledgedByUserId.HasValue ? alert.AcknowledgedByUserId.Value.ToString() : null,
                 AcknowledgedAt = alert.AcknowledgedAt,
                 ResolvedAt = alert.ResolvedAt,
                 DedupWindowEndUtc = alert.DedupWindowEndUtc,

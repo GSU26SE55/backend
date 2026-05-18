@@ -19,7 +19,8 @@ public class GetAccountsQueryHandler : IRequestHandler<GetAccountsQuery, Account
 
     public async Task<AccountListResponse> Handle(GetAccountsQuery request, CancellationToken cancellationToken)
     {
-        var query = _unitOfWork.Accounts.GetAllAsync().AsNoTracking();
+        var query = _unitOfWork.Accounts.GetAllAsync().AsNoTracking()
+            .Where(a => !a.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {

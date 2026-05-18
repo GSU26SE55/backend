@@ -23,7 +23,7 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
     {
         var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id == request.AccountId, cancellationToken);
+            .AnyAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
         {

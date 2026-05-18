@@ -51,9 +51,9 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
             from account in accountJoin.DefaultIfEmpty()
             select new SiteDto
             {
-                Id = site.Id,
+                Id = site.Id.ToString(),
                 Name = site.Name,
-                CustomerId = site.CustomerId,
+                CustomerId = site.CustomerId.ToString(),
                 CustomerName = account != null ? account.FullName : string.Empty,
                 Address = site.Address,
                 Latitude = site.Latitude,

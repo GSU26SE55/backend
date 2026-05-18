@@ -2,9 +2,9 @@ namespace BatteryService.Application.DTOs;
 
 public class ThresholdConfigDto
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
-    public Guid BatteryTypeId { get; set; }
+    public string BatteryTypeId { get; set; } = string.Empty;
 
     public string BatteryTypeName { get; set; } = string.Empty;
 

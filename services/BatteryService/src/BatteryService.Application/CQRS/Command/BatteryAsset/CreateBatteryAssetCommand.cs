@@ -74,7 +74,7 @@ public class CreateBatteryAssetCommand : IRequest<CommonResponse<BatteryAssetDto
             if (installDateUtc > DateTime.UtcNow)
                 AddError(response, nameof(InstallDate), "Ngày lắp đặt không được nằm trong tương lai.");
             else if (installDateUtc < DateTime.UtcNow.AddYears(-5))
-                AddError(response, nameof(InstallDate), "Ngày lắp đặt không được cũ hơn 5 năm.");
+                AddError(response, nameof(InstallDate), "Ngày lắp đặt không hợp lệ (quá xa trong quá khứ, tối đa 5 năm).");
         }
 
         if (WarrantyEndDate.HasValue && WarrantyEndDate.Value <= InstallDate)

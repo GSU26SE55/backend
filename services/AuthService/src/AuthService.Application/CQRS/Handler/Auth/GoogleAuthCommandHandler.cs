@@ -63,7 +63,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
                 .ThenInclude(ar => ar.Role)
             .Include(a => a.Profile)
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var isNewAccount = account == null;

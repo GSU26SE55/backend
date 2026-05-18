@@ -4,9 +4,9 @@ namespace BatteryService.Application.DTOs;
 
 public class AlertDto
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
-    public Guid BatteryAssetId { get; set; }
+    public string BatteryAssetId { get; set; } = string.Empty;
 
     public string BatterySerialNumber { get; set; } = string.Empty;
 
@@ -24,9 +24,9 @@ public class AlertDto
 
     public AlertStatusEnum Status { get; set; }
 
-    public Guid? TicketId { get; set; }
+    public string? TicketId { get; set; }
 
-    public Guid? AcknowledgedByUserId { get; set; }
+    public string? AcknowledgedByUserId { get; set; }
 
     public DateTime? AcknowledgedAt { get; set; }
 

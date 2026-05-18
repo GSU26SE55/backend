@@ -28,7 +28,7 @@ public class GetStaffAssignmentProfileQueryHandler : IRequestHandler<GetStaffAss
             .Include(sp => sp.Account)
                 .ThenInclude(account => account.Profile)
             .Include(sp => sp.Skills)
-            .FirstOrDefaultAsync(sp => sp.AccountId == request.StaffAccountId, cancellationToken);
+            .FirstOrDefaultAsync(sp => sp.AccountId == request.StaffAccountId && !sp.IsDeleted, cancellationToken);
 
         if (profile is null)
         {

@@ -35,7 +35,7 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (account is null)
             return new AccountResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy tài khoản." };

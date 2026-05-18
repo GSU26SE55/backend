@@ -4,7 +4,7 @@ namespace BatteryService.Application.DTOs;
 
 public class BatteryAssetRealtimeDto
 {
-    public Guid AssetId { get; set; }
+    public string AssetId { get; set; } = string.Empty;
 
     public string SerialNumber { get; set; } = string.Empty;
 

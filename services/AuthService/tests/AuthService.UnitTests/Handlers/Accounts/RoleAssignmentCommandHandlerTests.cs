@@ -142,8 +142,7 @@ public class AssignRoleTemporaryCommandHandlerTests
     {
         var account = new global::AuthService.Domain.Entities.Account { Id = Guid.NewGuid(), Email = "u@e.com", PasswordHash = "x", FullName = "U" };
         var role = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "R", NormalizedName = "R", Status = RoleStatusEnum.Active };
-        var (uow, accounts, _, _, accountRoles) = MockUnitOfWork.Build(roleSeed: new[] { role });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, accountRoles) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { role });
         var handler = new AssignRoleTemporaryCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var expiredAt = DateTime.UtcNow.AddDays(7);
@@ -214,8 +213,7 @@ public class UnlockAccountCommandHandlerTests
             FailedLoginAttempts = 5,
             LockoutEndAt = DateTime.UtcNow.AddMinutes(10)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new UnlockAccountCommand { Id = account.Id }, CancellationToken.None);
@@ -261,8 +259,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         var handler = new DeactivateMeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeactivateMeCommand { AccountId = account.Id }, CancellationToken.None);
@@ -292,8 +289,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);

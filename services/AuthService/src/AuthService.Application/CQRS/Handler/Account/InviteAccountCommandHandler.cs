@@ -42,7 +42,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
 
         var emailExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .AnyAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (emailExists)
         {
@@ -60,7 +60,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             var phone = request.PhoneNumber.Trim();
             var phoneExists = await _unitOfWork.Accounts
                 .GetAllAsync()
-                .AnyAsync(a => a.PhoneNumber == phone, cancellationToken);
+                .AnyAsync(a => a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
 
             if (phoneExists)
             {

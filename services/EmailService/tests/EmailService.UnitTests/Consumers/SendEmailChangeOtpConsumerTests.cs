@@ -100,7 +100,8 @@ public class SendEmailChangeOtpConsumerTests : IAsyncLifetime
 
         await _harness.Bus.Publish(new SendEmailChangeOtpEvent("new@example.com", "111111"));
 
-        await Task.Delay(500);
+        var consumerHarness = _harness.GetConsumerHarness<SendEmailChangeOtpConsumer>();
+        (await consumerHarness.Consumed.Any<SendEmailChangeOtpEvent>()).Should().BeTrue();
 
         _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendEmailChangeOtpConsumer), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _fakeHandler.CallCount.Should().Be(0);

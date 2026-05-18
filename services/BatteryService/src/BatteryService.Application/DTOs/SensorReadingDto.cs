@@ -4,7 +4,7 @@ public class SensorReadingDto
 {
     public DateTime Time { get; set; }
 
-    public Guid BatteryAssetId { get; set; }
+    public string BatteryAssetId { get; set; } = string.Empty;
 
     public decimal Voltage { get; set; }
 

@@ -77,9 +77,9 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
             StatusCode = 200,
             Data = new SiteDashboardDto
             {
-                SiteId = site.Id,
+                SiteId = site.Id.ToString(),
                 Name = site.Name,
-                CustomerId = site.CustomerId,
+                CustomerId = site.CustomerId.ToString(),
                 TotalAssets = totalAssets,
                 ActiveAssets = activeAssets,
                 AssetsWithActiveAlerts = activeAlertAssetIds.Count,

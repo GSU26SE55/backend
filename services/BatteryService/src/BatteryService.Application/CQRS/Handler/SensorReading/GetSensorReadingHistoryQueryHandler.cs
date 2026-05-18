@@ -48,7 +48,7 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
             .Select(reading => new SensorReadingDto
             {
                 Time = reading.Time,
-                BatteryAssetId = reading.BatteryAssetId,
+                BatteryAssetId = reading.BatteryAssetId.ToString(),
                 Voltage = reading.Voltage,
                 Current = reading.Current,
                 Temperature = reading.Temperature,

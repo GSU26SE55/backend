@@ -2,11 +2,11 @@ namespace BatteryService.Application.DTOs;
 
 public class SiteDashboardDto
 {
-    public Guid SiteId { get; set; }
+    public string SiteId { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
 
-    public Guid CustomerId { get; set; }
+    public string CustomerId { get; set; } = string.Empty;
 
     public int TotalAssets { get; set; }
 

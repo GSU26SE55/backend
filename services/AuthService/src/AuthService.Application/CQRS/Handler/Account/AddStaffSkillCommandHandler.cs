@@ -25,14 +25,14 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
 
         var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id == request.StaffAccountId, cancellationToken);
+            .AnyAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
             return Fail(404, "Không tìm thấy tài khoản.", nameof(request.StaffAccountId));
 
         var staffProfile = await _unitOfWork.StaffProfiles
             .GetAllAsync()
-            .FirstOrDefaultAsync(profile => profile.AccountId == request.StaffAccountId, cancellationToken);
+            .FirstOrDefaultAsync(profile => profile.AccountId == request.StaffAccountId && !profile.IsDeleted, cancellationToken);
 
         if (staffProfile is null)
         {

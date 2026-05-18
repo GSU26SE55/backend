@@ -4,6 +4,7 @@ using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Handler.Account;
@@ -21,7 +22,8 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
 
     public async Task<AccountActionResponse> Handle(UnlockAccountCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.Id);
+        var account = await _unitOfWork.Accounts.GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
             return new AccountActionResponse

@@ -3,6 +3,7 @@
 > Base URL: `http://localhost:{port}/api`
 > Content-Type: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>`
+> **ID fields:** Tất cả `id` trong response đều là `string` (UUID dạng `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`). Entity C# dùng `Guid` nhưng serialize thành `string` trong JSON — TypeScript dùng `string` cho mọi id field.
 
 ---
 
@@ -155,9 +156,10 @@ Base route: `/api/alerts`
 |---|---|---|---|
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
 | `pageSize` | `int` | Không (mặc định 10) | Số item mỗi trang |
-| `batteryAssetId` | `Guid?` | Không | Lọc alert của một asset cụ thể |
+| `batteryAssetId` | `string?` | Không | Lọc alert của một asset cụ thể (UUID string) |
 | `severity` | `AlertSeverityEnum?` | Không | Lọc theo mức độ nghiêm trọng |
-| `status` | `AlertStatusEnum?` | Không | Lọc theo trạng thái |
+| `status` | `AlertStatusEnum?` | Không | Lọc theo trạng thái; nếu truyền thì `excludeMerged` bị bỏ qua |
+| `excludeMerged` | `bool` | Không (mặc định `true`) | Loại trừ alert có `status = Merged` — mặc định `true` nên FE chỉ thấy alert gốc. Truyền `false` để xem tất cả kể cả Merged (dành cho debug/admin) |
 | `from` | `DateTime?` | Không | Lọc từ thời điểm phát sinh (UTC) |
 | `to` | `DateTime?` | Không | Lọc đến thời điểm phát sinh (UTC) |
 
@@ -167,8 +169,8 @@ Base route: `/api/alerts`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID cảnh báo |
-| `batteryAssetId` | `Guid` | Không | ID battery asset phát sinh cảnh báo |
+| `id` | `string` | Không | ID cảnh báo |
+| `batteryAssetId` | `string` | Không | ID battery asset phát sinh cảnh báo |
 | `batterySerialNumber` | `string` | Không | Serial number của pin (để hiển thị) |
 | `anomalyType` | `AnomalyTypeEnum` | Không | Loại bất thường (xem enum) |
 | `severity` | `AlertSeverityEnum` | Không | Mức độ nghiêm trọng (xem enum) |
@@ -177,8 +179,8 @@ Base route: `/api/alerts`
 | `unit` | `string` | Không | Đơn vị đo (e.g., `V`, `°C`, `%`) |
 | `detectedAt` | `DateTime` | Không | Thời điểm phát hiện bất thường (UTC) |
 | `status` | `AlertStatusEnum` | Không | Trạng thái hiện tại (xem enum) |
-| `ticketId` | `Guid?` | Null nếu chưa có ticket | ID ticket liên kết (nếu đã auto-tạo hoặc link thủ công) |
-| `acknowledgedByUserId` | `Guid?` | Null nếu chưa ack | ID user đã acknowledge |
+| `ticketId` | `string?` | Null nếu chưa có ticket | ID ticket liên kết (nếu đã auto-tạo hoặc link thủ công) |
+| `acknowledgedByUserId` | `string?` | Null nếu chưa ack | ID user đã acknowledge |
 | `acknowledgedAt` | `DateTime?` | Null nếu chưa ack | Thời điểm acknowledge (UTC) |
 | `resolvedAt` | `DateTime?` | Null nếu chưa resolve | Thời điểm resolve (UTC) |
 | `dedupWindowEndUtc` | `DateTime` | Không | Thời điểm kết thúc cửa sổ deduplication (Sprint 3) — luôn được set cho mọi alert |
@@ -190,7 +192,7 @@ Base route: `/api/alerts`
 - Điều kiện merge: cùng `batteryAssetId` + cùng `anomalyType`, alert gốc đang `Open` hoặc `Acknowledged`, và `dedupWindowEndUtc > now`.
 - Khi phát hiện anomaly trùng trong window, hệ thống tạo record alert mới với `status = Merged`, `mergedIntoAlertId = id alert gốc`, `dedupWindowEndUtc = dedupWindowEndUtc của alert gốc`.
 - Alert gốc chưa bị merge vẫn có `dedupWindowEndUtc = detectedAt + dedupWindow`.
-- `GET /api/alerts` hiện trả cả `Merged` nếu không truyền filter `status`; FE nên ẩn `Merged` trong list mặc định nếu chỉ muốn hiển thị alert gốc.
+- `GET /api/alerts` mặc định loại trừ `Merged` (`excludeMerged=true`). Để xem Merged alerts, truyền `excludeMerged=false` hoặc `status=Merged`.
 - `assetsWithActiveAlerts` trong Site dashboard chỉ tính alert `Open` và `Acknowledged`, không tính `Merged` hoặc `Resolved`.
 
 ---
@@ -266,10 +268,10 @@ Base route: `/api/battery-assets`
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
 | `pageSize` | `int` | Không (mặc định 10) | Số item mỗi trang |
 | `keyword` | `string?` | Không | Tìm theo serial number hoặc location |
-| `customerId` | `Guid?` | Không | Lọc theo khách hàng |
-| `batteryTypeId` | `Guid?` | Không | Lọc theo loại pin |
-| `siteId` | `Guid?` | Không | Lọc theo site |
-| `batteryGroupId` | `Guid?` | Không | Lọc theo nhóm pin |
+| `customerId` | `string?` | Không | Lọc theo khách hàng (UUID string) |
+| `batteryTypeId` | `string?` | Không | Lọc theo loại pin (UUID string) |
+| `siteId` | `string?` | Không | Lọc theo site (UUID string) |
+| `batteryGroupId` | `string?` | Không | Lọc theo nhóm pin (UUID string) |
 | `status` | `BatteryStatusEnum?` | Không | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Không (mặc định `false`) | Bao gồm cả asset đã soft-delete |
 
@@ -281,15 +283,15 @@ Base route: `/api/battery-assets`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID battery asset |
+| `id` | `string` | Không | ID battery asset |
 | `serialNumber` | `string` | Không | Serial number duy nhất của pin (chữ in hoa, số, dấu gạch ngang, 5–64 ký tự) |
-| `batteryTypeId` | `Guid` | Không | ID loại pin |
+| `batteryTypeId` | `string` | Không | ID loại pin |
 | `batteryTypeName` | `string` | Không | Tên loại pin (để hiển thị) |
-| `siteId` | `Guid?` | Null nếu chưa gán site | ID site lắp đặt |
+| `siteId` | `string?` | Null nếu chưa gán site | ID site lắp đặt |
 | `siteName` | `string?` | Null nếu chưa gán site | Tên site |
-| `batteryGroupId` | `Guid?` | Null nếu không thuộc nhóm | ID nhóm pin |
+| `batteryGroupId` | `string?` | Null nếu không thuộc nhóm | ID nhóm pin |
 | `batteryGroupName` | `string?` | Null nếu không thuộc nhóm | Tên nhóm pin |
-| `customerId` | `Guid` | Không | ID khách hàng sở hữu |
+| `customerId` | `string` | Không | ID khách hàng sở hữu |
 | `customerName` | `string` | Không | Tên khách hàng từ `CustomerAccount` read model |
 | `installDate` | `DateTime` | Không | Ngày lắp đặt (UTC) |
 | `warrantyEndDate` | `DateTime?` | Null nếu không có bảo hành | Ngày hết bảo hành (UTC) |
@@ -299,7 +301,7 @@ Base route: `/api/battery-assets`
 | `longitude` | `decimal?` | Null nếu không có tọa độ | Kinh độ (-180 đến 180) |
 | `status` | `BatteryStatusEnum` | Không | Trạng thái hoạt động của pin |
 | `notes` | `string?` | Null nếu không có | Ghi chú |
-| `lastSensorReadingAt` | `DateTime?` | Null nếu chưa nhận reading nào | Thời điểm nhận sensor reading gần nhất |
+| `lastSensorReadingAt` | `DateTime?` | Null nếu chưa nhận reading nào | Thời điểm nhận sensor reading gần nhất — stored trên `BatteryAsset` entity, được cập nhật real-time mỗi khi `POST /api/sensor-readings/batch` ingest thành công. Có DB index, không query sang TimescaleDB khi GET list. |
 | `createdAt` | `DateTime` | Không | Thời điểm tạo record (UTC) |
 
 ---
@@ -359,7 +361,7 @@ Base route: `/api/battery-assets`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `assetId` | `Guid` | Không | ID battery asset |
+| `assetId` | `string` | Không | ID battery asset |
 | `serialNumber` | `string` | Không | Serial number |
 | `status` | `BatteryStatusEnum` | Không | Trạng thái hoạt động |
 | `time` | `DateTime?` | Null nếu chưa có reading | Timestamp của reading gần nhất (UTC) |
@@ -385,11 +387,11 @@ Base route: `/api/battery-assets`
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
 | `serialNumber` | `string` | **Bắt buộc** | 5–64 ký tự, chỉ `A-Z`, `0-9`, `-` (chữ in hoa) | Serial number duy nhất |
-| `batteryTypeId` | `Guid` | **Bắt buộc** | Phải tồn tại trong DB | Loại pin |
-| `customerId` | `Guid` | **Bắt buộc** | Phải tồn tại trong DB | Khách hàng sở hữu |
-| `siteId` | `Guid?` | Không | Nếu truyền phải là Guid hợp lệ | Site lắp đặt |
-| `batteryGroupId` | `Guid?` | Không | Nếu truyền phải là Guid hợp lệ | Nhóm pin |
-| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai, không cũ hơn 5 năm | Ngày lắp đặt |
+| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
+| `siteId` | `string?` | Không | UUID hợp lệ nếu truyền | Site lắp đặt |
+| `batteryGroupId` | `string?` | Không | UUID hợp lệ nếu truyền | Nhóm pin |
+| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
 | `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền | Ngày hết bảo hành |
 | `location` | `string?` | Không | Max 255 ký tự | Mô tả vị trí |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
@@ -460,7 +462,7 @@ Base route: `/api/battery-assets`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `newCustomerId` | `Guid` | **Bắt buộc** | Khác empty GUID | ID khách hàng mới |
+| `newCustomerId` | `string` | **Bắt buộc** | UUID hợp lệ, khác `00000000-0000-...` | ID khách hàng mới |
 | `reason` | `string?` | Không | Max 500 ký tự | Lý do chuyển chủ sở hữu |
 
 **Response thành công `200`:** `isSuccess = true`
@@ -486,8 +488,8 @@ Base route: `/api/battery-groups`
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
 | `keyword` | `string?` | Tìm theo tên nhóm |
-| `siteId` | `Guid?` | Lọc theo site |
-| `batteryTypeId` | `Guid?` | Lọc theo loại pin |
+| `siteId` | `string?` | Lọc theo site (UUID string) |
+| `batteryTypeId` | `string?` | Lọc theo loại pin (UUID string) |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
 
 **Response thành công `200`:** `PaginationResponse<BatteryGroupDto>`
@@ -496,13 +498,13 @@ Base route: `/api/battery-groups`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID nhóm pin |
-| `siteId` | `Guid` | Không | ID site chứa nhóm |
+| `id` | `string` | Không | ID nhóm pin |
+| `siteId` | `string` | Không | ID site chứa nhóm |
 | `siteName` | `string` | Không | Tên site |
 | `name` | `string` | Không | Tên nhóm pin |
-| `batteryTypeId` | `Guid` | Không | ID loại pin trong nhóm |
+| `batteryTypeId` | `string` | Không | ID loại pin trong nhóm |
 | `batteryTypeName` | `string` | Không | Tên loại pin |
-| `batteryCount` | `int` | Không | Số pin trong nhóm (cập nhật khi thêm/xóa asset) |
+| `batteryCount` | `int` | Không | Số pin trong nhóm — denormalized counter, được cập nhật tự động khi thêm/xóa asset khỏi nhóm |
 | `createdAt` | `DateTime` | Không | Thời điểm tạo (UTC) |
 
 ---
@@ -512,6 +514,8 @@ Base route: `/api/battery-groups`
 **Mục đích:** Xem chi tiết một nhóm pin.
 
 **Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+> **Customer** được phép gọi endpoint này để xem thông tin nhóm pin chứa asset của mình (ví dụ: hiển thị `batteryTypeName`, `batteryCount` trong màn hình chi tiết pin trên mobile). Không có filter theo `customerId` ở server — bất kỳ Customer nào cũng đọc được mọi group nếu biết `id`. Đây là intentional vì group không chứa PII.
 
 **Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
 
@@ -527,9 +531,9 @@ Base route: `/api/battery-groups`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `siteId` | `Guid` | **Bắt buộc** | Khác empty GUID | Site chứa nhóm |
+| `siteId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Site chứa nhóm |
 | `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên nhóm |
-| `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin trong nhóm |
+| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin trong nhóm |
 
 **Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
 
@@ -553,9 +557,9 @@ Base route: `/api/battery-groups`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `siteId` | `Guid` | **Bắt buộc** | Khác empty GUID | Site chứa nhóm |
+| `siteId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Site chứa nhóm |
 | `name` | `string` | **Bắt buộc** | Max 100 ký tự, unique trong site | Tên nhóm |
-| `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin trong nhóm |
+| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin trong nhóm |
 
 **Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
 
@@ -595,7 +599,7 @@ Base route: `/api/battery-types`
 
 **Mục đích:** Danh sách loại pin với phân trang.
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin/Manager/Staff)
 
 **Query params:**
 
@@ -612,7 +616,7 @@ Base route: `/api/battery-types`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID loại pin |
+| `id` | `string` | Không | ID loại pin (UUID dạng string) |
 | `name` | `string` | Không | Tên model (e.g., `LiFePO4-200Ah-48V`) |
 | `manufacturer` | `string?` | Null nếu chưa cung cấp | Nhà sản xuất |
 | `nominalCapacityAh` | `decimal` | Không | Dung lượng danh định (Ah) |
@@ -626,7 +630,7 @@ Base route: `/api/battery-types`
 
 ### `GET /api/battery-types/{id}`
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin/Manager/Staff)
 
 **Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
 
@@ -646,7 +650,7 @@ Base route: `/api/battery-types`
 | `nominalVoltage` | `decimal` | **Bắt buộc** | > 0 | Điện áp danh định (V) |
 | `chemistry` | `BatteryChemistryEnum` | Không (mặc định `LiFePO4`) | — | Loại hóa học |
 | `maxCycleCount` | `int` | Không (mặc định 2000) | > 0 | Số chu kỳ tối đa |
-| `description` | `string?` | Không | Max 1000 ký tự | Mô tả |
+| `description` | `string?` | Không | Max 500 ký tự | Mô tả |
 
 **Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
 
@@ -674,11 +678,11 @@ Base route: `/api/battery-types`
 | `nominalVoltage` | `decimal` | **Bắt buộc** | > 0 | Điện áp danh định (V) |
 | `chemistry` | `BatteryChemistryEnum` | Không | — | Loại hóa học |
 | `maxCycleCount` | `int` | Không | > 0 | Số chu kỳ tối đa |
-| `description` | `string?` | Không | Max 1000 ký tự | Mô tả |
+| `description` | `string?` | Không | Max 500 ký tự | Mô tả |
 
 **Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
 
-**Lưu ý:** Đây là PUT full update; field optional không gửi sẽ bị reset về `null`.
+**Lưu ý:** Đây là PUT full update. `nominalCapacityAh` và `nominalVoltage` là bắt buộc — không gửi hoặc gửi `0` sẽ nhận `400`. Các field optional (`manufacturer`, `description`) không gửi sẽ bị reset về `null`.
 
 ---
 
@@ -744,7 +748,7 @@ Base route: `/api/sensor-readings`
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `time` | `DateTime` | Không | Timestamp đo lường (UTC) — partition key TimescaleDB |
-| `batteryAssetId` | `Guid` | Không | ID battery asset |
+| `batteryAssetId` | `string` | Không | ID battery asset |
 | `voltage` | `decimal` | Không | Điện áp (V) |
 | `current` | `decimal` | Không | Dòng điện (A) — âm = đang xả |
 | `temperature` | `decimal` | Không | Nhiệt độ (°C) |
@@ -846,7 +850,7 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `batteryAssetId` | `Guid` | Bắt buộc | Phải tồn tại và Active | ID pin |
+| `batteryAssetId` | `string` | Bắt buộc | UUID hợp lệ, phải tồn tại và Active | ID pin |
 | `time` | `DateTime` | Bắt buộc | Không ở tương lai (cho phép lệch tối đa +5 phút) | Timestamp (UTC) |
 | `voltage` | `decimal` | Bắt buộc | >= 0 | Điện áp (V) |
 | `current` | `decimal` | Bắt buộc | — | Dòng điện (A) — âm = đang xả |
@@ -902,7 +906,7 @@ Base route: `/api/sites`
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
 | `keyword` | `string?` | Tìm theo tên site hoặc địa chỉ |
-| `customerId` | `Guid?` | Lọc theo khách hàng |
+| `customerId` | `string?` | Lọc theo khách hàng (UUID string) |
 | `status` | `SiteStatusEnum?` | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
 
@@ -912,9 +916,9 @@ Base route: `/api/sites`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID site |
+| `id` | `string` | Không | ID site |
 | `name` | `string` | Không | Tên site (e.g., `Nhà máy mặt trời An Giang 1`) |
-| `customerId` | `Guid` | Không | ID khách hàng sở hữu |
+| `customerId` | `string` | Không | ID khách hàng sở hữu |
 | `customerName` | `string` | Không | Tên khách hàng từ `CustomerAccount` read model |
 | `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ |
 | `latitude` | `decimal?` | Null nếu không có tọa độ | Vĩ độ (-90 đến 90) |
@@ -979,9 +983,9 @@ Base route: `/api/sites`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `siteId` | `Guid` | Không | ID site |
+| `siteId` | `string` | Không | ID site |
 | `name` | `string` | Không | Tên site |
-| `customerId` | `Guid` | Không | ID khách hàng |
+| `customerId` | `string` | Không | ID khách hàng |
 | `totalAssets` | `int` | Không | Tổng số pin (bao gồm cả Inactive, Decommissioned) |
 | `activeAssets` | `int` | Không | Số pin đang Active |
 | `assetsWithActiveAlerts` | `int` | Không | Số pin có ít nhất 1 alert Open/Acknowledged |
@@ -1024,7 +1028,7 @@ Nếu site không có asset nào, healthScore = 100.
 |---|---|---|
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
-| `batteryGroupId` | `Guid?` | Lọc theo nhóm pin cụ thể |
+| `batteryGroupId` | `string?` | Lọc theo nhóm pin cụ thể (UUID string) |
 | `status` | `BatteryStatusEnum?` | Lọc theo trạng thái |
 
 **Response thành công `200`:** `PaginationResponse<BatteryAssetDto>`
@@ -1042,12 +1046,12 @@ Nếu site không có asset nào, healthScore = 100.
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
 | `name` | `string` | **Bắt buộc** | Max 200 ký tự | Tên site |
-| `customerId` | `Guid` | **Bắt buộc** | Khác empty GUID | Khách hàng sở hữu |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
 | `address` | `string?` | Không | — | Địa chỉ |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
 | `capacityKw` | `decimal?` | Không | > 0 nếu truyền | Công suất (kW) |
-| `installDate` | `DateTime` | **Bắt buộc** | — | Ngày lắp đặt |
+| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
 | `status` | `SiteStatusEnum` | Không (mặc định `Active`) | — | Trạng thái ban đầu |
 | `contactPersonName` | `string?` | Không | — | Tên người liên hệ |
 | `contactPersonPhone` | `string?` | Không | — | SĐT người liên hệ |
@@ -1098,7 +1102,7 @@ Base route: `/api/thresholds`
 |---|---|---|
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
-| `batteryTypeId` | `Guid?` | Lọc theo loại pin |
+| `batteryTypeId` | `string?` | Lọc theo loại pin (UUID string) |
 | `isActive` | `bool?` | Mặc định `true` — chỉ lấy config đang active |
 
 **Response thành công `200`:** `PaginationResponse<ThresholdConfigDto>`
@@ -1107,8 +1111,8 @@ Base route: `/api/thresholds`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID cấu hình |
-| `batteryTypeId` | `Guid` | Không | ID loại pin áp dụng |
+| `id` | `string` | Không | ID cấu hình |
+| `batteryTypeId` | `string` | Không | ID loại pin áp dụng |
 | `batteryTypeName` | `string` | Không | Tên loại pin |
 | `voltageMin` | `decimal` | Không | Điện áp tối thiểu (V) — thấp hơn → `Undervoltage` alert |
 | `voltageMax` | `decimal` | Không | Điện áp tối đa (V) — cao hơn → `Overvoltage` alert |
@@ -1196,8 +1200,8 @@ Base route: `/api/thresholds`
 | PUT | `/api/battery-groups/{id}` | Cập nhật nhóm pin | Admin |
 | DELETE | `/api/battery-groups/{id}` | Xóa nhóm pin | Admin |
 | PATCH | `/api/battery-groups/{id}/restore` | Khôi phục nhóm pin | Admin |
-| GET | `/api/battery-types` | Danh sách loại pin | Admin/Manager |
-| GET | `/api/battery-types/{id}` | Chi tiết loại pin | Admin/Manager |
+| GET | `/api/battery-types` | Danh sách loại pin | Admin/Manager/Staff |
+| GET | `/api/battery-types/{id}` | Chi tiết loại pin | Admin/Manager/Staff |
 | POST | `/api/battery-types` | Tạo loại pin | Admin |
 | PUT | `/api/battery-types/{id}` | Cập nhật loại pin | Admin |
 | DELETE | `/api/battery-types/{id}` | Xóa loại pin | Admin |
