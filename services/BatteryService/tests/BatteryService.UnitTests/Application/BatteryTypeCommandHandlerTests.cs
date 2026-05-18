@@ -35,7 +35,7 @@ public class BatteryTypeCommandHandlerTests
         }, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.StatusCode.Should().Be(200);
+        result.StatusCode.Should().Be(201);
         result.Data!.Name.Should().Be("LiFePO4 12V 100Ah");
         captured.Should().NotBeNull();
         batteryTypes.Verify(repository => repository.AddAsync(It.IsAny<BatteryType>()), Times.Once);

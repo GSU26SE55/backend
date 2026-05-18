@@ -19,8 +19,7 @@ public class GetRoleByIdQueryHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new GetRoleByIdQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRoleByIdQuery { Id = role.Id }, CancellationToken.None);

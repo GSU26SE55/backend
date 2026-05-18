@@ -332,8 +332,7 @@ public class UnlinkGoogleCommandHandlerTests
             GoogleId = "g-1",
             Provider = "Google"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
@@ -355,8 +354,7 @@ public class UnlinkGoogleCommandHandlerTests
             Status = AccountStatusEnum.Active,
             GoogleId = null
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
@@ -376,8 +374,7 @@ public class UnlinkGoogleCommandHandlerTests
             Status = AccountStatusEnum.Active,
             GoogleId = "g-1"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);

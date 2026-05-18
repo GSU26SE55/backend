@@ -82,7 +82,7 @@ public class SiteAndGroupCommandHandlerTests
         }, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.StatusCode.Should().Be(200);
+        result.StatusCode.Should().Be(201);
         captured.Should().NotBeNull();
         captured!.SiteId.Should().Be(site.Id);
         captured.BatteryTypeId.Should().Be(batteryType.Id);
