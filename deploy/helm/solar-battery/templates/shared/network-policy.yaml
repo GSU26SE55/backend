@@ -171,7 +171,22 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 9. Egress — cho phép DNS + cluster-internal + Internet (Mailjet, Google OAuth)
+# 9. cert-manager ACME HTTP-01 solver pods — Traefik cần reach port 8089 để forward challenge.
+# Solver pods do cert-manager tạo ra, không có label app.kubernetes.io/*, nên cần policy riêng.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  ingress:
+  - ports:
+    - { protocol: TCP, port: 8089 }
+  policyTypes: [Ingress]
+---
+# 10. Egress — cho phép DNS + cluster-internal + Internet (Mailjet, Google OAuth)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
