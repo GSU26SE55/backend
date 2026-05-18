@@ -30,6 +30,9 @@ spec:
       initContainers:
       - name: wait-file-storage-db
         image: {{ .Values.postgres.clientImage | default "postgres:16-alpine" }}
+        resources:
+          requests: { cpu: "50m", memory: "32Mi" }
+          limits:   { cpu: "100m", memory: "64Mi" }
         env:
         - name: POSTGRES_USER
           value: {{ .Values.postgres.username | quote }}
