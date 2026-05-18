@@ -12,8 +12,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable | quote }}
-      maxSurge: {{ .Values.global.rollingUpdate.maxSurge | quote }}
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.global.rollingUpdate.maxSurge }}
   selector:
     matchLabels:
       app.kubernetes.io/component: filestorageservice

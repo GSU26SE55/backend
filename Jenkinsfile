@@ -458,7 +458,7 @@ pipeline {
                 --set services.smsservice.enabled=false \
                 --set services.filestorageservice.enabled=false \
                 --set services.batteryservice.enabled=false \
-                --debug --wait --wait-for-jobs --timeout 60m
+                --wait --wait-for-jobs --timeout 60m
               stop_deploy_watcher
 
               start_deploy_watcher 'Postgres database init job'
@@ -483,7 +483,7 @@ pipeline {
                 -f deploy/helm/solar-battery/values-staging.yaml \
                 -f deploy/helm/solar-battery/values-vps-small.yaml \
                 --set-string global.imageTag=${SHA} \
-                --debug --atomic --wait --wait-for-jobs --timeout 60m
+                --atomic --wait --wait-for-jobs --timeout 60m
               stop_deploy_watcher
               trap - EXIT
             """
