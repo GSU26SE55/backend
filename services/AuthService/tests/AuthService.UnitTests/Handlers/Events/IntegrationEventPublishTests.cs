@@ -71,8 +71,7 @@ public class IntegrationEventPublishTests
             PhoneNumber = "0900000000",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object);
         var resp = await handler.Handle(new UpdateAccountCommand
@@ -104,8 +103,7 @@ public class IntegrationEventPublishTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new DeleteAccountCommandHandler(uow.Object, _producer.Object);
         await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
@@ -129,8 +127,7 @@ public class IntegrationEventPublishTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new DeleteMeCommandHandler(uow.Object, _producer.Object);
         await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);

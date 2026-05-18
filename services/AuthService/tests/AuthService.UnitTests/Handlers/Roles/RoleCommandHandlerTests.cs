@@ -77,8 +77,7 @@ public class UpdateRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new UpdateRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UpdateRoleCommand { Id = role.Id, Name = "X" }, CancellationToken.None);
@@ -126,8 +125,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Inactive }, CancellationToken.None);
@@ -147,8 +145,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Inactive }, CancellationToken.None);
@@ -167,8 +164,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Active }, CancellationToken.None);
@@ -191,8 +187,7 @@ public class DeleteRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
@@ -212,8 +207,7 @@ public class DeleteRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
@@ -233,8 +227,7 @@ public class DeleteRoleCommandHandlerTests
             IsSystemRole = false
         };
         var assignment = new AccountRole { Id = Guid.NewGuid(), AccountId = Guid.NewGuid(), RoleId = role.Id, IsActive = true };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build(accountRoleSeed: new[] { assignment });
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role }, accountRoleSeed: new[] { assignment });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
