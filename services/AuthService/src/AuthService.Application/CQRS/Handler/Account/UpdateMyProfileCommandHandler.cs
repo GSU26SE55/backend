@@ -35,7 +35,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (account is null)
             return NotFound();
@@ -45,7 +45,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
             var phone = request.PhoneNumber.Trim();
             var duplicated = await _unitOfWork.Accounts
                 .GetAllAsync()
-                .AnyAsync(a => a.Id != request.AccountId && a.PhoneNumber == phone, cancellationToken);
+                .AnyAsync(a => a.Id != request.AccountId && a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
 
             if (duplicated)
             {

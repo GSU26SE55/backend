@@ -4,23 +4,23 @@ namespace BatteryService.Application.DTOs;
 
 public class BatteryAssetDto
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     public string SerialNumber { get; set; } = string.Empty;
 
-    public Guid BatteryTypeId { get; set; }
+    public string BatteryTypeId { get; set; } = string.Empty;
 
     public string BatteryTypeName { get; set; } = string.Empty;
 
-    public Guid? SiteId { get; set; }
+    public string? SiteId { get; set; }
 
     public string? SiteName { get; set; }
 
-    public Guid? BatteryGroupId { get; set; }
+    public string? BatteryGroupId { get; set; }
 
     public string? BatteryGroupName { get; set; }
 
-    public Guid CustomerId { get; set; }
+    public string CustomerId { get; set; } = string.Empty;
 
     public string CustomerName { get; set; } = string.Empty;
 

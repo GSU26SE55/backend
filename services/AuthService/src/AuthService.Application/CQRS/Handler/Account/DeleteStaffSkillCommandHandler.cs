@@ -25,7 +25,7 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
         var skillCode = request.SkillCode.Trim();
         var skill = await _unitOfWork.StaffSkills
             .GetAllAsync()
-            .FirstOrDefaultAsync(s => s.StaffAccountId == request.StaffAccountId && s.SkillCode == skillCode, cancellationToken);
+            .FirstOrDefaultAsync(s => s.StaffAccountId == request.StaffAccountId && s.SkillCode == skillCode && !s.IsDeleted, cancellationToken);
 
         if (skill is null)
             return Fail(404, "Không tìm thấy staff skill.", nameof(request.SkillCode));

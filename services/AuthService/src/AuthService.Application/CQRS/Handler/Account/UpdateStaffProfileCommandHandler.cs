@@ -25,7 +25,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
 
         var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id == request.AccountId, cancellationToken);
+            .AnyAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
             return Fail(404, "Không tìm thấy tài khoản.", nameof(request.AccountId));
@@ -35,7 +35,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
         {
             var duplicated = await _unitOfWork.StaffProfiles
                 .GetAllAsync()
-                .AnyAsync(profile => profile.AccountId != request.AccountId && profile.EmployeeCode == employeeCode, cancellationToken);
+                .AnyAsync(profile => profile.AccountId != request.AccountId && profile.EmployeeCode == employeeCode && !profile.IsDeleted, cancellationToken);
 
             if (duplicated)
                 return Fail(409, "EmployeeCode đã được sử dụng.", nameof(request.EmployeeCode));
@@ -43,7 +43,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
 
         var profile = await _unitOfWork.StaffProfiles
             .GetAllAsync()
-            .FirstOrDefaultAsync(sp => sp.AccountId == request.AccountId, cancellationToken);
+            .FirstOrDefaultAsync(sp => sp.AccountId == request.AccountId && !sp.IsDeleted, cancellationToken);
 
         var createdProfile = profile is null;
         if (createdProfile)

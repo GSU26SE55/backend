@@ -39,7 +39,7 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Accou
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)
-            .FirstOrDefaultAsync(a => a.Id == userId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == userId && !a.IsDeleted, cancellationToken);
 
         if (account == null)
         {

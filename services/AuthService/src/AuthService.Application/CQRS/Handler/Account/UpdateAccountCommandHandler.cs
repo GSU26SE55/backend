@@ -22,7 +22,8 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
 
     public async Task<AccountActionResponse> Handle(UpdateAccountCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.Id);
+        var account = await _unitOfWork.Accounts.GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
             return new AccountActionResponse
@@ -38,7 +39,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
             var phone = request.PhoneNumber.Trim();
             var duplicated = await _unitOfWork.Accounts
                 .GetAllAsync()
-                .AnyAsync(a => a.Id != request.Id && a.PhoneNumber == phone, cancellationToken);
+                .AnyAsync(a => a.Id != request.Id && a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
 
             if (duplicated)
             {

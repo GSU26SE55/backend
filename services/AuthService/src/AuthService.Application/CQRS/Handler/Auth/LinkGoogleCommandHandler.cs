@@ -32,7 +32,7 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .Include(a => a.Profile)
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Không tìm thấy tài khoản.");
 
@@ -41,7 +41,7 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
 
         var googleAlreadyLinked = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject, cancellationToken);
+            .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject && !a.IsDeleted, cancellationToken);
 
         if (googleAlreadyLinked)
             return Fail(409, "Google account này đã được liên kết với tài khoản khác.");

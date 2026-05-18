@@ -261,7 +261,9 @@ Base route: `/api/auth`
 }
 ```
 
-**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP tối đa 5 lần. Khi vượt quá giới hạn, account bị lock 15 phút và API trả `423 Locked`. Nếu verify thành công, account chuyển sang `Active` nhưng không trả token; FE cần gọi `POST /api/auth/login`.
+**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP tối đa 5 lần. Khi vượt quá giới hạn, API trả `423 Locked` trong 15 phút. **Lock tự hết sau 15 phút — không cần admin can thiệp.** Sau 15 phút gọi lại bình thường. Nếu verify thành công, account chuyển sang `Active` nhưng không trả token; FE cần gọi `POST /api/auth/login`.
+
+**Phân biệt với password lockout:** Khi sai mật khẩu login 5 lần, `account.Status` bị set `Locked` — trường hợp đó Admin mới cần dùng `POST /api/admin/accounts/{id}/unlock`. OTP lockout ở endpoint này chỉ dùng `LockoutEndAt`, không set `Status = Locked`.
 
 ---
 
@@ -330,7 +332,7 @@ Base route: `/api/auth`
 | `data.resetToken` | `string` | Không | Token ngắn hạn dùng để đặt lại mật khẩu (bước sau) |
 | `data.expiresInSeconds` | `int` | Không | Thời gian hết hạn của resetToken (900 giây = 15 phút) |
 
-**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP reset tối đa 5 lần. Khi đạt giới hạn, account bị lock 15 phút; các request trong thời gian lockout trả `423 Locked`.
+**Rate limit / retry / lockout:** Endpoint có policy `AnonOtp` 5 request/phút theo IP. Sai OTP reset tối đa 5 lần. Khi đạt giới hạn, các request trong 15 phút tiếp theo trả `423 Locked`. **Lock tự hết sau 15 phút — không cần admin can thiệp** (cùng cơ chế với `verify-otp`: chỉ dùng `LockoutEndAt`, không set `Status = Locked`).
 
 ---
 
@@ -478,125 +480,13 @@ Base route: `/api/accounts`
 Header: `Authorization: Bearer {accessToken}`
 
 > **Phân biệt Nhóm 2 vs Nhóm 3:**
-> - **Nhóm 2** (`/api/accounts`) — AccountsController: quản lý account cốt lõi (password, email change, phone, 2FA, Google link, session, login history). **Đây là route canonical cho các thao tác account.**
-> - **Nhóm 3** (`/api/auth`) — AuthProfilesController: cập nhật profile mở rộng (fullName, address, birthDate, timezone, avatar). **Dùng Nhóm 3 cho profile/avatar operations.**
-> - `GET /api/accounts/me` và `GET /api/auth/me` trả cùng shape `AccountDto` — FE chọn một route nhất quán, khuyên dùng `GET /api/auth/me` vì thuộc AuthProfilesController quản lý profile.
+> - **Nhóm 2** (`/api/accounts`) — AccountsController: quản lý account cốt lõi (password, email change, phone verify, 2FA, Google link, deactivate/delete, login history). **Không có endpoint đọc/cập nhật profile ở nhóm này.**
+> - **Nhóm 3** (`/api/auth`) — AuthProfilesController: **canonical route cho profile operations** (đọc profile, cập nhật fullName/address/birthDate/timezone, avatar). FE dùng `GET /api/auth/me` và `PUT /api/auth/me/profile` cho mọi thao tác profile.
 
 **Lỗi thường gặp cho nhóm này:**
 - `401` — Token không hợp lệ, hết hạn hoặc JWT thiếu account id
-- `403` — Route id không thuộc account hiện tại hoặc không đủ quyền
 - `404` — Account/session/resource không tồn tại
 - `409` — Dữ liệu cập nhật xung đột với account khác hoặc rule nghiệp vụ
-
----
-
-### `GET /api/accounts/me`
-
-**Mục đích:** Lấy thông tin profile đầy đủ của tài khoản đang đăng nhập.
-
-**Auth:** Bắt buộc (mọi role)
-
-**Response thành công `200`:**
-```json
-{
-  "isSuccess": true,
-  "data": {
-    "id": "guid",
-    "email": "user@example.com",
-    "phoneNumber": null,
-    "fullName": "Nguyen Van A",
-    "avatarUrl": null,
-    "dateOfBirth": null,
-    "address": null,
-    "emailConfirmed": true,
-    "phoneConfirmed": false,
-    "twoFactorEnabled": false,
-    "status": 1,
-    "lastLoginAt": "2026-05-16T08:00:00Z",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": null,
-    "roles": ["Staff"],
-    "profile": { ... },
-    "staffProfile": null,
-    "displayAvatarUrl": "/api/files/{fileId}/download"
-  }
-}
-```
-
-**Chi tiết fields `AccountDto`:**
-
-| Field | Type | Nullable | Mô tả |
-|---|---|---|---|
-| `id` | `Guid` | Không | ID tài khoản |
-| `email` | `string` | Không | Email đăng nhập |
-| `phoneNumber` | `string?` | Null nếu chưa cung cấp | Số điện thoại |
-| `fullName` | `string` | Không | Họ và tên đầy đủ |
-| `avatarUrl` | `string?` | Null nếu không có hoặc dùng uploaded file | URL avatar legacy (Google hoặc direct URL) |
-| `dateOfBirth` | `DateTime?` | Null nếu chưa cung cấp | Ngày sinh |
-| `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ |
-| `emailConfirmed` | `bool` | Không | Email đã xác thực chưa |
-| `phoneConfirmed` | `bool` | Không | Số điện thoại đã xác thực chưa |
-| `twoFactorEnabled` | `bool` | Không | 2FA đang bật không |
-| `status` | `AccountStatusEnum` | Không | Trạng thái tài khoản (xem enum) |
-| `lastLoginAt` | `DateTime?` | Null nếu chưa login lần nào | Thời điểm đăng nhập gần nhất (UTC) |
-| `createdAt` | `DateTime` | Không | Thời điểm tạo tài khoản (UTC) |
-| `updatedAt` | `DateTime?` | Null nếu chưa cập nhật | Thời điểm cập nhật gần nhất (UTC) |
-| `roles` | `string[]` | Không (có thể rỗng) | Danh sách tên role đang gán |
-| `profile` | `AccountProfileDto?` | Null nếu chưa có profile extended | Thông tin profile mở rộng |
-| `staffProfile` | `StaffProfileDto?` | Null nếu không phải Staff | Thông tin staff (chỉ có với role Staff) |
-| `displayAvatarUrl` | `string?` | Null nếu không có avatar | URL để hiển thị avatar — có thể là URL Google hoặc `/api/files/{fileId}/download` |
-
-**Chi tiết `AccountProfileDto`:**
-
-| Field | Type | Nullable | Mô tả |
-|---|---|---|---|
-| `accountId` | `Guid` | Không | ID tài khoản |
-| `avatarFileId` | `Guid?` | Null nếu avatar không phải uploaded | FileId trong FileStorageService |
-| `externalAvatarUrl` | `string?` | Null nếu không có Google avatar | URL avatar từ Google OAuth |
-| `avatarSource` | `AvatarSourceEnum` | Không | Nguồn avatar (xem enum) |
-| `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ trong profile |
-| `birthDate` | `DateTime?` | Null nếu chưa cung cấp | Ngày sinh |
-| `timeZone` | `string?` | Null nếu chưa cài | Timezone (e.g., `Asia/Ho_Chi_Minh`) |
-
-**Chi tiết `StaffProfileDto`:**
-
-| Field | Type | Nullable | Mô tả |
-|---|---|---|---|
-| `accountId` | `Guid` | Không | ID tài khoản Staff |
-| `employeeCode` | `string?` | Null nếu chưa gán | Mã nhân viên |
-| `department` | `string?` | Null nếu chưa gán | Phòng ban |
-| `maxConcurrentTickets` | `int` | Không | Số ticket tối đa xử lý đồng thời (mặc định 3) |
-| `isAvailable` | `bool` | Không | Đang sẵn sàng nhận ticket không |
-| `notes` | `string?` | Null nếu không có | Ghi chú về staff |
-| `skills` | `StaffSkillDto[]` | Không (có thể rỗng) | Danh sách kỹ năng |
-
-**Chi tiết `StaffSkillDto`:**
-
-| Field | Type | Nullable | Mô tả |
-|---|---|---|---|
-| `skillCode` | `string` | Không | Mã kỹ năng (ví dụ: `BATTERY_REPAIR`, `ELECTRICAL`) |
-| `skillLevel` | `int` | Không | Mức độ kỹ năng (1–5 theo quy ước dự án) |
-| `certifiedUntil` | `DateTime?` | Null nếu không có chứng chỉ có hạn | Ngày hết hạn chứng chỉ |
-
----
-
-### `PUT /api/accounts/me`
-
-**Mục đích:** Cập nhật thông tin cá nhân (họ tên, ngày sinh, địa chỉ, timezone).
-
-**Auth:** Bắt buộc (mọi role)
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Validation | Mô tả |
-|---|---|---|---|---|
-| `fullName` | `string` | Bắt buộc | Không rỗng, max 150 ký tự | Họ và tên |
-| `phoneNumber` | `string?` | Tùy chọn | Max 20 ký tự | Số điện thoại |
-| `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai, năm >= 1900 | Ngày sinh |
-| `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
-| `timeZone` | `string?` | Tùy chọn | — | Timezone string |
-
-**Response thành công `200`:** `isSuccess = true`, data là Guid của account.
 
 ---
 
@@ -655,7 +545,11 @@ Header: `Authorization: Bearer {accessToken}`
 |---|---|---|---|
 | `otp` | `string` | Bắt buộc | OTP 6 chữ số gửi về email mới |
 
+**Lưu ý — email mới lấy từ đâu:** FE không cần gửi lại email mới trong request này. Khi gọi `POST /api/accounts/me/change-email`, server lưu email mới vào field `PendingEmail` của account trong DB. Handler `confirm-email-change` đọc `PendingEmail` từ DB, verify OTP, rồi copy sang `Email` chính thức. Không có race condition khi mở nhiều tab vì `PendingEmail` là per-account.
+
 **Response thành công `200`:** `isSuccess = true`, email đã cập nhật.
+
+**Lưu ý sau confirm:** Tất cả refresh token của account bị revoke. FE phải clear token và redirect về login ngay sau khi nhận response thành công.
 
 ---
 
@@ -668,6 +562,13 @@ Header: `Authorization: Bearer {accessToken}`
 **Request body:** Không có (AccountId lấy từ JWT)
 
 **Response thành công `200`:** `isSuccess = true`, OTP đã gửi.
+
+**Cooldown / Rate limit:** Có cooldown 60 giây giữa các lần gửi. Gọi quá sớm trả `429` với message "Vui lòng đợi N giây trước khi yêu cầu gửi lại OTP." OTP SMS có TTL 5 phút.
+
+**Lỗi thường gặp:**
+- `400` — Account chưa có `phoneNumber` trong profile (phải cập nhật profile trước)
+- `400` — Số điện thoại đã được xác thực (`phoneConfirmed = true`)
+- `429` — Cooldown chưa hết (gửi lại trong vòng 60 giây)
 
 ---
 
@@ -856,13 +757,13 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Lưu ý:** Các route `/api/auth-profiles/*` và `/api/staff-profiles/*` không phải route hiện tại trong controller. FE dùng các route bên dưới để tránh 404.
 
-> **Phân biệt với Nhóm 2:** Nhóm 3 là **canonical route cho profile & avatar operations** (AuthProfilesController). Nhóm 2 (`/api/accounts`) dùng cho account management (password, email change, 2FA...). Khi cần đọc profile tổng hợp, `GET /api/auth/me` và `GET /api/accounts/me` trả cùng shape — chọn một và dùng nhất quán trong toàn bộ FE.
+> **Phân biệt với Nhóm 2:** Nhóm 3 là **canonical route cho profile & avatar operations** (AuthProfilesController). Nhóm 2 (`/api/accounts`) dùng cho account management (password, email change, 2FA...). Dùng `GET /api/auth/me` để đọc profile tổng hợp — đây là route duy nhất, không có route profile thứ hai ở Nhóm 2.
 
 ---
 
 ### `GET /api/auth/me`
 
-**Mục đích:** Lấy profile tổng hợp của tài khoản hiện tại, cùng shape với `GET /api/accounts/me`.
+**Mục đích:** Lấy profile tổng hợp của tài khoản hiện tại.
 
 **Auth:** Bắt buộc (mọi role)
 
@@ -1093,6 +994,8 @@ Base route: `/api/admin/accounts`
 
 **Response:** `PaginationResponse<AccountDto>`
 
+**Lưu ý:** Mỗi `AccountDto` trong list **bao gồm đầy đủ** `profile` (AccountProfileDto) và `staffProfile` (StaffProfileDto nếu là Staff) — được eager load bằng `.Include()`, không có N+1 query. FE có thể render avatar, department, skills ngay từ list response mà không cần gọi thêm `/api/admin/accounts/{id}`.
+
 ---
 
 ### `GET /api/admin/accounts/{id}`
@@ -1131,6 +1034,18 @@ Base route: `/api/admin/accounts`
 | `address` | `string?` | Không | Max 500 ký tự | Địa chỉ |
 | `roleIds` | `Guid[]?` | Không | — | Danh sách role ID gán ngay |
 
+**Response thành công `201`:** `CommonResponse<Guid>` — `data` là Guid của account vừa tạo.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "data": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+**Lưu ý:** FE invalidate `KEY.admin.accounts` sau khi tạo thành công để list tự refetch; không cần re-fetch `AccountDto` từ response này.
+
 ---
 
 ### `POST /api/admin/accounts/invite`
@@ -1168,9 +1083,19 @@ Base route: `/api/admin/accounts`
 | `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai | Ngày sinh |
 | `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
 
-**Lưu ý:** Endpoint này chỉ sửa profile/account fields ở trên. Admin không sửa role/status/emailConfirmed trong body này; role dùng endpoint `/roles`, status dùng `PATCH /status`, session dùng `/sessions/*`.
+**Response thành công `200`:** `CommonResponse<Guid>` — `data` là Guid của account vừa update.
 
-**Lưu ý `avatarUrl` (legacy field):** Field này cho phép Admin set avatar bằng direct URL (ví dụ URL ảnh từ Google hoặc CDN bên ngoài) mà không cần upload qua FileStorageService. Với flow mới, ưu tiên dùng `POST /api/auth/me/avatar` + `avatarFileId`. FE luôn render avatar bằng `displayAvatarUrl` từ `AccountDto`, không dùng `avatarUrl` trực tiếp để hiển thị.
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+**Lưu ý:** Endpoint này chỉ sửa profile/account fields ở trên. Admin không sửa role/status/emailConfirmed trong body này; role dùng endpoint `/roles`, status dùng `PATCH /status`, session dùng `/sessions/*`. FE invalidate `QUERY_KEY.admin.accounts.detail(id)` và `KEY.admin.accounts` sau mutation.
+
+**Lưu ý `avatarUrl` (legacy field — deprecated):** Field này cho phép Admin set avatar bằng direct URL mà không cần upload qua FileStorageService. **Sẽ bị xóa khỏi endpoint này sau khi FileStorageService integration hoàn thành** (dự kiến Sprint 5). Với flow mới, ưu tiên dùng `POST /api/auth/me/avatar` + `avatarFileId`. FE luôn render avatar bằng `displayAvatarUrl` từ `AccountDto`, không dùng `avatarUrl` trực tiếp để hiển thị.
 
 ---
 
@@ -1247,6 +1172,16 @@ Base route: `/api/admin/accounts`
 **Mục đích:** Thu hồi một role cụ thể khỏi tài khoản.
 
 **Auth:** Admin
+
+**Response thành công `200`:** `isSuccess = true` — role đã bị thu hồi (`IsActive = false`).
+
+**Lưu ý:** Thu hồi không xóa record `AccountRole` — chỉ set `IsActive = false`. Role có thể được gán lại sau bằng `POST /api/admin/accounts/{id}/roles`.
+
+**Lỗi thường gặp:**
+- `400` — `id` hoặc `roleId` không hợp lệ (không phải Guid)
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin
+- `404` — Account hoặc role không tồn tại, hoặc account không đang có role đó
 
 ---
 
@@ -1357,8 +1292,7 @@ Base route: `/api/admin/staff`
 - `400` — `id`, `skillCode` hoặc body không hợp lệ
 - `401` — Token không hợp lệ hoặc hết hạn
 - `403` — Không có role Admin
-- `404` — Không tìm thấy account/staff skill
-- `409` — `employeeCode` trùng với staff khác
+- `404` — Không tìm thấy account hoặc skill code trên staff đó
 
 **Lưu ý route:** Staff assignment read nằm ở `/api/staff` và `/api/staff/{id}/assignment-profile`, không nằm dưới `/api/admin/accounts/staff`. Các route dynamic trong admin accounts đều có constraint `{id:guid}`, nên literal route như `invite` không bị match nhầm làm id.
 
@@ -1430,6 +1364,16 @@ Base route: `/api/admin/roles`
 **Mục đích:** Cập nhật tên và mô tả role.
 
 **Request body:** Giống POST nhưng có `id` từ route.
+
+**Response thành công `200`:** `CommonResponse<Guid>` — `data` là Guid của role vừa update.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
 
 ---
 

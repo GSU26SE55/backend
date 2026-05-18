@@ -49,7 +49,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             .GetAllAsync()
             .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
                 .ThenInclude(ar => ar.Role)
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
         {

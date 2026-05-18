@@ -25,7 +25,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
     {
         var role = await _unitOfWork.Roles
             .GetAllAsync()
-            .FirstOrDefaultAsync(r => r.Id == request.RoleId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == request.RoleId && !r.IsDeleted, cancellationToken);
 
         if (role == null)
             return Fail(404, "Role không tồn tại.");
@@ -46,7 +46,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
 
         var existing = await _unitOfWork.RolePermissions
             .GetAllAsync()
-            .Where(rp => rp.RoleId == request.RoleId)
+            .Where(rp => rp.RoleId == request.RoleId && !rp.IsDeleted)
             .ToListAsync(cancellationToken);
 
         var existingPermissionIds = existing.Select(rp => rp.PermissionId).ToHashSet();

@@ -17,7 +17,8 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
 
     public async Task<RoleActionResponse> Handle(DeleteRoleCommand request, CancellationToken cancellationToken)
     {
-        var role = await _unitOfWork.Roles.GetByIdAsync(request.Id);
+        var role = await _unitOfWork.Roles.GetAllAsync()
+            .FirstOrDefaultAsync(r => r.Id == request.Id && !r.IsDeleted, cancellationToken);
         if (role == null)
         {
             return new RoleActionResponse

@@ -24,7 +24,7 @@ public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, StaffAssignme
             .Include(profile => profile.Account)
                 .ThenInclude(account => account.Profile)
             .Include(profile => profile.Skills)
-            .Where(profile => profile.Account != null);
+            .Where(profile => !profile.IsDeleted && profile.Account != null && !profile.Account.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(request.Skill))
         {

@@ -52,9 +52,9 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
             .Take(request.PageSize)
             .Select(site => new SiteDto
             {
-                Id = site.Id,
+                Id = site.Id.ToString(),
                 Name = site.Name,
-                CustomerId = site.CustomerId,
+                CustomerId = site.CustomerId.ToString(),
                 CustomerName = customerName,
                 Address = site.Address,
                 Latitude = site.Latitude,

@@ -24,7 +24,7 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleA
 
         var existed = await _unitOfWork.Roles
             .GetAllAsync()
-            .AnyAsync(r => r.NormalizedName == normalized, cancellationToken);
+            .AnyAsync(r => r.NormalizedName == normalized && !r.IsDeleted, cancellationToken);
 
         if (existed)
         {

@@ -49,11 +49,11 @@ public class GetBatteryGroupsQueryHandler : IRequestHandler<GetBatteryGroupsQuer
             .Take(request.PageSize)
             .Select(group => new BatteryGroupDto
             {
-                Id = group.Id,
-                SiteId = group.SiteId,
+                Id = group.Id.ToString(),
+                SiteId = group.SiteId.ToString(),
                 SiteName = group.Site.Name,
                 Name = group.Name,
-                BatteryTypeId = group.BatteryTypeId,
+                BatteryTypeId = group.BatteryTypeId.ToString(),
                 BatteryTypeName = group.BatteryType.Name,
                 BatteryCount = group.BatteryCount,
                 CreatedAt = group.CreatedAt

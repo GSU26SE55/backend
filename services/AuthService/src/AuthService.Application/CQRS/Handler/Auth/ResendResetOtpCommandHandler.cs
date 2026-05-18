@@ -36,7 +36,7 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         // Không tiết lộ email tồn tại hay không.
         if (account != null && account.Status == AccountStatusEnum.Active && account.OtpPurpose == OtpPurposeEnum.PasswordReset)

@@ -34,7 +34,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
 
         var emailExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .AnyAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (emailExists)
         {
@@ -52,7 +52,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             var phone = request.PhoneNumber.Trim();
             var phoneExists = await _unitOfWork.Accounts
                 .GetAllAsync()
-                .AnyAsync(a => a.PhoneNumber == phone, cancellationToken);
+                .AnyAsync(a => a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
 
             if (phoneExists)
             {
@@ -71,7 +71,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
         {
             validRoleIds = await _unitOfWork.Roles
                 .GetAllAsync()
-                .Where(r => request.RoleIds.Contains(r.Id) && r.Status == RoleStatusEnum.Active)
+                .Where(r => request.RoleIds.Contains(r.Id) && r.Status == RoleStatusEnum.Active && !r.IsDeleted)
                 .Select(r => r.Id)
                 .ToListAsync(cancellationToken);
 
@@ -116,7 +116,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
 
         var roleNames = await _unitOfWork.Roles
             .GetAllAsync()
-            .Where(r => validRoleIds.Contains(r.Id))
+            .Where(r => validRoleIds.Contains(r.Id) && !r.IsDeleted)
             .Select(r => r.Name)
             .ToListAsync(cancellationToken);
 

@@ -4,11 +4,11 @@ namespace BatteryService.Application.DTOs;
 
 public class SiteDto
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
 
-    public Guid CustomerId { get; set; }
+    public string CustomerId { get; set; } = string.Empty;
 
     public string CustomerName { get; set; } = string.Empty;
 
