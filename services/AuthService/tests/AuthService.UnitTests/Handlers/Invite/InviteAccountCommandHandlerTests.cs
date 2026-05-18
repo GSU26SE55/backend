@@ -51,7 +51,7 @@ public class InviteAccountCommandHandlerTests
         captured.EmailConfirmed.Should().BeFalse();
         captured.InvitationToken.Should().NotBeNullOrEmpty();
         captured.InvitationExpiredAt.Should().NotBeNull();
-        captured.InvitationExpiredAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
+        captured.InvitationExpiredAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddHours(72), TimeSpan.FromMinutes(1));
 
         _producer.Verify(p => p.PublishAsync(
             It.Is<SendAdminInviteEvent>(e =>

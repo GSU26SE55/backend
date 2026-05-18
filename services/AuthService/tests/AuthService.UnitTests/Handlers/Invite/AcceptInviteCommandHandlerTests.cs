@@ -100,7 +100,7 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        resp.StatusCode.Should().Be(410);
         account.Status.Should().Be(AccountStatusEnum.PendingVerification);
     }
 
@@ -119,6 +119,6 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 }
