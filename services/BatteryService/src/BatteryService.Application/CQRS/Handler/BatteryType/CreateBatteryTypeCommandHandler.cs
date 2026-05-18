@@ -54,7 +54,7 @@ public class CreateBatteryTypeCommandHandler : IRequestHandler<CreateBatteryType
         return new CommonResponse<BatteryTypeDto>
         {
             IsSuccess = true,
-            StatusCode = 200,
+            StatusCode = 201,
             Message = "Tạo loại pin thành công.",
             Data = BatteryMapper.ToDto(entity)
         };
