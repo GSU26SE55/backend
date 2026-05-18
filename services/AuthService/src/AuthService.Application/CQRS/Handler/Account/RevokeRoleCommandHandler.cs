@@ -23,7 +23,7 @@ public class RevokeRoleCommandHandler : IRequestHandler<RevokeRoleCommand, Accou
     {
         var assignment = await _unitOfWork.AccountRoles
             .GetAllAsync()
-            .FirstOrDefaultAsync(ar => ar.AccountId == request.AccountId && ar.RoleId == request.RoleId, cancellationToken);
+            .FirstOrDefaultAsync(ar => ar.AccountId == request.AccountId && ar.RoleId == request.RoleId && !ar.IsDeleted, cancellationToken);
 
         if (assignment == null)
         {

@@ -36,7 +36,7 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
             return Fail(404, "Không tìm thấy tài khoản.");

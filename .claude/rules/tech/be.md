@@ -464,9 +464,12 @@ GET /api/batteries/{id}/readings/aggregate?from=...&to=...&interval=1h
 - FE dùng endpoint này cho chart, không dùng raw readings để vẽ
 
 **QueryHandler pattern cho sensor readings:**
+
+> ⚠️ `SensorReading` là append-only, **không** extend `AuditableEntity` và **không** có `IsDeleted`. Không filter `!x.IsDeleted` — compile error nếu thêm vào.
+
 ```csharp
 var query = _unitOfWork.SensorReadings.GetAllAsync()
-    .Where(x => !x.IsDeleted && x.BatteryId == request.BatteryId);
+    .Where(x => x.BatteryAssetId == request.BatteryAssetId);
 
 if (request.From.HasValue)   query = query.Where(x => x.Timestamp >= request.From.Value);
 if (request.To.HasValue)     query = query.Where(x => x.Timestamp <= request.To.Value);

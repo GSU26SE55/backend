@@ -37,8 +37,8 @@ public class GetThresholdConfigsQueryHandler : IRequestHandler<GetThresholdConfi
             .Take(request.PageSize)
             .Select(config => new ThresholdConfigDto
             {
-                Id = config.Id,
-                BatteryTypeId = config.BatteryTypeId,
+                Id = config.Id.ToString(),
+                BatteryTypeId = config.BatteryTypeId.ToString(),
                 BatteryTypeName = config.BatteryType.Name,
                 VoltageMin = config.VoltageMin,
                 VoltageMax = config.VoltageMax,

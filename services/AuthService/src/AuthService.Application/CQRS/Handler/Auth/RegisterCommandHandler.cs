@@ -41,7 +41,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
 
         var existing = await _unitOfWork.Accounts
             .GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (existing != null && existing.Status != AccountStatusEnum.PendingVerification)
             return Fail(409, "Email", "Email đã được sử dụng.");
@@ -50,7 +50,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         {
             var phoneOwnerId = await _unitOfWork.Accounts
                 .GetAllAsync()
-                .Where(a => a.PhoneNumber == phone)
+                .Where(a => a.PhoneNumber == phone && !a.IsDeleted)
                 .Select(a => (Guid?)a.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 

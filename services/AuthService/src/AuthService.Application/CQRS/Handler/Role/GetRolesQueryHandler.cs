@@ -18,7 +18,7 @@ public class GetRolesQueryHandler : IRequestHandler<GetRolesQuery, RoleListRespo
 
     public async Task<RoleListResponse> Handle(GetRolesQuery request, CancellationToken cancellationToken)
     {
-        var query = _unitOfWork.Roles.GetAllAsync().AsNoTracking();
+        var query = _unitOfWork.Roles.GetAllAsync().Where(r => !r.IsDeleted).AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {

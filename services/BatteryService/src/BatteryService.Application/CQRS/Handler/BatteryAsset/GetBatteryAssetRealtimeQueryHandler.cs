@@ -56,7 +56,7 @@ public class GetBatteryAssetRealtimeQueryHandler : IRequestHandler<GetBatteryAss
             StatusCode = 200,
             Data = new BatteryAssetRealtimeDto
             {
-                AssetId = asset.Id,
+                AssetId = asset.Id.ToString(),
                 SerialNumber = asset.SerialNumber,
                 Status = asset.Status,
                 Time = latest?.Time,

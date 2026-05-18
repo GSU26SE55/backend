@@ -35,19 +35,70 @@
 | `KbImage` | 4 | Hình ảnh trong knowledge base | Upload cho bài viết KB |
 | `Firmware` | 5 | File firmware thiết bị | Upload firmware cho battery management system |
 
-> **Lưu ý `Other = 0`:** Đây là ngoại lệ có chủ ý so với quy tắc BE chuẩn (enum bắt đầu từ 1). Giá trị `0` được chọn để `Other` là default value của C# enum — khi client không truyền `purpose` trong form upload, backend nhận `(FilePurposeEnum)0 = Other` và áp dụng whitelist `Other`. Không thay đổi giá trị này để tránh ảnh hưởng data đã có trong DB (`migration defaultValue: 0`). `FileStatusEnum` cũng áp dụng cùng pattern (`Uploaded = 0`).
+> **Lưu ý `Other = 0`:** Đây là ngoại lệ có chủ ý so với quy tắc BE chuẩn (enum bắt đầu từ 1). Giá trị `0` được chọn để `Other` là default value của C# enum — khi client không truyền `purpose` trong form upload, backend nhận `(FilePurposeEnum)0 = Other` và áp dụng whitelist `Other`. Không thay đổi giá trị này để tránh ảnh hưởng data đã có trong DB (`migration defaultValue: 0`). `FileStatusEnum` bắt đầu từ `1` theo quy tắc BE chuẩn — không áp dụng exception này.
 
 ### `FileStatusEnum`
 
 | Giá trị | Int | Ý nghĩa | Có thể tải không |
 |---|---|---|---|
-| `Uploaded` | 0 | Vừa upload xong, chưa qua xử lý | Có (legacy state) |
-| `Processing` | 1 | Đang trong pipeline xử lý (virus scan, resize...) | **Không** — download/presigned-url trả `409 Conflict` |
-| `Ready` | 2 | Đã xử lý xong, sẵn sàng phục vụ | Có |
-| `Quarantined` | 3 | Bị cách ly (phát hiện virus hoặc nội dung vi phạm) | **Không** — trả 409 |
-| `Deleted` | 4 | Đã bị xóa (soft delete) | **Không** — trả 404 |
+| `Uploaded` | 1 | Vừa upload xong, chưa qua xử lý | Có (legacy state) |
+| `Processing` | 2 | Đang trong pipeline xử lý (virus scan, resize...) | **Không** — download/presigned-url trả `409 Conflict` |
+| `Ready` | 3 | Đã xử lý xong, sẵn sàng phục vụ | Có |
+| `Quarantined` | 4 | Bị cách ly (phát hiện virus hoặc nội dung vi phạm) | **Không** — trả 409 |
+| `Deleted` | 5 | Đã bị xóa (soft delete) | **Không** — trả 404 |
 
 > **Sprint 1:** Pipeline xử lý (resize, virus scan) chưa active. File upload xong được lưu metadata với trạng thái `Ready`. `Uploaded` là state dự phòng cho pipeline Sprint 2+ — Sprint 1 không sử dụng.
+
+---
+
+## TypeScript Types
+
+Copy trực tiếp vào `src/features/file-storage/types/file-storage.types.ts`.
+
+```typescript
+// Giữ enum value đồng bộ với backend — không tự ý đổi số.
+export enum FilePurposeEnum {
+  Other = 0,           // exception: 0 là default C# khi form không truyền purpose
+  Avatar = 1,
+  TicketAttachment = 2,
+  MaintenancePhoto = 3,
+  KbImage = 4,
+  Firmware = 5,
+}
+
+export enum FileStatusEnum {
+  Uploaded = 1,
+  Processing = 2,
+  Ready = 3,
+  Quarantined = 4,
+  Deleted = 5,
+}
+
+export interface FileUploadResponse {
+  fileId: string;          // UUID — lưu vào domain service để tham chiếu
+  objectKey: string;       // khóa trong object storage — dùng cho endpoint legacy
+  fileName: string;        // tên file gốc client gửi lên
+  contentType: string;     // MIME type (e.g. "image/png")
+  size: number;            // bytes
+  publicUrl: string | null; // null ở Sprint 1 (MinIO local) — fallback GET /{id}/download
+}
+
+export interface FileMetadataResponse {
+  fileId: string;
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  folderName: string;
+  purpose: FilePurposeEnum;
+  status: FileStatusEnum;
+  publicUrl: string | null;
+  createdAt: string;       // ISO 8601 UTC
+  updatedAt: string | null;
+}
+```
+
+> **`publicUrl: null`:** Sprint 1 với MinIO local luôn trả `null`. FE phải handle `null` và fallback về `GET /api/files/{fileId}/download`. Khi production deploy với public bucket, `publicUrl` sẽ có giá trị — test lại path này trước khi release.
 
 ---
 
@@ -72,23 +123,6 @@
 
 ---
 
-## FE Feedback Resolution — 2026-05-17
-
-| Mã | Trạng thái BE | Ghi chú |
-|---|---|---|
-| C1 | Done | Đã document Authorization Scope; code enforce `CreatedBy` + role/purpose qua JWT claim. Resource-based access theo ticket/branch/assignment phải đi qua service sở hữu resource. |
-| C2 | Accepted risk + documented | Presigned URL đã cấp không revoke được bằng DB status; khuyến nghị `expiresInMinutes=1` cho file nhạy cảm và move/xóa object khi quarantine active. |
-| C3 | Fixed + documented | Endpoint legacy theo `objectKey` hiện lookup metadata DB, enforce owner/status; `Processing`/`Quarantined` trả `409`, `Deleted`/missing metadata trả `404`. |
-| H1 | Done | Đã liệt kê extension whitelist theo `FilePurposeEnum`. |
-| H2 | Done | Firmware dùng chung upload endpoint, chỉ Admin, size limit 20 MB, domain service firmware/device/battery lưu `fileId`. |
-| H3 | Done | `Processing` trả `409`; FE polling metadata mỗi 2-5 giây nếu cần chờ `Ready`. |
-| H4 | Done | File binary >20 MB trả `413`; middleware cũng trả JSON chuẩn khi ASP.NET Core reject request trước controller. |
-| M1 | Fixed + deprecated | `DELETE ?objectKey=` hiện soft-delete metadata để tránh orphan record, nhưng vẫn deprecated cho FE mới. |
-| M2 | Done | Cả hai endpoint presigned-url validate `expiresInMinutes` trong khoảng `1-1440`. |
-| M3 | Done | Đã document thứ tự clear domain reference trước, rồi FileStorage cleanup; lỗi cleanup cần retry/job bù trừ. |
-
----
-
 ## Authorization Scope
 
 FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`) và không biết ticket/branch/maintenance-log nào đang tham chiếu file. Vì vậy authorization trực tiếp tại FileStorage được enforce theo rule an toàn sau:
@@ -104,9 +138,13 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
 
 **Resource-based access:** nếu Manager cần xem ticket attachment thuộc branch hoặc Staff cần xem ảnh bảo trì của ticket được assign, Ticket/Maintenance service phải expose endpoint nghiệp vụ riêng và tự kiểm tra quyền theo ticket/branch/assignment trước khi proxy hoặc cấp file access. Không để FE gọi trực tiếp FileStorage cho file không do user hiện tại upload.
 
-**Ownership check:** backend so sánh `UploadedFile.CreatedBy` với `AccountId`/`NameIdentifier` trong JWT. Nếu không phải owner và không thỏa rule role/purpose ở bảng trên, API trả `403 Forbidden`.
+**KbImage — intentional open access:** `KbImage` được thiết kế để mọi role đăng nhập (bao gồm Customer) đều có thể đọc. KB là nội dung hỗ trợ kỹ thuật dành cho tất cả user — không phải file nội bộ. Đây là quyết định có chủ ý, không phải oversight.
 
-**JWT claim mapping:** FileStorageService resolve user hiện tại từ claim `NameIdentifier` hoặc `AccountId`; role được đọc từ claim `role` hoặc role claim chuẩn của ASP.NET Core. Nếu token thiếu user id hợp lệ, các thao tác upload/read/delete sẽ bị xem là không đủ quyền.
+**Ownership check:** backend so sánh `UploadedFile.CreatedBy` với userId trong JWT. Nếu không phải owner và không thỏa rule role/purpose ở bảng trên, API trả `403 Forbidden`.
+
+**JWT claim mapping:** FileStorageService resolve userId theo thứ tự ưu tiên: claim `NameIdentifier` **trước**, fallback về `AccountId` nếu `NameIdentifier` null. Role được đọc từ claim `role` hoặc role claim chuẩn ASP.NET Core. Token từ AuthService luôn chứa `NameIdentifier` — `AccountId` là fallback cho service legacy. Nếu token thiếu cả hai, mọi thao tác upload/read/delete bị xem là không đủ quyền.
+
+**Path traversal protection:** Tất cả endpoint nhận `objectKey` qua query string (`DELETE ?objectKey=`, `GET /download?objectKey=`, `GET /presigned-url?objectKey=`) đều thực hiện: (1) reject nếu `objectKey` chứa `..` → `400`, (2) normalize: trim whitespace, strip leading `/\`, replace `\→/`. Behavior này nhất quán trên cả 3 endpoint — không chỉ riêng DELETE.
 
 **Presigned URL risk:** presigned URL được issue tại thời điểm gọi API. Nếu file bị chuyển sang `Quarantined` sau đó, URL đã cấp vẫn có thể hoạt động trực tiếp với object storage đến khi hết hạn. Với file nhạy cảm, FE/domain service nên truyền `expiresInMinutes=1`; khi pipeline quarantine active, backend nên move/xóa object khỏi bucket phục vụ download để đóng window này.
 
@@ -555,3 +593,30 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 | `409` | File đang ở trạng thái Processing hoặc Quarantined — áp dụng cho `download` và `presigned-url` |
 | `413` | Upload vượt giới hạn 20 MB |
 | `500` | Lỗi object storage hoặc lỗi hệ thống |
+
+---
+
+## Changelog
+
+### 2026-05-18
+
+- **FileStatusEnum** đổi giá trị từ `0–4` sang `1–5` theo quy tắc BE chuẩn (enum bắt đầu từ 1). Migration `FixFileStatusEnumDefaultValue` đã chạy để cập nhật DB default và migrate data hiện có.
+- Bổ sung section **TypeScript Types** để FE copy trực tiếp thay vì tự suy ra từ bảng.
+- Làm rõ **KbImage open access** — intentional, Customer được đọc.
+- Làm rõ **JWT claim priority** — `NameIdentifier` trước, fallback `AccountId`.
+- Xác nhận **path traversal protection** áp dụng nhất quán trên cả 3 objectKey endpoint.
+
+### 2026-05-17 — FE Feedback Resolution
+
+| Mã | Trạng thái BE | Ghi chú |
+|---|---|---|
+| C1 | Done | Đã document Authorization Scope; code enforce `CreatedBy` + role/purpose qua JWT claim. Resource-based access theo ticket/branch/assignment phải đi qua service sở hữu resource. |
+| C2 | Accepted risk + documented | Presigned URL đã cấp không revoke được bằng DB status; khuyến nghị `expiresInMinutes=1` cho file nhạy cảm và move/xóa object khi quarantine active. |
+| C3 | Fixed + documented | Endpoint legacy theo `objectKey` hiện lookup metadata DB, enforce owner/status; `Processing`/`Quarantined` trả `409`, `Deleted`/missing metadata trả `404`. |
+| H1 | Done | Đã liệt kê extension whitelist theo `FilePurposeEnum`. |
+| H2 | Done | Firmware dùng chung upload endpoint, chỉ Admin, size limit 20 MB, domain service firmware/device/battery lưu `fileId`. |
+| H3 | Done | `Processing` trả `409`; FE polling metadata mỗi 2-5 giây nếu cần chờ `Ready`. |
+| H4 | Done | File binary >20 MB trả `413`; middleware cũng trả JSON chuẩn khi ASP.NET Core reject request trước controller. |
+| M1 | Fixed + deprecated | `DELETE ?objectKey=` hiện soft-delete metadata để tránh orphan record, nhưng vẫn deprecated cho FE mới. |
+| M2 | Done | Cả hai endpoint presigned-url validate `expiresInMinutes` trong khoảng `1-1440`. |
+| M3 | Done | Đã document thứ tự clear domain reference trước, rồi FileStorage cleanup; lỗi cleanup cần retry/job bù trừ. |

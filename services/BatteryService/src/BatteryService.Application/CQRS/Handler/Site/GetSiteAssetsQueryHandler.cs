@@ -64,15 +64,15 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
             from account in accountJoin.DefaultIfEmpty()
             select new BatteryAssetDto
             {
-                Id = asset.Id,
+                Id = asset.Id.ToString(),
                 SerialNumber = asset.SerialNumber,
-                BatteryTypeId = asset.BatteryTypeId,
+                BatteryTypeId = asset.BatteryTypeId.ToString(),
                 BatteryTypeName = asset.BatteryType.Name,
-                SiteId = asset.SiteId,
+                SiteId = asset.SiteId.HasValue ? asset.SiteId.Value.ToString() : null,
                 SiteName = asset.Site != null ? asset.Site.Name : null,
-                BatteryGroupId = asset.BatteryGroupId,
+                BatteryGroupId = asset.BatteryGroupId.HasValue ? asset.BatteryGroupId.Value.ToString() : null,
                 BatteryGroupName = asset.BatteryGroup != null ? asset.BatteryGroup.Name : null,
-                CustomerId = asset.CustomerId,
+                CustomerId = asset.CustomerId.ToString(),
                 CustomerName = account != null ? account.FullName : string.Empty,
                 InstallDate = asset.InstallDate,
                 WarrantyEndDate = asset.WarrantyEndDate,

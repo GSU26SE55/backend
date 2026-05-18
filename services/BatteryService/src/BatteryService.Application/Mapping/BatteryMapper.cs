@@ -10,7 +10,7 @@ public static class BatteryMapper
     {
         return new BatteryTypeDto
         {
-            Id = batteryType.Id,
+            Id = batteryType.Id.ToString(),
             Name = batteryType.Name,
             Manufacturer = batteryType.Manufacturer,
             NominalCapacityAh = batteryType.NominalCapacityAh,
@@ -26,15 +26,15 @@ public static class BatteryMapper
     {
         return new BatteryAssetDto
         {
-            Id = asset.Id,
+            Id = asset.Id.ToString(),
             SerialNumber = asset.SerialNumber,
-            BatteryTypeId = asset.BatteryTypeId,
+            BatteryTypeId = asset.BatteryTypeId.ToString(),
             BatteryTypeName = asset.BatteryType?.Name ?? string.Empty,
-            SiteId = asset.SiteId,
+            SiteId = asset.SiteId?.ToString(),
             SiteName = asset.Site?.Name,
-            BatteryGroupId = asset.BatteryGroupId,
+            BatteryGroupId = asset.BatteryGroupId?.ToString(),
             BatteryGroupName = asset.BatteryGroup?.Name,
-            CustomerId = asset.CustomerId,
+            CustomerId = asset.CustomerId.ToString(),
             CustomerName = customerName,
             InstallDate = asset.InstallDate,
             WarrantyEndDate = asset.WarrantyEndDate,
@@ -53,9 +53,9 @@ public static class BatteryMapper
     {
         return new SiteDto
         {
-            Id = site.Id,
+            Id = site.Id.ToString(),
             Name = site.Name,
-            CustomerId = site.CustomerId,
+            CustomerId = site.CustomerId.ToString(),
             CustomerName = customerName,
             Address = site.Address,
             Latitude = site.Latitude,
@@ -76,11 +76,11 @@ public static class BatteryMapper
     {
         return new BatteryGroupDto
         {
-            Id = group.Id,
-            SiteId = group.SiteId,
+            Id = group.Id.ToString(),
+            SiteId = group.SiteId.ToString(),
             SiteName = group.Site?.Name ?? string.Empty,
             Name = group.Name,
-            BatteryTypeId = group.BatteryTypeId,
+            BatteryTypeId = group.BatteryTypeId.ToString(),
             BatteryTypeName = group.BatteryType?.Name ?? string.Empty,
             BatteryCount = group.BatteryCount,
             CreatedAt = group.CreatedAt
@@ -91,8 +91,8 @@ public static class BatteryMapper
     {
         return new ThresholdConfigDto
         {
-            Id = config.Id,
-            BatteryTypeId = config.BatteryTypeId,
+            Id = config.Id.ToString(),
+            BatteryTypeId = config.BatteryTypeId.ToString(),
             BatteryTypeName = config.BatteryType?.Name ?? string.Empty,
             VoltageMin = config.VoltageMin,
             VoltageMax = config.VoltageMax,
@@ -114,7 +114,7 @@ public static class BatteryMapper
         return new SensorReadingDto
         {
             Time = reading.Time,
-            BatteryAssetId = reading.BatteryAssetId,
+            BatteryAssetId = reading.BatteryAssetId.ToString(),
             Voltage = reading.Voltage,
             Current = reading.Current,
             Temperature = reading.Temperature,
@@ -128,8 +128,8 @@ public static class BatteryMapper
     {
         return new AlertDto
         {
-            Id = alert.Id,
-            BatteryAssetId = alert.BatteryAssetId,
+            Id = alert.Id.ToString(),
+            BatteryAssetId = alert.BatteryAssetId.ToString(),
             BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,
             AnomalyType = alert.AnomalyType,
             Severity = alert.Severity,
@@ -138,8 +138,8 @@ public static class BatteryMapper
             Unit = alert.Unit,
             DetectedAt = alert.DetectedAt,
             Status = alert.Status,
-            TicketId = alert.TicketId,
-            AcknowledgedByUserId = alert.AcknowledgedByUserId,
+            TicketId = alert.TicketId?.ToString(),
+            AcknowledgedByUserId = alert.AcknowledgedByUserId?.ToString(),
             AcknowledgedAt = alert.AcknowledgedAt,
             ResolvedAt = alert.ResolvedAt,
             DedupWindowEndUtc = alert.DedupWindowEndUtc,

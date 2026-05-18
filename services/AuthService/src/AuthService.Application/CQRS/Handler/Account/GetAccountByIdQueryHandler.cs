@@ -26,7 +26,7 @@ public class GetAccountByIdQueryHandler : IRequestHandler<GetAccountByIdQuery, A
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)
-            .FirstOrDefaultAsync(a => a.Id == request.Id, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
 
         if (account == null)
         {

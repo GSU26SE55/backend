@@ -51,7 +51,7 @@ public class BatteryTypesController : ControllerBase
     /// - Trả về <see cref="PaginationResponse{T}"/> với <c>Items</c>, <c>TotalItems</c>, <c>PageNumber</c>, <c>PageSize</c>.
     ///
     /// Use case điển hình:
-    /// - Admin/Manager xem danh sách BatteryType để chọn khi tạo BatteryAsset/Site/Group.
+    /// - Admin/Manager/Staff xem danh sách BatteryType để chọn khi tạo BatteryAsset/Site/Group.
     /// - Admin filter <c>IncludeDeleted=true</c> để tìm BatteryType cũ cần khôi phục.
     /// </remarks>
     /// <param name="query">Query phân trang + filter.</param>
@@ -59,9 +59,9 @@ public class BatteryTypesController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> với <c>Data</c> là <see cref="PaginationResponse{T}"/> các <see cref="BatteryTypeDto"/>.</returns>
     /// <response code="200">Trả về danh sách BatteryType (có thể rỗng).</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ.</response>
-    /// <response code="403">Đăng nhập nhưng không có role Admin hoặc Manager.</response>
+    /// <response code="403">Đăng nhập nhưng không có role Admin, Manager hoặc Staff.</response>
     [HttpGet]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<BatteryTypeDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -90,10 +90,10 @@ public class BatteryTypesController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> với <c>Data</c> là <see cref="BatteryTypeDto"/>.</returns>
     /// <response code="200">Trả về BatteryType.</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin hoặc Manager.</response>
+    /// <response code="403">Không có role Admin, Manager hoặc Staff.</response>
     /// <response code="404">Không tìm thấy BatteryType hoặc đã bị xóa.</response>
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<BatteryTypeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -29,7 +29,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
             return Fail(404, "Tài khoản không tồn tại hoặc OTP không hợp lệ.");

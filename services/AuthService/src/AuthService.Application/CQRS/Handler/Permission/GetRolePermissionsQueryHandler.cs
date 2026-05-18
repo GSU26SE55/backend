@@ -29,7 +29,7 @@ public class GetRolePermissionsQueryHandler : IRequestHandler<GetRolePermissions
 
         var roleExists = await _unitOfWork.Roles
             .GetAllAsync()
-            .AnyAsync(r => r.Id == request.RoleId, cancellationToken);
+            .AnyAsync(r => r.Id == request.RoleId && !r.IsDeleted, cancellationToken);
 
         if (!roleExists)
         {
@@ -42,7 +42,7 @@ public class GetRolePermissionsQueryHandler : IRequestHandler<GetRolePermissions
         }
 
         var query = from rolePermission in _unitOfWork.RolePermissions.GetAllAsync()
-                    where rolePermission.RoleId == request.RoleId
+                    where rolePermission.RoleId == request.RoleId && !rolePermission.IsDeleted
                     join permission in _unitOfWork.Permissions.GetAllAsync()
                         on rolePermission.PermissionId equals permission.Id
                     orderby permission.Module, permission.Code

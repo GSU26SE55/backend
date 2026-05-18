@@ -34,7 +34,8 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
         if (error != null || !accountId.HasValue)
             return Fail(401, error ?? "Reset token không hợp lệ.");
 
-        var account = await _unitOfWork.Accounts.GetByIdAsync(accountId.Value);
+        var account = await _unitOfWork.Accounts.GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == accountId.Value && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Tài khoản không tồn tại.");
 
