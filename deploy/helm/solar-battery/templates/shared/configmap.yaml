@@ -14,9 +14,9 @@ data:
 
   # ApiGateway upstreams trong K8s. appsettings.json dùng localhost cho local dev,
   # nên K8s cần override bằng service DNS nội bộ.
-  ReverseProxy__Clusters__auth-cluster__Destinations__destination1__Address: "http://authservice:80"
-  ReverseProxy__Clusters__file-storage-cluster__Destinations__destination1__Address: "http://filestorageservice:80"
-  ReverseProxy__Clusters__battery-cluster__Destinations__destination1__Address: "http://batteryservice:80"
+  ReverseProxy__Clusters__authCluster__Destinations__destination1__Address: "http://authservice:80"
+  ReverseProxy__Clusters__fileStorageCluster__Destinations__destination1__Address: "http://filestorageservice:80"
+  ReverseProxy__Clusters__batteryCluster__Destinations__destination1__Address: "http://batteryservice:80"
 
   # Object Storage URLs build từ domain
   ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"

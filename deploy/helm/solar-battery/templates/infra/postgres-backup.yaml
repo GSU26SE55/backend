@@ -23,6 +23,13 @@ spec:
           - name: backup
             # postgres:16-alpine có pg_dump sẵn, gzip có sẵn; cài thêm mc qua wget.
             image: postgres:16-alpine
+            resources:
+              requests:
+                cpu: 20m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
             env:
             - name: PGHOST
               value: postgres
