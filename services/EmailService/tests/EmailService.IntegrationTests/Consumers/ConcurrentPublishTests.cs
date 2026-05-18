@@ -72,6 +72,12 @@ public class ConcurrentPublishTests : IAsyncLifetime
         foreach (var e in resets)
             await _factory.WaitForRenderCallAsync(e.Otp, timeoutMs: 10000);
 
+        // Render xảy ra TRƯỚC khi gửi Mailjet — đợi tới khi HTTP call thực sự hoàn tất rồi mới đếm.
+        foreach (var e in registers)
+            await _factory.WaitForMailjetCallAsync(e.ToEmail, timeoutMs: 10000);
+        foreach (var e in resets)
+            await _factory.WaitForMailjetCallAsync(e.ToEmail, timeoutMs: 10000);
+
         // Mỗi register + reset có 1 mailjet call.
         foreach (var e in registers)
             _factory.CountMailjetCallsContaining(e.ToEmail).Should().Be(1);
