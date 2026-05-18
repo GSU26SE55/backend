@@ -42,7 +42,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
         var token = await SeedAndLoginAsync("profile@example.com");
         _client.WithBearer(token);
 
-        var resp = await _client.GetAsync("/api/accounts/me");
+        var resp = await _client.GetAsync("/api/auth/me");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<AccountResponse>();
         body!.Data!.Email.Should().Be("profile@example.com");
@@ -53,7 +53,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
     public async Task GetMyProfile_NoToken_Returns401()
     {
         _client.WithoutBearer();
-        var resp = await _client.GetAsync("/api/accounts/me");
+        var resp = await _client.GetAsync("/api/auth/me");
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -72,7 +72,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
             await db.SaveChangesAsync();
         }
 
-        var resp = await _client.PutAsJsonAsync("/api/accounts/me", new
+        var resp = await _client.PutAsJsonAsync("/api/auth/me/profile", new
         {
             FullName = "Updated Name",
             PhoneNumber = "0900222"
