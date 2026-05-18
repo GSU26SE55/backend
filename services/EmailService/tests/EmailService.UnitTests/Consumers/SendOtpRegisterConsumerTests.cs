@@ -108,10 +108,14 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         var evt = new SendOtpRegisterEvent("user@example.com", "123456");
         await _harness.Bus.Publish(evt);
 
-        await Task.Delay(500);
-
         // Inbox PHẢI được hỏi (consumer đã chạy)
-        _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        await ConsumerTestWaiter.UntilAsync(
+            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+                It.IsAny<Guid>(),
+                nameof(SendOtpRegisterConsumer),
+                It.IsAny<CancellationToken>()), Times.AtLeastOnce),
+            TimeSpan.FromSeconds(10));
+
         // Mailjet KHÔNG được gọi
         _fakeHandler.CallCount.Should().Be(0);
         // Template renderer cũng không được gọi (skip toàn bộ logic gửi)
@@ -147,4 +151,3 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         _fakeHandler.CallCount.Should().Be(1);
     }
 }
-

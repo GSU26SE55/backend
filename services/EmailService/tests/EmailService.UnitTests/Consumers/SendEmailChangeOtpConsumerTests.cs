@@ -100,10 +100,17 @@ public class SendEmailChangeOtpConsumerTests : IAsyncLifetime
 
         await _harness.Bus.Publish(new SendEmailChangeOtpEvent("new@example.com", "111111"));
 
-        var consumerHarness = _harness.GetConsumerHarness<SendEmailChangeOtpConsumer>();
-        (await consumerHarness.Consumed.Any<SendEmailChangeOtpEvent>()).Should().BeTrue();
+        await ConsumerTestWaiter.UntilAsync(
+            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+                It.IsAny<Guid>(),
+                nameof(SendEmailChangeOtpConsumer),
+                It.IsAny<CancellationToken>()), Times.AtLeastOnce),
+            TimeSpan.FromSeconds(10));
 
-        _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendEmailChangeOtpConsumer), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _fakeHandler.CallCount.Should().Be(0);
+        _renderer.Verify(r => r.RenderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string?>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 }

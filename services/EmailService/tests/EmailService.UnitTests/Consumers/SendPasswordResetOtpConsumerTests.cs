@@ -100,8 +100,12 @@ public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
 
         await _harness.Bus.Publish(new SendPasswordResetOtpEvent("user@example.com", "111111"));
 
-        var consumerHarness = _harness.GetConsumerHarness<SendPasswordResetOtpConsumer>();
-        (await consumerHarness.Consumed.Any<SendPasswordResetOtpEvent>()).Should().BeTrue();
+        await ConsumerTestWaiter.UntilAsync(
+            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+                It.IsAny<Guid>(),
+                nameof(SendPasswordResetOtpConsumer),
+                It.IsAny<CancellationToken>()), Times.AtLeastOnce),
+            TimeSpan.FromSeconds(10));
 
         _fakeHandler.CallCount.Should().Be(0);
         _renderer.Verify(r => r.RenderAsync(It.IsAny<string>(),
