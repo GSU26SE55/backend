@@ -144,6 +144,7 @@ postgres:
     minimumPoolSize: 2
   initJob:
     activeDeadlineSeconds: 180
+    ttlSecondsAfterFinished: 300
     resources:
       requests: { cpu: 20m, memory: 64Mi }
       limits:   { cpu: 100m, memory: 128Mi }
