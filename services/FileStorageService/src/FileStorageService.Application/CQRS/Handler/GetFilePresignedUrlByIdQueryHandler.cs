@@ -32,7 +32,7 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
         var file = await _unitOfWork.UploadedFiles
             .GetAllAsync()
             .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.Id == request.Id && f.Status != FileStatusEnum.Deleted, cancellationToken);
+            .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted && f.Status != FileStatusEnum.Deleted, cancellationToken);
 
         if (file is null)
             return NotFound();

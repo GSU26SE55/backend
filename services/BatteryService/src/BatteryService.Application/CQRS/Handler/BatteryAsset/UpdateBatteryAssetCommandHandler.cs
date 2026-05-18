@@ -155,7 +155,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
         {
             var oldGroup = await _unitOfWork.BatteryGroups
                 .GetAllAsync()
-                .FirstOrDefaultAsync(group => group.Id == oldGroupId.Value, cancellationToken);
+                .FirstOrDefaultAsync(group => group.Id == oldGroupId.Value && !group.IsDeleted, cancellationToken);
 
             if (oldGroup is not null)
             {
@@ -168,7 +168,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
         {
             var newGroup = await _unitOfWork.BatteryGroups
                 .GetAllAsync()
-                .FirstOrDefaultAsync(group => group.Id == newGroupId.Value, cancellationToken);
+                .FirstOrDefaultAsync(group => group.Id == newGroupId.Value && !group.IsDeleted, cancellationToken);
 
             if (newGroup is not null)
             {

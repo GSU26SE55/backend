@@ -47,6 +47,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
     {
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Where(a => !a.IsDeleted)
             .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
                 .ThenInclude(ar => ar.Role)
             .FirstOrDefaultAsync(a => a.InvitationToken == request.InvitationToken, cancellationToken);
@@ -55,10 +56,10 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
 
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value < DateTime.UtcNow)
-            return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
+            return Fail(410, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(400, "Tài khoản đã được kích hoạt trước đó.");
+            return Fail(409, "Tài khoản đã được kích hoạt trước đó.");
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 

@@ -32,7 +32,7 @@ public class DeleteFileCommandHandler : IRequestHandler<DeleteFileCommand, Commo
         var objectKey = NormalizeObjectKey(request.ObjectKey);
         var file = await _unitOfWork.UploadedFiles
             .GetAllAsync()
-            .FirstOrDefaultAsync(f => f.ObjectKey == objectKey && f.Status != FileStatusEnum.Deleted, cancellationToken);
+            .FirstOrDefaultAsync(f => f.ObjectKey == objectKey && !f.IsDeleted && f.Status != FileStatusEnum.Deleted, cancellationToken);
 
         if (file is null)
             return NotFound();

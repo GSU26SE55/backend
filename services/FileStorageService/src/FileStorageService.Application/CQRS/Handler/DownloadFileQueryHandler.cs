@@ -34,7 +34,7 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
         var file = await _unitOfWork.UploadedFiles
             .GetAllAsync()
             .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.ObjectKey == objectKey && f.Status != FileStatusEnum.Deleted, cancellationToken);
+            .FirstOrDefaultAsync(f => f.ObjectKey == objectKey && !f.IsDeleted && f.Status != FileStatusEnum.Deleted, cancellationToken);
 
         if (file is null)
             return NotFound();

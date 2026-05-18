@@ -84,7 +84,7 @@ public class CreateBatteryGroupCommandHandler : IRequestHandler<CreateBatteryGro
         return new CommonResponse<BatteryGroupDto>
         {
             IsSuccess = true,
-            StatusCode = 201,
+            StatusCode = 200,
             Message = "Tạo nhóm pin thành công.",
             Data = BatteryMapper.ToDto(entity)
         };

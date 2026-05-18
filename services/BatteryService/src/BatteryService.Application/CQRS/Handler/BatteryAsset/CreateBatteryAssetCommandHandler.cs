@@ -145,7 +145,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
         return new CommonResponse<BatteryAssetDto>
         {
             IsSuccess = true,
-            StatusCode = 201,
+            StatusCode = 200,
             Message = "Tạo tài sản pin thành công.",
             Data = BatteryMapper.ToDto(entity, customer.FullName)
         };
