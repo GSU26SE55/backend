@@ -32,13 +32,21 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             };
         }
 
-        var wasLocked = account.Status == AccountStatusEnum.Locked;
+        if (account.Status != AccountStatusEnum.Locked)
+        {
+            return new AccountActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = 200,
+                Message = "Tài khoản không ở trạng thái Locked, không cần unlock."
+            };
+        }
+
         var previousFailedAttempts = account.FailedLoginAttempts;
 
         account.FailedLoginAttempts = 0;
         account.LockoutEndAt = null;
-        if (wasLocked)
-            account.Status = AccountStatusEnum.Active;
+        account.Status = AccountStatusEnum.Active;
 
         _unitOfWork.Accounts.UpdateAsync(account);
 
@@ -47,7 +55,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             TargetEmail: account.Email,
             Metadata: new Dictionary<string, object?>
             {
-                ["wasLocked"] = wasLocked,
+                ["wasLocked"] = true,
                 ["previousFailedAttempts"] = previousFailedAttempts
             }), cancellationToken);
 

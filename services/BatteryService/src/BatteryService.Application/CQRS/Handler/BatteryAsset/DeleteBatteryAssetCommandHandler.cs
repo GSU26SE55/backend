@@ -28,7 +28,7 @@ public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAss
         {
             var group = await _unitOfWork.BatteryGroups
                 .GetAllAsync()
-                .FirstOrDefaultAsync(item => item.Id == entity.BatteryGroupId.Value, cancellationToken);
+                .FirstOrDefaultAsync(item => item.Id == entity.BatteryGroupId.Value && !item.IsDeleted, cancellationToken);
 
             if (group is not null)
             {

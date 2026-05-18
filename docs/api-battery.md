@@ -181,7 +181,7 @@ Base route: `/api/alerts`
 | `acknowledgedByUserId` | `Guid?` | Null nếu chưa ack | ID user đã acknowledge |
 | `acknowledgedAt` | `DateTime?` | Null nếu chưa ack | Thời điểm acknowledge (UTC) |
 | `resolvedAt` | `DateTime?` | Null nếu chưa resolve | Thời điểm resolve (UTC) |
-| `dedupWindowEndUtc` | `DateTime` | Không | Thời điểm kết thúc cửa sổ deduplication (Sprint 3) |
+| `dedupWindowEndUtc` | `DateTime` | Không | Thời điểm kết thúc cửa sổ deduplication (Sprint 3) — luôn được set cho mọi alert |
 | `createdAt` | `DateTime` | Không | Thời điểm tạo record (UTC) |
 
 ### Logic Deduplication (Sprint 3)
@@ -222,7 +222,7 @@ Base route: `/api/alerts`
 **Lỗi thường gặp:**
 - `400` — `id` là empty GUID
 - `404` — Alert không tìm thấy
-- `400 isSuccess=false` — Alert không ở trạng thái có thể acknowledge (e.g., đã Resolved)
+- `409 isSuccess=false` — Alert đang ở trạng thái `Resolved` hoặc `Merged`; không thể acknowledge
 
 ---
 
@@ -272,6 +272,8 @@ Base route: `/api/battery-assets`
 | `batteryGroupId` | `Guid?` | Không | Lọc theo nhóm pin |
 | `status` | `BatteryStatusEnum?` | Không | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Không (mặc định `false`) | Bao gồm cả asset đã soft-delete |
+
+> **Sắp xếp mặc định:** `createdAt` giảm dần (mới nhất trước). Hiện không hỗ trợ sort params động — FE cần sort trên client nếu cần thứ tự khác.
 
 **Response thành công `200`:** `PaginationResponse<BatteryAssetDto>`
 
@@ -394,7 +396,16 @@ Base route: `/api/battery-assets`
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
 | `notes` | `string?` | Không | Max 1000 ký tự | Ghi chú |
 
-**Response thành công `201`:** `CommonResponse<BatteryAssetDto>`
+**Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi (xem `listErrors`)
+- `409` — Serial number đã tồn tại trong hệ thống
+- `409` — `batteryTypeId` của asset không khớp với `batteryTypeId` của nhóm (`batteryGroupId`)
+- `409` — `batteryGroupId` không thuộc `siteId` đã truyền
+- `409` — `siteId` không thuộc `customerId` đã truyền
+
+> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
 
 ---
 
@@ -412,6 +423,8 @@ Base route: `/api/battery-assets`
 |---|---|---|---|
 | `warrantyStatus` | `WarrantyStatusEnum` | Không (mặc định `Active`) | Trạng thái bảo hành |
 | `status` | `BatteryStatusEnum` | Không (mặc định `Active`) | Trạng thái hoạt động |
+
+> **Lưu ý `warrantyStatus = Void`:** Đặt trạng thái bảo hành thành `Void` (vô hiệu) không yêu cầu trường `voidReason` trong scope capstone. Admin thực hiện trực tiếp qua endpoint này mà không cần xác nhận thêm.
 
 **Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
 
@@ -518,7 +531,13 @@ Base route: `/api/battery-groups`
 | `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên nhóm |
 | `batteryTypeId` | `Guid` | **Bắt buộc** | Khác empty GUID | Loại pin trong nhóm |
 
-**Response thành công `201`:** `CommonResponse<BatteryGroupDto>`
+**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi (xem `listErrors`)
+- `409` — Tên nhóm pin đã tồn tại trong site
+
+> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
 
 ---
 
@@ -549,6 +568,12 @@ Base route: `/api/battery-groups`
 **Mục đích:** Xóa mềm nhóm pin.
 
 **Auth:** Bắt buộc (Admin)
+
+**Response thành công `200`:** `isSuccess = true`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy nhóm pin
+- `409` — Nhóm pin vẫn còn tài sản pin. Phải chuyển hoặc xóa toàn bộ asset trước khi xóa nhóm.
 
 ---
 
@@ -623,7 +648,13 @@ Base route: `/api/battery-types`
 | `maxCycleCount` | `int` | Không (mặc định 2000) | > 0 | Số chu kỳ tối đa |
 | `description` | `string?` | Không | Max 1000 ký tự | Mô tả |
 
-**Response thành công `201`:** `CommonResponse<BatteryTypeDto>`
+**Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi (xem `listErrors`)
+- `409` — Tên loại pin đã tồn tại trong hệ thống
+
+> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
 
 ---
 
@@ -656,6 +687,14 @@ Base route: `/api/battery-types`
 Soft delete loại pin.
 
 **Auth:** Bắt buộc (Admin)
+
+**Response thành công `200`:** `isSuccess = true`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy loại pin
+- `409` — Loại pin đang được gán cho tài sản pin. Phải cập nhật hoặc xóa các asset trước khi xóa loại pin.
+
+> **Lưu ý:** Code hiện tại chỉ kiểm tra asset (`BatteryAssets`). BatteryGroup tham chiếu đến loại pin nhưng không chặn xóa — chỉ asset mới chặn.
 
 ---
 
@@ -773,6 +812,8 @@ Base route: `/api/sensor-readings`
 
 Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3. FE không dùng raw `/history` để tự aggregate chart dài hạn; task này được đưa vào Sprint 7 để implement bằng TimescaleDB `time_bucket()`.
 
+> **FE/Mobile:** Không implement chart dài hạn (> 24h) bằng `/history` — số lượng raw rows quá lớn. Chờ endpoint `/aggregate` ở Sprint 7. Trong Sprint 3, chart dùng khoảng `from`/`to` ngắn (≤ 24h) với `limit` phù hợp. Leader đã xác nhận timeline Sprint 7.
+
 ---
 
 ### `POST /api/sensor-readings/batch`
@@ -780,6 +821,8 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 **Mục đích:** Ingest batch sensor readings từ IoT device/gateway (endpoint nội bộ).
 
 **Auth:** API Key (IoT gateway xác thực bằng header `X-Api-Key`, không dùng JWT)
+
+**Giới hạn batch:** Tối đa **1000** readings mỗi request. Vượt quá → `400 isSuccess=false`.
 
 **Request body:**
 ```json
@@ -804,10 +847,10 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
 | `batteryAssetId` | `Guid` | Bắt buộc | Phải tồn tại và Active | ID pin |
-| `time` | `DateTime` | Bắt buộc | Không ở tương lai | Timestamp (UTC) |
-| `voltage` | `decimal` | Bắt buộc | > 0 | Điện áp (V) |
-| `current` | `decimal` | Bắt buộc | — | Dòng điện (A) |
-| `temperature` | `decimal` | Bắt buộc | — | Nhiệt độ (°C) |
+| `time` | `DateTime` | Bắt buộc | Không ở tương lai (cho phép lệch tối đa +5 phút) | Timestamp (UTC) |
+| `voltage` | `decimal` | Bắt buộc | >= 0 | Điện áp (V) |
+| `current` | `decimal` | Bắt buộc | — | Dòng điện (A) — âm = đang xả |
+| `temperature` | `decimal` | Bắt buộc | -50 đến 120 (°C) | Nhiệt độ (°C) |
 | `socPercent` | `decimal` | Bắt buộc | 0–100 | State of Charge (%) |
 | `cycleCount` | `int?` | Không | >= 0 | Số chu kỳ |
 | `sohPercent` | `decimal?` | Không | 0–100 nếu truyền | SOH từ AI module |
@@ -831,6 +874,12 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 | `totalReceived` | `int` | Tổng số reading nhận được trong batch |
 | `inserted` | `int` | Số reading đã insert thành công vào TimescaleDB |
 | `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc đã xóa |
+
+**Lỗi thường gặp:**
+- `401` — Thiếu hoặc sai `X-Api-Key` header
+- `400` — `items` rỗng, vượt giới hạn 1000 readings, hoặc có item không hợp lệ (trả `listErrors` chi tiết từng item)
+
+> **Lưu ý hiệu suất:** Không gửi quá nhiều batch nhỏ liên tiếp. Gateway nên gom readings trong 1 batch mỗi 30–60 giây. Không có rate limit cứng trong Sprint 3, nhưng sẽ thêm khi scale lên.
 
 ---
 

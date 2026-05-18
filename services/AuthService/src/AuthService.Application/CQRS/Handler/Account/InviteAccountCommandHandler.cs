@@ -16,7 +16,7 @@ namespace AuthService.Application.CQRS.Handler.Account;
 
 public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand, AccountActionResponse>
 {
-    private const int InvitationLifetimeHours = 24;
+    private const int InvitationLifetimeHours = 72;
     private const int TokenByteLength = 48; // 64 chars base64url after encode
 
     private readonly IAuthUnitOfWork _unitOfWork;
