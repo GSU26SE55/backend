@@ -23,7 +23,8 @@ public class AssignRoleTemporaryCommandHandler : IRequestHandler<AssignRoleTempo
 
     public async Task<AccountActionResponse> Handle(AssignRoleTemporaryCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetAllAsync()
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Account", "Không tìm thấy tài khoản.");

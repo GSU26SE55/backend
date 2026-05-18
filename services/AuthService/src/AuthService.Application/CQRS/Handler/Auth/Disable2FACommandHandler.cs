@@ -17,7 +17,8 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
 
     public async Task<CommonResponse<string>> Handle(Disable2FACommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetAllAsync()
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Không tìm thấy tài khoản.");
