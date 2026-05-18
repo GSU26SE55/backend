@@ -22,7 +22,8 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
 
     public async Task<AccountActionResponse> Handle(DeleteAccountCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetAllAsync()
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {

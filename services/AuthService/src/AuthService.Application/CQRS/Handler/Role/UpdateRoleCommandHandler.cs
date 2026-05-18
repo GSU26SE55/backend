@@ -18,7 +18,8 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
 
     public async Task<RoleActionResponse> Handle(UpdateRoleCommand request, CancellationToken cancellationToken)
     {
-        var role = await _unitOfWork.Roles.GetAllAsync()
+        var role = await _unitOfWork.Roles
+            .GetAllAsync()
             .FirstOrDefaultAsync(r => r.Id == request.Id && !r.IsDeleted, cancellationToken);
         if (role == null)
         {

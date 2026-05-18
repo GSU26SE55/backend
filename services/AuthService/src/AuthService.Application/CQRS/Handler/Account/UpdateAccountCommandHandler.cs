@@ -22,7 +22,8 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
 
     public async Task<AccountActionResponse> Handle(UpdateAccountCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetAllAsync()
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
