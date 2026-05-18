@@ -1,0 +1,9 @@
+<Solution>
+    <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+    <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+    <Project Path="../../shared/src/SharedKernels/SharedKernels.csproj" />
+    <Project Path="src/TicketService.Api/TicketService.Api.csproj" />
+    <Project Path="src/TicketService.Application/TicketService.Application.csproj" />
+    <Project Path="src/TicketService.Domain/TicketService.Domain.csproj" />
+    <Project Path="src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" />
+</Solution>

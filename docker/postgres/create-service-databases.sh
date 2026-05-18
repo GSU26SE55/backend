@@ -41,6 +41,7 @@ SQL
 create_database "${AUTH_DB_NAME:-auth_db}"
 create_database "${FILE_STORAGE_DB_NAME:-file_storage_db}"
 create_database "${BATTERY_DB_NAME:-battery_db}"
+create_database "${TICKET_DB_NAME:-ticket_db}"
 
 if [ -n "${SERVICE_DATABASES:-}" ]; then
   normalized_service_databases="$(printf '%s' "$SERVICE_DATABASES" | tr ',' ' ')"
