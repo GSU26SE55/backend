@@ -35,6 +35,8 @@
 | `KbImage` | 4 | Hình ảnh trong knowledge base | Upload cho bài viết KB |
 | `Firmware` | 5 | File firmware thiết bị | Upload firmware cho battery management system |
 
+> **Lưu ý `Other = 0`:** Đây là ngoại lệ có chủ ý so với quy tắc BE chuẩn (enum bắt đầu từ 1). Giá trị `0` được chọn để `Other` là default value của C# enum — khi client không truyền `purpose` trong form upload, backend nhận `(FilePurposeEnum)0 = Other` và áp dụng whitelist `Other`. Không thay đổi giá trị này để tránh ảnh hưởng data đã có trong DB (`migration defaultValue: 0`). `FileStatusEnum` cũng áp dụng cùng pattern (`Uploaded = 0`).
+
 ### `FileStatusEnum`
 
 | Giá trị | Int | Ý nghĩa | Có thể tải không |
@@ -45,7 +47,7 @@
 | `Quarantined` | 3 | Bị cách ly (phát hiện virus hoặc nội dung vi phạm) | **Không** — trả 409 |
 | `Deleted` | 4 | Đã bị xóa (soft delete) | **Không** — trả 404 |
 
-> **Sprint 1:** Pipeline xử lý (resize, virus scan) chưa active. File upload xong được lưu metadata với trạng thái `Ready`. `Uploaded` là legacy state để tương thích dữ liệu cũ.
+> **Sprint 1:** Pipeline xử lý (resize, virus scan) chưa active. File upload xong được lưu metadata với trạng thái `Ready`. `Uploaded` là state dự phòng cho pipeline Sprint 2+ — Sprint 1 không sử dụng.
 
 ---
 
@@ -157,6 +159,7 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
 {
   "isSuccess": true,
   "statusCode": 201,
+  "message": "Upload file thành công.",
   "data": {
     "fileId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "objectKey": "avatars/3fa85f64-abc1-...png",
@@ -178,6 +181,8 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
 | `contentType` | `string` | Không | MIME type (e.g., `image/png`, `application/pdf`) |
 | `size` | `long` | Không | Kích thước file theo byte |
 | `publicUrl` | `string?` | Null nếu storage không cấu hình public base URL | URL public trực tiếp nếu bucket public; ngược lại null và phải dùng download/presigned-url |
+
+> **Sprint 1 (MinIO local):** `publicUrl` luôn `null`. FE phải handle `null` và fallback về `GET /{id}/download`. Khi deploy production với public bucket, `publicUrl` sẽ có giá trị — cần test lại path này.
 
 **Lỗi thường gặp:**
 - `400` — Không có file trong request
@@ -302,7 +307,7 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
 | `objectKey` | `string` | **Bắt buộc** | Khóa file trong object storage (e.g., `avatars/abc123.png`) |
 
 **Cách hoạt động:**
-1. Chuẩn hóa `objectKey`
+1. Validate `objectKey`: reject nếu rỗng hoặc chứa `..` (path traversal) → `400`. Sau đó chuẩn hóa: trim whitespace, strip leading `/` hoặc `\`, replace `\` → `/`. Không lowercase. Client phải truyền đúng `objectKey` nhận được từ upload response.
 2. Lookup `UploadedFile` trong metadata DB
 3. Check quyền truy cập giống endpoint theo `fileId`
 4. Nếu status = `Processing` hoặc `Quarantined` → trả `409 Conflict`
@@ -354,6 +359,7 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
 - `403` — File không thuộc quyền truy cập của account hiện tại
 - `404` — Không tìm thấy metadata hoặc file đã bị xóa
 - `409` — File đang được xử lý (`Processing`) hoặc bị cách ly (`Quarantined`), không thể tải
+- `500` — Object storage không khả dụng
 
 **Polling khi `Processing`:** FE nên gọi `GET /api/files/{id}/metadata` mỗi 2–5 giây cho đến khi `status=Ready`, hoặc dừng và hiển thị lỗi nếu nhận `Quarantined`/`Deleted`.
 
@@ -438,6 +444,7 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
 - `403` — File không thuộc quyền truy cập của account hiện tại
 - `404` — File không tìm thấy
 - `409` — File đang được xử lý hoặc bị cách ly
+- `500` — Lỗi tạo URL từ storage provider
 
 **Lưu ý bảo mật:** Presigned URL đã cấp không thể bị thu hồi bằng cách đổi `FileStatusEnum` trong DB. Nếu file bị quarantine sau khi issue URL, URL vẫn sống đến expiry; dùng `expiresInMinutes=1` cho file nhạy cảm.
 
@@ -459,7 +466,7 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
 | `objectKey` | `string` | **Bắt buộc** | Khóa file cần xóa |
 
 **Cách hoạt động:**
-1. Chuẩn hóa `objectKey`
+1. Validate `objectKey`: reject nếu rỗng hoặc chứa `..` (path traversal) → `400`. Sau đó chuẩn hóa: trim whitespace, strip leading `/` hoặc `\`, replace `\` → `/`. Không lowercase. Client phải truyền đúng `objectKey` nhận được từ upload response.
 2. Lookup metadata DB
 3. Check quyền xóa giống endpoint theo `fileId`
 4. Xóa object vật lý trong storage
@@ -519,6 +526,7 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 - `401` — Chưa đăng nhập
 - `403` — Không có quyền xóa file này
 - `404` — File không tìm thấy hoặc đã bị xóa
+- `500` — Lỗi xóa file từ object storage
 
 ---
 
@@ -528,7 +536,7 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 |---|---|---|---|
 | Download | `GET /download?objectKey=` | `GET /{id}/download` | Dùng theo fileId |
 | Presigned URL | `GET /presigned-url?objectKey=` | `GET /{id}/presigned-url` | Dùng theo fileId |
-| Metadata | — | `GET /{id}/metadata` | Chỉ có theo fileId |
+| Metadata | — | `GET /{id}/metadata` | Không có endpoint tương ứng theo objectKey — đây là lý do ưu tiên dùng fileId cho service mới |
 | Xóa | `DELETE ?objectKey=` | `DELETE /{id}` | Dùng theo fileId (xóa cả metadata) |
 
 ---
@@ -544,6 +552,6 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 | `401` | Chưa đăng nhập hoặc token hết hạn |
 | `403` | Đã đăng nhập nhưng file không thuộc quyền truy cập/xóa hoặc role không được upload purpose đó |
 | `404` | File không tìm thấy hoặc đã bị xóa |
-| `409` | File đang ở trạng thái Processing hoặc Quarantined, không thể tải/tạo presigned URL |
+| `409` | File đang ở trạng thái Processing hoặc Quarantined — áp dụng cho `download` và `presigned-url` |
 | `413` | Upload vượt giới hạn 20 MB |
 | `500` | Lỗi object storage hoặc lỗi hệ thống |

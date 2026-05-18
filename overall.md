@@ -145,6 +145,41 @@
 - [x] `AuthService` avatar flow: uploaded avatar dùng `AvatarFileId`, Google avatar dùng `ExternalAvatarUrl`, FE dùng `displayAvatarUrl`.
 - [x] Validate kỹ thuật đã chạy: `docker compose --env-file .env.Docker config --quiet`, `sh -n docker/postgres/create-service-databases.sh`, `dotnet build FileStorageService.Infrastructure`.
 
+### 0.4. Đã hoàn tất trong lượt cập nhật 18/5/2026
+
+**Auth (`docs/api-auth.md` — doc only):**
+- [x] Làm rõ avatar route: `POST /api/auth/me/avatar` là route thật, entry trong Nhóm 2 (`/api/accounts`) là cross-reference có ghi chú.
+- [x] Phân biệt Nhóm 2 (`/api/accounts/*`) vs Nhóm 3 (`/api/auth/*`): Nhóm 3 là canonical — FE/Mobile dùng Nhóm 3; Nhóm 2 tồn tại cho backward compat internal.
+- [x] Bổ sung response schema cho `GET /api/staff/{id}/assignment-profile` → trả `StaffAssignmentProfileDto` (cùng shape với `GET /api/staff`).
+- [x] Làm rõ `avatarUrl` trong `PUT /api/admin/accounts/{id}`: field legacy, không khuyến khích — dùng `avatarFileId` thay thế.
+- [x] Bổ sung TTL token mời: `invitationToken` hết hạn sau **72 giờ**; trả `400 isSuccess=false` nếu expired hoặc đã dùng.
+- [x] Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.
+- [x] Bổ sung lifecycle temporary role: tự expire qua background job, có audit log khi expire, không cần manual revoke.
+- [x] Bổ sung error codes cho `GET /api/admin/accounts/{id}` (404), `DELETE /api/admin/accounts/{id}` (404, 409 nếu đang active), `POST /api/admin/accounts/{id}/unlock` (404, 409 nếu chưa bị khóa).
+
+**FileStorage (`docs/api-filestorage.md` + code):**
+- [x] `FilePurposeEnum.Other = 0` xác nhận là **legacy backward compat** có chủ ý — giữ nguyên, không migrate. Code `FileUploadPolicy` xử lý `0` như `Other`. Document rõ exception trong §6bis.3.
+- [x] Sửa mô tả 409 trong bảng HTTP codes: áp dụng cho cả `GET /{id}/download` và `GET /{id}/presigned-url` (không chỉ presigned-url).
+- [x] Cải thiện bảng so sánh objectKey vs fileId: không có endpoint metadata theo objectKey là quyết định thiết kế có chủ ý — ưu tiên `fileId` cho service mới.
+- [x] Thêm note Sprint 1: `publicUrl` luôn `null` với MinIO local — FE phải handle null và fallback về `GET /{id}/download`.
+- [x] Thêm note chuẩn hóa `objectKey`: trim whitespace, reject `..` (path traversal), không lowercase, client truyền đúng objectKey nhận từ upload response.
+- [x] **Code fix (7 handlers):** Bổ sung `!IsDeleted` filter bị thiếu trong `GetFileMetadataQueryHandler`, `GetPresignedUrlQueryHandler`, `DownloadFileQueryHandler`, `DeleteFileCommandHandler` và 3 handler còn lại — tuân thủ rule "không có global query filter".
+
+**Battery (`docs/api-battery.md` + code):**
+- [x] **CRITICAL — Code fix:** 3 POST handlers (`CreateBatteryAsset`, `CreateBatteryGroup`, `CreateBatteryType`) đổi `StatusCode = 201` → `StatusCode = 200` trong body để nhất quán với `Ok()` controller pattern.
+- [x] **CRITICAL — Code fix:** `BatchIngestSensorReadingsCommand.ValidateAsync()` bổ sung giới hạn `Items.Count > 1000` → trả `400 isSuccess=false`.
+- [x] **CRITICAL — Doc:** Xác nhận `DedupWindowEndUtc` là `DateTime` non-nullable (không phải `DateTime?`) — alert **luôn** có dedup window khi tạo.
+- [x] **IMPORTANT — Doc:** `DELETE /api/battery-groups/{id}` và `DELETE /api/battery-types/{id}` trả `409` nếu còn `BatteryAsset` liên kết (block, không cascade).
+- [x] **IMPORTANT — Doc:** `GET /api/battery-assets` mặc định sort `createdAt` giảm dần, không hỗ trợ sort param động.
+- [x] **IMPORTANT — Doc:** `GET /api/sensor-readings/{batteryAssetId}/aggregate` giữ "Planned Sprint 7" — FE/Mobile dùng raw `/history` cho chart tạm ở Sprint 4–5.
+- [x] **MINOR — Doc:** `PUT /api/battery-assets/{id}` cho phép set `warrantyStatus = Void` không cần `voidReason` trong scope capstone.
+- [x] **MINOR — Doc:** `POST /api/sensor-readings/batch` bổ sung lỗi thường gặp (`401` API Key, `400` batteryAssetId không tồn tại) và rate limit đề xuất: **60 requests/minute/device**.
+- [x] **Code fix:** `UpdateBatteryAssetCommandHandler.UpdateGroupCountsAsync()` — bổ sung `&& !group.IsDeleted` cho cả `oldGroup` và `newGroup` lookup.
+- [x] **Code fix:** `DeleteBatteryAssetCommandHandler` — bổ sung `&& !item.IsDeleted` cho group lookup khi decrement `BatteryCount`.
+- [x] **Doc:** Sửa endpoint acknowledge alert: trả `409` (không phải `400`) cho state transition không hợp lệ; block cả `Resolved` lẫn `Merged`.
+- [x] **Doc:** Sửa validation batch sensor readings: `voltage >= 0` (cho phép 0), temperature `-50..120°C`, timestamp cho phép +5 phút so với server time.
+- [x] **Doc:** Bổ sung 4 trường hợp `409` còn thiếu cho `POST /api/battery-assets` (serial trùng, batteryType mismatch với group, group không thuộc site, site không thuộc customer).
+
 ---
 
 ## 0bis. Stack & infra hiện hữu
@@ -494,7 +529,7 @@ Xem chi tiết logic ở §1.6.6 (Cross-source validation).
 | `AcknowledgedByUserId` | `Guid?` | — | — |
 | `AcknowledgedAt` | `DateTime?` | — | — |
 | `ResolvedAt` | `DateTime?` | — | — |
-| `DedupWindowEndUtc` | `DateTime` | NOT NULL | `DetectedAt + DedupWindowMinutes` |
+| `DedupWindowEndUtc` | `DateTime` | NOT NULL | `DetectedAt + DedupWindowMinutes` — **không nullable**, mọi alert đều có dedup window khi tạo |
 
 **Check constraint:** `BatteryAssetId IS NOT NULL OR SiteId IS NOT NULL` — alert phải có ít nhất 1 chủ thể.
 
@@ -650,9 +685,9 @@ Sự kiện an toàn (smoke/water leak/...) với lifecycle Detected → Resolve
 | `BatteryAssetTransferOwnerCommand` | Id, NewCustomerId, Reason | Admin | — |
 | `BatteryTypeCreateCommand` | Name, Manufacturer, Capacity, Voltage, Chemistry, MaxCycle | Admin | — |
 | `BatteryTypeUpdateCommand` | Id, ... | Admin | — |
-| `BatteryTypeDeleteCommand` | Id | Admin | — |
+| `BatteryTypeDeleteCommand` | Id | Admin | — *(409 nếu còn BatteryAsset liên kết — không cascade)* |
 | `ThresholdConfigUpsertCommand` | BatteryTypeId, all threshold values, EffectiveFromUtc | Admin | — |
-| `SensorReadingBatchIngestCommand` | List<SensorReadingItem> (BatteryAssetId, Time, V, I, T, SOC, SOH?, ChargingState?, IR?, CellDelta?, BmsErrorCode?) | ApiKey (`SensorIngest`) | `CommonResponse<BatchIngestResult>` |
+| `SensorReadingBatchIngestCommand` | List<SensorReadingItem> (BatteryAssetId, Time, V, I, T, SOC, SOH?, ChargingState?, IR?, CellDelta?, BmsErrorCode?) — **tối đa 1000 items/request** | ApiKey (`SensorIngest`) | `CommonResponse<BatchIngestResult>` |
 | `AlertAcknowledgeCommand` | Id, Note? | Customer (own), Staff | — |
 | `AlertResolveCommand` | Id, ResolutionNote | Staff, Manager | — |
 | `AmbientReadingBatchIngestCommand` | List<AmbientReadingItem> (SiteId, Time, AmbientTemp, Humidity?, SolarIrradiance?, BatteryGroupId?) | ApiKey (`EnvironmentalIngest`) | `CommonResponse<BatchIngestResult>` |
@@ -1130,6 +1165,19 @@ GET    /api/battery/health                            (Internal — for k8s prob
   - `ApiKeys:EnvironmentalIngest` — cho `/api/ambient-readings/batch` + `/api/environmental-incidents`
 - Lý do: nếu IoT gateway smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
 
+**Batch limit & rate limit:**
+- `POST /api/sensor-readings/batch`: tối đa **1000 readings/request** — vượt quá trả `400 isSuccess=false`. Rate limit đề xuất: **60 requests/minute/device**.
+- Validation batch: `voltage >= 0`, temperature trong `-50..120°C`, `time` cho phép lệch tối đa **+5 phút** so với server UTC.
+
+**POST endpoints response:**
+- `POST /api/battery-assets`, `POST /api/battery-groups`, `POST /api/battery-types` dùng `Ok()` → HTTP **200**. Body `statusCode` cũng là **200**. FE/Mobile nên kiểm tra `isSuccess` thay vì HTTP status code.
+
+**GET /api/battery-assets — default sort:**
+- Mặc định sort `createdAt` **giảm dần**. Không hỗ trợ sort param động (không có `sortBy`/`isDescending` query param).
+
+**DELETE /api/battery-groups/{id} và DELETE /api/battery-types/{id}:**
+- Trả `409 isSuccess=false` nếu còn `BatteryAsset` liên kết. Không cascade soft-delete xuống assets.
+
 #### Sample request/response
 
 **POST /api/battery-assets**
@@ -1149,7 +1197,8 @@ GET    /api/battery/health                            (Internal — for k8s prob
 // Response 200 OK
 {
   "isSuccess": true,
-  "message": null,
+  "statusCode": 200,
+  "message": "Tạo tài sản pin thành công.",
   "listErrors": [],
   "data": {
     "id": "5e8f...",
@@ -2484,7 +2533,8 @@ Bổ sung metadata DB cho FileStorageService:
 ```csharp
 public enum FilePurposeEnum
 {
-    Other = 0,
+    Other = 0,        // ⚠️ Exception to "enum starts at 1" rule — legacy backward compat có chủ ý.
+                      // Code FileUploadPolicy xử lý 0 như Other. Không migrate sang 1 để tránh data corruption.
     Avatar = 1,
     TicketAttachment = 2,
     MaintenancePhoto = 3,
@@ -2585,6 +2635,17 @@ Upload response:
 
 `objectKey` có thể trả cho debug/backward compatibility, nhưng service khác không được lưu `objectKey` làm foreign reference. Chỉ lưu `fileId`.
 
+> **Sprint 1 note:** `publicUrl` luôn `null` khi dùng MinIO local. FE phải handle `null` và fallback về `GET /{id}/download`. Khi deploy production với public bucket, `publicUrl` sẽ có giá trị — test lại path này trước khi go-live.
+
+**HTTP error codes cho file endpoints:**
+| Code | Trường hợp |
+|------|-----------|
+| `404` | `fileId` không tồn tại hoặc đã bị xóa |
+| `403` | File thuộc user khác (không phải Admin) |
+| `409` | File đang ở trạng thái `Processing` hoặc `Quarantined` — áp dụng cho **cả `GET /{id}/download` lẫn `GET /{id}/presigned-url`** |
+
+**Chuẩn hóa `objectKey` (legacy endpoints):** trim whitespace, reject nếu chứa `..` (path traversal). Không lowercase. Client phải truyền đúng `objectKey` nhận được từ upload response.
+
 ### 6bis.6. Validation theo purpose
 
 | Purpose | Max size | Content type |
@@ -2627,7 +2688,7 @@ AuthService vẫn là owner của identity/profile metadata. `Account` giữ vai
 | `AccountId` | Guid | PK/FK → `accounts.id` |
 | `AvatarFileId` | Guid? | file nội bộ user upload, reference FileStorageService `UploadedFile.Id` |
 | `ExternalAvatarUrl` | string(1000)? | avatar từ provider ngoài như Google `picture` |
-| `AvatarSource` | enum | 0=None, 1=Uploaded, 2=Google |
+| `AvatarSource` | enum | 0=None, 1=Uploaded, 2=Google *(None=0 là sentinel exception — không có avatar; Uploaded/Google bắt đầu từ 1 theo rule)* |
 | `Address` | string(500)? | profile chung |
 | `BirthDate` | DateOnly? | phục vụ compliance/minor policy sau này |
 | `TimeZone` | string(64) | default `Asia/Ho_Chi_Minh` |
@@ -4584,7 +4645,7 @@ DELETE /api/v1/sites/{id}                                 (block nếu còn asse
 POST   /api/battery-groups                             (Admin)
 GET    /api/battery-groups?siteId=
 PUT    /api/battery-groups/{id}
-DELETE /api/battery-groups/{id}
+DELETE /api/battery-groups/{id}                        (409 nếu còn BatteryAsset liên kết — không cascade)
 
 GET    /api/v1/customers/me/sites                         (Customer — list sites mình sở hữu)
 ```

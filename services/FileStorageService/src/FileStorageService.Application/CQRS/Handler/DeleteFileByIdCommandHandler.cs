@@ -31,7 +31,7 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
 
         var file = await _unitOfWork.UploadedFiles
             .GetAllAsync()
-            .FirstOrDefaultAsync(f => f.Id == request.Id && f.Status != FileStatusEnum.Deleted, cancellationToken);
+            .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted && f.Status != FileStatusEnum.Deleted, cancellationToken);
 
         if (file is null)
             return NotFound();

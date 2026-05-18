@@ -462,12 +462,25 @@ Base route: `/api/auth`
 
 **Response thành công `200`:** Giống `POST /api/auth/login` — trả về `accessToken` + `refreshToken`.
 
+**Lỗi thường gặp:**
+- `400` — Body không hợp lệ (password rỗng, confirmPassword không khớp, invitationToken rỗng)
+- `401` — `invitationToken` không tồn tại hoặc đã bị vô hiệu hoá
+- `410` — `invitationToken` đã hết hạn (token có TTL **72 giờ** kể từ lúc Admin gửi invite)
+- `409` — Token đã được dùng rồi (account đã active, không thể accept lại)
+
+**Lưu ý TTL:** `invitationToken` hết hạn sau **72 giờ**. Nếu hết hạn, Admin cần gửi lại invite qua `POST /api/admin/accounts/invite` với cùng email.
+
 ---
 
 ## Nhóm 2 — Tài khoản cá nhân (Yêu cầu access token)
 
 Base route: `/api/accounts`
 Header: `Authorization: Bearer {accessToken}`
+
+> **Phân biệt Nhóm 2 vs Nhóm 3:**
+> - **Nhóm 2** (`/api/accounts`) — AccountsController: quản lý account cốt lõi (password, email change, phone, 2FA, Google link, session, login history). **Đây là route canonical cho các thao tác account.**
+> - **Nhóm 3** (`/api/auth`) — AuthProfilesController: cập nhật profile mở rộng (fullName, address, birthDate, timezone, avatar). **Dùng Nhóm 3 cho profile/avatar operations.**
+> - `GET /api/accounts/me` và `GET /api/auth/me` trả cùng shape `AccountDto` — FE chọn một route nhất quán, khuyên dùng `GET /api/auth/me` vì thuộc AuthProfilesController quản lý profile.
 
 **Lỗi thường gặp cho nhóm này:**
 - `401` — Token không hợp lệ, hết hạn hoặc JWT thiếu account id
@@ -587,23 +600,9 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-### `POST /api/auth/me/avatar`
+### Avatar
 
-**Mục đích:** Đặt avatar bằng `fileId` đã upload lên FileStorageService.
-
-**Auth:** Bắt buộc (mọi role)
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `avatarFileId` | `Guid` | Bắt buộc | FileId từ FileStorageService (phải là file type `Avatar`) |
-
-**Response thành công `200`:** `isSuccess = true`.
-
-**Lưu ý:** Sau khi set avatar, `displayAvatarUrl` của account sẽ trỏ về `/api/files/{fileId}/download`.
-
-**Lưu ý contract:** Avatar upload thuộc controller `AuthProfilesController`, base route thật là `/api/auth`. Field request body hiện tại là `avatarFileId`; FE upload file qua FileStorageService trước, sau đó gọi endpoint này để gắn file vào profile. FE luôn dùng `displayAvatarUrl` để render avatar; `avatarUrl` là legacy/direct URL, không phải field ưu tiên hiển thị.
+> **Endpoint này thuộc `/api/auth`, không phải `/api/accounts`.** Xem [Nhóm 3 → `POST /api/auth/me/avatar`](#post-apiauthmeavatar) để biết đầy đủ request body, response, và lưu ý contract.
 
 ---
 
@@ -712,7 +711,11 @@ Header: `Authorization: Bearer {accessToken}`
 | `data.secret` | `string` | Secret key (Base32) để nhập thủ công vào app authenticator |
 | `data.otpAuthUri` | `string` | URI để tạo QR code, quét bằng Google Authenticator / Authy |
 
-**Lưu ý:** 2FA được kích hoạt ngay sau khi endpoint này thành công. Hiện backend chưa có bước confirm TOTP riêng; user cần lưu/scan secret trước khi rời màn hình.
+**Lưu ý — 2FA activation behavior:**
+- 2FA **kích hoạt ngay** sau khi endpoint này thành công — không có bước confirm TOTP riêng biệt.
+- FE phải hiển thị QR code / secret và yêu cầu user scan + lưu **trước khi** cho phép rời màn hình, vì sau đó secret không được trả lại nữa.
+- **Recovery path nếu user mất access TOTP authenticator:** User tự gọi `POST /api/accounts/me/2fa/disable` (cần access token hợp lệ). Nếu user không thể login được, Admin cần can thiệp trực tiếp ở DB — hiện tại chưa có admin endpoint để disable 2FA cho account khác; backup codes cũng chưa được implement.
+- **Trạng thái triển khai hiện tại:** Backend lưu secret và đánh dấu `twoFactorEnabled = true`, nhưng **TOTP chưa được enforce tại bước login** (sẽ implement ở sprint sau). FE hiện tại không cần xử lý TOTP challenge khi login — chỉ cần hiển thị setup screen để user sẵn sàng cho sprint sau. Khi TOTP enforcement được bật, tài liệu này sẽ được cập nhật.
 
 ---
 
@@ -853,6 +856,8 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Lưu ý:** Các route `/api/auth-profiles/*` và `/api/staff-profiles/*` không phải route hiện tại trong controller. FE dùng các route bên dưới để tránh 404.
 
+> **Phân biệt với Nhóm 2:** Nhóm 3 là **canonical route cho profile & avatar operations** (AuthProfilesController). Nhóm 2 (`/api/accounts`) dùng cho account management (password, email change, 2FA...). Khi cần đọc profile tổng hợp, `GET /api/auth/me` và `GET /api/accounts/me` trả cùng shape — chọn một và dùng nhất quán trong toàn bộ FE.
+
 ---
 
 ### `GET /api/auth/me`
@@ -945,11 +950,15 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Path param:** `id` — AccountId của staff.
 
+**Response thành công `200`:** `data` là `StaffAssignmentProfileDto` — cùng shape với từng item trong `GET /api/staff`.
+
+**Chi tiết `StaffAssignmentProfileDto`:** Xem bảng field tại [GET /api/staff](#get-apistaff).
+
 **Lỗi thường gặp:**
-- `400` — `id` không hợp lệ
+- `400` — `id` không hợp lệ (không phải Guid)
 - `401` — Token không hợp lệ hoặc hết hạn
-- `403` — Không có role Admin/Manager
-- `404` — Account không có staff profile tương ứng
+- `403` — Không có role Admin/Manager; hoặc Staff không được xem profile của Staff khác
+- `404` — Account không tồn tại hoặc không có staff profile tương ứng
 
 ---
 
@@ -1094,7 +1103,13 @@ Base route: `/api/admin/accounts`
 
 **Path param:** `id` — Guid của tài khoản
 
-**Response:** `AccountDto`
+**Response thành công `200`:** `data` là `AccountDto` đầy đủ (cùng shape với `GET /api/accounts/me`), bao gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
+
+**Lỗi thường gặp:**
+- `400` — `id` không hợp lệ (không phải Guid)
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin/Manager
+- `404` — Không tìm thấy account với `id` đó
 
 ---
 
@@ -1149,11 +1164,13 @@ Base route: `/api/admin/accounts`
 |---|---|---|---|---|
 | `fullName` | `string` | Bắt buộc | Không rỗng, max 150 ký tự | Họ và tên |
 | `phoneNumber` | `string?` | Tùy chọn | Max 20 ký tự | Số điện thoại |
-| `avatarUrl` | `string?` | Tùy chọn | Max 500 ký tự | URL avatar legacy/direct |
+| `avatarUrl` | `string?` | Tùy chọn | Max 500 ký tự | URL avatar legacy/direct — **xem lưu ý bên dưới** |
 | `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai | Ngày sinh |
 | `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
 
 **Lưu ý:** Endpoint này chỉ sửa profile/account fields ở trên. Admin không sửa role/status/emailConfirmed trong body này; role dùng endpoint `/roles`, status dùng `PATCH /status`, session dùng `/sessions/*`.
+
+**Lưu ý `avatarUrl` (legacy field):** Field này cho phép Admin set avatar bằng direct URL (ví dụ URL ảnh từ Google hoặc CDN bên ngoài) mà không cần upload qua FileStorageService. Với flow mới, ưu tiên dùng `POST /api/auth/me/avatar` + `avatarFileId`. FE luôn render avatar bằng `displayAvatarUrl` từ `AccountDto`, không dùng `avatarUrl` trực tiếp để hiển thị.
 
 ---
 
@@ -1180,13 +1197,31 @@ Base route: `/api/admin/accounts`
 
 **Auth:** Admin hoặc Manager
 
+**Response thành công `200`:** `isSuccess = true`. Backend reset failed login attempts và lockout counter; account chuyển sang `Active`.
+
+**Lỗi thường gặp:**
+- `400` — `id` không hợp lệ
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin/Manager
+- `404` — Không tìm thấy account
+- `200 isSuccess=false` — Account không ở trạng thái `Locked` (không cần unlock)
+
 ---
 
 ### `DELETE /api/admin/accounts/{id}`
 
-**Mục đích:** Xóa mềm tài khoản (soft delete).
+**Mục đích:** Xóa mềm tài khoản (soft delete). Đặt `IsDeleted = true`; account không thể đăng nhập sau đó.
 
 **Auth:** Admin
+
+**Response thành công `200`:** `isSuccess = true`. Đồng thời toàn bộ refresh token của account bị revoke.
+
+**Lỗi thường gặp:**
+- `400` — `id` không hợp lệ
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin
+- `404` — Không tìm thấy account
+- `409` — *(Planned)* Không thể xóa account đang có ticket ở trạng thái active (`OPEN`, `ASSIGNED`, `IN_PROGRESS`, `ESCALATED`) — business rule này dự kiến implement cùng TicketService integration; hiện tại backend chưa enforce.
 
 ---
 
@@ -1227,6 +1262,11 @@ Base route: `/api/admin/accounts`
 |---|---|---|---|
 | `roleId` | `Guid` | Bắt buộc | Role ID cần gán |
 | `expiredAt` | `DateTime` | Bắt buộc | Thời điểm hết hạn role (UTC) |
+
+**Lưu ý lifecycle của temporary role:**
+- Role expire theo cơ chế **lazy expiry** — không có background job chủ động revoke. Khi user login hoặc refresh token, hệ thống filter `ExpiredAt == null || ExpiredAt > UtcNow` để loại role đã hết hạn khỏi JWT claims.
+- Role record vẫn tồn tại trong DB sau khi expire, chỉ không được đưa vào JWT — không có audit log `RoleRevoked` tự động khi hết hạn.
+- Nếu cần revoke sớm trước `expiredAt`, Admin dùng `DELETE /api/admin/accounts/{id}/roles/{roleId}`.
 
 ---
 

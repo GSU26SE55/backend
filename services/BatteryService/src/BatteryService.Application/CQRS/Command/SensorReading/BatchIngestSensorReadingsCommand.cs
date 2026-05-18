@@ -17,6 +17,9 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
         if (Items.Count == 0)
             AddError(response, nameof(Items), "Danh sách readings là bắt buộc.");
 
+        if (Items.Count > 1000)
+            AddError(response, nameof(Items), "Batch không được vượt quá 1000 readings.");
+
         for (var i = 0; i < Items.Count; i++)
         {
             var item = Items[i];
