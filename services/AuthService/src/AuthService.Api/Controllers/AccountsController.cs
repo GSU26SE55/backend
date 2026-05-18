@@ -1,6 +1,7 @@
 using AuthService.Api.Extensions;
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Query.Account;
 using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.DTOs.Response.Login;
@@ -365,6 +366,47 @@ public class AccountsController : ControllerBase
             return Unauthorized(Unauth());
 
         var result = await _mediator.Send(new DeleteMeCommand { AccountId = userId.Value }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpGet("me/profile")]
+    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new AccountResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var result = await _mediator.Send(new GetMyProfileQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null || userId.Value != id)
+            return StatusCode(403, new AccountActionResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền." });
+
+        command.Id = id;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPut("me/profile")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateMe([FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        command.Id = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 
