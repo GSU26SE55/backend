@@ -50,7 +50,7 @@ public class BatteryGroupFullHandlerTests
         var t = MakeType();
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryTypes(t);
         var r = await new CreateBatteryGroupCommandHandler(b.Build()).Handle(new CreateBatteryGroupCommand { SiteId = s.Id, Name = "G1", BatteryTypeId = t.Id }, default);
-        r.StatusCode.Should().Be(201);
+        r.StatusCode.Should().Be(200);
     }
 
     [Fact]

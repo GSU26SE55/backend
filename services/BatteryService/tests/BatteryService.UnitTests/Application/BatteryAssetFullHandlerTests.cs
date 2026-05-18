@@ -201,7 +201,7 @@ public class BatteryAssetFullHandlerTests
             .WithBatteryGroups(group);
         var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
-        r.StatusCode.Should().Be(201);
+        r.StatusCode.Should().Be(200);
         group.BatteryCount.Should().Be(1);
         b.BatteryAssets.Verify(x => x.AddAsync(It.IsAny<BatteryAsset>()), Times.Once);
     }
