@@ -264,6 +264,15 @@ monitoring:
   grafanaDashboards:
     enabled: false              # bật khi đã cài Grafana với sidecar dashboard discovery
 
+  cadvisor:
+    enabled: false
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+    serviceMonitor:
+      enabled: true
+
 # --------------------------------------------------------------------
 # Subchart values — cover 8 monitoring service từ docker-compose
 # Default: TẮT vì chart core nhẹ. Bật trong values-staging.yaml nếu cần.
@@ -284,6 +293,10 @@ kube-prometheus-stack:
     enabled: true
     adminPassword: changeme        # ← override trong values-staging
     sidecar:
+      datasources:
+        enabled: true
+        defaultDatasourceEnabled: true
+        uid: prometheus
       dashboards:
         enabled: true
         label: grafana_dashboard   # match label trong grafana-dashboards-cm.yaml
@@ -304,11 +317,17 @@ kube-prometheus-stack:
 loki-stack:
   enabled: false
   loki:
+    fullnameOverride: loki
+    datasource:
+      uid: loki
     persistence:
       enabled: true
       size: 10Gi
   promtail:
     enabled: true
+    config:
+      clients:
+      - url: http://loki:3100/loki/api/v1/push
 
 postgres-exporter:
   enabled: false

@@ -7,7 +7,7 @@ global:
   namespace: solar-staging
   domain: capstonegsu26se55.mooo.com
   aspnetEnvironment: Staging
-  tlsIssuer: letsencrypt-staging      # đổi sang letsencrypt-prod khi tin tưởng cert đúng
+  tlsIssuer: letsencrypt-prod
 
 services:
   apigateway:
@@ -62,41 +62,133 @@ minio:
     enabled: true   # files.capstonegsu26se55.mooo.com → S3 API
                     # minio.capstonegsu26se55.mooo.com → Console
 
-# Monitoring nhẹ — chỉ bật alertmanager-discord relay.
-# kube-prometheus-stack và loki-stack tốn ~3-4GB RAM — tắt cho VPS 4GB.
-# Bật sau khi stack chạy ổn và đã nâng cấp VPS.
+# Monitoring stack for VPS staging. Resource requests stay low so the stack
+# can fit on the current single-node k3s VPS while preserving sane limits.
 monitoring:
   alertmanagerDiscord:
-    enabled: false                     # bật khi Alertmanager đã chạy
+    enabled: true
   prometheusRules:
-    enabled: false
+    enabled: true
   grafanaDashboards:
-    enabled: false
+    enabled: true
+  cadvisor:
+    enabled: true
 
 kube-prometheus-stack:
-  enabled: false                       # quá nặng cho VPS 4GB — bật khi upgrade
+  enabled: true
+  defaultRules:
+    create: true
+  kubeEtcd:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  prometheusOperator:
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+  kube-state-metrics:
+    resources:
+      requests: { cpu: 20m, memory: 48Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus-node-exporter:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus:
+    prometheusSpec:
+      retention: 3d
+      retentionSize: 4GB
+      scrapeInterval: 15s
+      evaluationInterval: 15s
+      resources:
+        requests: { cpu: 75m, memory: 160Mi }
+        limits:   { cpu: 500m, memory: 768Mi }
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 5Gi
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
   grafana:
-    adminPassword: "Admin@123"         # đồng bộ với GRAFANA_ADMIN_PASSWORD trong secret
+    adminPassword: "Admin@123"
+    resources:
+      requests: { cpu: 25m, memory: 96Mi }
+      limits:   { cpu: 250m, memory: 384Mi }
+    persistence:
+      enabled: true
+      size: 2Gi
     ingress:
       enabled: true
       ingressClassName: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.tls: "true"
       hosts:
       - grafana.capstonegsu26se55.mooo.com
+      path: /
+      pathType: Prefix
+      tls:
+      - secretName: grafana-tls
+        hosts:
+        - grafana.capstonegsu26se55.mooo.com
 
 loki-stack:
-  enabled: false                       # quá nặng — bật sau
+  enabled: true
+  loki:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits:   { cpu: 300m, memory: 512Mi }
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+  promtail:
+    enabled: true
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: monitoring
 
 postgres-exporter:
-  enabled: false
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: monitoring
 
 redis-exporter:
-  enabled: false
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: monitoring
 
 # Quota an toàn cho VPS 4GB RAM (k3s system ~0.5GB, headroom còn ~3.5GB)
 resourceQuota:
   enabled: true
-  requestsCpu: "3"
-  requestsMemory: "3Gi"
-  limitsCpu: "6"
-  limitsMemory: "6Gi"
-  pvcs: "10"
+  requestsCpu: "4"
+  requestsMemory: "4Gi"
+  limitsCpu: "10"
+  limitsMemory: "12Gi"
+  pvcs: "15"

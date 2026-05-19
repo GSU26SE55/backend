@@ -1,0 +1,88 @@
+{{- if .Values.monitoring.cadvisor.enabled -}}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "cadvisor") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: cadvisor
+  template:
+    metadata:
+      labels:
+        {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "cadvisor") | nindent 8 }}
+    spec:
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: cadvisor
+        image: {{ .Values.monitoring.cadvisor.image }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        resources:
+          {{- toYaml .Values.monitoring.cadvisor.resources | nindent 10 }}
+        volumeMounts:
+        - { name: rootfs, mountPath: /rootfs, readOnly: true }
+        - { name: var-run, mountPath: /var/run, readOnly: true }
+        - { name: sys, mountPath: /sys, readOnly: true }
+        - { name: var-lib-docker, mountPath: /var/lib/docker, readOnly: true }
+        - { name: var-lib-containerd, mountPath: /var/lib/containerd, readOnly: true }
+        - { name: dev-disk, mountPath: /dev/disk, readOnly: true }
+        - { name: dev-kmsg, mountPath: /dev/kmsg, readOnly: true }
+      volumes:
+      - name: rootfs
+        hostPath: { path: / }
+      - name: var-run
+        hostPath: { path: /var/run }
+      - name: sys
+        hostPath: { path: /sys }
+      - name: var-lib-docker
+        hostPath: { path: /var/lib/docker, type: DirectoryOrCreate }
+      - name: var-lib-containerd
+        hostPath: { path: /var/lib/containerd, type: DirectoryOrCreate }
+      - name: dev-disk
+        hostPath: { path: /dev/disk, type: DirectoryOrCreate }
+      - name: dev-kmsg
+        hostPath: { path: /dev/kmsg }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "cadvisor") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: cadvisor
+  ports:
+  - { name: http, port: 8080, targetPort: http }
+{{- $kps := index .Values "kube-prometheus-stack" -}}
+{{- if and $kps.enabled .Values.monitoring.cadvisor.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cadvisor
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: cadvisor
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+{{- end }}
+{{- end }}
