@@ -1065,6 +1065,17 @@ Base route: `/api/admin/accounts`
 
 **Luồng:** Sau khi invite, user nhận email chứa link với `invitationToken`. User truy cập link và gọi `POST /api/auth/accept-invite` để đặt mật khẩu và kích hoạt.
 
+**Luồng gửi email:**
+- AuthService tạo account `PendingVerification`, sinh `invitationToken` TTL **72 giờ**, ghi `SendAdminInviteEvent` vào outbox và commit cùng account.
+- `OutboxRelayBackgroundService` publish event lên RabbitMQ.
+- EmailService consumer `SendAdminInviteConsumer` nhận event và gửi email qua MailJet bằng template `AdminInvite.html`.
+- Link trong email được build từ config `AdminInvite:AcceptUrlBase` hoặc `Frontend:AcceptInviteUrl`, sau đó append `?token={invitationToken}`. K8s Helm đang set mặc định `https://{global.domain}/auth/accept-invite`.
+
+**Troubleshooting nếu invite trả `201` nhưng không có email:**
+- Kiểm tra AuthService outbox: event `SendAdminInviteEvent` phải có `processed_at != null`; nếu còn pending hoặc `last_error` có lỗi thì kiểm tra RabbitMQ/outbox relay.
+- Kiểm tra EmailService có queue/consumer `SendAdminInviteConsumer`; nếu consumer không chạy, event sẽ không được gửi MailJet.
+- Kiểm tra cấu hình `MailJet:ApiKey`, `MailJet:ApiSecret`, `MailJet:FromEmail`, `RabbitMQ:*`, `Inbox:*`.
+
 ---
 
 ### `PUT /api/admin/accounts/{id}`
