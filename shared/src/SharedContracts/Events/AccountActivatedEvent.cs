@@ -13,12 +13,15 @@ namespace SharedContracts.Events;
 /// Subscribers tiêu biểu:
 /// - NotificationService: gửi welcome email.
 /// - Các service khác cần sync user (BatteryService, TicketService).
+///
+/// Lưu ý: quan hệ Role ↔ Account là 1-N — mỗi account chỉ có duy nhất 1 role.
+/// Trước đây dùng <c>IReadOnlyList&lt;string&gt; Roles</c> (multi-role), nay là <c>string Role</c>.
 /// </summary>
 public record AccountActivatedEvent(
     Guid AccountId,
     string Email,
     string FullName,
     string? PhoneNumber,
-    IReadOnlyList<string> Roles,
+    string Role,
     string CreationSource
 ) : IntegrationEvent;

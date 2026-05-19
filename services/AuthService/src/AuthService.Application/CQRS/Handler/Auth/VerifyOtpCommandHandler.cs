@@ -33,8 +33,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
@@ -78,31 +77,17 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         account.FailedLoginAttempts = 0;
         account.LockoutEndAt = null;
         account.Status = AccountStatusEnum.Active;
+
+        // Self-register: nếu account chưa gán role (RoleId rỗng) → default Customer.
+        if (account.RoleId == Guid.Empty)
+        {
+            account.RoleId = CustomerRoleId;
+            account.RoleAssignedAt = DateTime.UtcNow;
+        }
         _unitOfWork.Accounts.UpdateAsync(account);
 
-        var hasCustomerRole = account.AccountRoles.Any(ar => ar.RoleId == CustomerRoleId && ar.IsActive);
-        if (!hasCustomerRole)
-        {
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = CustomerRoleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
-        }
-
-        // AccountRole vừa AddAsync ở trên có Role nav = null (chỉ set RoleId).
-        // EF Change Tracker auto-fixup đẩy entry đó vào account.AccountRoles → cần filter ar.Role != null.
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive
-                         && ar.Role != null
-                         && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role!.Name)
-            .ToList();
-        if (!roleNames.Contains("Customer"))
-            roleNames.Add("Customer");
+        var roleName = account.Role?.Name
+                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
 
         // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges để event đi cùng transaction.
         await _messageProducer.PublishAsync(new AccountActivatedEvent(
@@ -110,7 +95,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            roleNames,
+            roleName,
             CreationSource: "SelfRegister"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

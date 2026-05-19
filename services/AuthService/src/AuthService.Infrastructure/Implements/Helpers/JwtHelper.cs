@@ -30,7 +30,7 @@ public class JwtHelper : IJwtHelper
     private string SecretKey => _configuration["JwtSettings:SecretKey"]
         ?? throw new InvalidOperationException("Missing configuration: JwtSettings:SecretKey");
 
-    public Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles, IEnumerable<string>? permissions = null)
+    public Task<string> GenerateAccessToken(Account account, string role, IEnumerable<string>? permissions = null)
     {
         var Issuer = _configuration["JwtSettings:Issuer"];
         var Audience = _configuration["JwtSettings:Audience"];
@@ -47,11 +47,8 @@ public class JwtHelper : IJwtHelper
                 new Claim("FullName", account.FullName ?? string.Empty),
             };
 
-        foreach (var role in roles ?? Enumerable.Empty<string>())
-        {
-            if (!string.IsNullOrWhiteSpace(role))
-                claims.Add(new Claim(ClaimTypes.Role, role));
-        }
+        if (!string.IsNullOrWhiteSpace(role))
+            claims.Add(new Claim(ClaimTypes.Role, role));
 
         foreach (var permission in (permissions ?? Enumerable.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
         {

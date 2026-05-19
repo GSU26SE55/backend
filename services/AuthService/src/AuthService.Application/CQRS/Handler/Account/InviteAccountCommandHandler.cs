@@ -74,21 +74,20 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             }
         }
 
-        var validRoles = await _unitOfWork.Roles
+        var role = await _unitOfWork.Roles
             .GetAllAsync()
-            .Where(r => request.RoleIds.Contains(r.Id) && r.Status == RoleStatusEnum.Active)
+            .Where(r => r.Id == request.RoleId && r.Status == RoleStatusEnum.Active && !r.IsDeleted)
             .Select(r => new { r.Id, r.Name })
-            .ToListAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
 
-        var validRoleIds = validRoles.Select(r => r.Id).ToList();
-        var missing = request.RoleIds.Except(validRoleIds).ToList();
-        if (missing.Count > 0)
+        if (role == null)
         {
             return new AccountActionResponse
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = $"Có {missing.Count} role không tồn tại hoặc đã bị vô hiệu hóa."
+                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
+                ListErrors = { new Errors { Field = "RoleId", Detail = "Role không tồn tại hoặc đã bị vô hiệu hóa." } }
             };
         }
 
@@ -109,30 +108,18 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             EmailConfirmed = false,
             Status = AccountStatusEnum.PendingVerification,
             InvitationToken = invitationToken,
-            InvitationExpiredAt = expiresAt
+            InvitationExpiredAt = expiresAt,
+            RoleId = role.Id,
+            RoleAssignedAt = DateTime.UtcNow
         };
 
         await _unitOfWork.Accounts.AddAsync(account);
-
-        foreach (var roleId in validRoleIds)
-        {
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = roleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
-        }
-
-        var roleNames = validRoles.Select(r => r.Name).ToList();
 
         await _messageProducer.PublishAsync(new SendAdminInviteEvent(
             account.Id,
             account.Email,
             account.FullName,
-            roleNames,
+            role.Name,
             invitationToken,
             expiresAt), cancellationToken);
 
@@ -141,7 +128,8 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             TargetEmail: account.Email,
             Metadata: new Dictionary<string, object?>
             {
-                ["roles"] = roleNames,
+                ["role"] = role.Name,
+                ["roleId"] = role.Id.ToString(),
                 ["expiresAt"] = expiresAt
             }), cancellationToken);
 

@@ -23,7 +23,7 @@ public class Enable2FACommandHandlerTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new Enable2FACommandHandler(uow.Object, Cfg());
 
         var resp = await handler.Handle(new Enable2FACommand { AccountId = account.Id }, CancellationToken.None);
@@ -49,7 +49,7 @@ public class Enable2FACommandHandlerTests
             TwoFactorEnabled = true,
             TwoFactorSecret = "EXISTING"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new Enable2FACommandHandler(uow.Object, Cfg());
 
         var resp = await handler.Handle(new Enable2FACommand { AccountId = account.Id }, CancellationToken.None);
@@ -60,7 +60,7 @@ public class Enable2FACommandHandlerTests
     [Fact]
     public async Task Enable_NotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((Account?)null);
         var handler = new Enable2FACommandHandler(uow.Object, Cfg());
 
@@ -85,7 +85,7 @@ public class Disable2FACommandHandlerTests
             TwoFactorEnabled = true,
             TwoFactorSecret = "SECRET"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new Disable2FACommandHandler(uow.Object);
 
         var resp = await handler.Handle(new Disable2FACommand { AccountId = account.Id }, CancellationToken.None);
@@ -107,7 +107,7 @@ public class Disable2FACommandHandlerTests
             Status = AccountStatusEnum.Active,
             TwoFactorEnabled = false
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new Disable2FACommandHandler(uow.Object);
 
         var resp = await handler.Handle(new Disable2FACommand { AccountId = account.Id }, CancellationToken.None);
@@ -118,7 +118,7 @@ public class Disable2FACommandHandlerTests
     [Fact]
     public async Task Disable_NotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((Account?)null);
         var handler = new Disable2FACommandHandler(uow.Object);
 

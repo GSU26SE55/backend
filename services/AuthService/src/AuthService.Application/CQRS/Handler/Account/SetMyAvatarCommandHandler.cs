@@ -30,8 +30,7 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive))
-                .ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)

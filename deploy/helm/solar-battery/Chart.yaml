@@ -4,7 +4,7 @@ description: Solar Battery Maintenance — full microservice stack (5 ASP.NET se
 type: application
 
 # Version chart — bump khi thay đổi template structure
-version: 0.1.0
+version: 0.1.2
 
 # Phiên bản app — hiển thị trong helm list, không liên quan image tag thực tế
 appVersion: "1.0.0"

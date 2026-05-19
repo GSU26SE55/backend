@@ -10,7 +10,12 @@ public class CustomerAccount : AuditableEntity
 
     public string? PhoneNumber { get; set; }
 
-    public string RolesCsv { get; set; } = string.Empty;
+    /// <summary>
+    /// Role hiện tại của account (single — quan hệ 1-N: Role → Account).
+    /// Trước đây là <c>RolesCsv</c> (multi-role) — đã đổi sang single sau khi AuthService
+    /// chuyển sang quan hệ 1-N.
+    /// </summary>
+    public string Role { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
 

@@ -60,8 +60,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .Include(a => a.Profile)
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
@@ -86,7 +85,9 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 LastLoginAt = DateTime.UtcNow,
                 LastLoginIp = ipAddress,
                 FailedLoginAttempts = 0,
-                LockoutEndAt = null
+                LockoutEndAt = null,
+                RoleId = CustomerRoleId,
+                RoleAssignedAt = DateTime.UtcNow
             };
             await _unitOfWork.Accounts.AddAsync(account);
             account.Profile = new AccountProfile
@@ -99,14 +100,6 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                     : AvatarSourceEnum.Google
             };
             await _unitOfWork.AccountProfiles.AddAsync(account.Profile);
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = CustomerRoleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
         }
         else
         {
@@ -139,19 +132,12 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             _unitOfWork.Accounts.UpdateAsync(account);
         }
 
-        // Lưu ý: AccountRole mới vừa AddAsync ở trên có Role nav = null (chỉ set RoleId).
-        // EF Change Tracker auto-fixup đẩy entry đó vào account.AccountRoles → cần filter ar.Role != null.
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive
-                         && ar.Role != null
-                         && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role!.Name)
-            .ToList();
-        if (!roleNames.Contains("Customer"))
-            roleNames.Add("Customer");
+        // Account mới vừa add — Role nav có thể null; nếu null fallback "Customer" (đã set RoleId=CustomerRoleId ở trên).
+        var roleName = account.Role?.Name
+                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
@@ -174,7 +160,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 account.Email,
                 account.FullName,
                 account.PhoneNumber,
-                roleNames,
+                roleName,
                 CreationSource: "GoogleOAuth"), cancellationToken);
         }
 

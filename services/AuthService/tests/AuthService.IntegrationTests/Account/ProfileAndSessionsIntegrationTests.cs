@@ -46,7 +46,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<AccountResponse>();
         body!.Data!.Email.Should().Be("profile@example.com");
-        body.Data.Roles.Should().Contain("Customer");
+        body.Data.Role.Should().Be("Customer");
     }
 
     [Fact]
