@@ -14,7 +14,7 @@ public class CreateAccountCommandValidationTests
         PhoneNumber = "0900111",
         DateOfBirth = new DateTime(1990, 1, 1),
         Address = "Addr",
-        RoleIds = new List<Guid> { Guid.NewGuid() }
+        RoleId = Guid.NewGuid()
     };
 
     [Fact] public async Task Valid_Passes() => (await Valid().ValidateAsync()).IsSuccess.Should().BeTrue();
@@ -77,8 +77,8 @@ public class CreateAccountCommandValidationTests
     public async Task RoleId_Empty_Fails()
     {
         var c = Valid();
-        c.RoleIds = new List<Guid> { Guid.Empty };
-        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "RoleIds");
+        c.RoleId = Guid.Empty;
+        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "RoleId");
     }
 }
 
@@ -281,75 +281,19 @@ public class ConfirmEmailChangeCommandValidationTests
         (await new ConfirmEmailChangeCommand { AccountId = Guid.NewGuid(), Otp = otp }.ValidateAsync()).IsSuccess.Should().BeFalse();
 }
 
-public class AssignRolesCommandValidationTests
-{
-    private static AssignRolesCommand Valid() => new()
-    {
-        AccountId = Guid.NewGuid(),
-        RoleIds = new List<Guid> { Guid.NewGuid() },
-        ExpiredAt = DateTime.UtcNow.AddDays(7)
-    };
-
-    [Fact] public async Task Valid_Passes() => (await Valid().ValidateAsync()).IsSuccess.Should().BeTrue();
-
-    [Fact]
-    public async Task ValidNoExpiredAt_Passes()
-    {
-        var c = Valid();
-        c.ExpiredAt = null;
-        (await c.ValidateAsync()).IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task EmptyAccountId_Fails()
-    {
-        var c = Valid();
-        c.AccountId = Guid.Empty;
-        (await c.ValidateAsync()).IsSuccess.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task EmptyRoleIds_Fails()
-    {
-        var c = Valid();
-        c.RoleIds = new List<Guid>();
-        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "RoleIds");
-    }
-
-    [Fact]
-    public async Task RoleId_EmptyGuid_Fails()
-    {
-        var c = Valid();
-        c.RoleIds = new List<Guid> { Guid.Empty };
-        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "RoleIds");
-    }
-
-    [Fact]
-    public async Task ExpiredAt_Past_Fails()
-    {
-        var c = Valid();
-        c.ExpiredAt = DateTime.UtcNow.AddDays(-1);
-        (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field == "ExpiredAt");
-    }
-}
-
-public class AssignRoleTemporaryCommandValidationTests
+public class ChangeAccountRoleCommandValidationTests
 {
     [Fact]
     public async Task Valid_Passes() =>
-        (await new AssignRoleTemporaryCommand { AccountId = Guid.NewGuid(), RoleId = Guid.NewGuid(), ExpiredAt = DateTime.UtcNow.AddDays(7) }.ValidateAsync()).IsSuccess.Should().BeTrue();
+        (await new ChangeAccountRoleCommand { AccountId = Guid.NewGuid(), RoleId = Guid.NewGuid() }.ValidateAsync()).IsSuccess.Should().BeTrue();
 
     [Fact]
     public async Task EmptyAccountId_Fails() =>
-        (await new AssignRoleTemporaryCommand { AccountId = Guid.Empty, RoleId = Guid.NewGuid(), ExpiredAt = DateTime.UtcNow.AddDays(7) }.ValidateAsync()).IsSuccess.Should().BeFalse();
+        (await new ChangeAccountRoleCommand { AccountId = Guid.Empty, RoleId = Guid.NewGuid() }.ValidateAsync()).IsSuccess.Should().BeFalse();
 
     [Fact]
     public async Task EmptyRoleId_Fails() =>
-        (await new AssignRoleTemporaryCommand { AccountId = Guid.NewGuid(), RoleId = Guid.Empty, ExpiredAt = DateTime.UtcNow.AddDays(7) }.ValidateAsync()).IsSuccess.Should().BeFalse();
-
-    [Fact]
-    public async Task ExpiredAt_Past_Fails() =>
-        (await new AssignRoleTemporaryCommand { AccountId = Guid.NewGuid(), RoleId = Guid.NewGuid(), ExpiredAt = DateTime.UtcNow.AddDays(-1) }.ValidateAsync()).IsSuccess.Should().BeFalse();
+        (await new ChangeAccountRoleCommand { AccountId = Guid.NewGuid(), RoleId = Guid.Empty }.ValidateAsync()).IsSuccess.Should().BeFalse();
 }
 
 public class SimpleAccountCommandValidationTests

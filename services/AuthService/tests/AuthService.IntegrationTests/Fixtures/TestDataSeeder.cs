@@ -40,6 +40,8 @@ public static class TestDataSeeder
     {
         await SeedSystemRolesAsync(db);
 
+        // 1-N refactor: mỗi account bắt buộc có 1 role → default Customer nếu caller không truyền.
+        var effectiveRoleId = roleId ?? CustomerRoleId;
         var account = new global::AuthService.Domain.Entities.Account
         {
             Id = Guid.NewGuid(),
@@ -48,22 +50,11 @@ public static class TestDataSeeder
             FullName = fullName,
             EmailConfirmed = true,
             Status = status,
+            RoleId = effectiveRoleId,
+            RoleAssignedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
         db.Users.Add(account);
-
-        if (roleId.HasValue)
-        {
-            db.AccountRoles.Add(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = roleId.Value,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
 
         await db.SaveChangesAsync();
         return account;

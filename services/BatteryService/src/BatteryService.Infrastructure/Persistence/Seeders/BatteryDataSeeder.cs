@@ -47,7 +47,7 @@ public class BatteryDataSeeder
             Email = "sample.customer@solarbattery.local",
             FullName = "Sample Battery Customer",
             PhoneNumber = "0900000001",
-            RolesCsv = "Customer",
+            Role = "Customer",
             IsActive = true,
             LastSyncedAtUtc = SeedTime(),
             CreatedAt = SeedTime()

@@ -21,8 +21,7 @@ public class GetAccountByIdQueryHandler : IRequestHandler<GetAccountByIdQuery, A
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .AsNoTracking()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive))
-                .ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)

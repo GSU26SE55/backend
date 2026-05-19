@@ -9,19 +9,21 @@ namespace AuthService.UnitTests.Handlers.Auth;
 
 public class GoogleAuthCommandHandlerTests
 {
+    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
     private readonly Mock<IJwtHelper> _jwt = new();
     private readonly Mock<IPasswordHasher> _hasher = new();
     private readonly Mock<IGoogleOAuthHelper> _google = new();
 
     public GoogleAuthCommandHandlerTests()
     {
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("acc");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<string>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("acc");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("rt");
         _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("HASH");
     }
 
     [Fact]
-    public async Task Google_NewEmail_CreatesAccount_AssignsCustomer_IssuesTokens()
+    public async Task Google_NewEmail_CreatesAccount_AssignsCustomerRole_IssuesTokens()
     {
         _google.Setup(g => g.ValidateAsync("good-token", It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
         {
@@ -30,7 +32,7 @@ public class GoogleAuthCommandHandlerTests
             Name = "New User",
             Subject = "google-sub-1"
         });
-        var (uow, accounts, refreshTokens, _, accountRoles) = MockUnitOfWork.Build();
+        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build();
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "good-token" }, CancellationToken.None);
@@ -41,9 +43,9 @@ public class GoogleAuthCommandHandlerTests
             a.GoogleId == "google-sub-1" &&
             a.Provider == "Google" &&
             a.EmailConfirmed &&
-            a.Status == AccountStatusEnum.Active
+            a.Status == AccountStatusEnum.Active &&
+            a.RoleId == CustomerRoleId
         )), Times.Once);
-        accountRoles.Verify(r => r.AddAsync(It.IsAny<AccountRole>()), Times.Once);
         refreshTokens.Verify(r => r.AddAsync(It.IsAny<RefreshToken>()), Times.Once);
     }
 
@@ -58,7 +60,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "google-sub-1",
             Picture = "https://lh3.googleusercontent.com/a/avatar"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var accountProfiles = Mock.Get(uow.Object.AccountProfiles);
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
@@ -82,7 +84,7 @@ public class GoogleAuthCommandHandlerTests
             FullName = "U",
             Status = AccountStatusEnum.Active,
             EmailConfirmed = true,
-            AccountRoles = new List<AccountRole>()
+            RoleId = CustomerRoleId
         };
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
         {
@@ -90,7 +92,7 @@ public class GoogleAuthCommandHandlerTests
             EmailVerified = true,
             Subject = "google-sub-2"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
@@ -121,7 +123,7 @@ public class GoogleAuthCommandHandlerTests
             Status = AccountStatusEnum.Active,
             EmailConfirmed = true,
             Profile = profile,
-            AccountRoles = new List<AccountRole>()
+            RoleId = CustomerRoleId
         };
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
         {
@@ -130,7 +132,7 @@ public class GoogleAuthCommandHandlerTests
             Subject = "google-sub-2",
             Picture = "https://new.google/avatar"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing }, accountProfileSeed: new[] { profile });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing }, accountProfileSeed: new[] { profile });
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
@@ -152,7 +154,7 @@ public class GoogleAuthCommandHandlerTests
             FullName = "P",
             Status = AccountStatusEnum.PendingVerification,
             EmailConfirmed = false,
-            AccountRoles = new List<AccountRole>()
+            RoleId = CustomerRoleId
         };
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
         {
@@ -160,7 +162,7 @@ public class GoogleAuthCommandHandlerTests
             EmailVerified = true,
             Subject = "g3"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
@@ -180,7 +182,7 @@ public class GoogleAuthCommandHandlerTests
             Status = AccountStatusEnum.Active,
             EmailConfirmed = true,
             GoogleId = "other-google-id",
-            AccountRoles = new List<AccountRole>()
+            RoleId = CustomerRoleId
         };
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleUserInfo
         {
@@ -188,7 +190,7 @@ public class GoogleAuthCommandHandlerTests
             EmailVerified = true,
             Subject = "different-google-id"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
@@ -200,7 +202,7 @@ public class GoogleAuthCommandHandlerTests
     public async Task Google_InvalidToken_Returns401()
     {
         _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((GoogleUserInfo?)null);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "bad" }, CancellationToken.None);
@@ -217,7 +219,7 @@ public class GoogleAuthCommandHandlerTests
             EmailVerified = false,
             Subject = "g"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
@@ -247,7 +249,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "g-1"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
@@ -274,7 +276,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "g"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
@@ -308,7 +310,7 @@ public class LinkGoogleCommandHandlerTests
             EmailVerified = true,
             Subject = "shared-google-id"
         });
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, another });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, another });
         var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
@@ -332,7 +334,7 @@ public class UnlinkGoogleCommandHandlerTests
             GoogleId = "g-1",
             Provider = "Google"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
@@ -354,7 +356,7 @@ public class UnlinkGoogleCommandHandlerTests
             Status = AccountStatusEnum.Active,
             GoogleId = null
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
@@ -374,7 +376,7 @@ public class UnlinkGoogleCommandHandlerTests
             Status = AccountStatusEnum.Active,
             GoogleId = "g-1"
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UnlinkGoogleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);

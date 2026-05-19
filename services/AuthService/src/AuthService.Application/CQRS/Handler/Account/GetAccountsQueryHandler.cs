@@ -40,14 +40,13 @@ public class GetAccountsQueryHandler : IRequestHandler<GetAccountsQuery, Account
         if (request.RoleId.HasValue)
         {
             var roleId = request.RoleId.Value;
-            query = query.Where(a => a.AccountRoles.Any(ar => ar.RoleId == roleId && ar.IsActive));
+            query = query.Where(a => a.RoleId == roleId);
         }
 
         var total = await query.CountAsync(cancellationToken);
 
         var accounts = await query
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive))
-                .ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(sp => sp.Skills)

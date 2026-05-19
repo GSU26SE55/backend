@@ -30,9 +30,9 @@ public class CustomerAccountConfiguration : IEntityTypeConfiguration<CustomerAcc
             .HasColumnName("phone_number")
             .HasMaxLength(30);
 
-        builder.Property(account => account.RolesCsv)
-            .HasColumnName("roles_csv")
-            .HasMaxLength(500)
+        builder.Property(account => account.Role)
+            .HasColumnName("role")
+            .HasMaxLength(100)
             .IsRequired();
 
         builder.Property(account => account.IsActive)

@@ -16,7 +16,7 @@ public class AuditTrailNotificationHandlerTests
         Mock<SharedKernels.Interfaces.IGenericRepository<AuditLog>>? auditLogsMock = null,
         string? currentUserId = null)
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         if (auditLogsMock != null)
             uow.SetupGet(u => u.AuditLogs).Returns(auditLogsMock.Object);
 

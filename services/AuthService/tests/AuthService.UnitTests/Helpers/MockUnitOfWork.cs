@@ -8,7 +8,10 @@ namespace AuthService.UnitTests.Helpers;
 /// Builder gom các mock repository thường dùng trong test handler.
 /// Dùng MockQueryable.Moq để mock IQueryable cho GetAllAsync().
 ///
-/// Lưu ý: AuditLogs mock được setup trên uow nhưng KHÔNG return trong tuple để tránh
+/// Lưu ý: Sau refactor sang quan hệ Role 1-N (mỗi Account chỉ có 1 Role) —
+/// repository <c>AccountRoles</c> đã bị bỏ; role của account được set trực tiếp qua <c>Account.RoleId</c>.
+///
+/// AuditLogs mock được setup trên uow nhưng KHÔNG return trong tuple để tránh
 /// break tests hiện hữu. Truy cập qua <c>uow.Object.AuditLogs</c> nếu cần verify.
 /// </summary>
 public static class MockUnitOfWork
@@ -16,17 +19,17 @@ public static class MockUnitOfWork
     public static (Mock<IAuthUnitOfWork> uow,
                    Mock<IGenericRepository<Account>> accounts,
                    Mock<IGenericRepository<RefreshToken>> refreshTokens,
-                   Mock<IGenericRepository<Role>> roles,
-                   Mock<IGenericRepository<AccountRole>> accountRoles)
+                   Mock<IGenericRepository<Role>> roles)
         Build(
             IEnumerable<Account>? accountSeed = null,
             IEnumerable<RefreshToken>? tokenSeed = null,
             IEnumerable<Role>? roleSeed = null,
-            IEnumerable<AccountRole>? accountRoleSeed = null,
             IEnumerable<AuditLog>? auditLogSeed = null,
             IEnumerable<AccountProfile>? accountProfileSeed = null,
             IEnumerable<StaffProfile>? staffProfileSeed = null,
-            IEnumerable<StaffSkill>? staffSkillSeed = null)
+            IEnumerable<StaffSkill>? staffSkillSeed = null,
+            IEnumerable<Permission>? permissionSeed = null,
+            IEnumerable<RolePermission>? rolePermissionSeed = null)
     {
         var accounts = new Mock<IGenericRepository<Account>>();
         accounts.Setup(r => r.GetAllAsync()).Returns((accountSeed ?? Array.Empty<Account>()).AsQueryable().BuildMock());
@@ -37,9 +40,6 @@ public static class MockUnitOfWork
         var roles = new Mock<IGenericRepository<Role>>();
         roles.Setup(r => r.GetAllAsync()).Returns((roleSeed ?? Array.Empty<Role>()).AsQueryable().BuildMock());
 
-        var accountRoles = new Mock<IGenericRepository<AccountRole>>();
-        accountRoles.Setup(r => r.GetAllAsync()).Returns((accountRoleSeed ?? Array.Empty<AccountRole>()).AsQueryable().BuildMock());
-
         var auditLogs = new Mock<IGenericRepository<AuditLog>>();
         auditLogs.Setup(r => r.GetAllAsync()).Returns((auditLogSeed ?? Array.Empty<AuditLog>()).AsQueryable().BuildMock());
 
@@ -47,10 +47,10 @@ public static class MockUnitOfWork
         loginAttempts.Setup(r => r.GetAllAsync()).Returns(Array.Empty<LoginAttempt>().AsQueryable().BuildMock());
 
         var permissions = new Mock<IGenericRepository<Permission>>();
-        permissions.Setup(r => r.GetAllAsync()).Returns(Array.Empty<Permission>().AsQueryable().BuildMock());
+        permissions.Setup(r => r.GetAllAsync()).Returns((permissionSeed ?? Array.Empty<Permission>()).AsQueryable().BuildMock());
 
         var rolePermissions = new Mock<IGenericRepository<RolePermission>>();
-        rolePermissions.Setup(r => r.GetAllAsync()).Returns(Array.Empty<RolePermission>().AsQueryable().BuildMock());
+        rolePermissions.Setup(r => r.GetAllAsync()).Returns((rolePermissionSeed ?? Array.Empty<RolePermission>()).AsQueryable().BuildMock());
 
         var accountProfiles = new Mock<IGenericRepository<AccountProfile>>();
         accountProfiles.Setup(r => r.GetAllAsync()).Returns((accountProfileSeed ?? Array.Empty<AccountProfile>()).AsQueryable().BuildMock());
@@ -65,7 +65,6 @@ public static class MockUnitOfWork
         uow.SetupGet(u => u.Accounts).Returns(accounts.Object);
         uow.SetupGet(u => u.RefreshTokens).Returns(refreshTokens.Object);
         uow.SetupGet(u => u.Roles).Returns(roles.Object);
-        uow.SetupGet(u => u.AccountRoles).Returns(accountRoles.Object);
         uow.SetupGet(u => u.AuditLogs).Returns(auditLogs.Object);
         uow.SetupGet(u => u.LoginAttempts).Returns(loginAttempts.Object);
         uow.SetupGet(u => u.Permissions).Returns(permissions.Object);
@@ -78,6 +77,6 @@ public static class MockUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, accounts, refreshTokens, roles, accountRoles);
+        return (uow, accounts, refreshTokens, roles);
     }
 }

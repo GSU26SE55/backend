@@ -28,7 +28,7 @@ public class SendPhoneOtpCommandHandlerTests
     public async Task Send_NoPhone_Returns400()
     {
         var account = WithPhone(phone: null);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new SendPhoneOtpCommandHandler(uow.Object, _producer.Object, NullLogger<SendPhoneOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
@@ -40,7 +40,7 @@ public class SendPhoneOtpCommandHandlerTests
     public async Task Send_AlreadyConfirmed_Returns400()
     {
         var account = WithPhone(confirmed: true);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new SendPhoneOtpCommandHandler(uow.Object, _producer.Object, NullLogger<SendPhoneOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
@@ -52,7 +52,7 @@ public class SendPhoneOtpCommandHandlerTests
     public async Task Send_FreshAccount_GeneratesOtp_PublishesEvent()
     {
         var account = WithPhone();
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new SendPhoneOtpCommandHandler(uow.Object, _producer.Object, NullLogger<SendPhoneOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
@@ -70,7 +70,7 @@ public class SendPhoneOtpCommandHandlerTests
         account.OtpCode = "111111";
         account.OtpPurpose = OtpPurposeEnum.PhoneVerify;
         account.OtpExpiredAt = DateTime.UtcNow.AddMinutes(4).AddSeconds(45);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new SendPhoneOtpCommandHandler(uow.Object, _producer.Object, NullLogger<SendPhoneOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
@@ -99,7 +99,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     public async Task Verify_CorrectOtp_SetsPhoneConfirmedTrue()
     {
         var account = WithPhoneOtp();
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -115,7 +115,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     {
         var account = WithPhoneOtp();
         account.PhoneConfirmed = true;
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -127,7 +127,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     public async Task Verify_WrongOtp_IncrementsCounter()
     {
         var account = WithPhoneOtp(otp: "999999");
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
@@ -141,7 +141,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     public async Task Verify_OtpExpired_Returns400()
     {
         var account = WithPhoneOtp(expired: DateTime.UtcNow.AddMinutes(-1));
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);

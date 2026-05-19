@@ -18,7 +18,7 @@ public class AcceptInviteCommandHandlerTests
     public AcceptInviteCommandHandlerTests()
     {
         _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("NEW-HASH");
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<global::AuthService.Domain.Entities.Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("access");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<global::AuthService.Domain.Entities.Account>(), It.IsAny<string>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("access");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("refresh");
     }
 
@@ -34,7 +34,7 @@ public class AcceptInviteCommandHandlerTests
             EmailConfirmed = false,
             InvitationToken = token,
             InvitationExpiredAt = expiresAt ?? DateTime.UtcNow.AddHours(20),
-            AccountRoles = new List<AccountRole>()
+            RoleId = Guid.NewGuid()
         };
     }
 
@@ -42,7 +42,7 @@ public class AcceptInviteCommandHandlerTests
     public async Task Accept_ValidToken_ActivatesAccount_SetsPassword_ClearsToken_IssuesTokens()
     {
         var account = InvitedAccount();
-        var (uow, _, refreshTokens, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
         var resp = await handler.Handle(new AcceptInviteCommand
@@ -73,7 +73,7 @@ public class AcceptInviteCommandHandlerTests
     [Fact]
     public async Task Accept_InvalidToken_Returns401()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
 
         var resp = await handler.Handle(new AcceptInviteCommand
@@ -90,7 +90,7 @@ public class AcceptInviteCommandHandlerTests
     public async Task Accept_ExpiredToken_Returns401_DoesNotActivate()
     {
         var account = InvitedAccount(expiresAt: DateTime.UtcNow.AddHours(-1));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
         var resp = await handler.Handle(new AcceptInviteCommand
@@ -109,7 +109,7 @@ public class AcceptInviteCommandHandlerTests
     {
         var account = InvitedAccount();
         account.Status = AccountStatusEnum.Active;
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
         var resp = await handler.Handle(new AcceptInviteCommand

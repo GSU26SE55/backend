@@ -63,10 +63,7 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
 
         builder.HasQueryFilter(r => !r.IsDeleted);
 
-        builder.HasMany(r => r.AccountRoles)
-            .WithOne(ar => ar.Role)
-            .HasForeignKey(ar => ar.RoleId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Account ↔ Role mapped trên AccountConfiguration (1 Role → nhiều Account).
 
         builder.Ignore(r => r.DomainEvents);
 
