@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <title>Lời mời tham gia {{AppName}}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f8;">
+    <div style="font-family: Helvetica, Arial, sans-serif; min-width:1000px; overflow:auto; line-height:1.7">
+        <div style="margin:50px auto; width:70%; padding:24px; background:#ffffff;">
+            <div style="border-bottom:1px solid #eee; padding-bottom:12px;">
+                <a href="{{AcceptUrl}}" style="font-size:1.4em; color:#00466a; text-decoration:none; font-weight:600">{{AppName}}</a>
+            </div>
+            <p style="font-size:1.1em">Xin chào {{UserName}},</p>
+            <p>Bạn được mời tham gia {{AppName}} với role <strong>{{Role}}</strong>.</p>
+            <p>Nhấn nút bên dưới để kích hoạt tài khoản và đặt mật khẩu lần đầu.</p>
+            <p style="margin:28px 0;">
+                <a href="{{AcceptUrl}}" style="background:#00466a; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; display:inline-block; font-weight:600;">
+                    Kích hoạt tài khoản
+                </a>
+            </p>
+            <p style="font-size:0.95em;">Link hết hạn lúc <strong>{{ExpiresAt}}</strong>.</p>
+            <p style="font-size:0.9em; color:#555;">Nếu nút không hoạt động, copy link này vào trình duyệt:<br />{{AcceptUrl}}</p>
+            <p style="font-size:0.9em;">Xin cảm ơn,<br />{{AppName}} Team</p>
+            <hr style="border:none;border-top:1px solid #eee" />
+            <p style="font-size:0.8em; color:#777;">Email nhận lời mời: {{Email}}</p>
+        </div>
+    </div>
+</body>
+</html>

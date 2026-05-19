@@ -33,7 +33,7 @@ public class EmailServiceHostTests
     }
 
     [Fact]
-    public void DI_RegistersAllFourConsumers_InAssemblyScan()
+    public void DI_RegistersAllConsumers_InAssemblyScan()
     {
         // Boot host trước khi access Services.
         _ = _factory.CreateClient();
@@ -41,7 +41,8 @@ public class EmailServiceHostTests
         using var scope = _factory.Services.CreateScope();
         var sp = scope.ServiceProvider;
 
-        // 4 consumer được resolve được = đã register qua AddConsumers(assembly).
+        // Các consumer được resolve được = đã register qua AddConsumers(assembly).
+        sp.GetService<SendAdminInviteConsumer>().Should().NotBeNull();
         sp.GetService<SendOtpRegisterConsumer>().Should().NotBeNull();
         sp.GetService<SendPasswordResetOtpConsumer>().Should().NotBeNull();
         sp.GetService<SendEmailChangeOtpConsumer>().Should().NotBeNull();
