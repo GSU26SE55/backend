@@ -23,7 +23,7 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Register_NewEmail_CreatesPendingAccount_AndPublishesEvent()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
 
         var handler = new RegisterCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<RegisterCommandHandler>.Instance);
         var cmd = new RegisterCommand
@@ -74,7 +74,7 @@ public class RegisterCommandHandlerTests
             FullName = "Existing",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
 
         var handler = new RegisterCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<RegisterCommandHandler>.Instance);
         var response = await handler.Handle(new RegisterCommand
@@ -104,7 +104,7 @@ public class RegisterCommandHandlerTests
             OtpCode = "111111",
             OtpExpiredAt = DateTime.UtcNow.AddMinutes(2)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
 
         var handler = new RegisterCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<RegisterCommandHandler>.Instance);
         var response = await handler.Handle(new RegisterCommand

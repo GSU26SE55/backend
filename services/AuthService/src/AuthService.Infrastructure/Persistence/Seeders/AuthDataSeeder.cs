@@ -187,7 +187,6 @@ public class AuthDataSeeder
 
         var adminAccount = await _dbContext.Users
             .IgnoreQueryFilters()
-            .Include(account => account.AccountRoles)
             .FirstOrDefaultAsync(account => account.Email == adminEmail, cancellationToken);
 
         if (adminAccount is null)
@@ -201,6 +200,8 @@ public class AuthDataSeeder
                 EmailConfirmed = true,
                 PhoneConfirmed = false,
                 Status = AccountStatusEnum.Active,
+                RoleId = adminRole.Id,
+                RoleAssignedAt = now,
                 CreatedAt = now,
                 IsDeleted = false
             };
@@ -214,30 +215,13 @@ public class AuthDataSeeder
             adminAccount.Status = AccountStatusEnum.Active;
             adminAccount.IsDeleted = false;
             adminAccount.DeletedAt = null;
-        }
 
-        var adminAssignment = adminAccount.AccountRoles
-            .FirstOrDefault(accountRole => accountRole.RoleId == adminRole.Id);
-
-        if (adminAssignment is null)
-        {
-            adminAccount.AccountRoles.Add(new AccountRole
+            // Ensure admin có đúng AdminRole — sửa nếu bị đổi tay trên DB.
+            if (adminAccount.RoleId != adminRole.Id)
             {
-                Id = Guid.NewGuid(),
-                AccountId = adminAccount.Id,
-                RoleId = adminRole.Id,
-                AssignedAt = now,
-                IsActive = true,
-                CreatedAt = now,
-                IsDeleted = false
-            });
-        }
-        else
-        {
-            adminAssignment.IsActive = true;
-            adminAssignment.IsDeleted = false;
-            adminAssignment.DeletedAt = null;
-            adminAssignment.ExpiredAt = null;
+                adminAccount.RoleId = adminRole.Id;
+                adminAccount.RoleAssignedAt = now;
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

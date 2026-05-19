@@ -20,7 +20,7 @@ public class UpdateAccountCommandHandlerTests
             PhoneConfirmed = true,
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
         var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
@@ -50,7 +50,7 @@ public class UpdateAccountCommandHandlerTests
             PhoneConfirmed = true,
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
         var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
@@ -85,7 +85,7 @@ public class UpdateAccountCommandHandlerTests
             PhoneNumber = "0900222",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, other });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, other });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
         var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
@@ -102,7 +102,7 @@ public class UpdateAccountCommandHandlerTests
     [Fact]
     public async Task Update_NotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new UpdateAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 

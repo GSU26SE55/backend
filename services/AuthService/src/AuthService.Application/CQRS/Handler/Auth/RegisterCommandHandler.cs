@@ -16,6 +16,7 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterResponse>
 {
     private const int OtpLifetimeMinutes = 5;
+    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
@@ -85,7 +86,10 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
                 LastLoginIp = null,
                 Status = AccountStatusEnum.PendingVerification,
                 GoogleId = null,
-                Provider = null
+                Provider = null,
+                // 1-N refactor: account bắt buộc có 1 role. Self-register default Customer.
+                RoleId = CustomerRoleId,
+                RoleAssignedAt = DateTime.UtcNow
             };
 
             await _unitOfWork.Accounts.AddAsync(account);
@@ -102,6 +106,12 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             existing.OtpPurpose = OtpPurposeEnum.Register;
             existing.FailedLoginAttempts = 0;
             existing.LockoutEndAt = null;
+            // Đảm bảo account có role hợp lệ — fallback Customer nếu chưa gán.
+            if (existing.RoleId == Guid.Empty)
+            {
+                existing.RoleId = CustomerRoleId;
+                existing.RoleAssignedAt = DateTime.UtcNow;
+            }
             _unitOfWork.Accounts.UpdateAsync(existing);
         }
 

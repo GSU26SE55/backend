@@ -199,7 +199,7 @@ public class SiteAndGroupCommandHandlerTests
             Id = id,
             Email = "customer@example.com",
             FullName = "Customer",
-            RolesCsv = "Customer",
+            Role = "Customer",
             IsActive = true,
             LastSyncedAtUtc = DateTime.UtcNow
         };

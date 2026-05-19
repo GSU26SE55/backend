@@ -5,12 +5,13 @@ namespace AuthService.Application.Interfaces.Helpers;
 public interface IJwtHelper
 {
     /// <summary>
-    /// Sinh access token chứa claims: NameIdentifier, AccountId, Email, FullName, role(s), permission(s).
+    /// Sinh access token chứa claims: NameIdentifier, AccountId, Email, FullName, Role (1), permission(s).
+    /// Quan hệ Role ↔ Account là 1-N — mỗi account chỉ có duy nhất 1 role nên claim Role là single value.
     /// </summary>
     /// <param name="account">Account entity.</param>
-    /// <param name="roles">Role name list.</param>
+    /// <param name="role">Role name (vd: "Admin", "Customer"). Có thể empty nếu account chưa gán role hợp lệ.</param>
     /// <param name="permissions">Permission code list (vd: ["battery.view", "ticket.assign"]). Có thể null/empty.</param>
-    Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles, IEnumerable<string>? permissions = null);
+    Task<string> GenerateAccessToken(Account account, string role, IEnumerable<string>? permissions = null);
 
     string GenerateRefreshToken();
     bool IsTokenValid(string token);

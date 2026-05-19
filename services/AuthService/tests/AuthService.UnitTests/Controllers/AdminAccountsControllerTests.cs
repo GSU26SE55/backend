@@ -73,31 +73,16 @@ public class AdminAccountsControllerTests
     }
 
     [Fact]
-    public async Task AssignRoles_AssignsAccountIdFromRoute()
+    public async Task ChangeRole_AssignsAccountIdFromRoute()
     {
         var id = Guid.NewGuid();
-        _mediator.Setup(m => m.Send(It.IsAny<AssignRolesCommand>(), It.IsAny<CancellationToken>()))
+        _mediator.Setup(m => m.Send(It.IsAny<ChangeAccountRoleCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AccountActionResponse { IsSuccess = true, StatusCode = 200 });
 
-        var cmd = new AssignRolesCommand { RoleIds = new() { Guid.NewGuid() } };
-        await NewCtrl().AssignRoles(id, cmd, CancellationToken.None);
+        var cmd = new ChangeAccountRoleCommand { RoleId = Guid.NewGuid() };
+        await NewCtrl().ChangeRole(id, cmd, CancellationToken.None);
 
         cmd.AccountId.Should().Be(id);
-    }
-
-    [Fact]
-    public async Task RevokeRole_BuildsCommandWithRouteParams()
-    {
-        var aid = Guid.NewGuid();
-        var rid = Guid.NewGuid();
-        _mediator.Setup(m => m.Send(It.IsAny<RevokeRoleCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AccountActionResponse { IsSuccess = true, StatusCode = 200 });
-
-        await NewCtrl().RevokeRole(aid, rid, CancellationToken.None);
-
-        _mediator.Verify(m => m.Send(
-            It.Is<RevokeRoleCommand>(c => c.AccountId == aid && c.RoleId == rid),
-            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

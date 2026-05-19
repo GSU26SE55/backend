@@ -19,7 +19,8 @@ public class InviteAccountCommand : IRequest<AccountActionResponse>, IValidatabl
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }
-    public List<Guid> RoleIds { get; set; } = new();
+    /// <summary>Role gán cho user mới khi accept invite. Bắt buộc — mỗi account chỉ có 1 role.</summary>
+    public Guid RoleId { get; set; }
 
     public Task<AccountActionResponse> ValidateAsync()
     {
@@ -40,10 +41,8 @@ public class InviteAccountCommand : IRequest<AccountActionResponse>, IValidatabl
         if (!string.IsNullOrWhiteSpace(PhoneNumber) && PhoneNumber.Trim().Length > 20)
             response.ListErrors.Add(new Errors { Field = "PhoneNumber", Detail = "Số điện thoại tối đa 20 ký tự." });
 
-        if (RoleIds.Count == 0)
-            response.ListErrors.Add(new Errors { Field = "RoleIds", Detail = "Phải gán ít nhất 1 role khi invite." });
-        else if (RoleIds.Any(id => id == Guid.Empty))
-            response.ListErrors.Add(new Errors { Field = "RoleIds", Detail = "RoleIds chứa giá trị không hợp lệ." });
+        if (RoleId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "Phải gán 1 role hợp lệ khi invite." });
 
         if (response.ListErrors.Count > 0)
         {

@@ -39,8 +39,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         var existing = await _unitOfWork.RefreshTokens
             .GetAllAsync()
             .Include(rt => rt.Account)
-                .ThenInclude(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                    .ThenInclude(ar => ar.Role)
+                .ThenInclude(a => a.Role)
             .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken, cancellationToken);
 
         if (existing == null)
@@ -82,13 +81,10 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role.Name)
-            .ToList();
+        var roleName = account.Role?.Name ?? string.Empty;
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var newAccessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
+        var newAccessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var newRefreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         var newRefreshToken = new RefreshToken

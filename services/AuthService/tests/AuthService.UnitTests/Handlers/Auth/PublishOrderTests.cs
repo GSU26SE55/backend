@@ -31,7 +31,7 @@ public class PublishOrderTests
     [Fact]
     public async Task Register_PublishesBeforeSaveChanges()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
 
         var sequence = new MockSequence();
         _producer.InSequence(sequence)
@@ -68,7 +68,7 @@ public class PublishOrderTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var sequence = new MockSequence();
         _producer.InSequence(sequence)
@@ -98,7 +98,7 @@ public class PublishOrderTests
             Status = AccountStatusEnum.PendingVerification,
             OtpExpiredAt = DateTime.UtcNow.AddMinutes(-10)  // hết cooldown
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var sequence = new MockSequence();
         _producer.InSequence(sequence)
@@ -129,7 +129,7 @@ public class PublishOrderTests
             PhoneConfirmed = false,
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
         var sequence = new MockSequence();
@@ -159,7 +159,7 @@ public class PublishOrderTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
         var sequence = new MockSequence();

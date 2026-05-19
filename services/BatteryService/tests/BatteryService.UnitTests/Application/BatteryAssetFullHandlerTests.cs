@@ -18,7 +18,7 @@ public class BatteryAssetFullHandlerTests
         Id = id ?? CustomerId,
         Email = "x@y.com",
         FullName = "x",
-        RolesCsv = "Customer",
+        Role = "Customer",
         IsActive = active,
         IsDeleted = deleted,
         LastSyncedAtUtc = DateTime.UtcNow,

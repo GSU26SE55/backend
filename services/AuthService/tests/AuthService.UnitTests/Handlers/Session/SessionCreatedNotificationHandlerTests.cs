@@ -16,7 +16,7 @@ public class SessionCreatedNotificationHandlerTests
         IEnumerable<RefreshToken>? existingTokens = null,
         Mock<MediatR.IPublisher>? publisher = null)
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: existingTokens);
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: existingTokens);
         return new SessionCreatedNotificationHandler(
             uow.Object,
             (publisher ?? MockPublisher.NoOp()).Object,

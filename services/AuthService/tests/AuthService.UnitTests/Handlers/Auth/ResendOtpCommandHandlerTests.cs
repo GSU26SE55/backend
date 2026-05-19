@@ -30,7 +30,7 @@ public class ResendOtpCommandHandlerTests
     {
         var account = Pending();
         account.Status = AccountStatusEnum.Active;
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendOtpCommand { Email = "p@example.com" }, CancellationToken.None);
@@ -41,7 +41,7 @@ public class ResendOtpCommandHandlerTests
     [Fact]
     public async Task Resend_NotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new ResendOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendOtpCommand { Email = "ghost@example.com" }, CancellationToken.None);
@@ -54,7 +54,7 @@ public class ResendOtpCommandHandlerTests
     {
         // Vừa gửi cách đây <60s → OtpExpiredAt còn > 4 phút
         var account = Pending(otpExpired: DateTime.UtcNow.AddMinutes(4).AddSeconds(30));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendOtpCommand { Email = "p@example.com" }, CancellationToken.None);
@@ -66,7 +66,7 @@ public class ResendOtpCommandHandlerTests
     public async Task Resend_AfterCooldown_GeneratesNewOtp_AndPublishes()
     {
         var account = Pending(otpExpired: DateTime.UtcNow.AddMinutes(2));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendOtpCommand { Email = "p@example.com" }, CancellationToken.None);

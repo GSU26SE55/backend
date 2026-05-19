@@ -19,9 +19,9 @@ public class ProfileExtensionHandlerTests
             PasswordHash = "x",
             FullName = "Me",
             Status = AccountStatusEnum.Active,
-            AccountRoles = new List<AccountRole>()
+            RoleId = Guid.NewGuid()
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new SetMyAvatarCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var avatarFileId = Guid.NewGuid();
 
@@ -47,9 +47,9 @@ public class ProfileExtensionHandlerTests
             PasswordHash = "x",
             FullName = "Old",
             Status = AccountStatusEnum.Active,
-            AccountRoles = new List<AccountRole>()
+            RoleId = Guid.NewGuid()
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new UpdateMyProfileCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var birthDate = new DateTime(1998, 4, 2);
 
@@ -118,7 +118,7 @@ public class ProfileExtensionHandlerTests
                 new() { Id = Guid.NewGuid(), StaffAccountId = otherAccount.Id, SkillCode = "LeadAcid", SkillLevel = 3 }
             }
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(
+        var (uow, _, _, _) = MockUnitOfWork.Build(
             accountSeed: new[] { matchingAccount, otherAccount },
             staffProfileSeed: new[] { matchingProfile, otherProfile });
         var handler = new GetStaffQueryHandler(uow.Object);

@@ -25,7 +25,9 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
         await context.ProcessOnceAsync(_inboxStore, nameof(AccountActivatedConsumer), async () =>
         {
             var evt = context.Message;
-            if (!evt.Roles.Any(role => string.Equals(role, CustomerRole, StringComparison.OrdinalIgnoreCase)))
+
+            // Quan hệ 1-N: account chỉ có 1 role. Chỉ sync account có role Customer vào BatteryService.
+            if (!string.Equals(evt.Role, CustomerRole, StringComparison.OrdinalIgnoreCase))
                 return;
 
             await _unitOfWork.BeginTransactionAsync();
@@ -44,7 +46,7 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                         Email = evt.Email.Trim().ToLowerInvariant(),
                         FullName = evt.FullName.Trim(),
                         PhoneNumber = string.IsNullOrWhiteSpace(evt.PhoneNumber) ? null : evt.PhoneNumber.Trim(),
-                        RolesCsv = BuildRolesCsv(evt.Roles),
+                        Role = evt.Role.Trim(),
                         IsActive = true,
                         IsDeleted = false,
                         DeletedAt = null,
@@ -56,7 +58,7 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                     account.Email = evt.Email.Trim().ToLowerInvariant();
                     account.FullName = evt.FullName.Trim();
                     account.PhoneNumber = string.IsNullOrWhiteSpace(evt.PhoneNumber) ? null : evt.PhoneNumber.Trim();
-                    account.RolesCsv = BuildRolesCsv(evt.Roles);
+                    account.Role = evt.Role.Trim();
                     account.IsActive = true;
                     account.IsDeleted = false;
                     account.DeletedAt = null;
@@ -72,15 +74,5 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                 throw;
             }
         });
-    }
-
-    private static string BuildRolesCsv(IReadOnlyList<string> roles)
-    {
-        return string.Join(
-            ',',
-            roles
-                .Where(role => !string.IsNullOrWhiteSpace(role))
-                .Select(role => role.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase));
     }
 }

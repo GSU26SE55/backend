@@ -107,14 +107,14 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         body!.IsSuccess.Should().BeTrue();
         body.Message.Should().Contain("kích hoạt");
 
-        // DB: account active, có Customer role, KHÔNG có refresh token
+        // 1-N refactor: account.Role là single — verify trực tiếp Role.Name.
         using var db = _factory.CreateDbContext();
         var acc = await db.Users
-            .Include(a => a.AccountRoles).ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .FirstAsync(a => a.Email == "verify@example.com");
         acc.Status.Should().Be(AccountStatusEnum.Active);
         acc.EmailConfirmed.Should().BeTrue();
-        acc.AccountRoles.Should().Contain(ar => ar.Role!.Name == "Customer");
+        acc.Role!.Name.Should().Be("Customer");
 
         (await db.RefreshTokens.AnyAsync(r => r.AccountId == acc.Id)).Should().BeFalse();
     }

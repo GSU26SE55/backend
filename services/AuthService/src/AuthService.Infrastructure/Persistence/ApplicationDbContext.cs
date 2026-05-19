@@ -20,7 +20,6 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<Account> Users { get; set; }
     public virtual DbSet<Role> Roles { get; set; }
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
-    public virtual DbSet<AccountRole> AccountRoles { get; set; }
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
     public virtual DbSet<LoginAttempt> LoginAttempts { get; set; }

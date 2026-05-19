@@ -20,7 +20,7 @@ public class InviteAccountCommandHandlerTests
     }
 
     [Fact]
-    public async Task Invite_NewEmail_CreatesAccountInPendingWithToken_PublishesInviteEvent()
+    public async Task Invite_NewEmail_CreatesAccountInPendingWithToken_AssignsRole_PublishesInviteEvent()
     {
         var role = new global::AuthService.Domain.Entities.Role
         {
@@ -30,7 +30,7 @@ public class InviteAccountCommandHandlerTests
             Status = RoleStatusEnum.Active
         };
         global::AuthService.Domain.Entities.Account? captured = null;
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         accounts.Setup(r => r.AddAsync(It.IsAny<global::AuthService.Domain.Entities.Account>()))
             .Callback<global::AuthService.Domain.Entities.Account>(a => captured = a)
             .Returns(Task.CompletedTask);
@@ -40,7 +40,7 @@ public class InviteAccountCommandHandlerTests
         {
             Email = "newstaff@example.com",
             FullName = "New Staff",
-            RoleIds = new List<Guid> { role.Id }
+            RoleId = role.Id
         }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
@@ -53,10 +53,14 @@ public class InviteAccountCommandHandlerTests
         captured.InvitationExpiredAt.Should().NotBeNull();
         captured.InvitationExpiredAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddHours(72), TimeSpan.FromMinutes(1));
 
+        // 1-N refactor: account có 1 role được set trực tiếp qua RoleId.
+        captured.RoleId.Should().Be(role.Id);
+        captured.RoleAssignedAt.Should().NotBeNull();
+
         _producer.Verify(p => p.PublishAsync(
             It.Is<SendAdminInviteEvent>(e =>
                 e.Email == "newstaff@example.com" &&
-                e.Roles.Contains("Staff") &&
+                e.Role == "Staff" &&
                 !string.IsNullOrEmpty(e.InvitationToken)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -72,14 +76,14 @@ public class InviteAccountCommandHandlerTests
             FullName = "E",
             Status = AccountStatusEnum.Active
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new InviteAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object, _publisher.Object);
 
         var resp = await handler.Handle(new InviteAccountCommand
         {
             Email = "exists@example.com",
             FullName = "X",
-            RoleIds = new List<Guid> { Guid.NewGuid() }
+            RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(409);
@@ -96,14 +100,14 @@ public class InviteAccountCommandHandlerTests
             NormalizedName = "OLD",
             Status = RoleStatusEnum.Deprecated
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { inactiveRole });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { inactiveRole });
         var handler = new InviteAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object, _publisher.Object);
 
         var resp = await handler.Handle(new InviteAccountCommand
         {
             Email = "newstaff@example.com",
             FullName = "X",
-            RoleIds = new List<Guid> { inactiveRole.Id }
+            RoleId = inactiveRole.Id
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(400);

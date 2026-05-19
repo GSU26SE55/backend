@@ -6,25 +6,26 @@ using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Command.Account;
 
-public class AssignRoleTemporaryCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
+/// <summary>
+/// Đổi role hiện tại của 1 account sang role khác.
+/// Mỗi account chỉ có duy nhất 1 role tại bất kỳ thời điểm nào (quan hệ 1-N: Role → Account).
+/// </summary>
+public class ChangeAccountRoleCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
     [JsonIgnore]
     public Guid AccountId { get; set; }
+
     public Guid RoleId { get; set; }
-    public DateTime ExpiredAt { get; set; }
 
     public Task<AccountActionResponse> ValidateAsync()
     {
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
 
         if (RoleId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "RoleId không hợp lệ." });
-
-        if (ExpiredAt <= DateTime.UtcNow)
-            response.ListErrors.Add(new Errors { Field = "ExpiredAt", Detail = "ExpiredAt phải ở tương lai." });
 
         if (response.ListErrors.Count > 0)
         {
@@ -32,6 +33,7 @@ public class AssignRoleTemporaryCommand : IRequest<AccountActionResponse>, IVali
             response.StatusCode = 400;
             response.Message = "Dữ liệu đầu vào không hợp lệ.";
         }
+
         return Task.FromResult(response);
     }
 }
