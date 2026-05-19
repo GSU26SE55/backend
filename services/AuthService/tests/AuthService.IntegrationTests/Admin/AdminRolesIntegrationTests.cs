@@ -86,31 +86,27 @@ public class AdminRolesIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AssignRoleTemporary_AddsAccountRoleWithExpiredAt()
+    public async Task ChangeRole_UpdatesAccountRoleId_AndAudit()
     {
+        // 1-N refactor: thay vì gán role tạm thời (đã xóa), endpoint mới là PUT /role
+        // đổi role hiện tại của account sang role mới (account chỉ có 1 role).
         var adminToken = await SeedAdminAndLoginAsync();
         Guid targetId;
-        Guid roleId;
         using (var db = _factory.CreateDbContext())
         {
-            var t = await TestDataSeeder.SeedActiveAccountAsync(db, "assignme@test.local", "P@ss123",
+            var t = await TestDataSeeder.SeedActiveAccountAsync(db, "changeme@test.local", "P@ss123",
                 roleId: TestDataSeeder.CustomerRoleId);
             targetId = t.Id;
-            roleId = TestDataSeeder.AdminRoleId; // gán Admin tạm thời
         }
 
         _client.WithBearer(adminToken);
-        var expiredAt = DateTime.UtcNow.AddDays(7);
-        var resp = await _client.PostAsJsonAsync($"/api/admin/accounts/{targetId}/roles/temporary",
-            new { RoleId = roleId, ExpiredAt = expiredAt });
+        var resp = await _client.PutAsJsonAsync($"/api/admin/accounts/{targetId}/role",
+            new { RoleId = TestDataSeeder.AdminRoleId });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var db2 = _factory.CreateDbContext();
-        var ar = await db2.AccountRoles
-            .Where(x => x.AccountId == targetId && x.RoleId == roleId)
-            .FirstAsync();
-        ar.IsActive.Should().BeTrue();
-        ar.ExpiredAt.Should().NotBeNull();
-        ar.ExpiredAt!.Value.Should().BeCloseTo(expiredAt, TimeSpan.FromSeconds(2));
+        var account = await db2.Users.FirstAsync(a => a.Id == targetId);
+        account.RoleId.Should().Be(TestDataSeeder.AdminRoleId);
+        account.RoleAssignedAt.Should().NotBeNull();
     }
 }

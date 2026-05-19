@@ -61,15 +61,16 @@ public class AuthDataSeederTests : IDisposable
         roles.Select(r => r.NormalizedName).Should().BeEquivalentTo(new[] { "ADMIN", "MANAGER", "STAFF", "CUSTOMER" });
         roles.Should().OnlyContain(r => r.IsSystemRole && r.Status == RoleStatusEnum.Active);
 
-        var admin = await _ctx.Users.Include(a => a.AccountRoles).FirstAsync();
+        var admin = await _ctx.Users.FirstAsync();
         admin.Email.Should().Be("admin@test.local");
         admin.PasswordHash.Should().Be("hashed:Test123!");
         admin.EmailConfirmed.Should().BeTrue();
         admin.Status.Should().Be(AccountStatusEnum.Active);
 
+        // 1-N refactor: admin role được set trực tiếp qua Account.RoleId.
         var adminRoleId = roles.First(r => r.NormalizedName == "ADMIN").Id;
-        admin.AccountRoles.Should().ContainSingle()
-            .Which.Should().Match<AccountRole>(ar => ar.RoleId == adminRoleId && ar.IsActive);
+        admin.RoleId.Should().Be(adminRoleId);
+        admin.RoleAssignedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -80,7 +81,6 @@ public class AuthDataSeederTests : IDisposable
 
         (await _ctx.Roles.CountAsync()).Should().Be(4);
         (await _ctx.Users.CountAsync()).Should().Be(1);
-        (await _ctx.AccountRoles.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -173,36 +173,33 @@ public class AuthDataSeederTests : IDisposable
         await NewSeeder().SeedAsync();
 
         var admin = await _ctx.Users.IgnoreQueryFilters()
-            .Include(a => a.AccountRoles)
             .FirstAsync(a => a.Id == adminId);
         admin.Status.Should().Be(AccountStatusEnum.Active);
         admin.EmailConfirmed.Should().BeTrue();
         admin.IsDeleted.Should().BeFalse();
         admin.DeletedAt.Should().BeNull();
         admin.PasswordHash.Should().Be("old-hash", "không re-hash mật khẩu của admin đã tồn tại");
-        admin.AccountRoles.Should().NotBeEmpty("Admin phải được gán Admin role");
+
+        // 1-N refactor: admin phải có RoleId = AdminRole.
+        var adminRoleId = await _ctx.Roles.Where(r => r.NormalizedName == "ADMIN").Select(r => r.Id).FirstAsync();
+        admin.RoleId.Should().Be(adminRoleId);
     }
 
     [Fact]
-    public async Task SeedAsync_AdminAssignmentExpiredButPresent_ReactivatesIt()
+    public async Task SeedAsync_AdminWithWrongRoleId_ResetsBackToAdminRole()
     {
-        // Admin + Admin role đã tồn tại; assignment cũ bị disable + có ExpiredAt.
+        // 1-N refactor: nếu admin bị manual đổi RoleId trên DB → seeder phải reset về Admin role.
         await NewSeeder().SeedAsync();
-
-        var assignment = await _ctx.AccountRoles.FirstAsync();
-        assignment.IsActive = false;
-        assignment.ExpiredAt = DateTime.UtcNow.AddDays(-1);
-        assignment.IsDeleted = true;
-        assignment.DeletedAt = DateTime.UtcNow;
+        var admin = await _ctx.Users.FirstAsync();
+        var wrongRoleId = Guid.NewGuid();
+        admin.RoleId = wrongRoleId;
         await _ctx.SaveChangesAsync();
 
         await NewSeeder().SeedAsync();
 
-        var refreshed = await _ctx.AccountRoles.IgnoreQueryFilters().FirstAsync(ar => ar.Id == assignment.Id);
-        refreshed.IsActive.Should().BeTrue();
-        refreshed.ExpiredAt.Should().BeNull();
-        refreshed.IsDeleted.Should().BeFalse();
-        refreshed.DeletedAt.Should().BeNull();
+        var adminRoleId = await _ctx.Roles.Where(r => r.NormalizedName == "ADMIN").Select(r => r.Id).FirstAsync();
+        var refreshed = await _ctx.Users.FirstAsync();
+        refreshed.RoleId.Should().Be(adminRoleId);
     }
 
     [Fact]

@@ -34,7 +34,7 @@ public class BatteryServiceIntegrationTests
             "CUSTOMER@EXAMPLE.COM",
             "  Nguyen Van A  ",
             " 0900000001 ",
-            ["Customer"],
+            "Customer",
             "integration-test");
 
         var consumeContext = new Mock<ConsumeContext<AccountActivatedEvent>>();
@@ -50,7 +50,7 @@ public class BatteryServiceIntegrationTests
         accounts[0].Email.Should().Be("customer@example.com");
         accounts[0].FullName.Should().Be("Nguyen Van A");
         accounts[0].PhoneNumber.Should().Be("0900000001");
-        accounts[0].RolesCsv.Should().Be("Customer");
+        accounts[0].Role.Should().Be("Customer");
         accounts[0].IsActive.Should().BeTrue();
         accounts[0].IsDeleted.Should().BeFalse();
     }
@@ -259,7 +259,7 @@ public class BatteryServiceIntegrationTests
     {
         await using var dbContext = CreateDbContext();
         var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
-        var evt = new AccountActivatedEvent(Guid.NewGuid(), "x@x", "n", null, ["Admin"], "test");
+        var evt = new AccountActivatedEvent(Guid.NewGuid(), "x@x", "n", null, "Admin", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);
         ctx.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
@@ -277,7 +277,7 @@ public class BatteryServiceIntegrationTests
         await dbContext.SaveChangesAsync();
 
         var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
-        var evt = new AccountActivatedEvent(customerId, "NEW@X.COM", " Name ", " 0901 ", ["Customer", "Admin"], "test");
+        var evt = new AccountActivatedEvent(customerId, "NEW@X.COM", " Name ", " 0901 ", "Customer", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);
         ctx.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
@@ -289,7 +289,7 @@ public class BatteryServiceIntegrationTests
         account.Email.Should().Be("new@x.com");
         account.FullName.Should().Be("Name");
         account.PhoneNumber.Should().Be("0901");
-        account.RolesCsv.Should().Contain("Customer").And.Contain("Admin");
+        account.Role.Should().Be("Customer");
     }
 
     private static ApplicationDbContext CreateDbContext()
@@ -311,7 +311,7 @@ public class BatteryServiceIntegrationTests
             Id = id,
             Email = $"{id:N}@example.com",
             FullName = "Integration Customer",
-            RolesCsv = "Customer",
+            Role = "Customer",
             IsActive = isActive,
             LastSyncedAtUtc = DateTime.UtcNow
         };

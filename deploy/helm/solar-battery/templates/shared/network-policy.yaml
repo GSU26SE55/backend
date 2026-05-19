@@ -106,7 +106,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/name, operator: In, values: [solar-battery] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
     ports:
     - { protocol: TCP, port: 6379 }
 ---
@@ -123,7 +123,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/name, operator: In, values: [solar-battery] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
     ports:
     - { protocol: TCP, port: 5672 }
     - { protocol: TCP, port: 15672 }

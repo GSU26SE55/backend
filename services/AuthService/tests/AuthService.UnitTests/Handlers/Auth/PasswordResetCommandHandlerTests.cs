@@ -17,7 +17,7 @@ public class ForgotPasswordCommandHandlerTests
     [Fact]
     public async Task Forgot_NonExistentEmail_Returns200_NoLeak()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "ghost@example.com" }, CancellationToken.None);
@@ -38,7 +38,7 @@ public class ForgotPasswordCommandHandlerTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "user@example.com" }, CancellationToken.None);
@@ -61,7 +61,7 @@ public class ForgotPasswordCommandHandlerTests
             FullName = "P",
             Status = AccountStatusEnum.PendingVerification
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "pending@example.com" }, CancellationToken.None);
@@ -97,7 +97,7 @@ public class VerifyResetOtpCommandHandlerTests
     public async Task VerifyReset_CorrectOtp_ReturnsResetToken()
     {
         var account = WithResetOtp();
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyResetOtpCommandHandler(uow.Object, _jwt.Object);
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "123456" }, CancellationToken.None);
@@ -112,7 +112,7 @@ public class VerifyResetOtpCommandHandlerTests
     public async Task VerifyReset_WrongOtp_IncrementsCounter_Returns401()
     {
         var account = WithResetOtp(otp: "999999");
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyResetOtpCommandHandler(uow.Object, _jwt.Object);
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "111111" }, CancellationToken.None);
@@ -126,7 +126,7 @@ public class VerifyResetOtpCommandHandlerTests
     {
         var account = WithResetOtp();
         account.OtpPurpose = OtpPurposeEnum.Register;
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new VerifyResetOtpCommandHandler(uow.Object, _jwt.Object);
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "123456" }, CancellationToken.None);
@@ -137,7 +137,7 @@ public class VerifyResetOtpCommandHandlerTests
     [Fact]
     public async Task VerifyReset_NotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new VerifyResetOtpCommandHandler(uow.Object, _jwt.Object);
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "ghost@example.com", Otp = "123456" }, CancellationToken.None);
@@ -179,7 +179,7 @@ public class ResetPasswordCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, refreshTokens, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
+        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync(account);
         _jwt.Setup(j => j.ValidateResetToken("good-token")).Returns((accountId, (string?)null));
 
@@ -197,7 +197,7 @@ public class ResetPasswordCommandHandlerTests
     [Fact]
     public async Task Reset_InvalidToken_Returns401()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         _jwt.Setup(j => j.ValidateResetToken(It.IsAny<string>())).Returns(((Guid?)null, "invalid"));
 
         var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
@@ -210,7 +210,7 @@ public class ResetPasswordCommandHandlerTests
     public async Task Reset_AccountDeleted_Returns404()
     {
         var accountId = Guid.NewGuid();
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync((Account?)null);
         _jwt.Setup(j => j.ValidateResetToken("good")).Returns((accountId, (string?)null));
 

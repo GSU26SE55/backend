@@ -140,7 +140,7 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            "TRUNCATE TABLE refresh_tokens, account_roles, accounts, roles RESTART IDENTITY CASCADE;");
+            "TRUNCATE TABLE refresh_tokens, accounts, roles RESTART IDENTITY CASCADE;");
     }
 
     private Dictionary<string, string?> CreateTestConfiguration() => new()

@@ -9,16 +9,25 @@ namespace AuthService.UnitTests.Handlers.Auth;
 
 public class RefreshTokenCommandHandlerTests
 {
+    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
     private readonly Mock<IJwtHelper> _jwt = new();
 
     public RefreshTokenCommandHandlerTests()
     {
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("new-access");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<Account>(), It.IsAny<string>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("new-access");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("new-refresh");
     }
 
     private static (global::AuthService.Domain.Entities.Account account, RefreshToken token) Seed(RefreshTokenStatus status, DateTime? expiredAt = null)
     {
+        var customerRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = CustomerRoleId,
+            Name = "Customer",
+            NormalizedName = "CUSTOMER",
+            Status = RoleStatusEnum.Active
+        };
         var account = new global::AuthService.Domain.Entities.Account
         {
             Id = Guid.NewGuid(),
@@ -26,7 +35,8 @@ public class RefreshTokenCommandHandlerTests
             PasswordHash = "x",
             FullName = "RT",
             Status = AccountStatusEnum.Active,
-            AccountRoles = new List<AccountRole>()
+            RoleId = CustomerRoleId,
+            Role = customerRole
         };
         var token = new RefreshToken
         {
@@ -45,7 +55,7 @@ public class RefreshTokenCommandHandlerTests
     public async Task Rotate_ActiveToken_IssuesNewPair_MarksOldAsUsed()
     {
         var (account, oldToken) = Seed(RefreshTokenStatus.Active);
-        var (uow, _, refreshTokens, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { oldToken });
+        var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { oldToken });
 
         var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
@@ -79,7 +89,7 @@ public class RefreshTokenCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7),
             Account = account
         };
-        var (uow, _, refreshTokens, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { usedToken, otherActive });
+        var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { usedToken, otherActive });
 
         var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
@@ -98,7 +108,7 @@ public class RefreshTokenCommandHandlerTests
     public async Task Rotate_RevokedToken_Returns401()
     {
         var (account, revoked) = Seed(RefreshTokenStatus.Revoked);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { revoked });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { revoked });
 
         var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
@@ -110,7 +120,7 @@ public class RefreshTokenCommandHandlerTests
     public async Task Rotate_ExpiredToken_MarksExpired_Returns401()
     {
         var (account, expired) = Seed(RefreshTokenStatus.Active, expiredAt: DateTime.UtcNow.AddSeconds(-1));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { expired });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { expired });
 
         var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
@@ -122,7 +132,7 @@ public class RefreshTokenCommandHandlerTests
     [Fact]
     public async Task Rotate_NonExistentToken_Returns401()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
 
         var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "ghost-token" }, CancellationToken.None);

@@ -12,7 +12,7 @@ public class SiteFullHandlerTests
 {
     private static readonly Guid Cust = Guid.NewGuid();
 
-    private static CustomerAccount Customer() => new() { Id = Cust, Email = "c@x", FullName = "c", RolesCsv = "Customer", IsActive = true, LastSyncedAtUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
+    private static CustomerAccount Customer() => new() { Id = Cust, Email = "c@x", FullName = "c", Role = "Customer", IsActive = true, LastSyncedAtUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
     private static Site MakeSite(string name = "S1", bool deleted = false) => new() { Id = Guid.NewGuid(), Name = name, CustomerId = Cust, InstallDate = DateTime.UtcNow, Status = SiteStatusEnum.Active, IsDeleted = deleted, CreatedAt = DateTime.UtcNow };
 
     [Fact]

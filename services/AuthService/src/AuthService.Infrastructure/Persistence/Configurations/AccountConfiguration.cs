@@ -114,6 +114,16 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.InvitationExpiredAt)
             .HasColumnName("invitation_expired_at");
 
+        builder.Property(a => a.RoleId)
+            .HasColumnName("role_id")
+            .IsRequired();
+
+        builder.Property(a => a.RoleAssignedAt)
+            .HasColumnName("role_assigned_at");
+
+        builder.Property(a => a.RoleAssignedBy)
+            .HasColumnName("role_assigned_by");
+
         builder.Property(a => a.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
@@ -137,13 +147,14 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.HasIndex(a => a.Status);
         builder.HasIndex(a => a.IsDeleted);
         builder.HasIndex(a => a.InvitationToken).HasFilter("\"invitation_token\" IS NOT NULL");
+        builder.HasIndex(a => a.RoleId);
 
         builder.HasQueryFilter(a => !a.IsDeleted);
 
-        builder.HasMany(a => a.AccountRoles)
-            .WithOne(ar => ar.Account)
-            .HasForeignKey(ar => ar.AccountId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(a => a.Role)
+            .WithMany(r => r.Accounts)
+            .HasForeignKey(a => a.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(a => a.RefreshTokens)
             .WithOne(rt => rt.Account)

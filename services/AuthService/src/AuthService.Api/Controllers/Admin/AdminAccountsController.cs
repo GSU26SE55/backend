@@ -143,7 +143,7 @@ public class AdminAccountsController : ControllerBase
     /// - <c>PhoneNumber</c>: tùy chọn, tối đa 20 ký tự.
     /// - <c>DateOfBirth</c>: tùy chọn, không được ở tương lai.
     /// - <c>Address</c>: tùy chọn, tối đa 500 ký tự.
-    /// - <c>RoleIds</c>: danh sách role muốn gán ngay khi tạo, mỗi id phải là Guid hợp lệ.
+    /// - <c>RoleId</c>: role gán cho account mới, bắt buộc và phải là Guid hợp lệ + role đang Active.
     ///
     /// Cách hoạt động:
     /// - Validate dữ liệu và kiểm tra trùng email/phone theo rule hiện có.
@@ -189,7 +189,7 @@ public class AdminAccountsController : ControllerBase
     /// - <c>Email</c>: bắt buộc, đúng định dạng.
     /// - <c>FullName</c>: bắt buộc.
     /// - <c>PhoneNumber</c>: tùy chọn.
-    /// - <c>RoleIds</c>: bắt buộc, ít nhất 1 role.
+    /// - <c>RoleId</c>: bắt buộc, role gán cho user khi accept invite.
     /// </remarks>
     /// <response code="201">Đã tạo account + gửi email invite.</response>
     /// <response code="400">Dữ liệu không hợp lệ hoặc role không tồn tại.</response>
@@ -338,132 +338,47 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Gán nhiều role cho 1 tài khoản.
+    /// Đổi role của 1 tài khoản sang role mới.
     /// </summary>
     /// <remarks>
-    /// Endpoint này gán thêm hoặc cập nhật một hoặc nhiều role cho account. Các role hiện có nhưng
-    /// không nằm trong request sẽ được giữ nguyên; muốn thu hồi role dùng endpoint DELETE role riêng.
+    /// Quan hệ Role ↔ Account là 1-N — mỗi account chỉ có duy nhất 1 role tại bất kỳ thời điểm nào.
+    /// Endpoint này thay thế role hiện tại của account bằng role mới được chỉ định.
     ///
     /// Quyền truy cập:
     /// - Chỉ role <c>Admin</c>.
     ///
     /// Path parameter:
-    /// - <c>id</c>: id account được gán role.
+    /// - <c>id</c>: id account cần đổi role.
     ///
     /// Body request:
-    /// - <c>RoleIds</c>: danh sách role id cần gán, bắt buộc có ít nhất một phần tử.
-    /// - <c>ExpiredAt</c>: thời điểm hết hạn chung cho các role được gán, tùy chọn; nếu có thì phải ở tương lai.
+    /// - <c>RoleId</c>: role mới sẽ thay thế role hiện tại; bắt buộc và phải tồn tại + đang Active.
     ///
     /// Cách hoạt động:
     /// - Controller gán AccountId từ route.
-    /// - Handler kiểm tra account và role tồn tại.
-    /// - Tạo hoặc cập nhật assignment role cho account.
+    /// - Handler kiểm tra account và role tồn tại + role đang Active.
+    /// - Nếu role mới trùng role hiện tại → 200 OK nhưng không phát sinh thay đổi.
+    /// - Ghi audit log với metadata <c>previousRoleId</c> + <c>newRoleId</c>.
     ///
     /// Lưu ý:
-    /// - Role được đưa vào JWT ở lần issue token tiếp theo nếu role còn active và assignment còn hiệu lực.
+    /// - Role được đưa vào JWT ở lần issue token tiếp theo.
     /// - Nếu user đang đăng nhập, access token cũ có thể vẫn giữ claim role cũ cho đến khi token hết hạn hoặc được refresh/login lại.
+    /// - Vì account bắt buộc phải có 1 role, KHÔNG có endpoint revoke role; muốn "thu hồi" thì đổi sang role thấp hơn (vd Customer).
     /// </remarks>
-    /// <param name="id">Id account được gán role.</param>
-    /// <param name="command">Danh sách role id và thời điểm hết hạn tùy chọn.</param>
+    /// <param name="id">Id account cần đổi role.</param>
+    /// <param name="command">RoleId mới.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Kết quả gán role.</returns>
-    /// <response code="200">Gán role thành công.</response>
-    /// <response code="400">Danh sách role không hợp lệ hoặc thời gian hết hạn không ở tương lai.</response>
+    /// <returns>Kết quả đổi role.</returns>
+    /// <response code="200">Đổi role thành công (hoặc role mới trùng role cũ — không có thay đổi).</response>
+    /// <response code="400">RoleId không hợp lệ hoặc role không tồn tại/đã bị vô hiệu hóa.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy account hoặc role.</response>
-    [HttpPost("{id:guid}/roles")]
+    /// <response code="404">Không tìm thấy account.</response>
+    [HttpPut("{id:guid}/role")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AssignRoles(Guid id, [FromBody] AssignRolesCommand command, CancellationToken cancellationToken)
-    {
-        command.AccountId = id;
-        var result = await _mediator.Send(command, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Thu hồi 1 role khỏi 1 tài khoản.
-    /// </summary>
-    /// <remarks>
-    /// Endpoint này thu hồi một role cụ thể khỏi account.
-    ///
-    /// Quyền truy cập:
-    /// - Chỉ role <c>Admin</c>.
-    ///
-    /// Path parameters:
-    /// - <c>id</c>: id account bị thu hồi role.
-    /// - <c>roleId</c>: id role cần thu hồi.
-    ///
-    /// Cách hoạt động:
-    /// - Handler tìm assignment giữa account và role.
-    /// - Thu hồi hoặc đánh dấu assignment không còn active theo logic hiện có.
-    ///
-    /// Lưu ý:
-    /// - Việc thu hồi role không nhất thiết làm access token đang có mất quyền ngay lập tức.
-    /// - User sẽ mất role ở lần issue token tiếp theo hoặc sau khi token cũ hết hạn.
-    /// </remarks>
-    /// <param name="id">Id account bị thu hồi role.</param>
-    /// <param name="roleId">Id role cần thu hồi.</param>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Kết quả thu hồi role.</returns>
-    /// <response code="200">Thu hồi role thành công.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy account, role hoặc assignment.</response>
-    [HttpDelete("{id:guid}/roles/{roleId:guid}")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RevokeRole(Guid id, Guid roleId, CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new RevokeRoleCommand { AccountId = id, RoleId = roleId }, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Gán role tạm thời cho 1 tài khoản (kèm thời điểm hết hạn). Khi quá hạn, role sẽ không được
-    /// đưa vào claim ở lần issue token tiếp theo.
-    /// </summary>
-    /// <remarks>
-    /// Endpoint này dùng cho các quyền tạm thời, ví dụ cấp quyền hỗ trợ trong một khoảng thời gian.
-    ///
-    /// Quyền truy cập:
-    /// - Chỉ role <c>Admin</c>.
-    ///
-    /// Path parameter:
-    /// - <c>id</c>: id account được gán role tạm thời.
-    ///
-    /// Body request:
-    /// - <c>RoleId</c>: role cần gán.
-    /// - <c>ExpiredAt</c>: thời điểm hết hạn, bắt buộc và phải ở tương lai.
-    ///
-    /// Cách hoạt động:
-    /// - Controller gán AccountId từ route.
-    /// - Handler tạo assignment role có thời điểm hết hạn.
-    /// - Khi quá hạn, role không được đưa vào claim ở lần issue token tiếp theo.
-    ///
-    /// Lưu ý:
-    /// - Thời gian nên truyền theo UTC để tránh lệch múi giờ.
-    /// - Token đã cấp trước khi role hết hạn có thể vẫn chứa claim cũ cho đến khi hết hạn.
-    /// </remarks>
-    /// <param name="id">Id account được gán role tạm thời.</param>
-    /// <param name="command">RoleId và thời điểm hết hạn.</param>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Kết quả gán role tạm thời.</returns>
-    /// <response code="200">Gán role tạm thời thành công.</response>
-    /// <response code="400">RoleId không hợp lệ hoặc ExpiredAt không ở tương lai.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy account hoặc role.</response>
-    [HttpPost("{id:guid}/roles/temporary")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AssignRoleTemporary(Guid id, [FromBody] AssignRoleTemporaryCommand command, CancellationToken cancellationToken)
+    public async Task<IActionResult> ChangeRole(Guid id, [FromBody] ChangeAccountRoleCommand command, CancellationToken cancellationToken)
     {
         command.AccountId = id;
         var result = await _mediator.Send(command, cancellationToken);

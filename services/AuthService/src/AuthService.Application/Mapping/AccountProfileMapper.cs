@@ -25,10 +25,10 @@ public static class AccountProfileMapper
             LastLoginAt = account.LastLoginAt,
             CreatedAt = account.CreatedAt,
             UpdatedAt = account.UpdatedAt,
-            Roles = account.AccountRoles
-                .Where(ar => ar.IsActive && ar.Role is not null)
-                .Select(ar => ar.Role.Name)
-                .ToList(),
+            RoleId = account.RoleId,
+            Role = account.Role?.Name ?? string.Empty,
+            RoleAssignedAt = account.RoleAssignedAt,
+            RoleAssignedBy = account.RoleAssignedBy,
             Profile = ToProfileDto(account.Profile, account.Id),
             StaffProfile = ToStaffProfileDto(account.StaffProfile),
             DisplayAvatarUrl = ResolveDisplayAvatarUrl(account.Profile)

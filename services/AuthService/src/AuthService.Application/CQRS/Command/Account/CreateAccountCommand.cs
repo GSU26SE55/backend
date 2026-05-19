@@ -19,7 +19,8 @@ public class CreateAccountCommand : IRequest<AccountActionResponse>, IValidatabl
     public string? PhoneNumber { get; set; }
     public DateTime? DateOfBirth { get; set; }
     public string? Address { get; set; }
-    public List<Guid> RoleIds { get; set; } = new();
+    /// <summary>Role gán cho account mới. Bắt buộc — mỗi account phải có đúng 1 role.</summary>
+    public Guid RoleId { get; set; }
 
     public Task<AccountActionResponse> ValidateAsync()
     {
@@ -48,8 +49,8 @@ public class CreateAccountCommand : IRequest<AccountActionResponse>, IValidatabl
         if (!string.IsNullOrEmpty(Address) && Address.Length > 500)
             response.ListErrors.Add(new Errors { Field = "Address", Detail = "Địa chỉ tối đa 500 ký tự." });
 
-        if (RoleIds.Any(id => id == Guid.Empty))
-            response.ListErrors.Add(new Errors { Field = "RoleIds", Detail = "RoleIds chứa giá trị không hợp lệ." });
+        if (RoleId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "Phải gán role hợp lệ cho account mới." });
 
         if (response.ListErrors.Count > 0)
         {

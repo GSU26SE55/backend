@@ -5,13 +5,13 @@ using Microsoft.EntityFrameworkCore;
 namespace AuthService.Application.Authorization;
 
 /// <summary>
-/// Helper resolve danh sách permission code mà 1 account có, dựa trên các role active của account.
+/// Helper resolve danh sách permission code mà 1 account có, dựa trên role hiện tại của account.
 ///
-/// Logic:
-/// - Lấy AccountRole của account WHERE IsActive AND (ExpiredAt is null OR ExpiredAt > now).
+/// Quan hệ 1-N: mỗi account chỉ có duy nhất 1 role. Permission được resolve qua:
+/// - Lấy <c>Account.RoleId</c>.
 /// - Lấy Role.Status = Active.
-/// - Lấy RolePermission.NOT IsDeleted.
-/// - Lấy Permission.NOT IsDeleted.
+/// - Lấy RolePermission của role đó (NOT IsDeleted).
+/// - Lấy Permission tương ứng (NOT IsDeleted).
 /// - Return distinct permission codes.
 /// </summary>
 public static class PermissionResolver
@@ -21,15 +21,11 @@ public static class PermissionResolver
         Guid accountId,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-
-        var query = from accountRole in unitOfWork.AccountRoles.GetAllAsync()
-                    where accountRole.AccountId == accountId
-                          && accountRole.IsActive
-                          && (accountRole.ExpiredAt == null || accountRole.ExpiredAt > now)
+        var query = from account in unitOfWork.Accounts.GetAllAsync()
+                    where account.Id == accountId && !account.IsDeleted
                     join role in unitOfWork.Roles.GetAllAsync()
-                        on accountRole.RoleId equals role.Id
-                    where role.Status == RoleStatusEnum.Active
+                        on account.RoleId equals role.Id
+                    where role.Status == RoleStatusEnum.Active && !role.IsDeleted
                     join rolePermission in unitOfWork.RolePermissions.GetAllAsync()
                         on role.Id equals rolePermission.RoleId
                     join permission in unitOfWork.Permissions.GetAllAsync()
