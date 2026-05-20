@@ -46,7 +46,6 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
                 Status = site.Status,
                 ContactPersonName = site.ContactPersonName,
                 ContactPersonPhone = site.ContactPersonPhone,
-                BatteryGroupCount = site.BatteryGroups.Count(batteryGroup => !batteryGroup.IsDeleted),
                 BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
                 ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = site.CreatedAt

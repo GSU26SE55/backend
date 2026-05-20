@@ -10,13 +10,12 @@ namespace BatteryService.Api.Controllers;
 
 /// <summary>
 /// Nhóm endpoint quản lý <b>Site</b> - địa điểm vật lý (nhà máy, trang trại điện mặt trời, tòa nhà...) thuộc một Customer,
-/// nơi lắp đặt các BatteryAsset / BatteryGroup.
+/// nơi lắp đặt các BatteryAsset.
 /// </summary>
 /// <remarks>
 /// Mô hình dữ liệu:
 /// <code>
-/// Customer (1) ──── (*) Site ──── (*) BatteryGroup ──── (*) BatteryAsset
-///                       └──── (*) BatteryAsset (asset có thể thuộc Site mà không thuộc Group nào)
+/// Customer (1) ──── (*) Site ──── (*) BatteryAsset
 /// </code>
 ///
 /// Phân quyền:
@@ -30,7 +29,7 @@ namespace BatteryService.Api.Controllers;
 /// Ràng buộc nghiệp vụ:
 /// <list type="number">
 ///   <item><description>Tên Site unique (case-insensitive) trong phạm vi một Customer.</description></item>
-///   <item><description>Không xóa được Site nếu còn BatteryAsset hoặc BatteryGroup chưa xóa thuộc nó.</description></item>
+///   <item><description>Không xóa được Site nếu còn BatteryAsset chưa xóa thuộc nó.</description></item>
 ///   <item><description>Không đổi <c>CustomerId</c> qua endpoint Update; muốn đổi chủ phải tạo Site mới + transfer asset.</description></item>
 /// </list>
 /// </remarks>
@@ -58,10 +57,10 @@ public class SitesController : ControllerBase
     /// - <c>IncludeDeleted</c>: <c>true</c> để bao gồm site đã xóa.
     ///
     /// Cách hoạt động:
-    /// - Include <c>BatteryGroups</c> + <c>BatteryAssets</c> để DTO có count thống kê.
+    /// - Include <c>BatteryAssets</c> để DTO có count thống kê.
     /// - Filter theo IsDeleted (trừ khi IncludeDeleted), keyword, customer, status.
     /// - Sort theo <c>CreatedAt</c> giảm dần.
-    /// - DTO trả thêm <c>BatteryGroupCount</c>, <c>BatteryAssetCount</c>, <c>ActiveBatteryAssetCount</c> (loại trừ deleted).
+    /// - DTO trả thêm <c>BatteryAssetCount</c>, <c>ActiveBatteryAssetCount</c> (loại trừ deleted).
     /// </remarks>
     /// <param name="query">Filter + phân trang.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
@@ -87,7 +86,7 @@ public class SitesController : ControllerBase
     /// Cách hoạt động:
     /// - Parse <c>UserId</c> từ token; nếu không hợp lệ trả 401.
     /// - Filter <c>CustomerId == currentUserId &amp;&amp; !IsDeleted</c>.
-    /// - Tương tự GetAll, trả các count thống kê asset/group trong DTO.
+    /// - Tương tự GetAll, trả các count thống kê asset trong DTO.
     /// </remarks>
     /// <param name="query">Phân trang.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
@@ -110,7 +109,7 @@ public class SitesController : ControllerBase
     /// Lấy chi tiết một Site theo Id.
     /// </summary>
     /// <remarks>
-    /// Trả về <see cref="SiteDto"/> với thông tin Site + count BatteryGroup, BatteryAsset, ActiveBatteryAsset.
+    /// Trả về <see cref="SiteDto"/> với thông tin Site + count BatteryAsset, ActiveBatteryAsset.
     ///
     /// Projection trực tiếp trong SQL (LINQ <c>.Select(...)</c>) để tránh load full graph navigation.
     /// </remarks>
@@ -139,14 +138,13 @@ public class SitesController : ControllerBase
     /// <remarks>
     /// Query parameters (cùng với <c>{id}</c> trong URL):
     /// - <c>PageNumber</c>, <c>PageSize</c>: phân trang.
-    /// - <c>BatteryGroupId</c>: tùy chọn, lọc asset thuộc group cụ thể trong site.
     /// - <c>Status</c>: tùy chọn, enum <c>BatteryStatusEnum</c>.
     ///
     /// Cách hoạt động:
     /// - Kiểm tra Site tồn tại + chưa xóa; nếu không trả 404.
     /// - Filter asset <c>SiteId == id &amp;&amp; !IsDeleted</c>.
-    /// - Apply filter group/status nếu có.
-    /// - Trả full <see cref="BatteryAssetDto"/> với BatteryType/Site/Group name.
+    /// - Apply filter status nếu có.
+    /// - Trả full <see cref="BatteryAssetDto"/> với BatteryType/Site name.
     /// </remarks>
     /// <param name="id">Id Site.</param>
     /// <param name="query">Filter bổ sung + phân trang.</param>
@@ -261,7 +259,7 @@ public class SitesController : ControllerBase
     /// Body request: giống Create, thêm các field trong <see cref="UpdateSiteCommand"/>.
     ///
     /// Cách hoạt động:
-    /// - Tìm site (include BatteryGroups/Assets); 404 nếu không có.
+    /// - Tìm site (include Assets); 404 nếu không có.
     /// - Nếu <c>CustomerId</c> trong body khác customer hiện tại (và khác <c>Guid.Empty</c>), trả 409 - không cho phép đổi chủ sở hữu qua Update.
     /// - Check trùng tên (loại trừ chính nó); trùng trả 409.
     /// - Update toàn bộ field còn lại; KHÔNG đụng đến <c>CustomerId</c>.
@@ -298,11 +296,10 @@ public class SitesController : ControllerBase
     /// Cách hoạt động:
     /// - 404 nếu site không tồn tại / đã xóa.
     /// - 409 nếu còn BatteryAsset chưa xóa thuộc site.
-    /// - 409 nếu còn BatteryGroup chưa xóa thuộc site.
-    /// - Nếu pass cả 2 check, soft delete site.
+    /// - Nếu pass check, soft delete site.
     ///
     /// Lưu ý:
-    /// - Để xóa site có asset/group, cần xóa hoặc transfer các thực thể con trước.
+    /// - Để xóa site có asset, cần xóa hoặc transfer các thực thể con trước.
     /// </remarks>
     /// <param name="id">Id Site.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
@@ -311,7 +308,7 @@ public class SitesController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Site không tồn tại.</response>
-    /// <response code="409">Còn asset hoặc group thuộc site.</response>
+    /// <response code="409">Còn asset thuộc site.</response>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]

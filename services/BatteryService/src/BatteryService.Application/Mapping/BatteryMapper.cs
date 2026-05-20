@@ -32,8 +32,6 @@ public static class BatteryMapper
             BatteryTypeName = asset.BatteryType?.Name ?? string.Empty,
             SiteId = asset.SiteId?.ToString(),
             SiteName = asset.Site?.Name,
-            BatteryGroupId = asset.BatteryGroupId?.ToString(),
-            BatteryGroupName = asset.BatteryGroup?.Name,
             CustomerId = asset.CustomerId.ToString(),
             CustomerName = customerName,
             InstallDate = asset.InstallDate,
@@ -65,25 +63,9 @@ public static class BatteryMapper
             Status = site.Status,
             ContactPersonName = site.ContactPersonName,
             ContactPersonPhone = site.ContactPersonPhone,
-            BatteryGroupCount = site.BatteryGroups.Count(group => !group.IsDeleted),
             BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
             ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == BatteryStatusEnum.Active),
             CreatedAt = site.CreatedAt
-        };
-    }
-
-    public static BatteryGroupDto ToDto(BatteryGroup group)
-    {
-        return new BatteryGroupDto
-        {
-            Id = group.Id.ToString(),
-            SiteId = group.SiteId.ToString(),
-            SiteName = group.Site?.Name ?? string.Empty,
-            Name = group.Name,
-            BatteryTypeId = group.BatteryTypeId.ToString(),
-            BatteryTypeName = group.BatteryType?.Name ?? string.Empty,
-            BatteryCount = group.BatteryCount,
-            CreatedAt = group.CreatedAt
         };
     }
 

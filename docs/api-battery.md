@@ -271,7 +271,6 @@ Base route: `/api/battery-assets`
 | `customerId` | `string?` | Không | Lọc theo khách hàng (UUID string) |
 | `batteryTypeId` | `string?` | Không | Lọc theo loại pin (UUID string) |
 | `siteId` | `string?` | Không | Lọc theo site (UUID string) |
-| `batteryGroupId` | `string?` | Không | Lọc theo nhóm pin (UUID string) |
 | `status` | `BatteryStatusEnum?` | Không | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Không (mặc định `false`) | Bao gồm cả asset đã soft-delete |
 
@@ -289,8 +288,6 @@ Base route: `/api/battery-assets`
 | `batteryTypeName` | `string` | Không | Tên loại pin (để hiển thị) |
 | `siteId` | `string?` | Null nếu chưa gán site | ID site lắp đặt |
 | `siteName` | `string?` | Null nếu chưa gán site | Tên site |
-| `batteryGroupId` | `string?` | Null nếu không thuộc nhóm | ID nhóm pin |
-| `batteryGroupName` | `string?` | Null nếu không thuộc nhóm | Tên nhóm pin |
 | `customerId` | `string` | Không | ID khách hàng sở hữu |
 | `customerName` | `string` | Không | Tên khách hàng từ `CustomerAccount` read model |
 | `installDate` | `DateTime` | Không | Ngày lắp đặt (UTC) |
@@ -390,7 +387,6 @@ Base route: `/api/battery-assets`
 | `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin |
 | `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
 | `siteId` | `string?` | Không | UUID hợp lệ nếu truyền | Site lắp đặt |
-| `batteryGroupId` | `string?` | Không | UUID hợp lệ nếu truyền | Nhóm pin |
 | `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
 | `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền | Ngày hết bảo hành |
 | `location` | `string?` | Không | Max 255 ký tự | Mô tả vị trí |
@@ -403,8 +399,6 @@ Base route: `/api/battery-assets`
 **Lỗi thường gặp:**
 - `400` — Validation field lỗi (xem `listErrors`)
 - `409` — Serial number đã tồn tại trong hệ thống
-- `409` — `batteryTypeId` của asset không khớp với `batteryTypeId` của nhóm (`batteryGroupId`)
-- `409` — `batteryGroupId` không thuộc `siteId` đã truyền
 - `409` — `siteId` không thuộc `customerId` đã truyền
 
 > **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
@@ -469,127 +463,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-## Nhóm 3 — Battery Groups (Nhóm Pin)
-
-Base route: `/api/battery-groups`
-
----
-
-### `GET /api/battery-groups`
-
-**Mục đích:** Danh sách nhóm pin với phân trang và lọc.
-
-**Auth:** Bắt buộc (Admin/Manager/Staff)
-
-**Query params:**
-
-| Param | Type | Mô tả |
-|---|---|---|
-| `pageNumber` | `int` | Trang |
-| `pageSize` | `int` | Số item/trang |
-| `keyword` | `string?` | Tìm theo tên nhóm |
-| `siteId` | `string?` | Lọc theo site (UUID string) |
-| `batteryTypeId` | `string?` | Lọc theo loại pin (UUID string) |
-| `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
-
-**Response thành công `200`:** `PaginationResponse<BatteryGroupDto>`
-
-**Chi tiết `BatteryGroupDto`:**
-
-| Field | Type | Nullable | Mô tả |
-|---|---|---|---|
-| `id` | `string` | Không | ID nhóm pin |
-| `siteId` | `string` | Không | ID site chứa nhóm |
-| `siteName` | `string` | Không | Tên site |
-| `name` | `string` | Không | Tên nhóm pin |
-| `batteryTypeId` | `string` | Không | ID loại pin trong nhóm |
-| `batteryTypeName` | `string` | Không | Tên loại pin |
-| `batteryCount` | `int` | Không | Số pin trong nhóm — denormalized counter, được cập nhật tự động khi thêm/xóa asset khỏi nhóm |
-| `createdAt` | `DateTime` | Không | Thời điểm tạo (UTC) |
-
----
-
-### `GET /api/battery-groups/{id}`
-
-**Mục đích:** Xem chi tiết một nhóm pin.
-
-**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
-
-> **Customer** được phép gọi endpoint này để xem thông tin nhóm pin chứa asset của mình (ví dụ: hiển thị `batteryTypeName`, `batteryCount` trong màn hình chi tiết pin trên mobile). Không có filter theo `customerId` ở server — bất kỳ Customer nào cũng đọc được mọi group nếu biết `id`. Đây là intentional vì group không chứa PII.
-
-**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
-
----
-
-### `POST /api/battery-groups`
-
-**Mục đích:** Tạo nhóm pin mới trong một site.
-
-**Auth:** Bắt buộc (Admin)
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Validation | Mô tả |
-|---|---|---|---|---|
-| `siteId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Site chứa nhóm |
-| `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên nhóm |
-| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin trong nhóm |
-
-**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
-
-**Lỗi thường gặp:**
-- `400` — Validation field lỗi (xem `listErrors`)
-- `409` — Tên nhóm pin đã tồn tại trong site
-
-> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
-
----
-
-### `PUT /api/battery-groups/{id}`
-
-**Mục đích:** Cập nhật thông tin nhóm pin.
-
-**Auth:** Bắt buộc (Admin)
-
-**Path param:** `id` — Guid của nhóm pin.
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Validation | Mô tả |
-|---|---|---|---|---|
-| `siteId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Site chứa nhóm |
-| `name` | `string` | **Bắt buộc** | Max 100 ký tự, unique trong site | Tên nhóm |
-| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin trong nhóm |
-
-**Response thành công `200`:** `CommonResponse<BatteryGroupDto>`
-
-**Lưu ý:** Nếu group đang có asset, BE trả `409` khi caller đổi `siteId` hoặc `batteryTypeId`.
-
----
-
-### `DELETE /api/battery-groups/{id}`
-
-**Mục đích:** Xóa mềm nhóm pin.
-
-**Auth:** Bắt buộc (Admin)
-
-**Response thành công `200`:** `isSuccess = true`
-
-**Lỗi thường gặp:**
-- `404` — Không tìm thấy nhóm pin
-- `409` — Nhóm pin vẫn còn tài sản pin. Phải chuyển hoặc xóa toàn bộ asset trước khi xóa nhóm.
-
----
-
-### `PATCH /api/battery-groups/{id}/restore`
-
-**Mục đích:** Khôi phục nhóm pin đã xóa.
-
-**Auth:** Bắt buộc (Admin)
-
----
-
-## Nhóm 4 — Battery Types (Loại Pin)
+## Nhóm 3 — Battery Types (Loại Pin)
 
 Base route: `/api/battery-types`
 
@@ -698,7 +572,7 @@ Soft delete loại pin.
 - `404` — Không tìm thấy loại pin
 - `409` — Loại pin đang được gán cho tài sản pin. Phải cập nhật hoặc xóa các asset trước khi xóa loại pin.
 
-> **Lưu ý:** Code hiện tại chỉ kiểm tra asset (`BatteryAssets`). BatteryGroup tham chiếu đến loại pin nhưng không chặn xóa — chỉ asset mới chặn.
+> **Lưu ý:** Code hiện tại chỉ kiểm tra asset (`BatteryAssets`) — chỉ asset mới chặn xóa.
 
 ---
 
@@ -710,7 +584,7 @@ Khôi phục loại pin đã xóa.
 
 ---
 
-## Nhóm 5 — Sensor Readings (Dữ liệu Cảm biến)
+## Nhóm 4 — Sensor Readings (Dữ liệu Cảm biến)
 
 Base route: `/api/sensor-readings`
 
@@ -887,7 +761,7 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 
 ---
 
-## Nhóm 6 — Sites (Địa điểm lắp đặt)
+## Nhóm 5 — Sites (Địa điểm lắp đặt)
 
 Base route: `/api/sites`
 
@@ -928,7 +802,6 @@ Base route: `/api/sites`
 | `status` | `SiteStatusEnum` | Không | Trạng thái site (xem enum) |
 | `contactPersonName` | `string?` | Null nếu chưa cung cấp | Tên người liên hệ tại site |
 | `contactPersonPhone` | `string?` | Null nếu chưa cung cấp | SĐT người liên hệ |
-| `batteryGroupCount` | `int` | Không | Số nhóm pin tại site |
 | `batteryAssetCount` | `int` | Không | Tổng số pin tại site |
 | `activeBatteryAssetCount` | `int` | Không | Số pin đang Active |
 | `createdAt` | `DateTime` | Không | Thời điểm tạo record (UTC) |
@@ -1028,7 +901,6 @@ Nếu site không có asset nào, healthScore = 100.
 |---|---|---|
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
-| `batteryGroupId` | `string?` | Lọc theo nhóm pin cụ thể (UUID string) |
 | `status` | `BatteryStatusEnum?` | Lọc theo trạng thái |
 
 **Response thành công `200`:** `PaginationResponse<BatteryAssetDto>`
@@ -1082,7 +954,7 @@ Khôi phục site đã xóa.
 
 ---
 
-## Nhóm 7 — Threshold Configs (Ngưỡng Cảnh báo)
+## Nhóm 6 — Threshold Configs (Ngưỡng Cảnh báo)
 
 Base route: `/api/thresholds`
 
@@ -1194,12 +1066,6 @@ Base route: `/api/thresholds`
 | DELETE | `/api/battery-assets/{id}` | Xóa pin | Admin |
 | PATCH | `/api/battery-assets/{id}/restore` | Khôi phục pin | Admin |
 | PUT | `/api/battery-assets/{id}/transfer-owner` | Chuyển chủ sở hữu | Admin |
-| GET | `/api/battery-groups` | Danh sách nhóm pin | Admin/Manager/Staff |
-| GET | `/api/battery-groups/{id}` | Chi tiết nhóm pin | Admin/Manager/Staff/Customer |
-| POST | `/api/battery-groups` | Tạo nhóm pin | Admin |
-| PUT | `/api/battery-groups/{id}` | Cập nhật nhóm pin | Admin |
-| DELETE | `/api/battery-groups/{id}` | Xóa nhóm pin | Admin |
-| PATCH | `/api/battery-groups/{id}/restore` | Khôi phục nhóm pin | Admin |
 | GET | `/api/battery-types` | Danh sách loại pin | Admin/Manager/Staff |
 | GET | `/api/battery-types/{id}` | Chi tiết loại pin | Admin/Manager/Staff |
 | POST | `/api/battery-types` | Tạo loại pin | Admin |

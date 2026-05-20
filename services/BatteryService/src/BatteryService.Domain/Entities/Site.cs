@@ -25,7 +25,5 @@ public class Site : AuditableEntity
 
     public string? ContactPersonPhone { get; set; }
 
-    public ICollection<BatteryGroup> BatteryGroups { get; set; } = new List<BatteryGroup>();
-
     public ICollection<BatteryAsset> BatteryAssets { get; set; } = new List<BatteryAsset>();
 }

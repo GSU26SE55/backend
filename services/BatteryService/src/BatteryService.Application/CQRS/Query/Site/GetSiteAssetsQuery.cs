@@ -10,7 +10,5 @@ public class GetSiteAssetsQuery : PaginationRequest, IRequest<CommonResponse<Pag
 {
     public Guid SiteId { get; set; }
 
-    public Guid? BatteryGroupId { get; set; }
-
     public BatteryStatusEnum? Status { get; set; }
 }

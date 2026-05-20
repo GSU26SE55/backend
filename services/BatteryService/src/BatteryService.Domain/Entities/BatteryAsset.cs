@@ -11,8 +11,6 @@ public class BatteryAsset : AuditableEntity
 
     public Guid? SiteId { get; set; }
 
-    public Guid? BatteryGroupId { get; set; }
-
     public Guid CustomerId { get; set; }
 
     public DateTime InstallDate { get; set; }
@@ -36,8 +34,6 @@ public class BatteryAsset : AuditableEntity
     public BatteryType BatteryType { get; set; } = null!;
 
     public Site? Site { get; set; }
-
-    public BatteryGroup? BatteryGroup { get; set; }
 
     public ICollection<SensorReading> SensorReadings { get; set; } = new List<SensorReading>();
 

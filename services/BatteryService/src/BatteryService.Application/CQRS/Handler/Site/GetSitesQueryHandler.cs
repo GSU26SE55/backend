@@ -63,7 +63,6 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
                 Status = site.Status,
                 ContactPersonName = site.ContactPersonName,
                 ContactPersonPhone = site.ContactPersonPhone,
-                BatteryGroupCount = site.BatteryGroups.Count(batteryGroup => !batteryGroup.IsDeleted),
                 BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
                 ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = site.CreatedAt
@@ -88,7 +87,6 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
         var query = _unitOfWork.Sites
             .GetAllAsync()
             .AsNoTracking()
-            .Include(site => site.BatteryGroups)
             .Include(site => site.BatteryAssets);
 
         return includeDeleted ? query : query.Where(site => !site.IsDeleted);

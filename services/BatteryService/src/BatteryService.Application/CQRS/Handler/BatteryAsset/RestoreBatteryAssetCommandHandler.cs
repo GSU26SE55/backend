@@ -65,26 +65,6 @@ public class RestoreBatteryAssetCommandHandler : IRequestHandler<RestoreBatteryA
             }
         }
 
-        if (entity.BatteryGroupId.HasValue)
-        {
-            var group = await _unitOfWork.BatteryGroups
-                .GetAllAsync()
-                .FirstOrDefaultAsync(item => item.Id == entity.BatteryGroupId.Value && !item.IsDeleted, cancellationToken);
-
-            if (group is null)
-            {
-                return new CommonResponse<object>
-                {
-                    IsSuccess = false,
-                    StatusCode = 409,
-                    Message = "Không thể khôi phục vì nhóm pin của tài sản đã bị xóa."
-                };
-            }
-
-            group.BatteryCount += 1;
-            _unitOfWork.BatteryGroups.UpdateAsync(group);
-        }
-
         entity.IsDeleted = false;
         entity.DeletedAt = null;
         _unitOfWork.BatteryAssets.UpdateAsync(entity);

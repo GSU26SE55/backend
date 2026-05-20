@@ -24,19 +24,6 @@ public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAss
         if (entity is null)
             return NotFound();
 
-        if (entity.BatteryGroupId.HasValue)
-        {
-            var group = await _unitOfWork.BatteryGroups
-                .GetAllAsync()
-                .FirstOrDefaultAsync(item => item.Id == entity.BatteryGroupId.Value && !item.IsDeleted, cancellationToken);
-
-            if (group is not null)
-            {
-                group.BatteryCount = Math.Max(0, group.BatteryCount - 1);
-                _unitOfWork.BatteryGroups.UpdateAsync(group);
-            }
-        }
-
         _unitOfWork.BatteryAssets.DeleteAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

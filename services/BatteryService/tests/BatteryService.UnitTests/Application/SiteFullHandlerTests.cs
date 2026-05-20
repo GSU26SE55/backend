@@ -93,16 +93,6 @@ public class SiteFullHandlerTests
     }
 
     [Fact]
-    public async Task Delete_HasGroups_Returns409()
-    {
-        var s = MakeSite();
-        var g = new BatteryGroup { Id = Guid.NewGuid(), Name = "g", SiteId = s.Id, BatteryTypeId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow };
-        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(g);
-        var r = await new DeleteSiteCommandHandler(b.Build()).Handle(new DeleteSiteCommand { Id = s.Id }, default);
-        r.StatusCode.Should().Be(409);
-    }
-
-    [Fact]
     public async Task Delete_Happy_Returns200()
     {
         var s = MakeSite();
@@ -208,14 +198,13 @@ public class SiteFullHandlerTests
     }
 
     [Fact]
-    public async Task GetSiteAssets_FiltersByGroupAndStatus()
+    public async Task GetSiteAssets_FiltersByStatus()
     {
         var s = MakeSite();
         var t = new BatteryType { Id = Guid.NewGuid(), Name = "T", NominalCapacityAh = 1, NominalVoltage = 1, CreatedAt = DateTime.UtcNow };
-        var g = new BatteryGroup { Id = Guid.NewGuid(), Name = "g", SiteId = s.Id, BatteryTypeId = t.Id, CreatedAt = DateTime.UtcNow };
-        var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "S", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, BatteryGroupId = g.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Active, CreatedAt = DateTime.UtcNow };
-        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(g).WithBatteryAssets(asset);
-        var r = await new GetSiteAssetsQueryHandler(b.Build()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, BatteryGroupId = g.Id, Status = BatteryStatusEnum.Active }, default);
+        var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "S", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Active, CreatedAt = DateTime.UtcNow };
+        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryAssets(asset);
+        var r = await new GetSiteAssetsQueryHandler(b.Build()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, Status = BatteryStatusEnum.Active }, default);
         r.Data!.TotalItems.Should().Be(1);
     }
 

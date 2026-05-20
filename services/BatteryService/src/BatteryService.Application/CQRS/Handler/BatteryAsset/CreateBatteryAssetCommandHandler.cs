@@ -7,7 +7,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using BatteryAssetEntity = BatteryService.Domain.Entities.BatteryAsset;
-using BatteryGroupEntity = BatteryService.Domain.Entities.BatteryGroup;
 using SiteEntity = BatteryService.Domain.Entities.Site;
 
 namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
@@ -87,28 +86,9 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             };
         }
 
-        var group = request.BatteryGroupId.HasValue
-            ? await _unitOfWork.BatteryGroups
-                .GetAllAsync()
-                .Include(item => item.Site)
-                .FirstOrDefaultAsync(item => item.Id == request.BatteryGroupId.Value && !item.IsDeleted && !item.Site.IsDeleted, cancellationToken)
-            : null;
-
-        if (request.BatteryGroupId.HasValue && group is null)
-        {
-            return new CommonResponse<BatteryAssetDto>
-            {
-                IsSuccess = false,
-                StatusCode = 404,
-                Message = "Không tìm thấy nhóm pin."
-            };
-        }
-
-        var relationError = ValidateSiteAndGroup(request.CustomerId, request.BatteryTypeId, site, group);
+        var relationError = ValidateSite(request.CustomerId, site);
         if (relationError is not null)
             return relationError;
-
-        site ??= group?.Site;
 
         var entity = new BatteryAssetEntity
         {
@@ -118,8 +98,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             BatteryType = batteryType,
             SiteId = site?.Id,
             Site = site,
-            BatteryGroupId = group?.Id,
-            BatteryGroup = group,
             CustomerId = request.CustomerId,
             InstallDate = ToUtc(request.InstallDate),
             WarrantyEndDate = ToUtc(request.WarrantyEndDate),
@@ -133,12 +111,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             Notes = request.Notes?.Trim()
         };
 
-        if (group is not null)
-        {
-            group.BatteryCount += 1;
-            _unitOfWork.BatteryGroups.UpdateAsync(group);
-        }
-
         await _unitOfWork.BatteryAssets.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -151,34 +123,9 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
         };
     }
 
-    private static CommonResponse<BatteryAssetDto>? ValidateSiteAndGroup(
-        Guid customerId,
-        Guid batteryTypeId,
-        SiteEntity? site,
-        BatteryGroupEntity? group)
+    private static CommonResponse<BatteryAssetDto>? ValidateSite(Guid customerId, SiteEntity? site)
     {
-        if (group is not null && group.BatteryTypeId != batteryTypeId)
-        {
-            return new CommonResponse<BatteryAssetDto>
-            {
-                IsSuccess = false,
-                StatusCode = 409,
-                Message = "Loại pin của tài sản phải trùng với loại pin của nhóm."
-            };
-        }
-
-        if (site is not null && group is not null && group.SiteId != site.Id)
-        {
-            return new CommonResponse<BatteryAssetDto>
-            {
-                IsSuccess = false,
-                StatusCode = 409,
-                Message = "Nhóm pin không thuộc site đã chọn."
-            };
-        }
-
-        var ownerSite = site ?? group?.Site;
-        if (ownerSite is not null && ownerSite.CustomerId != customerId)
+        if (site is not null && site.CustomerId != customerId)
         {
             return new CommonResponse<BatteryAssetDto>
             {
