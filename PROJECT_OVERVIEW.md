@@ -118,7 +118,7 @@ Hệ thống áp dụng chuẩn **ITIL** (chuẩn quốc tế cho quản lý d�
 | Mức | Tên | Thời hạn xử lý | Khi nào áp dụng |
 |-----|-----|----------------|-----------------|
 | 🔴 **P1** | Critical | **< 4 giờ** | Nguy cơ cháy nổ, mất điện toàn site, ảnh hưởng an toàn |
-| 🟠 **P2** | High | **< 24 giờ** | Pin xuống cấp đáng kể, một cụm pin có vấn đề |
+| 🟠 **P2** | High | **< 24 giờ** | Pin xuống cấp đáng kể, phạm vi một site có vấn đề |
 | 🟡 **P3** | Standard | **< 72 giờ** | Bất thường nhẹ, bảo trì định kỳ, một viên pin riêng lẻ |
 
 **Quy tắc quan trọng:** mức ưu tiên được Manager gán **một lần duy nhất** khi tiếp nhận, không thay đổi sau đó. Nếu trễ hạn → tự động leo thang (escalate) lên kỹ thuật viên cấp cao hơn, **không** kéo dài thời hạn.

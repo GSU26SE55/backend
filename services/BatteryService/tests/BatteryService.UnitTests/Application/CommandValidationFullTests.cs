@@ -1,6 +1,5 @@
 using BatteryService.Application.CQRS.Command.Alert;
 using BatteryService.Application.CQRS.Command.BatteryAsset;
-using BatteryService.Application.CQRS.Command.BatteryGroup;
 using BatteryService.Application.CQRS.Command.BatteryType;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Command.Site;
@@ -160,26 +159,6 @@ public class CommandValidationFullTests
     {
         IValidatable<SharedContracts.Common.Responses.CommonResponse<BatteryService.Application.DTOs.SiteDto>> cmd =
             new UpdateSiteCommand { Name = "N", CustomerId = Guid.NewGuid(), InstallDate = DateTime.UtcNow.AddDays(-1) };
-        var r = await cmd.ValidateAsync();
-        r.ListErrors.Should().Contain(e => e.Field == "Id");
-    }
-
-    // ===== BatteryGroup =====
-    [Fact]
-    public async Task CreateBatteryGroup_AllInvalid()
-    {
-        var r = await new CreateBatteryGroupCommand { Name = new string('n', 101) }.ValidateAsync();
-        r.IsSuccess.Should().BeFalse();
-        r.ListErrors.Should().Contain(e => e.Field == "SiteId");
-        r.ListErrors.Should().Contain(e => e.Field == "BatteryTypeId");
-        r.ListErrors.Should().Contain(e => e.Field == "Name");
-    }
-
-    [Fact]
-    public async Task UpdateBatteryGroup_EmptyId_Error()
-    {
-        IValidatable<SharedContracts.Common.Responses.CommonResponse<BatteryService.Application.DTOs.BatteryGroupDto>> cmd =
-            new UpdateBatteryGroupCommand { Name = "N", SiteId = Guid.NewGuid(), BatteryTypeId = Guid.NewGuid() };
         var r = await cmd.ValidateAsync();
         r.ListErrors.Should().Contain(e => e.Field == "Id");
     }

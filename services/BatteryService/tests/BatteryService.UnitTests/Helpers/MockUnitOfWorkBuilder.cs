@@ -11,7 +11,6 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IGenericRepository<BatteryType>> BatteryTypes { get; } = new();
     public Mock<IGenericRepository<BatteryAsset>> BatteryAssets { get; } = new();
     public Mock<IGenericRepository<Site>> Sites { get; } = new();
-    public Mock<IGenericRepository<BatteryGroup>> BatteryGroups { get; } = new();
     public Mock<IGenericRepository<CustomerAccount>> CustomerAccounts { get; } = new();
     public Mock<IGenericRepository<ThresholdConfig>> ThresholdConfigs { get; } = new();
     public Mock<IGenericRepository<SensorReading>> SensorReadings { get; } = new();
@@ -23,7 +22,6 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.BatteryTypes).Returns(BatteryTypes.Object);
         UnitOfWork.SetupGet(x => x.BatteryAssets).Returns(BatteryAssets.Object);
         UnitOfWork.SetupGet(x => x.Sites).Returns(Sites.Object);
-        UnitOfWork.SetupGet(x => x.BatteryGroups).Returns(BatteryGroups.Object);
         UnitOfWork.SetupGet(x => x.CustomerAccounts).Returns(CustomerAccounts.Object);
         UnitOfWork.SetupGet(x => x.ThresholdConfigs).Returns(ThresholdConfigs.Object);
         UnitOfWork.SetupGet(x => x.SensorReadings).Returns(SensorReadings.Object);
@@ -37,7 +35,6 @@ public sealed class MockUnitOfWorkBuilder
         Seed(BatteryTypes, Array.Empty<BatteryType>());
         Seed(BatteryAssets, Array.Empty<BatteryAsset>());
         Seed(Sites, Array.Empty<Site>());
-        Seed(BatteryGroups, Array.Empty<BatteryGroup>());
         Seed(CustomerAccounts, Array.Empty<CustomerAccount>());
         Seed(ThresholdConfigs, Array.Empty<ThresholdConfig>());
         Seed(SensorReadings, Array.Empty<SensorReading>());
@@ -48,7 +45,6 @@ public sealed class MockUnitOfWorkBuilder
     public MockUnitOfWorkBuilder WithBatteryTypes(params BatteryType[] data) { Seed(BatteryTypes, data); return this; }
     public MockUnitOfWorkBuilder WithBatteryAssets(params BatteryAsset[] data) { Seed(BatteryAssets, data); return this; }
     public MockUnitOfWorkBuilder WithSites(params Site[] data) { Seed(Sites, data); return this; }
-    public MockUnitOfWorkBuilder WithBatteryGroups(params BatteryGroup[] data) { Seed(BatteryGroups, data); return this; }
     public MockUnitOfWorkBuilder WithCustomerAccounts(params CustomerAccount[] data) { Seed(CustomerAccounts, data); return this; }
     public MockUnitOfWorkBuilder WithThresholdConfigs(params ThresholdConfig[] data) { Seed(ThresholdConfigs, data); return this; }
     public MockUnitOfWorkBuilder WithSensorReadings(params SensorReading[] data) { Seed(SensorReadings, data); return this; }

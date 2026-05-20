@@ -16,10 +16,6 @@ public class BatteryAssetDto
 
     public string? SiteName { get; set; }
 
-    public string? BatteryGroupId { get; set; }
-
-    public string? BatteryGroupName { get; set; }
-
     public string CustomerId { get; set; } = string.Empty;
 
     public string CustomerName { get; set; } = string.Empty;

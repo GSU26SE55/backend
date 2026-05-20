@@ -12,8 +12,6 @@ public class BatteryDataSeeder
     private static readonly Guid NmcTypeId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     private static readonly Guid NcaTypeId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     private static readonly Guid DefaultSiteId = Guid.Parse("20000000-0000-0000-0000-000000000001");
-    private static readonly Guid BlockAGroupId = Guid.Parse("30000000-0000-0000-0000-000000000001");
-    private static readonly Guid BlockBGroupId = Guid.Parse("30000000-0000-0000-0000-000000000002");
 
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<BatteryDataSeeder> _logger;
@@ -28,10 +26,9 @@ public class BatteryDataSeeder
     {
         await SeedCustomerAccountsAsync(cancellationToken);
         await SeedBatteryTypesAsync(cancellationToken);
-        await SeedSiteAndGroupsAsync(cancellationToken);
+        await SeedSiteAsync(cancellationToken);
         await SeedAssetsAsync(cancellationToken);
         await SeedThresholdsAsync(cancellationToken);
-        await SyncGroupCountsAsync(cancellationToken);
         await SeedAnomalyScenarioReadingsAsync(cancellationToken);
     }
 
@@ -85,7 +82,7 @@ public class BatteryDataSeeder
                 NominalVoltage = 48,
                 Chemistry = BatteryChemistryEnum.Nmc,
                 MaxCycleCount = 2500,
-                Description = "Cụm pin NMC công suất lớn cho solar farm.",
+                Description = "Pin NMC công suất lớn cho solar farm.",
                 CreatedAt = SeedTime()
             },
             new BatteryType
@@ -108,7 +105,7 @@ public class BatteryDataSeeder
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task SeedSiteAndGroupsAsync(CancellationToken cancellationToken)
+    private async Task SeedSiteAsync(CancellationToken cancellationToken)
     {
         var siteExists = await _dbContext.Sites.AnyAsync(site => site.Id == DefaultSiteId, cancellationToken);
         if (!siteExists)
@@ -130,36 +127,6 @@ public class BatteryDataSeeder
             });
         }
 
-        var existingGroupIds = await _dbContext.BatteryGroups
-            .Select(group => group.Id)
-            .ToListAsync(cancellationToken);
-
-        if (!existingGroupIds.Contains(BlockAGroupId))
-        {
-            _dbContext.BatteryGroups.Add(new BatteryGroup
-            {
-                Id = BlockAGroupId,
-                SiteId = DefaultSiteId,
-                Name = "Block A",
-                BatteryTypeId = LiFePo4TypeId,
-                BatteryCount = 0,
-                CreatedAt = SeedTime()
-            });
-        }
-
-        if (!existingGroupIds.Contains(BlockBGroupId))
-        {
-            _dbContext.BatteryGroups.Add(new BatteryGroup
-            {
-                Id = BlockBGroupId,
-                SiteId = DefaultSiteId,
-                Name = "Block B",
-                BatteryTypeId = NmcTypeId,
-                BatteryCount = 0,
-                CreatedAt = SeedTime()
-            });
-        }
-
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -177,7 +144,6 @@ public class BatteryDataSeeder
                 SerialNumber = "BAT-2026-001",
                 BatteryTypeId = LiFePo4TypeId,
                 SiteId = DefaultSiteId,
-                BatteryGroupId = BlockAGroupId,
                 CustomerId = SampleCustomerId,
                 InstallDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 1, 15, 0, 0, 0, DateTimeKind.Utc),
@@ -194,7 +160,6 @@ public class BatteryDataSeeder
                 SerialNumber = "BAT-2026-002",
                 BatteryTypeId = LiFePo4TypeId,
                 SiteId = DefaultSiteId,
-                BatteryGroupId = BlockAGroupId,
                 CustomerId = SampleCustomerId,
                 InstallDate = new DateTime(2026, 1, 20, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 1, 20, 0, 0, 0, DateTimeKind.Utc),
@@ -211,7 +176,6 @@ public class BatteryDataSeeder
                 SerialNumber = "BAT-2026-003",
                 BatteryTypeId = NmcTypeId,
                 SiteId = DefaultSiteId,
-                BatteryGroupId = BlockBGroupId,
                 CustomerId = SampleCustomerId,
                 InstallDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 2, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -353,20 +317,6 @@ public class BatteryDataSeeder
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded {Count} sensor readings across {Assets} anomaly scenarios", readings.Count, assets.Count);
-    }
-
-    private async Task SyncGroupCountsAsync(CancellationToken cancellationToken)
-    {
-        var groups = await _dbContext.BatteryGroups.ToListAsync(cancellationToken);
-
-        foreach (var group in groups)
-        {
-            group.BatteryCount = await _dbContext.BatteryAssets
-                .CountAsync(asset => asset.BatteryGroupId == group.Id && !asset.IsDeleted, cancellationToken);
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Battery seed data checked.");
     }
 
     private static ThresholdConfig CreateThreshold(

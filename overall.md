@@ -48,7 +48,7 @@
   - [28. Tóm tắt files/paths tạo mới](#28-tóm-tắt-filespaths-cần-tạo)
 - [Phần VII — Bổ sung sau review](#phần-vii--bổ-sung-sau-review-gap-analysis)
   - [30. AI Module integration](#30-ai-module-integration--p0)
-  - [31. Site & BatteryGroup](#31-site--batterygroup-entities--p0)
+  - [31. Site](#31-site-entities--p0)
   - [32. Ticket relationships](#32-ticket-relationships--parent-child-merge-watch--p0)
   - [33. SLA pause limits & advanced](#33-sla-pause-limits--advanced--p0)
   - [34. Real-time updates (SSE)](#34-real-time-updates-sse--push-channel--p0)
@@ -166,10 +166,10 @@
 - [x] **Code fix (7 handlers):** Bổ sung `!IsDeleted` filter bị thiếu trong `GetFileMetadataQueryHandler`, `GetPresignedUrlQueryHandler`, `DownloadFileQueryHandler`, `DeleteFileCommandHandler` và 3 handler còn lại — tuân thủ rule "không có global query filter".
 
 **Battery (`docs/api-battery.md` + code):**
-- [x] **CRITICAL — Code fix:** 3 POST handlers (`CreateBatteryAsset`, `CreateBatteryGroup`, `CreateBatteryType`) đổi `StatusCode = 201` → `StatusCode = 200` trong body để nhất quán với `Ok()` controller pattern.
+- [x] **CRITICAL — Code fix:** 2 POST handlers (`CreateBatteryAsset`, `CreateBatteryType`) đổi `StatusCode = 201` → `StatusCode = 200` trong body để nhất quán với `Ok()` controller pattern.
 - [x] **CRITICAL — Code fix:** `BatchIngestSensorReadingsCommand.ValidateAsync()` bổ sung giới hạn `Items.Count > 1000` → trả `400 isSuccess=false`.
 - [x] **CRITICAL — Doc:** Xác nhận `DedupWindowEndUtc` là `DateTime` non-nullable (không phải `DateTime?`) — alert **luôn** có dedup window khi tạo.
-- [x] **IMPORTANT — Doc:** `DELETE /api/battery-groups/{id}` và `DELETE /api/battery-types/{id}` trả `409` nếu còn `BatteryAsset` liên kết (block, không cascade).
+- [x] **IMPORTANT — Doc:** `DELETE /api/battery-types/{id}` trả `409` nếu còn `BatteryAsset` liên kết (block, không cascade).
 - [x] **IMPORTANT — Doc:** `GET /api/battery-assets` mặc định sort `createdAt` giảm dần, không hỗ trợ sort param động.
 - [x] **IMPORTANT — Doc:** `GET /api/sensor-readings/{batteryAssetId}/aggregate` giữ "Planned Sprint 7" — FE/Mobile dùng raw `/history` cho chart tạm ở Sprint 4–5.
 - [x] **MINOR — Doc:** `PUT /api/battery-assets/{id}` cho phép set `warrantyStatus = Void` không cần `voidReason` trong scope capstone.
@@ -604,7 +604,6 @@ Chuỗi đo định kỳ điều kiện môi trường tại Site. Có thể đ�
 |-------|------|-----------|-------|------|
 | `Time` | `DateTime` | NOT NULL | TimescaleDB hypertable column | UTC |
 | `SiteId` | `Guid` | NOT NULL, FK → Site.Id | btree composite | Bắt buộc |
-| `BatteryGroupId` | `Guid?` | nullable, FK → BatteryGroup.Id | btree (filter) | Hybrid override: khi 1 site có nhiều group khác môi trường (vd indoor vs outdoor) |
 | `AmbientTemperature` | `decimal(5,2)` | NOT NULL | — | °C — nhiệt độ MÔI TRƯỜNG (≠ Temperature của pin) |
 | `Humidity` | `decimal(5,2)?` | nullable, 0–100 | — | % RH |
 | `SolarIrradiance` | `decimal(8,2)?` | nullable, ≥ 0 | — | W/m² (`shortwave_radiation` từ OpenMeteo hoặc pyranometer) |
@@ -613,11 +612,11 @@ Chuỗi đo định kỳ điều kiện môi trường tại Site. Có thể đ�
 
 **PK composite:** `(Time, SiteId)` (giống `sensor_readings`).
 **Hypertable interval:** 7 day chunks.
-**Index:** `(SiteId, Time DESC)`; `(BatteryGroupId, Time DESC) WHERE battery_group_id IS NOT NULL`.
+**Index:** `(SiteId, Time DESC)`.
 **Retention:** 90 ngày raw, 1 năm 1h-aggregate (Sprint sau).
 
 **Query rule cho consumer (AnomalyDetector):**
-Để lấy ambient cho 1 BatteryAsset → tra theo `BatteryGroupId` của asset trước. Nếu Group có reading riêng (latest trong N phút) thì dùng. Nếu không, fallback dùng latest reading của Site.
+Để lấy ambient cho 1 BatteryAsset → lookup theo Site (latest reading của Site).
 
 #### 1.3.8. `AmbientThresholdConfig` (per Site, kế thừa `AuditableEntity`)
 
@@ -649,7 +648,6 @@ Sự kiện an toàn (smoke/water leak/...) với lifecycle Detected → Resolve
 |-------|------|-----------|------|
 | `Id` | `Guid` | PK | — |
 | `SiteId` | `Guid` | FK, NOT NULL | btree |
-| `BatteryGroupId` | `Guid?` | FK, nullable | Khi cảm biến gắn cho group cụ thể |
 | `IncidentType` | `IncidentTypeEnum` | NOT NULL | 1=SmokeDetected, 2=WaterLeak |
 | `Severity` | `IncidentSeverityEnum` | NOT NULL | 1=Warning, 2=High, 3=Critical |
 | `Status` | `IncidentStatusEnum` | NOT NULL default `Detected` | 1=Detected, 2=Acknowledged, 3=Resolved, 4=FalseAlarm |
@@ -690,9 +688,9 @@ Sự kiện an toàn (smoke/water leak/...) với lifecycle Detected → Resolve
 | `SensorReadingBatchIngestCommand` | List<SensorReadingItem> (BatteryAssetId, Time, V, I, T, SOC, SOH?, ChargingState?, IR?, CellDelta?, BmsErrorCode?) — **tối đa 1000 items/request** | ApiKey (`SensorIngest`) | `CommonResponse<BatchIngestResult>` |
 | `AlertAcknowledgeCommand` | Id, Note? | Customer (own), Staff | — |
 | `AlertResolveCommand` | Id, ResolutionNote | Staff, Manager | — |
-| `AmbientReadingBatchIngestCommand` | List<AmbientReadingItem> (SiteId, Time, AmbientTemp, Humidity?, SolarIrradiance?, BatteryGroupId?) | ApiKey (`EnvironmentalIngest`) | `CommonResponse<BatchIngestResult>` |
+| `AmbientReadingBatchIngestCommand` | List<AmbientReadingItem> (SiteId, Time, AmbientTemp, Humidity?, SolarIrradiance?) | ApiKey (`EnvironmentalIngest`) | `CommonResponse<BatchIngestResult>` |
 | `UpsertAmbientThresholdConfigCommand` | SiteId, TempMax?, TempMin?, HumidityMax?, ComboTemp?, ComboHumidity?, EffectiveFromUtc | Admin | `CommonResponse<AmbientThresholdConfigDto>` |
-| `ReportEnvironmentalIncidentCommand` | SiteId, BatteryGroupId?, IncidentType, Severity, DetectedAt, Description?, SourceDeviceId? | ApiKey (`EnvironmentalIngest`) | `CommonResponse<EnvironmentalIncidentDto>` |
+| `ReportEnvironmentalIncidentCommand` | SiteId, IncidentType, Severity, DetectedAt, Description?, SourceDeviceId? | ApiKey (`EnvironmentalIngest`) | `CommonResponse<EnvironmentalIncidentDto>` |
 | `AcknowledgeEnvironmentalIncidentCommand` | Id | Admin, Manager, Staff | — |
 | `ResolveEnvironmentalIncidentCommand` | Id, ResolutionNote? | Admin, Manager, Staff | — |
 | `MarkFalseAlarmEnvironmentalIncidentCommand` | Id, Reason | Admin, Manager | — |
@@ -762,8 +760,8 @@ public class BatteryAssetCreateCommand
 | `ActiveAlertsByAssetQuery` | AssetId | — | Redis 30s |
 | `BatteryDashboardStatsQuery` | (none — admin/manager view) | Admin/Manager | Redis 60s |
 | `ThresholdConfigGetByTypeQuery` | BatteryTypeId | Admin/Manager | Redis 600s |
-| `AmbientReadingHistoryQuery` | SiteId, From, To, BatteryGroupId? | Admin/Manager/Staff/Customer (own site) | Redis 60s |
-| `AmbientReadingLatestQuery` | SiteId, BatteryGroupId? | — same — | Redis 30s |
+| `AmbientReadingHistoryQuery` | SiteId, From, To | Admin/Manager/Staff/Customer (own site) | Redis 60s |
+| `AmbientReadingLatestQuery` | SiteId | — same — | Redis 30s |
 | `AmbientThresholdConfigBySiteQuery` | SiteId | Admin/Manager | Redis 600s |
 | `AmbientThresholdConfigGetListQuery` | Pagination + SiteId? + IsActive? | Admin/Manager | None |
 | `EnvironmentalIncidentGetListQuery` | Pagination + SiteId? + Type? + Status? + DateRange | Admin/Manager/Staff/Customer (own site) | None |
@@ -1071,7 +1069,6 @@ public record BatteryAssetTransferredEvent : IntegrationEvent {
 public record EnvironmentalIncidentDetectedEvent : IntegrationEvent {
     public Guid IncidentId { get; init; }
     public Guid SiteId { get; init; }
-    public Guid? BatteryGroupId { get; init; }
     public Guid CustomerId { get; init; }           // chủ Site, lookup khi publish
     public IncidentTypeEnum IncidentType { get; init; }
     public IncidentSeverityEnum Severity { get; init; }
@@ -1136,8 +1133,8 @@ PATCH  /api/alerts/{id}/resolve                       (Staff/Manager)
 
 # Ambient Reading (NEW)
 POST   /api/ambient-readings/batch                    (ApiKey `EnvironmentalIngest` — IoT)
-GET    /api/ambient-readings?siteId=&from=&to=&batteryGroupId=  (— same auth as alerts —)
-GET    /api/ambient-readings/latest?siteId=&batteryGroupId=     (— same —)
+GET    /api/ambient-readings?siteId=&from=&to=  (— same auth as alerts —)
+GET    /api/ambient-readings/latest?siteId=     (— same —)
 
 # Ambient Threshold (NEW)
 GET    /api/ambient-thresholds                        (Admin/Manager)
@@ -1170,12 +1167,12 @@ GET    /api/battery/health                            (Internal — for k8s prob
 - Validation batch: `voltage >= 0`, temperature trong `-50..120°C`, `time` cho phép lệch tối đa **+5 phút** so với server UTC.
 
 **POST endpoints response:**
-- `POST /api/battery-assets`, `POST /api/battery-groups`, `POST /api/battery-types` dùng `Ok()` → HTTP **200**. Body `statusCode` cũng là **200**. FE/Mobile nên kiểm tra `isSuccess` thay vì HTTP status code.
+- `POST /api/battery-assets`, `POST /api/battery-types` dùng `Ok()` → HTTP **200**. Body `statusCode` cũng là **200**. FE/Mobile nên kiểm tra `isSuccess` thay vì HTTP status code.
 
 **GET /api/battery-assets — default sort:**
 - Mặc định sort `createdAt` **giảm dần**. Không hỗ trợ sort param động (không có `sortBy`/`isDescending` query param).
 
-**DELETE /api/battery-groups/{id} và DELETE /api/battery-types/{id}:**
+**DELETE /api/battery-types/{id}:**
 - Trả `409 isSuccess=false` nếu còn `BatteryAsset` liên kết. Không cascade soft-delete xuống assets.
 
 #### Sample request/response
@@ -1411,7 +1408,7 @@ services/TicketService/
 | `Description` | `string(4000)` | NOT NULL | — |
 | `Category` | `TicketCategoryEnum` | NOT NULL | 1=Charging, 2=Overheat, 3=NoPower, 4=Performance, 5=Other |
 | `Priority` | `TicketPriorityEnum?` | nullable until ASSIGNED | 1=P1Critical, 2=P2High, 3=P3Normal — **derived từ ImpactScope × UrgencyLevel** (xem §2.10) |
-| `ImpactScope` | `ImpactScopeEnum?` | nullable until ASSIGNED | **B3** — 1=SingleAsset, 2=BatteryGroup, 3=Site, 4=MultiSite. Manager gán lúc triage |
+| `ImpactScope` | `ImpactScopeEnum?` | nullable until ASSIGNED | **B3** — 1=SingleAsset, 2=Site, 3=MultiSite. Manager gán lúc triage |
 | `UrgencyLevel` | `UrgencyLevelEnum?` | nullable until ASSIGNED | **B3** — 1=Low, 2=Medium, 3=High. Manager gán lúc triage |
 | `Status` | `TicketStatusEnum` | NOT NULL default `NEW` | xem §2.4 |
 | `Origin` | `TicketOriginEnum` | NOT NULL | 1=ManualByCustomer, 2=AutoFromAlert, 3=CreatedByStaff |
@@ -1661,9 +1658,8 @@ Priority = f(ImpactScope, UrgencyLevel)
 | Giá trị | Tên | Mô tả | Ví dụ |
 |---------|-----|------|-------|
 | 1 | `SingleAsset` | 1 BatteryAsset đơn lẻ | 1 pin overheat |
-| 2 | `BatteryGroup` | Cả 1 group/cluster trong site | 1 string A bị low SOC |
-| 3 | `Site` | Cả 1 site (≥ 50% asset bị ảnh hưởng) | Site An Giang mất điện |
-| 4 | `MultiSite` | Nhiều site cùng nhà cung cấp/khu vực | Lô pin LFP batch X gặp lỗi hàng loạt |
+| 2 | `Site` | Cả 1 site (≥ 50% asset bị ảnh hưởng) | Site An Giang mất điện |
+| 3 | `MultiSite` | Nhiều site cùng nhà cung cấp/khu vực | Lô pin LFP batch X gặp lỗi hàng loạt |
 
 **Urgency Level (B3) — mức độ khẩn cấp nghiệp vụ:**
 
@@ -1678,9 +1674,8 @@ Priority = f(ImpactScope, UrgencyLevel)
 | ↓ Impact / Urgency → | Low (1) | Medium (2) | High (3) |
 |---|---|---|---|
 | **SingleAsset (1)** | P3 | P3 | P2 |
-| **BatteryGroup (2)** | P3 | P2 | P2 |
-| **Site (3)** | P2 | P2 | **P1** |
-| **MultiSite (4)** | P2 | **P1** | **P1** |
+| **Site (2)** | P2 | P2 | **P1** |
+| **MultiSite (3)** | P2 | **P1** | **P1** |
 
 **Service implementation:**
 
@@ -1700,7 +1695,6 @@ public class PriorityCalculator : IPriorityCalculator
         if (impact == ImpactScopeEnum.Site && urgency == UrgencyLevelEnum.High)
             return TicketPriorityEnum.P1Critical;
         if (impact >= ImpactScopeEnum.Site
-            || (impact == ImpactScopeEnum.BatteryGroup && urgency >= UrgencyLevelEnum.Medium)
             || (impact == ImpactScopeEnum.SingleAsset && urgency == UrgencyLevelEnum.High))
             return TicketPriorityEnum.P2High;
         return TicketPriorityEnum.P3Normal;
@@ -1731,9 +1725,8 @@ public class PriorityCalculator : IPriorityCalculator
 ```csharp
 public enum ImpactScopeEnum {
     SingleAsset = 1,
-    BatteryGroup = 2,
-    Site = 3,
-    MultiSite = 4
+    Site = 2,
+    MultiSite = 3
 }
 
 public enum UrgencyLevelEnum {
@@ -3687,7 +3680,7 @@ GitHub Actions step:
 - [x] Migration rollback test trên TimescaleDB (script `services/BatteryService/scripts/test-migration-rollback.sh` — apply/rollback/re-apply cycle PASS, hypertable metadata auto-cleaned)
 - [x] Update docker-compose + ApiGateway route
 - [x] Seed BatteryType + 3 sample asset + sample customer/site/group
-- [x] Site + BatteryGroup entities/CRUD + asset link/filter/dashboard MVP
+- [x] Site entities/CRUD + asset link/filter/dashboard MVP
 
 ### Sprint 3 (8/6–21/6/2026)
 **Goal:** BatteryService anomaly engine + alert pipeline + Tier 1 extended battery health (SOH).
@@ -4597,9 +4590,9 @@ Prometheus metrics:
 
 ---
 
-## 31. Site & BatteryGroup entities — P0
+## 31. Site entities — P0
 
-> Solar farm thực tế cụm pin theo site. Mô hình hiện tại `Customer → Asset` trực tiếp sai về business reality. Sửa từ đầu rẻ hơn refactor sau.
+> Solar farm thực tế tổ chức pin theo site. Mô hình hiện tại `Customer → Asset` trực tiếp sai về business reality. Sửa từ đầu rẻ hơn refactor sau. Topology: `Customer (1) → (*) Site → (*) BatteryAsset` — không có cấp trung gian giữa Site và Asset.
 
 ### 31.1. New entities
 
@@ -4617,19 +4610,9 @@ Prometheus metrics:
 | `ContactPersonName` | string? | Người liên hệ tại site |
 | `ContactPersonPhone` | string? | — |
 
-#### `BatteryGroup` (cluster trong site)
-| Field | Type | Note |
-|-------|------|------|
-| `Id` | Guid | PK |
-| `SiteId` | Guid (FK) | — |
-| `Name` | string(100) | "Block A", "String 1" |
-| `BatteryTypeId` | Guid (FK) | Group cùng loại pin |
-| `BatteryCount` | int | denormalize đếm asset trong group |
-
 ### 31.2. Update existing entity
 - `BatteryAsset.SiteId` nullable (backward compatible).
-- `BatteryAsset.BatteryGroupId` nullable.
-- Migration: `AddSiteAndGroup` — tạo bảng + thêm column nullable.
+- Migration: `AddSite` — tạo bảng + thêm column nullable.
 
 ### 31.3. New endpoints
 ```
@@ -4642,18 +4625,13 @@ GET    /api/v1/sites/{id}/alerts                          (all alerts của site
 PUT    /api/v1/sites/{id}
 DELETE /api/v1/sites/{id}                                 (block nếu còn asset)
 
-POST   /api/battery-groups                             (Admin)
-GET    /api/battery-groups?siteId=
-PUT    /api/battery-groups/{id}
-DELETE /api/battery-groups/{id}                        (409 nếu còn BatteryAsset liên kết — không cascade)
-
 GET    /api/v1/customers/me/sites                         (Customer — list sites mình sở hữu)
 ```
 
 ### 31.4. Site-aggregated alert (giảm noise)
 Khi nhiều asset cùng site cùng anomaly trong 5 phút → tạo 1 `SiteAlert` thay vì N `Alert`:
 - Entity `SiteAlert` (parentSiteId, anomalyType, affectedAssetIds[], severity, detectedAt).
-- Push notification 1 lần với title "5 pin tại Block A overheat" thay vì spam 5 push.
+- Push notification 1 lần với title "5 pin tại Site X overheat" thay vì spam 5 push.
 - Customer/Staff drill down xem assets cụ thể.
 
 ### 31.5. Site dashboard endpoint
@@ -4675,7 +4653,7 @@ GET /api/v1/sites/{id}/dashboard
 ```
 
 ### 31.6. Migration impact
-- `BatteryAsset` migration `AddSiteAndGroup` (Sprint 2 hoặc 3).
+- `BatteryAsset` migration `AddSite` (Sprint 2 hoặc 3).
 - Seed: tạo Site mặc định "Default Site" cho Customer chưa có site, gán assets cũ vào đó.
 
 ### 31.7. Cascade Risk Assessment (B4) — rule-based propagation analysis
@@ -4714,8 +4692,8 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
             _ => 0m
         };
 
-        // Rule 2: Proximity — đếm asset cùng BatteryGroup có anomaly trong 1h
-        if (asset.BatteryGroupId.HasValue)
+        // Rule 2: Proximity — đếm asset cùng Site có anomaly trong 1h
+        if (asset.SiteId.HasValue)
         {
             var siblingAnomalies = await _unitOfWork.Alerts.GetAllAsync()
                 .Where(a => !a.IsDeleted
@@ -4723,7 +4701,7 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
                     && a.DetectedAt >= DateTime.UtcNow.AddHours(-1)
                     && a.BatteryAssetId != assetId
                     && _unitOfWork.BatteryAssets.GetAllAsync()
-                        .Any(b => b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
+                        .Any(b => b.Id == a.BatteryAssetId && b.SiteId == asset.SiteId))
                 .CountAsync();
 
             if (siblingAnomalies >= 1) score += 0.2m;
@@ -4752,7 +4730,7 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
   - `>= 0.5` → notify Manager dashboard, không auto-upgrade
 
 **Integration với Priority Matrix (§2.4bis):**
-- Khi `CascadeRiskScore >= 0.7` → override `ImpactScope` lên ít nhất `BatteryGroup` → `Priority` tính lại qua matrix.
+- Khi `CascadeRiskScore >= 0.7` → override `ImpactScope` lên ít nhất `Site` → `Priority` tính lại qua matrix.
 - Group Alert (§31.4): nếu N asset cùng group có score cao → tạo Group Alert + ticket parent-child.
 
 **Endpoint:**
@@ -4777,7 +4755,7 @@ public enum ElectricalTopologyEnum {
 - Graph Neural Network train trên cascade failure dataset (cần thực data, không khả thi).
 - Real-time thermal simulation.
 
-> **Lưu ý implementation:** B4 phụ thuộc Site/BatteryGroup (đã có Sprint 2). Đặt vào Sprint 7 cùng Reports + Observability.
+> **Lưu ý implementation:** B4 phụ thuộc Site entities (đã có Sprint 2). Đặt vào Sprint 7 cùng Reports + Observability.
 
 ---
 
@@ -5957,7 +5935,7 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint | Original scope | Bổ sung | Tổng effort |
 |--------|---------------|---------|-------------|
 | Sprint 1 | Stabilize foundations | + ADR setup, Edge case doc, **B5 (ADR-0005 ITIL stance), B2-draft (AI refs skeleton), B11 (§26 ref update)** | 1.2× |
-| Sprint 2 | BatteryService MVP | + **Site/BatteryGroup entities**, + **AI Bridge client skeleton** | 1.4× — cần thêm 1 dev hoặc kéo dài 3 ngày |
+| Sprint 2 | BatteryService MVP | + **Site entities**, + **AI Bridge client skeleton** | 1.4× — cần thêm 1 dev hoặc kéo dài 3 ngày |
 | Sprint 3 | BatteryService anomaly engine | + **AI Hybrid pipeline**, + **AlertSilence + Snooze**, + **Bulk import**, + **QR claim** | 1.6× — cân nhắc tách thành Sprint 3a + 3b |
 | Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, + **B3 (Priority Matrix Impact×Urgency)** | 1.2× |
 | Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment, + **B6 (StaffSkillTierEnum), B7 (Escalation closure rule)** | 1.4× |
@@ -6021,7 +5999,7 @@ Thêm vào §18:
 ### So với phiên bản đầu, đây là những thay đổi RIPPLE EFFECT:
 
 1. **Entity count: 17 → 30+**
-   - Mới: SohPrediction, AnomalyClassification, Site, BatteryGroup, AlertSilenceRule, TicketRelation, TicketSubscription, CommentMention, CommentReaction, CommentTemplate, MaintenanceSchedule, Part, PartTransaction, WebhookSubscription, PasswordHistory, AlertAckTimeline, DataExportRequest
+   - Mới: SohPrediction, AnomalyClassification, Site, AlertSilenceRule, TicketRelation, TicketSubscription, CommentMention, CommentReaction, CommentTemplate, MaintenanceSchedule, Part, PartTransaction, WebhookSubscription, PasswordHistory, AlertAckTimeline, DataExportRequest
 
 2. **Endpoints: 100+ → 150+**
 
@@ -6033,7 +6011,7 @@ Thêm vào §18:
    - TicketService: 4 → 6 (thêm SlaPauseEnforcement, ApprovalTimeout, PreventiveMaintenance)
 
 5. **Migration impact**
-   - BatteryService cần migration mới: `AddSiteAndGroup`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`
+   - BatteryService cần migration mới: `AddSite`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`
    - TicketService cần: `AddTicketRelations`, `AddTicketSubscriptions`, `AddCommentAdvanced`, `AddSlaPauseLimits`, `AddMaintenanceSchedule`
    - AuthService cần: `AddGdprFields`, `AddPasswordHistory`, `AddSessionLimit`
 

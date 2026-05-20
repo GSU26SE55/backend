@@ -28,8 +28,6 @@ public class SiteDto
 
     public string? ContactPersonPhone { get; set; }
 
-    public int BatteryGroupCount { get; set; }
-
     public int BatteryAssetCount { get; set; }
 
     public int ActiveBatteryAssetCount { get; set; }
