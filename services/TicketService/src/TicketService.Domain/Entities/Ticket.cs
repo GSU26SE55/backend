@@ -32,6 +32,10 @@ public class Ticket : AuditableEntity
     public DateTime? EscalatedAt { get; set; }
     public EscalationReasonEnum? EscalationReason { get; set; }
     public bool IsIncident { get; set; }
-    //chưa có search-vector mà gen ra tự động dựa trên Title, Description
-    //row-version
+
+    // Navigation properties
+    public SlaTimer? SlaTimer { get; set; }
+    public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();
+    public ICollection<TicketComment> Comments { get; set; } = new List<TicketComment>();
+    public ICollection<MaintenanceLog> MaintenanceLogs { get; set; } = new List<MaintenanceLog>();
 }

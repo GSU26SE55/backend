@@ -58,7 +58,7 @@ public class TicketCommentConfiguration : IEntityTypeConfiguration<TicketComment
         builder.HasIndex(e => e.AuthorUserId);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
+            .WithMany(e => e.Comments)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
     }
