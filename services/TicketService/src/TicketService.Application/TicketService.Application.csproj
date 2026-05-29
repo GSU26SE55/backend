@@ -13,7 +13,6 @@
     <Folder Include="DTOs\Responses\" />
     <Folder Include="Mapping\" />
     <Folder Include="Services\" />
-    <Folder Include="StateMachine\" />
   </ItemGroup>
 
   <ItemGroup>

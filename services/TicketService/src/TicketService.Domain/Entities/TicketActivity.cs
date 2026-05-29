@@ -3,7 +3,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Domain.Entities;
 
-public class TicketActivity : BaseEntity
+public class TicketActivity : AuditableEntity
 {
     public Guid TicketId { get; set; }
     public Guid? ActorUserId { get; set; }
@@ -13,7 +13,6 @@ public class TicketActivity : BaseEntity
     public string? OldValue { get; set; }
     public string? NewValue { get; set; }
     public string? Reason { get; set; }
-    public DateTime CreatedAt { get; set; }
 
-    public Ticket Ticket { get; set; }
+    public required Ticket Ticket { get; set; }
 }

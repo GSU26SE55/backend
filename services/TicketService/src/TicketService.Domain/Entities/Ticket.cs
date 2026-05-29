@@ -5,12 +5,12 @@ namespace TicketService.Domain.Entities;
 
 public class Ticket : AuditableEntity
 {
-    public string Code { get; set; }
+    public required string Code { get; set; }
     public Guid BatteryAssetId { get; set; }
     public Guid CustomerId { get; set; }
     public Guid? AssignedStaffId { get; set; }
-    public string Title { get; set; }
-    public string Description { get; set; }
+    public required string Title { get; set; }
+    public required string Description { get; set; }
     public TicketCategoryEnum Category { get; set; }
     public TicketPriorityEnum? Priority { get; set; }
     public ImpactScopeEnum? ImpactScope { get; set; }

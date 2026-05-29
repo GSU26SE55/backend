@@ -22,6 +22,9 @@ public class TicketStateMachineTests
         return new Ticket
         {
             Id = Guid.NewGuid(),
+            Code = "T-" + Guid.NewGuid().ToString()[..8],
+            Title = "Test Ticket",
+            Description = "Test Description",
             Status = status,
             AssignedStaffId = assignedStaffId,
             CustomerId = customerId ?? Guid.NewGuid(),
@@ -387,7 +390,7 @@ public class TicketStateMachineTests
         result.IsAllowed.Should().BeTrue();
         ticket.Status.Should().Be(TicketStatusEnum.Resolved);
         ticket.ResolvedAt.Should().NotBeNull();
-        ticket.ResolvedAt.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        ticket.ResolvedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         ticket.ResolvedByStaffId.Should().Be(staffId);
     }
 
@@ -409,7 +412,7 @@ public class TicketStateMachineTests
         // Assert
         result.IsAllowed.Should().BeTrue();
         ticket.ApprovedAt.Should().NotBeNull();
-        ticket.ApprovedAt.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        ticket.ApprovedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
@@ -431,7 +434,7 @@ public class TicketStateMachineTests
         // Assert
         result.IsAllowed.Should().BeTrue();
         ticket.ClosedAt.Should().NotBeNull();
-        ticket.ClosedAt.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        ticket.ClosedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
@@ -501,7 +504,7 @@ public class TicketStateMachineTests
 
         // Assert
         ticket.UpdatedAt.Should().NotBeNull();
-        ticket.UpdatedAt.Value.Should().BeAfter(oldUpdatedAt);
+        ticket.UpdatedAt!.Value.Should().BeAfter(oldUpdatedAt);
     }
 
     [Fact]

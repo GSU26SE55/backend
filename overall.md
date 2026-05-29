@@ -3711,8 +3711,8 @@ GitHub Actions step:
 ### Sprint 4 (22/6–5/7/2026)
 **Goal:** TicketService foundation only — service skeleton, schema, state machine, basic lifecycle commands/queries. Không phát triển song song BatteryService advanced monitoring trong sprint này.
 **Tasks:**
-- [ ] Tạo solution skeleton `services/TicketService/` — #83
-- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
+- [x] Tạo solution skeleton `services/TicketService/` — #83
+- [x] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
 - [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
 - [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
 - [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
