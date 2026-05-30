@@ -3,6 +3,7 @@ using Moq;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Helpers;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
 
@@ -42,6 +43,7 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
     }

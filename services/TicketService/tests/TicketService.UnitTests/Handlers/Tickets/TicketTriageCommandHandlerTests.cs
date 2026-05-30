@@ -61,6 +61,7 @@ public class TicketTriageCommandHandlerTests
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Approved, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager A", ActivityActionEnum.TriageApproved, It.IsAny<string>(), It.IsAny<string>(), "Urgent site issue"), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -87,11 +88,14 @@ public class TicketTriageCommandHandlerTests
         var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object);
 
         // Act
-        await handler.Handle(command, CancellationToken.None);
+        var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
+        result.IsSuccess.Should().BeTrue();
         ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         _priorityCalc.Verify(x => x.Calculate(It.IsAny<ImpactScopeEnum>(), It.IsAny<UrgencyLevelEnum>()), Times.Never);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
     #endregion
 

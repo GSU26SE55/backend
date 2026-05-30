@@ -28,6 +28,9 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
         if (string.IsNullOrWhiteSpace(Description))
             response.ListErrors.Add(new Errors { Field = "Description", Detail = "Mô tả không được để trống." });
 
+        if (CustomerId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "CustomerId", Detail = "CustomerId không hợp lệ." });
+
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;

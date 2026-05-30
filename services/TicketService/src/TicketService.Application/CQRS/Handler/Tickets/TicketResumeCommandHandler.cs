@@ -1,11 +1,14 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using TicketService.Application.Common.Events;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -54,6 +57,19 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
             ActivityActionEnum.SlaResumed,
             oldValue: oldStatus.ToString(),
             newValue: "InProgress");
+
+        // Outbox: Status Changed
+        var statusEvent = new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress);
+        var outboxMessage = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            AggregateId = ticket.Id,
+            Type = nameof(TicketStatusChangedIntegrationEvent),
+            Payload = JsonSerializer.Serialize(statusEvent),
+            OccurredAtUtc = DateTime.UtcNow,
+            RetryCount = 0
+        };
+        await _uow.OutboxMessages.AddAsync(outboxMessage);
 
         await _uow.SaveChangesAsync(ct);
 

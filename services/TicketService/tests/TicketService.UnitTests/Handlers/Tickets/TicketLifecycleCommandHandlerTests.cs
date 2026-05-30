@@ -39,6 +39,7 @@ public class TicketLifecycleCommandHandlerTests
 
         ticket.AssignedStaffId.Should().Be(newStaffId);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -82,6 +83,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -124,6 +127,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.WaitingParts, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -166,6 +171,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -208,6 +215,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedPendingRate, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -252,6 +261,8 @@ public class TicketLifecycleCommandHandlerTests
 
         ticket.Reason.Should().Be("Not fixed");
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -297,6 +308,8 @@ public class TicketLifecycleCommandHandlerTests
         ticket.EscalationReason.Should().Be(EscalationReasonEnum.SkillGap);
         ticket.EscalatedAt.Should().NotBeNull();
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -342,6 +355,8 @@ public class TicketLifecycleCommandHandlerTests
         ticket.EscalationReason.Should().Be(EscalationReasonEnum.SlaBreach);
         ticket.EscalatedAt.Should().NotBeNull();
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

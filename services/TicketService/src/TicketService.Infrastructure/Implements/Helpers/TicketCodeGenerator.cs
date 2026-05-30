@@ -18,9 +18,6 @@ public class TicketCodeGenerator : ITicketCodeGenerator
         var now = DateTime.UtcNow;
         var prefix = $"TKT-{now:yyMM}-";
 
-        // EXCEPTION TO SOFT-DELETE RULE: We intentionally OMIT the .Where(x => !x.IsDeleted)
-        // filter here because we must check ALL tickets (including deleted ones)
-        // to find the true maximum sequence number and prevent UNIQUE constraint violations.
         var lastTicket = await _uow.Tickets.GetAllAsync()
             .Where(t => t.Code.StartsWith(prefix))
             .OrderByDescending(t => t.Code)

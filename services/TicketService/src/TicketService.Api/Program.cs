@@ -22,7 +22,7 @@ builder.Services.AddSwaggerGen(options =>
         options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 });
 
-builder.Services.AddTicketServiceApplication();
+builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()

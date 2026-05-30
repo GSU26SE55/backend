@@ -7,7 +7,7 @@ public class PriorityCalculator : IPriorityCalculator
 {
     public TicketPriorityEnum Calculate(ImpactScopeEnum impact, UrgencyLevelEnum urgency)
     {
-        // Matrix lookup based on overall.md §2.4bis (updated: removed BatteryGroup)
+        // Matrix lookup based on overall.md §2.4bis
 
         // MultiSite (3)
         if (impact == ImpactScopeEnum.MultiSite)

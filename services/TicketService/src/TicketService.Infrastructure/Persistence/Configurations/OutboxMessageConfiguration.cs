@@ -10,50 +10,44 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
     {
         builder.ToTable("outbox_messages");
 
-        builder.Property(e => e.Id)
+        builder.HasKey(m => m.Id);
+
+        builder.Property(m => m.Id)
             .HasColumnName("id")
             .ValueGeneratedNever();
 
-        builder.Property(e => e.EventType)
-            .HasColumnName("event_type")
-            .HasMaxLength(256);
+        builder.Property(m => m.AggregateId)
+            .HasColumnName("aggregate_id")
+            .IsRequired();
 
-        builder.Property(e => e.Payload)
+        builder.Property(m => m.Type)
+            .HasColumnName("type")
+            .HasMaxLength(200)
+            .IsRequired();
+
+        builder.Property(m => m.Payload)
             .HasColumnName("payload")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .IsRequired();
 
-        builder.Property(e => e.OccurredAt)
-            .HasColumnName("occurred_at");
+        builder.Property(m => m.OccurredAtUtc)
+            .HasColumnName("occurred_at_utc")
+            .IsRequired();
 
-        builder.Property(e => e.ProcessedAt)
-            .HasColumnName("processed_at");
+        builder.Property(m => m.ProcessedAtUtc)
+            .HasColumnName("processed_at_utc");
 
-        builder.Property(e => e.RetryCount)
-            .HasColumnName("retry_count");
+        builder.Property(m => m.RetryCount)
+            .HasColumnName("retry_count")
+            .HasDefaultValue(0);
 
-        builder.Property(e => e.LastError)
-            .HasColumnName("last_error");
+        builder.Property(m => m.LastError)
+            .HasColumnName("last_error")
+            .HasMaxLength(2000);
 
-        builder.Property(e => e.CorrelationId)
-            .HasColumnName("correlation_id")
-            .HasMaxLength(128);
-
-        builder.Property(e => e.CreatedAt)
-            .HasColumnName("created_at");
-
-        builder.Property(e => e.CreatedBy)
-            .HasColumnName("created_by");
-
-        builder.Property(e => e.UpdatedAt)
-            .HasColumnName("updated_at");
-
-        builder.Property(e => e.IsDeleted)
-            .HasColumnName("is_deleted");
-
-        builder.Property(e => e.DeletedAt)
-            .HasColumnName("deleted_at");
-
-        builder.HasIndex(e => e.OccurredAt);
-        builder.HasIndex(e => e.ProcessedAt);
+        // Partial index: chỉ cần index các message chưa processed (relay query)
+        builder.HasIndex(m => m.OccurredAtUtc)
+            .HasDatabaseName("idx_outbox_pending")
+            .HasFilter("processed_at_utc IS NULL");
     }
 }

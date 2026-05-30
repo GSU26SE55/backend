@@ -4,8 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using SharedInfrastructure.DependencyInjection;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
+using TicketService.Infrastructure.BackgroundServices;
 using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
+using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
 
@@ -18,10 +21,17 @@ public static class ManageDependencyInjection
         services.AddDatabase(configuration);
         services.AddRepositories();
         services.AddHelpers();
+        services.AddOutbox();
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
 
         return services;
+    }
+
+    private static void AddOutbox(this IServiceCollection services)
+    {
+        services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddHostedService<OutboxRelayBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)
