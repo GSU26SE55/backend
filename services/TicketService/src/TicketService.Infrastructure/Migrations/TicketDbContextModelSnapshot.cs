@@ -460,13 +460,25 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("breach_at");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("CurrentPauseStartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("current_pause_started_at");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("DueAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastAutoResumeAt")
                         .HasColumnType("timestamp with time zone")
@@ -507,6 +519,9 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<int>("TotalPausedMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("total_paused_minutes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("WarningSentAt")
                         .HasColumnType("timestamp with time zone")
@@ -580,6 +595,9 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("skill_codes");
+
+                    b.Property<int>("SkillTier")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -704,9 +722,9 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rating_comment");
 
-                    b.Property<string>("RejectionReason")
+                    b.Property<string>("Reason")
                         .HasColumnType("text")
-                        .HasColumnName("rejection_reason");
+                        .HasColumnName("reason");
 
                     b.Property<int>("ReopenCount")
                         .HasColumnType("integer")
@@ -789,6 +807,15 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("NewValue")
                         .HasColumnType("text")
                         .HasColumnName("new_value");
@@ -804,6 +831,9 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid>("TicketId")
                         .HasColumnType("uuid")
                         .HasColumnName("ticket_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 

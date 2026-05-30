@@ -6,5 +6,6 @@ public enum TicketCategoryEnum
     Overheat = 2,
     NoPower = 3,
     Performance = 4,
-    Other = 5
+    Other = 5,
+    Repair = 6
 }

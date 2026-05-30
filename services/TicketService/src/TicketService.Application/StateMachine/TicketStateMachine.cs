@@ -49,10 +49,9 @@ public class TicketStateMachine : ITicketStateMachine
         return ruleFunction(ticket, actorRole, actorUserId);
     }
 
-    // Tạm thời chưa xử lý metadata và raised events, sẽ làm sau ở Issue 85, 86
     public Task<TransitionResult> ExecuteAsync(Ticket ticket, TicketStatusEnum target, TransitionContext ctx, CancellationToken ct)
     {
-        // 1. Kiểm tra quyền trước
+        // 1. Kiểm tra quyền và logic chuyển đổi một lần nữa (Gatekeeper)
         var result = CanTransition(ticket, target, ctx.ActorRole, ctx.ActorUserId);
         if (!result.IsAllowed)
             return Task.FromResult(result);
@@ -64,47 +63,76 @@ public class TicketStateMachine : ITicketStateMachine
         ticket.Status = target;
         ticket.UpdatedAt = DateTime.UtcNow;
 
-
         // 4. Cập nhật metadata theo từng transition
         UpdateMetadata(ticket, previousStatus, target, ctx);
-
-        // 5. Build RaisedEvents
-        // result.RaisedEvents = BuildEvents(ticket, previousStatus, target, ctx);
 
         return Task.FromResult(result);
     }
 
     private void UpdateMetadata(Ticket ticket, TicketStatusEnum from, TicketStatusEnum to, TransitionContext ctx)
     {
+        // Xóa lý do cũ trước khi cập nhật mới (đảm bảo Reason chỉ cho trạng thái hiện tại)
+        // Nếu chuyển sang trạng thái không cần lý do, nó sẽ được để trống
+        ticket.Reason = null;
+
         switch (to)
         {
             case TicketStatusEnum.Open:
-                // Reopen → tăng ReopenCount
+                // Reopen từ giai đoạn chờ đánh giá
                 if (from == TicketStatusEnum.ClosedPendingRate)
+                {
                     ticket.ReopenCount++;
+                    if (ctx.Payload.TryGetValue("ReopenReason", out var reopenReason) && reopenReason is string r)
+                        ticket.Reason = r;
+                }
                 break;
 
-            // case TicketStatusEnum.Assigned:
-            //     ticket. = DateTime.UtcNow;
-            //     ticket.AssignedStaffId = ctx.TargetStaffId;
-            //     break;
+            case TicketStatusEnum.Approved:
+                ticket.ApprovedAt = DateTime.UtcNow;
+                ticket.ApprovedByManagerId = ctx.ActorUserId;
+                break;
 
-            // case TicketStatusEnum.InProgress:
-            //     ticket.Start ??= DateTime.UtcNow; // chuyen sang tinh SLA timer
-            //     break;
+            case TicketStatusEnum.Assigned:
+                break;
+
+            case TicketStatusEnum.InProgress:
+                // Nếu quay lại InProgress từ Resolved (Manager Reject)
+                if (from == TicketStatusEnum.Resolved)
+                {
+                    if (ctx.Payload.TryGetValue("Reason", out var rejectReason) && rejectReason is string r)
+                        ticket.Reason = r;
+                }
+                break;
 
             case TicketStatusEnum.Resolved:
                 ticket.ResolvedAt = DateTime.UtcNow;
                 ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.AssignedStaffId && ctx.ActorRole == ActorRoleEnum.Staff)
-                                            ? ctx.ActorUserId : null;
+                                            ? ctx.ActorUserId : ticket.AssignedStaffId;
+
+                if (ctx.Payload.TryGetValue("ResolutionSummary", out var summary) && summary is string s)
+                    ticket.ResolutionSummary = s;
+                break;
+
+            case TicketStatusEnum.Escalated:
+                ticket.EscalatedAt = DateTime.UtcNow;
+                if (ctx.Payload.TryGetValue("EscalationReason", out var escalateReason) && escalateReason is EscalationReasonEnum er)
+                    ticket.EscalationReason = er;
                 break;
 
             case TicketStatusEnum.ClosedPendingRate:
                 ticket.ApprovedAt = DateTime.UtcNow;
+                ticket.ApprovedByManagerId = ctx.ActorUserId;
                 break;
 
             case TicketStatusEnum.Closed:
                 ticket.ClosedAt = DateTime.UtcNow;
+                if (ctx.Payload.TryGetValue("Rating", out var rating) && rating is short rate)
+                {
+                    ticket.Rating = rate;
+                    ticket.RatedAt = DateTime.UtcNow;
+                }
+                if (ctx.Payload.TryGetValue("Comment", out var comment) && comment is string c)
+                    ticket.RatingComment = c;
                 break;
         }
     }

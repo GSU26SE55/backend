@@ -36,9 +36,13 @@ public class TicketStateMachineTests
     #region Group 1: Valid Transitions (20 cases)
 
     [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)] //
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)] //
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)] //
+    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)]
+    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Escalated, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
@@ -183,9 +187,8 @@ public class TicketStateMachineTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)] // Only Manager
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)] // Only Manager
-    [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident)] // Only Manager
+    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
     public void CanTransition_StaffCannotDoManagerActions_ReturnsFalse(
         TicketStatusEnum from, TicketStatusEnum to)
     {
@@ -337,7 +340,6 @@ public class TicketStateMachineTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Assigned)] // Must go through Open
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.InProgress)] // Must go through Assigned
     [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.Resolved)] // Must go through InProgress
     public void CanTransition_InvalidPath_ReturnsFalse(TicketStatusEnum from, TicketStatusEnum to)
@@ -392,6 +394,29 @@ public class TicketStateMachineTests
         ticket.ResolvedAt.Should().NotBeNull();
         ticket.ResolvedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         ticket.ResolvedByStaffId.Should().Be(staffId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Approved_SetsMetadata()
+    {
+        // Arrange
+        var managerId = Guid.NewGuid();
+        var ticket = CreateTicket(TicketStatusEnum.Open);
+        var ctx = new TransitionContext
+        {
+            ActorRole = ActorRoleEnum.Manager,
+            ActorUserId = managerId
+        };
+
+        // Act
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Approved, ctx, CancellationToken.None);
+
+        // Assert
+        result.IsAllowed.Should().BeTrue();
+        ticket.Status.Should().Be(TicketStatusEnum.Approved);
+        ticket.ApprovedAt.Should().NotBeNull();
+        ticket.ApprovedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        ticket.ApprovedByManagerId.Should().Be(managerId);
     }
 
     [Fact]
@@ -490,8 +515,8 @@ public class TicketStateMachineTests
         // Arrange
         var managerId = Guid.NewGuid();
         var ticket = CreateTicket(TicketStatusEnum.New);
-        var oldUpdatedAt = ticket.UpdatedAt ?? DateTime.MinValue;
-        await Task.Delay(100); // Ensure time difference
+        var oldUpdatedAt = DateTime.UtcNow.AddSeconds(-1);
+        ticket.UpdatedAt = oldUpdatedAt;
 
         var ctx = new TransitionContext
         {
@@ -533,11 +558,12 @@ public class TicketStateMachineTests
 
     #endregion
 
-    #region Group 5: Admin Override Transitions (New)
+    #region Group 5: Admin Override Transitions (Updated)
 
     [Theory]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Approved)]
+    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned)]
     [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.InProgress)]
     [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)]
     [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]

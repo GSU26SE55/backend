@@ -1,6 +1,4 @@
-#!/bin/sh
-set -eu
-
+#!/bin/ash
 POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_DB="${POSTGRES_DB:-postgres}"
@@ -15,11 +13,9 @@ export PGPASSWORD="$POSTGRES_PASSWORD"
 
 create_database() {
   db_name="$1"
-
   if [ -z "$db_name" ]; then
     return 0
   fi
-
   echo "Ensuring database exists: $db_name"
   psql \
     --host="$POSTGRES_HOST" \
@@ -28,7 +24,7 @@ create_database() {
     --dbname="$POSTGRES_DB" \
     --set=db="$db_name" \
     --set=owner="$POSTGRES_USER" \
-    --set=ON_ERROR_STOP=1 <<'SQL'
+    --set=ON_ERROR_STOP=1 <<SQL
 SELECT format('CREATE DATABASE %I OWNER %I', :'db', :'owner')
 WHERE NOT EXISTS (
     SELECT 1

@@ -310,9 +310,6 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
-      JwtSettings__SecretKey: ${JWT_SECRET_KEY:-SuperSecretKeyForDevelopmentOnly!}
-      JwtSettings__Issuer: ${JWT_ISSUER:-GSU26SE55-AuthService}
-      JwtSettings__Audience: ${JWT_AUDIENCE:-GSU26SE55-Clients}
     ports:
       - "4007:8080"
     depends_on:

@@ -14,5 +14,6 @@ public enum TicketStatusEnum
     ClosedPendingRate = 10,
     Closed = 11,
     ClosedRejected = 12,
-    Incident = 13
+    Incident = 13,
+    Approved = 14
 }

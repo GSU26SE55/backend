@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SharedInfrastructure.DependencyInjection;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
@@ -15,10 +17,18 @@ public static class ManageDependencyInjection
     {
         services.AddDatabase(configuration);
         services.AddRepositories();
+        services.AddHelpers();
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
 
         return services;
+    }
+
+    private static void AddHelpers(this IServiceCollection services)
+    {
+        services.AddScoped<IPriorityCalculator, PriorityCalculator>();
+        services.AddScoped<IActivityLogger, ActivityLogger>();
+        services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

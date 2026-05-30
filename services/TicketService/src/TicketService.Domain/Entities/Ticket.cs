@@ -24,7 +24,7 @@ public class Ticket : AuditableEntity
     public Guid? ResolvedByStaffId { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public Guid? ApprovedByManagerId { get; set; }
-    public string? RejectionReason { get; set; }
+    public string? Reason { get; set; }
     public DateTime? ClosedAt { get; set; }
     public short? Rating { get; set; }
     public string? RatingComment { get; set; }

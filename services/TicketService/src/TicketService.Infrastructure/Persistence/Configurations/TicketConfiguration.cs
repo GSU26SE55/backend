@@ -82,8 +82,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.ApprovedByManagerId)
             .HasColumnName("approved_by_manager_id");
 
-        builder.Property(e => e.RejectionReason)
-            .HasColumnName("rejection_reason");
+        builder.Property(e => e.Reason)
+            .HasColumnName("reason");
 
         builder.Property(e => e.ClosedAt)
             .HasColumnName("closed_at");

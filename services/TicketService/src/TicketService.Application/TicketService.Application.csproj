@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
     <ProjectReference Include="..\TicketService.Domain\TicketService.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\shared\src\SharedKernels\SharedKernels.csproj" />
   </ItemGroup>
@@ -10,15 +11,14 @@
     <Folder Include="CQRS\Command\" />
     <Folder Include="CQRS\Handler\" />
     <Folder Include="CQRS\Query\" />
-    <Folder Include="DTOs\Responses\" />
     <Folder Include="Mapping\" />
-    <Folder Include="Services\" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MassTransit" Version="8.5.9" />
     <PackageReference Include="MediatR" Version="12.2.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0-rc.2.24473.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
   </ItemGroup>
 

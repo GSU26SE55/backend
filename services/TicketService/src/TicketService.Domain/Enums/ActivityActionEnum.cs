@@ -24,5 +24,6 @@ public enum ActivityActionEnum
     Reopened = 20,
     Closed = 21,
     AutoClosed = 22,
-    ResolvedByEscalatedStaff = 23
+    ResolvedByEscalatedStaff = 23,
+    TriageApproved = 24
 }
