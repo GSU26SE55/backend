@@ -5,6 +5,7 @@
 - **Role:** BE
 - **Ngày:** 2026-05-30
 - **Issue:** #86
+- **PR:** #213 — https://github.com/GSU26SE55/backend/pull/213
 - **Sprint:** Sprint 3
 
 ## Mục tiêu
