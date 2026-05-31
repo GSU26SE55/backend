@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.DTOs.Response;
+using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Query.TicketGetById;
 
@@ -29,10 +29,10 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         if (ticket is null)
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 404, Message = "Not found" };
 
-        if (!CanReadTicket(ticket.CustomerId, ticket.AssignedStaffId, request))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
-        var canViewInternalComments = CanViewInternalComments(request);
+        var canViewInternalComments = TicketQueryHelper.CanViewInternalComments(request.ActorRoles);
 
         var dto = new TicketDetailDTO
         {
@@ -66,24 +66,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             EscalationReason = ticket.EscalationReason,
             CreatedAt = ticket.CreatedAt,
             UpdatedAt = ticket.UpdatedAt,
-            SlaTimer = ticket.SlaTimer == null ? null : new SlaTimerDTO
-            {
-                Id = ticket.SlaTimer.Id.ToString(),
-                Priority = ticket.SlaTimer.Priority,
-                StartedAt = ticket.SlaTimer.StartedAt,
-                DueAt = ticket.SlaTimer.DueAt,
-                OriginalDueAt = ticket.SlaTimer.OriginalDueAt,
-                TotalPausedMinutes = ticket.SlaTimer.TotalPausedMinutes,
-                WarningSentAt = ticket.SlaTimer.WarningSentAt,
-                BreachAt = ticket.SlaTimer.BreachAt,
-                Status = ticket.SlaTimer.Status,
-                RemainingPercent = ticket.SlaTimer.Status == SlaTimerStatusEnum.Running
-                    ? (ticket.SlaTimer.DueAt != ticket.SlaTimer.StartedAt
-                        ? Math.Max(0, (ticket.SlaTimer.DueAt - DateTime.UtcNow).TotalMinutes /
-                            (ticket.SlaTimer.DueAt - ticket.SlaTimer.StartedAt).TotalMinutes * 100)
-                        : 0d)
-                    : 0
-            },
+            SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer),
             Activities = ticket.Activities.Select(a => new TicketActivityDTO
             {
                 Id = a.Id.ToString(),
@@ -129,27 +112,4 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
 
         return new CommonResponse<TicketDetailDTO> { IsSuccess = true, StatusCode = 200, Data = dto };
     }
-
-    private static bool CanReadTicket(Guid customerId, Guid? assignedStaffId, TicketGetByIdQuery request)
-    {
-        if (HasAnyRole(request, "Admin", "Manager"))
-            return true;
-
-        if (!request.ActorUserId.HasValue)
-            return false;
-
-        if (HasRole(request, "Customer") && customerId == request.ActorUserId.Value)
-            return true;
-
-        return HasRole(request, "Staff") && assignedStaffId == request.ActorUserId.Value;
-    }
-
-    private static bool CanViewInternalComments(TicketGetByIdQuery request)
-        => HasAnyRole(request, "Admin", "Manager", "Staff");
-
-    private static bool HasAnyRole(TicketGetByIdQuery request, params string[] roles)
-        => roles.Any(role => HasRole(request, role));
-
-    private static bool HasRole(TicketGetByIdQuery request, string role)
-        => request.ActorRoles.Any(actorRole => string.Equals(actorRole, role, StringComparison.OrdinalIgnoreCase));
 }

@@ -12,7 +12,7 @@ using TicketService.Application.CQRS.Query.TicketGetList;
 namespace TicketService.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/tickets")]
+[Route("api/tickets")]
 [Authorize]
 public class TicketController : ControllerBase
 {

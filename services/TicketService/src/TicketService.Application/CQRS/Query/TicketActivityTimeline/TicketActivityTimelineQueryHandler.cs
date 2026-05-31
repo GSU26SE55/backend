@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.DTOs.Response;
+using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Query.TicketActivityTimeline;
@@ -26,7 +27,7 @@ public class TicketActivityTimelineQueryHandler : IRequestHandler<TicketActivity
         if (ticket is null)
             return new CommonResponse<List<TicketActivityDTO>> { IsSuccess = false, StatusCode = 404, Message = "Not found" };
 
-        if (!CanReadTicket(ticket.CustomerId, ticket.AssignedStaffId, request))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
             return new CommonResponse<List<TicketActivityDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
         var activities = await _unitOfWork.TicketActivities.GetAllAsync()
@@ -50,24 +51,4 @@ public class TicketActivityTimelineQueryHandler : IRequestHandler<TicketActivity
 
         return new CommonResponse<List<TicketActivityDTO>> { IsSuccess = true, StatusCode = 200, Data = activities };
     }
-
-    private static bool CanReadTicket(Guid customerId, Guid? assignedStaffId, TicketActivityTimelineQuery request)
-    {
-        if (HasAnyRole(request, "Admin", "Manager"))
-            return true;
-
-        if (!request.ActorUserId.HasValue)
-            return false;
-
-        if (HasRole(request, "Customer") && customerId == request.ActorUserId.Value)
-            return true;
-
-        return HasRole(request, "Staff") && assignedStaffId == request.ActorUserId.Value;
-    }
-
-    private static bool HasAnyRole(TicketActivityTimelineQuery request, params string[] roles)
-        => roles.Any(role => HasRole(request, role));
-
-    private static bool HasRole(TicketActivityTimelineQuery request, string role)
-        => request.ActorRoles.Any(actorRole => string.Equals(actorRole, role, StringComparison.OrdinalIgnoreCase));
 }
