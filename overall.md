@@ -3708,7 +3708,7 @@ GitHub Actions step:
 - [x] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
 - [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
 - [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
-- [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
+- [x] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
 - [ ] Code generation utility (TKT-YYMM-NNNN) — #87
 - [ ] Outbox + relay service — #88
 - [ ] Coverage ≥ 80% — #88
