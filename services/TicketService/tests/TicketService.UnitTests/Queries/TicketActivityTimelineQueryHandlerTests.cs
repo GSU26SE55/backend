@@ -1,5 +1,7 @@
+using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Query.TicketActivityTimeline;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -35,10 +37,11 @@ public class TicketActivityTimelineQueryHandlerTests
         CreatedAt = DateTime.UtcNow
     };
 
-    private static TicketActivity MakeActivity(Guid ticketId) => new()
+    private static TicketActivity MakeActivity(Ticket ticket) => new()
     {
         Id = Guid.NewGuid(),
-        TicketId = ticketId,
+        TicketId = ticket.Id,
+        Ticket = ticket,
         ActorRole = ActorRoleEnum.Staff,
         Action = ActivityActionEnum.StatusChanged,
         CreatedAt = DateTime.UtcNow
@@ -48,9 +51,9 @@ public class TicketActivityTimelineQueryHandlerTests
     public async Task Handle_AdminCanViewActivities_Returns200WithItems()
     {
         var ticket = MakeTicket();
-        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.BuildMockDbSet().Object);
+        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(new List<Ticket> { ticket }));
         _mockActivityRepo.Setup(r => r.GetAllAsync())
-            .Returns(new List<TicketActivity> { MakeActivity(ticket.Id), MakeActivity(ticket.Id) }.BuildMockDbSet().Object);
+            .Returns(() => new TestAsyncEnumerable<TicketActivity>(new List<TicketActivity> { MakeActivity(ticket), MakeActivity(ticket) }));
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
@@ -67,9 +70,9 @@ public class TicketActivityTimelineQueryHandlerTests
     {
         var customerId = Guid.NewGuid();
         var ticket = MakeTicket(customerId: customerId);
-        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.BuildMockDbSet().Object);
+        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(new List<Ticket> { ticket }));
         _mockActivityRepo.Setup(r => r.GetAllAsync())
-            .Returns(new List<TicketActivity> { MakeActivity(ticket.Id) }.BuildMockDbSet().Object);
+            .Returns(() => new TestAsyncEnumerable<TicketActivity>(new List<TicketActivity> { MakeActivity(ticket) }));
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
@@ -84,7 +87,7 @@ public class TicketActivityTimelineQueryHandlerTests
     public async Task Handle_CustomerCannotViewOtherTicketActivities_Returns403()
     {
         var ticket = MakeTicket(customerId: Guid.NewGuid());
-        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.BuildMockDbSet().Object);
+        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(new List<Ticket> { ticket }));
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
@@ -98,7 +101,7 @@ public class TicketActivityTimelineQueryHandlerTests
     [Fact]
     public async Task Handle_TicketNotFound_Returns404()
     {
-        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket>().BuildMockDbSet().Object);
+        _mockTicketRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(new List<Ticket>()));
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {

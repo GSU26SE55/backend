@@ -1,5 +1,7 @@
+using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Query.ManagerQueue;
+using TicketService.Application.CQRS.Handler.ManagerQueue;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -20,7 +22,7 @@ public class ManagerQueueQueryHandlerTests
 
     private static Ticket MakeTicket(
         TicketStatusEnum status = TicketStatusEnum.Open,
-        TicketPriorityEnum priority = TicketPriorityEnum.P3Normal,
+        TicketPriorityEnum? priority = null,
         TicketCategoryEnum category = TicketCategoryEnum.Other,
         string code = "T-001",
         DateTime? createdAt = null) => new()
@@ -39,7 +41,8 @@ public class ManagerQueueQueryHandlerTests
     };
 
     private void SetupMock(List<Ticket> tickets)
-        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(tickets.BuildMockDbSet().Object);
+        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
+
 
     [Fact]
     public async Task Handle_ReturnsOnlyOpenTickets()

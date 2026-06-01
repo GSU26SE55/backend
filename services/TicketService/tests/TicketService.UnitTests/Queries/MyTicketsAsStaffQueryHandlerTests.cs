@@ -1,5 +1,7 @@
+using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Query.MyTicketsAsStaff;
+using TicketService.Application.CQRS.Handler.MyTicketsAsStaff;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -39,7 +41,7 @@ public class MyTicketsAsStaffQueryHandlerTests
     };
 
     private void SetupMock(List<Ticket> tickets)
-        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(tickets.BuildMockDbSet().Object);
+        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
 
     [Fact]
     public async Task Handle_ReturnsOnlyAssignedTickets()

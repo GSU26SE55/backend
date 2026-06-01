@@ -1,5 +1,7 @@
+using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Query.TicketGetList;
+using TicketService.Application.CQRS.Handler.TicketGetList;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -43,7 +45,7 @@ public class TicketGetListQueryHandlerTests
     };
 
     private void SetupMock(List<Ticket> tickets)
-        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(tickets.BuildMockDbSet().Object);
+        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
 
     [Fact]
     public async Task Handle_ReturnsOnlyNonDeletedTickets()

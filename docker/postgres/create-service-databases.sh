@@ -39,9 +39,3 @@ create_database "${FILE_STORAGE_DB_NAME:-file_storage_db}"
 create_database "${BATTERY_DB_NAME:-battery_db}"
 create_database "${TICKET_DB_NAME:-ticket_db}"
 
-if [ -n "${SERVICE_DATABASES:-}" ]; then
-  normalized_service_databases="$(printf '%s' "$SERVICE_DATABASES" | tr ',' ' ')"
-  for service_database in $normalized_service_databases; do
-    create_database "$service_database"
-  done
-fi

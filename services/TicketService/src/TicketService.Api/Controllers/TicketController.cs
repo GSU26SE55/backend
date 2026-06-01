@@ -2,14 +2,11 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Query;
+using TicketService.Application.DTOs.Response;
 using TicketService.Application.DTOs.Response.Ticket;
-using TicketService.Application.CQRS.Query.ManagerQueue;
-using TicketService.Application.CQRS.Query.MyTicketsAsCustomer;
-using TicketService.Application.CQRS.Query.MyTicketsAsStaff;
-using TicketService.Application.CQRS.Query.TicketActivityTimeline;
-using TicketService.Application.CQRS.Query.TicketGetById;
-using TicketService.Application.CQRS.Query.TicketGetList;
 
 namespace TicketService.Api.Controllers;
 
@@ -18,26 +15,73 @@ namespace TicketService.Api.Controllers;
 /// Bao gồm các hành động: tạo mới, bắt đầu xử lý, tạm dừng, tiếp tục, giải quyết và yêu cầu chuyển cấp.
 /// </summary>
 [ApiController]
-[Route("api/tickets")]
+[Route("api/v1/tickets")]
 [Authorize]
 [Produces("application/json")]
 public class TicketController : ControllerBase
 {
     private readonly IMediator _mediator;
 
-    public TicketController(IMediator mediator) => _mediator = mediator;
+    public TicketController(IMediator mediator)
+    {
+        _mediator = mediator;
+    }
 
-    /// <summary>Admin/Manager: danh sách ticket toàn hệ thống với filter.</summary>
+    #region Queries
+
+    /// <summary>
+    /// Admin/Manager: Lấy danh sách ticket toàn hệ thống với các bộ lọc nâng cao.
+    /// </summary>
+    /// <remarks>
+    /// Các tham số lọc (Query params):
+    /// - <c>Keyword</c>: Tìm kiếm theo mã ticket hoặc tiêu đề.
+    /// - <c>Status</c>: Lọc theo trạng thái (New, Open, InProgress, Resolved, Closed...).
+    /// - <c>Priority</c>: Lọc theo mức độ ưu tiên (P1, P2, P3, P4).
+    /// - <c>Category</c>: Lọc theo danh mục sự cố.
+    /// - <c>BatteryAssetId</c>: Lọc ticket liên quan đến một thiết bị pin cụ thể.
+    /// - <c>PageIndex</c> &amp; <c>PageSize</c>: Phân trang kết quả.
+    ///
+    /// Quyền hạn:
+    /// - Chỉ dành cho người dùng có role <c>Admin</c> hoặc <c>Manager</c>.
+    /// </remarks>
+    /// <param name="query">Các tiêu chí lọc và thông tin phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Danh sách ticket đã được phân trang.</returns>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có quyền truy cập (không phải Admin/Manager).</response>
     [HttpGet]
     [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList([FromQuery] TicketGetListQuery query, CancellationToken ct)
     {
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Chi tiết ticket (bao gồm activities, comments, SLA, maintenance logs).</summary>
+    /// <summary>
+    /// Lấy thông tin chi tiết của một ticket cụ thể.
+    /// </summary>
+    /// <remarks>
+    /// Thông tin bao gồm:
+    /// - Chi tiết nội dung ticket và thiết bị liên quan.
+    /// - Trạng thái SLA và thời gian xử lý.
+    /// - Danh sách các hoạt động (Activities) đã diễn ra.
+    /// - Các ghi chú (Comments) và nhật ký bảo trì liên quan.
+    ///
+    /// Điều kiện truy cập:
+    /// - Khách hàng chỉ xem được ticket của chính mình.
+    /// - Staff chỉ xem được ticket được gán cho mình.
+    /// - Manager/Admin có quyền xem toàn bộ.
+    /// </remarks>
+    /// <param name="id">ID (Guid) của ticket cần xem.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Thông tin chi tiết ticket.</returns>
+    /// <response code="200">Tìm thấy và trả về thông tin chi tiết.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc không có quyền xem.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(CommonResponse<TicketDetailDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var actorId = GetCurrentUserId();
@@ -53,8 +97,120 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Customer: danh sách ticket của chính mình.</summary>
+    /// <summary>
+    /// Khách hàng lấy danh sách ticket của chính mình.
+    /// </summary>
+    /// <remarks>
+    /// Các tham số lọc (Query params):
+    /// - <c>Status</c>: Lọc theo trạng thái ticket.
+    /// - <c>PageIndex</c> &amp; <c>PageSize</c>: Phân trang kết quả.
+    ///
+    /// Cách hoạt động:
+    /// - Hệ thống tự động lấy ID khách hàng từ Token để lọc.
+    /// </remarks>
+    /// <param name="query">Thông tin lọc và phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Danh sách ticket của khách hàng.</returns>
+    /// <response code="200">Lấy danh sách thành công.</response>
     [HttpGet("me/as-customer")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTicketsAsCustomer([FromQuery] MyTicketsAsCustomerQuery query,
+        CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        query.ActorCustomerId = actorId.Value;
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Nhân viên kỹ thuật lấy danh sách ticket được giao cho chính mình.
+    /// </summary>
+    /// <remarks>
+    /// Các tham số lọc (Query params):
+    /// - <c>Status</c>: Lọc theo trạng thái ticket.
+    /// - <c>PageIndex</c> &amp; <c>PageSize</c>: Phân trang kết quả.
+    ///
+    /// Cách hoạt động:
+    /// - Hệ thống tự động lấy ID nhân viên từ Token để lọc.
+    /// </remarks>
+    /// <param name="query">Thông tin lọc và phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Danh sách ticket của nhân viên.</returns>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    [HttpGet("me/as-staff")]
+    [Authorize(Roles = "Staff")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyTicketsAsStaff([FromQuery] MyTicketsAsStaffQuery query, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        query.ActorStaffId = actorId.Value;
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Manager: Xem danh sách ticket đang chờ phê duyệt (Queue).
+    /// </summary>
+    /// <remarks>
+    /// Danh sách này chứa các ticket ở trạng thái <c>Open</c> (đã triage sơ bộ)
+    /// và được sắp xếp ưu tiên theo mức độ quan trọng (P1 -> P4).
+    ///
+    /// Tham số lọc:
+    /// - <c>Priority</c>, <c>Category</c>.
+    /// </remarks>
+    /// <param name="query">Thông tin lọc và phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Hàng đợi ticket cần xử lý của Manager.</returns>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    [HttpGet("manager-queue")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ManagerQueue([FromQuery] ManagerQueueQuery query, CancellationToken ct)
+    {
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy dòng thời gian (Timeline) hoạt động của một ticket.
+    /// </summary>
+    /// <remarks>
+    /// Trả về danh sách các thay đổi trạng thái, người thực hiện và lý do thay đổi.
+    /// Sắp xếp từ hoạt động mới nhất đến cũ nhất.
+    /// </remarks>
+    /// <param name="id">ID của ticket.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns>Danh sách các hoạt động lịch sử.</returns>
+    /// <response code="200">Lấy dữ liệu thành công.</response>
+    [HttpGet("{id:guid}/activities")]
+    [ProducesResponseType(typeof(CommonResponse<List<TicketActivityDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ActivityTimeline(Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new TicketActivityTimelineQuery
+        {
+            TicketId = id,
+            ActorUserId = actorId,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    #endregion
+
+    #region Commands
+
     /// <summary>
     /// Khách hàng tạo ticket mới để yêu cầu hỗ trợ hoặc sửa chữa.
     /// </summary>
@@ -78,24 +234,15 @@ public class TicketController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpPost]
     [Authorize(Roles = "Customer")]
-    public async Task<IActionResult> MyTicketsAsCustomer([FromQuery] MyTicketsAsCustomerQuery query, CancellationToken ct)
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] TicketCreateCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        query.ActorCustomerId = actorId.Value;
-        var result = await _mediator.Send(query, ct);
         command.CustomerId = GetUserId();
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Staff: danh sách ticket được assign cho chính mình.</summary>
-    [HttpGet("me/as-staff")]
     /// <summary>
     /// Staff xác nhận bắt đầu xử lý ticket đã được giao.
     /// </summary>
@@ -115,15 +262,11 @@ public class TicketController : ControllerBase
     /// <response code="404">Không tìm thấy ticket.</response>
     [HttpPost("{id}/start")]
     [Authorize(Roles = "Staff")]
-    public async Task<IActionResult> MyTicketsAsStaff([FromQuery] MyTicketsAsStaffQuery query, CancellationToken ct)
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Start(Guid id, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
         var command = new TicketStartCommand
         {
             TicketId = id,
@@ -131,16 +274,10 @@ public class TicketController : ControllerBase
             StaffName = GetUserName()
         };
 
-        query.ActorStaffId = actorId.Value;
-        var result = await _mediator.Send(query, ct);
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Manager: queue ticket status=OPEN, sort by priority P1 → P3.</summary>
-    [HttpGet("manager-queue")]
-    [Authorize(Roles = "Manager")]
-    public async Task<IActionResult> ManagerQueue([FromQuery] ManagerQueueQuery query, CancellationToken ct)
     /// <summary>
     /// Staff tạm dừng xử lý ticket vì lý do khách quan (chờ khách hàng, chờ linh kiện...).
     /// </summary>
@@ -159,7 +296,6 @@ public class TicketController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Hold(Guid id, [FromBody] TicketHoldCommand command, CancellationToken ct)
     {
-        var result = await _mediator.Send(query, ct);
         command.TicketId = id;
         command.StaffId = GetUserId();
         command.StaffName = GetUserName();
@@ -168,9 +304,6 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Timeline hoạt động của một ticket, sort mới nhất trước.</summary>
-    [HttpGet("{id:guid}/activities")]
-    public async Task<IActionResult> ActivityTimeline(Guid id, CancellationToken ct)
     /// <summary>
     /// Staff tiếp tục xử lý ticket từ trạng thái tạm dừng.
     /// </summary>
@@ -184,17 +317,9 @@ public class TicketController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Resume(Guid id, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        var result = await _mediator.Send(new TicketActivityTimelineQuery
         var command = new TicketResumeCommand
         {
             TicketId = id,
-            ActorUserId = actorId,
-            ActorRoles = GetCurrentRoles()
-        }, ct);
             StaffId = GetUserId(),
             StaffName = GetUserName()
         };
@@ -203,7 +328,6 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    private Guid? GetCurrentUserId()
     /// <summary>
     /// Staff báo cáo đã hoàn thành việc giải quyết sự cố/yêu cầu.
     /// </summary>
@@ -246,7 +370,8 @@ public class TicketController : ControllerBase
     [HttpPost("{id}/escalate-request")]
     [Authorize(Roles = "Staff")]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> EscalateRequest(Guid id, [FromBody] TicketEscalateRequestCommand command, CancellationToken ct)
+    public async Task<IActionResult> EscalateRequest(Guid id, [FromBody] TicketEscalateRequestCommand command,
+        CancellationToken ct)
     {
         command.TicketId = id;
         command.StaffId = GetUserId();
@@ -256,21 +381,28 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    #endregion
+
     private Guid GetUserId()
     {
-        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var actorId) ? actorId : null;
         var userIdClaim = User.FindFirst("id")?.Value;
         Guid.TryParse(userIdClaim, out var userId);
         return userId;
     }
 
-    private string[] GetCurrentRoles()
-        => User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
     private string GetUserName()
     {
         return User.FindFirst("name")?.Value
                ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
                ?? "Unknown";
     }
+
+    private Guid? GetCurrentUserId()
+    {
+        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(raw, out var actorId) ? actorId : null;
+    }
+
+    private string[] GetCurrentRoles()
+        => User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
 }

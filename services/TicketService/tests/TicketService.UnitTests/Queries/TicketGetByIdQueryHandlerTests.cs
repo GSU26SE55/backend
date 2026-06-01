@@ -1,5 +1,7 @@
+using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Query.TicketGetById;
+using TicketService.Application.CQRS.Handler.TicketGetById;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -37,7 +39,7 @@ public class TicketGetByIdQueryHandlerTests
     };
 
     private void SetupMock(List<Ticket> tickets)
-        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(tickets.BuildMockDbSet().Object);
+        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
 
     [Fact]
     public async Task Handle_AdminCanReadAnyTicket_Returns200()
@@ -153,10 +155,10 @@ public class TicketGetByIdQueryHandlerTests
         var ticket = MakeTicket(customerId: customerId);
         ticket.Comments = new List<TicketComment>
         {
-            new() { Id = Guid.NewGuid(), TicketId = ticket.Id, AuthorUserId = Guid.NewGuid(),
+            new() { Id = Guid.NewGuid(), TicketId = ticket.Id, Ticket = ticket, AuthorUserId = Guid.NewGuid(),
                     AuthorRole = ActorRoleEnum.Staff, Body = "Internal note", IsInternal = true,
                     CreatedAt = DateTime.UtcNow },
-            new() { Id = Guid.NewGuid(), TicketId = ticket.Id, AuthorUserId = customerId,
+            new() { Id = Guid.NewGuid(), TicketId = ticket.Id, Ticket = ticket, AuthorUserId = customerId,
                     AuthorRole = ActorRoleEnum.Customer, Body = "Public comment", IsInternal = false,
                     CreatedAt = DateTime.UtcNow }
         };

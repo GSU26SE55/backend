@@ -1,32 +1,38 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.DTOs.Response;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Query.MyTicketsAsCustomer;
+namespace TicketService.Application.CQRS.Handler.ManagerQueue;
 
-public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustomerQuery, CommonResponse<PaginationResponse<TicketDTO>>>
+public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, CommonResponse<PaginationResponse<TicketDTO>>>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
 
-    public MyTicketsAsCustomerQueryHandler(ITicketUnitOfWork unitOfWork)
+    public ManagerQueueQueryHandler(ITicketUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(MyTicketsAsCustomerQuery request, CancellationToken cancellationToken)
+    public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(ManagerQueueQuery request, CancellationToken cancellationToken)
     {
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
-            .Where(t => !t.IsDeleted && t.CustomerId == request.ActorCustomerId);
+            .Where(t => !t.IsDeleted && t.Status == TicketStatusEnum.Open);
 
-        if (request.Status.HasValue)
-            query = query.Where(t => t.Status == request.Status.Value);
+        if (request.Priority.HasValue)
+            query = query.Where(t => t.Priority == request.Priority.Value);
 
-        query = query.OrderByDescending(t => t.CreatedAt);
+        if (request.Category.HasValue)
+            query = query.Where(t => t.Category == request.Category.Value);
+
+        // P1 first, then P2, P3; within same priority older tickets first
+        query = query.OrderBy(t => t.Priority).ThenBy(t => t.CreatedAt);
 
         var total = await query.CountAsync(cancellationToken);
         var rawItems = await query

@@ -21,20 +21,20 @@ public static class MockTicketUnitOfWork
             IEnumerable<OutboxMessage>? outboxSeed = null)
     {
         var tickets = new Mock<IGenericRepository<Ticket>>();
-        tickets.Setup(r => r.GetAllAsync()).Returns((ticketSeed ?? Array.Empty<Ticket>()).AsQueryable().BuildMock());
+        tickets.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(ticketSeed ?? Array.Empty<Ticket>()));
         tickets.Setup(r => r.GetByIdAsync(It.IsAny<object>())).ReturnsAsync((object id) => ticketSeed?.FirstOrDefault(x => x.Id == (Guid)id));
 
         var activities = new Mock<IGenericRepository<TicketActivity>>();
-        activities.Setup(r => r.GetAllAsync()).Returns((activitySeed ?? Array.Empty<TicketActivity>()).AsQueryable().BuildMock());
+        activities.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketActivity>(activitySeed ?? Array.Empty<TicketActivity>()));
 
         var customers = new Mock<IGenericRepository<CustomerAccount>>();
-        customers.Setup(r => r.GetAllAsync()).Returns((customerSeed ?? Array.Empty<CustomerAccount>()).AsQueryable().BuildMock());
+        customers.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<CustomerAccount>(customerSeed ?? Array.Empty<CustomerAccount>()));
 
         var staff = new Mock<IGenericRepository<StaffAccount>>();
-        staff.Setup(r => r.GetAllAsync()).Returns((staffSeed ?? Array.Empty<StaffAccount>()).AsQueryable().BuildMock());
+        staff.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<StaffAccount>(staffSeed ?? Array.Empty<StaffAccount>()));
 
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
-        outbox.Setup(r => r.GetAllAsync()).Returns((outboxSeed ?? Array.Empty<OutboxMessage>()).AsQueryable().BuildMock());
+        outbox.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<OutboxMessage>(outboxSeed ?? Array.Empty<OutboxMessage>()));
 
         var uow = new Mock<ITicketUnitOfWork>();
         uow.SetupGet(u => u.Tickets).Returns(tickets.Object);

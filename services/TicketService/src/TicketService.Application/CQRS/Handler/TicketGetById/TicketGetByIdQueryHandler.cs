@@ -1,11 +1,12 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Query;
 using TicketService.Application.DTOs.Response;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
-namespace TicketService.Application.CQRS.Query.TicketGetById;
+namespace TicketService.Application.CQRS.Handler.TicketGetById;
 
 public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, CommonResponse<TicketDetailDTO>>
 {
@@ -57,7 +58,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             ResolvedByStaffId = ticket.ResolvedByStaffId?.ToString(),
             ApprovedAt = ticket.ApprovedAt,
             ApprovedByManagerId = ticket.ApprovedByManagerId?.ToString(),
-            RejectionReason = ticket.RejectionReason,
+            RejectionReason = ticket.Reason,
             ClosedAt = ticket.ClosedAt,
             Rating = ticket.Rating,
             RatingComment = ticket.RatingComment,

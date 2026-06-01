@@ -4,7 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.DTOs.Response;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Query.TicketGetList;
+namespace TicketService.Application.CQRS.Query;
 
 public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<TicketDTO>>>
 {

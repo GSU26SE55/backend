@@ -7,13 +7,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Consumers\" />
     <Folder Include="CQRS\Command\" />
     <Folder Include="CQRS\Handler\" />
-    <Folder Include="CQRS\Query\" />
     <Folder Include="DTOs\Responses\" />
-    <Folder Include="Mapping\" />
-    <Folder Include="Services\" />
     <Folder Include="StateMachine\" />
   </ItemGroup>
 
