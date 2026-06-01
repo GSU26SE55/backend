@@ -1,5 +1,4 @@
 using BatteryService.Application.CQRS.Command.BatteryAsset;
-using BatteryService.Application.CQRS.Command.BatteryGroup;
 using BatteryService.Application.CQRS.Command.BatteryType;
 using BatteryService.Application.CQRS.Command.Site;
 using BatteryService.Application.CQRS.Command.ThresholdConfig;
@@ -94,20 +93,5 @@ public class BatteryCommandValidationTests
 
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(error => error.Field == nameof(command.Name));
-    }
-
-    [Fact]
-    public async Task CreateBatteryGroup_MissingSite_ReturnsValidationError()
-    {
-        var command = new CreateBatteryGroupCommand
-        {
-            Name = "Block A",
-            BatteryTypeId = Guid.NewGuid()
-        };
-
-        var result = await command.ValidateAsync();
-
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(error => error.Field == nameof(command.SiteId));
     }
 }

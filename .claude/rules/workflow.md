@@ -6,8 +6,8 @@
 [LEADER]  /kltn-sprint  →  tạo GitHub Issues (label: status:init) + phân công
 [DEV]     /kltn-plan 123        →  đọc issue → plan.md → approve → post plan lên issue + label:implementing
 [DEV]     /kltn-implement 123  →  đọc plan.md đã approved → code
-          → /kltn-reviewcode → /kltn-test → /kltn-ship 123  →  PR + label:reviewing
-[REVIEWER] /kltn-reviewpr 123  →  approve / request changes
+          → /kltn-reviewcode → /kltn-test → /kltn-ship 123  →  PR + handoff + label:reviewing
+[REVIEWER] review PR trực tiếp trên GitHub  →  approve / request changes
 [DEV]     /kltn-complete 123  →  merge PR + label:done + close issue
 [LEADER]  /kltn-team hoặc /kltn-member [tên]
 ```
@@ -31,7 +31,9 @@ Luồng chuẩn (áp dụng cho MỌI task, không phân biệt size):
 
 /kltn-implement 123  →  đọc plan.md đã approved  →  code từng bước
                →  /kltn-reviewcode  →  /kltn-test
-               →  /kltn-ship 123  →  PR + label: implementing → reviewing
+               →  /kltn-ship 123  →  PR + handoff + label: implementing → reviewing
+               →  reviewer approve trên GitHub
+               →  /kltn-complete 123  →  merge PR + label: done
 ```
 
 **Bước Plan (bắt buộc với MỌI task):**
@@ -137,7 +139,20 @@ pytest tests/ -v --cov=src
 
 ## Git
 
-- Branch: `feature/GH-[number]-slug-ngan` (ví dụ: `feature/GH-42-battery-crud`)
+**Branching strategy:**
+
+| Branch | Mục đích | Tạo bởi |
+|--------|----------|---------|
+| `main` | Production-ready; protected — merge chỉ qua approved PR | — |
+| `dev` | Integration — target cho mọi feature PR | — |
+| `staging` | Test gần production | — |
+| `feat/GH-[number]-slug` | Feature branch — 1 issue = 1 branch | `/kltn-implement` |
+| `fix/GH-[number]-slug` | Bug fix — issue label `type: fix` | `/kltn-debug` |
+| `chore/[purpose]` | Maintenance — deps, config, tooling | manual |
+| `docs/[purpose]` | Documentation | manual |
+| `refactor/[purpose]` | Refactor — không đổi behavior | manual |
+| `test/[purpose]` | Viết / cập nhật test cases | manual |
+
 - 1 issue = 1 branch, commit thường xuyên
 - Không merge thẳng dev — luôn qua PR
 - Commit message: `type(#[number]): mô tả` (ví dụ: `feat(#42): add Battery CRUD`)

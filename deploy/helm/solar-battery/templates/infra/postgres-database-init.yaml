@@ -10,7 +10,7 @@ metadata:
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: {{ .Values.postgres.initJob.activeDeadlineSeconds | default 180 }}
-  ttlSecondsAfterFinished: 300
+  ttlSecondsAfterFinished: {{ .Values.postgres.initJob.ttlSecondsAfterFinished | default 300 }}
   template:
     metadata:
       labels:

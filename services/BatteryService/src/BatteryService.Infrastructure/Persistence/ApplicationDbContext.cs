@@ -25,8 +25,6 @@ public class ApplicationDbContext : DbContext
 
     public virtual DbSet<Site> Sites { get; set; }
 
-    public virtual DbSet<BatteryGroup> BatteryGroups { get; set; }
-
     public virtual DbSet<CustomerAccount> CustomerAccounts { get; set; }
 
     public virtual DbSet<ThresholdConfig> ThresholdConfigs { get; set; }

@@ -12,7 +12,7 @@ public class SiteFullHandlerTests
 {
     private static readonly Guid Cust = Guid.NewGuid();
 
-    private static CustomerAccount Customer() => new() { Id = Cust, Email = "c@x", FullName = "c", RolesCsv = "Customer", IsActive = true, LastSyncedAtUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
+    private static CustomerAccount Customer() => new() { Id = Cust, Email = "c@x", FullName = "c", Role = "Customer", IsActive = true, LastSyncedAtUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
     private static Site MakeSite(string name = "S1", bool deleted = false) => new() { Id = Guid.NewGuid(), Name = name, CustomerId = Cust, InstallDate = DateTime.UtcNow, Status = SiteStatusEnum.Active, IsDeleted = deleted, CreatedAt = DateTime.UtcNow };
 
     [Fact]
@@ -88,16 +88,6 @@ public class SiteFullHandlerTests
         var s = MakeSite();
         var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "X", BatteryTypeId = Guid.NewGuid(), CustomerId = Cust, SiteId = s.Id, InstallDate = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryAssets(asset);
-        var r = await new DeleteSiteCommandHandler(b.Build()).Handle(new DeleteSiteCommand { Id = s.Id }, default);
-        r.StatusCode.Should().Be(409);
-    }
-
-    [Fact]
-    public async Task Delete_HasGroups_Returns409()
-    {
-        var s = MakeSite();
-        var g = new BatteryGroup { Id = Guid.NewGuid(), Name = "g", SiteId = s.Id, BatteryTypeId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow };
-        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(g);
         var r = await new DeleteSiteCommandHandler(b.Build()).Handle(new DeleteSiteCommand { Id = s.Id }, default);
         r.StatusCode.Should().Be(409);
     }
@@ -208,14 +198,13 @@ public class SiteFullHandlerTests
     }
 
     [Fact]
-    public async Task GetSiteAssets_FiltersByGroupAndStatus()
+    public async Task GetSiteAssets_FiltersByStatus()
     {
         var s = MakeSite();
         var t = new BatteryType { Id = Guid.NewGuid(), Name = "T", NominalCapacityAh = 1, NominalVoltage = 1, CreatedAt = DateTime.UtcNow };
-        var g = new BatteryGroup { Id = Guid.NewGuid(), Name = "g", SiteId = s.Id, BatteryTypeId = t.Id, CreatedAt = DateTime.UtcNow };
-        var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "S", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, BatteryGroupId = g.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Active, CreatedAt = DateTime.UtcNow };
-        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryGroups(g).WithBatteryAssets(asset);
-        var r = await new GetSiteAssetsQueryHandler(b.Build()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, BatteryGroupId = g.Id, Status = BatteryStatusEnum.Active }, default);
+        var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "S", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Active, CreatedAt = DateTime.UtcNow };
+        var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryAssets(asset);
+        var r = await new GetSiteAssetsQueryHandler(b.Build()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, Status = BatteryStatusEnum.Active }, default);
         r.Data!.TotalItems.Should().Be(1);
     }
 

@@ -21,7 +21,6 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
     {
         var entity = await _unitOfWork.Sites
             .GetAllAsync()
-            .Include(site => site.BatteryGroups)
             .Include(site => site.BatteryAssets)
             .FirstOrDefaultAsync(site => site.Id == request.Id && !site.IsDeleted, cancellationToken);
 

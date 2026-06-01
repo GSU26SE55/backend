@@ -31,7 +31,7 @@ public class GetAuditLogsQueryHandlerTests
     {
         var older = NewLog(AuditActionEnum.LoginSuccess, createdAt: DateTime.UtcNow.AddDays(-1));
         var newer = NewLog(AuditActionEnum.Logout, createdAt: DateTime.UtcNow);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { older, newer });
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { older, newer });
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery { PageNumber = 1, PageSize = 10 }, CancellationToken.None);
@@ -48,7 +48,7 @@ public class GetAuditLogsQueryHandlerTests
     {
         var login = NewLog(AuditActionEnum.LoginSuccess);
         var changePw = NewLog(AuditActionEnum.PasswordChanged);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { login, changePw });
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { login, changePw });
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery
@@ -68,7 +68,7 @@ public class GetAuditLogsQueryHandlerTests
         var targetId = Guid.NewGuid();
         var match = NewLog(AuditActionEnum.LoginSuccess, targetAccountId: targetId);
         var nonMatch = NewLog(AuditActionEnum.LoginSuccess, targetAccountId: Guid.NewGuid());
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { match, nonMatch });
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { match, nonMatch });
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery
@@ -87,7 +87,7 @@ public class GetAuditLogsQueryHandlerTests
     {
         var success = NewLog(AuditActionEnum.LoginSuccess, isSuccess: true);
         var failed = NewLog(AuditActionEnum.LoginFailedWrongPassword, isSuccess: false);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { success, failed });
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { success, failed });
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery
@@ -107,7 +107,7 @@ public class GetAuditLogsQueryHandlerTests
         var inside = NewLog(AuditActionEnum.LoginSuccess, createdAt: new DateTime(2026, 5, 5, 12, 0, 0, DateTimeKind.Utc));
         var beforeWindow = NewLog(AuditActionEnum.LoginSuccess, createdAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc));
         var afterWindow = NewLog(AuditActionEnum.LoginSuccess, createdAt: new DateTime(2026, 5, 10, 0, 0, 0, DateTimeKind.Utc));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { inside, beforeWindow, afterWindow });
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: new[] { inside, beforeWindow, afterWindow });
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery
@@ -124,7 +124,7 @@ public class GetAuditLogsQueryHandlerTests
     [Fact]
     public async Task InvalidTimeRange_FromGteTo_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery
@@ -142,7 +142,7 @@ public class GetAuditLogsQueryHandlerTests
         var logs = Enumerable.Range(0, 25)
             .Select(i => NewLog(AuditActionEnum.LoginSuccess, createdAt: DateTime.UtcNow.AddMinutes(-i)))
             .ToArray();
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(auditLogSeed: logs);
+        var (uow, _, _, _) = MockUnitOfWork.Build(auditLogSeed: logs);
         var handler = new GetAuditLogsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAuditLogsQuery { PageNumber = 2, PageSize = 10 }, CancellationToken.None);

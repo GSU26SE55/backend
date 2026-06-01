@@ -11,7 +11,7 @@ public class VerifyOtpCommandHandlerTests
 {
     private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
-    private static global::AuthService.Domain.Entities.Account PendingAccount(string otp = "123456", DateTime? otpExpired = null)
+    private static global::AuthService.Domain.Entities.Account PendingAccount(string otp = "123456", DateTime? otpExpired = null, Guid? roleId = null)
     {
         return new global::AuthService.Domain.Entities.Account
         {
@@ -23,15 +23,16 @@ public class VerifyOtpCommandHandlerTests
             OtpCode = otp,
             OtpExpiredAt = otpExpired ?? DateTime.UtcNow.AddMinutes(3),
             OtpPurpose = OtpPurposeEnum.Register,
-            AccountRoles = new List<AccountRole>()
+            RoleId = roleId ?? Guid.Empty
         };
     }
 
     [Fact]
     public async Task Verify_CorrectOtp_ActivatesAccount_AssignsCustomerRole_PublishesEvent_NoTokenIssued()
     {
+        // Account self-register chưa có role → handler phải gán RoleId = CustomerRoleId.
         var account = PendingAccount();
-        var (uow, accounts, refreshTokens, _, accountRoles) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var producer = new Mock<IMessageProducerService>();
 
         var handler = new VerifyOtpCommandHandler(uow.Object, producer.Object);
@@ -51,16 +52,37 @@ public class VerifyOtpCommandHandlerTests
         account.OtpPurpose.Should().BeNull();
         account.LastLoginAt.Should().BeNull("verify-otp should NOT log a login session");
 
-        accountRoles.Verify(r => r.AddAsync(It.Is<AccountRole>(ar => ar.RoleId == CustomerRoleId && ar.IsActive)), Times.Once);
+        // 1-N refactor: account chỉ có 1 role → handler set RoleId trực tiếp thay vì add AccountRole.
+        account.RoleId.Should().Be(CustomerRoleId);
+        account.RoleAssignedAt.Should().NotBeNull();
         refreshTokens.Verify(r => r.AddAsync(It.IsAny<RefreshToken>()), Times.Never);
         producer.Verify(p => p.PublishAsync(It.IsAny<AccountActivatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Verify_CorrectOtp_AccountAlreadyHasRole_KeepsExistingRole()
+    {
+        // Account invited bởi admin với role Staff → handler KHÔNG được ghi đè sang Customer.
+        var staffRoleId = Guid.NewGuid();
+        var account = PendingAccount(roleId: staffRoleId);
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var response = await handler.Handle(new VerifyOtpCommand
+        {
+            Email = "pending@example.com",
+            Otp = "123456"
+        }, CancellationToken.None);
+
+        response.IsSuccess.Should().BeTrue();
+        account.RoleId.Should().Be(staffRoleId);
     }
 
     [Fact]
     public async Task Verify_WrongOtp_IncrementsFailedAttempts_Returns401()
     {
         var account = PendingAccount(otp: "999999");
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var response = await handler.Handle(new VerifyOtpCommand
@@ -81,7 +103,7 @@ public class VerifyOtpCommandHandlerTests
     {
         var account = PendingAccount(otp: "999999");
         account.FailedLoginAttempts = 4;
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var response = await handler.Handle(new VerifyOtpCommand
@@ -100,7 +122,7 @@ public class VerifyOtpCommandHandlerTests
     public async Task Verify_OtpExpired_Returns400()
     {
         var account = PendingAccount(otpExpired: DateTime.UtcNow.AddMinutes(-1));
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var response = await handler.Handle(new VerifyOtpCommand
@@ -118,7 +140,7 @@ public class VerifyOtpCommandHandlerTests
     {
         var account = PendingAccount();
         account.Status = AccountStatusEnum.Active;
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var response = await handler.Handle(new VerifyOtpCommand
@@ -134,7 +156,7 @@ public class VerifyOtpCommandHandlerTests
     [Fact]
     public async Task Verify_EmailNotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
 
         var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
         var response = await handler.Handle(new VerifyOtpCommand

@@ -133,10 +133,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid?>("BatteryGroupId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("battery_group_id");
-
                     b.Property<Guid>("BatteryTypeId")
                         .HasColumnType("uuid")
                         .HasColumnName("battery_type_id");
@@ -223,8 +219,6 @@ namespace BatteryService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BatteryGroupId");
-
                     b.HasIndex("BatteryTypeId");
 
                     b.HasIndex("CustomerId");
@@ -239,74 +233,11 @@ namespace BatteryService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("BatteryGroupId", "IsDeleted", "Status");
-
                     b.HasIndex("CustomerId", "IsDeleted", "Status");
 
                     b.HasIndex("SiteId", "IsDeleted", "Status");
 
                     b.ToTable("battery_assets", (string)null);
-                });
-
-            modelBuilder.Entity("BatteryService.Domain.Entities.BatteryGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("BatteryCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("battery_count");
-
-                    b.Property<Guid>("BatteryTypeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("battery_type_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("name");
-
-                    b.Property<Guid>("SiteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("site_id");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BatteryTypeId");
-
-                    b.HasIndex("SiteId");
-
-                    b.HasIndex("SiteId", "Name")
-                        .IsUnique()
-                        .HasFilter("is_deleted = false");
-
-                    b.ToTable("battery_groups", (string)null);
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.BatteryType", b =>
@@ -439,11 +370,11 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("phone_number");
 
-                    b.Property<string>("RolesCsv")
+                    b.Property<string>("Role")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("roles_csv");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("role");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -782,11 +713,6 @@ namespace BatteryService.Infrastructure.Migrations
 
             modelBuilder.Entity("BatteryService.Domain.Entities.BatteryAsset", b =>
                 {
-                    b.HasOne("BatteryService.Domain.Entities.BatteryGroup", "BatteryGroup")
-                        .WithMany("BatteryAssets")
-                        .HasForeignKey("BatteryGroupId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("BatteryService.Domain.Entities.BatteryType", "BatteryType")
                         .WithMany("Assets")
                         .HasForeignKey("BatteryTypeId")
@@ -797,27 +723,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .WithMany("BatteryAssets")
                         .HasForeignKey("SiteId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("BatteryGroup");
-
-                    b.Navigation("BatteryType");
-
-                    b.Navigation("Site");
-                });
-
-            modelBuilder.Entity("BatteryService.Domain.Entities.BatteryGroup", b =>
-                {
-                    b.HasOne("BatteryService.Domain.Entities.BatteryType", "BatteryType")
-                        .WithMany("BatteryGroups")
-                        .HasForeignKey("BatteryTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
-                        .WithMany("BatteryGroups")
-                        .HasForeignKey("SiteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
 
                     b.Navigation("BatteryType");
 
@@ -858,16 +763,9 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("SensorReadings");
                 });
 
-            modelBuilder.Entity("BatteryService.Domain.Entities.BatteryGroup", b =>
-                {
-                    b.Navigation("BatteryAssets");
-                });
-
             modelBuilder.Entity("BatteryService.Domain.Entities.BatteryType", b =>
                 {
                     b.Navigation("Assets");
-
-                    b.Navigation("BatteryGroups");
 
                     b.Navigation("ThresholdConfigs");
                 });
@@ -875,8 +773,6 @@ namespace BatteryService.Infrastructure.Migrations
             modelBuilder.Entity("BatteryService.Domain.Entities.Site", b =>
                 {
                     b.Navigation("BatteryAssets");
-
-                    b.Navigation("BatteryGroups");
                 });
 #pragma warning restore 612, 618
         }

@@ -23,8 +23,6 @@ public class UnitOfWork : IBatteryUnitOfWork
 
     public IGenericRepository<Site> Sites => new GenericRepository<Site>(_context);
 
-    public IGenericRepository<BatteryGroup> BatteryGroups => new GenericRepository<BatteryGroup>(_context);
-
     public IGenericRepository<CustomerAccount> CustomerAccounts => new GenericRepository<CustomerAccount>(_context);
 
     public IGenericRepository<ThresholdConfig> ThresholdConfigs => new GenericRepository<ThresholdConfig>(_context);

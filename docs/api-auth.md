@@ -1032,7 +1032,7 @@ Base route: `/api/admin/accounts`
 | `phoneNumber` | `string?` | Không | Max 20 ký tự | Số điện thoại |
 | `dateOfBirth` | `DateTime?` | Không | — | Ngày sinh |
 | `address` | `string?` | Không | Max 500 ký tự | Địa chỉ |
-| `roleIds` | `Guid[]?` | Không | — | Danh sách role ID gán ngay |
+| `roleId` | `Guid` | Bắt buộc | Role đang Active | Role gán cho account (mỗi account chỉ có 1 role — quan hệ 1-N) |
 
 **Response thành công `201`:** `CommonResponse<Guid>` — `data` là Guid của account vừa tạo.
 
@@ -1061,9 +1061,20 @@ Base route: `/api/admin/accounts`
 | `email` | `string` | Bắt buộc | Email cần mời |
 | `fullName` | `string` | Bắt buộc | Họ tên |
 | `phoneNumber` | `string?` | Không | Số điện thoại |
-| `roleIds` | `Guid[]` | Bắt buộc | Role gán sẵn, ít nhất 1 role |
+| `roleId` | `Guid` | Bắt buộc | Role gán cho user khi accept invite (1 role/account — quan hệ 1-N) |
 
 **Luồng:** Sau khi invite, user nhận email chứa link với `invitationToken`. User truy cập link và gọi `POST /api/auth/accept-invite` để đặt mật khẩu và kích hoạt.
+
+**Luồng gửi email:**
+- AuthService tạo account `PendingVerification`, sinh `invitationToken` TTL **72 giờ**, ghi `SendAdminInviteEvent` vào outbox và commit cùng account.
+- `OutboxRelayBackgroundService` publish event lên RabbitMQ.
+- EmailService consumer `SendAdminInviteConsumer` nhận event và gửi email qua MailJet bằng template `AdminInvite.html`.
+- Link trong email được build từ config `AdminInvite:AcceptUrlBase` hoặc `Frontend:AcceptInviteUrl`, sau đó append `?token={invitationToken}`. K8s Helm đang set mặc định `https://{global.domain}/auth/accept-invite`.
+
+**Troubleshooting nếu invite trả `201` nhưng không có email:**
+- Kiểm tra AuthService outbox: event `SendAdminInviteEvent` phải có `processed_at != null`; nếu còn pending hoặc `last_error` có lỗi thì kiểm tra RabbitMQ/outbox relay.
+- Kiểm tra EmailService có queue/consumer `SendAdminInviteConsumer`; nếu consumer không chạy, event sẽ không được gửi MailJet.
+- Kiểm tra cấu hình `MailJet:ApiKey`, `MailJet:ApiSecret`, `MailJet:FromEmail`, `RabbitMQ:*`, `Inbox:*`.
 
 ---
 
@@ -1150,9 +1161,9 @@ Base route: `/api/admin/accounts`
 
 ---
 
-### `POST /api/admin/accounts/{id}/roles`
+### `PUT /api/admin/accounts/{id}/role`
 
-**Mục đích:** Gán thêm hoặc cập nhật danh sách role cho tài khoản.
+**Mục đích:** Đổi role hiện tại của account sang role khác.
 
 **Auth:** Admin
 
@@ -1160,48 +1171,23 @@ Base route: `/api/admin/accounts`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `roleIds` | `Guid[]` | Bắt buộc | Danh sách role ID cần gán hoặc cập nhật |
-| `expiredAt` | `DateTime?` | Không | Thời điểm hết hạn chung cho các role được gán |
+| `roleId` | `Guid` | Bắt buộc | Role mới sẽ thay role hiện tại; role phải đang Active |
 
-**Lưu ý semantics:** Endpoint này là additive/upsert, không phải replace toàn bộ. Role hiện có nhưng không nằm trong request vẫn được giữ nguyên; muốn thu hồi role, FE gọi `DELETE /api/admin/accounts/{id}/roles/{roleId}`.
+**Lưu ý 1-N:** Quan hệ Role ↔ Account là **1-N** — mỗi account có duy nhất 1 role tại bất kỳ thời điểm nào.
+- Vì account bắt buộc có 1 role, **KHÔNG có endpoint revoke role**; để "thu hồi quyền", Admin đổi sang role thấp hơn (vd Customer).
+- Tính năng **temporary role** (ExpiredAt) và **multi-role per account** đã được loại bỏ kể từ refactor 1-N.
+- Nếu `roleId` mới trùng `roleId` hiện tại → response `200 OK` nhưng không phát sinh thay đổi (idempotent).
+- Audit log `RoleAssigned` được ghi với metadata `previousRoleId`, `newRoleId`, `newRoleName`.
 
----
-
-### `DELETE /api/admin/accounts/{id}/roles/{roleId}`
-
-**Mục đích:** Thu hồi một role cụ thể khỏi tài khoản.
-
-**Auth:** Admin
-
-**Response thành công `200`:** `isSuccess = true` — role đã bị thu hồi (`IsActive = false`).
-
-**Lưu ý:** Thu hồi không xóa record `AccountRole` — chỉ set `IsActive = false`. Role có thể được gán lại sau bằng `POST /api/admin/accounts/{id}/roles`.
+**Response thành công `200`:** `isSuccess = true`, `data = accountId`.
 
 **Lỗi thường gặp:**
-- `400` — `id` hoặc `roleId` không hợp lệ (không phải Guid)
+- `400` — `roleId` không hợp lệ, role không tồn tại hoặc role bị disable
 - `401` — Token không hợp lệ hoặc hết hạn
 - `403` — Không có role Admin
-- `404` — Account hoặc role không tồn tại, hoặc account không đang có role đó
+- `404` — Không tìm thấy account
 
----
-
-### `POST /api/admin/accounts/{id}/roles/temporary`
-
-**Mục đích:** Gán role tạm thời cho tài khoản trong khoảng thời gian xác định.
-
-**Auth:** Admin
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `roleId` | `Guid` | Bắt buộc | Role ID cần gán |
-| `expiredAt` | `DateTime` | Bắt buộc | Thời điểm hết hạn role (UTC) |
-
-**Lưu ý lifecycle của temporary role:**
-- Role expire theo cơ chế **lazy expiry** — không có background job chủ động revoke. Khi user login hoặc refresh token, hệ thống filter `ExpiredAt == null || ExpiredAt > UtcNow` để loại role đã hết hạn khỏi JWT claims.
-- Role record vẫn tồn tại trong DB sau khi expire, chỉ không được đưa vào JWT — không có audit log `RoleRevoked` tự động khi hết hạn.
-- Nếu cần revoke sớm trước `expiredAt`, Admin dùng `DELETE /api/admin/accounts/{id}/roles/{roleId}`.
+**Lưu ý JWT cache:** Role được đưa vào JWT ở lần issue token tiếp theo. Access token cũ vẫn giữ claim `role` cũ cho đến khi hết hạn hoặc user login/refresh lại.
 
 ---
 

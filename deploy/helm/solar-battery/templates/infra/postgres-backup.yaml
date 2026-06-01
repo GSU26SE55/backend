@@ -17,6 +17,9 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres-backup") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
           containers:

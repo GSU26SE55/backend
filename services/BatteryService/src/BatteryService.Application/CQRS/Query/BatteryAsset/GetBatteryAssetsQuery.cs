@@ -16,8 +16,6 @@ public class GetBatteryAssetsQuery : PaginationRequest, IRequest<CommonResponse<
 
     public Guid? SiteId { get; set; }
 
-    public Guid? BatteryGroupId { get; set; }
-
     public BatteryStatusEnum? Status { get; set; }
 
     public bool IncludeDeleted { get; set; }

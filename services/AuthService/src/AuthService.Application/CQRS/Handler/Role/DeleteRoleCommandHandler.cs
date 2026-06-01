@@ -40,9 +40,9 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
             };
         }
 
-        var inUse = await _unitOfWork.AccountRoles
+        var inUse = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(ar => ar.RoleId == request.Id && ar.IsActive, cancellationToken);
+            .AnyAsync(a => a.RoleId == request.Id && !a.IsDeleted, cancellationToken);
 
         if (inUse)
         {

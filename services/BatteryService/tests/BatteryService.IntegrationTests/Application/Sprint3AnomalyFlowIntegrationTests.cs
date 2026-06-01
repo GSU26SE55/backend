@@ -221,7 +221,7 @@ public class Sprint3AnomalyFlowIntegrationTests
             Id = CustomerId,
             Email = "e2e@x.com",
             FullName = "E2E Customer",
-            RolesCsv = "Customer",
+            Role = "Customer",
             IsActive = true,
             LastSyncedAtUtc = DateTime.UtcNow
         });

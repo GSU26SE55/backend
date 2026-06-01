@@ -38,20 +38,6 @@ public class DeleteSiteCommandHandler : IRequestHandler<DeleteSiteCommand, Commo
             };
         }
 
-        var hasGroups = await _unitOfWork.BatteryGroups
-            .GetAllAsync()
-            .AnyAsync(group => group.SiteId == request.Id && !group.IsDeleted, cancellationToken);
-
-        if (hasGroups)
-        {
-            return new CommonResponse<object>
-            {
-                IsSuccess = false,
-                StatusCode = 409,
-                Message = "Không thể xóa site vì vẫn còn nhóm pin."
-            };
-        }
-
         _unitOfWork.Sites.DeleteAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

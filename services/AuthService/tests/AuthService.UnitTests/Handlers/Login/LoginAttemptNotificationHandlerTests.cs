@@ -12,7 +12,7 @@ public class LoginAttemptNotificationHandlerTests
     private LoginAttemptNotificationHandler CreateHandler(
         Mock<SharedKernels.Interfaces.IGenericRepository<LoginAttempt>>? loginAttemptsMock = null)
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         if (loginAttemptsMock != null)
             uow.SetupGet(u => u.LoginAttempts).Returns(loginAttemptsMock.Object);
 
@@ -127,7 +127,7 @@ public class GetLoginHistoryQueryHandlerTests
             NewAttempt(target, createdAt: DateTime.UtcNow),
             NewAttempt(other, createdAt: DateTime.UtcNow)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var loginAttempts = new Mock<SharedKernels.Interfaces.IGenericRepository<LoginAttempt>>();
         loginAttempts.Setup(r => r.GetAllAsync()).Returns(attempts.AsQueryable().BuildMock());
         uow.SetupGet(u => u.LoginAttempts).Returns(loginAttempts.Object);
@@ -156,7 +156,7 @@ public class GetLoginHistoryQueryHandlerTests
             NewAttempt(target, LoginAttemptResult.WrongPassword),
             NewAttempt(target, LoginAttemptResult.AccountLocked)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var loginAttempts = new Mock<SharedKernels.Interfaces.IGenericRepository<LoginAttempt>>();
         loginAttempts.Setup(r => r.GetAllAsync()).Returns(attempts.AsQueryable().BuildMock());
         uow.SetupGet(u => u.LoginAttempts).Returns(loginAttempts.Object);
@@ -177,7 +177,7 @@ public class GetLoginHistoryQueryHandlerTests
     [Fact]
     public async Task EmptyAccountId_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetLoginHistoryQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new Application.CQRS.Query.Login.GetLoginHistoryQuery
@@ -191,7 +191,7 @@ public class GetLoginHistoryQueryHandlerTests
     [Fact]
     public async Task InvalidTimeRange_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetLoginHistoryQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new Application.CQRS.Query.Login.GetLoginHistoryQuery

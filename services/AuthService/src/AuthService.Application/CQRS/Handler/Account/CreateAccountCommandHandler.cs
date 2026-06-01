@@ -66,25 +66,21 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             }
         }
 
-        var validRoleIds = new List<Guid>();
-        if (request.RoleIds.Count > 0)
-        {
-            validRoleIds = await _unitOfWork.Roles
-                .GetAllAsync()
-                .Where(r => request.RoleIds.Contains(r.Id) && r.Status == RoleStatusEnum.Active && !r.IsDeleted)
-                .Select(r => r.Id)
-                .ToListAsync(cancellationToken);
+        var role = await _unitOfWork.Roles
+            .GetAllAsync()
+            .Where(r => r.Id == request.RoleId && r.Status == RoleStatusEnum.Active && !r.IsDeleted)
+            .Select(r => new { r.Id, r.Name })
+            .FirstOrDefaultAsync(cancellationToken);
 
-            var missing = request.RoleIds.Except(validRoleIds).ToList();
-            if (missing.Count > 0)
+        if (role == null)
+        {
+            return new AccountActionResponse
             {
-                return new AccountActionResponse
-                {
-                    IsSuccess = false,
-                    StatusCode = 400,
-                    Message = $"Có {missing.Count} role không tồn tại hoặc đã bị vô hiệu hóa."
-                };
-            }
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
+                ListErrors = { new Errors { Field = "RoleId", Detail = "Role không tồn tại hoặc đã bị vô hiệu hóa." } }
+            };
         }
 
         var account = new Domain.Entities.Account
@@ -97,28 +93,12 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             DateOfBirth = request.DateOfBirth,
             Address = request.Address?.Trim(),
             EmailConfirmed = true,
-            Status = AccountStatusEnum.Active
+            Status = AccountStatusEnum.Active,
+            RoleId = role.Id,
+            RoleAssignedAt = DateTime.UtcNow
         };
 
         await _unitOfWork.Accounts.AddAsync(account);
-
-        foreach (var roleId in validRoleIds)
-        {
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = roleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
-        }
-
-        var roleNames = await _unitOfWork.Roles
-            .GetAllAsync()
-            .Where(r => validRoleIds.Contains(r.Id) && !r.IsDeleted)
-            .Select(r => r.Name)
-            .ToListAsync(cancellationToken);
 
         // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges → atomic với business data.
         await _messageProducer.PublishAsync(new AccountActivatedEvent(
@@ -126,7 +106,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            roleNames,
+            role.Name,
             CreationSource: "AdminCreate"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

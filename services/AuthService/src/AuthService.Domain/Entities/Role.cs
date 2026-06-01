@@ -4,7 +4,8 @@ using SharedKernels.Domain;
 namespace AuthService.Domain.Entities;
 
 /// <summary>
-/// Vai trò người dùng trong hệ thống (Admin, Manager, Technician, Customer...).
+/// Vai trò người dùng trong hệ thống (Admin, Manager, Staff, Customer).
+/// Quan hệ 1-N: 1 Role có thể được gán cho nhiều Account, nhưng mỗi Account chỉ có 1 Role.
 /// </summary>
 public class Role : AuditableEntity
 {
@@ -18,7 +19,7 @@ public class Role : AuditableEntity
 
     public bool IsSystemRole { get; set; } = false;
 
-    public ICollection<AccountRole> AccountRoles { get; set; } = new List<AccountRole>();
+    public ICollection<Account> Accounts { get; set; } = new List<Account>();
 
     public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
 }

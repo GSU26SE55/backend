@@ -18,7 +18,7 @@ public class BatteryAssetFullHandlerTests
         Id = id ?? CustomerId,
         Email = "x@y.com",
         FullName = "x",
-        RolesCsv = "Customer",
+        Role = "Customer",
         IsActive = active,
         IsDeleted = deleted,
         LastSyncedAtUtc = DateTime.UtcNow,
@@ -46,27 +46,14 @@ public class BatteryAssetFullHandlerTests
         CreatedAt = DateTime.UtcNow
     };
 
-    private static BatteryGroup MakeGroup(Site site, Guid? batteryTypeId = null) => new()
-    {
-        Id = Guid.NewGuid(),
-        Name = "G1",
-        Site = site,
-        SiteId = site.Id,
-        BatteryTypeId = batteryTypeId ?? BatteryTypeId,
-        BatteryCount = 0,
-        CreatedAt = DateTime.UtcNow
-    };
-
-    private static BatteryAsset MakeAsset(Guid? id = null, bool deleted = false, Guid? customerId = null, BatteryGroup? group = null) => new()
+    private static BatteryAsset MakeAsset(Guid? id = null, bool deleted = false, Guid? customerId = null, Guid? siteId = null) => new()
     {
         Id = id ?? Guid.NewGuid(),
         SerialNumber = "ABC-123",
         BatteryTypeId = BatteryTypeId,
         CustomerId = customerId ?? CustomerId,
         InstallDate = DateTime.UtcNow.AddDays(-10),
-        BatteryGroup = group,
-        BatteryGroupId = group?.Id,
-        SiteId = group?.SiteId,
+        SiteId = siteId,
         Status = BatteryStatusEnum.Active,
         IsDeleted = deleted,
         CreatedAt = DateTime.UtcNow
@@ -125,52 +112,6 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
-    public async Task Create_GroupMissing_Returns404()
-    {
-        var cmd = BuildCreateCmd();
-        cmd.BatteryGroupId = Guid.NewGuid();
-        var b = new MockUnitOfWorkBuilder()
-            .WithCustomerAccounts(Customer())
-            .WithBatteryTypes(MakeType());
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
-        r.StatusCode.Should().Be(404);
-    }
-
-    [Fact]
-    public async Task Create_GroupBatteryTypeMismatch_Returns409()
-    {
-        var site = MakeSite();
-        var group = MakeGroup(site, batteryTypeId: Guid.NewGuid());
-        var cmd = BuildCreateCmd();
-        cmd.BatteryGroupId = group.Id;
-        var b = new MockUnitOfWorkBuilder()
-            .WithCustomerAccounts(Customer())
-            .WithBatteryTypes(MakeType())
-            .WithSites(site)
-            .WithBatteryGroups(group);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
-        r.StatusCode.Should().Be(409);
-    }
-
-    [Fact]
-    public async Task Create_GroupSiteMismatch_Returns409()
-    {
-        var site1 = MakeSite();
-        var site2 = MakeSite();
-        var group = MakeGroup(site2);
-        var cmd = BuildCreateCmd();
-        cmd.SiteId = site1.Id;
-        cmd.BatteryGroupId = group.Id;
-        var b = new MockUnitOfWorkBuilder()
-            .WithCustomerAccounts(Customer())
-            .WithBatteryTypes(MakeType())
-            .WithSites(site1, site2)
-            .WithBatteryGroups(group);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
-        r.StatusCode.Should().Be(409);
-    }
-
-    [Fact]
     public async Task Create_SiteCustomerMismatch_Returns409()
     {
         var otherCustomer = Guid.NewGuid();
@@ -186,23 +127,19 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
-    public async Task Create_HappyPath_Returns201AndIncrementsGroup()
+    public async Task Create_HappyPath_Returns201()
     {
         var site = MakeSite();
-        var group = MakeGroup(site);
         var cmd = BuildCreateCmd();
         cmd.SiteId = site.Id;
-        cmd.BatteryGroupId = group.Id;
         cmd.WarrantyEndDate = DateTime.UtcNow.AddDays(-1); // hết hạn → WarrantyStatus = Expired
         var b = new MockUnitOfWorkBuilder()
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType())
-            .WithSites(site)
-            .WithBatteryGroups(group);
+            .WithSites(site);
         var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.StatusCode.Should().Be(201);
-        group.BatteryCount.Should().Be(1);
         b.BatteryAssets.Verify(x => x.AddAsync(It.IsAny<BatteryAsset>()), Times.Once);
     }
 
@@ -239,20 +176,14 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
-    public async Task Update_HappyPath_UpdatesGroupCounts()
+    public async Task Update_HappyPath_Succeeds()
     {
         var site = MakeSite();
-        var oldGroup = MakeGroup(site);
-        oldGroup.BatteryCount = 5;
-        var newGroup = MakeGroup(site);
-        newGroup.BatteryCount = 0;
-
-        var asset = MakeAsset(group: oldGroup);
+        var asset = MakeAsset();
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryTypes(MakeType())
             .WithBatteryAssets(asset)
-            .WithSites(site)
-            .WithBatteryGroups(oldGroup, newGroup);
+            .WithSites(site);
 
         var cmd = new UpdateBatteryAssetCommand
         {
@@ -262,14 +193,12 @@ public class BatteryAssetFullHandlerTests
             CustomerId = CustomerId,
             InstallDate = DateTime.UtcNow.AddDays(-1),
             SiteId = site.Id,
-            BatteryGroupId = newGroup.Id,
             Status = BatteryStatusEnum.Active,
             WarrantyStatus = WarrantyStatusEnum.Active
         };
         var r = await new UpdateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
-        oldGroup.BatteryCount.Should().Be(4);
-        newGroup.BatteryCount.Should().Be(1);
+        asset.SerialNumber.Should().Be("ABC-999");
     }
 
     // ---- Delete ----
@@ -282,18 +211,13 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
-    public async Task Delete_WithGroup_DecrementsGroup()
+    public async Task Delete_HappyPath_Succeeds()
     {
-        var site = MakeSite();
-        var group = MakeGroup(site);
-        group.BatteryCount = 3;
-        var asset = MakeAsset(group: group);
+        var asset = MakeAsset();
         var b = new MockUnitOfWorkBuilder()
-            .WithBatteryAssets(asset)
-            .WithBatteryGroups(group);
+            .WithBatteryAssets(asset);
         var r = await new DeleteBatteryAssetCommandHandler(b.Build()).Handle(new DeleteBatteryAssetCommand { Id = asset.Id }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
-        group.BatteryCount.Should().Be(2);
     }
 
     // ---- Restore ----
@@ -332,16 +256,13 @@ public class BatteryAssetFullHandlerTests
     public async Task Restore_HappyPath_Succeeds()
     {
         var site = MakeSite();
-        var group = MakeGroup(site);
-        var deleted = MakeAsset(deleted: true, group: group);
+        var deleted = MakeAsset(deleted: true, siteId: site.Id);
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(deleted)
-            .WithSites(site)
-            .WithBatteryGroups(group);
+            .WithSites(site);
         var r = await new RestoreBatteryAssetCommandHandler(b.Build()).Handle(new RestoreBatteryAssetCommand { Id = deleted.Id }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         deleted.IsDeleted.Should().BeFalse();
-        group.BatteryCount.Should().Be(1);
     }
 
     // ---- Transfer ----
@@ -372,23 +293,18 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
-    public async Task Transfer_HappyPath_DecrementsGroupAndResets()
+    public async Task Transfer_HappyPath_Resets()
     {
         var site = MakeSite();
-        var group = MakeGroup(site);
-        group.BatteryCount = 2;
-        var asset = MakeAsset(group: group);
+        var asset = MakeAsset(siteId: site.Id);
         var newCustomerId = Guid.NewGuid();
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(asset)
-            .WithBatteryGroups(group)
             .WithCustomerAccounts(Customer(id: newCustomerId));
         var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build()).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = newCustomerId, Reason = "moved" }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         asset.CustomerId.Should().Be(newCustomerId);
         asset.SiteId.Should().BeNull();
-        asset.BatteryGroupId.Should().BeNull();
-        group.BatteryCount.Should().Be(1);
     }
 
     // ---- Queries ----

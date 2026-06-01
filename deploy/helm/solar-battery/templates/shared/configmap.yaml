@@ -26,6 +26,9 @@ data:
   GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/auth-service/api/auth/google/callback"
   GoogleOAuth__FrontendCallbackUrl: "https://{{ .Values.global.domain }}/auth/google-callback"
 
+  # Admin invite email link — EmailService append ?token=...
+  AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
+
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}
   {{ $key }}: {{ $value | quote }}

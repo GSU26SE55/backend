@@ -151,6 +151,18 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("provider");
 
+                    b.Property<DateTime?>("RoleAssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("role_assigned_at");
+
+                    b.Property<Guid?>("RoleAssignedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_assigned_by");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -189,6 +201,8 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasIndex("PhoneNumber")
                         .IsUnique()
                         .HasFilter("\"phone_number\" IS NOT NULL");
+
+                    b.HasIndex("RoleId");
 
                     b.HasIndex("Status");
 
@@ -267,75 +281,6 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasIndex("IsDeleted");
 
                     b.ToTable("account_profiles", (string)null);
-                });
-
-            modelBuilder.Entity("AuthService.Domain.Entities.AccountRole", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("assigned_at");
-
-                    b.Property<Guid?>("AssignedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("assigned_by");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<DateTime?>("ExpiredAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expired_at");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccountId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("RoleId");
-
-                    b.HasIndex("AccountId", "RoleId")
-                        .IsUnique()
-                        .HasFilter("\"is_deleted\" = false");
-
-                    b.ToTable("account_roles", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.AuditLog", b =>
@@ -1064,6 +1009,17 @@ namespace AuthService.Infrastructure.Migrations
                     b.ToTable("staff_skills", (string)null);
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Role", "Role")
+                        .WithMany("Accounts")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.AccountProfile", b =>
                 {
                     b.HasOne("AuthService.Domain.Entities.Account", "Account")
@@ -1073,25 +1029,6 @@ namespace AuthService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
-                });
-
-            modelBuilder.Entity("AuthService.Domain.Entities.AccountRole", b =>
-                {
-                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
-                        .WithMany("AccountRoles")
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AuthService.Domain.Entities.Role", "Role")
-                        .WithMany("AccountRoles")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Account");
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
@@ -1159,8 +1096,6 @@ namespace AuthService.Infrastructure.Migrations
 
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
                 {
-                    b.Navigation("AccountRoles");
-
                     b.Navigation("Profile");
 
                     b.Navigation("RefreshTokens");
@@ -1175,7 +1110,7 @@ namespace AuthService.Infrastructure.Migrations
 
             modelBuilder.Entity("AuthService.Domain.Entities.Role", b =>
                 {
-                    b.Navigation("AccountRoles");
+                    b.Navigation("Accounts");
 
                     b.Navigation("RolePermissions");
                 });

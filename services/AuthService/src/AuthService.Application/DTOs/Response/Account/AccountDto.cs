@@ -18,7 +18,17 @@ public class AccountDto
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-    public List<string> Roles { get; set; } = new();
+    /// <summary>Id của role hiện tại của account (quan hệ 1-N: Role → Account).</summary>
+    public Guid RoleId { get; set; }
+
+    /// <summary>Tên role hiện tại — vd "Admin", "Customer". Có thể empty nếu role bị xóa/disable.</summary>
+    public string Role { get; set; } = string.Empty;
+
+    /// <summary>Thời điểm role được gán/đổi lần cuối.</summary>
+    public DateTime? RoleAssignedAt { get; set; }
+
+    /// <summary>AccountId của người gán/đổi role lần cuối — null nếu là seed/self-register.</summary>
+    public Guid? RoleAssignedBy { get; set; }
     public AccountProfileDto? Profile { get; set; }
     public StaffProfileDto? StaffProfile { get; set; }
     public string? DisplayAvatarUrl { get; set; }

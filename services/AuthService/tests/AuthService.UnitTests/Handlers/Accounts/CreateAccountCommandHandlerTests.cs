@@ -17,9 +17,16 @@ public class CreateAccountCommandHandlerTests
     }
 
     [Fact]
-    public async Task Create_NewEmail_NoRoles_CreatesActiveAccount()
+    public async Task Create_NewEmail_WithValidRole_CreatesActiveAccount()
     {
-        var (uow, accounts, _, _, accountRoles) = MockUnitOfWork.Build();
+        var role = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Staff",
+            NormalizedName = "STAFF",
+            Status = RoleStatusEnum.Active
+        };
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
@@ -27,16 +34,18 @@ public class CreateAccountCommandHandlerTests
             Email = "new@example.com",
             Password = "Pass123!",
             FullName = "New",
-            PhoneNumber = "0900111"
+            PhoneNumber = "0900111",
+            RoleId = role.Id
         }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         resp.StatusCode.Should().Be(201);
         accounts.Verify(r => r.AddAsync(It.Is<global::AuthService.Domain.Entities.Account>(a =>
             a.EmailConfirmed == true &&
-            a.Status == AccountStatusEnum.Active
+            a.Status == AccountStatusEnum.Active &&
+            a.RoleId == role.Id &&
+            a.RoleAssignedAt != null
         )), Times.Once);
-        accountRoles.Verify(r => r.AddAsync(It.IsAny<AccountRole>()), Times.Never);
     }
 
     [Fact]
@@ -49,14 +58,15 @@ public class CreateAccountCommandHandlerTests
             PasswordHash = "x",
             FullName = "U"
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
             Email = "dup@example.com",
             Password = "Pass123!",
-            FullName = "Other"
+            FullName = "Other",
+            RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(409);
@@ -73,7 +83,7 @@ public class CreateAccountCommandHandlerTests
             FullName = "U",
             PhoneNumber = "0900111"
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
@@ -81,36 +91,17 @@ public class CreateAccountCommandHandlerTests
             Email = "new@example.com",
             Password = "Pass123!",
             FullName = "New",
-            PhoneNumber = "0900111"
+            PhoneNumber = "0900111",
+            RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(409);
     }
 
     [Fact]
-    public async Task Create_WithValidRoles_AssignsAll()
-    {
-        var roleA = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "A", NormalizedName = "A", Status = RoleStatusEnum.Active };
-        var roleB = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "B", NormalizedName = "B", Status = RoleStatusEnum.Active };
-        var (uow, _, _, _, accountRoles) = MockUnitOfWork.Build(roleSeed: new[] { roleA, roleB });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
-
-        var resp = await handler.Handle(new CreateAccountCommand
-        {
-            Email = "new@example.com",
-            Password = "Pass123!",
-            FullName = "New",
-            RoleIds = new List<Guid> { roleA.Id, roleB.Id }
-        }, CancellationToken.None);
-
-        resp.IsSuccess.Should().BeTrue();
-        accountRoles.Verify(r => r.AddAsync(It.IsAny<AccountRole>()), Times.Exactly(2));
-    }
-
-    [Fact]
     public async Task Create_WithMissingRole_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new CreateAccountCommand
@@ -118,7 +109,7 @@ public class CreateAccountCommandHandlerTests
             Email = "new@example.com",
             Password = "Pass123!",
             FullName = "New",
-            RoleIds = new List<Guid> { Guid.NewGuid() }
+            RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(400);

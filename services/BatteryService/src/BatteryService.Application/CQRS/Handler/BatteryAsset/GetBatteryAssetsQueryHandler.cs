@@ -22,8 +22,7 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
             .GetAllAsync()
             .AsNoTracking()
             .Include(asset => asset.BatteryType)
-            .Include(asset => asset.Site)
-            .Include(asset => asset.BatteryGroup);
+            .Include(asset => asset.Site);
 
         if (!request.IncludeDeleted)
             query = query.Where(asset => !asset.IsDeleted);
@@ -44,9 +43,6 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
 
         if (request.SiteId.HasValue)
             query = query.Where(asset => asset.SiteId == request.SiteId.Value);
-
-        if (request.BatteryGroupId.HasValue)
-            query = query.Where(asset => asset.BatteryGroupId == request.BatteryGroupId.Value);
 
         if (request.Status.HasValue)
             query = query.Where(asset => asset.Status == request.Status.Value);
@@ -74,8 +70,6 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
                 BatteryTypeName = asset.BatteryType.Name,
                 SiteId = asset.SiteId.HasValue ? asset.SiteId.Value.ToString() : null,
                 SiteName = asset.Site != null ? asset.Site.Name : null,
-                BatteryGroupId = asset.BatteryGroupId.HasValue ? asset.BatteryGroupId.Value.ToString() : null,
-                BatteryGroupName = asset.BatteryGroup != null ? asset.BatteryGroup.Name : null,
                 CustomerId = asset.CustomerId.ToString(),
                 CustomerName = account != null ? account.FullName : string.Empty,
                 InstallDate = asset.InstallDate,
