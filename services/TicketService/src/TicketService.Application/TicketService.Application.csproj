@@ -9,7 +9,6 @@
   <ItemGroup>
     <Folder Include="CQRS\Command\" />
     <Folder Include="CQRS\Handler\" />
-    <Folder Include="DTOs\Responses\" />
     <Folder Include="StateMachine\" />
   </ItemGroup>
 

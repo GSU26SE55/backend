@@ -1,7 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.DTOs.Response;
+using TicketService.Application.CQRS.Query.Ticket;
+using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 

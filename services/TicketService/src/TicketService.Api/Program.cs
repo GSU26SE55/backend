@@ -56,9 +56,12 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[TicketService] No pending migrations.");
     }
 
-    var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
-    await seeder.SeedAsync();
-    Console.WriteLine("[TicketService] Seed data checked.");
+    if (!app.Environment.IsProduction())
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
+        await seeder.SeedAsync();
+        Console.WriteLine("[TicketService] Seed data checked for non-production environment.");
+    }
 }
 
 app.UseSharedInfrastructure();

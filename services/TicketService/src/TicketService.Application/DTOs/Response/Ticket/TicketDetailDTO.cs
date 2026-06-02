@@ -1,6 +1,7 @@
+using TicketService.Application.DTOs.Response.Maintenance;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response;
+namespace TicketService.Application.DTOs.Response.Ticket;
 
 public class TicketDetailDTO : TicketDTO
 {

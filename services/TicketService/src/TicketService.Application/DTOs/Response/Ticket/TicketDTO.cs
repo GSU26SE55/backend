@@ -1,6 +1,7 @@
+using TicketService.Application.DTOs.Response.SLA;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response;
+namespace TicketService.Application.DTOs.Response.Ticket;
 
 public class TicketDTO
 {

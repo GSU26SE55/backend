@@ -1,7 +1,7 @@
 using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.ManagerQueue;
-using TicketService.Application.CQRS.Query;
+using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;

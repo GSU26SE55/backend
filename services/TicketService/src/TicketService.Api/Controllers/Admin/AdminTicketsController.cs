@@ -12,10 +12,9 @@ namespace TicketService.Api.Controllers.Admin;
 /// Toàn bộ endpoint trong controller này yêu cầu quyền Manager/Admin.
 /// </summary>
 [ApiController]
-[Route("api/v1/admin/tickets")]
+[Route("api/admin/tickets")]
 [Authorize(Roles = "Manager,Admin")]
 [Produces("application/json")]
-[ApiExplorerSettings(GroupName = "admin")]
 public class AdminTicketsController : ControllerBase
 {
     private readonly IMediator _mediator;

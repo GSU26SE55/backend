@@ -1,6 +1,6 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response;
+namespace TicketService.Application.DTOs.Response.SLA;
 
 public class SlaTimerDTO
 {

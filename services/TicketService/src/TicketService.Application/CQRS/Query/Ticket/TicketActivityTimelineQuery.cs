@@ -1,8 +1,8 @@
 using MediatR;
 using SharedContracts.Common.Responses;
-using TicketService.Application.DTOs.Response;
+using TicketService.Application.DTOs.Response.Ticket;
 
-namespace TicketService.Application.CQRS.Query;
+namespace TicketService.Application.CQRS.Query.Ticket;
 
 public class TicketActivityTimelineQuery : IRequest<CommonResponse<List<TicketActivityDTO>>>
 {

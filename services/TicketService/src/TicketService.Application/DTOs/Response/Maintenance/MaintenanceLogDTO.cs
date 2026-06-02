@@ -1,6 +1,6 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response;
+namespace TicketService.Application.DTOs.Response.Maintenance;
 
 public class MaintenanceLogDTO
 {

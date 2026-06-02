@@ -4,8 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Tickets;
-using TicketService.Application.CQRS.Query;
-using TicketService.Application.DTOs.Response;
+using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
 
 namespace TicketService.Api.Controllers;
@@ -15,7 +14,7 @@ namespace TicketService.Api.Controllers;
 /// Bao gồm các hành động: tạo mới, bắt đầu xử lý, tạm dừng, tiếp tục, giải quyết và yêu cầu chuyển cấp.
 /// </summary>
 [ApiController]
-[Route("api/v1/tickets")]
+[Route("api/tickets")]
 [Authorize]
 [Produces("application/json")]
 public class TicketController : ControllerBase
