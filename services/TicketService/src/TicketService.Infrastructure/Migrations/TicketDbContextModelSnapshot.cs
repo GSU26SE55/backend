@@ -308,63 +308,45 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("CorrelationId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("correlation_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
+                    b.Property<Guid>("AggregateId")
                         .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("event_type");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
+                        .HasColumnName("aggregate_id");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("text")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
                         .HasColumnName("last_error");
 
-                    b.Property<DateTime>("OccurredAt")
+                    b.Property<DateTime>("OccurredAtUtc")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("occurred_at");
+                        .HasColumnName("occurred_at_utc");
 
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("payload");
 
-                    b.Property<DateTime?>("ProcessedAt")
+                    b.Property<DateTime?>("ProcessedAtUtc")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("processed_at");
+                        .HasColumnName("processed_at_utc");
 
                     b.Property<int>("RetryCount")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("retry_count");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("type");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OccurredAt");
-
-                    b.HasIndex("ProcessedAt");
+                    b.HasIndex("OccurredAtUtc")
+                        .HasDatabaseName("idx_outbox_pending")
+                        .HasFilter("processed_at_utc IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
                 });
@@ -460,13 +442,25 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("breach_at");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("CurrentPauseStartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("current_pause_started_at");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("DueAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastAutoResumeAt")
                         .HasColumnType("timestamp with time zone")
@@ -508,6 +502,9 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("total_paused_minutes");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("WarningSentAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("warning_sent_at");
@@ -516,7 +513,8 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("TicketId");
+                    b.HasIndex("TicketId")
+                        .IsUnique();
 
                     b.ToTable("sla_timers", (string)null);
                 });
@@ -580,6 +578,9 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("skill_codes");
+
+                    b.Property<int>("SkillTier")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -704,9 +705,9 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rating_comment");
 
-                    b.Property<string>("RejectionReason")
+                    b.Property<string>("Reason")
                         .HasColumnType("text")
-                        .HasColumnName("rejection_reason");
+                        .HasColumnName("reason");
 
                     b.Property<int>("ReopenCount")
                         .HasColumnType("integer")
@@ -789,6 +790,15 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("NewValue")
                         .HasColumnType("text")
                         .HasColumnName("new_value");
@@ -804,6 +814,9 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid>("TicketId")
                         .HasColumnType("uuid")
                         .HasColumnName("ticket_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -1010,7 +1023,7 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.MaintenanceLog", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
-                        .WithMany()
+                        .WithMany("MaintenanceLogs")
                         .HasForeignKey("TicketId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -1032,8 +1045,8 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.SlaTimer", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
-                        .WithMany()
-                        .HasForeignKey("TicketId")
+                        .WithOne("SlaTimer")
+                        .HasForeignKey("TicketService.Domain.Entities.SlaTimer", "TicketId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1043,7 +1056,7 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.TicketActivity", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
-                        .WithMany()
+                        .WithMany("Activities")
                         .HasForeignKey("TicketId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1065,12 +1078,23 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.TicketComment", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
-                        .WithMany()
+                        .WithMany("Comments")
                         .HasForeignKey("TicketId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.Ticket", b =>
+                {
+                    b.Navigation("Activities");
+
+                    b.Navigation("Comments");
+
+                    b.Navigation("MaintenanceLogs");
+
+                    b.Navigation("SlaTimer");
                 });
 #pragma warning restore 612, 618
         }

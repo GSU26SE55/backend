@@ -22,7 +22,7 @@ builder.Services.AddSwaggerGen(options =>
         options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 });
 
-builder.Services.AddTicketServiceApplication();
+builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()
@@ -40,20 +40,28 @@ using (var scope = app.Services.CreateScope())
     var pending = db.Database.GetPendingMigrations().ToList();
     Console.WriteLine($"[TicketService] Pending migrations: {pending.Count}");
 
-    if (pending.Any())
+    var skipMigration = builder.Configuration.GetValue<bool>("SkipMigration");
+    if (pending.Any() && !skipMigration)
     {
         Console.WriteLine("[TicketService] Running database migrations...");
         db.Database.Migrate();
         Console.WriteLine("[TicketService] Migration completed.");
+    }
+    else if (skipMigration)
+    {
+        Console.WriteLine("[TicketService] Skipping database migrations (SkipMigration=true).");
     }
     else
     {
         Console.WriteLine("[TicketService] No pending migrations.");
     }
 
-    var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
-    await seeder.SeedAsync();
-    Console.WriteLine("[TicketService] Seed data checked.");
+    if (!app.Environment.IsProduction())
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
+        await seeder.SeedAsync();
+        Console.WriteLine("[TicketService] Seed data checked for non-production environment.");
+    }
 }
 
 app.UseSharedInfrastructure();

@@ -38,10 +38,12 @@
     <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/Services/TicketService/">
-    <Project Path="services/TicketService/src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" Id="89d34082-bd49-4bbd-b815-f31c55aaceac" />
-    <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" Id="1fe6dbf1-1577-42c1-99cb-ba4b07d38c4d" />
-    <Project Path="services\TicketService\src\TicketService.Application\TicketService.Application.csproj" Id="7d92f5bb-6b7c-4f49-9781-bb80d707a3b1" />
-    <Project Path="services\TicketService\src\TicketService.Domain\TicketService.Domain.csproj" Id="e8beb6cb-58a2-4b15-b2ae-1f4ae3eb59b3" />
+    <Project Path="services/TicketService/src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Application\TicketService.Application.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Domain\TicketService.Domain.csproj" />
+    <Project Path="services\TicketService\tests\TicketService.IntergrationTests\TicketService.IntergrationTests.csproj" Type="Classic C#" />
+    <Project Path="services\TicketService\tests\TicketService.UnitTests\TicketService.UnitTests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/Shared/">
     <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />

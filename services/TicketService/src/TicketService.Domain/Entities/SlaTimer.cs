@@ -3,7 +3,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Domain.Entities;
 
-public class SlaTimer : BaseEntity
+public class SlaTimer : AuditableEntity
 {
     public Guid TicketId { get; set; }
     public TicketPriorityEnum Priority { get; set; }

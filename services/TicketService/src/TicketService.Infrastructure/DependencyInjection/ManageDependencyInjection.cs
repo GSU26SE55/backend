@@ -1,9 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using SharedContracts.Interfaces;
+using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
+using TicketService.Application.Common.Models;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
+using TicketService.Infrastructure.BackgroundServices;
+using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
+using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
 
@@ -15,10 +24,28 @@ public static class ManageDependencyInjection
     {
         services.AddDatabase(configuration);
         services.AddRepositories();
+        services.AddHelpers();
+        services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
+        services.AddMessageBus(configuration);
 
         return services;
+    }
+
+    private static void AddOutbox(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
+        services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
+        services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddHostedService<OutboxRelayBackgroundService>();
+    }
+
+    private static void AddHelpers(this IServiceCollection services)
+    {
+        services.AddScoped<IPriorityCalculator, PriorityCalculator>();
+        services.AddScoped<IActivityLogger, ActivityLogger>();
+        services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

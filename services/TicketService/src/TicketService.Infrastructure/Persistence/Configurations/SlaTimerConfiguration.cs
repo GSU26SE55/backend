@@ -65,8 +65,8 @@ public class SlaTimerConfiguration : IEntityTypeConfiguration<SlaTimer>
         builder.HasIndex(e => e.Status);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
-            .HasForeignKey(e => e.TicketId)
+            .WithOne(e => e.SlaTimer)
+            .HasForeignKey<SlaTimer>(e => e.TicketId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

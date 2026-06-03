@@ -95,7 +95,7 @@ public class MaintenanceLogConfiguration : IEntityTypeConfiguration<MaintenanceL
         builder.HasIndex(e => e.LogType);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
+            .WithMany(e => e.MaintenanceLogs)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Restrict);
     }

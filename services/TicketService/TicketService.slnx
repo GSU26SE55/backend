@@ -6,4 +6,6 @@
     <Project Path="src/TicketService.Application/TicketService.Application.csproj" />
     <Project Path="src/TicketService.Domain/TicketService.Domain.csproj" />
     <Project Path="src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" />
+    <Project Path="tests/TicketService.IntergrationTests/TicketService.IntergrationTests.csproj" />
+    <Project Path="tests/TicketService.UnitTests/TicketService.UnitTests.csproj" />
 </Solution>

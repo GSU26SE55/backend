@@ -12,6 +12,7 @@ public class StaffAccount : AuditableEntity
     public AccountStatusEnum Status { get; set; }
     public bool IsAvailable { get; set; } = true;
     public int MaxConcurrentTickets { get; set; } = 10;
+    public StaffSkillTierEnum SkillTier { get; set; } = StaffSkillTierEnum.Generalist;
     public List<string> SkillCodes { get; set; } = new();
     public DateTime LastSyncedAt { get; set; }
 }

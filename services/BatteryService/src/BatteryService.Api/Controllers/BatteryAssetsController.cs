@@ -357,7 +357,7 @@ public class BatteryAssetsController : ControllerBase
     /// - Set <c>CustomerId = NewCustomerId</c>.
     ///
     /// Lưu ý:
-    /// - Sau khi transfer, Admin nên gán lại Site cho asset qua <c>PUT /api/battery-assets/{id}</c> nếu Customer mới có Site phù hợp.
+    /// - After after transfer, Admin nên gán lại Site cho asset qua <c>PUT /api/battery-assets/{id}</c> nếu Customer mới có Site phù hợp.
     /// - SensorReading lịch sử KHÔNG bị xóa - giữ nguyên cho audit/analytics, nhưng được tính cho owner mới từ thời điểm transfer.
     /// - Alert lịch sử của asset cũng giữ nguyên.
     /// </remarks>

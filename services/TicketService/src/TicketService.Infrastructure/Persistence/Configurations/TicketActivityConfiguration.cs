@@ -48,7 +48,7 @@ public class TicketActivityConfiguration : IEntityTypeConfiguration<TicketActivi
         builder.HasIndex(e => e.ActorUserId);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
+            .WithMany(e => e.Activities)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
     }

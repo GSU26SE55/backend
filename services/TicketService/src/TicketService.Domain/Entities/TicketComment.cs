@@ -9,9 +9,9 @@ public class TicketComment : AuditableEntity
     public Guid AuthorUserId { get; set; }
     public ActorRoleEnum AuthorRole { get; set; }
     public string? AuthorDisplayName { get; set; }
-    public string Body { get; set; }
+    public required string Body { get; set; }
     public bool IsInternal { get; set; }
     public List<Guid> AttachmentFileIds { get; set; } = new();
 
-    public Ticket Ticket { get; set; }
+    public required Ticket Ticket { get; set; }
 }
