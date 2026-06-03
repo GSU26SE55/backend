@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.TicketGetById;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -49,7 +49,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Admin"]
+            Id = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Admin"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -65,7 +67,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Manager"]
+            Id = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Manager"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -81,7 +85,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = customerId, ActorRoles = ["Customer"]
+            Id = ticket.Id,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -96,7 +102,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Customer"]
+            Id = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Customer"]
         }, default);
 
         result.IsSuccess.Should().BeFalse();
@@ -112,7 +120,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = staffId, ActorRoles = ["Staff"]
+            Id = ticket.Id,
+            ActorUserId = staffId,
+            ActorRoles = ["Staff"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -127,7 +137,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Staff"]
+            Id = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Staff"]
         }, default);
 
         result.IsSuccess.Should().BeFalse();
@@ -141,7 +153,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = Guid.NewGuid(), ActorUserId = Guid.NewGuid(), ActorRoles = ["Admin"]
+            Id = Guid.NewGuid(),
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Admin"]
         }, default);
 
         result.IsSuccess.Should().BeFalse();
@@ -166,7 +180,9 @@ public class TicketGetByIdQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetByIdQuery
         {
-            Id = ticket.Id, ActorUserId = customerId, ActorRoles = ["Customer"]
+            Id = ticket.Id,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"]
         }, default);
 
         result.Data!.Comments.Should().HaveCount(1);

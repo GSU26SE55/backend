@@ -31,6 +31,7 @@ coverage/
 .gemini/
 AGENTS.md
 *.skill
+CLAUDE.local.md
 
 # ---------- Logs ----------
 *.log

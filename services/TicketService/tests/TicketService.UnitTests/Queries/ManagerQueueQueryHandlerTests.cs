@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.ManagerQueue;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -26,19 +26,19 @@ public class ManagerQueueQueryHandlerTests
         TicketCategoryEnum category = TicketCategoryEnum.Other,
         string code = "T-001",
         DateTime? createdAt = null) => new()
-    {
-        Id = Guid.NewGuid(),
-        Code = code,
-        BatteryAssetId = Guid.NewGuid(),
-        CustomerId = Guid.NewGuid(),
-        Title = "Test",
-        Description = "desc",
-        Category = category,
-        Priority = priority,
-        Status = status,
-        Origin = TicketOriginEnum.ManualByCustomer,
-        CreatedAt = createdAt ?? DateTime.UtcNow
-    };
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            BatteryAssetId = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            Title = "Test",
+            Description = "desc",
+            Category = category,
+            Priority = priority,
+            Status = status,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            CreatedAt = createdAt ?? DateTime.UtcNow
+        };
 
     private void SetupMock(List<Ticket> tickets)
         => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
@@ -87,7 +87,9 @@ public class ManagerQueueQueryHandlerTests
 
         var result = await _handler.Handle(new ManagerQueueQuery
         {
-            Priority = TicketPriorityEnum.P1Critical, PageNumber = 1, PageSize = 10
+            Priority = TicketPriorityEnum.P1Critical,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -103,7 +105,9 @@ public class ManagerQueueQueryHandlerTests
 
         var result = await _handler.Handle(new ManagerQueueQuery
         {
-            Category = TicketCategoryEnum.Overheat, PageNumber = 1, PageSize = 10
+            Category = TicketCategoryEnum.Overheat,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
