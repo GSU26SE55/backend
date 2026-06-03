@@ -19,7 +19,6 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
     {
         var entity = await _unitOfWork.BatteryAssets
             .GetAllAsync()
-            .Include(asset => asset.BatteryGroup)
             .FirstOrDefaultAsync(asset => asset.Id == request.Id && !asset.IsDeleted, cancellationToken);
 
         if (entity is null)
@@ -60,17 +59,9 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
             };
         }
 
-        if (entity.BatteryGroupId.HasValue && entity.BatteryGroup is not null)
-        {
-            entity.BatteryGroup.BatteryCount = Math.Max(0, entity.BatteryGroup.BatteryCount - 1);
-            _unitOfWork.BatteryGroups.UpdateAsync(entity.BatteryGroup);
-        }
-
         entity.CustomerId = request.NewCustomerId;
         entity.SiteId = null;
         entity.Site = null;
-        entity.BatteryGroupId = null;
-        entity.BatteryGroup = null;
         _unitOfWork.BatteryAssets.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

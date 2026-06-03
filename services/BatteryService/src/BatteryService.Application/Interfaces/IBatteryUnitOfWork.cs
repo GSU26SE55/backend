@@ -11,8 +11,6 @@ public interface IBatteryUnitOfWork : IUnitOfWork
 
     IGenericRepository<Site> Sites { get; }
 
-    IGenericRepository<BatteryGroup> BatteryGroups { get; }
-
     IGenericRepository<CustomerAccount> CustomerAccounts { get; }
 
     IGenericRepository<ThresholdConfig> ThresholdConfigs { get; }

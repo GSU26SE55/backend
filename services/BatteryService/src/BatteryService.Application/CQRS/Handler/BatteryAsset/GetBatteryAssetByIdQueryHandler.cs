@@ -24,7 +24,6 @@ public class GetBatteryAssetByIdQueryHandler : IRequestHandler<GetBatteryAssetBy
             .AsNoTracking()
             .Include(asset => asset.BatteryType)
             .Include(asset => asset.Site)
-            .Include(asset => asset.BatteryGroup)
             .FirstOrDefaultAsync(asset => asset.Id == request.Id && !asset.IsDeleted, cancellationToken);
 
         if (entity is null)

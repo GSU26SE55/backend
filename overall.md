@@ -111,11 +111,11 @@
 
 ### 0.2. CHƯA có — Roadmap (phần chính document này)
 
-| Service / Module | Priority | Section | Effort ước tính |
+| Service / Module | Status | Section | Details |
 |------------------|----------|---------|-----------------|
-| `BatteryService` (4 dự án, 30+ files CQRS) | 🔴 P0 | §1 | 3 sprint |
+| `BatteryService` | ✅ Done | §1 | Core CRUD + Sensor batch ingest + Threshold detection + Alert deduplication |
+| `TicketService` | ✅ Done | §2 | CQRS + State Machine (12+ states) + SLA Timer + Activity Timeline + Manager Approval + Reopen logic |
 | IoT Gateway backend + Device Management | 🔴 P0 | §52/§52bis + `iot.md` | 1 sprint song song + hardware track |
-| `TicketService` (4 dự án, 50+ files CQRS, state machine) | 🔴 P0 | §2 | 4 sprint |
 | `NotificationService` (4 dự án, consumers + Expo push) | 🟠 P1 | §3 | 2 sprint |
 | KnowledgeBase (module nội bộ TicketService) | 🟡 P2 | §4 | 0.5 sprint |
 | Reporting endpoints (mỗi service expose) | 🟡 P2 | §5 | 1 sprint |
@@ -1560,7 +1560,8 @@ public enum TicketStatusEnum {
     ClosedPendingRate = 10,
     Closed = 11,
     ClosedRejected = 12,
-    Incident = 13
+    Incident = 13,
+    Approved = 14
 }
 ```
 
@@ -1570,7 +1571,9 @@ public enum TicketStatusEnum {
 |-----------|---------------|-----------------|--------------|
 | `*` → `New` | System (initial) | — | Activity Created |
 | `New` → `Open` | Manager / System | — | Activity StatusChanged |
-| `Open` → `Assigned` | Manager | `Priority`, `AssignedStaffId` | Start SlaTimer, publish TicketAssignedEvent, Activity StaffAssigned + PriorityAssigned |
+| `Open` → `Approved` | Manager | `Priority`, `Impact`, `Urgency` | **Triage Success**: Phê duyệt tính hợp lệ, chưa gán Staff |
+| `Open` → `ClosedRejected` | Manager | `RejectionReason` | **Triage Fail**: Từ chối trực tiếp ticket không hợp lệ |
+| `Approved` → `Assigned` | Manager | `AssignedStaffId` | **Assignment**: Gán Staff, Start SlaTimer, publish TicketAssignedEvent |
 | `Assigned` → `InProgress` | AssignedStaff | — | Activity StatusChanged |
 | `InProgress` → `WaitingCustomer` | Staff | `Reason`, `Note` | Pause SlaTimer, create SlaPauseEvent |
 | `InProgress` → `WaitingParts` | Staff | `Reason`, `Note` | Same as above |
@@ -3711,15 +3714,15 @@ GitHub Actions step:
 ### Sprint 4 (22/6–5/7/2026)
 **Goal:** TicketService foundation only — service skeleton, schema, state machine, basic lifecycle commands/queries. Không phát triển song song BatteryService advanced monitoring trong sprint này.
 **Tasks:**
-- [ ] Tạo solution skeleton `services/TicketService/` — #83
-- [ ] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
-- [ ] `TicketStateMachine` class + 30+ transition unit tests — #84
-- [ ] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
-- [ ] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
-- [ ] Code generation utility (TKT-YYMM-NNNN) — #87
-- [ ] Outbox + relay service — #88
-- [ ] Coverage ≥ 80% — #88
-- [ ] **B3** — Priority Calculation Matrix: thêm `ImpactScopeEnum`, `UrgencyLevelEnum`, field `Ticket.ImpactScope` + `Ticket.UrgencyLevel`, `IPriorityCalculator` + impl, áp dụng trong `TicketAssignCommand`. Schema PHẢI vào migration `InitialTicketSchema` ngay từ Sprint này (xem §2.4bis) — #149
+- [x] Tạo solution skeleton `services/TicketService/` — #83
+- [x] Entities + migration `InitialTicketSchema` (Ticket, SlaTimer, SlaPauseEvent, TicketActivity, TicketComment, MaintenanceLog, TicketAttachment, OutboxMessage, **CustomerAccount, StaffAccount** — read-model cache từ AuthService, xem §2.7 Read-model) — #83
+- [x] `TicketStateMachine` class + 30+ transition unit tests — #84
+- [x] Commands: Create, Assign, Start, Hold, Resume, Resolve, Approve, Reject (8 commands) — #85
+- [x] Queries: GetById, GetList, MyAsCustomer, MyAsStaff, ManagerQueue, ActivityTimeline (6) — #86
+- [x] Code generation utility (TKT-YYMM-NNNN) — #87
+- [x] Outbox + relay service — #88
+- [x] Coverage ≥ 80% — #88
+- [x] **B3** — Priority Calculation Matrix: thêm `ImpactScopeEnum`, `UrgencyLevelEnum`, field `Ticket.ImpactScope` + `Ticket.UrgencyLevel`, `IPriorityCalculator` + impl, áp dụng trong `TicketAssignCommand`. Schema PHẢI vào migration `InitialTicketSchema` ngay từ Sprint này (xem §2.4bis) — #149
 
 ### Sprint 5 (6/7–19/7/2026)
 **Goal:** TicketService workflow integration — SLA, pause/resume, auto-create from Battery anomaly, maintenance log/comment/attachment.

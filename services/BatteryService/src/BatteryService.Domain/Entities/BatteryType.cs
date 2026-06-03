@@ -22,6 +22,4 @@ public class BatteryType : AuditableEntity
     public ICollection<BatteryAsset> Assets { get; set; } = new List<BatteryAsset>();
 
     public ICollection<ThresholdConfig> ThresholdConfigs { get; set; } = new List<ThresholdConfig>();
-
-    public ICollection<BatteryGroup> BatteryGroups { get; set; } = new List<BatteryGroup>();
 }

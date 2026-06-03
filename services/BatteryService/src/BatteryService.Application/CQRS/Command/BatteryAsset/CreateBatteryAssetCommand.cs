@@ -15,8 +15,6 @@ public class CreateBatteryAssetCommand : IRequest<CommonResponse<BatteryAssetDto
 
     public Guid? SiteId { get; set; }
 
-    public Guid? BatteryGroupId { get; set; }
-
     public Guid CustomerId { get; set; }
 
     public DateTime InstallDate { get; set; }
@@ -57,9 +55,6 @@ public class CreateBatteryAssetCommand : IRequest<CommonResponse<BatteryAssetDto
 
         if (SiteId == Guid.Empty)
             AddError(response, nameof(SiteId), "Id site không hợp lệ.");
-
-        if (BatteryGroupId == Guid.Empty)
-            AddError(response, nameof(BatteryGroupId), "Id nhóm pin không hợp lệ.");
 
         if (InstallDate == default)
         {

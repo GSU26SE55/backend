@@ -29,9 +29,6 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
         builder.Property(asset => asset.SiteId)
             .HasColumnName("site_id");
 
-        builder.Property(asset => asset.BatteryGroupId)
-            .HasColumnName("battery_group_id");
-
         builder.Property(asset => asset.CustomerId)
             .HasColumnName("customer_id")
             .IsRequired();
@@ -101,11 +98,6 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
             .HasForeignKey(asset => asset.SiteId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(asset => asset.BatteryGroup)
-            .WithMany(group => group.BatteryAssets)
-            .HasForeignKey(asset => asset.BatteryGroupId)
-            .OnDelete(DeleteBehavior.Restrict);
-
         builder.HasIndex(asset => asset.SerialNumber)
             .IsUnique()
             .HasFilter("is_deleted = false");
@@ -113,12 +105,10 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
         builder.HasIndex(asset => asset.CustomerId);
         builder.HasIndex(asset => asset.BatteryTypeId);
         builder.HasIndex(asset => asset.SiteId);
-        builder.HasIndex(asset => asset.BatteryGroupId);
         builder.HasIndex(asset => asset.Status);
         builder.HasIndex(asset => asset.LastSensorReadingAt);
         builder.HasIndex(asset => new { asset.CustomerId, asset.IsDeleted, asset.Status });
         builder.HasIndex(asset => new { asset.SiteId, asset.IsDeleted, asset.Status });
-        builder.HasIndex(asset => new { asset.BatteryGroupId, asset.IsDeleted, asset.Status });
 
         builder.Ignore(asset => asset.DomainEvents);
     }

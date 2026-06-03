@@ -9,8 +9,8 @@
     <Project Path="services/AuthService/src/AuthService.Application/AuthService.Application.csproj" />
     <Project Path="services/AuthService/src/AuthService.Domain/AuthService.Domain.csproj" />
     <Project Path="services/AuthService/src/AuthService.Infrastructure/AuthService.Infrastructure.csproj" />
-    <Project Path="services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj" />
     <Project Path="services/AuthService/tests/AuthService.IntegrationTests/AuthService.IntegrationTests.csproj" />
+    <Project Path="services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/BatteryService/">
     <Project Path="services/BatteryService/src/BatteryService.Api/BatteryService.Api.csproj" />
@@ -23,12 +23,8 @@
   <Folder Name="/Services/EmailService/">
     <Project Path="services/EmailService/src/EmailService.Api/EmailService.Api.csproj" />
     <Project Path="services/EmailService/src/EmailService.Infrastructure/EmailService.Infrastructure.csproj" />
-    <Project Path="services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj" />
     <Project Path="services/EmailService/tests/EmailService.IntegrationTests/EmailService.IntegrationTests.csproj" />
-  </Folder>
-  <Folder Name="/Services/SmsService/">
-    <Project Path="services/SmsService/src/SmsService.Api/SmsService.Api.csproj" />
-    <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
+    <Project Path="services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/FileStorageService/">
     <Project Path="services/FileStorageService/src/FileStorageService.Api/FileStorageService.Api.csproj" />
@@ -36,6 +32,18 @@
     <Project Path="services/FileStorageService/src/FileStorageService.Domain/FileStorageService.Domain.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Infrastructure/FileStorageService.Infrastructure.csproj" />
     <Project Path="services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/Services/SmsService/">
+    <Project Path="services/SmsService/src/SmsService.Api/SmsService.Api.csproj" />
+    <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/TicketService/">
+    <Project Path="services/TicketService/src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Application\TicketService.Application.csproj" />
+    <Project Path="services\TicketService\src\TicketService.Domain\TicketService.Domain.csproj" />
+    <Project Path="services\TicketService\tests\TicketService.IntergrationTests\TicketService.IntergrationTests.csproj" Type="Classic C#" />
+    <Project Path="services\TicketService\tests\TicketService.UnitTests\TicketService.UnitTests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/Shared/">
     <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />

@@ -72,6 +72,7 @@ services:
       AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
       FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
       BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
+      TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -294,6 +295,35 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  ticketservice:
+    container_name: solar-ticketservice
+    build:
+      context: .
+      dockerfile: services/TicketService/src/TicketService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__TicketDb: "Host=postgres;Port=5432;Database=${TICKET_DB_NAME:-ticket_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "4007:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
   # ---------- Gateway (HTTP only — production dùng reverse proxy ngoài cho HTTPS) ----------
   apigateway:
     container_name: solar-apigateway
@@ -311,6 +341,7 @@ services:
       - smsservice
       - filestorageservice
       - batteryservice
+      - ticketservice
     networks: [solar-net]
     restart: unless-stopped
 

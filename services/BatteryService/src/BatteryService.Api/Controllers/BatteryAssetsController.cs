@@ -9,8 +9,8 @@ using SharedContracts.Common.Responses;
 namespace BatteryService.Api.Controllers;
 
 /// <summary>
-/// Nhóm endpoint quản lý <b>BatteryAsset</b> - một viên pin vật lý (hoặc cụm pin) đang vận hành tại hệ thống của khách hàng.
-/// BatteryAsset là entity trung tâm: gắn với 1 Customer, có thể nằm trong 1 Site và 1 BatteryGroup, tham chiếu 1 BatteryType,
+/// Nhóm endpoint quản lý <b>BatteryAsset</b> - một viên pin vật lý đang vận hành tại hệ thống của khách hàng.
+/// BatteryAsset là entity trung tâm: gắn với 1 Customer, có thể nằm trong 1 Site, tham chiếu 1 BatteryType,
 /// và là chủ thể ghi nhận <see cref="SensorReadingsController">sensor readings</see> + <see cref="AlertsController">alert</see>.
 /// </summary>
 /// <remarks>
@@ -26,7 +26,6 @@ namespace BatteryService.Api.Controllers;
 ///   <item><description>Serial number unique (case-insensitive, upper) trong các asset chưa xóa.</description></item>
 ///   <item><description>CustomerId phải tồn tại trong read-model <c>CustomerAccount</c> (sync từ AuthService) và đang active.</description></item>
 ///   <item><description>Nếu chọn Site thì Site phải thuộc cùng Customer.</description></item>
-///   <item><description>Nếu chọn BatteryGroup thì Group phải cùng SiteId và cùng BatteryTypeId.</description></item>
 /// </list>
 /// </remarks>
 [ApiController]
@@ -51,12 +50,11 @@ public class BatteryAssetsController : ControllerBase
     /// - <c>CustomerId</c>: lọc theo chủ sở hữu.
     /// - <c>BatteryTypeId</c>: lọc theo loại pin.
     /// - <c>SiteId</c>: lọc theo site lắp đặt.
-    /// - <c>BatteryGroupId</c>: lọc theo cụm pin.
     /// - <c>Status</c>: enum trạng thái asset (<c>Active = 1</c>, <c>Inactive = 2</c>, <c>Decommissioned = 3</c>).
     /// - <c>IncludeDeleted</c>: <c>true</c> để xem cả asset đã xóa.
     ///
     /// Cách hoạt động:
-    /// - Include BatteryType, Site, BatteryGroup để DTO có tên hiển thị thay vì chỉ Id.
+    /// - Include BatteryType, Site để DTO có tên hiển thị thay vì chỉ Id.
     /// - Filter điều kiện theo từng query param có giá trị.
     /// - Sort theo <c>CreatedAt</c> giảm dần.
     /// - Projection sang <see cref="BatteryAssetDto"/> ở tầng query để giảm dữ liệu trả về.
@@ -90,7 +88,7 @@ public class BatteryAssetsController : ControllerBase
     /// - Đọc <c>UserId</c> từ access token (claim NameIdentifier) và parse thành Guid.
     /// - Nếu không parse được, trả 401.
     /// - Filter <c>CustomerId == currentUserId &amp;&amp; !IsDeleted</c>.
-    /// - Include BatteryType/Site/BatteryGroup để hiển thị tên.
+    /// - Include BatteryType/Site để hiển thị tên.
     ///
     /// Lưu ý:
     /// - Endpoint này chỉ dành cho role <b>Customer</b>. Admin/Manager dùng <c>GET /api/battery-assets?customerId=...</c>.
@@ -118,10 +116,10 @@ public class BatteryAssetsController : ControllerBase
     /// Lấy chi tiết một BatteryAsset theo Id.
     /// </summary>
     /// <remarks>
-    /// Trả đầy đủ thông tin asset + tên BatteryType, Site, BatteryGroup.
+    /// Trả đầy đủ thông tin asset + tên BatteryType, Site.
     ///
     /// Cách hoạt động:
-    /// - Tìm asset theo <c>Id</c> + <c>!IsDeleted</c>, include 3 navigation properties.
+    /// - Tìm asset theo <c>Id</c> + <c>!IsDeleted</c>, include navigation properties.
     /// - 404 nếu không tồn tại hoặc đã bị soft delete.
     ///
     /// Lưu ý phân quyền:
@@ -194,8 +192,6 @@ public class BatteryAssetsController : ControllerBase
     /// - <c>BatteryTypeId</c>: bắt buộc, phải tồn tại trong BatteryType chưa xóa.
     /// - <c>CustomerId</c>: bắt buộc, phải tồn tại trong <c>CustomerAccount</c> (read-model sync từ AuthService) và <c>IsActive = true</c>.
     /// - <c>SiteId</c>: tùy chọn. Nếu có, Site phải tồn tại, chưa xóa và thuộc cùng <c>CustomerId</c>.
-    /// - <c>BatteryGroupId</c>: tùy chọn. Nếu có, Group phải tồn tại, chưa xóa, Site cha của Group chưa xóa,
-    ///   cùng <c>BatteryTypeId</c> với asset, và nếu cả <c>SiteId</c> + <c>BatteryGroupId</c> đều được chỉ định thì Group phải thuộc Site đó.
     /// - <c>InstallDate</c>: bắt buộc, không ở tương lai và không cũ hơn 5 năm.
     /// - <c>WarrantyEndDate</c>: tùy chọn, phải sau <c>InstallDate</c>. Nếu đã qua hiện tại thì <c>WarrantyStatus</c> tự set <c>Expired</c>, ngược lại <c>Active</c>.
     /// - <c>Location</c>: tùy chọn, ≤ 255 ký tự (mô tả vị trí lắp).
@@ -205,8 +201,8 @@ public class BatteryAssetsController : ControllerBase
     ///
     /// Cách hoạt động:
     /// - Validate đầu vào (gom toàn bộ lỗi).
-    /// - Check customer active → check trùng serial → check BatteryType → check Site → check Group → validate relation.
-    /// - Tạo asset với <c>Status = Active</c>. Nếu có Group, <c>group.BatteryCount += 1</c>.
+    /// - Check customer active → check trùng serial → check BatteryType → check Site → validate relation.
+    /// - Tạo asset với <c>Status = Active</c>.
     /// - Lưu xuống DB.
     ///
     /// Lưu ý:
@@ -220,8 +216,8 @@ public class BatteryAssetsController : ControllerBase
     /// <response code="400">Dữ liệu không hợp lệ (xem <c>ListErrors</c>).</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy Customer / BatteryType / Site / Group được tham chiếu.</response>
-    /// <response code="409">Serial đã tồn tại, hoặc vi phạm ràng buộc Site/Group/BatteryType (ví dụ Site khác Customer, Group khác BatteryType, Group không thuộc Site).</response>
+    /// <response code="404">Không tìm thấy Customer / BatteryType / Site được tham chiếu.</response>
+    /// <response code="409">Serial đã tồn tại, hoặc vi phạm ràng buộc Site/BatteryType (ví dụ Site khác Customer).</response>
     [HttpPost]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<BatteryAssetDto>), StatusCodes.Status201Created)]
@@ -245,15 +241,12 @@ public class BatteryAssetsController : ControllerBase
     /// - <c>Status</c>: enum <c>Active</c>/<c>Inactive</c>/<c>Decommissioned</c>.
     ///
     /// Cách hoạt động:
-    /// - Tìm asset (include BatteryType/Site/Group); 404 nếu không có.
-    /// - Lưu <c>oldGroupId</c> để cập nhật <c>BatteryCount</c> sau.
-    /// - Check trùng serial (loại trừ chính nó), check tham chiếu, check ràng buộc Site/Group/Type giống Create.
+    /// - Tìm asset (include BatteryType/Site); 404 nếu không có.
+    /// - Check trùng serial (loại trừ chính nó), check tham chiếu, check ràng buộc Site/Type giống Create.
     /// - Update toàn bộ field.
-    /// - Nếu <c>BatteryGroupId</c> thay đổi: decrement count của group cũ (min 0), increment count của group mới.
     ///
     /// Lưu ý:
     /// - Không cho phép đổi <c>CustomerId</c> qua endpoint này (xem <see cref="TransferOwner"/>).
-    /// - Việc thay đổi <c>BatteryTypeId</c> được phép nhưng phải đảm bảo group (nếu có) cùng type mới.
     /// </remarks>
     /// <param name="id">Id BatteryAsset.</param>
     /// <param name="command">Thông tin update.</param>
@@ -263,8 +256,8 @@ public class BatteryAssetsController : ControllerBase
     /// <response code="400">Dữ liệu không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy asset hoặc reference (BatteryType/Site/Group).</response>
-    /// <response code="409">Serial trùng hoặc vi phạm ràng buộc Site/Group.</response>
+    /// <response code="404">Không tìm thấy asset hoặc reference (BatteryType/Site).</response>
+    /// <response code="409">Serial trùng hoặc vi phạm ràng buộc Site.</response>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<BatteryAssetDto>), StatusCodes.Status200OK)]
@@ -286,7 +279,6 @@ public class BatteryAssetsController : ControllerBase
     /// <remarks>
     /// Cách hoạt động:
     /// - Tìm asset; 404 nếu không có.
-    /// - Nếu asset thuộc 1 BatteryGroup: decrement <c>BatteryCount</c> của group đó (min 0).
     /// - Soft delete asset (interceptor set <c>IsDeleted = true</c>, <c>DeletedAt = UtcNow</c>).
     ///
     /// Lưu ý:
@@ -320,11 +312,10 @@ public class BatteryAssetsController : ControllerBase
     /// - Tìm asset <c>IsDeleted = true</c>; 404 nếu không có.
     /// - Check trùng serial trong các asset active; trùng trả 409.
     /// - Nếu asset có <c>SiteId</c>, kiểm tra Site đó vẫn còn active; nếu đã xóa trả 409.
-    /// - Nếu asset có <c>BatteryGroupId</c>, kiểm tra Group còn active; nếu đã xóa trả 409. Nếu OK thì increment <c>BatteryCount</c> của group.
     /// - Set <c>IsDeleted = false</c>, <c>DeletedAt = null</c>.
     ///
     /// Lưu ý:
-    /// - Nếu Site hoặc Group của asset đã bị xóa thì phải restore chúng trước (hoặc cập nhật asset reference) rồi mới restore asset được.
+    /// - Nếu Site của asset đã bị xóa thì phải restore Site trước (hoặc cập nhật asset reference) rồi mới restore asset được.
     /// </remarks>
     /// <param name="id">Id BatteryAsset đã xóa.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
@@ -333,7 +324,7 @@ public class BatteryAssetsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy asset đã xóa.</response>
-    /// <response code="409">Serial trùng, hoặc Site/Group của asset đã bị xóa.</response>
+    /// <response code="409">Serial trùng, hoặc Site của asset đã bị xóa.</response>
     [HttpPatch("{id:guid}/restore")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
@@ -352,22 +343,21 @@ public class BatteryAssetsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Endpoint dành riêng cho việc đổi chủ sở hữu (transfer of ownership) - không dùng PUT vì đây là hành động nghiệp vụ
-    /// đặc biệt, có hệ quả về reset Site/Group.
+    /// đặc biệt, có hệ quả về reset Site.
     ///
     /// Body request:
     /// - <c>NewCustomerId</c>: bắt buộc, Customer mới phải tồn tại trong read-model và đang active.
     /// - <c>Reason</c>: tùy chọn, ≤ 500 ký tự, ghi nhận lý do chuyển (audit log).
     ///
     /// Cách hoạt động:
-    /// - Tìm asset (include BatteryGroup); 404 nếu không có.
+    /// - Tìm asset; 404 nếu không có.
     /// - Nếu <c>NewCustomerId</c> trùng customer hiện tại, trả 409 (no-op không được phép).
     /// - Validate Customer mới active; không có trả 404.
-    /// - Nếu asset đang ở 1 Group: decrement <c>BatteryCount</c> của group đó.
-    /// - Reset <c>SiteId = null</c> và <c>BatteryGroupId = null</c> (Site/Group cũ thuộc Customer cũ, không hợp lệ với Customer mới).
+    /// - Reset <c>SiteId = null</c> (Site cũ thuộc Customer cũ, không hợp lệ với Customer mới).
     /// - Set <c>CustomerId = NewCustomerId</c>.
     ///
     /// Lưu ý:
-    /// - Sau khi transfer, Admin nên gán lại Site/Group cho asset qua <c>PUT /api/battery-assets/{id}</c> nếu Customer mới có Site phù hợp.
+    /// - After after transfer, Admin nên gán lại Site cho asset qua <c>PUT /api/battery-assets/{id}</c> nếu Customer mới có Site phù hợp.
     /// - SensorReading lịch sử KHÔNG bị xóa - giữ nguyên cho audit/analytics, nhưng được tính cho owner mới từ thời điểm transfer.
     /// - Alert lịch sử của asset cũng giữ nguyên.
     /// </remarks>

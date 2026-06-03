@@ -1,0 +1,102 @@
+using System.Text.Json;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Responses;
+using TicketService.Application.Common.Events;
+using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
+
+namespace TicketService.Application.CQRS.Handler.Tickets;
+
+public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, TicketActionResponse>
+{
+    private readonly ITicketUnitOfWork _uow;
+    private readonly ITicketStateMachine _stateMachine;
+    private readonly IActivityLogger _activityLogger;
+
+    public TicketStartCommandHandler(
+        ITicketUnitOfWork uow,
+        ITicketStateMachine stateMachine,
+        IActivityLogger activityLogger)
+    {
+        _uow = uow;
+        _stateMachine = stateMachine;
+        _activityLogger = activityLogger;
+    }
+
+    public async Task<TicketActionResponse> Handle(TicketStartCommand request, CancellationToken ct)
+    {
+        var ticket = await _uow.Tickets.GetAllAsync()
+            .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
+
+        if (ticket == null)
+            return Fail(404, "Ticket not found.");
+
+        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, request.StaffId);
+        if (!transitionResult.IsAllowed)
+            return Fail(403, transitionResult.Reason ?? "Cannot start work.");
+
+        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.InProgress, new TransitionContext
+        {
+            ActorUserId = request.StaffId,
+            ActorRole = ActorRoleEnum.Staff,
+            ActorDisplayName = request.StaffName ?? "Staff"
+        }, ct);
+
+        await _activityLogger.LogAsync(
+            ticket.Id,
+            request.StaffId,
+            ActorRoleEnum.Staff,
+            request.StaffName ?? "Staff",
+            ActivityActionEnum.StatusChanged,
+            oldValue: "Assigned",
+            newValue: "InProgress");
+
+        // Outbox: Status Changed
+        var statusEvent = new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Assigned, TicketStatusEnum.InProgress);
+        var outboxMessage = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            AggregateId = ticket.Id,
+            Type = nameof(TicketStatusChangedIntegrationEvent),
+            Payload = JsonSerializer.Serialize(statusEvent),
+            OccurredAtUtc = DateTime.UtcNow,
+            RetryCount = 0
+        };
+        await _uow.OutboxMessages.AddAsync(outboxMessage);
+
+        await _uow.SaveChangesAsync(ct);
+
+        return new TicketActionResponse
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Work started.",
+            Data = new TicketActionDto
+            {
+                Id = ticket.Id.ToString(),
+                Code = ticket.Code,
+                Status = ticket.Status
+            }
+        };
+    }
+
+    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    {
+        return new TicketActionResponse
+        {
+            IsSuccess = false,
+            StatusCode = statusCode,
+            Message = message,
+            ListErrors = new List<Errors>
+            {
+                new Errors { Field = field, Detail = message }
+            }
+        };
+    }
+}
