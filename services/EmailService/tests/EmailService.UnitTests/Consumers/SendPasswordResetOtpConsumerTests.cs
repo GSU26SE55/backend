@@ -6,11 +6,13 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 
 namespace EmailService.UnitTests.Consumers;
 
+[Collection("EmailConsumerTests")]
 public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
 {
     private ITestHarness _harness = null!;
@@ -41,6 +43,7 @@ public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
             }).Build();
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton(_renderer.Object);
         services.AddSingleton(_inbox.Object);
@@ -97,8 +100,12 @@ public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
 
         await _harness.Bus.Publish(new SendPasswordResetOtpEvent("user@example.com", "111111"));
 
-        var consumerHarness = _harness.GetConsumerHarness<SendPasswordResetOtpConsumer>();
-        (await consumerHarness.Consumed.Any<SendPasswordResetOtpEvent>()).Should().BeTrue();
+        await ConsumerTestWaiter.UntilAsync(
+            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+                It.IsAny<Guid>(),
+                nameof(SendPasswordResetOtpConsumer),
+                It.IsAny<CancellationToken>()), Times.AtLeastOnce),
+            TimeSpan.FromSeconds(10));
 
         _fakeHandler.CallCount.Should().Be(0);
         _renderer.Verify(r => r.RenderAsync(It.IsAny<string>(),

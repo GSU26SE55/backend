@@ -3,6 +3,7 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
@@ -31,7 +32,9 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
 
     public async Task<CommonResponse<string>> Handle(SendPhoneOtpCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Không tìm thấy tài khoản.");
 

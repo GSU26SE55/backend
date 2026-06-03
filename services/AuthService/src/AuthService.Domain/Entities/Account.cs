@@ -4,7 +4,8 @@ using SharedKernels.Domain;
 namespace AuthService.Domain.Entities;
 
 /// <summary>
-/// Đại diện cho một tài khoản người dùng (Admin, Technician, Customer...) trong hệ thống.
+/// Đại diện cho một tài khoản người dùng (Admin, Manager, Staff, Customer) trong hệ thống.
+/// Mỗi account chỉ có duy nhất 1 Role (quan hệ 1-N: 1 Role → nhiều Account).
 /// </summary>
 public class Account : AuditableEntity
 {
@@ -62,7 +63,20 @@ public class Account : AuditableEntity
 
     public DateTime? InvitationExpiredAt { get; set; }
 
-    public ICollection<AccountRole> AccountRoles { get; set; } = new List<AccountRole>();
+    /// <summary>Role hiện tại của account. Mỗi account bắt buộc có đúng 1 role.</summary>
+    public Guid RoleId { get; set; }
+
+    /// <summary>Thời điểm role được gán/đổi lần cuối — audit "ai đổi khi nào".</summary>
+    public DateTime? RoleAssignedAt { get; set; }
+
+    /// <summary>AccountId của admin đã gán/đổi role; null nếu là seed hoặc self-register.</summary>
+    public Guid? RoleAssignedBy { get; set; }
+
+    public Role Role { get; set; } = null!;
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+
+    public AccountProfile? Profile { get; set; }
+
+    public StaffProfile? StaffProfile { get; set; }
 }

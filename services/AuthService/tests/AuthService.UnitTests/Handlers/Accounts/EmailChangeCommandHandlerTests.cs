@@ -27,8 +27,7 @@ public class ChangeEmailCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         _hasher.Setup(h => h.Verify("right-password", "old-hash")).Returns(true);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
         var resp = await handler.Handle(new ChangeEmailCommand
@@ -58,8 +57,7 @@ public class ChangeEmailCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "new@example.com", CurrentPassword = "wrong" }, CancellationToken.None);
@@ -80,8 +78,7 @@ public class ChangeEmailCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(true);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "U@Example.com", CurrentPassword = "p" }, CancellationToken.None);
@@ -109,7 +106,7 @@ public class ChangeEmailCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(true);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, taken });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, taken });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
@@ -121,7 +118,7 @@ public class ChangeEmailCommandHandlerTests
     [Fact]
     public async Task ChangeEmail_AccountNotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
 
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
@@ -160,8 +157,7 @@ public class ConfirmEmailChangeCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -182,8 +178,7 @@ public class ConfirmEmailChangeCommandHandlerTests
         var account = WithPending();
         account.PendingEmail = null;
         account.OtpPurpose = OtpPurposeEnum.Register;
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -195,8 +190,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     public async Task Confirm_OtpExpired_Returns400()
     {
         var account = WithPending(expired: DateTime.UtcNow.AddMinutes(-1));
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -208,8 +202,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     public async Task Confirm_WrongOtp_IncrementsCounter_Returns401()
     {
         var account = WithPending(otp: "999999");
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
@@ -230,8 +223,7 @@ public class ConfirmEmailChangeCommandHandlerTests
             FullName = "Stealer",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { stealer });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, stealer });
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
@@ -244,7 +236,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     [Fact]
     public async Task Confirm_AccountNotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new ConfirmEmailChangeCommandHandler(uow.Object);
 

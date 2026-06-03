@@ -25,7 +25,7 @@ public class RateLimitingExtensionsTests
                 .ConfigureServices(s =>
                 {
                     s.AddLogging();
-                    s.AddOtpRateLimiting();
+                    s.AddOtpRateLimiting(window: TimeSpan.FromHours(1));
                     s.AddRouting();
                 })
                 .Configure(app =>

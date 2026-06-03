@@ -26,8 +26,8 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("auth", new OpenApiInfo { Title = "Auth Service API", Version = "v1" });
     c.SwaggerDoc("filestorage", new OpenApiInfo { Title = "File Storage Service API", Version = "v1" });
-    //c.SwaggerDoc("auth", new OpenApiInfo { Title = "Auth Service API", Version = "v1" });
-    //c.SwaggerDoc("auth", new OpenApiInfo { Title = "Auth Service API", Version = "v1" });
+    c.SwaggerDoc("battery", new OpenApiInfo { Title = "Battery Service API", Version = "v1" });
+    c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -77,12 +77,15 @@ if (!app.Environment.IsProduction())
     {
         options.SwaggerEndpoint("/auth-service/swagger/v1/swagger.json", "Auth Service API");
         options.SwaggerEndpoint("/file-storage-service/swagger/v1/swagger.json", "File Storage Service API");
+        options.SwaggerEndpoint("/battery-service/swagger/v1/swagger.json", "Battery Service API");
+        options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
     });
 }
 
 // HTTPS redirect chỉ áp dụng khi gateway listen HTTPS.
 // Trong Docker (HTTP-only), bỏ qua để tránh redirect loop.
-if (!app.Environment.IsEnvironment("Docker"))
+if (!app.Environment.IsEnvironment("Docker")
+    && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
 {
     app.UseHttpsRedirection();
 }
@@ -90,6 +93,7 @@ if (!app.Environment.IsEnvironment("Docker"))
 //app.UseWebSockets();
 
 app.UseCors("AllowAll");
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 app.MapReverseProxy();
 
 // Expose /metrics cho Prometheus scrape — đặt sau MapReverseProxy để không bị YARP route capture.

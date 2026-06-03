@@ -1,0 +1,74 @@
+using BatteryService.Application.CQRS.Command.BatteryType;
+using BatteryService.Application.DTOs;
+using BatteryService.Application.Interfaces;
+using BatteryService.Application.Mapping;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Responses;
+
+namespace BatteryService.Application.CQRS.Handler.BatteryType;
+
+public class UpdateBatteryTypeCommandHandler : IRequestHandler<UpdateBatteryTypeCommand, CommonResponse<BatteryTypeDto>>
+{
+    private readonly IBatteryUnitOfWork _unitOfWork;
+
+    public UpdateBatteryTypeCommandHandler(IBatteryUnitOfWork unitOfWork)
+    {
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<CommonResponse<BatteryTypeDto>> Handle(UpdateBatteryTypeCommand request, CancellationToken cancellationToken)
+    {
+        var entity = await _unitOfWork.BatteryTypes
+            .GetAllAsync()
+            .FirstOrDefaultAsync(type => type.Id == request.Id && !type.IsDeleted, cancellationToken);
+
+        if (entity is null)
+        {
+            return new CommonResponse<BatteryTypeDto>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy loại pin."
+            };
+        }
+
+        var normalizedName = request.Name.Trim().ToLower();
+        var duplicate = await _unitOfWork.BatteryTypes
+            .GetAllAsync()
+            .AnyAsync(type =>
+                type.Id != request.Id &&
+                !type.IsDeleted &&
+                type.Name.ToLower() == normalizedName, cancellationToken);
+
+        if (duplicate)
+        {
+            return new CommonResponse<BatteryTypeDto>
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "Tên loại pin đã tồn tại.",
+                ListErrors = { new Errors { Field = nameof(request.Name), Detail = "Tên loại pin đã tồn tại." } }
+            };
+        }
+
+        entity.Name = request.Name.Trim();
+        entity.Manufacturer = request.Manufacturer?.Trim();
+        entity.NominalCapacityAh = request.NominalCapacityAh;
+        entity.NominalVoltage = request.NominalVoltage;
+        entity.Chemistry = request.Chemistry;
+        entity.MaxCycleCount = request.MaxCycleCount;
+        entity.Description = request.Description?.Trim();
+
+        _unitOfWork.BatteryTypes.UpdateAsync(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new CommonResponse<BatteryTypeDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Cập nhật loại pin thành công.",
+            Data = BatteryMapper.ToDto(entity)
+        };
+    }
+}

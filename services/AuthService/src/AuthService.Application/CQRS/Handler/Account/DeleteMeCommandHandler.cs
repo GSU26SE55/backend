@@ -23,7 +23,9 @@ public class DeleteMeCommandHandler : IRequestHandler<DeleteMeCommand, AccountAc
 
     public async Task<AccountActionResponse> Handle(DeleteMeCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
             return new AccountActionResponse

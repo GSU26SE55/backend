@@ -1,7 +1,9 @@
 using FileStorageService.Application.CQRS.Query;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
+using FileStorageService.Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 
 namespace FileStorageService.Application.CQRS.Handler;
@@ -9,10 +11,17 @@ namespace FileStorageService.Application.CQRS.Handler;
 public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, CommonResponse<FileDownloadResponse>>
 {
     private readonly IObjectStorageService _objectStorageService;
+    private readonly IFileStorageUnitOfWork _unitOfWork;
+    private readonly IFileAuthorizationService _fileAuthorizationService;
 
-    public DownloadFileQueryHandler(IObjectStorageService objectStorageService)
+    public DownloadFileQueryHandler(
+        IObjectStorageService objectStorageService,
+        IFileStorageUnitOfWork unitOfWork,
+        IFileAuthorizationService fileAuthorizationService)
     {
         _objectStorageService = objectStorageService;
+        _unitOfWork = unitOfWork;
+        _fileAuthorizationService = fileAuthorizationService;
     }
 
     public async Task<CommonResponse<FileDownloadResponse>> Handle(DownloadFileQuery request, CancellationToken cancellationToken)
@@ -21,7 +30,25 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
         if (!validation.IsSuccess)
             return validation;
 
-        var result = await _objectStorageService.DownloadAsync(request.ObjectKey, cancellationToken);
+        var objectKey = NormalizeObjectKey(request.ObjectKey);
+        var file = await _unitOfWork.UploadedFiles
+            .GetAllAsync()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.ObjectKey == objectKey && !f.IsDeleted && f.Status != FileStatusEnum.Deleted, cancellationToken);
+
+        if (file is null)
+            return NotFound();
+
+        if (!_fileAuthorizationService.CanRead(file))
+            return Forbidden();
+
+        if (file.Status == FileStatusEnum.Quarantined)
+            return Conflict("File đang bị cách ly và không thể tải.");
+
+        if (file.Status == FileStatusEnum.Processing)
+            return Conflict("File đang được xử lý, vui lòng thử lại sau.");
+
+        var result = await _objectStorageService.DownloadAsync(objectKey, cancellationToken);
 
         return new CommonResponse<FileDownloadResponse>
         {
@@ -31,4 +58,30 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
             Data = result
         };
     }
+
+    private static string NormalizeObjectKey(string objectKey)
+    {
+        return objectKey.Trim().TrimStart('/', '\\').Replace('\\', '/');
+    }
+
+    private static CommonResponse<FileDownloadResponse> NotFound() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 404,
+        Message = "Không tìm thấy file."
+    };
+
+    private static CommonResponse<FileDownloadResponse> Forbidden() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 403,
+        Message = "Không có quyền tải file này."
+    };
+
+    private static CommonResponse<FileDownloadResponse> Conflict(string message) => new()
+    {
+        IsSuccess = false,
+        StatusCode = 409,
+        Message = message
+    };
 }

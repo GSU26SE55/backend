@@ -6,11 +6,13 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 
 namespace EmailService.UnitTests.Consumers;
 
+[Collection("EmailConsumerTests")]
 public class SendOtpRegisterConsumerTests : IAsyncLifetime
 {
     private ITestHarness _harness = null!;
@@ -43,6 +45,7 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
               .ReturnsAsync(true);
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton(_renderer.Object);
         services.AddSingleton(_inbox.Object);
@@ -105,7 +108,13 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         var evt = new SendOtpRegisterEvent("user@example.com", "123456");
         await _harness.Bus.Publish(evt);
 
-        (await _harness.Consumed.Any<SendOtpRegisterEvent>()).Should().BeTrue();
+        // Inbox PHẢI được hỏi (consumer đã chạy)
+        await ConsumerTestWaiter.UntilAsync(
+            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+                It.IsAny<Guid>(),
+                nameof(SendOtpRegisterConsumer),
+                It.IsAny<CancellationToken>()), Times.AtLeastOnce),
+            TimeSpan.FromSeconds(10));
 
         // Mailjet KHÔNG được gọi
         _fakeHandler.CallCount.Should().Be(0);
@@ -126,9 +135,15 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         for (int i = 0; i < 5; i++)
             await _harness.Bus.Publish(evt);
 
-        // MassTransit test harness chờ inactivity tự động trong harness lifecycle.
-        // Verify TryMarkProcessedAsync gọi đúng 5 lần (5 message được consume).
-        await Task.Delay(200);
+        var consumerHarness = _harness.GetConsumerHarness<SendOtpRegisterConsumer>();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (consumerHarness.Consumed.Select<SendOtpRegisterEvent>().Count() >= 5)
+                break;
+            await Task.Delay(100);
+        }
+
         _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()),
             Times.AtLeast(5));
 
@@ -136,4 +151,3 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         _fakeHandler.CallCount.Should().Be(1);
     }
 }
-

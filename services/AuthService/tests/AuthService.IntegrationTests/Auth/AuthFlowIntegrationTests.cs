@@ -82,7 +82,7 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task VerifyOtp_CorrectOtp_ActivatesAccount_IssuesTokens()
+    public async Task VerifyOtp_CorrectOtp_ActivatesAccount_NoTokenIssued()
     {
         // Step 1: Register
         await _client.PostAsJsonAsync("/api/auth/register", new
@@ -95,7 +95,7 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         // Step 2: Lấy OTP từ event capture
         var otpEvent = _factory.Producer.Published.OfType<SendOtpRegisterEvent>().Single();
 
-        // Step 3: VerifyOtp
+        // Step 3: VerifyOtp - chỉ kích hoạt account, KHÔNG cấp token. Client phải tự gọi login sau.
         var resp = await _client.PostAsJsonAsync("/api/auth/verify-otp", new
         {
             Email = "verify@example.com",
@@ -103,23 +103,20 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         });
 
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await resp.Content.ReadFromJsonAsync<LoginResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<CommonResponse<string>>();
         body!.IsSuccess.Should().BeTrue();
-        body.Data!.AccessToken.Should().NotBeNullOrEmpty();
-        body.Data.RefreshToken.Should().NotBeNullOrEmpty();
+        body.Message.Should().Contain("kích hoạt");
 
-        // DB: account active, có Customer role, có refresh token
+        // 1-N refactor: account.Role là single — verify trực tiếp Role.Name.
         using var db = _factory.CreateDbContext();
         var acc = await db.Users
-            .Include(a => a.AccountRoles).ThenInclude(ar => ar.Role)
+            .Include(a => a.Role)
             .FirstAsync(a => a.Email == "verify@example.com");
         acc.Status.Should().Be(AccountStatusEnum.Active);
         acc.EmailConfirmed.Should().BeTrue();
-        acc.AccountRoles.Should().Contain(ar => ar.Role!.Name == "Customer");
+        acc.Role!.Name.Should().Be("Customer");
 
-        var rt = await db.RefreshTokens.FirstAsync(r => r.AccountId == acc.Id);
-        rt.Status.Should().Be(RefreshTokenStatus.Active);
-        rt.Token.Should().Be(body.Data.RefreshToken);
+        (await db.RefreshTokens.AnyAsync(r => r.AccountId == acc.Id)).Should().BeFalse();
     }
 
     [Fact]
@@ -238,7 +235,8 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
             await TestDataSeeder.SeedActiveAccountAsync(db, "logout@example.com", "MyPass123",
                 roleId: TestDataSeeder.CustomerRoleId);
 
-        var (_, refresh) = await TestDataSeeder.LoginAsync(_client, "logout@example.com", "MyPass123");
+        var (access, refresh) = await TestDataSeeder.LoginAsync(_client, "logout@example.com", "MyPass123");
+        _client.WithBearer(access);
 
         var resp = await _client.PostAsJsonAsync("/api/auth/logout", new { RefreshToken = refresh });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -247,5 +245,20 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         var rt = await db2.RefreshTokens.FirstAsync(r => r.Token == refresh);
         rt.Status.Should().Be(RefreshTokenStatus.Revoked);
         rt.RevokedReason.Should().Be("UserLogout");
+    }
+
+    [Fact]
+    public async Task Logout_WithoutBearer_Returns401()
+    {
+        using (var db = _factory.CreateDbContext())
+            await TestDataSeeder.SeedActiveAccountAsync(db, "logout-no-bearer@example.com", "MyPass123",
+                roleId: TestDataSeeder.CustomerRoleId);
+
+        var (_, refresh) = await TestDataSeeder.LoginAsync(_client, "logout-no-bearer@example.com", "MyPass123");
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        var resp = await _client.PostAsJsonAsync("/api/auth/logout", new { RefreshToken = refresh });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

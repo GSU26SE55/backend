@@ -23,14 +23,15 @@ public class GetMySessionsQueryHandlerTests
             new RefreshToken { Id = Guid.NewGuid(), AccountId = userId, Token = "b", Status = RefreshTokenStatus.Revoked, IssuedAt = DateTime.UtcNow.AddDays(-1), ExpiredAt = DateTime.UtcNow.AddDays(6) },
             new RefreshToken { Id = Guid.NewGuid(), AccountId = Guid.NewGuid(), Token = "c", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) }
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
         var handler = new GetMySessionsQueryHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new GetMySessionsQuery { ActiveOnly = true }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.Should().HaveCount(1);
-        resp.Data[0].Status.Should().Be(RefreshTokenStatus.Active);
+        var sessions = resp.Data!;
+        sessions.Should().HaveCount(1);
+        sessions[0].Status.Should().Be(RefreshTokenStatus.Active);
     }
 
     [Fact]
@@ -43,7 +44,7 @@ public class GetMySessionsQueryHandlerTests
             new RefreshToken { Id = Guid.NewGuid(), AccountId = userId, Token = "a", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) },
             new RefreshToken { Id = Guid.NewGuid(), AccountId = userId, Token = "b", Status = RefreshTokenStatus.Revoked, IssuedAt = DateTime.UtcNow.AddDays(-1), ExpiredAt = DateTime.UtcNow.AddDays(6) }
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
         var handler = new GetMySessionsQueryHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new GetMySessionsQuery { ActiveOnly = false }, CancellationToken.None);
@@ -55,7 +56,7 @@ public class GetMySessionsQueryHandlerTests
     public async Task NoUserId_Returns401()
     {
         _currentUser.SetupGet(c => c.UserId).Returns((string?)null);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetMySessionsQueryHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new GetMySessionsQuery(), CancellationToken.None);
@@ -82,7 +83,7 @@ public class RevokeSessionCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
         var handler = new RevokeSessionCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeSessionCommand { SessionId = session.Id }, CancellationToken.None);
@@ -107,7 +108,7 @@ public class RevokeSessionCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
         var handler = new RevokeSessionCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeSessionCommand { SessionId = session.Id }, CancellationToken.None);
@@ -119,7 +120,7 @@ public class RevokeSessionCommandHandlerTests
     public async Task NotFound_Returns404()
     {
         _currentUser.SetupGet(c => c.UserId).Returns(Guid.NewGuid().ToString());
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new RevokeSessionCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeSessionCommand { SessionId = Guid.NewGuid() }, CancellationToken.None);
@@ -141,7 +142,7 @@ public class RevokeSessionCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { session });
         var handler = new RevokeSessionCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeSessionCommand { SessionId = session.Id }, CancellationToken.None);
@@ -173,7 +174,7 @@ public class RevokeAllSessionsCommandHandlerTests
         var current = Token(userId, "current-token");
         var other1 = Token(userId, "other-1");
         var other2 = Token(userId, "other-2");
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { current, other1, other2 });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { current, other1, other2 });
         var handler = new RevokeAllSessionsCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeAllSessionsCommand { ExceptCurrent = true, CurrentRefreshToken = "current-token" }, CancellationToken.None);
@@ -192,7 +193,7 @@ public class RevokeAllSessionsCommandHandlerTests
         _currentUser.SetupGet(c => c.UserId).Returns(userId.ToString());
         var t1 = Token(userId, "a");
         var t2 = Token(userId, "b");
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { t1, t2 });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { t1, t2 });
         var handler = new RevokeAllSessionsCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeAllSessionsCommand { ExceptCurrent = false }, CancellationToken.None);
@@ -206,7 +207,7 @@ public class RevokeAllSessionsCommandHandlerTests
     public async Task NoUserId_Returns401()
     {
         _currentUser.SetupGet(c => c.UserId).Returns((string?)null);
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new RevokeAllSessionsCommandHandler(uow.Object, _currentUser.Object);
 
         var resp = await handler.Handle(new RevokeAllSessionsCommand(), CancellationToken.None);

@@ -14,8 +14,10 @@ public static class RateLimitingExtensions
     public const string PolicyAnonOtp = "AnonOtp";
     public const string PolicyAuthOtp = "AuthOtp";
 
-    public static IServiceCollection AddOtpRateLimiting(this IServiceCollection services)
+    public static IServiceCollection AddOtpRateLimiting(this IServiceCollection services, TimeSpan? window = null)
     {
+        var w = window ?? TimeSpan.FromMinutes(1);
+
         services.AddRateLimiter(options =>
         {
             options.AddPolicy(PolicyAnonOtp, ctx =>
@@ -24,7 +26,7 @@ public static class RateLimitingExtensions
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 5,
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = w,
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                     }));
@@ -40,7 +42,7 @@ public static class RateLimitingExtensions
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 3,
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = w,
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                     });

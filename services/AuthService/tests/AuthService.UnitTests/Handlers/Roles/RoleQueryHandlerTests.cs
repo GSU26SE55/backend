@@ -19,8 +19,7 @@ public class GetRoleByIdQueryHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new GetRoleByIdQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRoleByIdQuery { Id = role.Id }, CancellationToken.None);
@@ -33,7 +32,7 @@ public class GetRoleByIdQueryHandlerTests
     [Fact]
     public async Task NotFound_Returns404()
     {
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
+        var (uow, _, _, roles) = MockUnitOfWork.Build();
         roles.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Role?)null);
         var handler = new GetRoleByIdQueryHandler(uow.Object);
 
@@ -55,7 +54,7 @@ public class GetRolesQueryHandlerTests
     [Fact]
     public async Task NoFilter_ReturnsAllPaged()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
         var handler = new GetRolesQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolesQuery { PageNumber = 1, PageSize = 10 }, CancellationToken.None);
@@ -68,7 +67,7 @@ public class GetRolesQueryHandlerTests
     [Fact]
     public async Task FilterByStatus_ReturnsOnlyMatching()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
         var handler = new GetRolesQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolesQuery { PageNumber = 1, PageSize = 10, Status = RoleStatusEnum.Inactive }, CancellationToken.None);
@@ -80,7 +79,7 @@ public class GetRolesQueryHandlerTests
     [Fact]
     public async Task FilterByKeyword_CaseInsensitive()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
         var handler = new GetRolesQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolesQuery { PageNumber = 1, PageSize = 10, Keyword = "ADM" }, CancellationToken.None);
@@ -91,7 +90,7 @@ public class GetRolesQueryHandlerTests
     [Fact]
     public async Task FilterByIsSystemRole_False()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: Seed());
         var handler = new GetRolesQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolesQuery { PageNumber = 1, PageSize = 10, IsSystemRole = false }, CancellationToken.None);

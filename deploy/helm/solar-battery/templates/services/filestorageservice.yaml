@@ -9,6 +9,11 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "filestorageservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.global.rollingUpdate.maxSurge }}
   selector:
     matchLabels:
       app.kubernetes.io/component: filestorageservice
@@ -22,15 +27,56 @@ spec:
     spec:
       imagePullSecrets:
       - name: {{ .Values.global.imagePullSecret }}
+      initContainers:
+      - name: wait-file-storage-db
+        image: {{ .Values.postgres.clientImage | default "postgres:16-alpine" }}
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+        env:
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.username | quote }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+        - name: FILE_STORAGE_DB_NAME
+          value: {{ .Values.postgres.fileStorageDatabase | quote }}
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER"; do
+            echo "waiting postgres..."; sleep 2
+          done
+          until psql --host=postgres --port=5432 --username="$POSTGRES_USER" --dbname=postgres \
+            --tuples-only --no-align \
+            --command="SELECT 1 FROM pg_database WHERE datname = '${FILE_STORAGE_DB_NAME}'" | grep -q 1; do
+            echo "waiting database ${FILE_STORAGE_DB_NAME}..."; sleep 2
+          done
+          echo "file storage database ready"
       containers:
       - name: filestorageservice
         image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image) }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+        - name: ConnectionStrings__FileStorageDb
+          value: "Host=postgres;Port=5432;Database={{ .Values.postgres.fileStorageDatabase }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size={{ .Values.postgres.connectionPool.maximumPoolSize }};Minimum Pool Size={{ .Values.postgres.connectionPool.minimumPoolSize }}"
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }
+        startupProbe:
+          httpGet: { path: /metrics, port: http }
+          failureThreshold: 30
+          periodSeconds: 5
         readinessProbe:
           httpGet: { path: /metrics, port: http }
         livenessProbe:

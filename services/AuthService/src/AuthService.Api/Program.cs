@@ -73,7 +73,8 @@ if (!app.Environment.IsProduction())
 }
 
 // HTTPS redirect chỉ khi service listen HTTPS. Docker chạy HTTP-only.
-if (!app.Environment.IsEnvironment("Docker"))
+if (!app.Environment.IsEnvironment("Docker")
+    && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
 {
     app.UseHttpsRedirection();
 }

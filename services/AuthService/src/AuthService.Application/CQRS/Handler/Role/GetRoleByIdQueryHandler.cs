@@ -2,6 +2,7 @@ using AuthService.Application.CQRS.Query.Role;
 using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace AuthService.Application.CQRS.Handler.Role;
 
@@ -16,7 +17,9 @@ public class GetRoleByIdQueryHandler : IRequestHandler<GetRoleByIdQuery, RoleRes
 
     public async Task<RoleResponse> Handle(GetRoleByIdQuery request, CancellationToken cancellationToken)
     {
-        var role = await _unitOfWork.Roles.GetByIdAsync(request.Id);
+        var role = await _unitOfWork.Roles
+            .GetAllAsync()
+            .FirstOrDefaultAsync(r => r.Id == request.Id && !r.IsDeleted, cancellationToken);
         if (role == null)
         {
             return new RoleResponse

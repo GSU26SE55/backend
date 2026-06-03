@@ -1,0 +1,41 @@
+{{- $kps := index .Values "kube-prometheus-stack" -}}
+{{- if $kps.enabled }}
+{{- if .Values.rabbitmq.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: rabbitmq
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+{{- end }}
+{{- if .Values.minio.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: minio
+  endpoints:
+  - port: s3
+    path: /minio/v2/metrics/cluster
+    interval: 15s
+    scrapeTimeout: 10s
+{{- end }}
+{{- end }}

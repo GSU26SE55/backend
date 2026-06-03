@@ -1,0 +1,18 @@
+# Apply once on the VPS k3s cluster to expose frontend staging on HTTPS :3443.
+# Main HTTPS remains on Traefik's built-in websecure entrypoint (:443).
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      websecure-staging:
+        port: 3443
+        expose:
+          default: true
+        exposedPort: 3443
+        protocol: TCP
+        tls:
+          enabled: true

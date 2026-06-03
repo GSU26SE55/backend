@@ -15,8 +15,9 @@ using SharedContracts.Common.Responses;
 namespace AuthService.Api.Controllers;
 
 /// <summary>
-/// Quản lý tài khoản của chính user đang đăng nhập (profile, password, phone verify, 2FA, link Google,
+/// Quản lý tài khoản của chính user đang đăng nhập (password, phone verify, 2FA, link Google,
 /// deactivate / delete chính mình).
+/// Profile read/update dùng <c>GET /api/auth/me</c> và <c>PUT /api/auth/me/profile</c>.
 /// Toàn bộ endpoint trong controller này yêu cầu access token hợp lệ.
 /// </summary>
 [ApiController]
@@ -33,134 +34,6 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy thông tin profile của tài khoản đang đăng nhập.
-    /// </summary>
-    /// <remarks>
-    /// Endpoint này đọc AccountId từ claim trong access token, vì vậy client không cần truyền id tài khoản.
-    ///
-    /// Quyền truy cập:
-    /// - Yêu cầu access token hợp lệ.
-    /// - Chỉ trả về profile của chính user đang gọi API.
-    ///
-    /// Response thành công thường bao gồm thông tin cơ bản như id, email, họ tên, số điện thoại,
-    /// avatar, ngày sinh, địa chỉ, trạng thái xác thực email/phone, trạng thái account và danh sách role.
-    ///
-    /// Use case:
-    /// - Hiển thị trang "Tài khoản của tôi".
-    /// - Đồng bộ lại thông tin user sau khi login hoặc sau khi cập nhật profile.
-    /// </remarks>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns><see cref="AccountResponse"/> chứa profile của user hiện tại.</returns>
-    /// <response code="200">Lấy profile thành công.</response>
-    /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
-    [HttpGet("me")]
-    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new GetMyProfileQuery(), cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Cập nhật profile của chính user theo id trên route.
-    /// </summary>
-    /// <remarks>
-    /// Endpoint này cho phép user tự cập nhật thông tin cá nhân nhưng chỉ khi <c>id</c> trên route trùng với AccountId trong JWT.
-    ///
-    /// Path parameter:
-    /// - <c>id</c>: id của account cần cập nhật. Phải là id của chính user đang đăng nhập.
-    ///
-    /// Body request:
-    /// - <c>FullName</c>: bắt buộc, tối đa 150 ký tự.
-    /// - <c>PhoneNumber</c>: tùy chọn, tối đa 20 ký tự.
-    /// - <c>AvatarUrl</c>: tùy chọn, tối đa 500 ký tự.
-    /// - <c>DateOfBirth</c>: tùy chọn, không được là ngày trong tương lai.
-    /// - <c>Address</c>: tùy chọn, tối đa 500 ký tự.
-    ///
-    /// Cách hoạt động:
-    /// - Controller kiểm tra route id có phải account hiện tại không.
-    /// - Nếu khác user, trả HTTP 403 để chặn cập nhật tài khoản người khác.
-    /// - Nếu hợp lệ, command được gán id từ route rồi gửi xuống application layer.
-    ///
-    /// Lưu ý:
-    /// - Endpoint này không dùng để đổi email, mật khẩu, role hoặc trạng thái account.
-    /// - Nếu đổi số điện thoại, trạng thái xác thực số điện thoại có thể cần xác minh lại tùy logic handler.
-    /// </remarks>
-    /// <param name="id">Id account cần cập nhật, phải trùng với user hiện tại.</param>
-    /// <param name="command">Thông tin profile mới.</param>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Kết quả cập nhật profile.</returns>
-    /// <response code="200">Cập nhật profile thành công.</response>
-    /// <response code="400">Dữ liệu đầu vào không hợp lệ.</response>
-    /// <response code="403">Route id không phải tài khoản của user hiện tại.</response>
-    /// <response code="404">Không tìm thấy tài khoản.</response>
-    /// <response code="409">Dữ liệu cập nhật bị trùng với account khác, ví dụ phone theo rule nghiệp vụ.</response>
-    [HttpPut("{id:guid}")]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
-    {
-        if (!IsSelf(id))
-            return StatusCode(StatusCodes.Status403Forbidden, new AccountActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 403,
-                Message = "Không có quyền cập nhật tài khoản này."
-            });
-
-        command.Id = id;
-        var result = await _mediator.Send(command, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Cập nhật profile của chính user hiện tại, không cần truyền id trên route.
-    /// </summary>
-    /// <remarks>
-    /// Đây là phiên bản thuận tiện hơn của <c>PUT /api/accounts/{id}</c>.
-    /// Controller lấy AccountId trực tiếp từ JWT claim rồi gán vào command.
-    ///
-    /// Body request giống endpoint cập nhật theo id:
-    /// - <c>FullName</c>: bắt buộc, tối đa 150 ký tự.
-    /// - <c>PhoneNumber</c>: tùy chọn, tối đa 20 ký tự.
-    /// - <c>AvatarUrl</c>: tùy chọn, tối đa 500 ký tự.
-    /// - <c>DateOfBirth</c>: tùy chọn, không được là ngày trong tương lai.
-    /// - <c>Address</c>: tùy chọn, tối đa 500 ký tự.
-    ///
-    /// Use case:
-    /// - Frontend cập nhật trang profile mà không cần lưu account id ở route.
-    /// - Giảm rủi ro FE truyền nhầm id của user khác.
-    /// </remarks>
-    /// <param name="command">Thông tin profile mới.</param>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Kết quả cập nhật profile.</returns>
-    /// <response code="200">Cập nhật profile thành công.</response>
-    /// <response code="400">Dữ liệu đầu vào không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập hoặc JWT không có AccountId hợp lệ.</response>
-    /// <response code="404">Không tìm thấy tài khoản.</response>
-    /// <response code="409">Dữ liệu cập nhật bị trùng với account khác.</response>
-    [HttpPut("me")]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> UpdateMe([FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        if (userId == null)
-            return Unauthorized(new AccountActionResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
-
-        command.Id = userId.Value;
-        var result = await _mediator.Send(command, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
     /// Đổi mật khẩu của tài khoản đang đăng nhập.
     /// </summary>
     /// <remarks>
@@ -168,7 +41,8 @@ public class AccountsController : ControllerBase
     ///
     /// Body request:
     /// - <c>CurrentPassword</c>: mật khẩu hiện tại, bắt buộc.
-    /// - <c>NewPassword</c>: mật khẩu mới, bắt buộc, từ 6 đến 100 ký tự và không chứa khoảng trắng.
+    /// - <c>NewPassword</c>: mật khẩu mới, bắt buộc, 8-100 ký tự và phải có chữ hoa,
+    ///   chữ thường, số, ký tự đặc biệt.
     /// - <c>ConfirmPassword</c>: phải khớp với <c>NewPassword</c>.
     ///
     /// Cách hoạt động:
@@ -296,7 +170,7 @@ public class AccountsController : ControllerBase
     ///
     /// Lưu ý:
     /// - Secret cần được bảo vệ như thông tin nhạy cảm.
-    /// - Tùy logic handler, trạng thái 2FA có thể được bật ngay hoặc cần thêm bước xác nhận mã TOTP đầu tiên.
+    /// - 2FA được bật ngay sau khi endpoint này thành công. Hiện chưa có bước confirm TOTP riêng.
     ///
     /// Idempotency:
     /// - Client NÊN gửi header <c>Idempotency-Key</c> (UUID v4) để chống bật 2FA trùng (sinh secret mới). Cache 24h.
@@ -495,6 +369,47 @@ public class AccountsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    [HttpGet("me/profile")]
+    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new AccountResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var result = await _mediator.Send(new GetMyProfileQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null || userId.Value != id)
+            return StatusCode(403, new AccountActionResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền." });
+
+        command.Id = id;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPut("me/profile")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateMe([FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        command.Id = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
     /// <summary>
     /// Xem lịch sử login của tài khoản đang đăng nhập.
     /// </summary>
@@ -545,12 +460,6 @@ public class AccountsController : ControllerBase
     {
         var raw = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(raw, out var id) ? id : null;
-    }
-
-    private bool IsSelf(Guid targetId)
-    {
-        var current = GetCurrentUserId();
-        return current.HasValue && current.Value == targetId;
     }
 
     private static AccountActionResponse Unauth() => new()

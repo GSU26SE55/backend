@@ -2,6 +2,7 @@ using AuthService.Application.CQRS.Command.Role;
 using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace AuthService.Application.CQRS.Handler.Role;
 
@@ -16,7 +17,9 @@ public class ChangeRoleStatusCommandHandler : IRequestHandler<ChangeRoleStatusCo
 
     public async Task<RoleActionResponse> Handle(ChangeRoleStatusCommand request, CancellationToken cancellationToken)
     {
-        var role = await _unitOfWork.Roles.GetByIdAsync(request.Id);
+        var role = await _unitOfWork.Roles
+            .GetAllAsync()
+            .FirstOrDefaultAsync(r => r.Id == request.Id && !r.IsDeleted, cancellationToken);
         if (role == null)
         {
             return new RoleActionResponse

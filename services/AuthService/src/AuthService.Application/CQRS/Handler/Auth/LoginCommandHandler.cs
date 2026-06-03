@@ -47,9 +47,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .Include(a => a.Role)
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
         {
@@ -192,13 +191,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         account.LastLoginIp = ipAddress;
         _unitOfWork.Accounts.UpdateAsync(account);
 
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role.Name)
-            .ToList();
+        var roleName = account.Role?.Name ?? string.Empty;
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
@@ -224,7 +220,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             actorAccountIdOverride: account.Id,
             metadata: new Dictionary<string, object?>
             {
-                ["roles"] = roleNames,
+                ["role"] = roleName,
                 ["sessionId"] = refreshToken.Id
             },
             cancellationToken: cancellationToken);

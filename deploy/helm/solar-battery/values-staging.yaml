@@ -5,9 +5,9 @@
 
 global:
   namespace: solar-staging
-  domain: staging.example.com         # ← BẠN ĐỔI tên domain thực tế
+  domain: capstonegsu26se55.mooo.com
   aspnetEnvironment: Staging
-  tlsIssuer: letsencrypt-staging      # đổi sang letsencrypt-prod khi tin tưởng cert đúng
+  tlsIssuer: letsencrypt-prod
 
 services:
   apigateway:
@@ -17,15 +17,12 @@ services:
       limits:   { cpu: 1,    memory: 1Gi }
 
   authservice:
-    replicas: 2                        # 2 replica để test rolling update
+    replicas: 1                        # single VPS — 2 replica không có lợi
     resources:
       requests: { cpu: 200m, memory: 384Mi }
       limits:   { cpu: 1,    memory: 1Gi }
     autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 5
-      targetCPUUtilizationPercentage: 70
+      enabled: false                   # HPA vô nghĩa trên single node
 
   emailservice:
     replicas: 1
@@ -45,47 +42,153 @@ services:
       requests: { cpu: 200m, memory: 256Mi }
       limits:   { cpu: 1,    memory: 1Gi }
 
+  batteryservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
+
 postgres:
-  storage: 10Gi                       # staging cần data persist nhiều hơn dev
+  storage: 10Gi
 
 rabbitmq:
   storage: 5Gi
+  ingress:
+    enabled: true   # rabbitmq.capstonegsu26se55.mooo.com → Management UI
 
 minio:
   storage: 20Gi
+  ingress:
+    enabled: true   # files.capstonegsu26se55.mooo.com → S3 API
+                    # minio.capstonegsu26se55.mooo.com → Console
 
-# Bật full monitoring stack trong staging
+# Monitoring stack for VPS staging. Resource requests stay low so the stack
+# can fit on the current single-node k3s VPS while preserving sane limits.
 monitoring:
   alertmanagerDiscord:
-    enabled: true                     # cần kubectl patch secret + DISCORD_WEBHOOK trước
+    enabled: true
   prometheusRules:
     enabled: true
   grafanaDashboards:
     enabled: true
+  cadvisor:
+    enabled: true
 
 kube-prometheus-stack:
   enabled: true
+  defaultRules:
+    create: true
+  kubeEtcd:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  prometheusOperator:
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+  kube-state-metrics:
+    resources:
+      requests: { cpu: 20m, memory: 48Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus-node-exporter:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus:
+    prometheusSpec:
+      retention: 3d
+      retentionSize: 4GB
+      scrapeInterval: 15s
+      evaluationInterval: 15s
+      resources:
+        requests: { cpu: 75m, memory: 160Mi }
+        limits:   { cpu: 500m, memory: 768Mi }
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 5Gi
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
   grafana:
-    adminPassword: "changeme-strong"  # ← ĐỔI password
+    adminPassword: "Admin@123"
+    resources:
+      requests: { cpu: 25m, memory: 96Mi }
+      limits:   { cpu: 250m, memory: 384Mi }
+    persistence:
+      enabled: true
+      size: 2Gi
     ingress:
       enabled: true
+      ingressClassName: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.tls: "true"
       hosts:
-      - grafana.staging.example.com   # ← ĐỔI domain
+      - grafana.capstonegsu26se55.mooo.com
+      path: /
+      pathType: Prefix
+      tls:
+      - secretName: grafana-tls
+        hosts:
+        - grafana.capstonegsu26se55.mooo.com
 
 loki-stack:
   enabled: true
+  loki:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits:   { cpu: 300m, memory: 512Mi }
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+  promtail:
+    enabled: true
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: monitoring
 
 postgres-exporter:
   enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: monitoring
 
 redis-exporter:
   enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: monitoring
 
-# Quota staging — tổng cluster cap, an toàn không OOM cả VPS
+# Quota an toàn cho VPS 4GB RAM (k3s system ~0.5GB, headroom còn ~3.5GB)
 resourceQuota:
   enabled: true
-  requestsCpu: "6"
-  requestsMemory: "12Gi"
+  requestsCpu: "4"
+  requestsMemory: "4Gi"
   limitsCpu: "10"
-  limitsMemory: "20Gi"
+  limitsMemory: "12Gi"
   pvcs: "15"

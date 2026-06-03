@@ -1,3 +1,5 @@
+using FileStorageService.Domain.Enums;
+
 namespace FileStorageService.Api.Requests;
 
 /// <summary>
@@ -18,4 +20,9 @@ public class UploadFileRequest
     /// Giá trị này sẽ trở thành phần đầu của <c>objectKey</c>, ví dụ <c>avatars/...</c> hoặc <c>reports/...</c>.
     /// </summary>
     public string FolderName { get; set; } = "default";
+
+    /// <summary>
+    /// Mục đích nghiệp vụ của file để service khác có thể phân quyền/hiển thị đúng ngữ cảnh.
+    /// </summary>
+    public FilePurposeEnum Purpose { get; set; } = FilePurposeEnum.Other;
 }

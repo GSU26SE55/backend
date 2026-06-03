@@ -27,9 +27,11 @@ public class JwtHelper : IJwtHelper
     /// <summary>Claim type cho permission code (compact để giảm size JWT).</summary>
     public const string PermissionClaimType = "perm";
 
-    public Task<string> GenerateAccessToken(Account account, IEnumerable<string> roles, IEnumerable<string>? permissions = null)
+    private string SecretKey => _configuration["JwtSettings:SecretKey"]
+        ?? throw new InvalidOperationException("Missing configuration: JwtSettings:SecretKey");
+
+    public Task<string> GenerateAccessToken(Account account, string role, IEnumerable<string>? permissions = null)
     {
-        var SecretKey = _configuration["JwtSettings:SecretKey"];
         var Issuer = _configuration["JwtSettings:Issuer"];
         var Audience = _configuration["JwtSettings:Audience"];
 
@@ -45,11 +47,8 @@ public class JwtHelper : IJwtHelper
                 new Claim("FullName", account.FullName ?? string.Empty),
             };
 
-        foreach (var role in roles ?? Enumerable.Empty<string>())
-        {
-            if (!string.IsNullOrWhiteSpace(role))
-                claims.Add(new Claim(ClaimTypes.Role, role));
-        }
+        if (!string.IsNullOrWhiteSpace(role))
+            claims.Add(new Claim(ClaimTypes.Role, role));
 
         foreach (var permission in (permissions ?? Enumerable.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -110,7 +109,6 @@ public class JwtHelper : IJwtHelper
 
     public (bool, string?) ValidateToken(string AccessToken)
     {
-        var SecretKey = _configuration["JwtSettings:SecretKey"];
         var SecretKeyBytes = Encoding.UTF8.GetBytes(SecretKey);
         var TokenHandler = new JwtSecurityTokenHandler();
 
@@ -149,8 +147,7 @@ public class JwtHelper : IJwtHelper
 
     public string GenerateResetToken(Guid accountId, string email, int expiresInMinutes)
     {
-        var secret = _configuration["JwtSettings:SecretKey"]!;
-        var key = Encoding.UTF8.GetBytes(secret);
+        var key = Encoding.UTF8.GetBytes(SecretKey);
         var handler = new JwtSecurityTokenHandler();
 
         var descriptor = new SecurityTokenDescriptor
@@ -178,8 +175,7 @@ public class JwtHelper : IJwtHelper
 
         try
         {
-            var secret = _configuration["JwtSettings:SecretKey"]!;
-            var key = Encoding.UTF8.GetBytes(secret);
+            var key = Encoding.UTF8.GetBytes(SecretKey);
             var handler = new JwtSecurityTokenHandler();
 
             var principal = handler.ValidateToken(token, new TokenValidationParameters

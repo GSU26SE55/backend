@@ -8,7 +8,7 @@
 # --------------------------------------------------------------------
 global:
   # Image registry. Jenkins push image với tag = git SHA về đây.
-  imageRegistry: ghcr.io/your-org
+  imageRegistry: ghcr.io/gsu26se55
 
   # Tag mặc định. Jenkins override `--set global.imageTag=abc1234` lúc deploy.
   imageTag: latest
@@ -24,7 +24,7 @@ global:
 
   # Domain public dùng cho Ingress của ApiGateway.
   # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
-  domain: dev.example.com
+  domain: capstonegsu26se55.mooo.com
 
   # ASP.NET environment — Development / Staging / Production
   aspnetEnvironment: Development
@@ -39,8 +39,14 @@ global:
   #     --docker-server=ghcr.io --docker-username=USER --docker-password=PAT
   imagePullSecret: ghcr-pull
 
+  # Default rolling update keeps zero downtime on larger nodes.
+  # VPS-small overlay changes this to avoid temporary double memory usage.
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
 # --------------------------------------------------------------------
-# 5 service ASP.NET
+# ASP.NET services
 # --------------------------------------------------------------------
 services:
   apigateway:
@@ -103,18 +109,45 @@ services:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 512Mi }
 
+  batteryservice:
+    enabled: true
+    image: batteryservice
+    replicas: 1
+    port: 8080
+    resources:
+      requests: { cpu: 150m, memory: 256Mi }
+      limits:   { cpu: 750m, memory: 768Mi }
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
 # --------------------------------------------------------------------
 # Infrastructure (chạy trong cluster — production tốt nhất dùng managed Postgres/Redis)
 # --------------------------------------------------------------------
 postgres:
   enabled: true
-  image: postgres:16-alpine
+  image: timescale/timescaledb:latest-pg16
+  clientImage: postgres:16-alpine
   database: auth_db
+  fileStorageDatabase: file_storage_db
+  batteryDatabase: battery_db
   username: postgres
   storage: 5Gi
   # Tăng max_connections để hỗ trợ pool nhiều service × replica.
   # Công thức: max_connections >= sum(replicas × poolSize) + buffer
   maxConnections: 300
+  sharedBuffers: 128MB
+  connectionPool:
+    maximumPoolSize: 25
+    minimumPoolSize: 2
+  initJob:
+    activeDeadlineSeconds: 180
+    ttlSecondsAfterFinished: 300
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
@@ -131,9 +164,12 @@ rabbitmq:
   image: rabbitmq:3-management-alpine
   username: guest
   storage: 2Gi
+  returnPerObjectMetrics: true
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose rabbitmq.{domain}
 
 minio:
   enabled: true
@@ -144,6 +180,14 @@ minio:
   resources:
     requests: { cpu: 50m,  memory: 128Mi }
     limits:   { cpu: 500m, memory: 512Mi }
+  initJob:
+    activeDeadlineSeconds: 600
+    ttlSecondsAfterFinished: 300
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  ingress:
+    enabled: false   # bật trong values-staging.yaml — expose files.{domain} + minio.{domain}
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)
@@ -220,6 +264,15 @@ monitoring:
   grafanaDashboards:
     enabled: false              # bật khi đã cài Grafana với sidecar dashboard discovery
 
+  cadvisor:
+    enabled: false
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+    serviceMonitor:
+      enabled: true
+
 # --------------------------------------------------------------------
 # Subchart values — cover 8 monitoring service từ docker-compose
 # Default: TẮT vì chart core nhẹ. Bật trong values-staging.yaml nếu cần.
@@ -240,6 +293,10 @@ kube-prometheus-stack:
     enabled: true
     adminPassword: changeme        # ← override trong values-staging
     sidecar:
+      datasources:
+        enabled: true
+        defaultDatasourceEnabled: true
+        uid: prometheus
       dashboards:
         enabled: true
         label: grafana_dashboard   # match label trong grafana-dashboards-cm.yaml
@@ -260,11 +317,17 @@ kube-prometheus-stack:
 loki-stack:
   enabled: false
   loki:
+    fullnameOverride: loki
+    datasource:
+      uid: loki
     persistence:
       enabled: true
       size: 10Gi
   promtail:
     enabled: true
+    config:
+      clients:
+      - url: http://loki:3100/loki/api/v1/push
 
 postgres-exporter:
   enabled: false
@@ -285,7 +348,7 @@ redis-exporter:
 # --------------------------------------------------------------------
 # ResourceQuota — cap tổng resource trong namespace solar-staging.
 # Tính toán: 5 service × (limits 500m × 512Mi) + infra 2 vCPU × 4Gi + monitoring 2 vCPU × 4Gi
-# = ~6.5 vCPU × ~10Gi cho dev. Staging upgrade lên trong values-staging.yaml.
+# = ~7 vCPU × ~11Gi cho dev. Staging upgrade lên trong values-staging.yaml.
 # --------------------------------------------------------------------
 resourceQuota:
   enabled: false              # bật trong values-staging

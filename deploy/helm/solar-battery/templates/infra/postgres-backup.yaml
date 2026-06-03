@@ -17,12 +17,22 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres-backup") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
           containers:
           - name: backup
             # postgres:16-alpine có pg_dump sẵn, gzip có sẵn; cài thêm mc qua wget.
             image: postgres:16-alpine
+            resources:
+              requests:
+                cpu: 20m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
             env:
             - name: PGHOST
               value: postgres

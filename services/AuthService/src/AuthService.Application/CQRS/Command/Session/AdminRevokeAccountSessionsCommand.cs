@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using MediatR;
 using SharedContracts.Common.Responses;
@@ -7,6 +8,7 @@ namespace AuthService.Application.CQRS.Command.Session;
 
 public class AdminRevokeAccountSessionsCommand : IRequest<SessionActionResponse>, IValidatable<SessionActionResponse>
 {
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string? Reason { get; set; }
 

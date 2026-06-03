@@ -20,14 +20,15 @@ public class GetAccountSessionsQueryHandlerTests
             new RefreshToken { Id = Guid.NewGuid(), AccountId = targetId, Token = "b", Status = RefreshTokenStatus.Revoked, IssuedAt = DateTime.UtcNow.AddDays(-1), ExpiredAt = DateTime.UtcNow.AddDays(6) },
             new RefreshToken { Id = Guid.NewGuid(), AccountId = otherId, Token = "c", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) }
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
         var handler = new GetAccountSessionsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAccountSessionsQuery { AccountId = targetId, ActiveOnly = true }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.Should().HaveCount(1);
-        resp.Data[0].Status.Should().Be(RefreshTokenStatus.Active);
+        var sessions = resp.Data!;
+        sessions.Should().HaveCount(1);
+        sessions[0].Status.Should().Be(RefreshTokenStatus.Active);
     }
 
     [Fact]
@@ -39,7 +40,7 @@ public class GetAccountSessionsQueryHandlerTests
             new RefreshToken { Id = Guid.NewGuid(), AccountId = targetId, Token = "a", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) },
             new RefreshToken { Id = Guid.NewGuid(), AccountId = targetId, Token = "b", Status = RefreshTokenStatus.Revoked, IssuedAt = DateTime.UtcNow.AddDays(-1), ExpiredAt = DateTime.UtcNow.AddDays(6) }
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: tokens);
         var handler = new GetAccountSessionsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAccountSessionsQuery { AccountId = targetId, ActiveOnly = false }, CancellationToken.None);
@@ -50,7 +51,7 @@ public class GetAccountSessionsQueryHandlerTests
     [Fact]
     public async Task EmptyAccountId_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetAccountSessionsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetAccountSessionsQuery { AccountId = Guid.Empty }, CancellationToken.None);
@@ -84,7 +85,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
         var t1 = new RefreshToken { Id = Guid.NewGuid(), AccountId = account.Id, Token = "a", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) };
         var t2 = new RefreshToken { Id = Guid.NewGuid(), AccountId = account.Id, Token = "b", Status = RefreshTokenStatus.Active, IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7) };
 
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { t1, t2, otherUserToken });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { t1, t2, otherUserToken });
         var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = account.Id, Reason = "Suspected breach" }, CancellationToken.None);
@@ -100,7 +101,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
     [Fact]
     public async Task AccountNotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
@@ -119,7 +120,7 @@ public class AdminRevokeAccountSessionsCommandHandlerTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new AdminRevokeAccountSessionsCommandHandler(uow.Object, MockPublisher.NoOp().Object);
 
         var resp = await handler.Handle(new AdminRevokeAccountSessionsCommand { AccountId = account.Id }, CancellationToken.None);

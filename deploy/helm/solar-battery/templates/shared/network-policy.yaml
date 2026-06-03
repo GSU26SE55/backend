@@ -28,7 +28,38 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 3. ApiGateway → 4 service backend
+# Traefik -> MinIO public endpoints (S3 API + Console).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-minio
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: minio
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - { protocol: TCP, port: 9000 }
+    - { protocol: TCP, port: 9001 }
+---
+# Traefik -> RabbitMQ Management UI.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-rabbitmq-management
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: rabbitmq
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - { protocol: TCP, port: 15672 }
+---
+# ApiGateway -> backend services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,7 +67,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice] }
   ingress:
   - from:
     - podSelector:
@@ -45,11 +76,11 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 4. AuthService → Postgres
+# 4. Database-backed services → Postgres
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-authservice-to-postgres
+  name: allow-services-to-postgres
 spec:
   podSelector:
     matchLabels:
@@ -57,8 +88,8 @@ spec:
   ingress:
   - from:
     - podSelector:
-        matchLabels:
-          app.kubernetes.io/component: authservice
+        matchExpressions:
+        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, postgres-database-init, postgres-backup] }
     ports:
     - { protocol: TCP, port: 5432 }
 ---
@@ -75,7 +106,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/name, operator: In, values: [solar-battery] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
     ports:
     - { protocol: TCP, port: 6379 }
 ---
@@ -92,7 +123,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/name, operator: In, values: [solar-battery] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
     ports:
     - { protocol: TCP, port: 5672 }
     - { protocol: TCP, port: 15672 }
@@ -111,12 +142,12 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [filestorageservice, minio-init] }
+        - { key: app.kubernetes.io/component, operator: In, values: [filestorageservice, minio-init, postgres-backup] }
     ports:
     - { protocol: TCP, port: 9000 }
     - { protocol: TCP, port: 9001 }
 ---
-# 8. Prometheus scrape /metrics của 5 service.
+# 8. Prometheus scrape /metrics của backend/gateway services.
 # Cho phép kubelet probe nữa (kubelet đi từ node IP — empty selector match all).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -125,7 +156,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, cadvisor] }
   ingress:
   # Prometheus pod (kube-prometheus-stack)
   - from:
@@ -140,7 +171,81 @@ spec:
     ports:
     - { protocol: TCP, port: 8080 }
 ---
-# 9. Egress — cho phép DNS + cluster-internal + Internet (Mailjet, Google OAuth)
+# Monitoring internal traffic:
+# - Prometheus scrapes app, infra, exporter, Loki, Promtail, cAdvisor metrics.
+# - Grafana reads Prometheus/Loki.
+# - Promtail pushes logs to Loki.
+# - Alertmanager sends webhook notifications to alertmanager-discord.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-stack
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - { protocol: TCP, port: 8080 }
+    - { protocol: TCP, port: 9000 }
+    - { protocol: TCP, port: 15692 }
+    - { protocol: TCP, port: 9187 }
+    - { protocol: TCP, port: 9121 }
+    - { protocol: TCP, port: 9100 }
+    - { protocol: TCP, port: 3100 }
+    - { protocol: TCP, port: 3101 }
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: grafana
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: promtail
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: alertmanager
+    ports:
+    - { protocol: TCP, port: 9090 }
+    - { protocol: TCP, port: 3100 }
+    - { protocol: TCP, port: 9094 }
+---
+# Traefik -> Grafana UI from kube-prometheus-stack.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-grafana
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - { protocol: TCP, port: 3000 }
+---
+# 9. cert-manager ACME HTTP-01 solver pods — Traefik cần reach port 8089 để forward challenge.
+# Solver pods do cert-manager tạo ra, không có label app.kubernetes.io/*, nên cần policy riêng.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  ingress:
+  - ports:
+    - { protocol: TCP, port: 8089 }
+  policyTypes: [Ingress]
+---
+# 10. Egress — cho phép DNS + cluster-internal + Internet (Mailjet, Google OAuth)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

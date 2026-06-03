@@ -22,7 +22,7 @@ public class IntegrationEventPublishTests
     public IntegrationEventPublishTests()
     {
         _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("HASHED");
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<global::AuthService.Domain.Entities.Account>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("access");
+        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<global::AuthService.Domain.Entities.Account>(), It.IsAny<string>(), It.IsAny<IEnumerable<string>?>())).ReturnsAsync("access");
         _jwt.Setup(j => j.GenerateRefreshToken()).Returns("refresh");
     }
 
@@ -36,7 +36,7 @@ public class IntegrationEventPublishTests
             NormalizedName = "STAFF",
             Status = RoleStatusEnum.Active
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object);
         var resp = await handler.Handle(new CreateAccountCommand
@@ -45,7 +45,7 @@ public class IntegrationEventPublishTests
             Password = "Password1!",
             FullName = "Staff One",
             PhoneNumber = "0901234567",
-            RoleIds = new List<Guid> { role.Id }
+            RoleId = role.Id
         }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
@@ -55,7 +55,7 @@ public class IntegrationEventPublishTests
                 e.FullName == "Staff One" &&
                 e.PhoneNumber == "0901234567" &&
                 e.CreationSource == "AdminCreate" &&
-                e.Roles.Contains("Staff")),
+                e.Role == "Staff"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -71,8 +71,7 @@ public class IntegrationEventPublishTests
             PhoneNumber = "0900000000",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object);
         var resp = await handler.Handle(new UpdateAccountCommand
@@ -104,8 +103,7 @@ public class IntegrationEventPublishTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new DeleteAccountCommandHandler(uow.Object, _producer.Object);
         await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
@@ -129,8 +127,7 @@ public class IntegrationEventPublishTests
             FullName = "U",
             Status = AccountStatusEnum.Active
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new DeleteMeCommandHandler(uow.Object, _producer.Object);
         await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);
@@ -145,7 +142,7 @@ public class IntegrationEventPublishTests
     [Fact]
     public async Task UpdateAccount_NotFound_DoesNotPublishEvent()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object);
 

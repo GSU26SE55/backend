@@ -60,9 +60,9 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .Include(a => a.Role)
+            .Include(a => a.Profile)
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var isNewAccount = account == null;
@@ -85,17 +85,21 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 LastLoginAt = DateTime.UtcNow,
                 LastLoginIp = ipAddress,
                 FailedLoginAttempts = 0,
-                LockoutEndAt = null
+                LockoutEndAt = null,
+                RoleId = CustomerRoleId,
+                RoleAssignedAt = DateTime.UtcNow
             };
             await _unitOfWork.Accounts.AddAsync(account);
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
+            account.Profile = new AccountProfile
             {
                 Id = Guid.NewGuid(),
                 AccountId = account.Id,
-                RoleId = CustomerRoleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
+                ExternalAvatarUrl = NormalizeGooglePicture(googleUser.Picture),
+                AvatarSource = string.IsNullOrWhiteSpace(googleUser.Picture)
+                    ? AvatarSourceEnum.None
+                    : AvatarSourceEnum.Google
+            };
+            await _unitOfWork.AccountProfiles.AddAsync(account.Profile);
         }
         else
         {
@@ -123,22 +127,17 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             account.LockoutEndAt = null;
             if (account.Status == AccountStatusEnum.Locked)
                 account.Status = AccountStatusEnum.Active;
+
+            await UpsertGoogleAvatarProfileAsync(account, googleUser.Picture);
             _unitOfWork.Accounts.UpdateAsync(account);
         }
 
-        // Lưu ý: AccountRole mới vừa AddAsync ở trên có Role nav = null (chỉ set RoleId).
-        // EF Change Tracker auto-fixup đẩy entry đó vào account.AccountRoles → cần filter ar.Role != null.
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive
-                         && ar.Role != null
-                         && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role!.Name)
-            .ToList();
-        if (!roleNames.Contains("Customer"))
-            roleNames.Add("Customer");
+        // Account mới vừa add — Role nav có thể null; nếu null fallback "Customer" (đã set RoleId=CustomerRoleId ở trên).
+        var roleName = account.Role?.Name
+                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
@@ -161,7 +160,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 account.Email,
                 account.FullName,
                 account.PhoneNumber,
-                roleNames,
+                roleName,
                 CreationSource: "GoogleOAuth"), cancellationToken);
         }
 
@@ -189,4 +188,36 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         Message = message,
         ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
+
+    private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)
+    {
+        var normalizedPicture = NormalizeGooglePicture(pictureUrl);
+        if (normalizedPicture is null)
+            return;
+
+        var profile = account.Profile ?? new AccountProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = account.Id
+        };
+
+        profile.ExternalAvatarUrl = normalizedPicture;
+        if (profile.AvatarFileId is null)
+            profile.AvatarSource = AvatarSourceEnum.Google;
+
+        if (account.Profile is null)
+        {
+            account.Profile = profile;
+            await _unitOfWork.AccountProfiles.AddAsync(profile);
+        }
+        else
+        {
+            _unitOfWork.AccountProfiles.UpdateAsync(profile);
+        }
+    }
+
+    private static string? NormalizeGooglePicture(string? pictureUrl)
+    {
+        return string.IsNullOrWhiteSpace(pictureUrl) ? null : pictureUrl.Trim();
+    }
 }

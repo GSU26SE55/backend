@@ -1,0 +1,220 @@
+using BatteryService.Api.Authentication;
+using BatteryService.Application.CQRS.Command.SensorReading;
+using BatteryService.Application.CQRS.Query.SensorReading;
+using BatteryService.Application.DTOs;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
+
+namespace BatteryService.Api.Controllers;
+
+/// <summary>
+/// Nhóm endpoint xử lý <b>SensorReading</b> - bản ghi đo lường thời gian thực từ pin (voltage, current, temperature, SOC...).
+/// Bảng <c>sensor_readings</c> là TimescaleDB hypertable, tự động partition theo thời gian.
+/// </summary>
+/// <remarks>
+/// Đặc thù endpoint:
+/// <list type="bullet">
+///   <item><description><b>POST /batch</b>: dùng <b>ApiKey authentication</b>, không phải JWT. Dành cho IoT gateway / sensor hub đẩy data vào.</description></item>
+///   <item><description><b>GET</b>: dùng JWT đăng nhập như các endpoint khác.</description></item>
+/// </list>
+///
+/// Lý do dùng ApiKey thay vì JWT cho ingest:
+/// - IoT gateway thường không có khả năng refresh token / xử lý OAuth flow.
+/// - ApiKey cố định (cấu hình qua <c>ApiKeys:SensorIngest</c>) đơn giản, có thể rotate khi cần.
+/// - Tách kênh ingest khỏi kênh user/web giúp dễ áp rate limit và monitoring riêng.
+/// </remarks>
+[ApiController]
+[Route("api/sensor-readings")]
+[Produces("application/json")]
+public class SensorReadingsController : ControllerBase
+{
+    private readonly IMediator _mediator;
+
+    public SensorReadingsController(IMediator mediator)
+    {
+        _mediator = mediator;
+    }
+
+    /// <summary>
+    /// Ingest hàng loạt SensorReading (dành cho IoT gateway).
+    /// </summary>
+    /// <remarks>
+    /// Authentication:
+    /// - Yêu cầu header <c>X-Api-Key: {key}</c> khớp với cấu hình <c>ApiKeys:SensorIngest</c>.
+    /// - <b>Không</b> cần JWT.
+    ///
+    /// Body request:
+    /// - <c>Items</c>: list các <see cref="SensorReadingItem"/>, bắt buộc có ít nhất 1 phần tử.
+    ///   Mỗi item:
+    ///   - <c>BatteryAssetId</c>: bắt buộc, GUID của asset đang đo.
+    ///   - <c>Time</c>: bắt buộc, thời điểm đo. Không được ở tương lai quá 5 phút. Hệ thống tự convert sang UTC.
+    ///   - <c>Voltage</c>: ≥ 0 (V).
+    ///   - <c>Current</c>: số thực, có thể âm (đang xả) hoặc dương (đang sạc) - tùy convention.
+    ///   - <c>Temperature</c>: [-50, 120] (°C).
+    ///   - <c>SocPercent</c>: [0, 100] (%).
+    ///   - <c>CycleCount</c>: tùy chọn, ≥ 0.
+    ///   - <c>SourceDeviceId</c>: tùy chọn, ≤ 64 ký tự (định danh thiết bị đo).
+    ///
+    /// Cách hoạt động:
+    /// - Validate toàn bộ items (gom hết lỗi → 400).
+    /// - Lọc các <c>BatteryAssetId</c> hợp lệ, query 1 lần để check tồn tại + <c>!IsDeleted</c> → dictionary.
+    /// - Với mỗi item:
+    ///   - Nếu asset không tồn tại trong dictionary → <b>skip</b> (không throw, được tính vào <c>Skipped</c>).
+    ///   - Convert <c>Time</c> sang UTC.
+    ///   - Insert SensorReading mới.
+    ///   - Cập nhật <c>asset.LastSensorReadingAt</c> nếu reading mới hơn timestamp đang lưu.
+    /// - Một <c>SaveChangesAsync</c> cho cả batch để tối ưu.
+    /// - Trả <see cref="SensorReadingBatchIngestResult"/> với count <c>TotalReceived</c>, <c>Inserted</c>, <c>Skipped</c>.
+    ///
+    /// Lưu ý:
+    /// - Endpoint <b>không</b> throw khi gặp asset không tồn tại; gateway có thể tiếp tục gửi data các asset khác.
+    ///   Trường <c>Skipped</c> trong response giúp gateway phát hiện sai cấu hình mapping.
+    /// - Duplicate (BatteryAssetId, Time) sẽ raise unique constraint của hypertable → throw 500. Gateway cần đảm bảo Time đủ resolution.
+    /// - Sprint 3: AnomalyDetector sẽ quét reading mới và phát sinh Alert dựa trên ThresholdConfig.
+    /// </remarks>
+    /// <param name="command">Batch sensor readings.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SensorReadingBatchIngestResult"/>.</returns>
+    /// <response code="200">Batch xử lý thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (xem <c>ListErrors</c>).</response>
+    /// <response code="401">Thiếu hoặc sai <c>X-Api-Key</c>.</response>
+    [HttpPost("batch")]
+    [Authorize(AuthenticationSchemes = ApiKeyAuthenticationHandler.SchemeName)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BatchIngest([FromBody] BatchIngestSensorReadingsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy lịch sử SensorReading của một BatteryAsset trong khoảng thời gian.
+    /// </summary>
+    /// <remarks>
+    /// Query parameters:
+    /// - <c>batteryAssetId</c>: bắt buộc trên route, asset cần xem history.
+    /// - <c>From</c>: tùy chọn, UTC, lọc <c>Time &gt;= From</c>.
+    /// - <c>To</c>: tùy chọn, UTC, lọc <c>Time &lt;= To</c>.
+    /// - <c>Limit</c>: số record mỗi trang, mặc định 100, tối đa 1000.
+    /// - <c>Cursor</c>: timestamp của record cuối trang trước; dùng để lấy trang tiếp theo.
+    ///
+    /// Cách hoạt động:
+    /// - Filter theo asset + time range.
+    /// - Sort <c>Time</c> giảm dần (đo mới nhất lên đầu).
+    /// - Nếu có <c>Cursor</c>, chỉ lấy record có <c>Time &lt; Cursor</c>.
+    /// - Projection thẳng sang <see cref="SensorReadingDto"/>.
+    /// - Tận dụng TimescaleDB chunk pruning để query time range nhanh.
+    ///
+    /// Use case:
+    /// - Mobile/Web vẽ biểu đồ voltage/temperature theo thời gian.
+    /// - Manager phân tích root cause khi có alert.
+    ///
+    /// Lưu ý:
+    /// - Endpoint <b>chưa</b> enforce server-side rằng Customer chỉ xem được history của asset mình sở hữu - phải kiểm tra ở FE/Mobile hoặc bổ sung trong sprint sau.
+    /// - Không trả <c>TotalItems</c> cho time-series vì count full range rất tốn kém. FE dùng <c>HasMore</c> và <c>NextCursor</c>.
+    /// - Với time range lớn (ví dụ 1 năm) và pin có tần số đo cao (mỗi 30s), nên dùng aggregation (sẽ làm Sprint 7) thay vì raw history.
+    /// </remarks>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
+    /// <param name="query">Filter time range + cursor paging.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa items + next cursor.</returns>
+    /// <response code="200">Trả history.</response>
+    /// <response code="400">Query không hợp lệ.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role phù hợp.</response>
+    [HttpGet("{batteryAssetId:guid}/history")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingHistoryResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingHistoryResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetHistory(Guid batteryAssetId, [FromQuery] GetSensorReadingHistoryQuery query, CancellationToken cancellationToken)
+    {
+        query.BatteryAssetId = batteryAssetId;
+        var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy dữ liệu SensorReading đã được gộp theo khoảng thời gian (aggregate) cho chart.
+    /// </summary>
+    /// <remarks>
+    /// Query parameters:
+    /// - <c>batteryAssetId</c>: bắt buộc trên route.
+    /// - <c>From</c>: tùy chọn, UTC, lọc <c>Time &gt;= From</c>.
+    /// - <c>To</c>: tùy chọn, UTC, lọc <c>Time &lt;= To</c>.
+    /// - <c>Interval</c>: khoảng bucket — <c>1m</c>, <c>5m</c>, <c>15m</c>, <c>1h</c>, <c>1d</c>. Mặc định <c>1h</c>.
+    ///
+    /// Cách hoạt động:
+    /// - Filter theo asset + time range.
+    /// - Gộp readings theo <c>Interval</c>, tính AVG cho từng metric (Voltage, Current, Temperature, SocPercent, SohPercent).
+    /// - Trả danh sách bucket sắp xếp tăng dần theo thời gian.
+    ///
+    /// Use case:
+    /// - FE/Mobile vẽ biểu đồ SOC/Voltage/Temperature theo thời gian.
+    /// - Thay thế <c>/history</c> khi time range lớn (> 1 ngày) để tránh quá nhiều data points.
+    ///
+    /// Lưu ý:
+    /// - <c>AvgSohPercent</c> là nullable; trả <c>null</c> nếu không có reading nào có SohPercent trong bucket.
+    /// - Không trả totalItems — FE dùng độ dài mảng <c>items</c>.
+    /// </remarks>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
+    /// <param name="query">Filter + interval.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa danh sách <see cref="SensorReadingAggregateDto"/>.</returns>
+    /// <response code="200">Trả aggregate data.</response>
+    /// <response code="400">Query không hợp lệ (interval không đúng, time range ngược).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role phù hợp.</response>
+    [HttpGet("{batteryAssetId:guid}/aggregate")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAggregate(Guid batteryAssetId, [FromQuery] GetSensorReadingAggregateQuery query, CancellationToken cancellationToken)
+    {
+        query.BatteryAssetId = batteryAssetId;
+        var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy SensorReading mới nhất của một BatteryAsset.
+    /// </summary>
+    /// <remarks>
+    /// Route parameter:
+    /// - <c>batteryAssetId</c>: bắt buộc, Id BatteryAsset.
+    ///
+    /// Cách hoạt động:
+    /// - Filter <c>BatteryAssetId = assetId</c>, <c>OrderByDescending(Time).FirstOrDefault()</c>.
+    /// - TimescaleDB tối ưu việc tìm reading mới nhất trên hypertable.
+    /// - 404 nếu asset chưa có reading nào (chú ý: không 404 cho asset không tồn tại - vẫn trả 404 do query không match).
+    ///
+    /// Tips:
+    /// - Nếu chỉ cần snapshot tổng quan (reading + alert count), dùng <c>GET /api/battery-assets/{id}/realtime</c> sẽ thuận tiện hơn.
+    /// - Endpoint này phù hợp khi chỉ muốn raw reading, không cần asset metadata.
+    /// </remarks>
+    /// <param name="batteryAssetId">Id BatteryAsset.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SensorReadingDto"/>.</returns>
+    /// <response code="200">Trả reading mới nhất.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role phù hợp.</response>
+    /// <response code="404">Asset chưa có reading nào.</response>
+    [HttpGet("{batteryAssetId:guid}/latest")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetLatest(Guid batteryAssetId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetLatestSensorReadingQuery { BatteryAssetId = batteryAssetId }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+}

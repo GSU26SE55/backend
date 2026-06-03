@@ -35,7 +35,7 @@ public class ChangePasswordCommandHandlerTests
         };
         _hasher.Setup(h => h.Verify("old-pw", "old")).Returns(true);
         _hasher.Setup(h => h.Hash("new-pw")).Returns("NEW-HASH");
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
         var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
@@ -65,8 +65,7 @@ public class ChangePasswordCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
         var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
         var resp = await handler.Handle(new ChangePasswordCommand
@@ -83,7 +82,7 @@ public class ChangePasswordCommandHandlerTests
     [Fact]
     public async Task ChangePassword_AccountNotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new ChangePasswordCommandHandler(uow.Object, _hasher.Object, _publisher.Object);
 
@@ -118,8 +117,7 @@ public class ChangeAccountStatusCommandHandlerTests
     public async Task Change_ToActive_ResetsFailedAttempts_AndLockoutEnd()
     {
         var account = WithStatus(AccountStatusEnum.Locked);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
@@ -143,8 +141,7 @@ public class ChangeAccountStatusCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Locked, Reason = "violation" }, CancellationToken.None);
@@ -158,8 +155,7 @@ public class ChangeAccountStatusCommandHandlerTests
     public async Task Change_SameStatus_NoOp_Returns200()
     {
         var account = WithStatus(AccountStatusEnum.Active);
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
@@ -171,7 +167,7 @@ public class ChangeAccountStatusCommandHandlerTests
     [Fact]
     public async Task Change_NotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
 
@@ -203,8 +199,7 @@ public class DeleteAccountCommandHandlerTests
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
@@ -218,7 +213,7 @@ public class DeleteAccountCommandHandlerTests
     [Fact]
     public async Task Delete_NotFound_Returns404()
     {
-        var (uow, accounts, _, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
         var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
 

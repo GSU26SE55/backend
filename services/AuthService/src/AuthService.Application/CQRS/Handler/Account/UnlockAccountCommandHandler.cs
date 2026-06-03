@@ -4,6 +4,7 @@ using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Handler.Account;
@@ -21,7 +22,9 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
 
     public async Task<AccountActionResponse> Handle(UnlockAccountCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.Id);
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
             return new AccountActionResponse
@@ -32,13 +35,21 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             };
         }
 
-        var wasLocked = account.Status == AccountStatusEnum.Locked;
+        if (account.Status != AccountStatusEnum.Locked)
+        {
+            return new AccountActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = 200,
+                Message = "Tài khoản không ở trạng thái Locked, không cần unlock."
+            };
+        }
+
         var previousFailedAttempts = account.FailedLoginAttempts;
 
         account.FailedLoginAttempts = 0;
         account.LockoutEndAt = null;
-        if (wasLocked)
-            account.Status = AccountStatusEnum.Active;
+        account.Status = AccountStatusEnum.Active;
 
         _unitOfWork.Accounts.UpdateAsync(account);
 
@@ -47,7 +58,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             TargetEmail: account.Email,
             Metadata: new Dictionary<string, object?>
             {
-                ["wasLocked"] = wasLocked,
+                ["wasLocked"] = true,
                 ["previousFailedAttempts"] = previousFailedAttempts
             }), cancellationToken);
 

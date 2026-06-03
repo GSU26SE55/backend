@@ -3,6 +3,7 @@
 .env
 # Docker: .env.Docker (gitignored vì có secret thật)
 .env.Docker
+.env.Docker.example
 .env.Production
 .env.Staging
 .env.local
@@ -26,10 +27,15 @@ coverage/
 *.swp
 .DS_Store
 
+# ---------- Gemini & Agents (Local only) ----------
+.gemini/
+AGENTS.md
+*.skill
+
 # ---------- Logs ----------
 *.log
 logs/
 
 # ---------- Helm subchart cache (auto-download bằng `helm dependency update`) ----------
 deploy/helm/*/charts/
-
+.config/dotnet-tools.json

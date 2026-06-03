@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Account;
 using MediatR;
@@ -10,6 +11,7 @@ public class ConfirmEmailChangeCommand : IRequest<AccountActionResponse>, IValid
 {
     private static readonly Regex OtpRegex = new(@"^\d{6}$", RegexOptions.Compiled);
 
+    [JsonIgnore]
     public Guid AccountId { get; set; }
     public string Otp { get; set; } = string.Empty;
 

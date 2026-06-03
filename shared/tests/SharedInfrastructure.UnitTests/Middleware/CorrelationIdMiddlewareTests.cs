@@ -61,10 +61,11 @@ public class CorrelationIdMiddlewareTests
     }
 
     [Fact]
-    public async Task GetCorrelationId_OnNullContext_ReturnsNull()
+    public Task GetCorrelationId_OnNullContext_ReturnsNull()
     {
         HttpContext? nullCtx = null;
         nullCtx.GetCorrelationId().Should().BeNull();
+        return Task.CompletedTask;
     }
 
     [Fact]

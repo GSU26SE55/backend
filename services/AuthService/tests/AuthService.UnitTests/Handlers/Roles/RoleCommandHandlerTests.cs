@@ -11,7 +11,7 @@ public class CreateRoleCommandHandlerTests
     [Fact]
     public async Task Create_NewName_AddsRole_Returns201()
     {
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
+        var (uow, _, _, roles) = MockUnitOfWork.Build();
         var handler = new CreateRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new CreateRoleCommand { Name = "Inspector", Description = "Bảo trì" }, CancellationToken.None);
@@ -30,7 +30,7 @@ public class CreateRoleCommandHandlerTests
     public async Task Create_DuplicateName_Returns409()
     {
         var existing = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "X", NormalizedName = "INSPECTOR", Status = RoleStatusEnum.Active };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { existing });
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { existing });
         var handler = new CreateRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new CreateRoleCommand { Name = "Inspector" }, CancellationToken.None);
@@ -54,7 +54,7 @@ public class UpdateRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
         var handler = new UpdateRoleCommandHandler(uow.Object);
 
@@ -77,8 +77,7 @@ public class UpdateRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new UpdateRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new UpdateRoleCommand { Id = role.Id, Name = "X" }, CancellationToken.None);
@@ -91,7 +90,7 @@ public class UpdateRoleCommandHandlerTests
     {
         var role = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "Me", NormalizedName = "ME", Status = RoleStatusEnum.Active, IsSystemRole = false };
         var other = new global::AuthService.Domain.Entities.Role { Id = Guid.NewGuid(), Name = "Other", NormalizedName = "OTHER", Status = RoleStatusEnum.Active };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build(roleSeed: new[] { role, other });
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role, other });
         roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
         var handler = new UpdateRoleCommandHandler(uow.Object);
 
@@ -103,7 +102,7 @@ public class UpdateRoleCommandHandlerTests
     [Fact]
     public async Task Update_NotFound_Returns404()
     {
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
+        var (uow, _, _, roles) = MockUnitOfWork.Build();
         roles.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Role?)null);
         var handler = new UpdateRoleCommandHandler(uow.Object);
 
@@ -126,8 +125,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Inactive }, CancellationToken.None);
@@ -147,8 +145,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Inactive }, CancellationToken.None);
@@ -167,8 +164,7 @@ public class ChangeRoleStatusCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new ChangeRoleStatusCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Active }, CancellationToken.None);
@@ -191,8 +187,7 @@ public class DeleteRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
@@ -212,8 +207,7 @@ public class DeleteRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = true
         };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
@@ -232,9 +226,16 @@ public class DeleteRoleCommandHandlerTests
             Status = RoleStatusEnum.Active,
             IsSystemRole = false
         };
-        var assignment = new AccountRole { Id = Guid.NewGuid(), AccountId = Guid.NewGuid(), RoleId = role.Id, IsActive = true };
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build(accountRoleSeed: new[] { assignment });
-        roles.Setup(r => r.GetByIdAsync(role.Id)).ReturnsAsync(role);
+        // 1-N refactor: account dùng role này được tính qua Account.RoleId thay vì AccountRole join table.
+        var accountUsingRole = new global::AuthService.Domain.Entities.Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "user@example.com",
+            PasswordHash = "x",
+            FullName = "User",
+            RoleId = role.Id
+        };
+        var (uow, _, _, roles) = MockUnitOfWork.Build(roleSeed: new[] { role }, accountSeed: new[] { accountUsingRole });
         var handler = new DeleteRoleCommandHandler(uow.Object);
 
         var resp = await handler.Handle(new DeleteRoleCommand { Id = role.Id }, CancellationToken.None);
@@ -245,7 +246,7 @@ public class DeleteRoleCommandHandlerTests
     [Fact]
     public async Task Delete_NotFound_Returns404()
     {
-        var (uow, _, _, roles, _) = MockUnitOfWork.Build();
+        var (uow, _, _, roles) = MockUnitOfWork.Build();
         roles.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Role?)null);
         var handler = new DeleteRoleCommandHandler(uow.Object);
 

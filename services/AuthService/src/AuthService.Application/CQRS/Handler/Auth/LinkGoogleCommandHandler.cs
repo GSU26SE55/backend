@@ -2,6 +2,8 @@ using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Domain.Entities;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -27,7 +29,10 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         if (googleUser == null || string.IsNullOrWhiteSpace(googleUser.Email))
             return Fail(401, "Google ID token không hợp lệ.");
 
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
+            .Include(a => a.Profile)
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Không tìm thấy tài khoản.");
 
@@ -36,13 +41,16 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
 
         var googleAlreadyLinked = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject, cancellationToken);
+            .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject && !a.IsDeleted, cancellationToken);
 
         if (googleAlreadyLinked)
             return Fail(409, "Google account này đã được liên kết với tài khoản khác.");
 
         account.GoogleId = googleUser.Subject;
         account.Provider = ProviderName;
+
+        await UpsertGoogleAvatarProfileAsync(account, googleUser.Picture);
+
         _unitOfWork.Accounts.UpdateAsync(account);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -62,4 +70,30 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         Message = message,
         ListErrors = { new Errors { Field = "Google", Detail = message } }
     };
+
+    private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)
+    {
+        if (string.IsNullOrWhiteSpace(pictureUrl))
+            return;
+
+        var profile = account.Profile ?? new AccountProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = account.Id
+        };
+
+        profile.ExternalAvatarUrl = pictureUrl.Trim();
+        if (profile.AvatarFileId is null)
+            profile.AvatarSource = AvatarSourceEnum.Google;
+
+        if (account.Profile is null)
+        {
+            account.Profile = profile;
+            await _unitOfWork.AccountProfiles.AddAsync(profile);
+        }
+        else
+        {
+            _unitOfWork.AccountProfiles.UpdateAsync(profile);
+        }
+    }
 }

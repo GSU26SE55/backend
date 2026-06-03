@@ -17,13 +17,17 @@ Issue number: `$ARGUMENTS`
 **Bước 0 — Kiểm tra plan hiện tại**
 
 Đọc `logs/GH-$ARGUMENTS/plan.md`:
-- **Nếu tồn tại** → Hiện nội dung plan đã có. Hỏi:
-  ```
-  Plan đã tồn tại (Status: [status]).
-  [1] Dùng plan này → chạy /kltn-implement $ARGUMENTS để bắt đầu code
-  [2] Cập nhật plan — thay đổi approach hoặc scope
-  ```
-  Nếu chọn 1 → Dừng. Nếu chọn 2 → tiếp tục Bước 1.
+- **Nếu tồn tại** → Hiện nội dung plan đã có. Kiểm tra `Status`:
+
+  | Status | Hành động |
+  |--------|-----------|
+  | `PLANNING` | Hỏi: **[1] Dùng plan này** → chạy `/kltn-implement $ARGUMENTS` / **[2] Cập nhật plan** → tiếp tục Bước 1 |
+  | `IN_PROGRESS` | Nhắc "Plan đang được implement. Chạy `/kltn-implement $ARGUMENTS` để tiếp tục." Dừng. |
+  | `REVIEWING` | Nhắc "Đang chờ review. Chạy `/kltn-reviewcode $ARGUMENTS`." Dừng. |
+  | `TESTING` | Nhắc "Đang ở giai đoạn test. Chạy `/kltn-test $ARGUMENTS`." Dừng. |
+  | `SHIPPED` | Nhắc "Đang chờ PR merge." Dừng. |
+  | `MERGED` | Nhắc "Task đã hoàn thành." Dừng. |
+
 - **Nếu chưa tồn tại** → Tiếp tục Bước 1.
 
 ---
@@ -31,10 +35,17 @@ Issue number: `$ARGUMENTS`
 **Bước 1 — Đọc GitHub Issue**
 
 ```bash
+# Đọc issue chính
 gh issue view $ARGUMENTS --json number,title,body,labels,milestone,assignees
+
+# Đọc sub-issues (nếu có)
+gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/issues/$ARGUMENTS/sub_issues \
+  --jq '.[] | {number: .number, title: .title, body: .body, state: .state}'
 ```
 
-Đọc kỹ: title, body (Mục tiêu + Acceptance Criteria + Ghi chú kỹ thuật), labels, milestone, assignees.
+Đọc kỹ:
+- **Issue chính:** title, body (Mục tiêu + Acceptance Criteria + Ghi chú kỹ thuật), labels, milestone, assignees.
+- **Sub-issues (nếu có):** title, body, state của từng sub-issue — plan chi tiết hoặc scope có thể đã được cập nhật tại đây. Tổng hợp thông tin từ tất cả sub-issues vào phân tích ở Bước 2.
 
 ---
 
@@ -124,7 +135,13 @@ Tạo `logs/GH-$ARGUMENTS/plan.md`:
 - Input không hợp lệ: ...
 - Error handling: ...
 
+## Success Criteria
+| Tiêu chí | Cách verify |
+|----------|------------|
+| [Mô tả outcome cụ thể] | [Lệnh / bước kiểm tra] |
+
 ## Steps
+[Dùng bảng template bên dưới theo role — mỗi dòng là 1 checkbox]
 - [ ] Bước 1: ...
 - [ ] Bước 2: ...
 
@@ -132,7 +149,7 @@ Tạo `logs/GH-$ARGUMENTS/plan.md`:
 [Tóm tắt những điểm đã hỏi và câu trả lời — để reviewer hiểu context]
 ```
 
-> **Step template theo role:**
+> **Step template theo role** — chọn cột theo role, mỗi dòng là 1 checkbox trong Steps:
 >
 > | BE | FE | AI |
 > |----|----|----|
@@ -156,7 +173,7 @@ Plan cho GH-$ARGUMENTS đã sẵn sàng.
 [2] Chỉnh sửa → nêu điểm cần thay đổi
 ```
 
-- User chọn **1 / approve / ok / tiến hành** → thực hiện Bước 7.
+- User chọn **1 / approve / ok / yes / y / tiến hành** → thực hiện Bước 7.
 - User chọn **2 / chỉnh sửa** → cập nhật plan theo góp ý → hiện lại. Lặp cho đến khi approve.
 
 ---
@@ -164,22 +181,40 @@ Plan cho GH-$ARGUMENTS đã sẵn sàng.
 **Bước 7 — Finalize: post lên issue + cập nhật label**
 
 ```bash
-# Post plan summary lên issue để team theo dõi
-gh issue comment $ARGUMENTS --body "## 📋 Plan — GH-$ARGUMENTS
+# Update body của issue với plan chi tiết (thay thế placeholder)
+# Lưu ý: dùng <<EOF (không có single-quote) để biến được expand
+gh issue edit $ARGUMENTS --body "$(cat <<EOF
+## 📋 Plan — GH-$ARGUMENTS
 
 **Dev:** [tên từ CLAUDE.local.md]
 **Ngày lập plan:** $(date +%Y-%m-%d)
 
-### Mục tiêu
+## Mục tiêu
 [copy từ plan.md]
 
-### Approach
+## Scope
+**Trong scope:**
 [copy từ plan.md]
 
-### Steps
+**Ngoài scope:**
+[copy từ plan.md]
+
+## Approach
+[copy từ plan.md]
+
+## Steps
 [copy danh sách steps từ plan.md]
 
-> Plan đầy đủ (bao gồm edge cases, files, câu hỏi đã giải đáp): \`logs/GH-$ARGUMENTS/plan.md\`"
+## Edge Cases
+[copy từ plan.md]
+
+## Success Criteria
+[copy từ plan.md]
+
+---
+> Plan đầy đủ (bao gồm files, câu hỏi đã giải đáp): \`logs/GH-$ARGUMENTS/plan.md\`
+EOF
+)"
 
 # Chuyển label status: init → status: implementing
 gh issue edit $ARGUMENTS \
@@ -194,3 +229,24 @@ Sau đó nhắc user:
 Plan đã được approved và post lên issue.
 Chạy /kltn-implement $ARGUMENTS để bắt đầu implement.
 ```
+
+---
+
+**⚠️ Khi có thay đổi đột xuất trong lúc implement**
+
+Nếu scope, approach, hoặc files thay đổi so với plan đã approve (do phát hiện blocker, yêu cầu mới, hoặc technical constraint):
+
+1. **Cập nhật `logs/GH-$ARGUMENTS/plan.md`** — ghi rõ thay đổi gì, lý do tại sao.
+2. **Sync lại body của issue ngay sau khi xác nhận thay đổi:**
+
+```bash
+# Lưu ý: dùng <<EOF (không có single-quote) để biến được expand
+gh issue edit $ARGUMENTS --body "$(cat <<EOF
+[nội dung plan mới — copy từ plan.md đã cập nhật]
+EOF
+)"
+```
+
+> **Nguyên tắc:** Issue body phải luôn phản ánh trạng thái plan **hiện tại** — không để body và plan.md bị lệch nhau. Reviewer và team đọc issue body, không đọc file local.
+
+Không cần approve lại nếu thay đổi nhỏ (thêm/bớt file, điều chỉnh approach). Nếu thay đổi lớn (scope mới, approach hoàn toàn khác) → dừng implement, hỏi user trước.

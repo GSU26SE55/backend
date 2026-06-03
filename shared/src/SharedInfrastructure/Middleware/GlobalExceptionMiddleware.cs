@@ -31,14 +31,25 @@ public class GlobalExceptionMiddleware
     private async Task HandleExceptionAsync(HttpContext context, Exception ex)
     {
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+        var statusCode = ex is BadHttpRequestException badHttpRequestException
+            ? badHttpRequestException.StatusCode
+            : (int)HttpStatusCode.InternalServerError;
+        context.Response.StatusCode = statusCode;
 
         var response = new
         {
             isSuccess = false,
-            message = "An error was caught in global exception middleware.",
-            data = ex.Message,
-            listErrors = Array.Empty<object>()
+            statusCode,
+            message = statusCode == StatusCodes.Status413PayloadTooLarge
+                ? "Request payload too large. File tối đa 20 MB."
+                : "An error was caught in global exception middleware.",
+            data = statusCode == (int)HttpStatusCode.InternalServerError ? ex.Message : null,
+            listErrors = statusCode == StatusCodes.Status413PayloadTooLarge
+                ? new object[]
+                {
+                    new { field = "file", detail = "Kích thước request vượt quá giới hạn cho phép." }
+                }
+                : Array.Empty<object>()
         };
 
         var json = JsonSerializer.Serialize(response);

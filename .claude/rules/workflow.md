@@ -4,9 +4,10 @@
 
 ```
 [LEADER]  /kltn-sprint  →  tạo GitHub Issues (label: status:init) + phân công
-[DEV]     /kltn-implement 123  →  đọc issue → plan.md → approve → post plan lên issue + label:implementing → code
-          → /kltn-reviewcode → /kltn-test → /kltn-ship 123  →  PR + label:reviewing
-[REVIEWER] /kltn-reviewpr 123  →  approve / request changes
+[DEV]     /kltn-plan 123        →  đọc issue → plan.md → approve → post plan lên issue + label:implementing
+[DEV]     /kltn-implement 123  →  đọc plan.md đã approved → code
+          → /kltn-reviewcode → /kltn-test → /kltn-ship 123  →  PR + handoff + label:reviewing
+[REVIEWER] review PR trực tiếp trên GitHub  →  approve / request changes
 [DEV]     /kltn-complete 123  →  merge PR + label:done + close issue
 [LEADER]  /kltn-team hoặc /kltn-member [tên]
 ```
@@ -23,12 +24,16 @@
 
 Luồng chuẩn (áp dụng cho MỌI task, không phân biệt size):
 ```
-/kltn-implement 123  →  đọc GitHub Issue #123  →  viết plan.md
-               →  chờ user approve
+/kltn-plan 123       →  đọc GitHub Issue #123  →  phân tích gap
+               →  hỏi nếu chưa rõ scope/approach
+               →  viết plan.md  →  chờ user approve
                →  post plan lên issue + label: init → implementing
-               →  code
+
+/kltn-implement 123  →  đọc plan.md đã approved  →  code từng bước
                →  /kltn-reviewcode  →  /kltn-test
-               →  /kltn-ship 123  →  PR + label: implementing → reviewing
+               →  /kltn-ship 123  →  PR + handoff + label: implementing → reviewing
+               →  reviewer approve trên GitHub
+               →  /kltn-complete 123  →  merge PR + label: done
 ```
 
 **Bước Plan (bắt buộc với MỌI task):**
@@ -66,7 +71,23 @@ Nội dung plan.md phải có:
 Một ticket được coi là **Done** khi đủ cả 3 điều kiện:
 1. Code đã được `/kltn-reviewcode` **PASS**
 2. `/kltn-test` xuất báo cáo **PASS**
-3. PR đã được ít nhất **1 người approve** và **merged vào main**
+3. PR đã được ít nhất **1 người approve** và **merged vào dev**
+
+---
+
+## Nguyên tắc viết code
+
+**Simplicity First — Chỉ viết code được yêu cầu:**
+- Implement đúng những gì issue mô tả — không thêm feature "phòng hờ"
+- Không thêm abstraction, interface, hoặc layer nếu issue không yêu cầu
+- Không thêm error handling cho cases chưa xảy ra trong scope
+- Tự hỏi: "Senior dev có nghĩ cái này overcomplicated không?" — nếu có, đơn giản lại
+
+**Surgical Changes — Chỉ touch những gì cần thiết:**
+- Chỉ sửa files được liệt kê trong `plan.md`
+- Không refactor code lân cận trừ khi changes của bạn làm nó obsolete
+- Không rename biến, format lại file, hoặc xóa dead code ngoài scope task
+- Không thay đổi code style của người khác khi đang làm task khác
 
 ---
 
@@ -118,9 +139,22 @@ pytest tests/ -v --cov=src
 
 ## Git
 
-- Branch: `feature/GH-[number]-slug-ngan` (ví dụ: `feature/GH-42-battery-crud`)
+**Branching strategy:**
+
+| Branch | Mục đích | Tạo bởi |
+|--------|----------|---------|
+| `main` | Production-ready; protected — merge chỉ qua approved PR | — |
+| `dev` | Integration — target cho mọi feature PR | — |
+| `staging` | Test gần production | — |
+| `feat/GH-[number]-slug` | Feature branch — 1 issue = 1 branch | `/kltn-implement` |
+| `fix/GH-[number]-slug` | Bug fix — issue label `type: fix` | `/kltn-debug` |
+| `chore/[purpose]` | Maintenance — deps, config, tooling | manual |
+| `docs/[purpose]` | Documentation | manual |
+| `refactor/[purpose]` | Refactor — không đổi behavior | manual |
+| `test/[purpose]` | Viết / cập nhật test cases | manual |
+
 - 1 issue = 1 branch, commit thường xuyên
-- Không merge thẳng main — luôn qua PR
+- Không merge thẳng dev — luôn qua PR
 - Commit message: `type(#[number]): mô tả` (ví dụ: `feat(#42): add Battery CRUD`)
 - PR body **phải có** `Closes #[number]` để GitHub tự close issue khi merge
 

@@ -1,13 +1,8 @@
-using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
-using AuthService.Application.CQRS.Notification.Session;
-using AuthService.Application.DTOs.Response.Auth;
-using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
@@ -15,42 +10,31 @@ using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
-public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginResponse>
+public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonResponse<string>>
 {
     private const int MaxFailedAttempts = 5;
     private const int LockoutDurationMinutes = 15;
-    private const int RefreshTokenExpirationDays = 7;
     private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     private readonly IAuthUnitOfWork _unitOfWork;
-    private readonly IJwtHelper _jwtHelper;
     private readonly IMessageProducerService _messageProducer;
-    private readonly IPublisher _publisher;
-    private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public VerifyOtpCommandHandler(
         IAuthUnitOfWork unitOfWork,
-        IJwtHelper jwtHelper,
-        IMessageProducerService messageProducer,
-        IPublisher publisher,
-        IHttpContextAccessor? httpContextAccessor = null)
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
-        _jwtHelper = jwtHelper;
         _messageProducer = messageProducer;
-        _publisher = publisher;
-        _httpContextAccessor = httpContextAccessor;
     }
 
-    public async Task<LoginResponse> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
+    public async Task<CommonResponse<string>> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
-            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail, cancellationToken);
+            .Include(a => a.Role)
+            .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
             return Fail(404, "Tài khoản không tồn tại.");
@@ -86,8 +70,6 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
             return Fail(401, $"OTP không chính xác. Còn {remaining} lần thử.");
         }
 
-        var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
-
         account.EmailConfirmed = true;
         account.OtpCode = null;
         account.OtpExpiredAt = null;
@@ -95,55 +77,17 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
         account.FailedLoginAttempts = 0;
         account.LockoutEndAt = null;
         account.Status = AccountStatusEnum.Active;
-        account.LastLoginAt = DateTime.UtcNow;
-        account.LastLoginIp = ipAddress;
+
+        // Self-register: nếu account chưa gán role (RoleId rỗng) → default Customer.
+        if (account.RoleId == Guid.Empty)
+        {
+            account.RoleId = CustomerRoleId;
+            account.RoleAssignedAt = DateTime.UtcNow;
+        }
         _unitOfWork.Accounts.UpdateAsync(account);
 
-        var hasCustomerRole = account.AccountRoles.Any(ar => ar.RoleId == CustomerRoleId && ar.IsActive);
-        if (!hasCustomerRole)
-        {
-            await _unitOfWork.AccountRoles.AddAsync(new AccountRole
-            {
-                Id = Guid.NewGuid(),
-                AccountId = account.Id,
-                RoleId = CustomerRoleId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true
-            });
-        }
-
-        // AccountRole vừa AddAsync ở trên có Role nav = null (chỉ set RoleId).
-        // EF Change Tracker auto-fixup đẩy entry đó vào account.AccountRoles → cần filter ar.Role != null.
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive
-                         && ar.Role != null
-                         && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role!.Name)
-            .ToList();
-        if (!roleNames.Contains("Customer"))
-            roleNames.Add("Customer");
-
-        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
-        var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
-
-        var refreshToken = new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            AccountId = account.Id,
-            Token = refreshTokenValue,
-            IssuedAt = DateTime.UtcNow,
-            ExpiredAt = DateTime.UtcNow.AddDays(RefreshTokenExpirationDays),
-            Status = RefreshTokenStatus.Active,
-            IpAddress = ipAddress,
-            UserAgent = userAgent,
-            DeviceId = deviceId
-        };
-
-        await _unitOfWork.RefreshTokens.AddAsync(refreshToken);
-
-        // Enforce concurrent session limit.
-        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
+        var roleName = account.Role?.Name
+                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
 
         // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges để event đi cùng transaction.
         await _messageProducer.PublishAsync(new AccountActivatedEvent(
@@ -151,27 +95,22 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, LoginRe
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            roleNames,
+            roleName,
             CreationSource: "SelfRegister"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return new LoginResponse
+        return new CommonResponse<string>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xác thực OTP thành công. Tài khoản đã kích hoạt.",
-            Data = new TokenDTO
-            {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
-            }
+            Message = "Xác thực OTP thành công. Tài khoản đã kích hoạt. Vui lòng đăng nhập."
         };
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "Auth")
+    private static CommonResponse<string> Fail(int statusCode, string message, string field = "Auth")
     {
-        return new LoginResponse
+        return new CommonResponse<string>
         {
             IsSuccess = false,
             StatusCode = statusCode,

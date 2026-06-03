@@ -42,18 +42,18 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
         var token = await SeedAndLoginAsync("profile@example.com");
         _client.WithBearer(token);
 
-        var resp = await _client.GetAsync("/api/accounts/me");
+        var resp = await _client.GetAsync("/api/auth/me");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<AccountResponse>();
         body!.Data!.Email.Should().Be("profile@example.com");
-        body.Data.Roles.Should().Contain("Customer");
+        body.Data.Role.Should().Be("Customer");
     }
 
     [Fact]
     public async Task GetMyProfile_NoToken_Returns401()
     {
         _client.WithoutBearer();
-        var resp = await _client.GetAsync("/api/accounts/me");
+        var resp = await _client.GetAsync("/api/auth/me");
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -72,7 +72,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
             await db.SaveChangesAsync();
         }
 
-        var resp = await _client.PutAsJsonAsync("/api/accounts/me", new
+        var resp = await _client.PutAsJsonAsync("/api/auth/me/profile", new
         {
             FullName = "Updated Name",
             PhoneNumber = "0900222"
@@ -96,8 +96,8 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
             JsonContent.Create(new
             {
                 CurrentPassword = "OldPass123",
-                NewPassword = "NewPass456",
-                ConfirmPassword = "NewPass456"
+                NewPassword = "NewPass456!",
+                ConfirmPassword = "NewPass456!"
             }));
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 

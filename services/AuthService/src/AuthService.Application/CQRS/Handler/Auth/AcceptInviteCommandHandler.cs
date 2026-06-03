@@ -47,18 +47,18 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
     {
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.AccountRoles.Where(ar => ar.IsActive && !ar.IsDeleted))
-                .ThenInclude(ar => ar.Role)
+            .Where(a => !a.IsDeleted)
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.InvitationToken == request.InvitationToken, cancellationToken);
 
         if (account == null)
             return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
 
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value < DateTime.UtcNow)
-            return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
+            return Fail(410, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(400, "Tài khoản đã được kích hoạt trước đó.");
+            return Fail(409, "Tài khoản đã được kích hoạt trước đó.");
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
@@ -74,15 +74,10 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         account.LastLoginIp = ipAddress;
         _unitOfWork.Accounts.UpdateAsync(account);
 
-        var roleNames = account.AccountRoles
-            .Where(ar => ar.IsActive
-                         && ar.Role != null
-                         && (ar.ExpiredAt == null || ar.ExpiredAt > DateTime.UtcNow))
-            .Select(ar => ar.Role!.Name)
-            .ToList();
+        var roleName = account.Role?.Name ?? string.Empty;
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleNames, permissionCodes);
+        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
@@ -106,7 +101,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            roleNames,
+            roleName,
             CreationSource: "AdminInvite"), cancellationToken);
 
         await _publisher.Publish(new AuditTrailNotification(

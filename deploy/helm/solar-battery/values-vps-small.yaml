@@ -1,0 +1,102 @@
+# =====================================================================
+# values-vps-small.yaml
+# Overlay for a single 2 vCPU / 4GB RAM VPS running Jenkins + k3s.
+# Keep every service enabled, but avoid temporary double memory use during deploy.
+# =====================================================================
+
+global:
+  imagePullPolicy: IfNotPresent
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+services:
+  apigateway:
+    replicas: 1
+    resources:
+      requests: { cpu: 80m, memory: 128Mi }
+      limits:   { cpu: 300m, memory: 256Mi }
+
+  authservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 150m, memory: 256Mi }
+      limits:   { cpu: 600m, memory: 512Mi }
+    autoscaling:
+      enabled: false
+
+  emailservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+
+  smsservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+
+  filestorageservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 120m, memory: 192Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
+
+  batteryservice:
+    replicas: 1
+    resources:
+      requests: { cpu: 150m, memory: 256Mi }
+      limits:   { cpu: 600m, memory: 512Mi }
+    autoscaling:
+      enabled: false
+
+postgres:
+  maxConnections: 100
+  sharedBuffers: 64MB
+  connectionPool:
+    maximumPoolSize: 10
+    minimumPoolSize: 0
+  initJob:
+    activeDeadlineSeconds: 600
+    ttlSecondsAfterFinished: 1800
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  resources:
+    requests: { cpu: 150m, memory: 384Mi }
+    limits:   { cpu: 500m, memory: 768Mi }
+
+redis:
+  resources:
+    requests: { cpu: 30m, memory: 64Mi }
+    limits:   { cpu: 150m, memory: 128Mi }
+
+rabbitmq:
+  returnPerObjectMetrics: true
+  resources:
+    requests: { cpu: 150m, memory: 384Mi }
+    limits:   { cpu: 700m, memory: 768Mi }
+
+minio:
+  resources:
+    requests: { cpu: 80m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  initJob:
+    activeDeadlineSeconds: 600
+    ttlSecondsAfterFinished: 1800
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+
+config:
+  DOTNET_gcServer: "0"
+  DisableHttpsRedirection: "true"
+
+resourceQuota:
+  enabled: true
+  requestsCpu: "2"
+  requestsMemory: "4Gi"
+  limitsCpu: "10"
+  limitsMemory: "12Gi"
+  pvcs: "15"

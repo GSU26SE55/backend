@@ -30,12 +30,12 @@ public class JwtHelperTests
         _sut = new JwtHelper(config);
     }
 
-    private static Account MakeAccount(Guid? id = null, string email = "user@test.com", string? fullName = "User Test")
+    private static Account MakeAccount(Guid? id = null, string? email = "user@test.com", string? fullName = "User Test")
         => new()
         {
             Id = id ?? Guid.NewGuid(),
-            Email = email,
-            FullName = fullName,
+            Email = email!,
+            FullName = fullName!,
             PasswordHash = "h",
             Status = AuthService.Domain.Enums.AccountStatusEnum.Active
         };
@@ -47,28 +47,28 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public async Task GenerateAccessToken_IncludesStandardClaims()
+    public async Task GenerateAccessToken_IncludesStandardClaims_WithSingleRole()
     {
+        // 1-N refactor: role là single string trong JWT.
         var account = MakeAccount(email: "alice@example.com", fullName: "Alice");
-        var token = await _sut.GenerateAccessToken(account, new[] { "Customer", "Admin" });
+        var token = await _sut.GenerateAccessToken(account, "Customer");
 
         var claims = ParseClaims(token).ToList();
 
-        // ReadJwtToken trả raw JWT claims (đã qua outbound mapping); ClaimTypes.NameIdentifier → "nameid", ClaimTypes.Role → "role".
         claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Jti);
         claims.Should().Contain(c => c.Type == "nameid" && c.Value == account.Id.ToString());
         claims.Should().Contain(c => c.Type == "AccountId" && c.Value == account.Id.ToString());
         claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Email && c.Value == "alice@example.com");
         claims.Should().Contain(c => c.Type == "FullName" && c.Value == "Alice");
         claims.Where(c => c.Type == "role").Select(c => c.Value)
-              .Should().BeEquivalentTo(new[] { "Customer", "Admin" });
+              .Should().BeEquivalentTo(new[] { "Customer" });
     }
 
     [Fact]
     public async Task GenerateAccessToken_NullEmailAndFullName_UsesEmptyString()
     {
         var account = MakeAccount(email: null!, fullName: null);
-        var token = await _sut.GenerateAccessToken(account, Enumerable.Empty<string>());
+        var token = await _sut.GenerateAccessToken(account, string.Empty);
 
         var claims = ParseClaims(token).ToList();
         claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Email && c.Value == string.Empty);
@@ -76,7 +76,7 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public async Task GenerateAccessToken_NullRoles_DoesNotThrow()
+    public async Task GenerateAccessToken_NullRole_DoesNotEmitRoleClaim()
     {
         var account = MakeAccount();
 
@@ -87,20 +87,19 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public async Task GenerateAccessToken_WhitespaceRoles_AreFilteredOut()
+    public async Task GenerateAccessToken_WhitespaceRole_IsFilteredOut()
     {
         var account = MakeAccount();
 
-        var token = await _sut.GenerateAccessToken(account, new[] { "Valid", "", "  ", "Other" });
+        var token = await _sut.GenerateAccessToken(account, "   ");
 
-        ParseClaims(token).Where(c => c.Type == "role").Select(c => c.Value)
-            .Should().BeEquivalentTo(new[] { "Valid", "Other" });
+        ParseClaims(token).Should().NotContain(c => c.Type == "role");
     }
 
     [Fact]
     public async Task GenerateAccessToken_HasIssuerAudienceAnd1HourExpiry()
     {
-        var token = await _sut.GenerateAccessToken(MakeAccount(), Enumerable.Empty<string>());
+        var token = await _sut.GenerateAccessToken(MakeAccount(), string.Empty);
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
         jwt.Issuer.Should().Be(Issuer);
@@ -122,7 +121,7 @@ public class JwtHelperTests
     [Fact]
     public async Task ValidateToken_ValidGeneratedToken_ReturnsTrue()
     {
-        var token = await _sut.GenerateAccessToken(MakeAccount(), new[] { "Customer" });
+        var token = await _sut.GenerateAccessToken(MakeAccount(), "Customer");
 
         var (ok, err) = _sut.ValidateToken(token);
 
@@ -139,7 +138,7 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void ValidateToken_TokenSignedWithOtherKey_Throws()
+    public async Task ValidateToken_TokenSignedWithOtherKey_Throws()
     {
         var otherConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -150,7 +149,7 @@ public class JwtHelperTests
             })
             .Build();
         var other = new JwtHelper(otherConfig);
-        var token = other.GenerateAccessToken(MakeAccount(), Array.Empty<string>()).Result;
+        var token = await other.GenerateAccessToken(MakeAccount(), string.Empty);
 
         var act = () => _sut.ValidateToken(token);
         act.Should().Throw<Exception>();
@@ -208,10 +207,10 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void ValidateResetToken_WrongPurpose_ReturnsError()
+    public async Task ValidateResetToken_WrongPurpose_ReturnsError()
     {
         // Generate access token (not reset token) — không có purpose claim.
-        var access = _sut.GenerateAccessToken(MakeAccount(), Array.Empty<string>()).Result;
+        var access = await _sut.GenerateAccessToken(MakeAccount(), string.Empty);
 
         var (id, err) = _sut.ValidateResetToken(access);
 

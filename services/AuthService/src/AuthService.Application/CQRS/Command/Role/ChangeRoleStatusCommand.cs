@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Role;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -8,6 +9,7 @@ namespace AuthService.Application.CQRS.Command.Role;
 
 public class ChangeRoleStatusCommand : IRequest<RoleActionResponse>, IValidatable<RoleActionResponse>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
     public RoleStatusEnum Status { get; set; }
 

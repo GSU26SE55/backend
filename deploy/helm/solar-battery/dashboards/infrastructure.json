@@ -81,12 +81,17 @@
       "id": 5,
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Filter by id — `name` label not available on Docker Desktop Mac (containerd socket missing). Cross-platform query.",
+      "description": "Kubernetes cAdvisor metrics with Docker fallback for local compose.",
       "targets": [
         {
-          "expr": "label_replace(sum(rate(container_cpu_usage_seconds_total{id=~\"/docker/.+\"}[1m])) by (id) * 100, \"container_id\", \"$1\", \"id\", \"/docker/(.{12}).*\")",
-          "legendFormat": "{{container_id}}",
+          "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{container!=\"\", image!=\"\"}[1m])) * 100",
+          "legendFormat": "{{pod}}/{{container}}",
           "refId": "A"
+        },
+        {
+          "expr": "label_replace(sum(rate(container_cpu_usage_seconds_total{id=~\"/docker/.+\"}[1m])) by (id) * 100, \"container_id\", \"$1\", \"id\", \"/docker/(.{12}).*\")",
+          "legendFormat": "docker/{{container_id}}",
+          "refId": "B"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "percent" } }
@@ -99,9 +104,14 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "label_replace(container_memory_working_set_bytes{id=~\"/docker/.+\"}, \"container_id\", \"$1\", \"id\", \"/docker/(.{12}).*\")",
-          "legendFormat": "{{container_id}}",
+          "expr": "sum by (pod, container) (container_memory_working_set_bytes{container!=\"\", image!=\"\"})",
+          "legendFormat": "{{pod}}/{{container}}",
           "refId": "A"
+        },
+        {
+          "expr": "label_replace(container_memory_working_set_bytes{id=~\"/docker/.+\"}, \"container_id\", \"$1\", \"id\", \"/docker/(.{12}).*\")",
+          "legendFormat": "docker/{{container_id}}",
+          "refId": "B"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "bytes" } }

@@ -6,7 +6,7 @@ namespace AuthService.Infrastructure.Persistence;
 
 public class ApplicationDbContext : DbContext
 {
-    private readonly AuditableEntityInterceptor _auditableEntityInterceptor;
+    private readonly AuditableEntityInterceptor? _auditableEntityInterceptor;
 
     public ApplicationDbContext()
     {
@@ -20,15 +20,18 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<Account> Users { get; set; }
     public virtual DbSet<Role> Roles { get; set; }
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
-    public virtual DbSet<AccountRole> AccountRoles { get; set; }
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
     public virtual DbSet<LoginAttempt> LoginAttempts { get; set; }
     public virtual DbSet<Permission> Permissions { get; set; }
     public virtual DbSet<RolePermission> RolePermissions { get; set; }
+    public virtual DbSet<AccountProfile> AccountProfiles { get; set; }
+    public virtual DbSet<StaffProfile> StaffProfiles { get; set; }
+    public virtual DbSet<StaffSkill> StaffSkills { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.AddInterceptors(_auditableEntityInterceptor);
+        if (_auditableEntityInterceptor is not null)
+            optionsBuilder.AddInterceptors(_auditableEntityInterceptor);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

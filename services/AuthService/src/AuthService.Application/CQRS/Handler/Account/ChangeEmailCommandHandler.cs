@@ -35,7 +35,9 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
 
     public async Task<AccountActionResponse> Handle(ChangeEmailCommand request, CancellationToken cancellationToken)
     {
-        var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+        var account = await _unitOfWork.Accounts
+            .GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Account", "Không tìm thấy tài khoản.");
 
@@ -49,7 +51,7 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
 
         var emailTaken = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id != request.AccountId && a.Email.ToLower() == newEmail, cancellationToken);
+            .AnyAsync(a => a.Id != request.AccountId && a.Email.ToLower() == newEmail && !a.IsDeleted, cancellationToken);
 
         if (emailTaken)
             return Fail(409, "NewEmail", "Email mới đã được sử dụng bởi tài khoản khác.");

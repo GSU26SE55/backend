@@ -15,7 +15,7 @@ public class ResendResetOtpCommandHandlerTests
     [Fact]
     public async Task Resend_NonExistentEmail_Returns200_NoLeak_NoPublish()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new ResendResetOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendResetOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendResetOtpCommand { Email = "ghost@example.com" }, CancellationToken.None);
@@ -37,7 +37,7 @@ public class ResendResetOtpCommandHandlerTests
             Status = AccountStatusEnum.Active,
             OtpPurpose = OtpPurposeEnum.Register
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendResetOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendResetOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendResetOtpCommand { Email = "u@example.com" }, CancellationToken.None);
@@ -60,7 +60,7 @@ public class ResendResetOtpCommandHandlerTests
             OtpExpiredAt = DateTime.UtcNow.AddMinutes(2),
             OtpPurpose = OtpPurposeEnum.PasswordReset
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendResetOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendResetOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendResetOtpCommand { Email = "u@example.com" }, CancellationToken.None);
@@ -84,7 +84,7 @@ public class ResendResetOtpCommandHandlerTests
             OtpExpiredAt = DateTime.UtcNow.AddMinutes(9).AddSeconds(45),
             OtpPurpose = OtpPurposeEnum.PasswordReset
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         var handler = new ResendResetOtpCommandHandler(uow.Object, _producer.Object, NullLogger<ResendResetOtpCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ResendResetOtpCommand { Email = "u@example.com" }, CancellationToken.None);

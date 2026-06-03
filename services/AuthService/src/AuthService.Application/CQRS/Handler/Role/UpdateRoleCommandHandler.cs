@@ -18,7 +18,9 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
 
     public async Task<RoleActionResponse> Handle(UpdateRoleCommand request, CancellationToken cancellationToken)
     {
-        var role = await _unitOfWork.Roles.GetByIdAsync(request.Id);
+        var role = await _unitOfWork.Roles
+            .GetAllAsync()
+            .FirstOrDefaultAsync(r => r.Id == request.Id && !r.IsDeleted, cancellationToken);
         if (role == null)
         {
             return new RoleActionResponse
@@ -43,7 +45,7 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
 
         var duplicated = await _unitOfWork.Roles
             .GetAllAsync()
-            .AnyAsync(r => r.Id != request.Id && r.NormalizedName == normalized, cancellationToken);
+            .AnyAsync(r => r.Id != request.Id && r.NormalizedName == normalized && !r.IsDeleted, cancellationToken);
 
         if (duplicated)
         {

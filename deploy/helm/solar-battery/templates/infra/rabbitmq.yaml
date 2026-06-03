@@ -31,7 +31,7 @@ spec:
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: RabbitMQ__Password }
         - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
-          value: "-rabbitmq_prometheus return_per_object_metrics true"
+          value: "-rabbitmq_prometheus return_per_object_metrics {{ ternary "true" "false" .Values.rabbitmq.returnPerObjectMetrics }}"
         # Enable plugin Prometheus + Management lúc start
         command:
         - bash
@@ -39,14 +39,23 @@ spec:
         - |
           rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management
           rabbitmq-server
-        readinessProbe:
-          exec: { command: [rabbitmq-diagnostics, ping] }
-          initialDelaySeconds: 30
+        startupProbe:
+          exec: { command: [rabbitmq-diagnostics, -q, ping] }
           periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          exec: { command: [rabbitmq-diagnostics, -q, ping] }
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 12
         livenessProbe:
-          exec: { command: [rabbitmq-diagnostics, ping] }
-          initialDelaySeconds: 60
+          exec: { command: [rabbitmq-diagnostics, -q, ping] }
+          initialDelaySeconds: 30
           periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 6
         resources:
           {{- toYaml .Values.rabbitmq.resources | nindent 10 }}
         volumeMounts:
@@ -65,6 +74,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rabbitmq
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "rabbitmq") | nindent 4 }}
 spec:
   clusterIP: None
   selector:
@@ -73,4 +84,31 @@ spec:
   - { name: amqp,    port: 5672,  targetPort: amqp }
   - { name: mgmt,    port: 15672, targetPort: mgmt }
   - { name: metrics, port: 15692, targetPort: metrics }
+{{- if .Values.rabbitmq.ingress.enabled }}
+---
+# RabbitMQ Management UI — expose qua Ingress (chỉ bật staging/prod)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmq-mgmt
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.tlsIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts: ["rabbitmq.{{ .Values.global.domain }}"]
+    secretName: rabbitmq-tls
+  rules:
+  - host: "rabbitmq.{{ .Values.global.domain }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rabbitmq
+            port: { name: mgmt }
+{{- end }}
 {{- end }}

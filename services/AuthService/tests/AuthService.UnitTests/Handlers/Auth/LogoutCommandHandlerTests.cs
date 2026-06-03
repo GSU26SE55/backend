@@ -11,19 +11,20 @@ public class LogoutCommandHandlerTests
     [Fact]
     public async Task Logout_ActiveToken_Revokes()
     {
+        var accountId = Guid.NewGuid();
         var token = new RefreshToken
         {
             Id = Guid.NewGuid(),
-            AccountId = Guid.NewGuid(),
+            AccountId = accountId,
             Token = "rt-abc",
             Status = RefreshTokenStatus.Active,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
         var handler = new LogoutCommandHandler(uow.Object);
 
-        var resp = await handler.Handle(new LogoutCommand { RefreshToken = "rt-abc" }, CancellationToken.None);
+        var resp = await handler.Handle(new LogoutCommand { AccountId = accountId, RefreshToken = "rt-abc" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         token.Status.Should().Be(RefreshTokenStatus.Revoked);
@@ -34,31 +35,55 @@ public class LogoutCommandHandlerTests
     [Fact]
     public async Task Logout_TokenNotFound_ReturnsAlreadyInactive()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new LogoutCommandHandler(uow.Object);
 
-        var resp = await handler.Handle(new LogoutCommand { RefreshToken = "ghost" }, CancellationToken.None);
+        var resp = await handler.Handle(new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "ghost" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         resp.Data.Should().Be("AlreadyInactive");
     }
 
     [Fact]
-    public async Task Logout_AlreadyRevokedToken_NoOp()
+    public async Task Logout_TokenOwnedByOtherAccount_Returns403()
     {
+        var ownerId = Guid.NewGuid();
         var token = new RefreshToken
         {
             Id = Guid.NewGuid(),
-            AccountId = Guid.NewGuid(),
+            AccountId = ownerId,
+            Token = "rt-other",
+            Status = RefreshTokenStatus.Active,
+            IssuedAt = DateTime.UtcNow,
+            ExpiredAt = DateTime.UtcNow.AddDays(7)
+        };
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
+        var handler = new LogoutCommandHandler(uow.Object);
+
+        var resp = await handler.Handle(new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "rt-other" }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(403);
+        token.Status.Should().Be(RefreshTokenStatus.Active);
+    }
+
+    [Fact]
+    public async Task Logout_AlreadyRevokedToken_NoOp()
+    {
+        var accountId = Guid.NewGuid();
+        var token = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
             Token = "rt-revoked",
             Status = RefreshTokenStatus.Revoked,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
+        var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
         var handler = new LogoutCommandHandler(uow.Object);
 
-        var resp = await handler.Handle(new LogoutCommand { RefreshToken = "rt-revoked" }, CancellationToken.None);
+        var resp = await handler.Handle(new LogoutCommand { AccountId = accountId, RefreshToken = "rt-revoked" }, CancellationToken.None);
 
         resp.Data.Should().Be("AlreadyInactive");
     }

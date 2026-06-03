@@ -9,8 +9,14 @@ data:
   ASPNETCORE_ENVIRONMENT: {{ .Values.global.aspnetEnvironment | quote }}
   ASPNETCORE_URLS: "http://+:8080"
 
-  # Connection string Postgres — Npgsql pool 25 (mỗi pod). Tổng = replicas × 25 < max_connections (300).
-  ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database={{ .Values.postgres.database }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size=25;Minimum Pool Size=2"
+  # Database-backed services set their connection strings in their Deployment
+  # so Kubernetes can expand POSTGRES_PASSWORD from an explicit env var.
+
+  # ApiGateway upstreams trong K8s. appsettings.json dùng localhost cho local dev,
+  # nên K8s cần override bằng service DNS nội bộ.
+  ReverseProxy__Clusters__authCluster__Destinations__destination1__Address: "http://authservice:80"
+  ReverseProxy__Clusters__fileStorageCluster__Destinations__destination1__Address: "http://filestorageservice:80"
+  ReverseProxy__Clusters__batteryCluster__Destinations__destination1__Address: "http://batteryservice:80"
 
   # Object Storage URLs build từ domain
   ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"
@@ -19,6 +25,9 @@ data:
   # Google OAuth callback — build theo domain
   GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/auth-service/api/auth/google/callback"
   GoogleOAuth__FrontendCallbackUrl: "https://{{ .Values.global.domain }}/auth/google-callback"
+
+  # Admin invite email link — EmailService append ?token=...
+  AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
 
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}

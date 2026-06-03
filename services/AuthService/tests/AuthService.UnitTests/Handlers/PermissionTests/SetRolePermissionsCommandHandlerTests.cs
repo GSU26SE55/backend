@@ -27,7 +27,7 @@ public class SetRolePermissionsCommandHandlerTests
         var role = new Role { Id = Guid.NewGuid(), Name = "Tech", NormalizedName = "TECH", Status = RoleStatusEnum.Active, IsSystemRole = false };
         var perm1 = NewPerm("battery.view");
         var perm2 = NewPerm("ticket.view");
-        var (uow, _, _, rolesMock, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, rolesMock) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
         var permsMock = new Mock<SharedKernels.Interfaces.IGenericRepository<Permission>>();
         permsMock.Setup(r => r.GetAllAsync()).Returns(new[] { perm1, perm2 }.AsQueryable().BuildMock());
@@ -61,7 +61,7 @@ public class SetRolePermissionsCommandHandlerTests
             new RolePermission { Id = Guid.NewGuid(), RoleId = role.Id, PermissionId = removePerm.Id }
         };
 
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var permsMock = new Mock<SharedKernels.Interfaces.IGenericRepository<Permission>>();
         permsMock.Setup(r => r.GetAllAsync()).Returns(new[] { keepPerm, removePerm }.AsQueryable().BuildMock());
         uow.SetupGet(u => u.Permissions).Returns(permsMock.Object);
@@ -86,7 +86,7 @@ public class SetRolePermissionsCommandHandlerTests
     public async Task Set_SystemRole_BlockedByDefault_Returns400()
     {
         var role = new Role { Id = Guid.NewGuid(), Name = "Admin", NormalizedName = "ADMIN", Status = RoleStatusEnum.Active, IsSystemRole = true };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
         var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
@@ -103,7 +103,7 @@ public class SetRolePermissionsCommandHandlerTests
     {
         var role = new Role { Id = Guid.NewGuid(), Name = "Manager", NormalizedName = "MANAGER", Status = RoleStatusEnum.Active, IsSystemRole = true };
         var perm = NewPerm("user.view");
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
         var permsMock = new Mock<SharedKernels.Interfaces.IGenericRepository<Permission>>();
         permsMock.Setup(r => r.GetAllAsync()).Returns(new[] { perm }.AsQueryable().BuildMock());
@@ -127,7 +127,7 @@ public class SetRolePermissionsCommandHandlerTests
     [Fact]
     public async Task Set_RoleNotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
 
         var resp = await handler.Handle(new SetRolePermissionsCommand
@@ -143,7 +143,7 @@ public class SetRolePermissionsCommandHandlerTests
     public async Task Set_PermissionIdNotExist_Returns400()
     {
         var role = new Role { Id = Guid.NewGuid(), Name = "Tech", NormalizedName = "TECH", Status = RoleStatusEnum.Active, IsSystemRole = false };
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
         var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
@@ -174,7 +174,7 @@ public class GetRolePermissionsQueryHandlerTests
             new RolePermission { Id = Guid.NewGuid(), RoleId = otherRoleId, PermissionId = p3.Id }
         };
 
-        var (uow, _, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
         var permsMock = new Mock<SharedKernels.Interfaces.IGenericRepository<Permission>>();
         permsMock.Setup(r => r.GetAllAsync()).Returns(new[] { p1, p2, p3 }.AsQueryable().BuildMock());
         uow.SetupGet(u => u.Permissions).Returns(permsMock.Object);
@@ -186,14 +186,15 @@ public class GetRolePermissionsQueryHandlerTests
         var resp = await handler.Handle(new GetRolePermissionsQuery { RoleId = role.Id }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.Should().HaveCount(2);
-        resp.Data.Select(p => p.Code).Should().Contain(new[] { "a.view", "b.view" });
+        var permissions = resp.Data!;
+        permissions.Should().HaveCount(2);
+        permissions.Select(p => p.Code).Should().Contain(new[] { "a.view", "b.view" });
     }
 
     [Fact]
     public async Task GetByRole_RoleNotFound_Returns404()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetRolePermissionsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolePermissionsQuery { RoleId = Guid.NewGuid() }, CancellationToken.None);
@@ -204,7 +205,7 @@ public class GetRolePermissionsQueryHandlerTests
     [Fact]
     public async Task GetByRole_EmptyId_Returns400()
     {
-        var (uow, _, _, _, _) = MockUnitOfWork.Build();
+        var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new GetRolePermissionsQueryHandler(uow.Object);
 
         var resp = await handler.Handle(new GetRolePermissionsQuery { RoleId = Guid.Empty }, CancellationToken.None);

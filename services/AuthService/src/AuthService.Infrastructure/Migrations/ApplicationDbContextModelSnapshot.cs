@@ -151,6 +151,18 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("provider");
 
+                    b.Property<DateTime?>("RoleAssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("role_assigned_at");
+
+                    b.Property<Guid?>("RoleAssignedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_assigned_by");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -190,12 +202,14 @@ namespace AuthService.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"phone_number\" IS NOT NULL");
 
+                    b.HasIndex("RoleId");
+
                     b.HasIndex("Status");
 
                     b.ToTable("accounts", (string)null);
                 });
 
-            modelBuilder.Entity("AuthService.Domain.Entities.AccountRole", b =>
+            modelBuilder.Entity("AuthService.Domain.Entities.AccountProfile", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -205,13 +219,24 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("assigned_at");
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("address");
 
-                    b.Property<Guid?>("AssignedBy")
+                    b.Property<Guid?>("AvatarFileId")
                         .HasColumnType("uuid")
-                        .HasColumnName("assigned_by");
+                        .HasColumnName("avatar_file_id");
+
+                    b.Property<int>("AvatarSource")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("avatar_source");
+
+                    b.Property<DateTime?>("BirthDate")
+                        .HasColumnType("date")
+                        .HasColumnName("birth_date");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -225,15 +250,10 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<DateTime?>("ExpiredAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expired_at");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
+                    b.Property<string>("ExternalAvatarUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("external_avatar_url");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -241,9 +261,10 @@ namespace AuthService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("time_zone");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -251,17 +272,15 @@ namespace AuthService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
+                    b.HasIndex("AccountId")
+                        .IsUnique();
 
-                    b.HasIndex("IsActive");
+                    b.HasIndex("AvatarFileId")
+                        .HasFilter("\"avatar_file_id\" IS NOT NULL");
 
-                    b.HasIndex("RoleId");
+                    b.HasIndex("IsDeleted");
 
-                    b.HasIndex("AccountId", "RoleId")
-                        .IsUnique()
-                        .HasFilter("\"is_deleted\" = false");
-
-                    b.ToTable("account_roles", (string)null);
+                    b.ToTable("account_profiles", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.AuditLog", b =>
@@ -855,23 +874,161 @@ namespace AuthService.Infrastructure.Migrations
                     b.ToTable("role_permissions", (string)null);
                 });
 
-            modelBuilder.Entity("AuthService.Domain.Entities.AccountRole", b =>
+            modelBuilder.Entity("AuthService.Domain.Entities.StaffProfile", b =>
                 {
-                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
-                        .WithMany("AccountRoles")
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Department")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("department");
+
+                    b.Property<string>("EmployeeCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("employee_code");
+
+                    b.Property<bool>("IsAvailable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_available");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("MaxConcurrentTickets")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("max_concurrent_tickets");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .IsUnique();
+
+                    b.HasIndex("EmployeeCode")
+                        .IsUnique()
+                        .HasFilter("\"employee_code\" IS NOT NULL");
+
+                    b.HasIndex("IsAvailable");
+
+                    b.HasIndex("IsDeleted");
+
+                    b.ToTable("staff_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.StaffSkill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CertifiedUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("certified_until");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("SkillCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("skill_code");
+
+                    b.Property<int>("SkillLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("skill_level");
+
+                    b.Property<Guid>("StaffAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("staff_account_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDeleted");
+
+                    b.HasIndex("SkillCode");
+
+                    b.HasIndex("StaffAccountId", "SkillCode")
+                        .IsUnique();
+
+                    b.ToTable("staff_skills", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
+                {
                     b.HasOne("AuthService.Domain.Entities.Role", "Role")
-                        .WithMany("AccountRoles")
+                        .WithMany("Accounts")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Account");
-
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.AccountProfile", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
+                        .WithOne("Profile")
+                        .HasForeignKey("AuthService.Domain.Entities.AccountProfile", "AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
@@ -914,11 +1071,36 @@ namespace AuthService.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.StaffProfile", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
+                        .WithOne("StaffProfile")
+                        .HasForeignKey("AuthService.Domain.Entities.StaffProfile", "AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.StaffSkill", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.StaffProfile", "StaffProfile")
+                        .WithMany("Skills")
+                        .HasForeignKey("StaffAccountId")
+                        .HasPrincipalKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StaffProfile");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
                 {
-                    b.Navigation("AccountRoles");
+                    b.Navigation("Profile");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("StaffProfile");
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.Permission", b =>
@@ -928,9 +1110,14 @@ namespace AuthService.Infrastructure.Migrations
 
             modelBuilder.Entity("AuthService.Domain.Entities.Role", b =>
                 {
-                    b.Navigation("AccountRoles");
+                    b.Navigation("Accounts");
 
                     b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.StaffProfile", b =>
+                {
+                    b.Navigation("Skills");
                 });
 #pragma warning restore 612, 618
         }
