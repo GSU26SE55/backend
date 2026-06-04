@@ -3,6 +3,7 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using TicketService.Application.DependencyInjection;
+using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
@@ -24,6 +25,7 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
+builder.Services.AddHostedService<AutoCloseBackgroundService>();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TicketDbContext>("TicketDb");

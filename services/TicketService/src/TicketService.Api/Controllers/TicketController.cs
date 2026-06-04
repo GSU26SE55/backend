@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Commands.TicketDeclareIncident;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
 
@@ -462,6 +463,34 @@ public class TicketController : ControllerBase
         command.CustomerId = GetUserId();
         command.CustomerName = GetUserName();
 
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Manager/Admin: Đánh dấu một ticket là một sự cố (Incident).
+    /// </summary>
+    /// <remarks>
+    /// Hành động này dùng để phân loại các ticket có ảnh hưởng nghiêm trọng hoặc diện rộng,
+    /// cần quy trình xử lý đặc biệt.
+    ///
+    /// Cách hoạt động:
+    /// - Set cờ `IsIncident = true` trên ticket.
+    /// - Ghi lại hoạt động "Incident Declared" vào lịch sử ticket.
+    /// </remarks>
+    /// <param name="id">ID của Ticket.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Đánh dấu sự cố thành công.</response>
+    /// <response code="403">Không có quyền.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpPost("{id}/declare-incident")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeclareIncident(Guid id, CancellationToken ct)
+    {
+        var command = new TicketDeclareIncidentCommand(id, GetUserId());
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
