@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Commands.TicketDeclareIncident;
 using TicketService.Application.CQRS.Handler.Tickets;
@@ -18,6 +19,7 @@ public class TicketDeclareIncidentCommandHandlerTests
     private readonly Mock<ITicketUnitOfWork> _unitOfWorkMock;
     private readonly Mock<IGenericRepository<Ticket>> _ticketRepositoryMock;
     private readonly Mock<IGenericRepository<TicketActivity>> _ticketActivityRepositoryMock;
+    private readonly Mock<IMessageProducerService> _producerMock;
     private readonly TicketDeclareIncidentCommandHandler _handler;
 
     public TicketDeclareIncidentCommandHandlerTests()
@@ -25,11 +27,12 @@ public class TicketDeclareIncidentCommandHandlerTests
         _unitOfWorkMock = new Mock<ITicketUnitOfWork>();
         _ticketRepositoryMock = new Mock<IGenericRepository<Ticket>>();
         _ticketActivityRepositoryMock = new Mock<IGenericRepository<TicketActivity>>();
+        _producerMock = new Mock<IMessageProducerService>();
 
         _unitOfWorkMock.Setup(u => u.Tickets).Returns(_ticketRepositoryMock.Object);
         _unitOfWorkMock.Setup(u => u.TicketActivities).Returns(_ticketActivityRepositoryMock.Object);
 
-        _handler = new TicketDeclareIncidentCommandHandler(_unitOfWorkMock.Object);
+        _handler = new TicketDeclareIncidentCommandHandler(_unitOfWorkMock.Object, _producerMock.Object);
     }
 
     [Fact]

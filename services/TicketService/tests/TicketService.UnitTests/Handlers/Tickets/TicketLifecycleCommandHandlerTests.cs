@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.StateMachine;
@@ -16,8 +18,9 @@ public class TicketLifecycleCommandHandlerTests
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
     private readonly Mock<ISlaService> _slaService = new();
+    private readonly Mock<IMessageProducerService> _producer = new();
 
-    #region TicketStart
+    #region TicketReassign
     [Fact]
     public async Task Reassign_ValidRequest_UpdatesStaff()
     {
@@ -30,7 +33,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -41,7 +44,7 @@ public class TicketLifecycleCommandHandlerTests
 
         ticket.AssignedStaffId.Should().Be(newStaffId);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -57,7 +60,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Denied" });
 
-        var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -76,7 +79,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -85,7 +88,7 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -101,7 +104,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -120,7 +123,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -129,7 +132,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.WaitingParts, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketHeldIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -145,7 +149,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.WaitingParts, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -164,7 +168,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -173,7 +177,8 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketResumedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -189,7 +194,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -208,7 +213,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketApproveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketApproveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -217,7 +222,7 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedPendingRate, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketApprovedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -233,7 +238,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.ClosedPendingRate, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketApproveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketApproveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -252,7 +257,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -263,7 +268,7 @@ public class TicketLifecycleCommandHandlerTests
 
         ticket.Reason.Should().Be("Not fixed");
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.InProgress, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketRejectedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -279,7 +284,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -298,7 +303,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketEscalateRequestCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketEscalateRequestCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -310,7 +315,7 @@ public class TicketLifecycleCommandHandlerTests
         ticket.EscalationReason.Should().Be(EscalationReasonEnum.SkillGap);
         ticket.EscalatedAt.Should().NotBeNull();
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketEscalatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -326,7 +331,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketEscalateRequestCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketEscalateRequestCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -345,7 +350,7 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketEscalateForceCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketEscalateForceCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -357,7 +362,7 @@ public class TicketLifecycleCommandHandlerTests
         ticket.EscalationReason.Should().Be(EscalationReasonEnum.SlaBreach);
         ticket.EscalatedAt.Should().NotBeNull();
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketEscalatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -373,7 +378,7 @@ public class TicketLifecycleCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketEscalateForceCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketEscalateForceCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -388,7 +393,7 @@ public class TicketLifecycleCommandHandlerTests
         var command = new TicketStartCommand { TicketId = ticketId, StaffId = Guid.NewGuid() };
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
 
-        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();

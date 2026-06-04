@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Helpers;
@@ -16,6 +17,7 @@ public class TicketSlaPauseResumeTests
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
     private readonly Mock<ISlaService> _slaService = new();
+    private readonly Mock<IMessageProducerService> _producer = new();
 
     [Fact]
     public async Task Hold_ValidRequest_CallsSlaServicePause()
@@ -35,7 +37,7 @@ public class TicketSlaPauseResumeTests
             Note = "Waiting for spare parts"
         };
 
-        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -61,7 +63,7 @@ public class TicketSlaPauseResumeTests
             StaffId = staffId
         };
 
-        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
+        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

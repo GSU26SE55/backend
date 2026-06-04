@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 using TicketService.Application.Interfaces.Services;
@@ -104,11 +105,14 @@ public class SlaTimerBackgroundServiceTests
 
     private ServiceProvider CreateProvider(string dbName)
     {
+        var mockProducer = new Mock<IMessageProducerService>();
+
         return new ServiceCollection()
             .AddScoped<ICurrentUserService, NullUserService>()
             .AddScoped<AuditableEntityInterceptor>()
             .AddScoped<ISlaCalculator, SlaCalculator>()
             .AddDbContext<TicketDbContext>(options => options.UseInMemoryDatabase(dbName))
+            .AddSingleton<IMessageProducerService>(mockProducer.Object)
             .AddMassTransitTestHarness()
             .BuildServiceProvider(true);
     }

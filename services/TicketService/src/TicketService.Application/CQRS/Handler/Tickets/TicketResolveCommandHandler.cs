@@ -1,14 +1,13 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -18,15 +17,18 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketResolveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResolveCommand request, CancellationToken ct)
@@ -64,16 +66,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
-        var @event = new TicketResolvedIntegrationEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary);
-        await _uow.OutboxMessages.AddAsync(new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketResolvedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(@event),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        });
+        await _producer.PublishAsync(new TicketResolvedIntegrationEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
 
         await _uow.SaveChangesAsync(ct);
 

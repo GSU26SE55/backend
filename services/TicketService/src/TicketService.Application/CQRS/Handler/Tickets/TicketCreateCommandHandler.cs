@@ -1,12 +1,11 @@
-using System.Text.Json;
 using MediatR;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 
@@ -17,15 +16,18 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
@@ -50,17 +52,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         await _uow.Tickets.AddAsync(ticket);
 
         // Outbox: Ticket Created
-        var integrationEvent = new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code);
-        var outboxMessage = new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketCreatedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(integrationEvent),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        };
-        await _uow.OutboxMessages.AddAsync(outboxMessage);
+        await _producer.PublishAsync(new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code), ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,

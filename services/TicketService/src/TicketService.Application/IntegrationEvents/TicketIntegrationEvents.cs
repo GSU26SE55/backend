@@ -1,7 +1,9 @@
 using SharedContracts.Events.Root;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Common.Events;
+namespace TicketService.Application.IntegrationEvents;
+
+// --- Ticket Lifecycle Events ---
 
 public record TicketCreatedIntegrationEvent(Guid TicketId, string Code) : IntegrationEvent;
 
@@ -20,3 +22,17 @@ public record TicketReopenedIntegrationEvent(Guid TicketId, string Code, Guid Cu
 public record TicketRatedIntegrationEvent(Guid TicketId, string Code, Guid CustomerId, short Rating, string? RatingComment) : IntegrationEvent;
 
 public record TicketEscalatedIntegrationEvent(Guid TicketId, string Code, EscalationReasonEnum Reason, string? Note, Guid? StaffId, string? StaffName) : IntegrationEvent;
+
+// --- SLA Events ---
+
+public record SlaBreachedIntegrationEvent(Guid TicketId, DateTime BreachedAt) : IntegrationEvent;
+
+public record SlaWarningIntegrationEvent(Guid TicketId, DateTime WarningAt, double Percentage) : IntegrationEvent;
+
+// --- Ticket Action Events ---
+
+public record IncidentDeclaredIntegrationEvent(Guid TicketId, string Code, Guid ManagerId) : IntegrationEvent;
+
+public record TicketHeldIntegrationEvent(Guid TicketId, string Code, PauseReasonEnum Reason, string? Note) : IntegrationEvent;
+
+public record TicketResumedIntegrationEvent(Guid TicketId, string Code) : IntegrationEvent;

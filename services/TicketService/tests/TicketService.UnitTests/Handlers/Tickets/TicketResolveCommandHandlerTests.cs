@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -14,6 +16,7 @@ public class TicketResolveCommandHandlerTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
+    private readonly Mock<IMessageProducerService> _producer = new();
 
     [Fact]
     public async Task Handle_ValidRequest_ResolvesTicket()
@@ -41,7 +44,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -52,7 +55,7 @@ public class TicketResolveCommandHandlerTests
         result.Data.Status.Should().Be(TicketStatusEnum.Resolved);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Resolved, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        uow.Verify(x => x.OutboxMessages.AddAsync(It.IsAny<OutboxMessage>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketResolvedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -81,7 +84,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -116,7 +119,7 @@ public class TicketResolveCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

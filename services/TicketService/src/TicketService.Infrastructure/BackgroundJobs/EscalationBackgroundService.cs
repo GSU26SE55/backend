@@ -1,8 +1,7 @@
-using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Events;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
@@ -11,23 +10,26 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.BackgroundJobs;
 
-public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
+public class EscalationBackgroundService : IConsumer<SlaBreachedIntegrationEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public EscalationBackgroundService(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
-    public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
+    public async Task Consume(ConsumeContext<SlaBreachedIntegrationEvent> context)
     {
         var message = context.Message;
 
@@ -57,16 +59,7 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
             await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: EscalationReasonEnum.SlaBreach.ToString(), reason: "SLA breached");
 
             // Outbox: Ticket Escalated
-            var @event = new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, EscalationReasonEnum.SlaBreach, "SLA breached", null, "System");
-            await _uow.OutboxMessages.AddAsync(new OutboxMessage
-            {
-                Id = Guid.NewGuid(),
-                AggregateId = ticket.Id,
-                Type = nameof(TicketEscalatedIntegrationEvent),
-                Payload = JsonSerializer.Serialize(@event),
-                OccurredAtUtc = DateTime.UtcNow,
-                RetryCount = 0
-            });
+            await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
 
             await _uow.SaveChangesAsync(context.CancellationToken);
         }

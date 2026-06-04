@@ -15,7 +15,7 @@ namespace TicketService.Api.Controllers;
 /// Bao gồm các hành động: tạo mới, bắt đầu xử lý, tạm dừng, tiếp tục, giải quyết và yêu cầu chuyển cấp.
 /// </summary>
 [ApiController]
-[Route("api/tickets")]
+[Route("api/v1/tickets")]
 [Authorize]
 [Produces("application/json")]
 public class TicketController : ControllerBase

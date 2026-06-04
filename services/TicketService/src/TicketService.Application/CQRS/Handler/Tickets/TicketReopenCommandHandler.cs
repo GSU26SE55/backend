@@ -1,14 +1,13 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -18,15 +17,18 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketReopenCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketReopenCommand request, CancellationToken ct)
@@ -54,8 +56,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Reopened, newValue: request.ReopenReason);
 
         // Outbox: Ticket Reopened
-        var reopenEvent = new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason);
-        await AddToOutbox(reopenEvent, ticket.Id);
+        await _producer.PublishAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
 
         // BR-07: Auto-escalate if ReopenCount >= 2
         if (ticket.ReopenCount >= 2)
@@ -80,8 +81,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
 
                 await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: reason.ToString(), reason: note);
 
-                var escalateEvent = new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null);
-                await AddToOutbox(escalateEvent, ticket.Id);
+                await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
             }
         }
 
@@ -99,19 +99,6 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
                 Status = ticket.Status
             }
         };
-    }
-
-    private async Task AddToOutbox<T>(T @event, Guid aggregateId) where T : class
-    {
-        await _uow.OutboxMessages.AddAsync(new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = aggregateId,
-            Type = typeof(T).Name,
-            Payload = JsonSerializer.Serialize(@event),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        });
     }
 
     private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")

@@ -12,7 +12,7 @@ namespace TicketService.Api.Controllers.Admin;
 /// Toàn bộ endpoint trong controller này yêu cầu quyền Manager/Admin.
 /// </summary>
 [ApiController]
-[Route("api/admin/tickets")]
+[Route("api/v1/admin/tickets")]
 [Authorize(Roles = "Manager,Admin")]
 [Produces("application/json")]
 public class AdminTicketsController : ControllerBase

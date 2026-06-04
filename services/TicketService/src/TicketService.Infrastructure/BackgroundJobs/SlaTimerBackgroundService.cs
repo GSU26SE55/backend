@@ -1,9 +1,9 @@
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using SharedContracts.Events;
+using SharedContracts.Interfaces;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -46,13 +46,13 @@ public class SlaTimerBackgroundService : BackgroundService
         _logger.LogInformation("SLA Timer Background Service is stopping.");
     }
 
-    protected async Task CheckSlaViolations(CancellationToken stoppingToken)
+    public async Task CheckSlaViolations(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Checking for SLA violations...");
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-        var bus = scope.ServiceProvider.GetRequiredService<IBus>();
+        var producer = scope.ServiceProvider.GetRequiredService<IMessageProducerService>();
 
         var currentTime = _timeProvider.GetUtcNow().UtcDateTime; // Dùng TimeProvider thay vì DateTime.UtcNow
 
@@ -71,7 +71,7 @@ public class SlaTimerBackgroundService : BackgroundService
                 _logger.LogWarning("SLA breached for ticket {TicketId}", timer.TicketId);
                 timer.Status = SlaTimerStatusEnum.Breached;
                 timer.BreachAt = currentTime;
-                await bus.Publish(new SlaBreachedEvent { TicketId = timer.TicketId, BreachedAt = timer.BreachAt.Value }, stoppingToken);
+                await producer.PublishAsync(new SlaBreachedIntegrationEvent(timer.TicketId, timer.BreachAt.Value), stoppingToken);
             }
             else
             {
@@ -84,7 +84,7 @@ public class SlaTimerBackgroundService : BackgroundService
                     // SLA warning
                     _logger.LogWarning("SLA warning for ticket {TicketId}", timer.TicketId);
                     timer.WarningSentAt = currentTime;
-                    await bus.Publish(new SlaWarningEvent { TicketId = timer.TicketId, WarningAt = timer.WarningSentAt.Value, Percentage = percentage }, stoppingToken);
+                    await producer.PublishAsync(new SlaWarningIntegrationEvent(timer.TicketId, timer.WarningSentAt.Value, percentage), stoppingToken);
                 }
             }
         }

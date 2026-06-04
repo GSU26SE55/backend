@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Commands.TicketDeclareIncident;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -12,10 +14,12 @@ namespace TicketService.Application.CQRS.Handler.Tickets;
 public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclareIncidentCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
+    private readonly IMessageProducerService _producer;
 
-    public TicketDeclareIncidentCommandHandler(ITicketUnitOfWork unitOfWork)
+    public TicketDeclareIncidentCommandHandler(ITicketUnitOfWork unitOfWork, IMessageProducerService producer)
     {
         _unitOfWork = unitOfWork;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketDeclareIncidentCommand request, CancellationToken cancellationToken)
@@ -40,6 +44,10 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
         };
 
         await _unitOfWork.TicketActivities.AddAsync(activity);
+
+        // Outbox: Incident Declared
+        await _producer.PublishAsync(new IncidentDeclaredIntegrationEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
+
         await _unitOfWork.CommitTransactionAsync();
 
         return new TicketActionResponse
