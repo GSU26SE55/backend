@@ -17,7 +17,7 @@ HEAD="${HEAD_REF:-HEAD}"
 CHANGED_PATHS=$(git diff --name-only "$BASE...$HEAD" 2>/dev/null || git diff --name-only HEAD~1...HEAD)
 
 # Nếu shared library đổi → build all
-ALL_SERVICES="apigateway authservice emailservice smsservice filestorageservice batteryservice"
+ALL_SERVICES="apigateway authservice emailservice smsservice filestorageservice batteryservice ticketservice notificationservice"
 
 if echo "$CHANGED_PATHS" | grep -qE "^shared/|^Dockerfile.template|^SolarBatteryMaintainance.slnx"; then
   echo "$ALL_SERVICES"
@@ -32,6 +32,8 @@ echo "$CHANGED_PATHS" | grep -E "^services/EmailService"        > /dev/null && S
 echo "$CHANGED_PATHS" | grep -E "^services/SmsService"          > /dev/null && SERVICES+=("smsservice")
 echo "$CHANGED_PATHS" | grep -E "^services/FileStorageService"  > /dev/null && SERVICES+=("filestorageservice")
 echo "$CHANGED_PATHS" | grep -E "^services/BatteryService"      > /dev/null && SERVICES+=("batteryservice")
+echo "$CHANGED_PATHS" | grep -E "^services/TicketService"       > /dev/null && SERVICES+=("ticketservice")
+echo "$CHANGED_PATHS" | grep -E "^services/NotificationService" > /dev/null && SERVICES+=("notificationservice")
 
 # Nếu KHÔNG service nào đổi (chỉ docs, monitoring, etc.) → build all để safe
 if [ ${#SERVICES[@]} -eq 0 ]; then
