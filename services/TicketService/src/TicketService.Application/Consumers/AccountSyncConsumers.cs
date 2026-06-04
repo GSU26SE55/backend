@@ -196,6 +196,7 @@ public class StaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEvent>
             staff.EmployeeCode = @event.EmployeeCode;
             staff.MaxConcurrentTickets = @event.MaxConcurrentTickets;
             staff.IsAvailable = @event.IsAvailable;
+            staff.SkillTier = (StaffSkillTierEnum)@event.SkillTier;
             staff.LastSyncedAt = DateTime.UtcNow;
             _uow.StaffAccounts.UpdateAsync(staff);
             await _uow.SaveChangesAsync(context.CancellationToken);

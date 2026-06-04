@@ -6,5 +6,6 @@ public record StaffProfileUpdatedEvent(
     Guid AccountId,
     string? EmployeeCode,
     int MaxConcurrentTickets,
-    bool IsAvailable
+    bool IsAvailable,
+    int SkillTier
 ) : IntegrationEvent;

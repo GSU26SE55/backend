@@ -131,5 +131,78 @@ public class TicketAssignCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(403);
     }
+
+    [Fact]
+    public async Task Handle_SkillGapTicket_AssignedToGeneralist_Returns403()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            EscalationReason = EscalationReasonEnum.SkillGap,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.Generalist }
+        };
+
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        result.Message.Should().Contain("ModuleSpecialist trở lên");
+    }
+
+    [Fact]
+    public async Task Handle_ComplexCategory_AssignedToGeneralist_ReturnsWarning()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            Category = TicketCategoryEnum.Overheat,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.Generalist }
+        };
+
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Message.Should().Contain("Lưu ý: Ticket thuộc danh mục phức tạp");
+    }
     #endregion
 }

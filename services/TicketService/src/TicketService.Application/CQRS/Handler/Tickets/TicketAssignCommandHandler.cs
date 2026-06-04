@@ -51,6 +51,19 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         if (!staff.IsAvailable)
             return Fail(403, "Nhân viên hiện đang không sẵn sàng nhận ticket mới.", "StaffId");
 
+        // Skill Tier Enforcement/Warning
+        string? warningMessage = null;
+        if (ticket.EscalationReason == EscalationReasonEnum.SkillGap && staff.SkillTier < StaffSkillTierEnum.ModuleSpecialist)
+        {
+            return Fail(403, "Ticket này yêu cầu nhân viên có trình độ ModuleSpecialist trở lên do đang gặp SkillGap.", "StaffId");
+        }
+
+        if ((ticket.Category == TicketCategoryEnum.Overheat || ticket.Category == TicketCategoryEnum.Performance)
+            && staff.SkillTier == StaffSkillTierEnum.Generalist)
+        {
+            warningMessage = "Lưu ý: Ticket thuộc danh mục phức tạp nhưng nhân viên được gán đang ở mức Generalist.";
+        }
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Transition not allowed.");
@@ -83,7 +96,7 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Ticket assigned successfully.",
+            Message = warningMessage ?? "Ticket assigned successfully.",
             Data = new TicketActionDto
             {
                 Id = ticket.Id.ToString(),
