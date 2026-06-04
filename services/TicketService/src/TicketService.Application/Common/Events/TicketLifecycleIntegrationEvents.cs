@@ -14,3 +14,5 @@ public record TicketApprovedIntegrationEvent(Guid TicketId, string Code, Guid Cu
 public record TicketRejectedIntegrationEvent(Guid TicketId, string Code, Guid StaffId, string Reason) : IntegrationEvent;
 
 public record TicketStatusChangedIntegrationEvent(Guid TicketId, string Code, TicketStatusEnum OldStatus, TicketStatusEnum NewStatus) : IntegrationEvent;
+
+public record TicketEscalatedIntegrationEvent(Guid TicketId, string Code, EscalationReasonEnum Reason, string? Note, Guid? StaffId, string? StaffName) : IntegrationEvent;

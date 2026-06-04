@@ -54,13 +54,13 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
 
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, ActivityActionEnum.EscalationRequested, newValue: request.Reason.ToString(), reason: request.Note);
 
-        // Outbox: Status Changed (Escalated)
-        var @event = new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.InProgress, TicketStatusEnum.Escalated);
+        // Outbox: Ticket Escalated
+        var @event = new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName);
         await _uow.OutboxMessages.AddAsync(new OutboxMessage
         {
             Id = Guid.NewGuid(),
             AggregateId = ticket.Id,
-            Type = nameof(TicketStatusChangedIntegrationEvent),
+            Type = nameof(TicketEscalatedIntegrationEvent),
             Payload = JsonSerializer.Serialize(@event),
             OccurredAtUtc = DateTime.UtcNow,
             RetryCount = 0

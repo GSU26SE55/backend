@@ -9,6 +9,7 @@ using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.BackgroundServices;
 using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
@@ -28,7 +29,7 @@ public static class ManageDependencyInjection
         services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
-        services.AddMessageBus(configuration);
+        services.AddMessageBus(configuration, typeof(ManageDependencyInjection).Assembly);
 
         return services;
     }
@@ -39,6 +40,7 @@ public static class ManageDependencyInjection
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddHostedService<OutboxRelayBackgroundService>();
+        services.AddHostedService<SlaTimerBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)

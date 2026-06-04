@@ -380,6 +380,31 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Manager/Admin cưỡng ép chuyển cấp xử lý (Escalation) cho ticket.
+    /// </summary>
+    /// <remarks>
+    /// Body request:
+    /// - <c>Reason</c>: Lý do chuyển cấp.
+    /// - <c>Note</c>: Giải thích thêm.
+    /// </remarks>
+    /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Lý do cưỡng ép chuyển cấp.</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpPost("{id}/escalate")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Escalate(Guid id, [FromBody] TicketEscalateForceCommand command,
+        CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = GetUserId();
+        command.ManagerName = GetUserName();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     #endregion
 
     private Guid GetUserId()
