@@ -405,6 +405,67 @@ public class TicketController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Khách hàng yêu cầu mở lại ticket khi chưa hài lòng với kết quả xử lý.
+    /// </summary>
+    /// <remarks>
+    /// Điều kiện:
+    /// - Ticket phải ở trạng thái <c>ClosedPendingRate</c>.
+    /// - Thời gian mở lại phải trong vòng 7 ngày kể từ khi ticket được phê duyệt giải quyết (BR-06).
+    /// - Nếu mở lại từ lần thứ 2 trở đi, ticket sẽ tự động được chuyển cấp (Escalated) theo BR-07.
+    ///
+    /// Body request:
+    /// - <c>ReopenReason</c>: Lý do mở lại ticket.
+    /// </remarks>
+    /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Lý do mở lại.</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpPost("{id}/reopen")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Reopen(Guid id, [FromBody] TicketReopenCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.CustomerId = GetUserId();
+        command.CustomerName = GetUserName();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Khách hàng thực hiện đánh giá chất lượng xử lý và đóng ticket chính thức.
+    /// </summary>
+    /// <remarks>
+    /// Điều kiện:
+    /// - Ticket phải ở trạng thái <c>ClosedPendingRate</c>.
+    ///
+    /// Body request:
+    /// - <c>Rating</c>: Điểm đánh giá (1-5 sao).
+    /// - <c>RatingComment</c>: Nhận xét chi tiết (tùy chọn).
+    ///
+    /// Cách hoạt động:
+    /// - Cập nhật thông tin đánh giá vào ticket.
+    /// - Chuyển trạng thái sang <c>Closed</c>.
+    /// </remarks>
+    /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Thông tin đánh giá.</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpPost("{id}/rate")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Rate(Guid id, [FromBody] TicketRateCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.CustomerId = GetUserId();
+        command.CustomerName = GetUserName();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     #endregion
 
     private Guid GetUserId()

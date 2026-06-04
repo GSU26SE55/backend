@@ -63,6 +63,16 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                                 ? null
                                 : "Only Managers can approve."
                         }
+                    },
+                    {
+                        TicketStatusEnum.Escalated,
+                        (ticket, role, userId) => new TransitionResult
+                        {
+                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System,
+                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System
+                                ? null
+                                : "Only Managers, Admin or System can escalate."
+                        }
                     }
                 }
             },
