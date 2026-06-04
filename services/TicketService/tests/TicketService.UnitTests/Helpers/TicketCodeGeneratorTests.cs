@@ -13,7 +13,7 @@ public class TicketCodeGeneratorTests
     public async Task GenerateAsync_ReturnsCorrectFormat()
     {
         // Arrange
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
         var generator = new TicketCodeGenerator(uow.Object);
 
         // Act
@@ -38,7 +38,7 @@ public class TicketCodeGeneratorTests
             Description = "D"
         };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { existingTicket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { existingTicket });
         var generator = new TicketCodeGenerator(uow.Object);
 
         // Act

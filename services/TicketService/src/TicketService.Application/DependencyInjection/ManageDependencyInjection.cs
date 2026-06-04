@@ -17,6 +17,8 @@ public static class ManageDependencyInjection
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ManageDependencyInjection).Assembly));
         services.AddScoped<ITicketStateMachine, TicketStateMachine>();
         services.AddScoped<ITransitionRuleProvider, TransitionRuleProvider>();
+        services.AddScoped<Interfaces.Services.ISlaCalculator, Services.SlaCalculator>();
+        services.AddScoped<Interfaces.Services.ISlaService, Services.SlaService>();
         return services;
     }
 }

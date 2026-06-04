@@ -12,13 +12,17 @@ public static class MockTicketUnitOfWork
                    Mock<IGenericRepository<Ticket>> tickets,
                    Mock<IGenericRepository<TicketActivity>> activities,
                    Mock<IGenericRepository<CustomerAccount>> customers,
-                   Mock<IGenericRepository<StaffAccount>> staff)
+                   Mock<IGenericRepository<StaffAccount>> staff,
+                   Mock<IGenericRepository<SlaTimer>> slaTimers,
+                   Mock<IGenericRepository<SlaPauseEvent>> slaPauseEvents)
         Build(
             IEnumerable<Ticket>? ticketSeed = null,
             IEnumerable<TicketActivity>? activitySeed = null,
             IEnumerable<CustomerAccount>? customerSeed = null,
             IEnumerable<StaffAccount>? staffSeed = null,
-            IEnumerable<OutboxMessage>? outboxSeed = null)
+            IEnumerable<OutboxMessage>? outboxSeed = null,
+            IEnumerable<SlaTimer>? slaTimerSeed = null,
+            IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null)
     {
         var tickets = new Mock<IGenericRepository<Ticket>>();
         tickets.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(ticketSeed ?? Array.Empty<Ticket>()));
@@ -33,6 +37,12 @@ public static class MockTicketUnitOfWork
         var staff = new Mock<IGenericRepository<StaffAccount>>();
         staff.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<StaffAccount>(staffSeed ?? Array.Empty<StaffAccount>()));
 
+        var slaTimers = new Mock<IGenericRepository<SlaTimer>>();
+        slaTimers.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<SlaTimer>(slaTimerSeed ?? Array.Empty<SlaTimer>()));
+
+        var slaPauseEvents = new Mock<IGenericRepository<SlaPauseEvent>>();
+        slaPauseEvents.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<SlaPauseEvent>(slaPauseEventSeed ?? Array.Empty<SlaPauseEvent>()));
+
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
         outbox.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<OutboxMessage>(outboxSeed ?? Array.Empty<OutboxMessage>()));
 
@@ -41,6 +51,8 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.TicketActivities).Returns(activities.Object);
         uow.SetupGet(u => u.CustomerAccounts).Returns(customers.Object);
         uow.SetupGet(u => u.StaffAccounts).Returns(staff.Object);
+        uow.SetupGet(u => u.SlaTimers).Returns(slaTimers.Object);
+        uow.SetupGet(u => u.SlaPauseEvents).Returns(slaPauseEvents.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
 
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -48,6 +60,6 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, tickets, activities, customers, staff);
+        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents);
     }
 }

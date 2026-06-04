@@ -1,5 +1,3 @@
-using FluentAssertions;
-using Moq;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Helpers;
@@ -42,7 +40,7 @@ public class TicketTriageCommandHandlerTests
             ManagerComment = "Urgent site issue"
         };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         _priorityCalc.Setup(x => x.Calculate(ImpactScopeEnum.Site, UrgencyLevelEnum.High))
             .Returns(TicketPriorityEnum.P1Critical);
@@ -83,7 +81,7 @@ public class TicketTriageCommandHandlerTests
             PriorityOverrideReason = "CEO Request"
         };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object);
 
@@ -108,7 +106,7 @@ public class TicketTriageCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Status = TicketStatusEnum.Closed, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" };
         var command = new TicketTriageCommand { TicketId = ticketId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Approved, It.IsAny<ActorRoleEnum>(), It.IsAny<Guid>()))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Ticket is closed" });
 
@@ -127,7 +125,7 @@ public class TicketTriageCommandHandlerTests
     public async Task Handle_TicketNotFound_Returns404()
     {
         var command = new TicketTriageCommand { TicketId = Guid.NewGuid() };
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
 
         var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);

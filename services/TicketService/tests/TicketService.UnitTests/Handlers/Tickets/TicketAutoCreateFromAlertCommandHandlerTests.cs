@@ -34,7 +34,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-AUTO-001");
         _priorityCalc.Setup(x => x.Calculate(expectedImpact, expectedUrgency)).Returns(expectedPriority);
 
-        var (uow, tickets, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
         var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object);
 

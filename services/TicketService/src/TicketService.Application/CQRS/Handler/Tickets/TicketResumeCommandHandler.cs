@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -18,15 +19,18 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly ISlaService _slaService;
 
     public TicketResumeCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        ISlaService slaService)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _slaService = slaService;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResumeCommand request, CancellationToken ct)
@@ -48,6 +52,9 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
             ActorRole = ActorRoleEnum.Staff,
             ActorDisplayName = request.StaffName ?? "Staff"
         }, ct);
+
+        // SLA Timer logic
+        await _slaService.ResumeSlaAsync(ticket.Id, request.StaffId, ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,

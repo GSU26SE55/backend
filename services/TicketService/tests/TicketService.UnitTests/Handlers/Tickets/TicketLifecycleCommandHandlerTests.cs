@@ -3,6 +3,7 @@ using Moq;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -14,8 +15,9 @@ public class TicketLifecycleCommandHandlerTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
+    private readonly Mock<ISlaService> _slaService = new();
 
-    #region TicketReassign
+    #region TicketStart
     [Fact]
     public async Task Reassign_ValidRequest_UpdatesStaff()
     {
@@ -26,7 +28,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, AssignedStaffId = oldStaffId };
         var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewStaffId = newStaffId, ManagerName = "Mgr" };
 
-        var (uow, tickets, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -51,7 +53,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Closed };
         var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Denied" });
 
@@ -72,7 +74,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned };
         var command = new TicketStartCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, tickets, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -95,7 +97,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Open };
         var command = new TicketStartCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
@@ -116,9 +118,9 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.InProgress };
         var command = new TicketHoldCommand { TicketId = ticketId, StaffId = staffId, Reason = PauseReasonEnum.WaitingParts };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -139,11 +141,11 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Closed };
         var command = new TicketHoldCommand { TicketId = ticketId, StaffId = staffId, Reason = PauseReasonEnum.WaitingParts };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.WaitingParts, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -160,9 +162,9 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.WaitingParts };
         var command = new TicketResumeCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -183,11 +185,11 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Open };
         var command = new TicketResumeCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
-        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
+        var handler = new TicketResumeCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -204,7 +206,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Resolved };
         var command = new TicketApproveCommand { TicketId = ticketId, ManagerId = managerId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketApproveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -227,7 +229,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Open };
         var command = new TicketApproveCommand { TicketId = ticketId, ManagerId = managerId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.ClosedPendingRate, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
@@ -248,7 +250,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Resolved };
         var command = new TicketRejectCommand { TicketId = ticketId, ManagerId = managerId, Reason = "Not fixed" };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -273,7 +275,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Open };
         var command = new TicketRejectCommand { TicketId = ticketId, ManagerId = managerId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
@@ -294,7 +296,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.InProgress };
         var command = new TicketEscalateRequestCommand { TicketId = ticketId, StaffId = staffId, Reason = EscalationReasonEnum.SkillGap };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketEscalateRequestCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -320,7 +322,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Closed };
         var command = new TicketEscalateRequestCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, staffId))
             .Returns(new TransitionResult { IsAllowed = false });
 
@@ -341,7 +343,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned };
         var command = new TicketEscalateForceCommand { TicketId = ticketId, ManagerId = managerId, Reason = EscalationReasonEnum.SlaBreach };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketEscalateForceCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);
@@ -367,7 +369,7 @@ public class TicketLifecycleCommandHandlerTests
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Closed };
         var command = new TicketEscalateForceCommand { TicketId = ticketId, ManagerId = managerId };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false });
 
@@ -384,7 +386,7 @@ public class TicketLifecycleCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var command = new TicketStartCommand { TicketId = ticketId, StaffId = Guid.NewGuid() };
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
 
         var handler = new TicketStartCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
         var result = await handler.Handle(command, CancellationToken.None);

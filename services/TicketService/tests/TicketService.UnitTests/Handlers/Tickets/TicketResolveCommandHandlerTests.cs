@@ -39,7 +39,7 @@ public class TicketResolveCommandHandlerTests
             ResolutionSummary = "Fixed"
         };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
 
@@ -79,7 +79,7 @@ public class TicketResolveCommandHandlerTests
             StaffId = originalStaffId
         };
 
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
         var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object);
 
@@ -112,7 +112,7 @@ public class TicketResolveCommandHandlerTests
 
         var command = new TicketResolveCommand { TicketId = ticketId, StaffId = staffId };
 
-        var (uow, _, _, _, staffRepo) = MockTicketUnitOfWork.Build(
+        var (uow, _, _, _, staffRepo, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 

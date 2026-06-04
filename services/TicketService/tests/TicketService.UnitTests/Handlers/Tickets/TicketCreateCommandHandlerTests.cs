@@ -28,7 +28,7 @@ public class TicketCreateCommandHandlerTests
         };
 
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
-        var (uow, tickets, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
         var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object);
 

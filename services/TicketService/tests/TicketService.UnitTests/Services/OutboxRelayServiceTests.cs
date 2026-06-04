@@ -33,7 +33,7 @@ public class OutboxRelayServiceTests
             Payload = JsonSerializer.Serialize(evt),
             OccurredAtUtc = DateTime.UtcNow
         };
-        var (uow, _, outbox, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
+        var (uow, _, outbox, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
         var sut = new OutboxRelayService(uow.Object, _producer.Object, _options, _logger.Object);
 
         // Act
@@ -50,7 +50,7 @@ public class OutboxRelayServiceTests
     public async Task RelayBatchAsync_NoPendingMessages_ReturnsEmptyResult()
     {
         // Arrange
-        var (uow, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: Enumerable.Empty<OutboxMessage>());
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: Enumerable.Empty<OutboxMessage>());
         var sut = new OutboxRelayService(uow.Object, _producer.Object, _options, _logger.Object);
 
         // Act
@@ -74,7 +74,7 @@ public class OutboxRelayServiceTests
             Payload = "{}",
             OccurredAtUtc = DateTime.UtcNow
         };
-        var (uow, _, outbox, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
+        var (uow, _, outbox, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
         var sut = new OutboxRelayService(uow.Object, _producer.Object, _options, _logger.Object);
 
         // Act
@@ -98,7 +98,7 @@ public class OutboxRelayServiceTests
             RetryCount = 3, // MaxRetryCount is 3 in _options
             ProcessedAtUtc = null
         };
-        var (uow, _, outbox, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
+        var (uow, _, outbox, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
         var sut = new OutboxRelayService(uow.Object, _producer.Object, _options, _logger.Object);
 
         // Act
