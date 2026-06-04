@@ -40,7 +40,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             return Fail(404, "Tài khoản không tồn tại.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(400, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
+            return Fail(409, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
         {
@@ -49,10 +49,10 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         }
 
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(400, "OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
+            return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
 
         if (account.OtpPurpose != OtpPurposeEnum.Register)
-            return Fail(400, "OTP không phải dành cho đăng ký.");
+            return Fail(401, "OTP không phải dành cho đăng ký.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {

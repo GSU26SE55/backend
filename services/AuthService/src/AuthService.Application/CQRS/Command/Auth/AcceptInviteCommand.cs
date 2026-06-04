@@ -25,13 +25,18 @@ public class AcceptInviteCommand : IRequest<LoginResponse>, IValidatable<LoginRe
 
         PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Mật khẩu");
 
+        var hasCrossFieldError = false;
         if (Password != ConfirmPassword)
+        {
             response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });
+            hasCrossFieldError = true;
+        }
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
-            response.StatusCode = 400;
+            // 422 cho cross-field (password confirm không match), 400 cho field validation đơn
+            response.StatusCode = hasCrossFieldError ? 422 : 400;
             response.Message = "Dữ liệu đầu vào không hợp lệ.";
         }
 

@@ -71,6 +71,8 @@ services:
       AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
       FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
       BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
+      TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
+      NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -290,6 +292,60 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  ticketservice:
+    image: ghcr.io/gsu26se55/ticketservice:${IMAGE_TAG:-staging}
+    container_name: solar-ticketservice
+    mem_limit: 512m
+    cpus: "0.50"
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__TicketDb: "Host=postgres;Port=5432;Database=${TICKET_DB_NAME:-ticket_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+    ports:
+      - "4007:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  notificationservice:
+    image: ghcr.io/gsu26se55/notificationservice:${IMAGE_TAG:-staging}
+    container_name: solar-notificationservice
+    mem_limit: 384m
+    cpus: "0.40"
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__NotificationDb: "Host=postgres;Port=5432;Database=${NOTIFICATION_DB_NAME:-notification_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+    ports:
+      - "4008:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
   apigateway:
     image: ghcr.io/gsu26se55/apigateway:${IMAGE_TAG:-staging}
     container_name: solar-apigateway
@@ -310,6 +366,8 @@ services:
       - smsservice
       - filestorageservice
       - batteryservice
+      - ticketservice
+      - notificationservice
     networks: [solar-net]
     restart: unless-stopped
 

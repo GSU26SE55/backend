@@ -63,7 +63,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 note: "Email không tồn tại.",
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Email hoặc mật khẩu không chính xác.");
+            return Fail(400, "Email hoặc mật khẩu không chính xác.");
         }
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
@@ -180,7 +180,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                     $"Sai mật khẩu quá {MaxFailedAttempts} lần. Tài khoản bị khóa {LockoutDurationMinutes} phút.");
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
-            return Fail(401, $"Email hoặc mật khẩu không chính xác. Còn {remaining} lần thử.");
+            return Fail(400, $"Email hoặc mật khẩu không chính xác. Còn {remaining} lần thử.");
         }
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);

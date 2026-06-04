@@ -27,16 +27,25 @@ public class ChangePasswordCommand : IRequest<AccountActionResponse>, IValidatab
 
         PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "Mật khẩu mới");
 
+        var hasCrossFieldError = false;
+
         if (NewPassword != ConfirmPassword)
+        {
             response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });
+            hasCrossFieldError = true;
+        }
 
         if (!string.IsNullOrEmpty(CurrentPassword) && CurrentPassword == NewPassword)
+        {
             response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu mới phải khác mật khẩu hiện tại." });
+            hasCrossFieldError = true;
+        }
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
-            response.StatusCode = 400;
+            // 422 nếu có cross-field business rule (confirm không match / new = old), 400 cho field validation đơn
+            response.StatusCode = hasCrossFieldError ? 422 : 400;
             response.Message = "Dữ liệu đầu vào không hợp lệ.";
         }
 

@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="../../shared/src/SharedContracts/SharedContracts.csproj" />
+  <Project Path="../../shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
+  <Project Path="../../shared/src/SharedKernels/SharedKernels.csproj" />
+  <Project Path="src/NotificationService.Api/NotificationService.Api.csproj" />
+  <Project Path="src/NotificationService.Application/NotificationService.Application.csproj" />
+  <Project Path="src/NotificationService.Domain/NotificationService.Domain.csproj" />
+  <Project Path="src/NotificationService.Infrastructure/NotificationService.Infrastructure.csproj" />
+</Solution>

@@ -31,7 +31,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
             return Fail(404, "Role không tồn tại.");
 
         if (role.IsSystemRole && !request.AllowSystemRole)
-            return Fail(400, "Không thể thay đổi permission của system role mặc định. Set AllowSystemRole=true nếu muốn override.");
+            return Fail(403, "Không thể thay đổi permission của system role mặc định. Set AllowSystemRole=true nếu muốn override.");
 
         var requestedIds = request.PermissionIds.Distinct().ToList();
         var validIds = await _unitOfWork.Permissions
@@ -42,7 +42,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
 
         var missing = requestedIds.Except(validIds).ToList();
         if (missing.Count > 0)
-            return Fail(400, $"Có {missing.Count} permission không tồn tại.");
+            return Fail(404, $"Có {missing.Count} permission không tồn tại.");
 
         var existing = await _unitOfWork.RolePermissions
             .GetAllAsync()

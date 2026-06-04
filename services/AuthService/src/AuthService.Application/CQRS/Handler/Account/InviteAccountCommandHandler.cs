@@ -85,7 +85,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             return new AccountActionResponse
             {
                 IsSuccess = false,
-                StatusCode = 400,
+                StatusCode = 404,
                 Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
                 ListErrors = { new Errors { Field = "RoleId", Detail = "Role không tồn tại hoặc đã bị vô hiệu hóa." } }
             };
