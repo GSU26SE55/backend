@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\TicketService.Domain\TicketService.Domain.csproj" />
+        <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\shared\src\SharedKernels\SharedKernels.csproj" />
     <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
   </ItemGroup>

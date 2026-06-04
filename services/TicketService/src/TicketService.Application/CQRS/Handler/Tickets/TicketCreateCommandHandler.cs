@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
@@ -32,6 +33,15 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
     {
+        // Validate Customer
+        var customer = (await _uow.CustomerAccounts.GetAllAsync().Where(c => c.AccountId == request.CustomerId).ToListAsync(ct)).FirstOrDefault();
+
+        if (customer == null)
+            return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.", "CustomerId");
+
+        if (customer.Status != AccountStatusEnum.Active)
+            return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.", "CustomerId");
+
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new TicketEntity

@@ -35,6 +35,11 @@ public class TicketAssignCommandHandlerTests
             Description = "Test Description"
         };
 
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+        };
+
         var command = new TicketAssignCommand
         {
             TicketId = ticketId,
@@ -44,7 +49,7 @@ public class TicketAssignCommandHandlerTests
             Notes = "Please handle this."
         };
 
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
         var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
 
@@ -70,11 +75,17 @@ public class TicketAssignCommandHandlerTests
         // Arrange
         var ticketId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
         var ticket = new Ticket { Id = ticketId, Status = TicketStatusEnum.Open, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" }; // Not Approved yet
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId };
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+        };
 
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Ticket must be Approved before assignment." });
@@ -95,14 +106,20 @@ public class TicketAssignCommandHandlerTests
     {
         // Arrange
         var ticketId = Guid.NewGuid();
-        var staffId = Guid.NewGuid(); // Trying to assign themselves
+        var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
         var ticket = new Ticket { Id = ticketId, Status = TicketStatusEnum.Approved, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = staffId };
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+        };
 
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
 
-        _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, staffId))
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Only Managers can assign staff." });
 
         var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);

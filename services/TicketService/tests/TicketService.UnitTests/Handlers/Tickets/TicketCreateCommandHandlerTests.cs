@@ -26,12 +26,17 @@ public class TicketCreateCommandHandlerTests
         {
             Title = "Battery Overheat",
             Description = "Battery is too hot",
-            Category = TicketCategoryEnum.Overheat,
+            Category = TicketCategoryEnum.Repair,
             CustomerId = customerId
         };
 
+        var customers = new List<CustomerAccount>
+        {
+            new CustomerAccount { AccountId = customerId, Status = AccountStatusEnum.Active }
+        };
+
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
-        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(customerSeed: customers);
 
         var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object);
 

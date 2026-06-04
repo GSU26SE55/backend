@@ -39,6 +39,18 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        // Validate Staff
+        var staff = (await _uow.StaffAccounts.GetAllAsync().Where(s => s.AccountId == request.StaffId).ToListAsync(ct)).FirstOrDefault();
+
+        if (staff == null)
+            return Fail(404, "Không tìm thấy thông tin nhân viên trong hệ thống Ticket.", "StaffId");
+
+        if (staff.Status != AccountStatusEnum.Active)
+            return Fail(403, "Tài khoản nhân viên đang bị khóa hoặc vô hiệu hóa.", "StaffId");
+
+        if (!staff.IsAvailable)
+            return Fail(403, "Nhân viên hiện đang không sẵn sàng nhận ticket mới.", "StaffId");
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Transition not allowed.");

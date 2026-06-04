@@ -1,5 +1,4 @@
-using MockQueryable.Moq;
-using Moq;
+using System.Linq.Expressions;
 using SharedKernels.Interfaces;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
@@ -24,27 +23,37 @@ public static class MockTicketUnitOfWork
             IEnumerable<SlaTimer>? slaTimerSeed = null,
             IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null)
     {
+        var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).AsQueryable().BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
-        tickets.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(ticketSeed ?? Array.Empty<Ticket>()));
+        tickets.Setup(r => r.GetAllAsync()).Returns(ticketsMock);
         tickets.Setup(r => r.GetByIdAsync(It.IsAny<object>())).ReturnsAsync((object id) => ticketSeed?.FirstOrDefault(x => x.Id == (Guid)id));
+        tickets.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Ticket, bool>>>())).Returns((Expression<Func<Ticket, bool>> p) => ticketsMock.Where(p));
 
+        var activitiesMock = (activitySeed ?? Array.Empty<TicketActivity>()).AsQueryable().BuildMock();
         var activities = new Mock<IGenericRepository<TicketActivity>>();
-        activities.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketActivity>(activitySeed ?? Array.Empty<TicketActivity>()));
+        activities.Setup(r => r.GetAllAsync()).Returns(activitiesMock);
 
+        var customersMock = (customerSeed ?? Array.Empty<CustomerAccount>()).AsQueryable().BuildMock();
         var customers = new Mock<IGenericRepository<CustomerAccount>>();
-        customers.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<CustomerAccount>(customerSeed ?? Array.Empty<CustomerAccount>()));
+        customers.Setup(r => r.GetAllAsync()).Returns(customersMock);
+        customers.Setup(r => r.FindAsync(It.IsAny<Expression<Func<CustomerAccount, bool>>>())).Returns((Expression<Func<CustomerAccount, bool>> p) => customersMock.Where(p));
 
+        var staffMock = (staffSeed ?? Array.Empty<StaffAccount>()).AsQueryable().BuildMock();
         var staff = new Mock<IGenericRepository<StaffAccount>>();
-        staff.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<StaffAccount>(staffSeed ?? Array.Empty<StaffAccount>()));
+        staff.Setup(r => r.GetAllAsync()).Returns(staffMock);
+        staff.Setup(r => r.FindAsync(It.IsAny<Expression<Func<StaffAccount, bool>>>())).Returns((Expression<Func<StaffAccount, bool>> p) => staffMock.Where(p));
 
+        var slaTimersMock = (slaTimerSeed ?? Array.Empty<SlaTimer>()).AsQueryable().BuildMock();
         var slaTimers = new Mock<IGenericRepository<SlaTimer>>();
-        slaTimers.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<SlaTimer>(slaTimerSeed ?? Array.Empty<SlaTimer>()));
+        slaTimers.Setup(r => r.GetAllAsync()).Returns(slaTimersMock);
 
+        var slaPauseEventsMock = (slaPauseEventSeed ?? Array.Empty<SlaPauseEvent>()).AsQueryable().BuildMock();
         var slaPauseEvents = new Mock<IGenericRepository<SlaPauseEvent>>();
-        slaPauseEvents.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<SlaPauseEvent>(slaPauseEventSeed ?? Array.Empty<SlaPauseEvent>()));
+        slaPauseEvents.Setup(r => r.GetAllAsync()).Returns(slaPauseEventsMock);
 
+        var outboxMock = (outboxSeed ?? Array.Empty<OutboxMessage>()).AsQueryable().BuildMock();
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
-        outbox.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<OutboxMessage>(outboxSeed ?? Array.Empty<OutboxMessage>()));
+        outbox.Setup(r => r.GetAllAsync()).Returns(outboxMock);
 
         var uow = new Mock<ITicketUnitOfWork>();
         uow.SetupGet(u => u.Tickets).Returns(tickets.Object);

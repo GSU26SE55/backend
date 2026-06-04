@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
+using SharedInfrastructure.Idempotency;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -29,7 +30,8 @@ public static class ManageDependencyInjection
         services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
-        services.AddMessageBus(configuration, typeof(ManageDependencyInjection).Assembly);
+        services.AddInboxIdempotency(configuration);
+        services.AddMessageBus(configuration, typeof(ManageDependencyInjection).Assembly, typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
 
         return services;
     }
