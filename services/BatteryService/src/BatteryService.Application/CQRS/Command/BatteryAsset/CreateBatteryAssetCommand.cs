@@ -73,7 +73,7 @@ public class CreateBatteryAssetCommand : IRequest<CommonResponse<BatteryAssetDto
         }
 
         if (WarrantyEndDate.HasValue && WarrantyEndDate.Value <= InstallDate)
-            AddError(response, nameof(WarrantyEndDate), "Ngày hết bảo hành phải sau ngày lắp đặt.");
+            AddCrossFieldError(response, nameof(WarrantyEndDate), "Ngày hết bảo hành phải sau ngày lắp đặt.");
 
         if (Location?.Length > 255)
             AddError(response, nameof(Location), "Vị trí tối đa 255 ký tự.");
@@ -92,6 +92,17 @@ public class CreateBatteryAssetCommand : IRequest<CommonResponse<BatteryAssetDto
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
+        response.Message = "Dữ liệu tài sản pin không hợp lệ.";
+        response.ListErrors.Add(new Errors { Field = field, Detail = detail });
+    }
+
+    protected static void AddCrossFieldError(CommonResponse<BatteryAssetDto> response, string field, string detail)
+    {
+        response.IsSuccess = false;
+        // Cross-field business rule violation → 422.
+        // Do not overwrite 400 (field-level format errors take precedence).
+        if (response.StatusCode != 400)
+            response.StatusCode = 422;
         response.Message = "Dữ liệu tài sản pin không hợp lệ.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }

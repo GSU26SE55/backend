@@ -29,7 +29,7 @@ public class Enable2FACommandHandler : IRequestHandler<Enable2FACommand, CommonR
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
-            return Fail(400, "2FA đã được bật trên tài khoản này.");
+            return Fail(409, "2FA đã được bật trên tài khoản này.");
 
         var secret = GenerateBase32Secret(20);
         account.TwoFactorSecret = secret;

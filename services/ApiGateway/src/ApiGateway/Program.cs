@@ -28,6 +28,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("filestorage", new OpenApiInfo { Title = "File Storage Service API", Version = "v1" });
     c.SwaggerDoc("battery", new OpenApiInfo { Title = "Battery Service API", Version = "v1" });
     c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
+    c.SwaggerDoc("notification", new OpenApiInfo { Title = "Notification Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -79,6 +80,7 @@ if (!app.Environment.IsProduction())
         options.SwaggerEndpoint("/file-storage-service/swagger/v1/swagger.json", "File Storage Service API");
         options.SwaggerEndpoint("/battery-service/swagger/v1/swagger.json", "Battery Service API");
         options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
+        options.SwaggerEndpoint("/notification-service/swagger/v1/swagger.json", "Notification Service API");
     });
 }
 

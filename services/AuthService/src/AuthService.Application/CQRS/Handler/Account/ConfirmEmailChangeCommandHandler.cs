@@ -29,13 +29,13 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             return Fail(404, "Account", "Không tìm thấy tài khoản.");
 
         if (string.IsNullOrEmpty(account.PendingEmail) || account.OtpPurpose != OtpPurposeEnum.EmailChange)
-            return Fail(400, "Auth", "Không có yêu cầu đổi email đang chờ verify.");
+            return Fail(409, "Auth", "Không có yêu cầu đổi email đang chờ verify.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
             return Fail(423, "Auth", "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
 
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(400, "Otp", "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
+            return Fail(401, "Otp", "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {

@@ -55,7 +55,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
 
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value < DateTime.UtcNow)
-            return Fail(410, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
+            return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
             return Fail(409, "Tài khoản đã được kích hoạt trước đó.");
