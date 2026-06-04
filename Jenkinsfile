@@ -277,6 +277,8 @@ pipeline {
             [name: 'smsservice',         dockerfile: 'services/SmsService/src/SmsService.Api/Dockerfile'],
             [name: 'filestorageservice', dockerfile: 'services/FileStorageService/src/FileStorageService.Api/Dockerfile'],
             [name: 'batteryservice',     dockerfile: 'services/BatteryService/src/BatteryService.Api/Dockerfile'],
+            [name: 'ticketservice',      dockerfile: 'services/TicketService/src/TicketService.Api/Dockerfile'],
+            [name: 'notificationservice',dockerfile: 'services/NotificationService/src/NotificationService.Api/Dockerfile'],
           ]
 
           services.each { svc ->
@@ -299,7 +301,7 @@ pipeline {
       when { branch 'staging' }
       steps {
         script {
-          ['apigateway', 'authservice', 'emailservice', 'smsservice', 'filestorageservice', 'batteryservice'].each { svc ->
+          ['apigateway', 'authservice', 'emailservice', 'smsservice', 'filestorageservice', 'batteryservice', 'ticketservice', 'notificationservice'].each { svc ->
             sh "docker push ${REGISTRY}/${svc}:${SHA}"
             sh "docker push ${REGISTRY}/${svc}:${BRANCH_NAME}"
           }
@@ -458,6 +460,8 @@ pipeline {
                 --set services.smsservice.enabled=false \
                 --set services.filestorageservice.enabled=false \
                 --set services.batteryservice.enabled=false \
+                --set services.ticketservice.enabled=false \
+                --set services.notificationservice.enabled=false \
                 --wait --wait-for-jobs --timeout 60m
               stop_deploy_watcher
 
