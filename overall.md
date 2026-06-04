@@ -3737,11 +3737,11 @@ GitHub Actions step:
 - [x] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
 - [x] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
 - [x] Consumer `BatteryAnomalyDetectedConsumer` → auto-create ticket + dedup BR-02 theo `(BatteryAssetId + Category + status active)` — KHÔNG dùng `OriginAlertId` cho dedup (xem §2.7) — #142
-- [ ] **5 read-model sync consumers** cho TicketService (`AccountActivatedConsumer`, `AccountStatusChangedConsumer`, `AccountProfileUpdatedConsumer`, `StaffProfileUpdatedConsumer`, `StaffSkillsUpdatedConsumer`) → upsert `CustomerAccount`/`StaffAccount` qua Inbox idempotency (xem §2.7 Read-model) — #142
-- [ ] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
-- [ ] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
-- [ ] MaintenanceLog + comments + attachments workflow trong TicketService — #143
-- [ ] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
+- [x] **5 read-model sync consumers** cho TicketService (`AccountActivatedConsumer`, `AccountStatusChangedConsumer`, `AccountProfileUpdatedConsumer`, `StaffProfileUpdatedConsumer`, `StaffSkillsUpdatedConsumer`) → upsert `CustomerAccount`/`StaffAccount` qua Inbox idempotency (xem §2.7 Read-model) — #142
+- [x] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
+- [x] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
+- [x] MaintenanceLog + comments + attachments workflow trong TicketService — #143
+- [x] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
 - [ ] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
 
 ### Sprint 5B (20/7–26/7/2026)
