@@ -41,7 +41,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(400, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(401, "OTP không hợp lệ hoặc đã hết hạn.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {

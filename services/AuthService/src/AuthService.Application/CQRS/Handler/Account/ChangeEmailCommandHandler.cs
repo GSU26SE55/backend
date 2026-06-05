@@ -42,12 +42,12 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
             return Fail(404, "Account", "Không tìm thấy tài khoản.");
 
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
-            return Fail(400, "CurrentPassword", "Mật khẩu hiện tại không chính xác.");
+            return Fail(401, "CurrentPassword", "Mật khẩu hiện tại không chính xác.");
 
         var newEmail = request.NewEmail.Trim().ToLowerInvariant();
 
         if (account.Email.Equals(newEmail, StringComparison.OrdinalIgnoreCase))
-            return Fail(400, "NewEmail", "Email mới phải khác email hiện tại.");
+            return Fail(422, "NewEmail", "Email mới phải khác email hiện tại.");
 
         var emailTaken = await _unitOfWork.Accounts
             .GetAllAsync()
