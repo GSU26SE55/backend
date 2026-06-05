@@ -11,14 +11,6 @@ public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IVal
     public Guid UserId { get; set; }
     public string? IncidentDescription { get; set; }
 
-    public TicketDeclareIncidentCommand() { }
-
-    public TicketDeclareIncidentCommand(Guid ticketId, Guid userId)
-    {
-        TicketId = ticketId;
-        UserId = userId;
-    }
-
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();
