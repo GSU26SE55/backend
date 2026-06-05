@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
@@ -221,7 +222,11 @@ public class AdminTicketsController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeclareIncident(Guid id, CancellationToken ct)
     {
-        var command = new global::TicketService.Application.CQRS.Command.TicketDeclareIncident.TicketDeclareIncidentCommand(id, GetUserId());
+        var command = new TicketDeclareIncidentCommand
+        {
+            TicketId = id,
+            UserId = GetUserId()
+        };
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
