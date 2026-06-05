@@ -1,13 +1,11 @@
-using System.Collections.Generic;
-using FluentAssertions;
-using Moq;
-using TicketService.Application.CQRS.Commands.CommentAdd;
+using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Handler.Comments;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
 
-namespace TicketService.UnitTests.Handlers.Tickets;
+namespace TicketService.UnitTests.Handlers.Comments;
 
 public class CommentAddCommandHandlerTests
 {
@@ -31,18 +29,19 @@ public class CommentAddCommandHandlerTests
             ticketSeed: new[] { ticket }
         );
 
-        var command = new CommentAddCommand(
-            ticketId,
-            userId,
-            ActorRoleEnum.Staff,
-            "Staff User",
-            "This is a comment",
-            false,
-            new List<CommentAttachmentInput>
+        var command = new CommentAddCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "This is a comment",
+            IsInternal = false,
+            Attachments = new List<CommentAttachmentInput>
             {
                 new CommentAttachmentInput(Guid.NewGuid(), "file.pdf", "application/pdf", 1024)
             }
-        );
+        };
 
         var handler = new CommentAddCommandHandler(uow.Object, _logger.Object);
 
@@ -79,7 +78,15 @@ public class CommentAddCommandHandlerTests
     public async Task Validate_EmptyBody_ReturnsError()
     {
         // Arrange
-        var command = new CommentAddCommand(Guid.NewGuid(), Guid.NewGuid(), ActorRoleEnum.Staff, "User", "", false);
+        var command = new CommentAddCommand
+        {
+            TicketId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "User",
+            Body = "",
+            IsInternal = false
+        };
 
         // Act
         var result = await command.ValidateAsync();

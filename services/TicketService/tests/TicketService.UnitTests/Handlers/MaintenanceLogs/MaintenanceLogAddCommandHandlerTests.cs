@@ -1,12 +1,13 @@
 using FluentAssertions;
 using Moq;
-using TicketService.Application.CQRS.Commands.MaintenanceLogAdd;
+using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
+using TicketService.Application.CQRS.Handler.MaintenanceLogs;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
 
-namespace TicketService.UnitTests.Handlers.Tickets;
+namespace TicketService.UnitTests.Handlers.MaintenanceLogs;
 
 public class MaintenanceLogAddCommandHandlerTests
 {
@@ -30,23 +31,23 @@ public class MaintenanceLogAddCommandHandlerTests
             ticketSeed: new[] { ticket }
         );
 
-        var command = new MaintenanceLogAddCommand(
-            ticketId,
-            staffId,
-            MaintenanceLogTypeEnum.OnSite,
-            "On-site repair",
-            "Broken panel",
-            "Replaced panel",
-            120,
-            "Resolved",
-            DateTime.UtcNow.AddHours(-2),
-            DateTime.UtcNow,
-            null,
-            new List<MaintenanceAttachmentInput>
+        var command = new MaintenanceLogAddCommand
+        {
+            TicketId = ticketId,
+            StaffId = staffId,
+            LogType = MaintenanceLogTypeEnum.OnSite,
+            Summary = "On-site repair",
+            DiagnosisDetails = "Broken panel",
+            ActionsTaken = "Replaced panel",
+            DurationMinutes = 120,
+            ResolutionNote = "Resolved",
+            StartedAt = DateTime.UtcNow.AddHours(-2),
+            CompletedAt = DateTime.UtcNow,
+            Attachments = new List<MaintenanceAttachmentInput>
             {
                 new MaintenanceAttachmentInput(Guid.NewGuid(), "report.pdf", "application/pdf", 2048)
             }
-        );
+        };
 
         var handler = new MaintenanceLogAddCommandHandler(uow.Object, _logger.Object);
 
@@ -83,8 +84,14 @@ public class MaintenanceLogAddCommandHandlerTests
     public async Task Validate_EmptySummary_ReturnsError()
     {
         // Arrange
-        var command = new MaintenanceLogAddCommand(
-            Guid.NewGuid(), Guid.NewGuid(), MaintenanceLogTypeEnum.OnSite, "", null, null, 0, null, DateTime.UtcNow, null, null);
+        var command = new MaintenanceLogAddCommand
+        {
+            TicketId = Guid.NewGuid(),
+            StaffId = Guid.NewGuid(),
+            LogType = MaintenanceLogTypeEnum.OnSite,
+            Summary = "",
+            StartedAt = DateTime.UtcNow
+        };
 
         // Act
         var result = await command.ValidateAsync();

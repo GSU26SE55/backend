@@ -113,7 +113,7 @@ public class TicketResolveCommandHandlerTests
 
         var staff = new StaffAccount { AccountId = staffId, SkillTier = StaffSkillTierEnum.Generalist };
 
-        var command = new TicketResolveCommand { TicketId = ticketId, StaffId = staffId };
+        var command = new TicketResolveCommand { TicketId = ticketId, StaffId = staffId, ResolutionSummary = "Fixed" };
 
         var (uow, _, _, _, staffRepo, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
@@ -128,5 +128,83 @@ public class TicketResolveCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(403);
         result.Message.Should().Contain("Cần Staff Tier 2 trở lên");
+    }
+
+    [Fact]
+    public async Task Handle_EscalatedTicket_ResolveByCorrectStaff_ResolvesTicket()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test",
+            Description = "Desc",
+            Status = TicketStatusEnum.InProgress,
+            AssignedStaffId = staffId,
+            EscalatedAt = DateTime.UtcNow
+        };
+
+        var command = new TicketResolveCommand
+        {
+            TicketId = ticketId,
+            StaffId = staffId,
+            StaffName = "Senior Staff",
+            ResolutionSummary = "Escalation resolved"
+        };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        _logger.Verify(x => x.LogAsync(ticketId, staffId, ActorRoleEnum.Staff, "Senior Staff", ActivityActionEnum.ResolvedByEscalatedStaff, null, "Escalation resolved", null), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_SkillGapEscalation_HighTierStaff_ResolvesTicket()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test",
+            Description = "Desc",
+            Status = TicketStatusEnum.InProgress,
+            AssignedStaffId = staffId,
+            EscalationReason = EscalationReasonEnum.SkillGap,
+            EscalatedAt = DateTime.UtcNow
+        };
+
+        var staff = new StaffAccount { AccountId = staffId, SkillTier = StaffSkillTierEnum.ModuleSpecialist };
+
+        var command = new TicketResolveCommand
+        {
+            TicketId = ticketId,
+            StaffId = staffId,
+            StaffName = "Specialist Staff",
+            ResolutionSummary = "Expertly fixed"
+        };
+
+        var (uow, _, _, _, staffRepo, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            staffSeed: new[] { staff });
+
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
     }
 }

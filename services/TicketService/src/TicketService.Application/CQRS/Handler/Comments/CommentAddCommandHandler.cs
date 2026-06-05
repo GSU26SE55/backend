@@ -1,12 +1,13 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Command.CommentAdd;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Commands.CommentAdd;
+namespace TicketService.Application.CQRS.Handler.Comments;
 
 public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, TicketActionResponse>
 {

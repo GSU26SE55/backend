@@ -1,32 +1,36 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Commands.MaintenanceLogAdd;
+namespace TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 
-public record MaintenanceLogAddCommand(
-    Guid TicketId,
-    Guid StaffId,
-    MaintenanceLogTypeEnum LogType,
-    string Summary,
-    string? DiagnosisDetails,
-    string? ActionsTaken,
-    int DurationMinutes,
-    string? ResolutionNote,
-    DateTime StartedAt,
-    DateTime? CompletedAt,
-    string? PartsUsed,
-    List<MaintenanceAttachmentInput>? Attachments = null,
-    List<MaintenanceAttachmentInput>? BeforePhotos = null,
-    List<MaintenanceAttachmentInput>? AfterPhotos = null,
-    List<Guid>? RelatedKbArticleIds = null,
-    decimal? CheckInLatitude = null,
-    decimal? CheckInLongitude = null,
-    DateTime? CheckInAt = null
-) : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class MaintenanceLogAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    [JsonIgnore]
+    public Guid TicketId { get; set; }
+    [JsonIgnore]
+    public Guid StaffId { get; set; }
+
+    public MaintenanceLogTypeEnum LogType { get; set; }
+    public required string Summary { get; set; }
+    public string? DiagnosisDetails { get; set; }
+    public string? ActionsTaken { get; set; }
+    public int DurationMinutes { get; set; }
+    public string? ResolutionNote { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? PartsUsed { get; set; }
+    public List<MaintenanceAttachmentInput>? Attachments { get; set; }
+    public List<MaintenanceAttachmentInput>? BeforePhotos { get; set; }
+    public List<MaintenanceAttachmentInput>? AfterPhotos { get; set; }
+    public List<Guid>? RelatedKbArticleIds { get; set; }
+    public decimal? CheckInLatitude { get; set; }
+    public decimal? CheckInLongitude { get; set; }
+    public DateTime? CheckInAt { get; set; }
+
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();

@@ -1,5 +1,6 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -7,7 +8,7 @@ using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 
-namespace TicketService.Application.CQRS.Commands.MaintenanceLogAdd;
+namespace TicketService.Application.CQRS.Handler.MaintenanceLogs;
 
 public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAddCommand, TicketActionResponse>
 {

@@ -2,14 +2,14 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TicketService.Application.CQRS.Commands.CommentAdd;
+using TicketService.Application.CQRS.Command.CommentAdd;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/tickets/{ticketId}/comments")]
+[Route("api/tickets/{ticketId}/comments")]
 [Authorize]
 [Produces("application/json")]
 public class TicketCommentsController : ControllerBase
@@ -24,19 +24,28 @@ public class TicketCommentsController : ControllerBase
     /// <summary>
     /// Thêm bình luận vào Ticket.
     /// </summary>
+    /// <remarks>
+    /// Áp dụng cho cả Customer và Staff.
+    /// - <c>IsInternal</c>: Nếu true, chỉ Staff/Manager mới có thể xem (ẩn với Customer).
+    /// - <c>Attachments</c>: Danh sách tệp đính kèm (nếu có).
+    /// </remarks>
     /// <param name="ticketId">ID của Ticket.</param>
-    /// <param name="request">Nội dung bình luận và đính kèm.</param>
+    /// <param name="command">Nội dung bình luận và đính kèm.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <returns>Kết quả thực hiện.</returns>
+    /// <response code="201">Thêm bình luận thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
     [HttpPost]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AddComment(Guid ticketId, [FromBody] CommentAddRequest request, CancellationToken ct)
+    public async Task<IActionResult> AddComment(Guid ticketId, [FromBody] CommentAddCommand command, CancellationToken ct)
     {
-        var userId = GetUserId();
-        var roles = GetCurrentRoles();
+        command.TicketId = ticketId;
+        command.UserId = GetUserId();
+        command.UserDisplayName = GetUserName();
 
+        var roles = GetCurrentRoles();
         var userRole = ActorRoleEnum.Staff; // Default
         if (roles.Contains("Customer"))
             userRole = ActorRoleEnum.Customer;
@@ -45,16 +54,7 @@ public class TicketCommentsController : ControllerBase
         else if (roles.Contains("Admin"))
             userRole = ActorRoleEnum.Admin;
 
-        var command = new CommentAddCommand(
-            ticketId,
-            userId,
-            userRole,
-            GetUserName(),
-            request.Body,
-            request.IsInternal,
-            request.Attachments?.Select(a => new CommentAttachmentInput(
-                a.FileId, a.FileName, a.ContentType, a.SizeBytes)).ToList()
-        );
+        command.UserRole = userRole;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -76,19 +76,4 @@ public class TicketCommentsController : ControllerBase
 
     private string[] GetCurrentRoles()
         => User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
-}
-
-public class CommentAddRequest
-{
-    public required string Body { get; set; }
-    public bool IsInternal { get; set; }
-    public List<CommentAttachmentRequest>? Attachments { get; set; }
-}
-
-public class CommentAttachmentRequest
-{
-    public Guid FileId { get; set; }
-    public string FileName { get; set; } = string.Empty;
-    public string ContentType { get; set; } = string.Empty;
-    public long SizeBytes { get; set; }
 }

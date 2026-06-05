@@ -1,16 +1,10 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using FluentAssertions;
-using Moq;
 using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Commands.TicketDeclareIncident;
+using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using Xunit;
 
 namespace TicketService.UnitTests.Handlers.Tickets;
 

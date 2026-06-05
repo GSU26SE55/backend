@@ -1,8 +1,7 @@
-using System.Collections.Generic;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Commands.TicketDeclareIncident;
+using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
