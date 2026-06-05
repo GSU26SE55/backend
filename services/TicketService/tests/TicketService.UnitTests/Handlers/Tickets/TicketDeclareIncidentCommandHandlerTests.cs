@@ -44,7 +44,11 @@ public class TicketDeclareIncidentCommandHandlerTests
             Title = "Test Ticket",
             Description = "Test Description"
         };
-        var command = new TicketDeclareIncidentCommand(ticketId, userId);
+        var command = new TicketDeclareIncidentCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+        };
 
         _ticketRepositoryMock.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
 
@@ -65,7 +69,11 @@ public class TicketDeclareIncidentCommandHandlerTests
         // Arrange
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var command = new TicketDeclareIncidentCommand(ticketId, userId);
+        var command = new TicketDeclareIncidentCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+        };
 
         _ticketRepositoryMock.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync((Ticket?)null);
 
