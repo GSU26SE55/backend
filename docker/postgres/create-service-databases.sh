@@ -39,4 +39,3 @@ create_database "${FILE_STORAGE_DB_NAME:-file_storage_db}"
 create_database "${BATTERY_DB_NAME:-battery_db}"
 create_database "${TICKET_DB_NAME:-ticket_db}"
 create_database "${NOTIFICATION_DB_NAME:-notification_db}"
-

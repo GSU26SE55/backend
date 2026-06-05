@@ -104,6 +104,13 @@ public class TicketStateMachine : ITicketStateMachine
                 }
                 break;
 
+            case TicketStatusEnum.WaitingCustomer:
+            case TicketStatusEnum.WaitingParts:
+            case TicketStatusEnum.WaitingOnsiteSchedule:
+                if (ctx.Payload.TryGetValue("Note", out var note) && note is string n)
+                    ticket.Reason = n;
+                break;
+
             case TicketStatusEnum.Resolved:
                 ticket.ResolvedAt = DateTime.UtcNow;
                 ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.AssignedStaffId && ctx.ActorRole == ActorRoleEnum.Staff)

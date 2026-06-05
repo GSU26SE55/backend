@@ -929,6 +929,9 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("notes");
 
+                    b.Property<int>("SkillTier")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

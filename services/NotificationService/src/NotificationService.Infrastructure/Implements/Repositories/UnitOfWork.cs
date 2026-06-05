@@ -24,7 +24,8 @@ public class UnitOfWork : INotificationUnitOfWork
 
     public async Task BeginTransactionAsync()
     {
-        if (_currentTransaction != null) return;
+        if (_currentTransaction != null)
+            return;
         _currentTransaction = await _context.Database.BeginTransactionAsync();
     }
 

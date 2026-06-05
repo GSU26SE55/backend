@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.MyTicketsAsCustomer;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -45,7 +45,9 @@ public class MyTicketsAsCustomerQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, PageNumber = 1, PageSize = 10
+            ActorCustomerId = myId,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -65,7 +67,10 @@ public class MyTicketsAsCustomerQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, Status = TicketStatusEnum.Resolved, PageNumber = 1, PageSize = 10
+            ActorCustomerId = myId,
+            Status = TicketStatusEnum.Resolved,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -80,7 +85,9 @@ public class MyTicketsAsCustomerQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, PageNumber = 2, PageSize = 3
+            ActorCustomerId = myId,
+            PageNumber = 2,
+            PageSize = 3
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);

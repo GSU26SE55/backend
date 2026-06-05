@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.MyTicketsAsStaff;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -25,20 +25,20 @@ public class MyTicketsAsStaffQueryHandlerTests
         TicketStatusEnum status = TicketStatusEnum.InProgress,
         TicketPriorityEnum priority = TicketPriorityEnum.P3Normal,
         string code = "T-001") => new()
-    {
-        Id = Guid.NewGuid(),
-        Code = code,
-        BatteryAssetId = Guid.NewGuid(),
-        CustomerId = Guid.NewGuid(),
-        AssignedStaffId = staffId,
-        Title = "Test",
-        Description = "desc",
-        Category = TicketCategoryEnum.Other,
-        Priority = priority,
-        Status = status,
-        Origin = TicketOriginEnum.ManualByCustomer,
-        CreatedAt = DateTime.UtcNow
-    };
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            BatteryAssetId = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            AssignedStaffId = staffId,
+            Title = "Test",
+            Description = "desc",
+            Category = TicketCategoryEnum.Other,
+            Priority = priority,
+            Status = status,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            CreatedAt = DateTime.UtcNow
+        };
 
     private void SetupMock(List<Ticket> tickets)
         => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
@@ -51,7 +51,9 @@ public class MyTicketsAsStaffQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
-            ActorStaffId = myId, PageNumber = 1, PageSize = 10
+            ActorStaffId = myId,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -69,7 +71,10 @@ public class MyTicketsAsStaffQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
-            ActorStaffId = myId, Status = TicketStatusEnum.InProgress, PageNumber = 1, PageSize = 10
+            ActorStaffId = myId,
+            Status = TicketStatusEnum.InProgress,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -86,7 +91,9 @@ public class MyTicketsAsStaffQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
-            ActorStaffId = myId, PageNumber = 1, PageSize = 10
+            ActorStaffId = myId,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items[0].Code.Should().Be("P1");

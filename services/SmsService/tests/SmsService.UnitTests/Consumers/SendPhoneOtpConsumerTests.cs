@@ -41,9 +41,12 @@ public class SendPhoneOtpConsumerTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_harness != null) await _harness.Stop();
-        if (_provider is IAsyncDisposable ad) await ad.DisposeAsync();
-        else if (_provider is IDisposable d) d.Dispose();
+        if (_harness != null)
+            await _harness.Stop();
+        if (_provider is IAsyncDisposable ad)
+            await ad.DisposeAsync();
+        else if (_provider is IDisposable d)
+            d.Dispose();
     }
 
     [Fact]

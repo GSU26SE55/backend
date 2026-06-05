@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.CQRS.Query.TicketActivityTimeline;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -57,7 +57,9 @@ public class TicketActivityTimelineQueryHandlerTests
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
-            TicketId = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Admin"]
+            TicketId = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Admin"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -76,7 +78,9 @@ public class TicketActivityTimelineQueryHandlerTests
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
-            TicketId = ticket.Id, ActorUserId = customerId, ActorRoles = ["Customer"]
+            TicketId = ticket.Id,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"]
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -91,7 +95,9 @@ public class TicketActivityTimelineQueryHandlerTests
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
-            TicketId = ticket.Id, ActorUserId = Guid.NewGuid(), ActorRoles = ["Customer"]
+            TicketId = ticket.Id,
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Customer"]
         }, default);
 
         result.IsSuccess.Should().BeFalse();
@@ -105,7 +111,9 @@ public class TicketActivityTimelineQueryHandlerTests
 
         var result = await _handler.Handle(new TicketActivityTimelineQuery
         {
-            TicketId = Guid.NewGuid(), ActorUserId = Guid.NewGuid(), ActorRoles = ["Admin"]
+            TicketId = Guid.NewGuid(),
+            ActorUserId = Guid.NewGuid(),
+            ActorRoles = ["Admin"]
         }, default);
 
         result.IsSuccess.Should().BeFalse();

@@ -2,19 +2,24 @@ using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfileCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IMessageProducerService _messageProducer;
 
-    public UpdateStaffProfileCommandHandler(IAuthUnitOfWork unitOfWork)
+    public UpdateStaffProfileCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(UpdateStaffProfileCommand request, CancellationToken cancellationToken)
@@ -63,10 +68,19 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
         profile.Department = request.Department?.Trim();
         profile.MaxConcurrentTickets = request.MaxConcurrentTickets;
         profile.IsAvailable = request.IsAvailable;
+        profile.SkillTier = (StaffSkillTierEnum)request.SkillTier;
         profile.Notes = request.Notes?.Trim();
 
         if (!createdProfile)
             _unitOfWork.StaffProfiles.UpdateAsync(profile);
+
+        await _messageProducer.PublishAsync(new StaffProfileUpdatedEvent(
+            profile.AccountId,
+            profile.EmployeeCode,
+            profile.MaxConcurrentTickets,
+            profile.IsAvailable,
+            (int)profile.SkillTier), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse

@@ -1,14 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
+using SharedInfrastructure.Idempotency;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.BackgroundServices;
 using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
@@ -28,7 +29,8 @@ public static class ManageDependencyInjection
         services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
-        services.AddMessageBus(configuration);
+        services.AddInboxIdempotency(configuration);
+        services.AddMessageBus(configuration, typeof(ManageDependencyInjection).Assembly, typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
 
         return services;
     }
@@ -39,6 +41,7 @@ public static class ManageDependencyInjection
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddHostedService<OutboxRelayBackgroundService>();
+        services.AddHostedService<SlaTimerBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -46,6 +49,8 @@ public static class ManageDependencyInjection
         services.AddScoped<IPriorityCalculator, PriorityCalculator>();
         services.AddScoped<IActivityLogger, ActivityLogger>();
         services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
+        services.AddScoped<ISlaCalculator, SlaCalculator>();
+        services.AddScoped<ISlaService, SlaService>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

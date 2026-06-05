@@ -29,7 +29,7 @@ public class TicketApiTests : IClassFixture<TicketApiFactory>
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/tickets", command);
+        var response = await _client.PostAsJsonAsync("/api/customer/tickets", command);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -52,7 +52,7 @@ public class TicketApiTests : IClassFixture<TicketApiFactory>
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/tickets", command);
+        var response = await _client.PostAsJsonAsync("/api/customer/tickets", command);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
