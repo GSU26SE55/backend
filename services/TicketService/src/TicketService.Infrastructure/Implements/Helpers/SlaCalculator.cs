@@ -1,8 +1,8 @@
-using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Services;
+namespace TicketService.Infrastructure.Implements.Helpers;
 
 public class SlaCalculator : ISlaCalculator
 {

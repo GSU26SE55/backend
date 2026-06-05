@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
@@ -50,6 +49,8 @@ public static class ManageDependencyInjection
         services.AddScoped<IPriorityCalculator, PriorityCalculator>();
         services.AddScoped<IActivityLogger, ActivityLogger>();
         services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
+        services.AddScoped<ISlaCalculator, SlaCalculator>();
+        services.AddScoped<ISlaService, SlaService>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

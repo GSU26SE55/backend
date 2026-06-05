@@ -1,9 +1,6 @@
-using System;
-using FluentAssertions;
-using TicketService.Application.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using Xunit;
+using TicketService.Infrastructure.Implements.Helpers;
 
 namespace TicketService.UnitTests.Application.Services;
 

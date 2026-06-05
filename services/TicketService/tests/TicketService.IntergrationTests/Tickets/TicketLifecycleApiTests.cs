@@ -67,6 +67,6 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         approveRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var finalTicket = (await approveRes.Content.ReadFromJsonAsync<TicketActionResponse>())!.Data!;
-        finalTicket.NewStatus.Should().Be("ClosedPendingRate");
+        finalTicket.Status.Should().Be(TicketStatusEnum.ClosedPendingRate);
     }
 }

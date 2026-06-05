@@ -1,6 +1,6 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Interfaces.Services;
+namespace TicketService.Application.Interfaces.Helpers;
 
 public interface ISlaService
 {

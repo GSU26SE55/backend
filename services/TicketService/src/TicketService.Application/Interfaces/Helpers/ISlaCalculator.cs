@@ -1,6 +1,6 @@
 using TicketService.Domain.Entities;
 
-namespace TicketService.Application.Interfaces.Services;
+namespace TicketService.Application.Interfaces.Helpers;
 
 public interface ISlaCalculator
 {

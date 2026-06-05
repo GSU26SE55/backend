@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Services;
+namespace TicketService.Infrastructure.Implements.Helpers;
 
 public class SlaService : ISlaService
 {

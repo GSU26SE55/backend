@@ -1,22 +1,16 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using FluentAssertions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Moq;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
-using TicketService.Application.Interfaces.Services;
-using TicketService.Application.Services;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.BackgroundJobs;
+using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Persistence;
-using Xunit;
 
 namespace TicketService.UnitTests.Infrastructure.BackgroundJobs;
 

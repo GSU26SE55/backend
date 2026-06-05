@@ -1,10 +1,6 @@
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Moq;
-using TicketService.Application.Interfaces.Services;
-using TicketService.Application.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Services;
