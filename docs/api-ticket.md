@@ -1,23 +1,23 @@
 # API Documentation — TicketService
 
-> **Base URL:** `http://localhost:7300/api`
-> **Content-Type:** `application/json`
-> **Response Wrapper:** `CommonResponse<T>` hoặc `TicketActionResponse`
+> Base URL: `http://localhost:{port}/api`
+> Content-Type: `application/json`
+> Response wrapper chuẩn: `CommonResponse<T>`
+> **ID fields:** Tất cả `id` trong response đều là `string` (UUID dạng `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`). Entity C# dùng `Guid` nhưng serialize thành `string` trong JSON — TypeScript dùng `string` cho mọi id field.
 
 ---
 
-## 1. Cấu trúc Response chuẩn
+## Cấu trúc Response chung
 
-### 1.1. `CommonResponse<T>`
-Sử dụng cho các truy vấn dữ liệu (GET).
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `isSuccess` | `boolean` | `true` nếu xử lý thành công |
-| `statusCode` | `int` | Mã HTTP Status Code |
-| `message` | `string` | Thông báo kết quả |
-| `data` | `T` | Dữ liệu phản hồi thực tế |
-| `listErrors` | `Error[]` | Danh sách lỗi nếu `isSuccess` là `false` |
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "...",
+  "data": { ... },
+  "listErrors": []
+}
+```
 
 | Field | Type | Mô tả |
 |---|---|---|
@@ -28,107 +28,391 @@ Sử dụng cho các truy vấn dữ liệu (GET).
 | `listErrors` | `Errors[]` | Danh sách lỗi validation — mỗi phần tử có `field` và `detail` |
 
 **Lỗi HTTP chung:**
-- `400` — Validation hoặc input không hợp lệ, body vẫn theo `CommonResponse<T>` nếu lỗi đi qua application validation
-- `401` — Token thiếu/hết hạn/không hợp lệ hoặc credential sai
-- `403` — Có token nhưng không đủ quyền hoặc resource không thuộc user hiện tại
+- `400` — Validation hoặc input không hợp lệ
+- `401` — Token thiếu/hết hạn/không hợp lệ
+- `403` — Có token nhưng không đủ quyền hoặc resource không thuộc user hiện tại / sai trạng thái ticket
 - `404` — Không tìm thấy resource
-- `409` — Xung đột dữ liệu/nghiệp vụ
-- `423` — Account bị lockout tạm thời
-- `429` — Bị rate limit
 - `500` — Lỗi server ngoài dự kiến
 
-### 1.2. `TicketActionResponse`
-Sử dụng cho các hành động thay đổi dữ liệu (POST).
+### `TicketActionResponse`
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `data.ticketId` | `Guid` | ID của Ticket vừa thao tác |
-| `data.ticketCode` | `string` | Mã hiển thị của Ticket |
-| `data.newStatus` | `string` | Trạng thái mới của Ticket sau hành động |
+Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hành động thay đổi trạng thái ticket (POST mutations). `data` trỏ tới `TicketActionDto`.
 
-### 1.3. `PaginationResponse<T>`
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "...",
+  "data": {
+    "id": "guid",
+    "code": "TKT-2606-0001",
+    "status": "InProgress"
+  },
+  "listErrors": []
+}
+```
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `data.id` | `string \| null` | ID của ticket vừa thao tác |
+| `data.code` | `string \| null` | Mã hiển thị của ticket |
+| `data.status` | `TicketStatusEnum` | Trạng thái mới của ticket sau hành động |
+
+**TypeScript types:**
+```ts
+interface TicketActionDto {
+  id: string | null;
+  code: string | null;
+  status: TicketStatusEnum;
+}
+
+interface TicketActionResponse {
+  isSuccess: boolean;
+  statusCode: number;
+  message: string | null;
+  data: TicketActionDto | null;
+  listErrors: Array<{ field: string | null; detail: string | null }> | null;
+}
+```
+
+### `PaginationResponse<T>`
+
 Dữ liệu nằm trong field `data` của `CommonResponse` khi truy vấn danh sách.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
+| Field | Type | Mô tả |
+|---|---|---|
 | `items` | `T[]` | Danh sách dữ liệu trang hiện tại |
 | `totalItems` | `int` | Tổng số bản ghi thỏa mãn bộ lọc |
 | `pageNumber` | `int` | Chỉ số trang hiện tại |
 | `pageSize` | `int` | Số lượng bản ghi trên một trang |
+| `totalPages` | `int` | Tổng số trang |
+| `hasNextPage` | `bool` | Còn trang tiếp theo không |
+| `hasPreviousPage` | `bool` | Có trang trước không |
 
 ---
 
-## 2. Danh mục Enums (Hệ thống dùng String)
+## Enums
 
-### 2.1. `TicketStatusEnum` (Trạng thái Ticket)
+### `TicketStatusEnum`
 
-| Value | Ý nghĩa |
-| :--- | :--- |
+| Giá trị | Ý nghĩa |
+|---|---|
 | `New` | Vừa tạo, chờ triage |
 | `Open` | Đã triage sơ bộ, chờ Manager phê duyệt |
-| `Approved` | Manager đã phê duyệt, chờ gán Staff |
-| `Assigned` | Đã gán Staff, chờ Staff xác nhận |
+| `Approved` | Manager đã phê duyệt tính hợp lệ, chờ gán Staff |
+| `Assigned` | Đã gán Staff, chờ Staff xác nhận và bắt đầu |
 | `InProgress` | Staff đang xử lý |
-| `WaitingCustomer` | Tạm dừng: Chờ khách hàng phản hồi |
-| `WaitingParts` | Tạm dừng: Chờ linh kiện |
-| `WaitingOnsiteSchedule` | Tạm dừng: Chờ lịch hẹn tại chỗ |
+| `WaitingCustomer` | Tạm dừng — chờ khách hàng phản hồi |
+| `WaitingParts` | Tạm dừng — chờ linh kiện |
+| `WaitingOnsiteSchedule` | Tạm dừng — chờ lịch hẹn tại chỗ |
 | `Resolved` | Staff báo đã xong, chờ Manager kiểm tra |
+| `Escalated` | Đã được chuyển cấp xử lý (SLA breach hoặc Staff/Manager request) |
 | `ClosedPendingRate` | Manager đã phê duyệt kết quả, chờ Customer đánh giá |
-| `Closed` | Đã đóng chính thức |
-| `ClosedRejected` | Manager từ chối kết quả (quay lại InProgress) |
-| `Incident` | Sự cố nghiêm trọng |
+| `Closed` | Đã đóng chính thức (sau khi Customer rate) |
+| `ClosedRejected` | Manager từ chối kết quả — trạng thái lưu lại sau khi quay về `InProgress` |
+| `Incident` | Sự cố nghiêm trọng được Admin/Manager đánh dấu |
 
-### 2.2. `TicketPriorityEnum` (Mức độ ưu tiên)
+**State machine chính:**
+```
+New → Open → Approved → Assigned → InProgress → Resolved → ClosedPendingRate → Closed
+                                        ↕ (hold/resume)
+                               WaitingCustomer / WaitingParts / WaitingOnsiteSchedule
 
-| Value | Ý nghĩa |
-| :--- | :--- |
-| `P1Critical` | Nghiêm trọng (SLA 4h) |
-| `P2High` | Cao (SLA 24h) |
-| `P3Normal` | Bình thường (SLA h) |
+InProgress → Escalated (SLA breach hoặc Staff request)
+Resolved   → ClosedRejected → InProgress (Manager reject)
+ClosedPendingRate → InProgress (Customer reopen, lần 2+ → Escalated)
+Any        → Incident (Manager/Admin declare)
+```
 
-### 2.3. `ImpactScopeEnum` (Phạm vi ảnh hưởng)
+### `TicketPriorityEnum`
 
-| Value | Ý nghĩa |
-| :--- | :--- |
+| Giá trị | SLA | Ý nghĩa |
+|---|---|---|
+| `P1Critical` | 4h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
+| `P2High` | 24h | Cao — degradation đáng kể |
+| `P3Normal` | 72h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
+
+**Lưu ý:** Priority được tính tự động từ `ImpactScope × UrgencyLevel` matrix tại bước triage. **Không thay đổi** trong toàn bộ vòng đời ticket. Override thủ công chỉ khi có lý do an toàn (`priorityOverrideReason`).
+
+### `TicketCategoryEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `Charging` | Lỗi sạc |
+| `Overheat` | Quá nhiệt |
+| `NoPower` | Không có điện |
+| `Performance` | Hiệu suất kém |
+| `Repair` | Yêu cầu sửa chữa |
+| `Other` | Khác |
+
+### `TicketOriginEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `ManualByCustomer` | Customer tự tạo qua app/web |
+| `AutoFromAlert` | Tự động tạo từ `BatteryAnomalyDetectedEvent` |
+| `CreatedByStaff` | Staff tạo thay cho Customer |
+
+### `ImpactScopeEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
 | `SingleAsset` | Một thiết bị |
 | `Site` | Một khu vực/trạm |
 | `MultiSite` | Nhiều khu vực |
 
-### 2.4. `UrgencyLevelEnum` (Độ khẩn cấp)
+### `UrgencyLevelEnum`
 
-| Value | Ý nghĩa |
-| :--- | :--- |
+| Giá trị | Ý nghĩa |
+|---|---|
 | `Low` | Thấp |
 | `Medium` | Trung bình |
 | `High` | Cao |
 
+### `EscalationReasonEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `SkillGap` | Vượt quá năng lực kỹ thuật của Staff hiện tại |
+| `PartsRequired` | Cần linh kiện không có sẵn |
+| `SafetyConcern` | Lo ngại về an toàn |
+| `SlaBreach` | SLA đã vi phạm |
+| `CustomerComplaint` | Khiếu nại của khách hàng |
+
+### `PauseReasonEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `WaitingCustomer` | Chờ khách hàng cung cấp thêm thông tin |
+| `WaitingParts` | Chờ linh kiện về |
+| `WaitingOnsiteSchedule` | Chờ lịch hẹn đến tận nơi |
+
+### `SlaTimerStatusEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `Running` | Đang đếm ngược |
+| `Paused` | Đang tạm dừng (hold) |
+| `Met` | Đã giải quyết đúng hạn |
+| `Breached` | Đã vi phạm SLA |
+
+### `MaintenanceLogTypeEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `RemoteSupport` | Hỗ trợ từ xa |
+| `OnSite` | Đến tại chỗ |
+| `PartReplacement` | Thay linh kiện |
+| `Inspection` | Kiểm tra định kỳ |
+
+### `ActivityActionEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `Created` | Ticket được tạo |
+| `StatusChanged` | Trạng thái thay đổi |
+| `PriorityAssigned` | Priority được gán (tại triage) |
+| `StaffAssigned` | Staff được gán |
+| `StaffReassigned` | Staff được điều chuyển |
+| `Commented` | Có bình luận mới |
+| `MaintenanceLogged` | Nhật ký bảo trì được thêm |
+| `AttachmentAdded` | File đính kèm được thêm |
+| `SlaPaused` | SLA bị tạm dừng |
+| `SlaResumed` | SLA tiếp tục |
+| `SlaWarning` | Cảnh báo sắp vi phạm SLA |
+| `SlaBreached` | SLA đã bị vi phạm |
+| `EscalationRequested` | Staff yêu cầu chuyển cấp |
+| `Escalated` | Ticket đã được chuyển cấp |
+| `IncidentDeclared` | Ticket được đánh dấu là sự cố |
+| `Resolved` | Staff báo đã xử lý xong |
+| `Approved` | Manager phê duyệt kết quả |
+| `Rejected` | Manager từ chối kết quả |
+| `Rated` | Customer đã đánh giá |
+| `Reopened` | Customer yêu cầu mở lại |
+| `AutoClosed` | Tự động đóng (hệ thống) |
+| `ResolvedByEscalatedStaff` | Được giải quyết bởi Staff cấp cao sau escalation |
+| `TriageApproved` | Manager phê duyệt tính hợp lệ tại bước triage |
+
+### `ActorRoleEnum`
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `Admin` | Quản trị viên |
+| `Manager` | Quản lý |
+| `Staff` | Nhân viên kỹ thuật |
+| `Customer` | Khách hàng |
+| `System` | Hành động tự động của hệ thống |
+
 ---
 
-## 3. Nhóm 1: API Chung (Mọi Role)
+## DTOs
 
-Base Path: `/api/tickets`
+### `TicketDTO` (item trong danh sách)
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID ticket |
+| `code` | `string` | Không | Mã hiển thị (e.g. `TKT-2606-0001`) |
+| `batteryAssetId` | `string?` | Null nếu không liên quan pin cụ thể | ID thiết bị pin |
+| `customerId` | `string` | Không | ID khách hàng tạo ticket |
+| `assignedStaffId` | `string?` | Null khi chưa gán | ID Staff được gán |
+| `title` | `string` | Không | Tiêu đề ticket |
+| `category` | `TicketCategoryEnum` | Không | Phân loại lỗi |
+| `priority` | `TicketPriorityEnum` | Không | Mức độ ưu tiên (auto từ matrix) |
+| `impactScope` | `ImpactScopeEnum` | Không | Phạm vi ảnh hưởng |
+| `urgencyLevel` | `UrgencyLevelEnum` | Không | Độ khẩn cấp |
+| `status` | `TicketStatusEnum` | Không | Trạng thái hiện tại |
+| `origin` | `TicketOriginEnum` | Không | Nguồn tạo ticket |
+| `reopenCount` | `int` | Không | Số lần Customer mở lại |
+| `isIncident` | `bool` | Không | Có được đánh dấu là Incident không |
+| `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
+| `updatedAt` | `string?` | Null nếu chưa cập nhật | Thời điểm cập nhật gần nhất |
+| `slaTimer` | `SlaTimerDTO` | Không | Thông tin SLA timer hiện tại |
+
+### `TicketDetailDTO` (chi tiết một ticket — extend `TicketDTO`)
+
+Bao gồm tất cả field của `TicketDTO`, cộng thêm:
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `description` | `string?` | Null | Mô tả chi tiết vấn đề |
+| `resolutionSummary` | `string?` | Null khi chưa resolve | Tóm tắt cách giải quyết |
+| `resolvedAt` | `string?` | Null | Thời điểm Staff báo xong |
+| `resolvedByStaffId` | `string?` | Null | Staff thực hiện resolve |
+| `approvedAt` | `string?` | Null | Thời điểm Manager phê duyệt kết quả |
+| `approvedByManagerId` | `string?` | Null | Manager phê duyệt |
+| `rejectionReason` | `string?` | Null | Lý do Manager từ chối |
+| `closedAt` | `string?` | Null | Thời điểm đóng ticket chính thức |
+| `rating` | `int?` | Null khi chưa rate | Điểm đánh giá 1–5 sao |
+| `ratingComment` | `string?` | Null | Nhận xét của Customer |
+| `ratedAt` | `string?` | Null | Thời điểm Customer đánh giá |
+| `escalatedAt` | `string?` | Null | Thời điểm chuyển cấp |
+| `escalationReason` | `EscalationReasonEnum` | **Không nullable** (Swagger) — khi ticket chưa escalate có thể là enum default, FE nên treat như optional | Lý do chuyển cấp |
+| `originAlertId` | `string?` | Null nếu không từ alert | ID cảnh báo nguồn (khi `origin = AutoFromAlert`) |
+| `activities` | `TicketActivityDTO[]?` | Nullable | Lịch sử hành động (timeline) |
+| `comments` | `TicketCommentDTO[]?` | Nullable | Danh sách bình luận |
+| `maintenanceLogs` | `MaintenanceLogDTO[]?` | Nullable | Nhật ký bảo trì |
+| `attachments` | `TicketAttachmentDTO[]?` | Nullable | File đính kèm của ticket |
+
+### `SlaTimerDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID SLA timer |
+| `priority` | `TicketPriorityEnum` | Không | Priority của ticket khi SLA được tạo |
+| `startedAt` | `string` | Không | Thời điểm bắt đầu tính SLA (UTC) |
+| `dueAt` | `string` | Không | Thời điểm deadline hiện tại (đã trừ thời gian pause) |
+| `originalDueAt` | `string` | Không | Deadline gốc khi chưa tính pause |
+| `totalPausedMinutes` | `int` | Không | Tổng số phút đã tạm dừng (SLA không tính) |
+| `warningSentAt` | `string?` | Null | Thời điểm gửi cảnh báo sắp breach |
+| `breachAt` | `string?` | Null nếu chưa breach | Thời điểm SLA bị vi phạm |
+| `status` | `SlaTimerStatusEnum` | Không | Trạng thái SLA timer |
+| `remainingPercent` | `number` | Không | Phần trăm thời gian còn lại (0–100) |
+
+### `TicketActivityDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID activity |
+| `ticketId` | `string` | Không | ID ticket |
+| `actorUserId` | `string?` | Null nếu System | ID người thực hiện |
+| `actorRole` | `ActorRoleEnum` | Không | Role của người thực hiện |
+| `actorDisplayName` | `string?` | Null | Tên hiển thị |
+| `action` | `ActivityActionEnum` | Không | Loại hành động |
+| `oldValue` | `string?` | Null | Giá trị cũ (dạng string) |
+| `newValue` | `string?` | Null | Giá trị mới (dạng string) |
+| `reason` | `string?` | Null | Lý do thực hiện |
+| `createdAt` | `string` | Không | Thời điểm ghi nhận (UTC) |
+
+### `TicketCommentDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID comment |
+| `ticketId` | `string` | Không | ID ticket |
+| `authorUserId` | `string?` | Null | ID người viết |
+| `authorRole` | `ActorRoleEnum` | Không | Role của người viết |
+| `authorDisplayName` | `string?` | Null | Tên hiển thị |
+| `body` | `string` | Không | Nội dung bình luận |
+| `isInternal` | `bool` | Không | `true` = chỉ Staff/Manager xem được, ẩn với Customer |
+| `attachmentFileIds` | `string[]?` | Null | Danh sách FileId đính kèm |
+| `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
+
+### `MaintenanceLogDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Null | ID nhật ký |
+| `ticketId` | `string` | Null | ID ticket |
+| `staffId` | `string` | Null | ID Staff tạo nhật ký |
+| `logType` | `MaintenanceLogTypeEnum` | Không | Loại nhật ký |
+| `summary` | `string?` | Null | Tóm tắt công việc |
+| `diagnosisDetails` | `string?` | Null | Chi tiết chẩn đoán |
+| `actionsTaken` | `string?` | Null | Các hành động đã thực hiện |
+| `durationMinutes` | `int` | Không | Thời lượng thực hiện (phút) |
+| `resolutionNote` | `string?` | Null | Ghi chú kết quả |
+| `startedAt` | `string` | Không | Thời điểm bắt đầu (UTC) |
+| `completedAt` | `string?` | Null | Thời điểm hoàn thành (UTC) |
+| `attachmentFileIds` | `string[]?` | Null | File đính kèm chung |
+| `beforePhotosFileIds` | `string[]?` | Null | Ảnh trước khi sửa |
+| `afterPhotosFileIds` | `string[]?` | Null | Ảnh sau khi sửa |
+| `relatedKbArticleIds` | `string[]?` | Null | ID bài viết KB liên quan |
+| `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
+
+> **Lưu ý:** Field `partsUsed` chỉ tồn tại trong request body khi tạo log — **không có** trong response DTO.
+
+### `TicketAttachmentDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID attachment |
+| `fileId` | `string` | Không | FileId từ FileStorageService |
+| `fileName` | `string` | Không | Tên file gốc |
+| `contentType` | `string` | Không | MIME type |
+| `sizeBytes` | `int64` | Không | Kích thước file (bytes) |
+| `uploadedByUserId` | `string?` | Null | ID người upload |
+| `createdAt` | `string` | Không | Thời điểm upload (UTC) |
+
+---
+
+## Nhóm 1 — Chung (Mọi role đã đăng nhập)
+
+Base path: `/api/tickets`
+**Auth:** Bắt buộc — `Authorization: Bearer {accessToken}`
+
+---
 
 ### `GET /api/tickets/{id}`
-**Mục đích:** Lấy thông tin chi tiết của một Ticket.
+
+**Mục đích:** Lấy thông tin chi tiết của một ticket.
+
+**Auth:** Bắt buộc (mọi role)
 
 **Quyền hạn:**
-- Khách hàng: Chỉ xem được Ticket của mình.
-- Staff: Chỉ xem được Ticket được gán.
+- Customer: Chỉ xem ticket của chính mình.
+- Staff: Chỉ xem ticket được gán cho mình.
 - Manager/Admin: Xem toàn bộ.
 
-**Response thành công (200):**
+**Path param:** `id` — UUID của ticket.
+
+**Response thành công `200`:** `CommonResponse<TicketDetailDTO>`
+
 ```json
 {
   "isSuccess": true,
   "data": {
     "id": "guid",
     "code": "TKT-2606-0001",
-    "title": "...",
+    "title": "Pin không sạc được",
     "description": "...",
     "status": "InProgress",
     "priority": "P2High",
     "category": "Charging",
-    "createdAt": "2026-06-05T...",
+    "origin": "ManualByCustomer",
+    "isIncident": false,
+    "reopenCount": 0,
+    "createdAt": "2026-06-05T08:00:00Z",
+    "slaTimer": { ... },
     "activities": [...],
     "comments": [...],
     "maintenanceLogs": [...]
@@ -136,86 +420,513 @@ Base Path: `/api/tickets`
 }
 ```
 
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `404` — Không tìm thấy hoặc không có quyền xem
+
 ---
 
-## 4. Nhóm 2: API Khách hàng (Customer)
+### `GET /api/tickets/{id}/activities`
 
-Base Path: `/api/customer/tickets`
+**Mục đích:** Lấy timeline hoạt động của một ticket (danh sách thay đổi trạng thái, người thực hiện, lý do). Sắp xếp từ mới nhất đến cũ nhất.
+
+**Auth:** Bắt buộc (mọi role)
+
+**Path param:** `id` — UUID của ticket.
+
+**Response thành công `200`:** `CommonResponse<TicketActivityDTO[]>`
+
+> **Lưu ý:** Trả về toàn bộ array — **không pagination**. Không có `PaginationResponse` wrapper.
+
+---
+
+### `POST /api/tickets/{ticketId}/comments`
+
+**Mục đích:** Thêm bình luận vào ticket. Áp dụng cho cả Customer và Staff.
+
+**Auth:** Bắt buộc (mọi role)
+
+**Path param:** `ticketId` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `body` | `string` | Bắt buộc | Không rỗng | Nội dung bình luận |
+| `isInternal` | `bool` | Không (mặc định `false`) | — | `true` = chỉ Staff/Manager xem được |
+| `attachments` | `CommentAttachmentInput[]?` | Không | — | Danh sách file đính kèm |
+
+**`CommentAttachmentInput`:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `fileId` | `string` (UUID) | Bắt buộc | FileId từ FileStorageService — gửi dạng UUID string |
+| `fileName` | `string?` | Không | Tên file gốc |
+| `contentType` | `string?` | Không | MIME type |
+| `sizeBytes` | `int64` | Không | Kích thước file (bytes) |
+
+**Response thành công `201`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `404` — Không tìm thấy ticket
+
+---
+
+### `POST /api/tickets/{ticketId}/maintenance-logs`
+
+**Mục đích:** Staff ghi nhật ký bảo trì cho ticket — quá trình sửa chữa, thời gian, linh kiện, ảnh chụp, tọa độ check-in.
+
+**Auth:** Bắt buộc (Staff hoặc Manager)
+
+**Path param:** `ticketId` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `logType` | `MaintenanceLogTypeEnum` | Không (mặc định `RemoteSupport`) | Loại nhật ký |
+| `summary` | `string` | Bắt buộc | Tóm tắt công việc |
+| `diagnosisDetails` | `string?` | Không | Chi tiết chẩn đoán |
+| `actionsTaken` | `string?` | Không | Các hành động đã thực hiện |
+| `durationMinutes` | `int` | Không | Thời lượng (phút) |
+| `resolutionNote` | `string?` | Không | Ghi chú kết quả |
+| `startedAt` | `DateTime` | Không | Thời điểm bắt đầu (UTC) |
+| `completedAt` | `DateTime?` | Không | Thời điểm hoàn thành (UTC) |
+| `partsUsed` | `string?` | Không | Linh kiện đã dùng (mô tả dạng text) |
+| `attachments` | `MaintenanceAttachmentInput[]?` | Không | File đính kèm chung |
+| `beforePhotos` | `MaintenanceAttachmentInput[]?` | Không | Ảnh trước khi sửa |
+| `afterPhotos` | `MaintenanceAttachmentInput[]?` | Không | Ảnh sau khi sửa |
+| `relatedKbArticleIds` | `Guid[]?` | Không | ID bài viết KB liên quan |
+| `checkInLatitude` | `double?` | Không | Vĩ độ điểm check-in |
+| `checkInLongitude` | `double?` | Không | Kinh độ điểm check-in |
+| `checkInAt` | `DateTime?` | Không | Thời điểm check-in (UTC) |
+
+**`MaintenanceAttachmentInput`:** Cùng shape với `CommentAttachmentInput` — `fileId` (string UUID), `fileName`, `contentType`, `sizeBytes`.
+
+**Response thành công `201`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `403` — Không có quyền Staff/Manager
+- `404` — Không tìm thấy ticket
+
+---
+
+## Nhóm 2 — Customer
+
+Base path: `/api/customer/tickets`
+**Auth:** Bắt buộc — Customer role
+
+---
+
+### `GET /api/customer/tickets/me`
+
+**Mục đích:** Customer lấy danh sách ticket của chính mình. Hệ thống tự động lọc theo `customerId` từ JWT.
+
+**Auth:** Bắt buộc (Customer)
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
+| `PageNumber` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang |
+
+> **Internal param:** BE expose thêm `ActorCustomerId` (uuid) dùng nội bộ để BE đọc từ JWT. FE **không gửi** param này.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+
+---
 
 ### `POST /api/customer/tickets`
-**Mục đích:** Tạo yêu cầu hỗ trợ mới.
 
-**Request Body:**
-| Field | Type | Required | Validation | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `title` | `string` | Có | Max 200 ký tự | Tiêu đề ngắn gọn của lỗi |
-| `description` | `string` | Có | Max 2000 ký tự | Mô tả chi tiết vấn đề |
-| `category` | `string` | Có | TicketCategoryEnum | Loại lỗi (Charging, Overheat...) |
-| `batteryAssetId` | `Guid` | Không | - | ID thiết bị đang gặp lỗi |
+**Mục đích:** Customer tạo yêu cầu hỗ trợ mới.
+
+**Auth:** Bắt buộc (Customer)
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `title` | `string` | Bắt buộc | Không rỗng, max 200 ký tự | Tiêu đề ngắn gọn |
+| `description` | `string` | Bắt buộc | Max 2000 ký tự | Mô tả chi tiết vấn đề |
+| `category` | `TicketCategoryEnum` | Bắt buộc | — | Loại lỗi |
+| `batteryAssetId` | `Guid?` | Không | — | ID thiết bị đang gặp lỗi |
+
+**Response thành công `201`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `400` — Dữ liệu không hợp lệ (title/description rỗng, category không hợp lệ)
+
+---
+
+### `POST /api/customer/tickets/{id}/reopen`
+
+**Mục đích:** Customer yêu cầu mở lại ticket khi chưa hài lòng với kết quả.
+
+**Auth:** Bắt buộc (Customer)
+
+**Điều kiện:**
+- Ticket phải ở trạng thái `ClosedPendingRate`.
+- Trong vòng 7 ngày kể từ khi Manager approve.
+- Lần mở lại thứ 2 trở đi → tự động escalate.
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `reopenReason` | `string?` | Không | Lý do mở lại |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `403` — Quá hạn 7 ngày hoặc sai trạng thái ticket
 
 ---
 
 ### `POST /api/customer/tickets/{id}/rate`
-**Mục đích:** Đánh giá chất lượng xử lý và đóng ticket.
 
-**Request Body:**
-| Field | Type | Required | Validation | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `rating` | `short` | Có | 1 - 5 | Số sao đánh giá |
-| `ratingComment` | `string` | Không | - | Nhận xét chi tiết |
+**Mục đích:** Customer đánh giá chất lượng xử lý và đóng ticket chính thức.
+
+**Auth:** Bắt buộc (Customer)
+
+**Điều kiện:** Ticket phải ở trạng thái `ClosedPendingRate`.
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `rating` | `int` | Bắt buộc | 1–5 | Số sao đánh giá |
+| `ratingComment` | `string?` | Không | — | Nhận xét chi tiết |
+
+**Response thành công `200`:** `TicketActionResponse` — ticket chuyển sang `Closed`.
+
+**Lỗi thường gặp:**
+- `403` — Sai trạng thái ticket
 
 ---
 
-## 5. Nhóm 3: API Nhân viên kỹ thuật (Staff)
+## Nhóm 3 — Staff
 
-Base Path: `/api/staff/tickets`
+Base path: `/api/staff/tickets`
+**Auth:** Bắt buộc — Staff role
+
+---
+
+### `GET /api/staff/tickets/me`
+
+**Mục đích:** Staff lấy danh sách ticket được giao cho mình. Hệ thống tự động lọc theo `assignedStaffId` từ JWT.
+
+**Auth:** Bắt buộc (Staff)
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
+| `PageNumber` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang |
+
+> **Internal param:** BE expose thêm `ActorStaffId` (uuid) dùng nội bộ để BE đọc từ JWT. FE **không gửi** param này.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+
+---
+
+### `POST /api/staff/tickets/{id}/start`
+
+**Mục đích:** Staff xác nhận bắt đầu xử lý ticket đã được giao. Chuyển trạng thái `Assigned → InProgress`.
+
+**Auth:** Bắt buộc (Staff)
+
+**Path param:** `id` — UUID của ticket.
+
+**Response thành công `200`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `403` — Sai trạng thái hoặc không có quyền (không phải staff được gán)
+- `404` — Không tìm thấy ticket
+
+---
 
 ### `POST /api/staff/tickets/{id}/hold`
-**Mục đích:** Tạm dừng xử lý (Pause SLA).
 
-**Request Body:**
-| Field | Type | Required | Validation | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `reason` | `string` | Có | PauseReasonEnum | Lý do (WaitingParts, WaitingCustomer...) |
-| `note` | `string` | Không | - | Ghi chú chi tiết lý do dừng |
+**Mục đích:** Staff tạm dừng xử lý ticket vì lý do khách quan. SLA bị tạm dừng.
+
+**Auth:** Bắt buộc (Staff)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `reason` | `PauseReasonEnum` | Bắt buộc | Lý do tạm dừng |
+| `note` | `string?` | Không | Ghi chú chi tiết |
+
+**Response thành công `200`:** `TicketActionResponse` — trạng thái chuyển sang `WaitingCustomer` / `WaitingParts` / `WaitingOnsiteSchedule` tương ứng.
 
 ---
 
-## 6. Nhóm 4: API Quản trị (Admin/Manager)
+### `POST /api/staff/tickets/{id}/resume`
 
-Base Path: `/api/admin/tickets`
+**Mục đích:** Staff tiếp tục xử lý ticket từ trạng thái tạm dừng. Trạng thái quay lại `InProgress`, SLA tiếp tục đếm.
+
+**Auth:** Bắt buộc (Staff)
+
+**Path param:** `id` — UUID của ticket.
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/staff/tickets/{id}/resolve`
+
+**Mục đích:** Staff báo cáo đã hoàn thành giải quyết. Chuyển trạng thái `InProgress → Resolved`, chờ Manager phê duyệt.
+
+**Auth:** Bắt buộc (Staff)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `resolutionSummary` | `string?` | Không | Tóm tắt cách giải quyết |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `403` — Không đủ thẩm quyền (với ticket đã Escalated, cần Staff cấp cao hơn)
+
+---
+
+### `POST /api/staff/tickets/{id}/escalate-request`
+
+**Mục đích:** Staff chủ động yêu cầu chuyển cấp xử lý khi vượt quá khả năng. Chờ Manager điều phối.
+
+**Auth:** Bắt buộc (Staff)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `reason` | `EscalationReasonEnum` | Bắt buộc | Lý do yêu cầu — `SkillGap`, `PartsRequired`, `SafetyConcern`, v.v. |
+| `note` | `string?` | Không | Ghi chú bổ sung |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+## Nhóm 4 — Admin/Manager
+
+Base path: `/api/admin/tickets`
+**Auth:** Bắt buộc — Manager hoặc Admin role
+
+---
+
+### `GET /api/admin/tickets`
+
+**Mục đích:** Admin/Manager lấy danh sách toàn bộ ticket với bộ lọc nâng cao.
+
+**Auth:** Bắt buộc (Admin hoặc Manager)
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Keyword` | `string?` | Tìm theo mã hoặc tiêu đề |
+| `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
+| `Priority` | `TicketPriorityEnum?` | Lọc theo priority |
+| `Category` | `TicketCategoryEnum?` | Lọc theo loại lỗi |
+| `BatteryAssetId` | `Guid?` | Lọc theo thiết bị |
+| `IsDescending` | `bool` | Sắp xếp giảm dần theo `createdAt` (mặc định `false`) |
+| `PageNumber` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
+
+---
+
+### `GET /api/admin/tickets/queue`
+
+**Mục đích:** Manager xem queue ticket đang chờ phê duyệt — các ticket ở trạng thái `Open`, sắp xếp theo Priority (P1 trước).
+
+**Auth:** Bắt buộc (Manager)
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Priority` | `TicketPriorityEnum?` | Lọc theo priority |
+| `Category` | `TicketCategoryEnum?` | Lọc theo loại lỗi |
+| `PageNumber` | `int` | Trang |
+| `PageSize` | `int` | Số item/trang |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
+
+---
 
 ### `POST /api/admin/tickets/{id}/triage`
-**Mục đích:** Phê duyệt và phân loại ưu tiên cho Ticket.
 
-**Request Body:**
-| Field | Type | Required | Validation | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `impact` | `string` | Có | ImpactScopeEnum | Phạm vi ảnh hưởng |
-| `urgency` | `string` | Có | UrgencyLevelEnum | Độ khẩn cấp |
-| `manualPriority` | `string` | Không | TicketPriorityEnum | Gán ưu tiên thủ công (nếu cần) |
-| `managerComment` | `string` | Không | - | Nhận xét của quản lý |
+**Mục đích:** Manager phê duyệt tính hợp lệ của ticket và xác định mức độ ưu tiên. Chuyển trạng thái `Open → Approved`. Priority được tính tự động từ `impact × urgency`.
 
----
+**Auth:** Bắt buộc (Manager)
 
-## 7. Phụ trợ: Bình luận & Nhật ký
+**Path param:** `id` — UUID của ticket.
 
-### `POST /api/tickets/{id}/comments`
-**Mục đích:** Thêm bình luận hoặc thảo luận nội bộ.
+**Request body:**
 
-**Request Body:**
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `body` | `string` | Có | Nội dung bình luận |
-| `isInternal` | `boolean` | Không | `true` nếu chỉ Staff/Manager xem được |
-| `attachments` | `object[]` | Không | Danh sách file đính kèm |
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `impact` | `ImpactScopeEnum` | Bắt buộc | Phạm vi ảnh hưởng |
+| `urgency` | `UrgencyLevelEnum` | Bắt buộc | Độ khẩn cấp |
+| `manualPriority` | `TicketPriorityEnum?` | Không | Gán priority thủ công (override matrix — cần kèm `priorityOverrideReason`) |
+| `priorityOverrideReason` | `string?` | Không | Lý do override priority (bắt buộc nếu `manualPriority` khác giá trị matrix) |
+| `managerComment` | `string?` | Không | Nhận xét của Manager |
+
+**Response thành công `200`:** `TicketActionResponse`
 
 ---
 
-## 8. Bảng mã lỗi thường gặp
+### `POST /api/admin/tickets/{id}/assign`
+
+**Mục đích:** Manager gán nhân viên xử lý cho ticket đã được phê duyệt. Chuyển trạng thái `Approved → Assigned`.
+
+**Auth:** Bắt buộc (Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `staffId` | `Guid` | Bắt buộc | ID Staff được gán |
+| `notes` | `string?` | Không | Ghi chú khi gán |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `403` — Ticket không ở trạng thái `Approved`
+
+---
+
+### `POST /api/admin/tickets/{id}/reassign`
+
+**Mục đích:** Manager điều chuyển ticket sang cho nhân viên khác. Lưu lịch sử thay đổi Staff.
+
+**Auth:** Bắt buộc (Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `newStaffId` | `Guid` | Bắt buộc | ID Staff mới |
+| `reason` | `string?` | Không | Lý do điều chuyển |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/admin/tickets/{id}/approve`
+
+**Mục đích:** Manager phê duyệt kết quả giải quyết của Staff. Chuyển trạng thái `Resolved → ClosedPendingRate`, kích hoạt yêu cầu đánh giá cho Customer.
+
+**Auth:** Bắt buộc (Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Query param:** _(không phải request body)_
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `comment` | `string?` | Nhận xét của Manager (optional) |
+
+> **Lưu ý FE:** `comment` truyền qua query string, không phải body. Dùng `axios.post(url, null, { params: { comment } })`.
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/admin/tickets/{id}/reject`
+
+**Mục đích:** Manager từ chối kết quả giải quyết của Staff (kết quả chưa đạt). Trạng thái quay về `InProgress` để Staff tiếp tục xử lý.
+
+**Auth:** Bắt buộc (Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `reason` | `string?` | Không | Lý do từ chối |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/admin/tickets/{id}/escalate`
+
+**Mục đích:** Manager ép buộc chuyển cấp xử lý trong trường hợp khẩn cấp hoặc điều phối lại nguồn lực.
+
+**Auth:** Bắt buộc (Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `reason` | `EscalationReasonEnum` | Bắt buộc | Lý do ép chuyển cấp |
+| `note` | `string?` | Không | Ghi chú bổ sung |
+
+**Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/admin/tickets/{id}/declare-incident`
+
+**Mục đích:** Manager/Admin đánh dấu ticket là sự cố nghiêm trọng (Incident) để có quy trình xử lý ưu tiên.
+
+**Auth:** Bắt buộc (Admin hoặc Manager)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:** Không có.
+
+**Response thành công `200`:** `TicketActionResponse` — `isIncident = true`.
+
+**Lỗi thường gặp:**
+- `403` — Không có quyền
+- `404` — Không tìm thấy ticket
+
+---
+
+## Bảng mã lỗi nghiệp vụ thường gặp
 
 | StatusCode | Field | Detail |
-| :--- | :--- | :--- |
-| `400` | `Title` | Tiêu đề không được để trống. |
-| `403` | `Ticket` | Ticket không ở trạng thái hợp lệ để thực hiện thao tác này. |
-| `404` | `Ticket` | Không tìm thấy Ticket yêu cầu. |
+|---|---|---|
+| `400` | `Title` | Tiêu đề không được để trống |
+| `400` | `Description` | Mô tả không được để trống |
+| `400` | `Rating` | Điểm đánh giá phải từ 1 đến 5 |
+| `403` | `Ticket` | Ticket không ở trạng thái hợp lệ để thực hiện thao tác này |
+| `403` | `Ticket` | Quá hạn 7 ngày để mở lại ticket |
+| `403` | `Ticket` | Không đủ thẩm quyền xử lý ticket đã Escalated |
+| `404` | `Ticket` | Không tìm thấy ticket yêu cầu |
