@@ -370,6 +370,8 @@ Dữ liệu trả về khi Staff xem lịch sử nhật ký cá nhân (đã gom 
 | `ticketTitle` | `string` | Không | Tiêu đề Ticket |
 | `logs` | `MaintenanceLogDTO[]` | Không | Danh sách các phiên bảo trì thuộc Ticket này |
 
+> **Lưu ý:** Field `partsUsed` chỉ tồn tại trong request body khi tạo log — **không có** trong response DTO.
+
 ### `TicketAttachmentDTO`
 
 | Field | Type | Nullable | Mô tả |
@@ -399,7 +401,7 @@ Base path: `/api/tickets`
 
 **Quyền hạn:**
 - Customer: Chỉ xem ticket của chính mình.
-- Staff: Chỉ xem ticket được gán cho mình.
+- Staff: Chỉ xem ticket được gán for mình.
 - Manager/Admin: Xem toàn bộ.
 
 **Path param:** `id` — UUID của ticket.
