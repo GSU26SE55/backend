@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +5,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers;
 
@@ -19,10 +19,12 @@ namespace TicketService.Api.Controllers;
 public class CustomerTicketsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITicketCurrentUserService _currentUser;
 
-    public CustomerTicketsController(IMediator mediator)
+    public CustomerTicketsController(IMediator mediator, ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -44,11 +46,6 @@ public class CustomerTicketsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyTickets([FromQuery] MyTicketsAsCustomerQuery query, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        query.ActorCustomerId = actorId.Value;
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -70,7 +67,7 @@ public class CustomerTicketsController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] TicketCreateCommand command, CancellationToken ct)
     {
-        command.CustomerId = GetUserId();
+        command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -94,8 +91,8 @@ public class CustomerTicketsController : ControllerBase
     public async Task<IActionResult> Reopen(Guid id, [FromBody] TicketReopenCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.CustomerId = GetUserId();
-        command.CustomerName = GetUserName();
+        command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.CustomerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -119,30 +116,10 @@ public class CustomerTicketsController : ControllerBase
     public async Task<IActionResult> Rate(Guid id, [FromBody] TicketRateCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.CustomerId = GetUserId();
-        command.CustomerName = GetUserName();
+        command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.CustomerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
-    }
-
-    private Guid GetUserId()
-    {
-        var userIdClaim = User.FindFirst("id")?.Value;
-        Guid.TryParse(userIdClaim, out var userId);
-        return userId;
-    }
-
-    private string GetUserName()
-    {
-        return User.FindFirst("name")?.Value
-               ?? User.FindFirst(ClaimTypes.Name)?.Value
-               ?? "Unknown";
-    }
-
-    private Guid? GetCurrentUserId()
-    {
-        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var actorId) ? actorId : null;
     }
 }

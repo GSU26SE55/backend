@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
@@ -9,7 +8,5 @@ namespace TicketService.Application.CQRS.Query.Ticket;
 
 public class MyTicketsAsCustomerQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<TicketDTO>>>
 {
-    [JsonIgnore]
-    public Guid ActorCustomerId { get; set; }
     public TicketStatusEnum? Status { get; set; }
 }

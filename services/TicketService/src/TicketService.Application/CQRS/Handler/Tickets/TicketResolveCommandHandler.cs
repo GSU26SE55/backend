@@ -47,12 +47,26 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
             var staff = await _uow.StaffAccounts.GetAllAsync()
                 .FirstOrDefaultAsync(s => s.AccountId == request.StaffId && !s.IsDeleted, ct);
             if (staff == null || (int)staff.SkillTier < 2)
-                return Fail(403, "Cần Staff Tier 2 trở lên cho SkillGap escalation.");
+                return Fail(403, "Cần Staff Tier cao hơn hiện tại cho SkillGap escalation.");
         }
 
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Resolved, ActorRoleEnum.Staff, request.StaffId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot resolve.");
+
+        // TỰ ĐỘNG ĐÓNG CÁC MAINTENANCE LOG CHƯA XONG KHI RESOLVE TICKET
+        var activeLogs = await _uow.MaintenanceLogs.GetAllAsync()
+            .Where(m => m.TicketId == ticket.Id && m.CompletedAt == null && !m.IsDeleted)
+            .ToListAsync(ct);
+
+        foreach (var log in activeLogs)
+        {
+            log.CompletedAt = DateTime.UtcNow;
+            if (string.IsNullOrEmpty(log.Summary) || log.Summary == "Đang thực hiện...")
+            {
+                log.Summary = request.ResolutionSummary;
+            }
+        }
 
         ticket.ResolutionSummary = request.ResolutionSummary;
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Resolved, new TransitionContext
