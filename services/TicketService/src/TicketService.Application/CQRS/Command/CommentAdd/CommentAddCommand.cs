@@ -35,6 +35,20 @@ public class CommentAddCommand : IRequest<TicketActionResponse>, IValidatable<Ti
         if (string.IsNullOrWhiteSpace(Body))
             response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận không được để trống." });
 
+        if (Attachments != null && Attachments.Any())
+        {
+            for (int i = 0; i < Attachments.Count; i++)
+            {
+                var att = Attachments[i];
+                if (att.FileId == Guid.Empty)
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileId", Detail = "FileId không được để trống." });
+                if (string.IsNullOrWhiteSpace(att.FileName))
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileName", Detail = "FileName không được để trống." });
+                if (string.IsNullOrWhiteSpace(att.ContentType))
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].ContentType", Detail = "ContentType không được để trống." });
+            }
+        }
+
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;

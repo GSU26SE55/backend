@@ -8,6 +8,7 @@ using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -49,6 +50,29 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
             ActorRole = ActorRoleEnum.Staff,
             ActorDisplayName = request.StaffName ?? "Staff"
         }, ct);
+
+        // TỰ ĐỘNG TẠO MAINTENANCE LOG KHI START WORK
+        // Kiểm tra xem đã có log nào chưa xong không (đề phòng)
+        var activeLogExists = await _uow.MaintenanceLogs.GetAllAsync()
+            .AnyAsync(m => m.TicketId == ticket.Id && m.CompletedAt == null && !m.IsDeleted, ct);
+
+        if (!activeLogExists)
+        {
+            var log = new MaintenanceLog
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                Ticket = ticket,
+                StaffId = request.StaffId,
+                LogType = request.LogType ?? MaintenanceLogTypeEnum.OnSite,
+                Summary = "Đang thực hiện...",
+                StartedAt = DateTime.UtcNow,
+                // CheckInLatitude = request.Latitude,
+                // CheckInLongitude = request.Longitude,
+                CheckInAt = DateTime.UtcNow
+            };
+            await _uow.MaintenanceLogs.AddAsync(log);
+        }
 
         await _activityLogger.LogAsync(
             ticket.Id,

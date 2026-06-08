@@ -5,24 +5,37 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Application.CQRS.Handler.MyTicketsAsStaff;
 
 public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuery, CommonResponse<PaginationResponse<TicketDTO>>>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
+    private readonly ITicketCurrentUserService _currentUserService;
 
-    public MyTicketsAsStaffQueryHandler(ITicketUnitOfWork unitOfWork)
+    public MyTicketsAsStaffQueryHandler(ITicketUnitOfWork unitOfWork, ITicketCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(MyTicketsAsStaffQuery request, CancellationToken cancellationToken)
     {
+        if (!Guid.TryParse(_currentUserService.UserId, out var staffId))
+        {
+            return new CommonResponse<PaginationResponse<TicketDTO>>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Chưa đăng nhập."
+            };
+        }
+
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
-            .Where(t => !t.IsDeleted && t.AssignedStaffId == request.ActorStaffId);
+            .Where(t => !t.IsDeleted && t.AssignedStaffId == staffId);
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);

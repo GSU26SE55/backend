@@ -5,6 +5,7 @@ using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.Services;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -51,6 +52,11 @@ public static class ManageDependencyInjection
         services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
         services.AddScoped<ISlaCalculator, SlaCalculator>();
         services.AddScoped<ISlaService, SlaService>();
+
+        // Override CurrentUserService from Shared
+        services.AddScoped<TicketCurrentUserService>();
+        services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
+        services.AddScoped<ITicketCurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

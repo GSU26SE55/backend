@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers.Admin;
 
@@ -21,10 +22,12 @@ namespace TicketService.Api.Controllers.Admin;
 public class AdminTicketsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITicketCurrentUserService _currentUser;
 
-    public AdminTicketsController(IMediator mediator)
+    public AdminTicketsController(IMediator mediator, ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -81,8 +84,8 @@ public class AdminTicketsController : ControllerBase
     public async Task<IActionResult> Triage(Guid id, [FromBody] TicketTriageCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.ManagerId = GetUserId();
-        command.ManagerName = GetUserName();
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -106,8 +109,8 @@ public class AdminTicketsController : ControllerBase
     public async Task<IActionResult> Assign(Guid id, [FromBody] TicketAssignCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.ManagerId = GetUserId();
-        command.ManagerName = GetUserName();
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -128,8 +131,8 @@ public class AdminTicketsController : ControllerBase
     public async Task<IActionResult> Reassign(Guid id, [FromBody] TicketReassignCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.ManagerId = GetUserId();
-        command.ManagerName = GetUserName();
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -154,8 +157,8 @@ public class AdminTicketsController : ControllerBase
         {
             TicketId = id,
             ManagerComment = comment,
-            ManagerId = GetUserId(),
-            ManagerName = GetUserName()
+            ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            ManagerName = _currentUser.FullName ?? "Unknown"
         };
 
         var result = await _mediator.Send(command, ct);
@@ -177,8 +180,8 @@ public class AdminTicketsController : ControllerBase
     public async Task<IActionResult> Reject(Guid id, [FromBody] TicketRejectCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.ManagerId = GetUserId();
-        command.ManagerName = GetUserName();
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -199,8 +202,8 @@ public class AdminTicketsController : ControllerBase
     public async Task<IActionResult> Escalate(Guid id, [FromBody] TicketEscalateForceCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.ManagerId = GetUserId();
-        command.ManagerName = GetUserName();
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -225,23 +228,9 @@ public class AdminTicketsController : ControllerBase
         var command = new TicketDeclareIncidentCommand
         {
             TicketId = id,
-            UserId = GetUserId()
+            UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId)
         };
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
-    }
-
-    private Guid GetUserId()
-    {
-        var userIdClaim = User.FindFirst("id")?.Value;
-        Guid.TryParse(userIdClaim, out var userId);
-        return userId;
-    }
-
-    private string GetUserName()
-    {
-        return User.FindFirst("name")?.Value
-               ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
-               ?? "Unknown";
     }
 }

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.DTOs.Response.Ticket;
@@ -26,6 +27,28 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
+
+        // KIỂM TRA LOCK LOGIC: Không cho thêm log khi đã báo Resolved hoặc đã Closed
+        if (ticket.Status == TicketStatusEnum.Resolved ||
+            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+            ticket.Status == TicketStatusEnum.Closed)
+        {
+            return Fail(403, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể thêm nhật ký mới.");
+        }
+
+        // KIỂM TRA LOG ĐANG CHẠY (IN-PROGRESS):
+        // Nếu log mới định add mà chưa có CompletedAt (đang bắt đầu làm)
+        // thì check xem ticket này đã có cái nào chưa xong không.
+        if (request.CompletedAt == null)
+        {
+            var activeLog = await _uow.MaintenanceLogs.GetAllAsync()
+                .AnyAsync(m => m.TicketId == ticket.Id && m.CompletedAt == null && !m.IsDeleted, ct);
+
+            if (activeLog)
+            {
+                return Fail(400, "Đang có một nhật ký bảo trì chưa hoàn thành cho Ticket này. Vui lòng hoàn thành nhật ký cũ trước khi bắt đầu cái mới.");
+            }
+        }
 
         var log = new MaintenanceLog
         {
@@ -77,7 +100,8 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
             Message = "Thêm nhật ký bảo trì thành công.",
             Data = new TicketActionDto
             {
-                Id = ticket.Id.ToString(),
+                Id = log.Id.ToString(),
+                TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
                 Status = ticket.Status
             }

@@ -20,7 +20,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var claims = new[] {
-            new Claim("id", UserId),
+            new Claim(ClaimTypes.NameIdentifier, UserId),
             new Claim(ClaimTypes.Name, UserName),
             new Claim(ClaimTypes.Role, "Customer"),
             new Claim(ClaimTypes.Role, "Staff"),
