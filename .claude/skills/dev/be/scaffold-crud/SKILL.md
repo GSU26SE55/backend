@@ -7,7 +7,7 @@ allowed-tools: Bash, Write, Read, Edit
 
 # Scaffold Full CRUD `$ARGUMENTS`
 
-Usage: `/scaffold-crud ServiceName EntityName`  
+Usage: `/scaffold-crud ServiceName EntityName`
 Example: `/scaffold-crud BatteryService Battery`
 
 Skill này tạo **tất cả files** cho một CRUD feature hoàn chỉnh.
