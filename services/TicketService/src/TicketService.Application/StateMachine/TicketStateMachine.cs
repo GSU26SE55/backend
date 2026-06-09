@@ -99,8 +99,8 @@ public class TicketStateMachine : ITicketStateMachine
                 // Nếu quay lại InProgress từ Resolved (Manager Reject)
                 if (from == TicketStatusEnum.Resolved)
                 {
-                    if (ctx.Payload.TryGetValue("Reason", out var rejectReason) && rejectReason is string r)
-                        ticket.Reason = r;
+                    if (ctx.Payload.TryGetValue("Reason", out var inProgressRejectReason) && inProgressRejectReason is string ipr)
+                        ticket.Reason = ipr;
                 }
                 break;
 
@@ -140,6 +140,12 @@ public class TicketStateMachine : ITicketStateMachine
                 }
                 if (ctx.Payload.TryGetValue("Comment", out var comment) && comment is string c)
                     ticket.RatingComment = c;
+                break;
+
+            case TicketStatusEnum.ClosedRejected:
+                ticket.ClosedAt = DateTime.UtcNow;
+                if (ctx.Payload.TryGetValue("Reason", out var triageRejectReason) && triageRejectReason is string trr)
+                    ticket.Reason = trr;
                 break;
         }
     }

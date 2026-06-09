@@ -66,10 +66,6 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             log.DurationMinutes = request.DurationMinutes.Value;
         if (request.ResolutionNote != null)
             log.ResolutionNote = request.ResolutionNote;
-        if (request.StartedAt.HasValue)
-            log.StartedAt = request.StartedAt.Value;
-        if (request.CompletedAt.HasValue)
-            log.CompletedAt = request.CompletedAt.Value;
         if (request.PartsUsed != null)
             log.PartsUsed = request.PartsUsed;
         if (request.RelatedKbArticleIds != null)

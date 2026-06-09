@@ -53,7 +53,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Category = request.Category,
             CustomerId = request.CustomerId,
             BatteryAssetId = request.BatteryAssetId ?? Guid.Empty,
-            Status = TicketStatusEnum.New,
+            Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
             IsIncident = false

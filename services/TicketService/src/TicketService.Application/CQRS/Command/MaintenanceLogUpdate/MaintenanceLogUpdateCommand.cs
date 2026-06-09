@@ -21,8 +21,6 @@ public class MaintenanceLogUpdateCommand : IRequest<TicketActionResponse>, IVali
     public string? ActionsTaken { get; set; }
     public int? DurationMinutes { get; set; }
     public string? ResolutionNote { get; set; }
-    public DateTime? StartedAt { get; set; }
-    public DateTime? CompletedAt { get; set; }
     public string? PartsUsed { get; set; }
     public List<MaintenanceAttachmentInput>? Attachments { get; set; }
     public List<MaintenanceAttachmentInput>? BeforePhotos { get; set; }
@@ -45,8 +43,6 @@ public class MaintenanceLogUpdateCommand : IRequest<TicketActionResponse>, IVali
         if (DurationMinutes.HasValue && DurationMinutes < 0)
             response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Thời gian thực hiện không hợp lệ." });
 
-        if (StartedAt.HasValue && StartedAt == default)
-            response.ListErrors.Add(new Errors { Field = "StartedAt", Detail = "Thời gian bắt đầu không hợp lệ." });
 
         if (response.ListErrors.Count > 0)
         {

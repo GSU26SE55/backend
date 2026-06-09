@@ -43,7 +43,7 @@ public class TicketDataSeeder
                 Description = "The battery unit is plugged in but not accumulating any charge. The indicator light is off.",
                 Category = TicketCategoryEnum.Charging,
                 Priority = TicketPriorityEnum.P1Critical,
-                Status = TicketStatusEnum.New,
+                Status = TicketStatusEnum.Open,
                 Origin = TicketOriginEnum.ManualByCustomer,
                 IsIncident = true,
                 CreatedAt = DateTime.UtcNow.AddDays(-5),

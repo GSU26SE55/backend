@@ -73,6 +73,16 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                                 ? null
                                 : "Only Managers, Admin or System can escalate."
                         }
+                    },
+                    {
+                        TicketStatusEnum.ClosedRejected,
+                        (ticket, role, userId) => new TransitionResult
+                        {
+                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
+                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
+                                ? null
+                                : "Only Managers can reject tickets at triage."
+                        }
                     }
                 }
             },
@@ -101,16 +111,6 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                             Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
                                 ? null
                                 : "Only Managers can escalate approved tickets."
-                        }
-                    },
-                    {
-                        TicketStatusEnum.ClosedRejected,
-                        (ticket, role, userId) => new TransitionResult
-                        {
-                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
-                                ? null
-                                : "Only Managers can reject approved tickets."
                         }
                     }
                 }
