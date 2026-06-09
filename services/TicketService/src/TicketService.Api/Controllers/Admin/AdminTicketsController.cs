@@ -92,6 +92,29 @@ public class AdminTicketsController : ControllerBase
     }
 
     /// <summary>
+    /// Manager từ chối ticket ngay từ bước phân loại (Triage).
+    /// </summary>
+    /// <remarks>
+    /// - Chuyển trạng thái từ <c>Open</c> sang <c>ClosedRejected</c>.
+    /// - Yêu cầu lý do từ chối.
+    /// </remarks>
+    /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Lý do từ chối.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Từ chối thành công.</response>
+    [HttpPost("{id}/triage-reject")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> TriageReject(Guid id, [FromBody] TicketTriageRejectCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName ?? "Unknown";
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Manager gán nhân viên xử lý cho ticket đã được phê duyệt.
     /// </summary>
     /// <remarks>
@@ -216,6 +239,7 @@ public class AdminTicketsController : ControllerBase
     /// Phân loại ticket nghiêm trọng/diện rộng để có quy trình xử lý ưu tiên.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Thông tin sự cố (Mô tả).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Đánh dấu thành công.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
@@ -223,13 +247,11 @@ public class AdminTicketsController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeclareIncident(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeclareIncident(Guid id, [FromBody] TicketDeclareIncidentCommand command, CancellationToken ct)
     {
-        var command = new TicketDeclareIncidentCommand
-        {
-            TicketId = id,
-            UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId)
-        };
+        command.TicketId = id;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }

@@ -29,7 +29,7 @@ public class MaintenanceLogsController : ControllerBase
     /// Lấy danh sách nhật ký bảo trì của chính Staff đang đăng nhập (Gom nhóm theo Ticket).
     /// </summary>
     /// <response code="200">Thành công.</response>
-    [HttpGet("staff/maintenance-logs/me")]
+    [HttpGet("staff/tickets/maintenance-logs/me")]
     [Authorize(Roles = "Staff")]
     [ProducesResponseType(typeof(List<StaffMaintenanceLogGroupDTO>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyLogs(CancellationToken ct)

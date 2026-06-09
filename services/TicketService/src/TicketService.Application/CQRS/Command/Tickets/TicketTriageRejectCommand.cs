@@ -4,15 +4,19 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Ticket;
 
-namespace TicketService.Application.CQRS.Command.TicketDeclareIncident;
+namespace TicketService.Application.CQRS.Command.Tickets;
 
-public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class TicketTriageRejectCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
+
+    public required string Reason { get; set; }
+
     [JsonIgnore]
-    public Guid UserId { get; set; }
-    public string? IncidentDescription { get; set; }
+    public Guid ManagerId { get; set; }
+    [JsonIgnore]
+    public string? ManagerName { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -21,11 +25,8 @@ public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IVal
         if (TicketId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
 
-        if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
-
-        if (string.IsNullOrWhiteSpace(IncidentDescription))
-            response.ListErrors.Add(new Errors { Field = "IncidentDescription", Detail = "Mô tả sự cố không được để trống." });
+        if (string.IsNullOrWhiteSpace(Reason))
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Lý do từ chối không được để trống." });
 
         if (response.ListErrors.Count > 0)
         {

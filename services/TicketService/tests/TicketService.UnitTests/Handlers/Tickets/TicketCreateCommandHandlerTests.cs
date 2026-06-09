@@ -47,7 +47,7 @@ public class TicketCreateCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(201);
         result.Data!.Code.Should().Be("TKT-2605-0001");
-        result.Data.Status.Should().Be(TicketStatusEnum.New);
+        result.Data.Status.Should().Be(TicketStatusEnum.Open);
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);

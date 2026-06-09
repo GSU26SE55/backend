@@ -4,6 +4,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.IntegrationEvents;
+using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -14,11 +15,16 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
 {
     private readonly ITicketUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _producer;
+    private readonly IActivityLogger _activityLogger;
 
-    public TicketDeclareIncidentCommandHandler(ITicketUnitOfWork unitOfWork, IMessageProducerService producer)
+    public TicketDeclareIncidentCommandHandler(
+        ITicketUnitOfWork unitOfWork,
+        IMessageProducerService producer,
+        IActivityLogger activityLogger)
     {
         _unitOfWork = unitOfWork;
         _producer = producer;
+        _activityLogger = activityLogger;
     }
 
     public async Task<TicketActionResponse> Handle(TicketDeclareIncidentCommand request, CancellationToken cancellationToken)
@@ -29,25 +35,27 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             return Fail(404, "Ticket not found");
         }
 
-        ticket.IsIncident = true;
-
-        var activity = new TicketActivity
+        if (ticket.IsIncident)
         {
-            TicketId = ticket.Id,
-            Action = ActivityActionEnum.IncidentDeclared,
-            ActorUserId = request.UserId,
-            ActorRole = ActorRoleEnum.Manager, // Assuming the user is a manager
-            ActorDisplayName = "Manager", // This should be retrieved from the user claims
-            Reason = "Ticket has been declared as an incident.",
-            Ticket = ticket
-        };
+            return Fail(400, "Ticket is already an incident.");
+        }
 
-        await _unitOfWork.TicketActivities.AddAsync(activity);
+        ticket.IsIncident = true;
+        // Optionally, we could also update the status to Incident if the state machine allows it
+        // but for now, we follow the existing logic of just flipping the flag but with correct persistence.
+
+        await _activityLogger.LogAsync(
+            ticket.Id,
+            request.UserId,
+            ActorRoleEnum.Manager,
+            "Manager", // Should be from context but following existing pattern
+            ActivityActionEnum.IncidentDeclared,
+            reason: request.IncidentDescription);
 
         // Outbox: Incident Declared
         await _producer.PublishAsync(new IncidentDeclaredIntegrationEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
 
-        await _unitOfWork.CommitTransactionAsync();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new TicketActionResponse
         {
