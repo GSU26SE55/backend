@@ -131,7 +131,7 @@ public class VerifyOtpCommandHandlerTests
             Otp = "123456"
         }, CancellationToken.None);
 
-        response.StatusCode.Should().Be(400);
+        response.StatusCode.Should().Be(401);
         response.Message.Should().Contain("hết hạn");
     }
 
@@ -149,7 +149,7 @@ public class VerifyOtpCommandHandlerTests
             Otp = "123456"
         }, CancellationToken.None);
 
-        response.StatusCode.Should().Be(400);
+        response.StatusCode.Should().Be(409);
         response.Message.Should().Contain("xác thực");
     }
 

@@ -31,6 +31,7 @@ public class TicketDto
 public class TicketActionDto
 {
     public string Id { get; set; } = string.Empty;
+    public string TicketId { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public TicketStatusEnum Status { get; set; }
 }

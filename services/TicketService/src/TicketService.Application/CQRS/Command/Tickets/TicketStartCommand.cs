@@ -3,6 +3,7 @@ using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.Tickets;
 
@@ -14,6 +15,9 @@ public class TicketStartCommand : IRequest<TicketActionResponse>, IValidatable<T
     public Guid StaffId { get; set; }
     [JsonIgnore]
     public string? StaffName { get; set; }
+
+    // Thông tin cho Maintenance Log tự động
+    public MaintenanceLogTypeEnum? LogType { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {

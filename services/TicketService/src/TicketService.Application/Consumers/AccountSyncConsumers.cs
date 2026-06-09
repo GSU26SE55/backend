@@ -1,7 +1,5 @@
-using System.Linq;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 using TicketService.Application.Interfaces.Repositories;

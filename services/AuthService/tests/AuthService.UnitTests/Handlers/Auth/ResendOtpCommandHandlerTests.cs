@@ -35,7 +35,7 @@ public class ResendOtpCommandHandlerTests
 
         var resp = await handler.Handle(new ResendOtpCommand { Email = "p@example.com" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]

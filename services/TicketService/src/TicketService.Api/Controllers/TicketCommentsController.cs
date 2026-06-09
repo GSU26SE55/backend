@@ -2,8 +2,11 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Api.Controllers;
@@ -15,10 +18,12 @@ namespace TicketService.Api.Controllers;
 public class TicketCommentsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITicketCurrentUserService _currentUser;
 
-    public TicketCommentsController(IMediator mediator)
+    public TicketCommentsController(IMediator mediator, ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -42,16 +47,16 @@ public class TicketCommentsController : ControllerBase
     public async Task<IActionResult> AddComment(Guid ticketId, [FromBody] CommentAddCommand command, CancellationToken ct)
     {
         command.TicketId = ticketId;
-        command.UserId = GetUserId();
-        command.UserDisplayName = GetUserName();
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
 
-        var roles = GetCurrentRoles();
+        var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
-        if (roles.Contains("Customer"))
+        if (roleStr == "Customer")
             userRole = ActorRoleEnum.Customer;
-        else if (roles.Contains("Manager"))
+        else if (roleStr == "Manager")
             userRole = ActorRoleEnum.Manager;
-        else if (roles.Contains("Admin"))
+        else if (roleStr == "Admin")
             userRole = ActorRoleEnum.Admin;
 
         command.UserRole = userRole;
@@ -60,20 +65,52 @@ public class TicketCommentsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    private Guid GetUserId()
+    /// <summary>
+    /// Lấy danh sách bình luận của Ticket (phân trang).
+    /// </summary>
+    /// <remarks>
+    /// - Nếu là Customer: Chỉ xem được các bình luận công khai (IsInternal = false).
+    /// - Nếu là Staff/Manager/Admin: Xem được tất cả bình luận bao gồm cả nội bộ.
+    /// </remarks>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="page">Số trang (mặc định 1).</param>
+    /// <param name="pageSize">Kích thước trang (mặc định 10).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpGet]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketCommentDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetComments(
+        Guid ticketId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
     {
-        var userIdClaim = User.FindFirst("id")?.Value;
-        Guid.TryParse(userIdClaim, out var userId);
-        return userId;
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new TicketCommentsQuery
+        {
+            TicketId = ticketId,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles(),
+            PageNumber = page,
+            PageSize = pageSize
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
     }
 
-    private string GetUserName()
+    private Guid? GetCurrentUserId()
     {
-        return User.FindFirst("name")?.Value
-               ?? User.FindFirst(ClaimTypes.Name)?.Value
-               ?? "Unknown";
+        var raw = _currentUser.UserId;
+        return Guid.TryParse(raw, out var actorId) ? actorId : null;
     }
 
     private string[] GetCurrentRoles()
-        => User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+    {
+        return User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+    }
 }

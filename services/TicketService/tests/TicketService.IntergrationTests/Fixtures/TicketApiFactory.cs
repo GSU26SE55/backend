@@ -16,13 +16,23 @@ public class TicketApiFactory : WebApplicationFactory<Program>
 {
     private SqliteConnection? _connection;
 
+    static TicketApiFactory()
+    {
+        // Ensure DI in Program.cs finds a connection string. The real DbContext is
+        // replaced with SQLite below, so this value is only used to pass the guard.
+        Environment.SetEnvironmentVariable(
+            "ConnectionStrings__TicketDb",
+            "Host=localhost;Database=ticket_test;Username=test;Password=test");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureAppConfiguration((context, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "SkipMigration", "true" }
+                { "SkipMigration", "true" },
+                { "ConnectionStrings:TicketDb", "Host=localhost;Database=ticket_test;Username=test;Password=test" }
             });
         });
 

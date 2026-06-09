@@ -1,9 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Persistence;
 using TicketService.IntergrationTests.Fixtures;
 
 namespace TicketService.IntergrationTests.Tickets;
@@ -11,10 +14,44 @@ namespace TicketService.IntergrationTests.Tickets;
 public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
 {
     private readonly HttpClient _client;
+    private readonly System.Text.Json.JsonSerializerOptions _jsonOptions;
 
     public TicketLifecycleApiTests(TicketApiFactory factory)
     {
         _client = factory.CreateClient();
+        _jsonOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+        _jsonOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+
+        // Ensure the database is clean before each test
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+
+        db.CustomerAccounts.Add(new CustomerAccount
+        {
+            AccountId = Guid.Parse(TestAuthHandler.UserId),
+            Email = "customer@test.com",
+            FullName = "Test Customer",
+            Status = AccountStatusEnum.Active,
+            LastSyncedAt = DateTime.UtcNow
+        });
+
+        db.StaffAccounts.Add(new StaffAccount
+        {
+            AccountId = Guid.Parse(TestAuthHandler.UserId),
+            Email = "staff@test.com",
+            FullName = "Test Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow
+        });
+
+        db.SaveChanges();
     }
 
     [Fact]
@@ -29,7 +66,7 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         };
         var createRes = await _client.PostAsJsonAsync("/api/customer/tickets", createCmd);
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);
-        var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>())!.Data!;
+        var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions))!.Data!;
 
         // 2. Triage Ticket (Manager)
         var triageCmd = new TicketTriageCommand
@@ -66,7 +103,7 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         var approveRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/approve", new { });
         approveRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var finalTicket = (await approveRes.Content.ReadFromJsonAsync<TicketActionResponse>())!.Data!;
+        var finalTicket = (await approveRes.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions))!.Data!;
         finalTicket.Status.Should().Be(TicketStatusEnum.ClosedPendingRate);
     }
 }

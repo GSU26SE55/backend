@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +5,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers;
 
@@ -19,10 +19,12 @@ namespace TicketService.Api.Controllers;
 public class StaffTicketsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ITicketCurrentUserService _currentUser;
 
-    public StaffTicketsController(IMediator mediator)
+    public StaffTicketsController(IMediator mediator, ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -40,11 +42,6 @@ public class StaffTicketsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyTickets([FromQuery] MyTicketsAsStaffQuery query, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        query.ActorStaffId = actorId.Value;
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -70,8 +67,8 @@ public class StaffTicketsController : ControllerBase
         var command = new TicketStartCommand
         {
             TicketId = id,
-            StaffId = GetUserId(),
-            StaffName = GetUserName()
+            StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            StaffName = _currentUser.FullName ?? "Unknown"
         };
 
         var result = await _mediator.Send(command, ct);
@@ -93,8 +90,8 @@ public class StaffTicketsController : ControllerBase
     public async Task<IActionResult> Hold(Guid id, [FromBody] TicketHoldCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.StaffId = GetUserId();
-        command.StaffName = GetUserName();
+        command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.StaffName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -116,8 +113,8 @@ public class StaffTicketsController : ControllerBase
         var command = new TicketResumeCommand
         {
             TicketId = id,
-            StaffId = GetUserId(),
-            StaffName = GetUserName()
+            StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            StaffName = _currentUser.FullName ?? "Unknown"
         };
 
         var result = await _mediator.Send(command, ct);
@@ -142,8 +139,8 @@ public class StaffTicketsController : ControllerBase
     public async Task<IActionResult> Resolve(Guid id, [FromBody] TicketResolveCommand command, CancellationToken ct)
     {
         command.TicketId = id;
-        command.StaffId = GetUserId();
-        command.StaffName = GetUserName();
+        command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.StaffName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -165,30 +162,10 @@ public class StaffTicketsController : ControllerBase
         CancellationToken ct)
     {
         command.TicketId = id;
-        command.StaffId = GetUserId();
-        command.StaffName = GetUserName();
+        command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.StaffName = _currentUser.FullName ?? "Unknown";
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
-    }
-
-    private Guid GetUserId()
-    {
-        var userIdClaim = User.FindFirst("id")?.Value;
-        Guid.TryParse(userIdClaim, out var userId);
-        return userId;
-    }
-
-    private string GetUserName()
-    {
-        return User.FindFirst("name")?.Value
-               ?? User.FindFirst(ClaimTypes.Name)?.Value
-               ?? "Unknown";
-    }
-
-    private Guid? GetCurrentUserId()
-    {
-        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(raw, out var actorId) ? actorId : null;
     }
 }

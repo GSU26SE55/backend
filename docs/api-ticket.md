@@ -342,9 +342,9 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `string` | Null | ID nhật ký |
-| `ticketId` | `string` | Null | ID ticket |
-| `staffId` | `string` | Null | ID Staff tạo nhật ký |
+| `id` | `string` | Không | ID nhật ký |
+| `ticketId` | `string` | Không | ID ticket |
+| `staffId` | `string` | Không | ID Staff tạo nhật ký |
 | `logType` | `MaintenanceLogTypeEnum` | Không | Loại nhật ký |
 | `summary` | `string?` | Null | Tóm tắt công việc |
 | `diagnosisDetails` | `string?` | Null | Chi tiết chẩn đoán |
@@ -358,6 +358,17 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `afterPhotosFileIds` | `string[]?` | Null | Ảnh sau khi sửa |
 | `relatedKbArticleIds` | `string[]?` | Null | ID bài viết KB liên quan |
 | `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
+
+### `StaffMaintenanceLogGroupDTO`
+
+Dữ liệu trả về khi Staff xem lịch sử nhật ký cá nhân (đã gom nhóm theo Ticket).
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `ticketId` | `string` | Không | ID Ticket |
+| `ticketCode` | `string` | Không | Mã hiển thị Ticket |
+| `ticketTitle` | `string` | Không | Tiêu đề Ticket |
+| `logs` | `MaintenanceLogDTO[]` | Không | Danh sách các phiên bảo trì thuộc Ticket này |
 
 > **Lưu ý:** Field `partsUsed` chỉ tồn tại trong request body khi tạo log — **không có** trong response DTO.
 
@@ -390,7 +401,7 @@ Base path: `/api/tickets`
 
 **Quyền hạn:**
 - Customer: Chỉ xem ticket của chính mình.
-- Staff: Chỉ xem ticket được gán cho mình.
+- Staff: Chỉ xem ticket được gán for mình.
 - Manager/Admin: Xem toàn bộ.
 
 **Path param:** `id` — UUID của ticket.
@@ -436,7 +447,30 @@ Base path: `/api/tickets`
 
 **Response thành công `200`:** `CommonResponse<TicketActivityDTO[]>`
 
-> **Lưu ý:** Trả về toàn bộ array — **không pagination**. Không có `PaginationResponse` wrapper.
+> **Lưu ý:** Trả về toàn bộ array — **không pagination**.
+
+---
+
+### `GET /api/tickets/{ticketId}/comments`
+
+**Mục đích:** Lấy danh sách bình luận của Ticket (có phân trang).
+
+**Auth:** Bắt buộc (mọi role)
+
+**Quyền hạn:**
+- Customer: Chỉ xem được bình luận công khai (`IsInternal = false`).
+- Staff/Manager/Admin: Xem được tất cả bao gồm bình luận nội bộ.
+
+**Path param:** `ticketId` — UUID của ticket.
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `page` | `int` | Số trang (mặc định 1) |
+| `pageSize` | `int` | Kích thước trang (mặc định 10) |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketCommentDTO>>`
 
 ---
 
@@ -647,17 +681,23 @@ Base path: `/api/staff/tickets`
 
 ### `POST /api/staff/tickets/{id}/start`
 
-**Mục đích:** Staff xác nhận bắt đầu xử lý ticket đã được giao. Chuyển trạng thái `Assigned → InProgress`.
+**Mục đích:** Staff xác nhận bắt đầu xử lý ticket đã được giao.
+
+**Hành động phụ:** Hệ thống tự động tạo một Maintenance Log mới với `startedAt` là thời điểm hiện tại.
 
 **Auth:** Bắt buộc (Staff)
 
 **Path param:** `id` — UUID của ticket.
 
-**Response thành công `200`:** `TicketActionResponse`
+**Request body:**
 
-**Lỗi thường gặp:**
-- `403` — Sai trạng thái hoặc không có quyền (không phải staff được gán)
-- `404` — Không tìm thấy ticket
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `logType` | `MaintenanceLogTypeEnum?` | Không | Loại nhật ký cho log tự động |
+| `latitude` | `decimal?` | Không | Vĩ độ check-in |
+| `longitude` | `decimal?` | Không | Kinh độ check-in |
+
+**Response thành công `200`:** `TicketActionResponse`
 
 ---
 
@@ -916,6 +956,75 @@ Base path: `/api/admin/tickets`
 **Lỗi thường gặp:**
 - `403` — Không có quyền
 - `404` — Không tìm thấy ticket
+
+---
+
+## Nhóm 5 — Maintenance Logs (Nhật ký bảo trì)
+
+Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ với vòng đời của Ticket.
+
+### Quy trình tự động (Automated Workflow)
+
+1.  **Tự động tạo Log:** Khi Staff gọi API `POST /api/staff/tickets/{id}/start`, hệ thống sẽ tự động tạo một Maintenance Log mới với `startedAt` là thời điểm hiện tại và `Summary = "Đang thực hiện..."`.
+2.  **Tự động đóng Log:** Khi Staff gọi API `POST /api/staff/tickets/{id}/resolve`, hệ thống sẽ tìm tất cả các nhật ký chưa hoàn thành của Ticket đó và tự động gán `completedAt` bằng thời điểm hiện tại.
+
+---
+
+### `GET /api/staff/maintenance-logs/me`
+
+**Mục đích:** Staff xem lịch sử bảo trì cá nhân, gom nhóm theo từng Ticket.
+
+**Auth:** Bắt buộc (Staff)
+
+**Response thành công `200`:** `CommonResponse<StaffMaintenanceLogGroupDTO[]>`
+
+---
+
+### `GET /api/tickets/{ticketId}/maintenance-logs`
+
+**Mục đích:** Manager/Admin xem toàn bộ nhật ký bảo trì của một Ticket cụ thể.
+
+**Auth:** Bắt buộc (Manager hoặc Admin)
+
+**Path param:** `ticketId` — UUID của ticket.
+
+**Response thành công `200`:** `CommonResponse<MaintenanceLogDTO[]>`
+
+---
+
+### `POST /api/tickets/{ticketId}/maintenance-logs`
+
+**Mục đích:** Nhập thủ công một nhật ký bảo trì (thường dùng cho trường hợp nhập bù).
+
+**Auth:** Bắt buộc (Staff hoặc Manager)
+
+**Điều kiện:** Không cho phép tạo log mới nếu đang có một log khác chưa hoàn thành (`completedAt` là null) cho ticket này.
+
+**Request body:** (Xem bảng `MaintenanceLogDTO` để biết các field, lưu ý `startedAt` là bắt buộc).
+
+---
+
+### `PATCH /api/tickets/{ticketId}/maintenance-logs/{logId}`
+
+**Mục đích:** Cập nhật từng phần (Partial Update) cho nhật ký bảo trì. Chỉ nên gửi lên các trường cần thay đổi.
+
+**Auth:** Bắt buộc (Chủ sở hữu log hoặc Manager/Admin)
+
+**Điều kiện:** Không được chỉnh sửa nếu Ticket đã ở trạng thái `Resolved`, `Closed` hoặc `ClosedPendingRate`.
+
+**Request body:** (Mọi field đều là tùy chọn, ngoại trừ `logId` trong path).
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `logType` | `MaintenanceLogTypeEnum?` | Loại nhật ký |
+| `summary` | `string?` | Tóm tắt (Không được để trống nếu gửi) |
+| `diagnosisDetails` | `string?` | Chẩn đoán |
+| `actionsTaken` | `string?` | Hành động xử lý |
+| `durationMinutes` | `int?` | Thời lượng |
+| `resolutionNote` | `string?` | Ghi chú kết quả |
+| `attachments` | `Input[]?` | File đính kèm mới |
+| `beforePhotos` | `Input[]?` | Ảnh trước khi sửa |
+| `afterPhotos` | `Input[]?` | Ảnh sau khi sửa |
 
 ---
 

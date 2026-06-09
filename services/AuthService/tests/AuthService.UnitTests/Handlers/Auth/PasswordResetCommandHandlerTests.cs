@@ -131,7 +131,7 @@ public class VerifyResetOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(401);
     }
 
     [Fact]
