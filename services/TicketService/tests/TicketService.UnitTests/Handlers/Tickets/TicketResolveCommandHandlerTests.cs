@@ -127,7 +127,7 @@ public class TicketResolveCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(403);
-        result.Message.Should().Contain("Cần Staff Tier 2 trở lên");
+        result.Message.Should().Contain("Cần Staff Tier cao hơn hiện tại cho SkillGap escalation.");
     }
 
     [Fact]

@@ -95,7 +95,7 @@ public class SetRolePermissionsCommandHandlerTests
             PermissionIds = new List<Guid> { Guid.NewGuid() }
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(403);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class SetRolePermissionsCommandHandlerTests
             PermissionIds = new List<Guid> { Guid.NewGuid() } // không tồn tại
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(404);
     }
 }
 

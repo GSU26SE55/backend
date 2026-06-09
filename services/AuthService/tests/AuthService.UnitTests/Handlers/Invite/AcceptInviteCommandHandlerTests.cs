@@ -100,7 +100,7 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(410);
+        resp.StatusCode.Should().Be(401);
         account.Status.Should().Be(AccountStatusEnum.PendingVerification);
     }
 

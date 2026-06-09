@@ -54,7 +54,7 @@ public class Enable2FACommandHandlerTests
 
         var resp = await handler.Handle(new Enable2FACommand { AccountId = account.Id }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]

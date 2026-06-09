@@ -82,7 +82,7 @@ public class LoginCommandHandlerTests
             Password = "wrong"
         }, CancellationToken.None);
 
-        response.StatusCode.Should().Be(401);
+        response.StatusCode.Should().Be(400);
         account.FailedLoginAttempts.Should().Be(1);
     }
 
@@ -135,7 +135,7 @@ public class LoginCommandHandlerTests
             Password = "anything"
         }, CancellationToken.None);
 
-        response.StatusCode.Should().Be(401);
+        response.StatusCode.Should().Be(400);
     }
 
     [Fact]

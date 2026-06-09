@@ -171,8 +171,8 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         {
             var resp = await _client.PostAsJsonAsync("/api/auth/login",
                 new { Email = "lock@example.com", Password = "WrongPass" });
-            // last attempt should be 423; previous 401
-            (i < 4 ? HttpStatusCode.Unauthorized : HttpStatusCode.Locked)
+            // last attempt should be 423; previous 400
+            (i < 4 ? HttpStatusCode.BadRequest : HttpStatusCode.Locked)
                 .Should().Be(resp.StatusCode);
         }
 
