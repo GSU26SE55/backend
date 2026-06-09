@@ -80,6 +80,6 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Phone", Detail = message } }
+        ListErrors = { new Errors { Field = "PhoneNumber", Detail = message } }
     };
 }

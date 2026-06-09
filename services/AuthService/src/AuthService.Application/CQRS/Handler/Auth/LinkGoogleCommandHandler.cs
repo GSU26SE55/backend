@@ -27,24 +27,24 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
     {
         var googleUser = await _googleOAuthHelper.ValidateAsync(request.IdToken, cancellationToken);
         if (googleUser == null || string.IsNullOrWhiteSpace(googleUser.Email))
-            return Fail(401, "Google ID token không hợp lệ.");
+            return Fail(401, nameof(LinkGoogleCommand.IdToken), "Google ID token không hợp lệ.");
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .Include(a => a.Profile)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "AccountId", "Không tìm thấy tài khoản.");
 
         if (!string.Equals(account.Email, googleUser.Email, StringComparison.OrdinalIgnoreCase))
-            return Fail(422, "Email Google không khớp với email tài khoản hiện tại.");
+            return Fail(422, nameof(LinkGoogleCommand.IdToken), "Email Google không khớp với email tài khoản hiện tại.");
 
         var googleAlreadyLinked = await _unitOfWork.Accounts
             .GetAllAsync()
             .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject && !a.IsDeleted, cancellationToken);
 
         if (googleAlreadyLinked)
-            return Fail(409, "Google account này đã được liên kết với tài khoản khác.");
+            return Fail(409, nameof(LinkGoogleCommand.IdToken), "Google account này đã được liên kết với tài khoản khác.");
 
         account.GoogleId = googleUser.Subject;
         account.Provider = ProviderName;
@@ -63,12 +63,12 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string message) => new()
+    private static AccountActionResponse Fail(int statusCode, string field, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Google", Detail = message } }
+        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 
     private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)

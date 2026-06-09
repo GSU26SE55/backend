@@ -71,7 +71,7 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message, string field = "TicketId")
     {
         return new TicketActionResponse
         {

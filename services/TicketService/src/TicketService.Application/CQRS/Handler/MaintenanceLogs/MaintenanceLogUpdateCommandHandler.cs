@@ -155,7 +155,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             Message = message,
             ListErrors = new List<Errors>
             {
-                new Errors { Field = "MaintenanceLog", Detail = message }
+                new Errors { Field = "LogId", Detail = message }
             }
         };
     }

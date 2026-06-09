@@ -3742,7 +3742,7 @@ GitHub Actions step:
 - [x] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
 - [x] MaintenanceLog + comments + attachments workflow trong TicketService — #143
 - [x] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
-- [ ] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
+- [x] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
 
 ### Sprint 5B (20/7–26/7/2026)
 **Goal:** BatteryService advanced monitoring riêng — ambient/environmental/tier-2 sensor health. Sprint này tách khỏi TicketService để tránh phát triển song song hai domain lớn.

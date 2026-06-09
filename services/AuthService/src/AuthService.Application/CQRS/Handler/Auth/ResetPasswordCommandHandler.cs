@@ -32,13 +32,13 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
     {
         var (accountId, error) = _jwtHelper.ValidateResetToken(request.ResetToken);
         if (error != null || !accountId.HasValue)
-            return Fail(401, error ?? "Reset token không hợp lệ.");
+            return Fail(401, nameof(ResetPasswordCommand.ResetToken), error ?? "Reset token không hợp lệ.");
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == accountId.Value && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại.");
+            return Fail(404, nameof(ResetPasswordCommand.ResetToken), "Tài khoản không tồn tại.");
 
         account.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         account.OtpCode = null;
@@ -78,11 +78,11 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
         };
     }
 
-    private static CommonResponse<string> Fail(int statusCode, string message) => new()
+    private static CommonResponse<string> Fail(int statusCode, string field, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Auth", Detail = message } }
+        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

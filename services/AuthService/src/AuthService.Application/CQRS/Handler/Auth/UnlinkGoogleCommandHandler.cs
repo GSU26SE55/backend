@@ -49,6 +49,6 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Google", Detail = message } }
+        ListErrors = { new Errors { Field = "AccountId", Detail = message } }
     };
 }

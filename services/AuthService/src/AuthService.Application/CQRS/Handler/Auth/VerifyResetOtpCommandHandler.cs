@@ -32,16 +32,16 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại hoặc OTP không hợp lệ.");
+            return Fail(404, nameof(VerifyResetOtpCommand.Email), "Tài khoản không tồn tại hoặc OTP không hợp lệ.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, nameof(VerifyResetOtpCommand.Email), "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
 
         if (account.OtpPurpose != OtpPurposeEnum.PasswordReset
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(401, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(401, nameof(VerifyResetOtpCommand.Otp), "OTP không hợp lệ hoặc đã hết hạn.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {
@@ -51,7 +51,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
 
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, nameof(VerifyResetOtpCommand.Otp), "OTP không chính xác.");
         }
 
         account.FailedLoginAttempts = 0;
@@ -73,11 +73,11 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
         };
     }
 
-    private static CommonResponse<ResetTokenDto> Fail(int statusCode, string message) => new()
+    private static CommonResponse<ResetTokenDto> Fail(int statusCode, string field, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Auth", Detail = message } }
+        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }
