@@ -87,6 +87,6 @@ public class Enable2FACommandHandler : IRequestHandler<Enable2FACommand, CommonR
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "TwoFactor", Detail = message } }
+        ListErrors = { new Errors { Field = "AccountId", Detail = message } }
     };
 }

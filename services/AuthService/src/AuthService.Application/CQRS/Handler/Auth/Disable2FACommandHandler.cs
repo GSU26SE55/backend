@@ -53,6 +53,6 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "TwoFactor", Detail = message } }
+        ListErrors = { new Errors { Field = "AccountId", Detail = message } }
     };
 }

@@ -25,19 +25,19 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "AccountId", "Không tìm thấy tài khoản.");
 
         if (account.PhoneConfirmed)
-            return Fail(409, "Số điện thoại đã được xác thực.");
+            return Fail(409, "PhoneNumber", "Số điện thoại đã được xác thực.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, "AccountId", "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
 
         if (account.OtpPurpose != OtpPurposeEnum.PhoneVerify
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(401, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(401, nameof(VerifyPhoneOtpCommand.Otp), "OTP không hợp lệ hoặc đã hết hạn.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {
@@ -46,7 +46,7 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, nameof(VerifyPhoneOtpCommand.Otp), "OTP không chính xác.");
         }
 
         account.PhoneConfirmed = true;
@@ -66,11 +66,11 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
         };
     }
 
-    private static CommonResponse<string> Fail(int statusCode, string message) => new()
+    private static CommonResponse<string> Fail(int statusCode, string field, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Phone", Detail = message } }
+        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

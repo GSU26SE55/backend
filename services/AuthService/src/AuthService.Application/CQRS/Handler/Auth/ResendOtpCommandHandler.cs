@@ -80,6 +80,6 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Auth", Detail = message } }
+        ListErrors = { new Errors { Field = nameof(ResendOtpCommand.Email), Detail = message } }
     };
 }

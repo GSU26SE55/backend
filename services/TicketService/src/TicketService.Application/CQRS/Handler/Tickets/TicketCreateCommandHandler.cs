@@ -37,10 +37,10 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         var customer = (await _uow.CustomerAccounts.GetAllAsync().Where(c => c.AccountId == request.CustomerId).ToListAsync(ct)).FirstOrDefault();
 
         if (customer == null)
-            return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.");
+            return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.", nameof(request.CustomerId));
 
         if (customer.Status != AccountStatusEnum.Active)
-            return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.");
+            return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.", nameof(request.CustomerId));
 
         var code = await _codeGenerator.GenerateAsync();
 
@@ -87,7 +87,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message, string field = "TicketId")
     {
         return new TicketActionResponse
         {

@@ -98,7 +98,7 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             Message = message,
             ListErrors = new List<Errors>
             {
-                new Errors { Field = "Ticket", Detail = message }
+                new Errors { Field = "TicketId", Detail = message }
             }
         };
     }

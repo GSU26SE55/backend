@@ -30,20 +30,20 @@ public class GoogleCallbackCommandHandler : IRequestHandler<GoogleCallbackComman
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (allowedUris.Count > 0 && !allowedUris.Contains(request.RedirectUri))
-            return Fail(400, "RedirectUri không hợp lệ.");
+            return Fail(400, nameof(GoogleCallbackCommand.RedirectUri), "RedirectUri không hợp lệ.");
 
         var idToken = await _googleOAuthHelper.ExchangeCodeForIdTokenAsync(request.Code, request.RedirectUri, cancellationToken);
         if (string.IsNullOrWhiteSpace(idToken))
-            return Fail(401, "Không thể đổi authorization code lấy id_token từ Google.");
+            return Fail(401, nameof(GoogleCallbackCommand.Code), "Không thể đổi authorization code lấy id_token từ Google.");
 
         return await _mediator.Send(new GoogleAuthCommand { IdToken = idToken }, cancellationToken);
     }
 
-    private static LoginResponse Fail(int statusCode, string message) => new()
+    private static LoginResponse Fail(int statusCode, string field, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = "Auth", Detail = message } }
+        ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
 }
