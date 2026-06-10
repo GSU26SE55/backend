@@ -28,10 +28,10 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
             .FirstOrDefaultAsync(r => r.Id == request.RoleId && !r.IsDeleted, cancellationToken);
 
         if (role == null)
-            return Fail(404, nameof(SetRolePermissionsCommand.RoleId), "Role không tồn tại.");
+            return Fail(404, "Role không tồn tại.");
 
         if (role.IsSystemRole && !request.AllowSystemRole)
-            return Fail(403, nameof(SetRolePermissionsCommand.AllowSystemRole), "Không thể thay đổi permission của system role mặc định. Set AllowSystemRole=true nếu muốn override.");
+            return Fail(403, "Không thể thay đổi permission của system role mặc định. Set AllowSystemRole=true nếu muốn override.");
 
         var requestedIds = request.PermissionIds.Distinct().ToList();
         var validIds = await _unitOfWork.Permissions
@@ -42,7 +42,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
 
         var missing = requestedIds.Except(validIds).ToList();
         if (missing.Count > 0)
-            return Fail(404, nameof(SetRolePermissionsCommand.PermissionIds), $"Có {missing.Count} permission không tồn tại.");
+            return Fail(404, $"Có {missing.Count} permission không tồn tại.");
 
         var existing = await _unitOfWork.RolePermissions
             .GetAllAsync()
@@ -93,11 +93,10 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
         };
     }
 
-    private static PermissionActionResponse Fail(int statusCode, string field, string message) => new()
+    private static PermissionActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

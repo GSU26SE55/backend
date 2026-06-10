@@ -51,7 +51,6 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Email đã được sử dụng.",
-                ListErrors = { new Errors { Field = "Email", Detail = "Email đã được sử dụng." } }
             };
         }
 
@@ -69,7 +68,6 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
                     IsSuccess = false,
                     StatusCode = 409,
                     Message = "Số điện thoại đã được sử dụng.",
-                    ListErrors = { new Errors { Field = "PhoneNumber", Detail = "Số điện thoại đã được sử dụng." } }
                 };
             }
         }
@@ -87,7 +85,6 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
-                ListErrors = { new Errors { Field = "RoleId", Detail = "Role không tồn tại hoặc đã bị vô hiệu hóa." } }
             };
         }
 

@@ -99,17 +99,13 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "TicketId")
+    private static TicketActionResponse Fail(int statusCode, string message)
     {
         return new TicketActionResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }

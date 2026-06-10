@@ -55,7 +55,6 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Không tìm thấy khách hàng mới đang hoạt động.",
-                ListErrors = { new Errors { Field = nameof(request.NewCustomerId), Detail = "Khách hàng mới không tồn tại hoặc đã bị khóa." } }
             };
         }
 

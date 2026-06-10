@@ -33,7 +33,6 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleA
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Tên role đã tồn tại.",
-                ListErrors = { new Errors { Field = "Name", Detail = "Tên role đã tồn tại." } }
             };
         }
 

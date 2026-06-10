@@ -96,10 +96,6 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = "TicketId", Detail = message }
-            }
         };
     }
 }
