@@ -39,22 +39,22 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Account", "Không tìm thấy tài khoản.");
+            return Fail(404, "Không tìm thấy tài khoản.");
 
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
-            return Fail(401, "CurrentPassword", "Mật khẩu hiện tại không chính xác.");
+            return Fail(401, "Mật khẩu hiện tại không chính xác.");
 
         var newEmail = request.NewEmail.Trim().ToLowerInvariant();
 
         if (account.Email.Equals(newEmail, StringComparison.OrdinalIgnoreCase))
-            return Fail(422, "NewEmail", "Email mới phải khác email hiện tại.");
+            return Fail(422, "Email mới phải khác email hiện tại.");
 
         var emailTaken = await _unitOfWork.Accounts
             .GetAllAsync()
             .AnyAsync(a => a.Id != request.AccountId && a.Email.ToLower() == newEmail && !a.IsDeleted, cancellationToken);
 
         if (emailTaken)
-            return Fail(409, "NewEmail", "Email mới đã được sử dụng bởi tài khoản khác.");
+            return Fail(409, "Email mới đã được sử dụng bởi tài khoản khác.");
 
         var otp = OtpHelper.GenerateOtp(6);
         account.PendingEmail = newEmail;
@@ -78,11 +78,10 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string field, string message) => new()
+    private static AccountActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

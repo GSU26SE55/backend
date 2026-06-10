@@ -108,14 +108,13 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         };
     }
 
-    private static CommonResponse<string> Fail(int statusCode, string message, string field = "Auth")
+    private static CommonResponse<string> Fail(int statusCode, string message)
     {
         return new CommonResponse<string>
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
         };
     }
 }

@@ -615,7 +615,6 @@ public class AuthController : ControllerBase
         IsSuccess = false,
         StatusCode = status,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = "Auth", Detail = message } }
     };
 
     private Guid? GetCurrentUserId()

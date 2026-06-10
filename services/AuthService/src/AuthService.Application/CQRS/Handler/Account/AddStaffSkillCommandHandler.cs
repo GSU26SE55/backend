@@ -28,7 +28,7 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
             .AnyAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
-            return Fail(404, "Không tìm thấy tài khoản.", nameof(request.StaffAccountId));
+            return Fail(404, "Không tìm thấy tài khoản.");
 
         var staffProfile = await _unitOfWork.StaffProfiles
             .GetAllAsync()
@@ -86,11 +86,10 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string message, string field) => new()
+    private static AccountActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

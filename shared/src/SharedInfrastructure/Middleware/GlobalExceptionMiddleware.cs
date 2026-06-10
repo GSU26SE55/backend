@@ -36,6 +36,13 @@ public class GlobalExceptionMiddleware
             : (int)HttpStatusCode.InternalServerError;
         context.Response.StatusCode = statusCode;
 
+        object[]? listErrors = statusCode == StatusCodes.Status413PayloadTooLarge
+            ? new object[]
+            {
+                new { field = "file", detail = "Kích thước request vượt quá giới hạn cho phép." }
+            }
+            : null;
+
         var response = new
         {
             isSuccess = false,
@@ -44,12 +51,7 @@ public class GlobalExceptionMiddleware
                 ? "Request payload too large. File tối đa 20 MB."
                 : "An error was caught in global exception middleware.",
             data = statusCode == (int)HttpStatusCode.InternalServerError ? ex.Message : null,
-            listErrors = statusCode == StatusCodes.Status413PayloadTooLarge
-                ? new object[]
-                {
-                    new { field = "file", detail = "Kích thước request vượt quá giới hạn cho phép." }
-                }
-                : Array.Empty<object>()
+            listErrors
         };
 
         var json = JsonSerializer.Serialize(response);

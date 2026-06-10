@@ -57,7 +57,7 @@ public class GlobalExceptionMiddlewareTests
         doc.RootElement.GetProperty("message").GetString()
             .Should().Be("An error was caught in global exception middleware.");
         doc.RootElement.GetProperty("data").GetString().Should().Be("boom");
-        doc.RootElement.GetProperty("listErrors").GetArrayLength().Should().Be(0);
+        doc.RootElement.GetProperty("listErrors").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
             .FirstOrDefaultAsync(s => s.StaffAccountId == request.StaffAccountId && s.SkillCode == skillCode && !s.IsDeleted, cancellationToken);
 
         if (skill is null)
-            return Fail(404, "Không tìm thấy staff skill.", nameof(request.SkillCode));
+            return Fail(404, "Không tìm thấy staff skill.");
 
         _unitOfWork.StaffSkills.DeleteAsync(skill);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -42,11 +42,10 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string message, string field) => new()
+    private static AccountActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

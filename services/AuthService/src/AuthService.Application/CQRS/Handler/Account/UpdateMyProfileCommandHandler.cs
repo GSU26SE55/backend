@@ -53,7 +53,6 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
                     IsSuccess = false,
                     StatusCode = 409,
                     Message = "Số điện thoại đã được sử dụng.",
-                    ListErrors = { new Errors { Field = nameof(request.PhoneNumber), Detail = "Số điện thoại đã được sử dụng." } }
                 };
             }
 

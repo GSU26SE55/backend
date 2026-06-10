@@ -26,16 +26,16 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Account", "Không tìm thấy tài khoản.");
+            return Fail(404, "Không tìm thấy tài khoản.");
 
         if (string.IsNullOrEmpty(account.PendingEmail) || account.OtpPurpose != OtpPurposeEnum.EmailChange)
-            return Fail(409, "Auth", "Không có yêu cầu đổi email đang chờ verify.");
+            return Fail(409, "Không có yêu cầu đổi email đang chờ verify.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Auth", "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
 
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(401, "Otp", "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
+            return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {
@@ -44,7 +44,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Otp", "OTP không chính xác.");
+            return Fail(401, "OTP không chính xác.");
         }
 
         // Double-check email vẫn chưa bị account khác chiếm trong khoảng chờ verify.
@@ -60,7 +60,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             account.OtpExpiredAt = null;
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(409, "NewEmail", "Email mới đã bị tài khoản khác đăng ký trong lúc chờ verify.");
+            return Fail(409, "Email mới đã bị tài khoản khác đăng ký trong lúc chờ verify.");
         }
 
         account.Email = pending;
@@ -97,11 +97,10 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string field, string message) => new()
+    private static AccountActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

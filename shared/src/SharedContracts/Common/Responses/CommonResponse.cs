@@ -1,8 +1,11 @@
 namespace SharedContracts.Common.Responses;
 
+using System.Text.Json.Serialization;
+
 public class CommonResponse<T> : CommonResponseBase
 {
     public T? Data { get; set; }
+    [JsonConverter(typeof(ErrorsListJsonConverter))]
     public List<Errors> ListErrors { get; set; } = new();
 }
 public class CommonResponseBase

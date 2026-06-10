@@ -51,7 +51,6 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Serial pin đã tồn tại.",
-                ListErrors = { new Errors { Field = nameof(request.SerialNumber), Detail = "Serial pin đã tồn tại." } }
             };
         }
 

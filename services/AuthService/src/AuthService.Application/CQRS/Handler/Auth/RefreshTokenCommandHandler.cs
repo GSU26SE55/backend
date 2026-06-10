@@ -128,11 +128,10 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         };
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "Auth") => new()
+    private static LoginResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
 }

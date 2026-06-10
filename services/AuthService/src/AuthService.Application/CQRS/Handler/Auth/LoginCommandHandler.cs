@@ -270,17 +270,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             cancellationToken);
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "Auth")
+    private static LoginResponse Fail(int statusCode, string message)
     {
         return new LoginResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }
