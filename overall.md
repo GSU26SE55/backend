@@ -69,7 +69,7 @@
   - [49. Notification advanced](#49-notification-advanced-digest--batching--p1)
   - [50. Updated sprint backlog impact](#50-updated-sprint-backlog-impact)
 - [Phần VIII — Bổ sung lần 2 (Final completeness)](#phần-viii--bổ-sung-lần-2-final-completeness)
-  - [52. IoT Gateway & Device Management](#52-iot-gateway--device-management--p0)
+  - [52. IoT Edge Device & Device Management](#52-iot-edge-device--device-management--p0)
   - [52bis. IoT implementation plan](#52bis-iot-implementation-plan)
   - [53. Battery scope reduction & Alert–Ticket Saga](#53-battery-scope-reduction--alertticket-saga--p0)
   - [54. Production Deployment (K8s + Helm)](#54-production-deployment-k8s--helm--p1)
@@ -116,7 +116,7 @@
 |------------------|----------|---------|-----------------|
 | `BatteryService` | ✅ Core done | §1 | Core CRUD + Sensor batch ingest + Threshold detection + Alert deduplication; **không quản lý Energy/CO2 analytics** |
 | `TicketService` | ✅ Core done | §2 | CQRS + Ticket State Machine + SLA/Activity/Reopen done; Alert–Ticket Saga pending Sprint 5B |
-| IoT Gateway backend + Device Management | 🔴 P0 | §52/§52bis + `iot.md` | 1 sprint song song + hardware track |
+| IoT Edge Device backend + Device Management (ESP32 + hybrid HTTPS/MQTT) | 🔴 P0 | §52/§52bis + `newiot.md`/`overall.iot.md` | 1 sprint song song + hardware track |
 | `NotificationService` (4 dự án, consumers + Expo push) | 🟠 P1 | §3 | 2 sprint |
 | KnowledgeBase (module nội bộ TicketService) | 🟡 P2 | §4 | 0.5 sprint |
 | Reporting endpoints (mỗi service expose) | 🟡 P2 | §5 | 1 sprint |
@@ -230,6 +230,8 @@
 /api/thresholds/*         → BatteryService
 /api/sensor-readings/*    → BatteryService
 /api/alerts/*             → BatteryService
+/api/v1/iot-devices/*        → BatteryService       (device-side: provision/heartbeat/firmware/calibration — §52)
+/api/v1/admin/iot-devices/*  → BatteryService       (admin CRUD device + firmware release — §52)
 /api/v1/tickets/*            → TicketService        (port 5003)
 /api/v1/comments/*           → TicketService
 /api/v1/maintenance-logs/*   → TicketService
@@ -406,10 +408,15 @@ services/BatteryService/
 │       │   ├── AlertEscalationBackgroundService.cs
 │       │   ├── AlertAutoResolveBackgroundService.cs
 │       │   └── OutboxRelayBackgroundService.cs
-│       ├── ExternalServices/
-│       │   └── (optional: IoT MQTT bridge nếu cần)
+│       ├── Mqtt/                                    ← MQTT v2 (P3 — xem §52.10, §52.14)
+│       │   ├── MqttBridgeBackgroundService.cs        ← subscribe telemetry/heartbeat/status
+│       │   ├── MqttTopicMap.cs                       ← solar/{site}/{dev}/...
+│       │   ├── TelemetryMessageHandler.cs            ← validate → insert → anomaly (reuse ingest command)
+│       │   └── LastWillHandler.cs                    ← status=offline → mark Offline + alert
+│       ├── Security/
+│       │   └── DeviceApiKeyService.cs                ← sinh/hash/rotate/revoke API key per-device (+ MQTT credential)
 │       └── DependencyInjection/
-│           └── ManageDependencyInjection.cs
+│           └── ManageDependencyInjection.cs          ← đăng ký MQTT bridge + IoT background jobs
 └── tests/
     ├── BatteryService.UnitTests/
     │   ├── BatteryService.UnitTests.csproj
@@ -528,8 +535,9 @@ services/BatteryService/
 | `InternalResistanceMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
 | `CellVoltageDeltaMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV — chênh lệch Vmax-Vmin giữa các cell |
 | `BmsErrorCode` | `string(64)?` | nullable | Mã lỗi BMS raw (vd `0x0A`, `OverCurrent,CellImbalance`) |
-| `SourceDeviceId` | `string(64)?` | — | IoT gateway ID hoặc BMS module ID |
+| `SourceDeviceId` | `string(64)?` | — | IoT edge device code (ESP32 `DeviceCode`) hoặc BMS module ID |
 | `SourceType` | `SensorReadingSourceTypeEnum` | NOT NULL default `IotGateway` | **B9** — 1=Bms, 2=IotGateway, 3=External. Phân biệt nguồn đo |
+| `SensorSourceCode` | `string(20)?` | nullable | **§52.9** — "primary" / "redundant" / "external-temp". Phân biệt nhiều sensor cùng đo 1 pin (vd BMS primary vs INA226 redundant vs DS18B20 external-temp). 1 pin có thể có nhiều reading cùng timestamp khác `SensorSourceCode` |
 
 **Compound index:** `(BatteryAssetId, Time DESC)` cho realtime/history queries.
 **Hypertable interval:** 1 day chunks.
@@ -601,10 +609,10 @@ public enum AnomalyTypeEnum {
     SensorMismatch = 15   // BMS reading vs IoT reading lệch quá ngưỡng
 }
 
-// Nguồn đo của SensorReading (B9) - phân biệt BMS vs IoT Gateway
+// Nguồn đo của SensorReading (B9) - phân biệt BMS vs IoT edge device
 public enum SensorReadingSourceTypeEnum {
-    Bms = 1,         // Từ BMS gắn trực tiếp trong pack
-    IotGateway = 2,  // Từ IoT gateway (Raspberry Pi + sensor ngoài)
+    Bms = 1,         // Từ BMS gắn trực tiếp trong pack (qua RS485/Modbus)
+    IotGateway = 2,  // Từ IoT edge device (ESP32-S3 + sensor ngoài INA226/DS18B20); tên enum giữ legacy "Gateway"
     External = 3     // Manual import, third-party feed
 }
 
@@ -1137,6 +1145,18 @@ public record EnvironmentalIncidentResolvedEvent : IntegrationEvent {
     public bool WasFalseAlarm { get; init; }
 }
 
+// IoT device chuyển Offline (publish bởi LWT handler hoặc IotDeviceOfflineDetectionBackgroundService — §52.6).
+// NotificationService consume để báo Customer/Staff; payload denormalize battery/site cho template.
+public record IotDeviceWentOfflineEvent : IntegrationEvent {
+    public Guid DeviceId { get; init; }
+    public string DeviceCode { get; init; } = string.Empty;
+    public Guid? SiteId { get; init; }
+    public string? SiteName { get; init; }                  // denormalize cho template
+    public Guid[] AffectedBatteryAssetIds { get; init; } = Array.Empty<Guid>();
+    public DateTime LastSeenAt { get; init; }
+    public DateTime DetectedAt { get; init; }
+}
+
 // SharedContracts; BatteryService publish sau khi Alert.TicketId đã commit.
 public record AlertLinkedToTicketEvent(
     Guid CorrelationId,
@@ -1228,7 +1248,9 @@ GET    /api/battery/health                            (Internal — for k8s prob
 - Tách thành 2 key trong `appsettings.json`:
   - `ApiKeys:SensorIngest` — chỉ cho `/api/sensor-readings/batch`
   - `ApiKeys:EnvironmentalIngest` — cho `/api/ambient-readings/batch` + `/api/environmental-incidents`
-- Lý do: nếu IoT gateway smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
+- Lý do: nếu IoT edge device smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
+
+> **MVP global key vs production per-device key (§52):** 2 key global ở trên là **mức MVP (P0–P2)** để chạy nhanh với simulator. Từ Sprint IoT-1, production dùng **API key per-device** (hash, kèm `X-Device-Code`, scope `sensor.ingest`/`device.heartbeat`/`environmental.ingest` — §52.2) thay cho global key; backend chấp nhận **cả hai** trong giai đoạn chuyển tiếp (backward-compat, §52bis.3). MQTT (v2) dùng credential per-device riêng (§52.14). Global `SensorIngest`/`EnvironmentalIngest` chỉ nên giữ cho demo/simulator, không cấp cho device thật ngoài site.
 
 **Batch limit & rate limit:**
 - `POST /api/sensor-readings/batch`: tối đa **1000 readings/request** — vượt quá trả `400 isSuccess=false`. Rate limit đề xuất: **60 requests/minute/device**.
@@ -2322,6 +2344,8 @@ INPUT: NotificationTypeEnum + targetUserIds + payload
 | IncidentDeclared (broadcast Manager/Admin/LeadStaff) | ✅ | ✅ | ✅ | ✅ |
 | BatteryAlertEscalationPending (Manager + Admin) | ✅ | ✅ | ✅ | — | Critical Alert chưa-ack > 5 phút (xem §1, §8.3) |
 | AlertTicketSagaFailed (Admin) | ✅ | ✅ | ✅ | — | Saga Failed cần operator reprocess (xem §53.11) |
+| DeviceOffline (Customer) | ✅ | ✅ | — | — | Từ `DeviceOffline` Alert (Warning) — Customer biết pin mất giám sát (§52.6) |
+| DeviceOffline (Staff/ops) | ✅ | ✅ | — | — | Từ `IotDeviceWentOfflineEvent` — Staff đi kiểm tra device tại site (§52.6) |
 
 ### 3.5. Endpoints
 ```
@@ -3569,6 +3593,15 @@ public static readonly Counter InboxProcessingFailed = Metrics
    - Ticket reuse vs new ratio
    - Inbox processing failures by consumer
 
+5. **IoT Device Monitoring** (Sprint IoT-1/7, xem §52.12):
+   - Devices online/offline count — gauge (`iot_devices_online_count` / `iot_devices_offline_total`)
+   - Heartbeat rate by device + last-seen age
+   - Sensor readings ingested vs rejected (`iot_sensor_readings_ingested_total` / `iot_sensor_readings_rejected_total{reason}`)
+   - Local queue depth per device (phát hiện mất mạng kéo dài)
+   - Reject reason breakdown (clock_drift / sensor_outlier)
+   - Firmware update status (`iot_firmware_updates_total{status}`)
+   - (MQTT P3) broker connected clients + LWT offline events
+
 #### Alert rules (`alertmanager.yaml`)
 ```yaml
 groups:
@@ -3600,6 +3633,19 @@ groups:
         for: 5m
         annotations:
           summary: "Saga Failed phát sinh trong 5 phút — admin reprocess theo runbook 08-saga-failed.md"
+
+      # Sprint IoT-1 — IoT device ops (xem §52.12)
+      - alert: IotDevicesOfflineSpike
+        expr: increase(iot_devices_offline_total[10m]) > 2
+        for: 5m
+        annotations:
+          summary: "Nhiều IoT device chuyển Offline trong 10 phút — kiểm tra mạng site / nguồn / broker"
+
+      - alert: IotIngestRejectHigh
+        expr: rate(iot_sensor_readings_rejected_total[15m]) > 0.2
+        for: 5m
+        annotations:
+          summary: "Tỉ lệ reject reading IoT cao (clock_drift/outlier) > 15 phút — kiểm tra NTP/calibration device"
 
   # SLO error budget burn rate (xem §40.5)
   - name: slo
@@ -3855,6 +3901,7 @@ Mục tiêu: PR CI time ≤ 10 phút.
 - 3 ThresholdConfig (1 per type)
 - 10 BatteryAsset gắn với 5 Customer (mỗi customer 2 asset)
 - 10000 SensorReading (last 7 days, 1 reading/10min, có chèn ~5 anomaly events)
+- **1 IotDevice** (`DeviceCode=GW-DEMO-001`, `Model=ESP32-S3-N16R8`, `Status=Active`, `ConfigJson.batteryMappings` map 2–3 BatteryAsset qua `unitId` 1–3) + API key hash seed (key plaintext in ra console khi seed cho demo) + vài `IotDeviceHeartbeat` gần nhất + 1 `IotDeviceCalibration` (Voltage offset mẫu). Đủ để demo provision/heartbeat/offline mà không cần phần cứng.
 
 **Ticket (TicketService):**
 - 5 KnowledgeBaseArticle (1 per category)
@@ -3881,6 +3928,10 @@ Mục tiêu: PR CI time ≤ 10 phút.
 7. AuthService `SeedSagaPermissions` + `BindSagaPermissionsToRoles` (`#166`) — data migration (KHÔNG schema change); publish `PermissionsChangedEvent` để invalidate cache cross-service. Step này có thể chạy song song với #160–#163 vì khác DB; nhưng PHẢI hoàn tất trước khi enable Saga admin endpoints (#163 cutover).
 
 Mọi migration step phải pass rollback test trước khi apply step kế tiếp.
+
+**Sprint IoT-1 migration (`AddIotDeviceManagement`, sau Sprint 5B):**
+- BatteryService `AddIotDeviceManagement` — 5 entity (`IotDevice`, `IotDeviceHeartbeat`, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`) + `create_hypertable('iot_device_heartbeats','time')` (retention 30 ngày) + thêm `SensorReading.SourceType` (NOT NULL default `IotGateway` → seed data cũ = IotGateway) **và** `SensorReading.SensorSourceCode` (nullable) — **B9**, xem §1.3.4/§52.2.
+- Chạy độc lập DB BatteryService, không phụ thuộc thứ tự Saga ở trên; vẫn phải pass rollback test (`Down()` drop 5 bảng + 2 column).
 
 ### 12.3. Migration checklist (theo `be.md §14`)
 - [ ] Tên migration mô tả rõ
@@ -3990,8 +4041,18 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 - **A04 Insecure design:** state machine validate transition, không tin client
 - **A05 Misconfig:** SecurityHeadersMiddleware đã có (X-Frame-Options, CSP)
 - **A07 AuthN failures:** rate limit login, login attempt tracking đã có
-- **A08 Software integrity:** dependabot đã có (PR #45 ví dụ)
+- **A08 Software integrity:** dependabot đã có (PR #45 ví dụ); **OTA firmware verify SHA-256 trước khi flash** (§52.7)
 - **A09 Logging:** Serilog + CorrelationId
+
+### 14.8. IoT device security (§52)
+- [ ] **API key per-device** chỉ lưu **hash** (không plaintext), key hiện 1 lần khi tạo/provision, hỗ trợ **rotate/revoke**; scope giới hạn (`sensor.ingest`/`device.heartbeat`/`environmental.ingest`).
+- [ ] Mọi ingest/heartbeat phải kèm `X-Device-Code` + device `Status=Active`; reject nếu device `Offline/Decommissioned`.
+- [ ] **Anti-spoofing:** reject clock skew > 5 phút, reject outlier, auto-disable device sau N outlier (EC-24/EC-25); device chỉ gửi được reading cho battery trong mapping của nó (§52.2).
+- [ ] **TLS:** HTTPS cho ingest/provision/firmware; MQTT-over-TLS 8883 (production) — dev mới `setInsecure()`.
+- [ ] **(MQTT)** credential MQTT per-device + **ACL phân quyền topic** — device chỉ pub/sub topic của chính nó (`infra/mqtt/acl.conf`, §52.14).
+- [ ] **Rate limit per device:** 60 requests/minute/device cho ingest (§1.8); broker connection limit.
+- [ ] OTA `downloadUrl` là **signed URL** hết hạn ngắn; firmware verify SHA-256 trước khi ghi partition (§52.7).
+- [ ] Audit: tạo/rotate/revoke device key + decommission device → `AuditLog` (`Action="IotDeviceKeyRotate"`/`"IotDeviceDecommission"`).
 
 ---
 
@@ -4087,6 +4148,26 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 # - AlertEscalationBackgroundService (Sprint 5B đổi sang publish BatteryAlertEscalationRequestedEvent, KHÔNG republish BatteryAnomalyDetectedEvent — xem §1, §53.4)
 # - AlertAutoResolveBackgroundService
 # - OutboxRelayBackgroundService
+
+# Sprint IoT-1 additions (ESP32 edge device — xem §52/§52bis)
+/scaffold-entity BatteryService IotDevice
+/scaffold-entity BatteryService IotDeviceHeartbeat          # custom hypertable migration, retention 30d
+/scaffold-crud   BatteryService IotDeviceCalibration
+/scaffold-crud   BatteryService IotFirmwareRelease
+/scaffold-entity BatteryService IotFirmwareUpdateLog
+# Migration thêm tay: AddIotDeviceManagement (5 entity + heartbeat hypertable + SensorReading.SourceType/SensorSourceCode — B9)
+/scaffold-cqrs-command BatteryService IotDevice Create        # admin tạo device + sinh API key (hash) + (MQTT) credential
+/scaffold-cqrs-command BatteryService IotDevice Provision
+/scaffold-cqrs-command BatteryService IotDevice Heartbeat
+/scaffold-cqrs-command BatteryService IotDevice UpdateConfig
+/scaffold-cqrs-command BatteryService IotDevice MarkOffline   # dùng cho MQTT LWT (§52.6)
+/scaffold-cqrs-query   BatteryService IotDevice GetList
+/scaffold-cqrs-query   BatteryService IotDevice HeartbeatHistory
+# Background services làm tay:
+# - IotDeviceOfflineDetectionBackgroundService (2 phút — backup cho LWT)
+# - CalibrationExpiryNotificationService
+# MQTT (P3, optional — §52.14): Infrastructure/Mqtt/{MqttBridgeBackgroundService,MqttTopicMap,TelemetryMessageHandler,LastWillHandler} + Security/DeviceApiKeyService — làm tay (không scaffold)
+# Broker hạ tầng: infra/mqtt/ (EMQX/Mosquitto + TLS 8883 + ACL per-device)
 ```
 
 ### 16.2. TicketService (sprint 3-4)
@@ -4205,6 +4286,13 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 # Sprint 5B additions (xem §3.2, §53)
 /scaffold-consumer NotificationService BatteryAlertEscalationRequestedEvent
 /scaffold-consumer NotificationService AlertTicketSagaFailedEvent
+
+# Sprint 6 additions (environmental — xem §3.4)
+/scaffold-consumer NotificationService EnvironmentalIncidentDetectedEvent
+/scaffold-consumer NotificationService EnvironmentalIncidentResolvedEvent
+
+# Sprint IoT-1 addition (device offline — xem §52.6, §3.4)
+/scaffold-consumer NotificationService IotDeviceWentOfflineEvent
 
 # Tests
 /scaffold-unit-tests NotificationService Notification
@@ -4415,25 +4503,35 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#164` endpoint st
 - [ ] **B2-finalize** — Hoàn thiện `.claude/docs/ai-research-references.md` với paper cite đầy đủ cho 15 anomaly types — #153
 
 ### Sprint IoT-1 (song song Sprint 6: 27/7–9/8/2026)
-**Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị gateway simulator/hardware path cho demo.
+**Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị **ESP32** simulator/hardware path cho demo.
 
 **Owner:** **Thái** (BatteryService domain primary). Sprint 5B work của Thái (#158/#159/#163-Battery) hoàn tất 26/7, ngay liền IoT-1 27/7 — Thái tiếp tục BatteryService domain seamlessly.
 
 **Sprint 6 trong cùng window:** Duy + Thắng đảm nhiệm NotificationService finalization. Sprint 5B carryover verify items (2 Saga consumer + 2 template + dispatcher debounce — pass-14 add) lightweight cho Thắng (đã code phần Saga consumer trong #163, chỉ verify present).
 
-**Scope note:** Sprint này có owner riêng để không block NotificationService Sprint 6. Nếu thiếu nhân lực, giữ `IotFirmware*` ở backlog và vẫn phải hoàn thành provision + heartbeat + ingest + offline. **Hardware pilot** (RasPi + RS485) cần đối tác hỗ trợ — Leader liên hệ trước Sprint 5B kết thúc để không bị block giữa IoT-1.
+**Scope note:** Sprint này có owner riêng để không block NotificationService Sprint 6. Nếu thiếu nhân lực, giữ `IotFirmware*` + **MQTT (P3, §52.14)** ở backlog và vẫn phải hoàn thành provision + heartbeat + ingest + offline (HTTPS đủ cho MVP/demo). **Hardware pilot** (ESP32-S3 + MAX485 + RS485 multi-drop) cần đối tác hỗ trợ phần cứng — Leader liên hệ trước Sprint 5B kết thúc để không bị block giữa IoT-1.
 **Tasks:**
-- [x] Tạo tài liệu triển khai riêng `iot.md`: kiến trúc, thiết bị phần cứng, backend backlog, gateway software, sprint plan.
+- [x] Tạo bộ tài liệu triển khai IoT v2: `newiot.md` (thiết kế ESP32+MQTT), `overall.iot.md` (BOM + luồng), `wiring-diagram.md` (đấu dây), `hardware-bom.csv` (mua sắm). Bản `iot.md` (RPi v1) deprecated.
 - [ ] Entity + migration `AddIotDeviceManagement`: `IotDevice`, `IotDeviceHeartbeat` hypertable, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`.
 - [ ] Thiết kế API key per-device: sinh key khi admin tạo device, chỉ lưu hash, hỗ trợ rotate/revoke, scope `sensor.ingest` + `device.heartbeat`.
 - [ ] Admin endpoints: `POST/GET/PUT/DELETE /api/v1/admin/iot-devices`, `POST/GET /api/v1/admin/iot-firmware-releases`.
 - [ ] Device endpoints: `POST /api/v1/iot-devices/provision`, `POST /api/v1/iot-devices/heartbeat`, `GET /api/v1/iot-devices/firmware-check`, `PUT /api/v1/iot-devices/firmware-update-log/{id}`.
 - [ ] Update `POST /api/sensor-readings/batch`: nhận thêm `X-Device-Code`, `Idempotency-Key`, `deviceTimestamp`, hỗ trợ mapping `batteryAssetSerial` nhưng vẫn giữ legacy `batteryAssetId` cho simulator/MVP.
 - [ ] Validate IoT-specific: clock skew <= 5 phút, reject sensor outlier, apply calibration offset/scale, update `IotDevice.LastSeenAt`.
-- [ ] `IotDeviceOfflineDetectionBackgroundService`: device Active mất heartbeat > 5 phút => mark Offline, tạo `DeviceOffline` alert cho battery liên quan, publish event notification.
-- [ ] Gateway simulator script: gửi heartbeat + sensor batch định kỳ, queue local khi backend down, retry với `Idempotency-Key`.
-- [ ] Gateway hardware pilot guide: Raspberry Pi + RS485/CAN path, mapping BMS register sang payload backend.
-- [ ] Gateway route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*`.
+- [ ] `IotDeviceOfflineDetectionBackgroundService`: device Active mất heartbeat > 5 phút => mark Offline, tạo `DeviceOffline` alert cho battery liên quan, publish `IotDeviceWentOfflineEvent`.
+- [ ] Khai báo `IotDeviceWentOfflineEvent` trong SharedContracts (§1.7) + **NotificationService**: `IotDeviceWentOfflineConsumer` + template device-offline (push/in-app, routing §3.4) — **+1 consumer / +1 template ngoài baseline Sprint 6 `#107`/`#111`** (IoT-1 chạy song song Sprint 6, owner Thái phối hợp Duy/Thắng).
+- [ ] ESP32/simulator script: gửi heartbeat + sensor batch định kỳ, queue local (NVS/LittleFS) khi backend down, retry với `Idempotency-Key`. MVP có thể dùng `mock_bms` (data giả) trước khi có BMS thật.
+- [ ] ESP32 hardware pilot guide: ESP32-S3 + MAX485 + RS485/Modbus multi-drop (mỗi BMS 1 `unitId`), mapping BMS register sang payload backend (tham chiếu `newiot.md` §5/§8, `wiring-diagram.md`).
+- [ ] IoT route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*` (xem §0bis.3).
+- [ ] **(P3 — MQTT realtime, optional/giãn sang Sprint 7 nếu thiếu nhân lực — §52.14)** Xây hạ tầng MQTT, gồm:
+  - [ ] Dựng broker `infra/mqtt/` (EMQX/Mosquitto, Docker) + TLS 8883 + `mosquitto.conf` + `certs/`.
+  - [ ] Cấp **credential MQTT per-device** (gắn `IotDevice`) + **ACL phân quyền topic per-device** (`infra/mqtt/acl.conf`).
+  - [ ] `MqttBridgeBackgroundService` (`Infrastructure/Mqtt/`) subscribe `telemetry`/`heartbeat`/`status`, đăng ký DI `AddHostedService`.
+  - [ ] `TelemetryMessageHandler` → reuse `SensorReadingBatchIngestCommand` (không viết lại validate/insert/anomaly).
+  - [ ] `LastWillHandler`: `status=offline` → `IotDeviceMarkOfflineCommand` (mark Offline tức thì) + alert `DeviceOffline`.
+  - [ ] `MqttTopicMap` + `IMqttBridgePublisher` (publish downlink `cmd`: đổi config / trigger OTA).
+  - [ ] Thêm broker vào docker-compose (xem §51) — chỉ bật khi triển khai MQTT.
+  - [ ] Tests: telemetry qua broker đi đúng ingest command; LWT → Offline + alert; ACL chặn device lạ.
 - [ ] Unit/integration tests: provision, heartbeat, offline detection, ingest dedup, clock skew, outlier, calibration, firmware check happy path.
 - [ ] **B9** — Thêm `SensorReadingSourceTypeEnum` + field `SensorReading.SourceType` (NOT NULL default IotGateway) vào migration `AddIotDeviceManagement` + update ingest endpoint accept `sourceType` per item (BMS/IotGateway/External) (xem §1.3.4 + §1.3.6) — #154
 
@@ -4479,11 +4577,11 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#164` endpoint st
 - [ ] CSV/XLSX export — #114
 - [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger (**bao gồm Saga admin endpoints từ Sprint 5B**) — #115
 - [ ] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident + **Alert–Ticket Saga flow** với CorrelationId=AlertId xuyên BatteryService↔TicketService) — #116
-- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, **Alert–Ticket Saga (verify panel từ Sprint 5B đã hiển thị metric đúng)**, System Health — #117
+- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, **IoT Device Monitoring (online/offline, ingest/reject, queue depth — §9.2 #5)**, **Alert–Ticket Saga (verify panel từ Sprint 5B đã hiển thị metric đúng)**, System Health — #117
 - [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency + **verify Saga rules từ Sprint 5B đã active** — #118
 - [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example + **2 Saga seed row từ Sprint 5B giữ nguyên** — #119
 - [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle + **Saga happy path + failure recovery**) — #119
-- [ ] IoT hardware pilot E2E: Raspberry Pi/gateway simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng gateway tạo `DeviceOffline` alert — #127
+- [ ] IoT hardware pilot E2E: ESP32-S3 (RS485 multi-drop) / simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng device tạo `DeviceOffline` alert (job 5 phút, hoặc LWT tức thì nếu đã bật MQTT P3) — #127
 - [ ] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #126
 - [ ] **B4** — Cascade Risk Assessment rule-based: field `BatteryAsset.CascadeRiskScore`/`CascadeRiskUpdatedAt`/`ElectricalTopology` + migration `AddCascadeRiskFields` + `CascadeRiskCalculator` + `CascadeRiskBackgroundService` (5min) + 3 endpoint + integration với Priority Matrix (xem §31.7) — #156
 - [ ] **B10** — `AnomalyTypeEnum.SensorMismatch = 15` + cross-source validation logic trong `ThresholdCheckBackgroundService` (BMS vs IoT delta 0.5V/5°C) + migration value bổ sung enum + 3 unit test (xem §1.6.6) — #157
@@ -4503,10 +4601,10 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#164` endpoint st
 - [ ] Performance testing + tuning per §13.4 SLAs (**bao gồm 3 Saga endpoint SLA mới + end-to-end Saga 4s P95**) — #120
 - [ ] Security audit (OWASP checklist §14.7) (**bao gồm Saga admin endpoints: TicketSagaReprocess audit log + Idempotency-Key required + AdminIpWhitelist apply**) — #121
 - [ ] Documentation: API contracts final (**Saga 8 contracts + V1/V2 BatteryAnomalyDetected**), README per service (**TicketService README bao gồm Saga ops section**), postman collection (**+ Saga admin folder**) — #122
-- [ ] Documentation: IoT runbook final (`iot.md`), gateway setup checklist, Postman/curl collection cho provision/heartbeat/ingest — #122
+- [ ] Documentation: IoT runbook final (`newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`), ESP32 setup checklist, Postman/curl collection cho provision/heartbeat/ingest — #122
 - [ ] Final seed data với scenarios realistic (**giữ 2 Saga seed row từ Sprint 5B, không refactor**) — #123
 - [ ] Demo script: walkthrough end-to-end flow trên Mobile + Web — #123
-- [ ] Demo script IoT: simulator path + hardware path, normal reading, overheat/low SOC alert, stop heartbeat => `DeviceOffline` — #123
+- [ ] Demo script IoT: simulator/ESP32 path + hardware path (RS485 multi-drop), normal reading, overheat/low SOC alert, stop ESP32 => `DeviceOffline` (LWT tức thì nếu có MQTT, hoặc job 5 phút) — #123
 - [ ] Demo script Saga: happy path (Alert → Ticket → link → `Completed`) + failure scenario (BatteryService down → Saga `Failed` → admin reprocess → recovery) không tạo Ticket trùng — #123
 - [ ] Architecture poster A1: thêm Saga state machine diagram (Initial → TicketRequested → TicketProvisioned → AlertLinkRequested → Completed/Failed) — #123
 - [ ] Bug bash + bug fix (**ưu tiên Saga edge case: timeout, late response, reconciliation, conflict TicketId**) — #124
@@ -4637,6 +4735,12 @@ public static class PermissionCodes {
     public const string AlertResolve = "battery.alert.resolve";
     public const string BatteryDashboardView = "battery.dashboard.view";
 
+    // IoT device management (§52)
+    public const string IotDeviceView = "iot.device.view";
+    public const string IotDeviceManage = "iot.device.manage";          // create/update config/decommission + sinh/rotate API key
+    public const string IotFirmwareManage = "iot.firmware.manage";      // upload/list firmware release
+    public const string IotCalibrationManage = "iot.calibration.manage"; // tạo/xem calibration (Staff/Admin)
+
     // Ticket
     public const string TicketCreate = "ticket.create";
     public const string TicketViewOwn = "ticket.view-own";
@@ -4684,6 +4788,10 @@ public static class PermissionCodes {
 | AlertAcknowledge | ✅ | ✅ | ✅ | ✅ |
 | AlertResolve | ✅ | ✅ | ✅ | — |
 | BatteryDashboardView | ✅ | ✅ | — | — |
+| IotDeviceView | ✅ | ✅ | ✅ | — |
+| IotDeviceManage | ✅ | — | — | — |
+| IotFirmwareManage | ✅ | — | — | — |
+| IotCalibrationManage | ✅ | — | ✅ | — |
 | TicketCreate | ✅ | ✅ | ✅ | ✅ |
 | TicketViewOwn | — | — | ✅ (assigned) | ✅ (owned) |
 | TicketViewAll | ✅ | ✅ | — | — |
@@ -4782,11 +4890,12 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 ## 23. Risk register
 
-> **27 risk items** chia 4 nhóm chính:
+> **29 risk items** chia 5 nhóm chính:
 > - **R-01..R-13**: Technical baseline (state machine, SLA, dedup, migration, performance, security)
 > - **R-14..R-18**: Sprint 5B Saga design (forward recovery, duplicate, scope creep, cutover, restart)
 > - **R-19..R-22**: Sprint 5B operational (preflight cleanup, mapping, Quartz schema, notification spam)
 > - **R-23..R-27**: Capacity + planning + external (Duy overload, IoT-1 owner, bus factor, ext quota, mentor schedule)
+> - **R-28..R-29**: IoT v2 pivot (ESP32 firmware codebase mới, BMS procurement / register map — xem §52, `overall.iot.md` §D)
 >
 > Mỗi risk có owner cụ thể. Leader review weekly trong daily standup, escalate Sev-High risk khi likelihood tăng.
 
@@ -4819,6 +4928,8 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-25 | Bus factor=1 cho Saga code → Duy unavailable block toàn bộ Sprint 5B | Low | Critical | Pair programming Duy+Thắng cho `#162`, code walkthrough mandatory sau merge, Thắng viết ≥30% Saga test, backup owner per task (xem §17 Bus factor warning) | Duy + Thắng |
 | R-26 | External service quota hết giữa demo Sprint 8 (email/SMS/Expo) | Med | Med | Đăng ký nhiều provider + fallback in-app + monitor quota hàng tuần (xem §56.15 external dependency register) | Leader |
 | R-27 | Mentor (GVHD) không available cho dry-run review post-Sprint 8 | Low | High | Leader confirm GVHD lịch trước Sprint 8 kết thúc, book 2 slot dự phòng (xem §56.14 timeline) | Leader |
+| R-28 | Pivot ESP32 → firmware C++/Arduino là **codebase mới**, team BE thiếu kinh nghiệm embedded → IoT-1 slip | Med | Med | MVP `mock_bms` (data giả) chứng minh flow backend trước, không phụ thuộc firmware; MQTT là P3 optional (HTTPS đủ demo); reuse logic từ `iot.md` v1; pair với đối tác phần cứng (xem §52.10, R-24) | Thái |
+| R-29 | Mua nhầm BMS không có register map / không đổi được `unitId` → không đọc được data dù pin chạy tốt (multi-drop fail) | Med | High | Checklist mua BMS bắt buộc (RS485/Modbus + register map + đổi unitId + CRC — `overall.iot.md` §A4); test 1 BMS bằng USB-RS485 + Modbus Poll trước khi mua số lượng; ESP32 `mock_bms` fallback cho demo | Thái + Leader |
 
 ---
 
@@ -4948,6 +5059,17 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | **Tombstone** | Row terminal-state (Completed/Failed) được giữ lại trong DB để chống event/message cũ tạo lại entity mới — không hard-delete |
 | **EF Consumer Outbox** | MassTransit feature commit consumed message + outgoing message cùng `DbContext` transaction của business action |
 | **Wire value** | Số nguyên ổn định cross-service trong contract. Trong dự án này, wire value của `AnomalyType` **bằng** integer của `AnomalyTypeEnum` ở §1.3.6 (sau v4.5 reconcile) — single source of truth. Upgrade không breaking khi chỉ thêm enum value mới (existing values KHÔNG ĐƯỢC thay đổi); subscriber luôn handle unknown wire value an toàn cho forward-compatible rolling deploy. |
+| **IoT edge device** | Thiết bị tại site đọc sensor/BMS rồi gửi backend. Chuẩn v2 = **ESP32-S3** (`DeviceType=StandaloneSensor`); v1 legacy = Raspberry Pi. Là điểm kiểm soát bảo mật duy nhất (1 device = 1 key + TLS). Xem §52, ADR-016 |
+| **BMS** | Battery Management System — mạch quản lý tích hợp trong pack pin, expose voltage/current/temp/SOC/SOH/error qua RS485-Modbus hoặc CAN |
+| **RS485 / Modbus RTU** | Chuẩn truyền nối tiếp công nghiệp (request/response) ESP32 dùng để đọc BMS. Bus đa điểm (multi-drop) |
+| **Multi-drop** | Nhiều BMS nối chung 1 cặp dây RS485 A/B; mỗi BMS có **`unitId`** (slave address) khác nhau để ESP32 poll lần lượt → 1 ESP32 quản nhiều pin |
+| **`unitId`** | Địa chỉ slave Modbus của 1 BMS trên bus multi-drop (1,2,3…). Map sang `BatteryAsset` qua `IotDevice.ConfigJson.batteryMappings` (§52.2) |
+| **MQTT** | Giao thức pub/sub realtime (kết nối thường trực, <100ms) cho telemetry/downlink (v2/P3 — §52.14). Khác HTTPS REST (request/response, v1) |
+| **Broker** | Phần mềm trung chuyển MQTT (EMQX/Mosquitto) — như "database của message", chỉ deploy + config (`infra/mqtt/`), không viết code |
+| **LWT (Last Will & Testament)** | Cơ chế MQTT: broker tự publish `offline` khi device rớt kết nối (keep-alive ~60s) → backend phát hiện offline tức thì thay vì chờ job 5 phút (§52.6) |
+| **Calibration** | Hiệu chuẩn sensor: `calibrated = raw × scaleFactor + offsetValue`, lấy chuẩn từ thiết bị đo (Fluke 87V). Lưu `IotDeviceCalibration`, có `ValidUntil` (§52.8) |
+| **Cross-source validation** | So reading cùng pin từ 2 nguồn độc lập (BMS-relayed `SourceType=Bms` vs INA226 `SourceType=IotGateway`) trong cửa sổ 60s → `SensorMismatch` nếu lệch quá ngưỡng (§1.6.6, §52.9) |
+| **OTA** | Over-The-Air firmware update — backend đẩy `.bin` (signed URL + SHA-256), ESP32 verify rồi flash, rollback nếu fail (§52.7) |
 
 ### References
 
@@ -4972,6 +5094,14 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 **AI & battery research (B2):**
 - Xem `.claude/docs/ai-research-references.md` cho danh sách paper đầy đủ cite cho 15 anomaly types, IsolationForest hyperparameter justification, NASA dataset spec.
+
+**IoT (v2 — ESP32 + MQTT):**
+- `newiot.md` — thiết kế tổng thể ESP32-S3 + MQTT (topic, broker, bridge, firmware, roadmap P0–P5).
+- `overall.iot.md` — BOM phần cứng đầy đủ + luồng vận hành (provision/data/anomaly/offline/calibration/OTA).
+- `wiring-diagram.md` — sơ đồ đấu dây + bảng GPIO ESP32-S3.
+- `hardware-bom.csv` — bảng mua sắm theo cấp ngân sách (Cấp 0→4).
+- `iot.md` — **deprecated** (Raspberry Pi v1, Python) — chỉ tham khảo logic queue/calibration/validation.
+- MQTT/MQTTnet docs, Eclipse Mosquitto / EMQX docs, Modbus RTU spec — cho bridge + broker + firmware.
 
 **ADRs:**
 - `docs/adr/0005-b2b-itil-stance.md` — B2B/B2C scope + ITIL stance (B5)
@@ -6239,7 +6369,7 @@ Folder `docs/adrs/`:
 | ADR-013 | Hybrid threshold + AI anomaly detection |
 | ADR-014 | Account profile extension tables in AuthService (vs stuffing `Account` / separate UserService) |
 | ADR-015 | TestContainers over shared dev Postgres for integration tests |
-| ADR-016 | HTTPS REST for IoT Gateway → Backend (vs MQTT/CoAP) — xem §52.10 |
+| ADR-016 | IoT edge = **ESP32-S3** (pivot từ Raspberry Pi); transport **hybrid**: HTTPS REST (v1 — bulk/admin/firmware/flush) + **MQTT** (v2 — realtime <100ms, LWT offline, downlink command). BMS đọc qua RS485/Modbus RTU multi-drop. — xem §52.10 |
 | ADR-017 | Remove Energy and CO2 analytics from BatteryService scope — xem §53.1 |
 | ADR-018 | Orchestrated Alert–Ticket Saga + forward recovery (vs choreography hoặc 2PC) — xem §8.3, §53.4–§53.8 |
 
@@ -6315,6 +6445,8 @@ Restore Postgres ngụ ý restore cả `alert_ticket_saga_states` + `qrtz_*` tab
 - `08-saga-failed.md`              ← Sprint 5B, task `#165` — Alert–Ticket Saga state=Failed cần reprocess
 - `09-saga-stuck.md`               ← Sprint 5B, task `#165` — Saga non-terminal không update > 10 phút
 - `10-saga-duplicate-canonical.md` ← Sprint 5B — chọn Ticket canonical khi preflight phát hiện duplicate `OriginAlertId` hoặc duplicate active `(BatteryAssetId, Category)`
+
+> **IoT device ops (Sprint IoT-1):** Không mint runbook đánh số riêng — quy trình xử lý sự cố device (offline triage, broker down, queue đầy, clock drift, reject spike) đã nằm ở **§52.15 Failure modes** + **§52.6 offline detection**, và setup/hardware runbook ở `newiot.md`/`overall.iot.md`/`wiring-diagram.md`. Nếu pilot phần cứng mở rộng, có thể tách `11-iot-device-offline.md` từ §52.15 (khi đó cập nhật count runbook ở §66/§67).
 
 Sample structure:
 ```markdown
@@ -7127,7 +7259,7 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, + **B3 (Priority Matrix Impact×Urgency)** | 1.2× |
 | Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment, + **B6 (StaffSkillTierEnum), B7 (Escalation closure rule)** | 1.4× |
 | Sprint 5B | Battery scope cleanup + Alert–Ticket Saga | + bỏ Energy/CO2 + `Site.CapacityKw`, harden Outbox/Inbox, Saga orchestration, ambient/environmental/tier-2 sau P0 | **1.8× — bắt buộc defer scope phụ, xem mục cuối** |
-| Sprint IoT-1 | IoT Gateway backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, gateway simulator/hardware guide, + **B9 (SensorReading.SourceType BMS/IoT)** | 1.1× sprint song song Sprint 6 |
+| Sprint IoT-1 | IoT Edge Device backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, ESP32 simulator/hardware guide, MQTT P3 optional (§52.14), + **B9 (SensorReading.SourceType BMS/IoT)** | 1.1× sprint song song Sprint 6 |
 | Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB**, + **B8 (KB Code + TicketKbReference)**, + **Sprint 5B carryover** (verify 2 Saga consumer + 2 template + dispatcher debounce — pass-14 add) | 1.6× (up from 1.5×) |
 | Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management**, + **B4 (Cascade Risk rule-based), B10 (SensorMismatch anomaly)**, + **Sprint 5B carryover** (verify Saga panel/alert/swagger/tracing/seed/E2E — pass-15 add) | 1.6× (up from 1.5×) |
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report**, + **Sprint 5B carryover** (Saga demo script + Mermaid diagram + architecture publish — pass-16 add) | 1.1× (up from giữ nguyên) |
@@ -7155,7 +7287,7 @@ an toàn nếu vẫn giữ toàn bộ ambient/tier-2/environmental trong 7 ngày
 4. SLA pause limits (§33) — Sprint 5
 5. Battery scope cleanup: bỏ Energy/CO2 và `Site.CapacityKw` (§53.1–§53.3) — Sprint 5B
 6. Alert–Ticket Saga + Outbox/Inbox hardening (§8.1–§8.3, §53.4–§53.12) — Sprint 5B
-7. IoT Gateway backend + device lifecycle (§52/§52bis, `iot.md`) — Sprint IoT-1
+7. IoT Edge Device backend + device lifecycle (ESP32 + hybrid HTTPS/MQTT) (§52/§52bis, `newiot.md`/`overall.iot.md`) — Sprint IoT-1
 8. SSE realtime (§34) — Sprint 6
 9. ADR + Runbook (§40) — Sprint 7-8
 
@@ -7198,7 +7330,7 @@ Thêm vào §18:
 2. **Endpoints: 100+ → 220+** (đồng bộ §67 stats)
 
 3. **Integration events: 17 → 30+**
-   - Mới: `SohRapidDegradationEvent`, `SohWarningEvent`, `SohCriticalEvent`, `SiteAlertAggregatedEvent`, `WebhookEventPublishedEvent`, `BatteryAlertEscalationRequestedEvent`, `BatteryAnomalyDetectedV2Event`.
+   - Mới: `SohRapidDegradationEvent`, `SohWarningEvent`, `SohCriticalEvent`, `SiteAlertAggregatedEvent`, `WebhookEventPublishedEvent`, `BatteryAlertEscalationRequestedEvent`, `BatteryAnomalyDetectedV2Event`, `EnvironmentalIncidentDetectedEvent`, `EnvironmentalIncidentResolvedEvent`, `IotDeviceWentOfflineEvent` (§52.6).
    - Alert–Ticket Saga bổ sung 8 command/event contracts trong `SharedContracts/Saga/AlertTicket/` (CreateTicketFromAlertCommand, TicketProvisionedForAlertEvent, TicketProvisionForAlertRejectedEvent, LinkAlertToTicketCommand, AlertLinkedToTicketEvent, AlertLinkToTicketRejectedEvent, ReconcileAlertTicketSagaCommand, AlertTicketSagaFailedEvent).
 
 4. **Background services per service tăng**
@@ -7206,7 +7338,7 @@ Thêm vào §18:
    - TicketService: 4 → 6 (thêm SlaPauseEnforcement, ApprovalTimeout, PreventiveMaintenance); Sprint 5B thêm Quartz scheduler endpoint (in-process, dùng `qrtz_*` schema) cho Saga retry/timeout.
 
 5. **Migration impact**
-   - BatteryService cần migration mới: `AddSiteAndGroup`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`, `RemoveSiteCapacityKw`, `AddDurableMessagingFoundation`, `AddAlertTicketLinkIndex`.
+   - BatteryService cần migration mới: `AddSiteAndGroup`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`, `RemoveSiteCapacityKw`, `AddDurableMessagingFoundation`, `AddAlertTicketLinkIndex`, `AddIotDeviceManagement` (Sprint IoT-1 — 5 IoT entity + heartbeat hypertable + `SensorReading.SourceType`/`SensorSourceCode`).
    - TicketService cần: `AddTicketRelations`, `AddTicketSubscriptions`, `AddCommentAdvanced`, `AddSlaPauseLimits`, `AddMaintenanceSchedule`, `AddDurableMessagingFoundation`, `AddAlertTicketSagaFoundation`, `AddQuartzPersistenceSchema` (11 bảng `qrtz_*` cho durable scheduler — chạy bằng official Quartz.NET SQL script, không dùng EF migration sinh từ model).
    - AuthService cần: `AddGdprFields`, `AddPasswordHistory`, `AddSessionLimit`
 
@@ -7214,6 +7346,7 @@ Thêm vào §18:
    - Add `ai-module` service
    - Add `tempo` for tracing
    - Add persistent Saga scheduler configuration; current RabbitMQ image does not include delayed-message plugin.
+   - **(IoT P3)** Add MQTT broker (EMQX/Mosquitto) qua `infra/mqtt/docker-compose.yml` + TLS 8883 + credential/ACL per-device — chỉ khi triển khai MQTT realtime (§52.14).
 
 7. **Documentation deliverables tăng**
    - `docs/adrs/` — 15 ADR files
@@ -7232,33 +7365,47 @@ Thêm vào §18:
 
 # Phần VIII — Bổ sung lần 2 (Final completeness)
 
-> Phần này bổ sung sau khi review lần 3. Scope review ngày 10/6/2026 giữ **IoT Gateway, K8s deployment, App management, Demo prep**, loại Solar Energy/CO2 metrics và bổ sung Alert–Ticket Saga.
+> Phần này bổ sung sau khi review lần 3. Scope review ngày 10/6/2026 giữ **IoT Edge Device (ESP32, pivot từ RPi — ADR-016), K8s deployment, App management, Demo prep**, loại Solar Energy/CO2 metrics và bổ sung Alert–Ticket Saga.
 
 ---
 
-## 52. IoT Gateway & Device Management — P0
+## 52. IoT Edge Device & Device Management — P0
 
-> Solar battery context: backend phải **giao tiếp với IoT gateway thực tế** (Raspberry Pi / ESP32 / industrial gateway). Section trước chỉ có 1 endpoint batch ingest — không đủ cho production.
+> Solar battery context: backend phải **giao tiếp với IoT edge device thực tế**. Theo pivot v2 (ADR-016, `newiot.md`/`overall.iot.md`), edge device chuẩn là **ESP32-S3** (`DeviceType=StandaloneSensor`) đọc BMS qua **RS485/Modbus RTU multi-drop**, gửi backend qua **hybrid HTTPS + MQTT**. Bản v1 (Raspberry Pi, folder `iot/`, Python) vẫn được tham chiếu nhưng KHÔNG còn là đường triển khai chính.
+>
+> "Gateway" trong các tên cũ (DeviceType `Gateway=1`, `firmware-check`, …) vẫn giữ giá trị enum/route — chỉ hiểu lại: ESP32 node = `StandaloneSensor=2`, quản nhiều pin qua multi-drop chứ không phải gateway tập trung.
 
 ### 52.1. Architecture overview
 
 ```
-Battery (sensor)
+Battery + BMS (mỗi pin 1 unitId)
     │
-    │ Modbus/CAN bus
+    │ RS485 / Modbus RTU (multi-drop, 1 bus nhiều BMS)
     ▼
-IoT Gateway (RPi/ESP32)
+ESP32-S3 node  (poll BMS → normalize → calibration → local queue → publish)
     │
-    │ HTTPS REST (đã chọn — xem ADR-016)
-    ▼
-BatteryService API
+    ├───── MQTT (v2, realtime <100ms, 2 chiều) ─────┐
+    │        solar/{site}/{dev}/telemetry           │
+    │        solar/{dev}/heartbeat                   ▼
+    │        solar/{dev}/status (LWT offline)   MQTT Broker (EMQX/Mosquitto)
+    │        solar/{dev}/cmd (downlink)              │ push
+    │                                                ▼
+    │                                   MqttBridgeBackgroundService (subscribe)
+    │                                                │
+    └───── HTTPS REST (v1, bulk/admin/firmware) ─────┤
+             POST /api/sensor-readings/batch         │ cùng đổ vào ▼
+             provision / heartbeat / firmware-check  │
+                                                     ▼
+                                          BatteryService API / Ingest
     │
-    ├──→ Validate device cert + ApiKey
+    ├──→ Validate device API key + (MQTT) credential per-device, device phải Active
     ├──→ Validate timestamp (within 5min skew)
     ├──→ Dedup via Idempotency-Key
+    ├──→ Apply calibration (raw*scale + offset)
     ├──→ Insert sensor_readings (TimescaleDB)
     ├──→ Update device.last_seen_at
-    └──→ Trigger threshold check
+    ├──→ (MQTT LWT status=offline → mark Offline tức thì)
+    └──→ Trigger threshold check → anomaly → alert/ticket/notification
 ```
 
 ### 52.2. New entities
@@ -7269,7 +7416,7 @@ BatteryService API
 | `Id` | Guid | PK |
 | `DeviceCode` | string(64) UNIQUE | "GW-001234" |
 | `DeviceType` | enum (Gateway=1, StandaloneSensor=2) | — |
-| `Model` | string(100) | "RaspberryPi-4B" / "ESP32-WROOM" |
+| `Model` | string(100) | "ESP32-S3-N16R8" (chuẩn v2) / legacy "RaspberryPi-4B" |
 | `FirmwareVersion` | string(20) | "1.2.3" |
 | `MacAddress` | string(17)? | — |
 | `SiteId` | Guid? (FK) | Site mà gateway đặt tại |
@@ -7277,8 +7424,19 @@ BatteryService API
 | `ApiKeyId` | Guid (FK) | Link tới API key |
 | `LastSeenAt` | DateTime? | Update mỗi heartbeat |
 | `LastFirmwareUpdateAt` | DateTime? | — |
-| `BatteryAssetIds` | jsonb | Array — devices có thể quản lý nhiều battery |
-| `ConfigJson` | jsonb? | Per-device config (polling interval, ngưỡng cảnh báo client-side) |
+| `BatteryAssetIds` | jsonb | Array — 1 device quản nhiều battery (multi-drop RS485) |
+| `ConfigJson` | jsonb? | Per-device config: pollingInterval, heartbeatInterval, ngưỡng client-side, **và `batteryMappings[]`** |
+
+**`ConfigJson.batteryMappings[]` (multi-drop RS485 — mỗi BMS 1 `unitId`):**
+```json
+"batteryMappings": [
+  { "batteryAssetSerial": "BAT-2026-001", "unitId": 1, "sensorSourceCode": "primary" },
+  { "batteryAssetSerial": "BAT-2026-002", "unitId": 2, "sensorSourceCode": "primary" }
+]
+```
+> Firmware ESP32 dùng `unitId` để poll đúng BMS trên bus RS485, `batteryAssetSerial` để backend map về `BatteryAsset`, `sensorSourceCode` để phân biệt nguồn (primary/redundant). Backend validate device chỉ được gửi reading cho battery nằm trong mapping của nó.
+
+**API key per-device — scope (§7.2):** `sensor.ingest` + `device.heartbeat` + (nếu device có cảm biến môi trường SHT31/MQ-2/water) `environmental.ingest` — để cùng device key gọi được `/api/ambient-readings/batch` và `/api/environmental-incidents` (§1.8). Chỉ lưu **hash**, key hiện 1 lần khi tạo/provision, hỗ trợ rotate/revoke; MQTT (v2) cấp thêm credential riêng + ACL topic per-device (§52.14).
 
 #### `IotDeviceHeartbeat` (time-series, append-only)
 | Field | Type |
@@ -7288,13 +7446,15 @@ BatteryService API
 | `Cpu` | decimal(5,2)? |
 | `MemoryUsageMb` | int? |
 | `DiskFreeMb` | int? |
-| `Temperature` | decimal? (gateway chassis temp) |
+| `Temperature` | decimal? (chassis/chip temp) |
 | `ConnectedSensorCount` | int |
 | `LocalQueueDepth` | int (số reading chưa upload) |
 | `IpAddress` | string(45)? |
 | `SignalStrengthDbm` | int? |
 
 **Retention:** 30 ngày.
+
+> **ESP32 field mapping:** ESP32 không có CPU/disk theo nghĩa Linux → gửi `Cpu`=null, `DiskFreeMb`=null. Map: chip temp → `Temperature`, free heap → `MemoryUsageMb`, WiFi RSSI → `SignalStrengthDbm`, độ sâu queue NVS/LittleFS/SD → `LocalQueueDepth`. Các field nullable nên RPi (legacy) gửi đầy đủ, ESP32 gửi tập con — không cần migration khác.
 
 #### `IotDeviceCalibration`
 | Field | Type | Note |
@@ -7343,10 +7503,10 @@ Step 1: Admin tạo IotDevice + APIKey (scope: sensor.ingest, device.heartbeat)
    POST /api/v1/admin/iot-devices
    → Response: { deviceCode, apiKey, provisioningQrCode }
 
-Step 2: Technician chạy script provision trên gateway hardware
+Step 2: Technician nạp deviceCode + apiKey + WiFi + brokerUrl vào ESP32, ESP32 boot → NTP sync → provision
    $ curl -X POST https://api/api/v1/iot-devices/provision \
        -H "X-Api-Key: $KEY" \
-       -d '{"deviceCode":"GW-001234","macAddress":"...","model":"RPi-4B","firmwareVersion":"1.0.0"}'
+       -d '{"deviceCode":"GW-001234","macAddress":"...","model":"ESP32-S3-N16R8","firmwareVersion":"1.0.0"}'
 
 Step 3: Backend validate + activate device, return device-specific config
    → { configJson, ntpServer, syncIntervalSec, supportedSensors, ... }
@@ -7382,30 +7542,48 @@ X-Device-Code: GW-001234
 Idempotency-Key: <uuid>           # tránh duplicate khi gateway retry
 Content-Type: application/json
 {
-  "deviceTimestamp": "2026-05-12T10:15:30Z",     # NTP-synced gateway time
+  "deviceTimestamp": "2026-05-12T10:15:30Z",     # NTP-synced edge device time (ESP32 không có RTC → NTP bắt buộc)
   "readings": [
     {
       "batteryAssetSerial": "BAT-2026-001",
       "time": "2026-05-12T10:15:30Z",
-      "voltage": 12.6, "current": -5.2, "temperature": 35.4, "socPercent": 78.5
+      "voltage": 12.6, "current": -5.2, "temperature": 35.4, "socPercent": 78.5,
+      "cycleCount": 120, "sohPercent": 94.2, "chargingState": 3,
+      "bmsErrorCode": null, "sensorSourceCode": "primary", "sourceType": 2
     },
     ...
   ]
 }
 ```
+> Các field `cycleCount/sohPercent/chargingState/bmsErrorCode/sensorSourceCode/sourceType` đều optional — BMS/sensor có thì gửi, không thì để null (entity §1.3.4). MQTT (v2) gửi cùng schema payload qua topic `solar/{site}/{dev}/telemetry`.
 
 **Validation:**
-- Reject nếu `deviceTimestamp` skew > 5 phút so với server (gateway clock issue → log + alert).
-- Reject nếu reading values vô lý: voltage > 1000V, temperature < -50°C hoặc > 150°C (sensor lỗi).
-- Apply calibration offset/scale per device + metric.
+- Reject nếu `deviceTimestamp` skew > 5 phút so với server (edge device clock issue → log + alert + metric `reason=clock_drift`).
+- Reject nếu reading values vô lý: voltage âm hoặc > 1000V, temperature < -50°C hoặc > 150°C, socPercent ngoài 0–100, sohPercent ngoài 0–100 (sensor lỗi → `reason=sensor_outlier`).
+- `BmsErrorCode` ≤ 64 ký tự nếu có.
+- Device phải `Active` + có quyền với battery (mapping trong `IotDevice.BatteryAssetIds` / `batteryMappings`).
+- Apply calibration offset/scale per device + metric (`calibrated = raw*scale + offset`) trước khi insert.
 - Insert into TimescaleDB batch (single SQL `COPY` cho performance).
+- **Backward compatibility (MVP):** vẫn chấp nhận payload legacy dùng `items[].batteryAssetId` để demo nhanh với simulator.
 
-### 52.6. Device offline detection
+### 52.6. Device offline detection (2 cơ chế)
 
-`IotDeviceOfflineDetectionBackgroundService` (every 2 phút):
+**Cơ chế 1 — MQTT Last Will & Testament (LWT, v2 — tức thì):**
+- ESP32 đăng ký LWT lúc connect broker: "nếu mất kết nối → broker tự publish `offline` lên `solar/{dev}/status`".
+- Broker phát hiện rớt qua keep-alive (~60s) → `LastWillHandler` (trong `MqttBridgeBackgroundService`) nhận → mark `Status=Offline` **NGAY** (qua `IotDeviceMarkOfflineCommand`) → tạo alert + publish event.
+- Nhanh hơn nhiều so với job 5 phút bên dưới.
+
+**Cơ chế 2 — `IotDeviceOfflineDetectionBackgroundService` (every 2 phút — backup, luôn chạy kể cả khi chưa bật MQTT):**
 - Scan devices `Status=Active AND LastSeenAt < now - 5min` → mark `Status=Offline`.
 - Publish `IotDeviceWentOfflineEvent` → NotificationService notify Customer + Staff.
 - Tạo Alert `DeviceOffline` cho mọi battery gắn với device đó (severity Warning).
+
+> Hai cơ chế bổ trợ: LWT cho phản ứng tức thì khi có broker; job là backup cho cả HTTPS-only (P0–P2) lẫn trường hợp LWT miss.
+
+**Phân vai notification (tránh double-notify):**
+- **Customer** được báo qua **`DeviceOffline` Alert** (AnomalyType=7, Warning) đi đường BatteryAlert sẵn có (§3.4 `DeviceOffline (Customer)`).
+- **Staff/ops** được báo qua **`IotDeviceWentOfflineEvent`** (§1.7) → `IotDeviceWentOfflineConsumer` ở NotificationService → đi kiểm tra device tại site.
+- Cả hai dedup theo `DeviceId` trong cửa sổ offline để không spam khi device chập chờn.
 
 ### 52.7. OTA firmware update flow
 
@@ -7414,7 +7592,7 @@ Content-Type: application/json
 POST /api/v1/admin/iot-firmware-releases
 multipart/form-data:
   version: "1.3.0"
-  deviceModel: "RPi-4B"
+  deviceModel: "ESP32-S3-N16R8"
   channel: stable
   file: firmware.bin
   releaseNotes: "..."
@@ -7453,27 +7631,58 @@ POST   /api/v1/iot-devices/{id}/calibrations              (Staff/Admin)
 GET    /api/v1/iot-devices/{id}/calibrations
 GET    /api/v1/iot-devices/calibrations-expiring?within=30d   (Manager)
 ```
-- Background service alert Manager khi calibration sắp hết hạn.
+- `CalibrationExpiryNotificationService` (background) alert Manager khi calibration sắp hết hạn.
+- Công thức áp dụng lúc ingest: `calibrated_value = raw_value * ScaleFactor + OffsetValue`.
 
 ### 52.9. Multi-sensor per battery support
-Cập nhật `SensorReading` entity:
+Cập nhật `SensorReading` entity (xem §1.3.4):
 - Thêm `SensorSourceCode` (string(20)?) — "primary", "redundant", "external-temp".
-- 1 battery có thể có 3 readings cùng timestamp (3 sensor riêng).
+- 1 battery có thể có nhiều readings cùng timestamp (nhiều sensor riêng).
 - Query realtime: chọn "primary" làm display value, redundant để verify.
 
-### 52.10. Protocol decision (ADR-016 mới)
-**Decision:** HTTPS REST batch ingest cho v1.
-**Lý do:**
-- Đơn giản, no special infra.
-- Idempotency-Key đã có.
-- Polly retry đã có.
-- TLS đơn giản hơn MQTT-over-TLS setup.
+**Quy ước tag nguồn khi ESP32 đọc nhiều sensor (đồng bộ `overall.iot.md` §A5 + §1.6.6):**
 
-**Trade-off:**
-- Latency cao hơn MQTT (1-2s vs <100ms).
-- OK cho monitoring (không phải control-plane).
+| Nguồn vật lý | `SourceType` | `SensorSourceCode` |
+|--------------|--------------|--------------------|
+| BMS đọc qua RS485/Modbus (ESP32 relay) | `Bms` (1) | `primary` |
+| INA226 (đo V/I độc lập qua I2C) | `IotGateway` (2) | `redundant` |
+| DS18B20 (nhiệt thân pin qua 1-Wire) | `IotGateway` (2) | `external-temp` |
 
-**Future:** MQTT broker (HiveMQ/EMQX) khi cần latency < 100ms hoặc bidirectional command.
+> ESP32 chỉ *relay* dữ liệu BMS → vẫn tag `SourceType=Bms` (nguồn gốc là BMS chip), KHÔNG phải `IotGateway`. Nhờ vậy **cross-source validation §1.6.6** (so `Bms` vs `IotGateway` trong cửa sổ 60s) chính là so BMS-relayed vs INA226 → phát hiện `SensorMismatch` đúng nghĩa khi 1 trong 2 nguồn đo sai.
+
+### 52.9bis. Ambient & Environmental ingest từ ESP32
+
+ESP32 node trong BOM (`overall.iot.md` §A6) còn gắn **SHT31** (nhiệt-ẩm môi trường), **MQ-2** (khói), **water leak**. Các nguồn này KHÔNG đi vào `sensor_readings` mà tái dùng model môi trường sẵn có (§1.3.7–§1.3.9, §1.8):
+- SHT31 → `POST /api/ambient-readings/batch` → `AmbientReading` (`Source=IotSensor`, `SourceDeviceId`=DeviceCode ESP32).
+- MQ-2 / water → `POST /api/environmental-incidents` → `EnvironmentalIncident` (`SmokeDetected`/`WaterLeak`) → alert Critical + `EnvironmentalIncidentDetectedEvent`.
+- Dùng **cùng device API key** (scope thêm `environmental.ingest`, §52.2) — không cần global key riêng.
+
+> Không thêm entity mới cho môi trường — chỉ nối phần cứng ESP32 vào đường ingest ambient/incident đã có. Ticket IoT-1 chỉ cần đảm bảo device key scope + firmware gọi đúng 2 endpoint này.
+
+### 52.10. Protocol decision (ADR-016)
+
+> Cập nhật theo pivot IoT v2 (`newiot.md`/`overall.iot.md`): edge device đổi từ **Raspberry Pi → ESP32-S3**,
+> transport đổi từ "chỉ HTTPS" sang **hybrid HTTPS + MQTT**.
+
+**Decision — hybrid 2 kênh:**
+
+| Kênh | Dùng cho | Giai đoạn |
+|------|----------|-----------|
+| **HTTPS REST** | provision device, heartbeat, firmware download/OTA, flush queue tồn đọng khi mất mạng dài, admin CRUD, **MVP ingest (P0–P2)** | v1 (làm trước) |
+| **MQTT** (EMQX/Mosquitto) | telemetry realtime (<100ms), heartbeat, offline tức thì qua **Last Will & Testament (LWT)**, lệnh **downlink** (đổi config/OTA trigger) | v2 (P3 — nâng cấp) |
+
+**Lý do giữ HTTPS (v1):**
+- Đơn giản, không cần broker; Idempotency-Key + Polly retry đã có; TLS đơn giản hơn MQTT-over-TLS.
+- Đủ cho monitoring (latency 1–2s OK, không phải control-plane).
+
+**Lý do thêm MQTT (v2):**
+- Latency <100ms, kết nối thường trực (tiết kiệm pin/băng thông), 2 chiều (downlink command), phát hiện offline tức thì (LWT) thay vì chờ job 5 phút.
+
+**Trade-off MQTT:** thêm hạ tầng broker (deploy/bảo mật/monitor), ESP32 vẫn phải giữ local queue + fallback HTTPS flush khi broker down (SPOF). Vì vậy MQTT là **scope mở rộng P3** — chỉ làm sau khi flow HTTPS (P0–P2) chạy ổn; nếu thiếu thời gian, HTTPS đủ cho MVP/demo.
+
+**Edge device:** ESP32-S3 (N16R8, có PSRAM cho MQTT-over-TLS), `DeviceType=StandaloneSensor`, đọc nhiều pin qua **RS485/Modbus RTU multi-drop** (mỗi BMS 1 `unitId`). Firmware C++ (PlatformIO/Arduino) — **không** dùng lại code Python của bản RPi v1. Chi tiết phần cứng/firmware: `newiot.md`, `overall.iot.md`, `wiring-diagram.md`, `hardware-bom.csv`.
+
+> **CAN bus (tùy chọn):** Một số BMS dùng CAN thay RS485. ESP32-S3 hỗ trợ qua TWAI + transceiver SN65HVD230 (`overall.iot.md` §A3, `wiring-diagram.md` §5). Backend KHÔNG đổi — firmware đọc CAN rồi gửi cùng contract/payload như Modbus. Capstone ưu tiên RS485; CAN chỉ làm nếu có BMS CAN thật.
 
 ### 52.11. Endpoints summary
 
@@ -7523,12 +7732,62 @@ iot_firmware_updates_total{from_version, to_version, status}
 - Sensor outlier rejection
 - Calibration offset applied correctly
 - Firmware OTA flow with rollback simulation
+- **(MQTT v2)** LWT `status=offline` → device mark Offline tức thì + alert created
+- **(MQTT v2)** Telemetry qua broker đi đúng `SensorReadingBatchIngestCommand` (reuse, không viết lại validate/insert/anomaly)
+
+### 52.14. MQTT realtime channel (v2 — P3)
+
+> Nâng cấp transport khi cần latency <100ms + 2 chiều. **Scope mở rộng** — chỉ làm sau khi HTTPS (P0–P2) ổn. Chi tiết firmware/broker: `newiot.md` §8.
+
+**MQTT sống ở 3 nơi:**
+
+| Nơi | Vai trò | Viết code? |
+|-----|---------|-----------|
+| **MQTT Broker** (EMQX/Mosquitto, Docker) | trung chuyển pub/sub | ❌ chỉ deploy + config (`infra/mqtt/`) |
+| **ESP32 firmware** | publisher telemetry/heartbeat + subscriber cmd | C++ (`PubSubClient`) — codebase `firmware-esp32/` |
+| **Backend bridge** | subscriber telemetry/status + publisher cmd | C# (`MQTTnet`) — `BatteryService.Infrastructure/Mqtt/` |
+
+**Topic design:**
+```
+solar/{siteId}/{deviceCode}/telemetry   ← ESP32 publish reading (uplink)
+solar/{deviceCode}/heartbeat            ← ESP32 publish trạng thái thiết bị
+solar/{deviceCode}/status               ← Last Will: "online"/"offline" tự động
+solar/{deviceCode}/cmd                  ← Backend publish lệnh xuống (downlink: đổi config, trigger OTA)
+solar/{deviceCode}/cmd/ack              ← ESP32 báo đã thực thi
+```
+
+**Backend bridge** (`MqttBridgeBackgroundService`, đăng ký `AddHostedService`):
+- Subscribe `solar/+/+/telemetry`, `solar/+/heartbeat`, `solar/+/status` (TLS 8883, credential `backend-bridge`).
+- Telemetry → tạo scope → `SensorReadingBatchIngestCommand` (**reuse** logic validate/insert/anomaly của HTTPS, chỉ đổi "nguồn vào").
+- `status=offline` → `IotDeviceMarkOfflineCommand` (§52.6 cơ chế 1).
+- Downlink: `IMqttBridgePublisher.Publish(solar/{dev}/cmd, ...)`.
+
+**Bảo mật per-device:**
+- Ngoài API key (HTTPS), cấp **MQTT credential per-device** gắn với `IotDevice` + **ACL phân quyền topic per-device** ở broker (`infra/mqtt/acl.conf`) — device chỉ publish/subscribe topic của chính nó.
+
+**Broker deploy:** `infra/mqtt/` (docker-compose EMQX/Mosquitto, `mosquitto.conf`, `acl.conf`, `certs/` cho TLS 8883). Xem `hardware-bom.csv` A13 + `overall.iot.md` A13.
+
+**Trap (xem `newiot.md` §12):** NTP bắt buộc (ESP32 không có RTC); MQTT-over-TLS tốn RAM → dùng S3 có PSRAM; broker là SPOF → firmware vẫn giữ local queue + fallback HTTPS flush.
+
+### 52.15. Failure modes & resilience (ESP32 + MQTT)
+
+> Bổ sung từ "bẫy ESP32" (`newiot.md` §12) + luồng chống mất data (`overall.iot.md` §B7) — ánh xạ sang hành vi backend. Không tạo EC numbered mới (xem EC-21/24/25 §58 đã cover ingest); đây là checklist resilience cho IoT-1/P3.
+
+| Failure mode | Hành vi mong đợi | Backend xử lý |
+|--------------|------------------|---------------|
+| ESP32 mất WiFi/4G kéo dài | Reading vào local queue (NVS/LittleFS/SD) + retry exponential backoff, không xóa tới khi backend 2xx | Khi mạng lại, ESP32 flush kèm `Idempotency-Key` cũ → backend dedup, không tạo bản ghi trùng (EC-21) |
+| Queue flash đầy (ESP32 buffer nhỏ hơn RPi) | Chấp nhận drop data cũ nhất hoặc giảm tần suất poll | `IotDeviceHeartbeat.LocalQueueDepth` cao → dashboard cảnh báo (§9.2 #5); không có rule backend khác |
+| MQTT broker down (SPOF) | Firmware fallback HTTPS flush + giữ local queue | Bridge reconnect (ManagedMqttClient); ingest HTTPS vẫn nhận bình thường |
+| NTP sync fail → `deviceTimestamp` lệch | — | Reject clock skew > 5 phút (EC-24) + metric `reason=clock_drift` + `IotDevice.ClockDriftIncidentCount` |
+| Sai mapping / unitId conflict (device gửi reading cho battery không thuộc `batteryMappings`) | — | Reject reading không nằm trong mapping/`BatteryAssetIds` của device + log |
+| Sensor outlier (V=1200V, temp ngoài giới hạn) | — | Reject + `reason=sensor_outlier`, auto-disable device sau N outlier (EC-25) |
+| LWT miss (broker chưa kịp phát) | — | Job `IotDeviceOfflineDetectionBackgroundService` 2 phút là backup (§52.6) |
 
 ---
 
 ## 52bis. IoT implementation plan
 
-> Chi tiết triển khai phần cứng, gateway software, payload mẫu, checklist mua thiết bị và runbook demo nằm ở [`iot.md`](./iot.md). Section này chỉ giữ phần backend work cần phản ánh trong master roadmap.
+> Chi tiết triển khai phần cứng, firmware ESP32, payload mẫu, BOM mua thiết bị, sơ đồ đấu dây và runbook demo nằm ở bộ tài liệu IoT v2: [`newiot.md`](./newiot.md) (thiết kế tổng thể ESP32+MQTT), [`overall.iot.md`](./overall.iot.md) (BOM + luồng vận hành), [`wiring-diagram.md`](./wiring-diagram.md) (đấu dây + GPIO), [`hardware-bom.csv`](./hardware-bom.csv) (bảng mua sắm). Bản v1 [`iot.md`](./iot.md) (Raspberry Pi, Python) **deprecated** — giữ tham khảo logic queue/calibration/validation. Section này chỉ giữ phần backend work cần phản ánh trong master roadmap.
 
 ### 52bis.1. Current backend state
 
@@ -7544,16 +7803,18 @@ Chưa đủ cho hệ thống IoT thật:
 - Chưa có heartbeat và offline detection theo device.
 - Chưa có API key riêng từng device, rotate/revoke key.
 - Chưa có `X-Device-Code`, `deviceTimestamp`, `Idempotency-Key` trong contract ingest production.
-- Chưa có calibration, firmware OTA, gateway simulator/hardware runbook.
+- Chưa có calibration, firmware OTA, ESP32 simulator/hardware runbook.
+- Chưa có kênh MQTT (broker + bridge + LWT + downlink) cho realtime <100ms (v2/P3 — §52.14).
 
 ### 52bis.2. Implementation tracks
 
-| Track | Mục tiêu | Deliverable |
-|-------|----------|-------------|
-| IoT MVP | Chạy được flow backend bằng simulator/laptop/RPi mock | Simulator gửi batch vào endpoint hiện có, dashboard thấy latest/history/alert |
-| IoT Backend Production | Quản lý gateway thật | `IotDevice`, provision, heartbeat, per-device auth, offline detection |
-| IoT Hardware Pilot | Thay simulator bằng Raspberry Pi đọc BMS/cảm biến | Gateway đọc Modbus/CAN hoặc mock hardware adapter và gửi production payload |
-| IoT Hardening | Sẵn sàng demo/production-lite | Retry/idempotency, local queue, calibration, metrics, runbook |
+| Track | Mục tiêu | Deliverable | Map roadmap `newiot.md` |
+|-------|----------|-------------|--------------------------|
+| IoT MVP | Chạy được flow backend bằng simulator/laptop/ESP32 mock | Simulator/ESP32 `mock_bms` gửi batch (HTTPS) vào endpoint hiện có, dashboard thấy latest/history/alert | P0–P1 |
+| IoT Backend Production | Quản lý edge device thật | `IotDevice`, provision, heartbeat, per-device auth, offline detection | P2 |
+| IoT MQTT/Realtime | Streaming <100ms + 2 chiều | MQTT broker (`infra/mqtt/`) + `MqttBridgeBackgroundService` + LWT offline tức thì + downlink cmd + ACL per-device (§52.14) | **P3 (mới)** |
+| IoT Hardware Pilot | Thay simulator bằng **ESP32-S3** đọc BMS qua RS485/Modbus | ESP32 + MAX485 multi-drop đọc Modbus thật (nhiều pin/unitId) và gửi production payload | P4 |
+| IoT Hardening | Sẵn sàng demo/production-lite | Retry/idempotency, local queue (NVS/LittleFS/SD), calibration, metrics, OTA, runbook | P5 |
 
 ### 52bis.3. Backend tasks to add
 
@@ -7596,11 +7857,11 @@ Chưa đủ cho hệ thống IoT thật:
 
 | Sprint | Scope |
 |--------|-------|
-| Sprint 3 | Đã có ingest MVP + anomaly engine. Dùng simulator để test flow end-to-end. |
+| Sprint 3 | Đã có ingest MVP + anomaly engine. Dùng simulator/ESP32 mock (HTTPS) để test flow end-to-end (P0–P1). |
 | Sprint 5B | Release gate `#158–#166`: scope cleanup Energy/CO2 + Alert–Ticket Saga; ambient/environmental/tier-2 chỉ làm sau P0. |
-| Sprint IoT-1 | Backend device management + gateway simulator/prototype. |
-| Sprint 7 | Hardware pilot + Grafana IoT metrics + E2E test. |
-| Sprint 8 | IoT demo runbook, polish, failure scenario: stop heartbeat => `DeviceOffline`. |
+| Sprint IoT-1 | Backend device management + ESP32 simulator/prototype (provision, heartbeat, per-device key, offline) — P2. |
+| Sprint 7 | Hardware pilot (ESP32-S3 + RS485 multi-drop) + Grafana IoT metrics + E2E test — P4. **MQTT/Realtime (P3) làm trước trong sprint này nếu đủ nhân lực; nếu thiếu → để backlog, HTTPS đủ cho demo.** |
+| Sprint 8 | IoT demo runbook, polish, failure scenario: stop ESP32 => `DeviceOffline` (LWT tức thì hoặc job 5 phút). |
 
 ### 52bis.5. Acceptance checklist
 
@@ -7612,7 +7873,8 @@ Chưa đủ cho hệ thống IoT thật:
 - [ ] Critical alert publish event cho Ticket/Notification flow.
 - [ ] Dừng gateway > 5 phút tạo `DeviceOffline`.
 - [ ] Gateway retry cùng `Idempotency-Key` không tạo duplicate.
-- [ ] Runbook `iot.md` đủ để người khác setup simulator và Raspberry Pi pilot.
+- [ ] Bộ runbook IoT v2 (`newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`) đủ để người khác setup simulator và **ESP32-S3 pilot** (nạp firmware, đấu RS485 multi-drop, cấu hình broker).
+- [ ] (P3 — nếu làm MQTT) Broker `infra/mqtt/` chạy, bridge subscribe telemetry, LWT mark Offline tức thì, ACL per-device hoạt động.
 
 ---
 
@@ -7643,6 +7905,15 @@ Chưa đủ cho hệ thống IoT thật:
 
 Không tạo `EnergyService` thay thế trong capstone. Nếu business mở lại scope sau này, phải có ADR mới,
 nguồn meter đáng tin cậy và service boundary riêng; không nhét lại vào BatteryService.
+
+> **Lưu ý IoT hardware (đồng bộ `overall.iot.md` §A14/§D + `newiot.md`):** Bộ tài liệu phần cứng IoT v2 (ESP32)
+> có liệt kê module **INA226** (đo V/I độc lập) và một path demo "energy metrics" (charge/discharge kWh, cost,
+> CO2) ở **Cấp 4 — tùy chọn**. Để tránh mâu thuẫn với quyết định này:
+> - **INA226 / sensor đo độc lập** trong scope chỉ phục vụ **cross-source/redundant validation** (`SensorMismatch`,
+>   §1.3.4 + §1.6.6) và đo telemetry sức khỏe pin — **KHÔNG** dùng để tích phân năng lượng.
+> - **Energy/CO2 demo vẫn nằm NGOÀI software scope** (ADR-017, CI scope-guard §53.2bis giữ nguyên). Nếu pilot
+>   muốn trình diễn energy metrics ở Cấp 4, đó là **stretch hardware-only**, phải mở ADR mới trước khi thêm bất kỳ
+>   entity/report/endpoint energy nào vào backend. Không có ngoại lệ "nhét tạm để demo".
 
 ### 53.2. Inventory cần xóa hoặc không được triển khai
 
@@ -8753,9 +9024,10 @@ Cấu trúc đề xuất (90 phút demo):
 3. Trigger export training data for retrain
 
 ## Scene 9 — Operational visibility (5 phút)
-1. Open Grafana: business + system dashboards
+1. Open Grafana: business + system dashboards (+ **IoT Device Monitoring** dashboard §9.2 #5: online/offline, ingest/reject, queue depth)
 2. Show traces in Tempo for ticket flow
 3. Show maintenance announcement publish flow
+4. **IoT device demo:** show provisioned device `GW-DEMO-001` (heartbeat LastSeenAt cập nhật), rồi **dừng ESP32/simulator > 5 phút → `DeviceOffline` alert** tự sinh + notification (LWT tức thì nếu bật MQTT). Đây là điểm "đúng chất IoT" của hệ thống.
 
 ## Q&A buffer (15 phút)
 ```
@@ -8838,9 +9110,10 @@ Seed dùng tên thật Việt Nam:
 ### 56.6. Architecture poster
 
 `docs/demo/architecture-poster.pdf` (A1 print):
-- System overview diagram (4 microservices + AI module + clients)
-- Tech stack icons
+- System overview diagram (4 microservices + AI module + clients + **IoT edge layer**: ESP32-S3 ↔ RS485/Modbus BMS ↔ hybrid HTTPS/MQTT broker → BatteryService — xem §52.1)
+- Tech stack icons (bao gồm ESP32-S3, EMQX/Mosquitto, Modbus/RS485)
 - Key metrics: 50+ entities, 220+ endpoints, 30+ integration events + 8 Saga contracts, ≥80% coverage, Saga state machine (5 state), 10 runbook
+- (tùy chọn) Sơ đồ IoT data flow 1 dòng: BMS → ESP32 → MQTT/HTTPS → TimescaleDB → anomaly → alert/ticket/notification
 - Sponsor logos / team photo
 
 Source file: `docs/demo/architecture-poster.drawio` (commit + export PDF on each major update).
@@ -8890,8 +9163,8 @@ A: Đã có guard BR-04-Extended (xem §33). Max pause minutes per priority, ...
 ## Q3: AI fail thì sao?
 A: Hybrid pipeline (xem §30.2) — threshold detector vẫn chạy độc lập, ...
 
-## Q4: Bảo mật đường truyền IoT gateway → backend?
-A: TLS 1.3, API key per device, rotation, ...
+## Q4: Bảo mật đường truyền IoT edge device (ESP32) → backend?
+A: TLS (HTTPS + MQTT-over-TLS 8883), **API key per-device chỉ lưu hash + rotate/revoke**, `X-Device-Code` + device phải Active, anti-spoofing (reject clock skew/outlier, device chỉ gửi cho battery trong mapping), MQTT có credential + **ACL topic per-device**, rate limit 60 req/phút/device, OTA verify SHA-256 + signed URL — xem §14.8, §52.10/§52.14.
 
 ## Q5: Scale 10,000 batteries thì sao?
 A: HPA (§54.5), TimescaleDB hypertable partition by time, ...
@@ -8995,7 +9268,7 @@ Tổng hợp toàn bộ external services capstone depends on. Mỗi item có **
 | Sentry (error tracking) | Free tier | 5k errors/month | Demo error rate spike → quota | Self-host hoặc disable Sentry trong demo | Sprint 7 trước observability deploy |
 | Statuspage.io (status page) | Free | 1 page + 10 components | Không có | Static HTML self-host | Sprint 7 |
 | NASA Ames dataset | Public | N/A | Download fail | Mirror trên team Drive | Sprint 2 (AI training) |
-| Hardware partner (RasPi pilot) | TBD | N/A | Partner delay hardware delivery | Pure simulator demo (đã có) | **Sprint 5B kết thúc** (xem §17 Sprint IoT-1) |
+| Hardware partner (ESP32-S3 pilot + RS485/BMS) | TBD | N/A | Partner delay hardware delivery | Pure simulator/ESP32 `mock_bms` demo (đã có) | **Sprint 5B kết thúc** (xem §17 Sprint IoT-1) |
 | RabbitMQ delayed-message plugin | N/A — không dùng | N/A | N/A | Đã chọn Quartz alternative (xem §53.8) | Không cần |
 | Cloudflare (HTTPS proxy) | Free | Unlimited | DDoS during demo | Direct origin fallback | Sprint 7 nếu deploy K8s |
 
@@ -9654,6 +9927,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redis Inbox `TryMarkProcessedAsync` ghi key trước business commit → giờ tách thành EF Consumer Inbox cho DB consumer. PR #160.
 ```
 
+**Sprint IoT-1 entry template** (IoT v2 — ESP32 + MQTT, ADR-016):
+
+```markdown
+## [1.6.0-iot] — 2026-08-09 (Sprint IoT-1)
+
+### Added
+- **IoT device management** (§52): `IotDevice`, `IotDeviceHeartbeat` (hypertable), `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog` + migration `AddIotDeviceManagement`. PR #154.
+- API key per-device (hash + rotate/revoke) + provision/heartbeat/firmware-check/calibration endpoints + admin device CRUD. PR #154.
+- `SensorReading.SourceType` (Bms/IotGateway/External — B9) + `SensorReading.SensorSourceCode` (primary/redundant/external-temp). PR #154.
+- `IotDeviceWentOfflineEvent` + `IotDeviceWentOfflineConsumer` (NotificationService) + routing DeviceOffline. PR #154.
+- `IotDeviceOfflineDetectionBackgroundService` + `CalibrationExpiryNotificationService`. PR #154.
+- AuthService permission `iot.device.view/manage`, `iot.firmware.manage`, `iot.calibration.manage`. PR #154.
+- 6 IoT Prometheus metric + IoT Device Monitoring Grafana dashboard + 2 AlertManager rule. PR #154.
+- **(P3, optional)** MQTT realtime: broker `infra/mqtt/` (EMQX/Mosquitto + TLS 8883 + ACL per-device), `MqttBridgeBackgroundService`, LWT offline, downlink cmd (§52.14).
+
+### Changed
+- IoT edge device chuẩn đổi Raspberry Pi → **ESP32-S3** + RS485/Modbus multi-drop; transport hybrid HTTPS + MQTT (ADR-016 reframe).
+- `POST /api/sensor-readings/batch`: thêm `X-Device-Code`/`Idempotency-Key`/`deviceTimestamp`, mapping `batteryAssetSerial`; giữ legacy `batteryAssetId` cho simulator/MVP.
+
+### Deprecated
+- `iot.md` (Raspberry Pi v1, Python) — thay bằng `newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`.
+```
+
 **Commit message convention** (Conventional Commits) — `tools/release-notes.sh` parse:
 - `feat(saga): ...` → Added section
 - `fix(saga): ...` → Fixed section
@@ -9664,6 +9960,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Git tag convention:**
 - Sprint 5B release: `v1.5.0-beta-sprint5b` sau khi `#164` merge.
 - Post-cutover smoke test pass: `v1.5.0`.
+- Sprint IoT-1 release: `v1.6.0-iot` sau khi `#154` merge (provision + heartbeat + ingest + offline pass).
 
 ---
 
@@ -9773,7 +10070,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 66.8. "Bonus points" academic
 - [ ] AI feedback loop demonstrable
 - [ ] Drift detection working
-- [ ] Real IoT device sending data (even if RPi mock)
+- [ ] Real IoT device sending data (even if ESP32 `mock_bms`)
 - [ ] Saga failure/recovery trace demonstrable without duplicate Ticket
 - [ ] GDPR export demo
 - [ ] Postmortem template ready (if incident happens during demo, recover gracefully)
@@ -9812,7 +10109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | ADRs documented | **18** (+ ADR-016 IoT protocol, ADR-017 Energy/CO2 scope removal, ADR-018 Alert–Ticket Saga) |
 | Runbooks | **10** (7 baseline + 3 Saga: `08-saga-failed`, `09-saga-stuck`, `10-saga-duplicate-canonical`) |
 | Edge case rules | **34** (EC-01..EC-34) |
-| Risk register items | **27** (R-01..R-27, bao gồm Saga risks R-14..R-22 và capacity/ext-deps R-23..R-27) |
+| Risk register items | **29** (R-01..R-29, bao gồm Saga risks R-14..R-22, capacity/ext-deps R-23..R-27 và IoT v2 pivot R-28..R-29) |
 | Q&A thống nhất | **25** (Q-01..Q-25, bao gồm Saga design Q-19..Q-25) |
 | Troubleshooting playbook | **11** (8 baseline + 3 Saga case ở §27.9-11) |
 | Demo scenes scripted | **9** |
@@ -9835,8 +10132,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - v4.4 (2026-06-10): physical reality + meta-tích lũy — Sprint 5B working days clarification (5 dev-day, 4 mitigation option); local dev hardware requirement table + cleanup script (§40.6); CI execution time budget §11.7 (16 phút Sprint 5B end, 5 mitigation); demo day contingency 6 item (power outage, smoke test, Saga pre-warm, mid-demo recovery, audio, NTP) + backup mentor + backup defense slot (§56.12/56.14); §28 Scripts recap 11 orphan cleanup; document header v4.3 reflect đầy đủ scope; §23 risk register intro 4-group breakdown
 - v4.5 (2026-06-10): final full-file review (multi-pass) — **fix wire value/domain enum reconcile**: §53.7 Saga wire value table giờ khớp `AnomalyTypeEnum` §1.3.6 (1-15 thay vì 1-11 cũ); §2.4 PriorityCalculator table mở rộng 15 row; §1.3.5 Alert.AnomalyType note "1–14" → "1–15"; §1.6 ThresholdAnomalyDetector "14 rule check" → "15 rule check"; §1.7 BatteryAnomalyDetectedEvent comment đổi từ "không reference Domain enum" sang "wire value = AnomalyTypeEnum integer §1.3.6"; §26 Glossary Wire value redefined "bằng integer của Domain enum"; §1.9 ThresholdAnomalyDetectorTests 14→15 case; §2.9 CreateTicketFromAlertConsumerTests "đủ 8 anomaly" → "đủ 15 anomaly"; §51 Entity count 17→50+ đồng bộ §67 stats; §56.6 Architecture poster metrics update đồng bộ §67; §56.8 Postman "150+ endpoints" → "220+ endpoints" đồng bộ §67; §50 Sprint 7 mitigation "1.5×" → "1.6×" đồng bộ table; §30.6 V2 Classification comment làm rõ "wire value khớp AnomalyClassificationEnum §30.3 (1=Normal/2=Degrading/3=Failed), null = AI chưa classify"; thay "pass 55" thành "v4.5" trong glossary để tránh dependency vào pass numbering nội bộ; **§5.2 Reports endpoint catalog stale fix**: TicketService 8→9 endpoints (thêm `GET /reports/saga-failed-rate` đồng bộ §17 Sprint 7 task #114), BatteryService 5→7 endpoints (thêm `GET /reports/environmental-incidents` + `GET /reports/ambient-trend` đồng bộ Sprint 5B ambient + §17 carryover).
 
-**Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga).
-**Last major update:** 2026-06-10 (v4.5) — Full-file review reconcile wire value vs domain enum + meta accuracy fixes (54+ pass).
+- v4.6 (2026-06-11): **IoT v2 pivot — Raspberry Pi → ESP32-S3 + hybrid HTTPS/MQTT** (đồng bộ `newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`). ADR-016 reframe (ESP32 + hybrid transport, RS485/Modbus multi-drop); §52 đổi "Gateway"→"Edge Device", sơ đồ §52.1 thêm MQTT broker/bridge; §52.5 payload đầy đủ + §52.6 LWT offline tức thì + §52.8 CalibrationExpiryNotificationService; **§52.9 cross-source tag table** (BMS/primary vs INA226/redundant) + **§52.9bis** ESP32 feed ambient/incident + **§52.14 MQTT realtime** (broker/bridge/LWT/downlink/ACL per-device) + **§52.15 failure modes**; §1.3.4 thêm `SensorSourceCode` (đang thiếu); §52.2 `batteryMappings[]` multi-drop + heartbeat ESP32 field mapping + key scope `environmental.ingest`; §0bis.3 route IoT; §1.7 khai báo `IotDeviceWentOfflineEvent` + §3.4 routing + §16.3 consumer; §20 permission `iot.device/firmware/calibration.*`; §12.1 seed 1 IoT device + §12.2/§51 migration `AddIotDeviceManagement`; §14.8 IoT device security; §9.2 dashboard #5 IoT Device Monitoring + 2 alert rule; §1.8 reconcile global key vs per-device; §26 glossary 12 thuật ngữ IoT + IoT references; §23 R-28/R-29 (ESP32 firmware/BMS procurement). **Energy/CO2 conflict resolved** (§53.1): INA226 = cross-source validation, energy demo optional ngoài software scope (ADR-017 giữ nguyên). ADR count giữ 18 (mở rộng ADR-016, không mint mới); EC/consumer/template count baseline giữ nguyên (IoT-1 attribute +1).
+
+**Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga, IoT v2 pivot).
+**Last major update:** 2026-06-11 (v4.6) — IoT v2 pivot ESP32 + MQTT (5-pass review, đồng bộ 4 file IoT mới).
 
 **Recommended reading order for newcomer:**
 1. §0-0bis (context — 10 phút)
@@ -9844,7 +10143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 3. §30, §52, §53 (AI, IoT, scope cleanup và Saga — 25 phút)
 4. §38 + §58 (edge cases matrix — 10 phút)
 5. §17 (sprint backlog + capacity warnings — 15 phút)
-6. **§23 (27 risk items — 10 phút) ← bắt buộc nắm trước khi join sprint**
+6. **§23 (29 risk items — 10 phút) ← bắt buộc nắm trước khi join sprint**
 7. **§40 (ops: ADR + DR + runbook + postmortem — 15 phút) ← critical cho on-call**
 8. §56 (demo prep — when nearing deadline)
 9. **§60.4bis (Saga admin UI spec — 5 phút) ← FE Trí + Minh required reading**
