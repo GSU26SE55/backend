@@ -48,7 +48,9 @@ public class MaintenanceLogConfiguration : IEntityTypeConfiguration<MaintenanceL
             .HasColumnName("completed_at");
 
         builder.Property(e => e.PartsUsed)
-            .HasColumnName("parts_used");
+            .HasColumnName("parts_used")
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<string>>();
 
         builder.Property(e => e.AttachmentFileIds)
             .HasColumnName("attachment_file_ids")
