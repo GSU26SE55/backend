@@ -278,6 +278,17 @@ services:
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__BatteryDb: "Host=postgres;Port=5432;Database=${BATTERY_DB_NAME:-battery_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+      # Sprint 5B #91/#102 — Environmental ingest API key (smoke/fire/water IoT)
+      ApiKeys__EnvironmentalIngest: ${BATTERY_ENVIRONMENTAL_INGEST_API_KEY}
+      # Sprint 5B #90/#92 — OpenMeteo + WeatherSyncBackgroundService
+      Weather__BaseUrl: ${BATTERY_WEATHER_BASE_URL:-https://api.open-meteo.com/}
+      Weather__IntervalMinutes: ${BATTERY_WEATHER_INTERVAL_MINUTES:-15}
+      Weather__DedupWindowMinutes: ${BATTERY_WEATHER_DEDUP_WINDOW_MINUTES:-10}
+      Weather__HttpTimeoutSeconds: ${BATTERY_WEATHER_HTTP_TIMEOUT_SECONDS:-10}
+      Weather__Enabled: ${BATTERY_WEATHER_ENABLED:-true}
+      # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
     ports:
       - "4006:8080"
     depends_on:
@@ -305,6 +316,12 @@ services:
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__TicketDb: "Host=postgres;Port=5432;Database=${TICKET_DB_NAME:-ticket_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+      # Sprint 5B #235 — MassTransit endpoint runtime
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
+      # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
+      AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
+      AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
     ports:
       - "4007:8080"
     depends_on:

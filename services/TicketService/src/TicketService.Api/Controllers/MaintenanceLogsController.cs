@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
 using TicketService.Application.CQRS.Query.MaintenanceLogs;
@@ -31,12 +32,18 @@ public class MaintenanceLogsController : ControllerBase
     /// <response code="200">Thành công.</response>
     [HttpGet("staff/tickets/maintenance-logs/me")]
     [Authorize(Roles = "Staff")]
-    [ProducesResponseType(typeof(List<StaffMaintenanceLogGroupDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<StaffMaintenanceLogGroupDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyLogs(CancellationToken ct)
     {
         var query = new MyMaintenanceLogsQuery(GetCurrentUserId());
         var result = await _mediator.Send(query, ct);
-        return Ok(result);
+        return Ok(new CommonResponse<List<StaffMaintenanceLogGroupDTO>>
+        {
+            IsSuccess = true,
+            StatusCode = StatusCodes.Status200OK,
+            Message = "Lấy danh sách nhật ký bảo trì thành công.",
+            Data = result
+        });
     }
 
     /// <summary>
@@ -46,12 +53,18 @@ public class MaintenanceLogsController : ControllerBase
     /// <response code="200">Thành công.</response>
     [HttpGet("tickets/{ticketId:guid}/maintenance-logs")]
     [Authorize(Roles = "Manager,Admin")]
-    [ProducesResponseType(typeof(List<MaintenanceLogDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<MaintenanceLogDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLogsByTicket(Guid ticketId, CancellationToken ct)
     {
         var query = new MaintenanceLogsByTicketQuery(ticketId);
         var result = await _mediator.Send(query, ct);
-        return Ok(result);
+        return Ok(new CommonResponse<List<MaintenanceLogDTO>>
+        {
+            IsSuccess = true,
+            StatusCode = StatusCodes.Status200OK,
+            Message = "Lấy nhật ký bảo trì theo ticket thành công.",
+            Data = result
+        });
     }
 
     /// <summary>

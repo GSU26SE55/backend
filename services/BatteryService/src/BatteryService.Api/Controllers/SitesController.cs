@@ -174,7 +174,6 @@ public class SitesController : ControllerBase
     /// - <c>TotalAssets</c>: tổng asset chưa xóa thuộc site.
     /// - <c>ActiveAssets</c>: số asset có <c>Status = Active</c>.
     /// - <c>AssetsWithActiveAlerts</c>: số asset đang có ít nhất 1 alert ở trạng thái Open/Acknowledged.
-    /// - <c>TotalCapacityKw</c>: dung lượng site (nullable, copy từ <c>Site.CapacityKw</c>).
     /// - <c>LastAlertAt</c>: thời điểm alert gần nhất trên các asset của site (nullable).
     /// - <c>HealthScore</c>: số nguyên 0-100, tính theo công thức:
     ///   <c>100 - (assets_inactive × 5) - (assets_with_active_alerts × 10)</c>, clamp về [0, 100].

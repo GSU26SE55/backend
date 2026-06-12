@@ -14,8 +14,6 @@ public class SiteDashboardDto
 
     public int AssetsWithActiveAlerts { get; set; }
 
-    public decimal? TotalCapacityKw { get; set; }
-
     public DateTime? LastAlertAt { get; set; }
 
     public int HealthScore { get; set; }

@@ -63,7 +63,6 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
             Address = request.Address?.Trim(),
             Latitude = request.Latitude,
             Longitude = request.Longitude,
-            CapacityKw = request.CapacityKw,
             InstallDate = ToUtc(request.InstallDate),
             Status = request.Status,
             ContactPersonName = request.ContactPersonName?.Trim(),

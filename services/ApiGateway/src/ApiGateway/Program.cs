@@ -95,6 +95,11 @@ if (!app.Environment.IsEnvironment("Docker")
 //app.UseWebSockets();
 
 app.UseCors("AllowAll");
+
+// Bọc mọi response status-only (404/401/403/405/...) thành CommonResponse để client luôn parse cùng schema.
+// Phải đặt TRƯỚC MapReverseProxy/MapMetrics để bắt được cả 404 do YARP không match route lẫn 404 do controller.
+app.UseCommonResponseStatusCodes();
+
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 app.MapReverseProxy();
 

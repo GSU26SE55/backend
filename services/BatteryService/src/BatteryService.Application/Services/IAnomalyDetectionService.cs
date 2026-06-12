@@ -17,4 +17,7 @@ public class AnomalyDetectionResult
     public int AlertsCreated { get; set; }
     public int AlertsMerged { get; set; }
     public int OutboxEventsQueued { get; set; }
+
+    /// <summary>Sprint 5B B1 (#152) — số anomaly bị noise-suppress (chưa đủ frequency).</summary>
+    public int AlertsSuppressed { get; set; }
 }

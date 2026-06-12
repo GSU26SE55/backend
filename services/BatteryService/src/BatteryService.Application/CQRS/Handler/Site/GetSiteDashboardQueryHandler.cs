@@ -50,10 +50,11 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
                 .GetAllAsync()
                 .AsNoTracking()
                 .Where(alert =>
-                    assetIds.Contains(alert.BatteryAssetId) &&
+                    alert.BatteryAssetId != null &&
+                    assetIds.Contains(alert.BatteryAssetId.Value) &&
                     !alert.IsDeleted &&
                     activeStatuses.Contains(alert.Status))
-                .Select(alert => alert.BatteryAssetId)
+                .Select(alert => alert.BatteryAssetId!.Value)
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
@@ -62,7 +63,9 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
             : await _unitOfWork.Alerts
                 .GetAllAsync()
                 .AsNoTracking()
-                .Where(alert => assetIds.Contains(alert.BatteryAssetId) && !alert.IsDeleted)
+                .Where(alert => alert.BatteryAssetId != null
+                                && assetIds.Contains(alert.BatteryAssetId.Value)
+                                && !alert.IsDeleted)
                 .MaxAsync(alert => (DateTime?)alert.DetectedAt, cancellationToken);
 
         var totalAssets = assets.Count;
@@ -83,7 +86,6 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
                 TotalAssets = totalAssets,
                 ActiveAssets = activeAssets,
                 AssetsWithActiveAlerts = activeAlertAssetIds.Count,
-                TotalCapacityKw = site.CapacityKw,
                 LastAlertAt = lastAlertAt,
                 HealthScore = healthScore
             }

@@ -35,6 +35,16 @@ public class ApplicationDbContext : DbContext
 
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
 
+    // Sprint 5B #89 — Ambient monitoring.
+    public virtual DbSet<AmbientReading> AmbientReadings { get; set; }
+    public virtual DbSet<AmbientThresholdConfig> AmbientThresholdConfigs { get; set; }
+
+    // Sprint 5B #100 — Environmental incident.
+    public virtual DbSet<EnvironmentalIncident> EnvironmentalIncidents { get; set; }
+
+    // Sprint 5B B1 (#152) — Noise breach hypertable.
+    public virtual DbSet<NoiseBreachEvent> NoiseBreachEvents { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (_auditableEntityInterceptor is not null)

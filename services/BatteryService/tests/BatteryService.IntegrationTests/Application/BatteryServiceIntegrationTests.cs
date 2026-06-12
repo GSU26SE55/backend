@@ -65,7 +65,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext));
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance);
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {
@@ -94,7 +94,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext));
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance);
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {

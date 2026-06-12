@@ -34,7 +34,7 @@ public class SiteFullHandlerTests
     public async Task Create_Happy_Returns201()
     {
         var b = new MockUnitOfWorkBuilder().WithCustomerAccounts(Customer());
-        var r = await new CreateSiteCommandHandler(b.Build()).Handle(new CreateSiteCommand { Name = "HN", CustomerId = Cust, InstallDate = DateTime.UtcNow, Address = "Hanoi", Latitude = 10, Longitude = 20, CapacityKw = 100, ContactPersonName = "A", ContactPersonPhone = "0901" }, default);
+        var r = await new CreateSiteCommandHandler(b.Build()).Handle(new CreateSiteCommand { Name = "HN", CustomerId = Cust, InstallDate = DateTime.UtcNow, Address = "Hanoi", Latitude = 10, Longitude = 20, ContactPersonName = "A", ContactPersonPhone = "0901" }, default);
         r.StatusCode.Should().Be(201);
         b.Sites.Verify(s => s.AddAsync(It.IsAny<Site>()), Times.Once);
     }

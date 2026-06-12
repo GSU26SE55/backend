@@ -4,7 +4,7 @@ using SharedContracts.Interfaces;
 
 namespace SharedInfrastructure.Bus;
 
-public class MassTransitProducer : IMessageProducerService
+public class MassTransitProducer : IMessageProducerService, IIntegrationEventTransport
 {
     private readonly IPublishEndpoint _publishEndpoint;
     public MassTransitProducer(IPublishEndpoint publishEndpoint)

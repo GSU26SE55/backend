@@ -224,6 +224,10 @@ public class AdminBatteryAssetsController : ControllerBase
     public async Task<IActionResult> TransferOwner(Guid id, [FromBody] TransferBatteryAssetOwnerCommand command, CancellationToken cancellationToken)
     {
         command.Id = id;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst("UserId")?.Value;
+        if (Guid.TryParse(userIdClaim, out var userId))
+            command.PerformedByUserId = userId;
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }

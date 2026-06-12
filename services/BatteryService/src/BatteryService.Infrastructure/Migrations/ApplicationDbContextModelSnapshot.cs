@@ -36,7 +36,7 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("acknowledged_by_user_id");
 
-                    b.Property<decimal>("ActualValue")
+                    b.Property<decimal?>("ActualValue")
                         .HasPrecision(10, 4)
                         .HasColumnType("numeric(10,4)")
                         .HasColumnName("actual_value");
@@ -45,7 +45,7 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("anomaly_type");
 
-                    b.Property<Guid>("BatteryAssetId")
+                    b.Property<Guid?>("BatteryAssetId")
                         .HasColumnType("uuid")
                         .HasColumnName("battery_asset_id");
 
@@ -69,6 +69,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("detected_at");
 
+                    b.Property<Guid?>("EnvironmentalIncidentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environmental_incident_id");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -87,13 +91,17 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("severity");
 
+                    b.Property<Guid?>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
                         .HasColumnName("status");
 
-                    b.Property<decimal>("ThresholdValue")
+                    b.Property<decimal?>("ThresholdValue")
                         .HasPrecision(10, 4)
                         .HasColumnType("numeric(10,4)")
                         .HasColumnName("threshold_value");
@@ -103,7 +111,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("ticket_id");
 
                     b.Property<string>("Unit")
-                        .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("unit");
@@ -116,15 +123,144 @@ namespace BatteryService.Infrastructure.Migrations
 
                     b.HasIndex("BatteryAssetId");
 
+                    b.HasIndex("EnvironmentalIncidentId");
+
                     b.HasIndex("MergedIntoAlertId");
 
                     b.HasIndex("Severity");
+
+                    b.HasIndex("SiteId");
 
                     b.HasIndex("Status");
 
                     b.HasIndex("BatteryAssetId", "AnomalyType", "Status", "DedupWindowEndUtc");
 
-                    b.ToTable("alerts", (string)null);
+                    b.ToTable("alerts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_alerts_asset_or_site_required", "battery_asset_id IS NOT NULL OR site_id IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.AmbientReading", b =>
+                {
+                    b.Property<DateTime>("Time")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("time");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<decimal>("AmbientTemperature")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("ambient_temperature_celsius");
+
+                    b.Property<decimal?>("Humidity")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("humidity_percent");
+
+                    b.Property<decimal?>("SolarIrradiance")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("solar_irradiance_wm2");
+
+                    b.Property<int>("Source")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("source");
+
+                    b.Property<string>("SourceDeviceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_device_id");
+
+                    b.HasKey("Time", "SiteId");
+
+                    b.HasIndex("SiteId", "Time")
+                        .HasDatabaseName("ix_ambient_readings_site_time");
+
+                    b.ToTable("ambient_readings", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.AmbientThresholdConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("ComboHumidityThreshold")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("combo_humidity_threshold");
+
+                    b.Property<decimal?>("ComboTempThreshold")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("combo_temp_threshold");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("enabled");
+
+                    b.Property<decimal?>("HighAmbientTempCritical")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("high_ambient_temp_critical");
+
+                    b.Property<decimal?>("HighAmbientTempWarning")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("high_ambient_temp_warning");
+
+                    b.Property<decimal?>("HighHumidityCritical")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("high_humidity_critical");
+
+                    b.Property<decimal?>("HighHumidityWarning")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("high_humidity_warning");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SiteId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ambient_threshold_configs_site_active")
+                        .HasFilter("is_deleted = false AND enabled = true");
+
+                    b.ToTable("ambient_threshold_configs", (string)null);
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.BatteryAsset", b =>
@@ -391,6 +527,165 @@ namespace BatteryService.Infrastructure.Migrations
                     b.ToTable("customer_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.EnvironmentalIncident", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at");
+
+                    b.Property<Guid?>("AcknowledgedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime>("DetectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detected_at");
+
+                    b.Property<DateTime?>("FalseAlarmAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("false_alarm_at");
+
+                    b.Property<Guid?>("FalseAlarmBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("false_alarm_by");
+
+                    b.Property<string>("FalseAlarmReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("false_alarm_reason");
+
+                    b.Property<int>("IncidentType")
+                        .HasColumnType("integer")
+                        .HasColumnName("incident_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("ReportedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("reported_by");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("resolution_note");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<int>("Severity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("severity");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DetectedAt")
+                        .HasDatabaseName("ix_environmental_incidents_detected_at");
+
+                    b.HasIndex("SiteId", "Status")
+                        .HasDatabaseName("ix_environmental_incidents_site_status");
+
+                    b.ToTable("environmental_incidents", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
+                {
+                    b.Property<DateTime>("Time")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("time");
+
+                    b.Property<Guid>("BatteryAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("battery_asset_id");
+
+                    b.Property<int>("AnomalyType")
+                        .HasColumnType("integer")
+                        .HasColumnName("anomaly_type");
+
+                    b.Property<decimal>("ActualValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("actual_value");
+
+                    b.Property<Guid?>("PromotedToAlertId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("promoted_to_alert_id");
+
+                    b.Property<int>("SourceType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("source_type");
+
+                    b.Property<decimal>("ThresholdValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("threshold_value");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("unit");
+
+                    b.HasKey("Time", "BatteryAssetId", "AnomalyType");
+
+                    b.HasIndex("PromotedToAlertId")
+                        .HasDatabaseName("ix_noise_breach_events_promoted_alert")
+                        .HasFilter("promoted_to_alert_id IS NOT NULL");
+
+                    b.HasIndex("BatteryAssetId", "AnomalyType", "Time")
+                        .HasDatabaseName("ix_noise_breach_events_asset_type_time");
+
+                    b.ToTable("noise_breach_events", (string)null);
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -450,6 +745,16 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("battery_asset_id");
 
+                    b.Property<string>("BmsErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bms_error_code");
+
+                    b.Property<decimal?>("CellVoltageDeltaMv")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("cell_voltage_delta_mv");
+
                     b.Property<int?>("ChargingState")
                         .HasColumnType("integer")
                         .HasColumnName("charging_state");
@@ -462,6 +767,16 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Property<int?>("CycleCount")
                         .HasColumnType("integer")
                         .HasColumnName("cycle_count");
+
+                    b.Property<decimal?>("InternalResistanceMilliohm")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("internal_resistance_milliohm");
+
+                    b.Property<string>("SensorSourceCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sensor_source_code");
 
                     b.Property<decimal>("SocPercent")
                         .HasPrecision(5, 2)
@@ -477,6 +792,12 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source_device_id");
+
+                    b.Property<int>("SourceType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("source_type");
 
                     b.Property<decimal>("Temperature")
                         .HasPrecision(5, 2)
@@ -507,11 +828,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("address");
-
-                    b.Property<decimal?>("CapacityKw")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("numeric(10,2)")
-                        .HasColumnName("capacity_kw");
 
                     b.Property<string>("ContactPersonName")
                         .HasMaxLength(150)
@@ -600,6 +916,11 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("battery_type_id");
 
+                    b.Property<decimal?>("CellVoltageDeltaMaxMv")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("cell_voltage_delta_max_mv");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -626,6 +947,11 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("effective_from_utc");
 
+                    b.Property<decimal?>("InternalResistanceMaxMilliohm")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("internal_resistance_max_milliohm");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -637,6 +963,24 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<int>("NoiseSuppressionCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5)
+                        .HasColumnName("noise_suppression_count");
+
+                    b.Property<bool>("NoiseSuppressionEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("noise_suppression_enabled");
+
+                    b.Property<int>("NoiseSuppressionWindowHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(24)
+                        .HasColumnName("noise_suppression_window_hours");
 
                     b.Property<decimal>("SocCriticalThreshold")
                         .HasPrecision(5, 2)
@@ -698,17 +1042,52 @@ namespace BatteryService.Infrastructure.Migrations
                     b.HasOne("BatteryService.Domain.Entities.BatteryAsset", "BatteryAsset")
                         .WithMany("Alerts")
                         .HasForeignKey("BatteryAssetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BatteryService.Domain.Entities.EnvironmentalIncident", "EnvironmentalIncident")
+                        .WithMany("Alerts")
+                        .HasForeignKey("EnvironmentalIncidentId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("BatteryService.Domain.Entities.Alert", "MergedIntoAlert")
                         .WithMany("MergedAlerts")
                         .HasForeignKey("MergedIntoAlertId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("BatteryAsset");
 
+                    b.Navigation("EnvironmentalIncident");
+
                     b.Navigation("MergedIntoAlert");
+
+                    b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.AmbientReading", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.AmbientThresholdConfig", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Site");
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.BatteryAsset", b =>
@@ -727,6 +1106,28 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("BatteryType");
 
                     b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.EnvironmentalIncident", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.BatteryAsset", "BatteryAsset")
+                        .WithMany()
+                        .HasForeignKey("BatteryAssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BatteryAsset");
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.SensorReading", b =>
@@ -768,6 +1169,11 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("Assets");
 
                     b.Navigation("ThresholdConfigs");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.EnvironmentalIncident", b =>
+                {
+                    b.Navigation("Alerts");
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.Site", b =>

@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using SharedInfrastructure.Behaviors;
 using SharedInfrastructure.Caching;
 using SharedInfrastructure.DependencyInjection.Extensions;
+using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Middleware;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Persistence.Repositories;
@@ -32,6 +33,7 @@ public static class ManageDependencyInjection
         services.AddCorsExtentions();
         services.AddJwtAuthentication(configuration);
         services.AddRoleAuthorize();
+        services.AddCommonModelStateResponse();
         services.AddSharedSwaggerGen(apiTitle);
 
         services.AddStackExchangeRedisCache(options =>
@@ -47,7 +49,9 @@ public static class ManageDependencyInjection
     /// 1. SecurityHeaders — set OWASP headers cho mọi response (đặt sớm để cả error response cũng có)
     /// 2. CorrelationId — sinh/forward X-Correlation-ID, push vào log scope
     /// 3. RequestLogging — log mọi HTTP request kèm duration + correlation ID
-    /// 4. GlobalException — bắt unhandled exception, trả JSON chuẩn
+    /// 4. GlobalException — bắt unhandled exception, trả JSON CommonResponse chuẩn
+    /// 5. CommonResponseStatusCodes — bọc response status-only (404/401/403/405/...) thành CommonResponse
+    ///    để client luôn parse cùng schema, không gặp body rỗng khi route không tồn tại.
     /// Pipeline gọi method này TRƯỚC UseHttpsRedirection / UseCors / UseAuthentication.
     /// </summary>
     public static IApplicationBuilder UseSharedInfrastructure(this IApplicationBuilder app)
@@ -56,6 +60,7 @@ public static class ManageDependencyInjection
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseMiddleware<RequestLoggingMiddleware>();
         app.UseMiddleware<GlobalExceptionMiddleware>();
+        app.UseCommonResponseStatusCodes();
         return app;
     }
 }

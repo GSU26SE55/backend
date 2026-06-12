@@ -46,7 +46,7 @@ public enum ActivityActionEnum
     /// <summary>Khách hàng mở lại ticket.</summary>
     Reopened = 20,
     /// <summary>Ticket đã đóng chính thức.</summary>
-    Closed = 11,
+    Closed = 25,
     /// <summary>Hệ thống tự động đóng.</summary>
     AutoClosed = 22,
     /// <summary>Nhân viên cấp cao giải quyết.</summary>

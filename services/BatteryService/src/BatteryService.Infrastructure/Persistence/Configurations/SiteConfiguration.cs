@@ -38,10 +38,6 @@ public class SiteConfiguration : IEntityTypeConfiguration<Site>
             .HasColumnName("longitude")
             .HasPrecision(9, 6);
 
-        builder.Property(site => site.CapacityKw)
-            .HasColumnName("capacity_kw")
-            .HasPrecision(10, 2);
-
         builder.Property(site => site.InstallDate)
             .HasColumnName("install_date")
             .IsRequired();
