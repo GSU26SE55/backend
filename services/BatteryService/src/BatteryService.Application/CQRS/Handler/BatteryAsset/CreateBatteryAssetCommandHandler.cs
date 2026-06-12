@@ -36,7 +36,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Không tìm thấy khách hàng đang hoạt động.",
-                ListErrors = { new Errors { Field = nameof(request.CustomerId), Detail = "Khách hàng không tồn tại hoặc đã bị khóa." } }
             };
         }
 
@@ -52,7 +51,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Serial pin đã tồn tại.",
-                ListErrors = { new Errors { Field = nameof(request.SerialNumber), Detail = "Serial pin đã tồn tại." } }
             };
         }
 

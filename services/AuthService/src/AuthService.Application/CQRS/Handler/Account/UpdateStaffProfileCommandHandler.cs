@@ -33,7 +33,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
             .AnyAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
-            return Fail(404, "Không tìm thấy tài khoản.", nameof(request.AccountId));
+            return Fail(404, "Không tìm thấy tài khoản.");
 
         var employeeCode = string.IsNullOrWhiteSpace(request.EmployeeCode) ? null : request.EmployeeCode.Trim();
         if (employeeCode is not null)
@@ -43,7 +43,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
                 .AnyAsync(profile => profile.AccountId != request.AccountId && profile.EmployeeCode == employeeCode && !profile.IsDeleted, cancellationToken);
 
             if (duplicated)
-                return Fail(409, "EmployeeCode đã được sử dụng.", nameof(request.EmployeeCode));
+                return Fail(409, "EmployeeCode đã được sử dụng.");
         }
 
         var profile = await _unitOfWork.StaffProfiles
@@ -92,11 +92,10 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
         };
     }
 
-    private static AccountActionResponse Fail(int statusCode, string message, string field) => new()
+    private static AccountActionResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = field, Detail = message } }
     };
 }

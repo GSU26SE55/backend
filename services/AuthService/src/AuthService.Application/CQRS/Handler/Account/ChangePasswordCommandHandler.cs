@@ -53,7 +53,6 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
                 IsSuccess = false,
                 StatusCode = 401,
                 Message = "Mật khẩu hiện tại không chính xác.",
-                ListErrors = { new Errors { Field = "CurrentPassword", Detail = "Mật khẩu hiện tại không chính xác." } }
             };
         }
 

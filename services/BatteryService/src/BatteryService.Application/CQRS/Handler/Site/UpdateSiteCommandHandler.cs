@@ -53,7 +53,6 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Tên site đã tồn tại cho khách hàng này.",
-                ListErrors = { new Errors { Field = nameof(request.Name), Detail = "Tên site đã tồn tại cho khách hàng này." } }
             };
         }
 

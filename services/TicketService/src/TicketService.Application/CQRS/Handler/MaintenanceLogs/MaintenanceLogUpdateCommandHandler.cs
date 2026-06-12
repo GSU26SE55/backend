@@ -149,10 +149,6 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = "LogId", Detail = message }
-            }
         };
     }
 }
