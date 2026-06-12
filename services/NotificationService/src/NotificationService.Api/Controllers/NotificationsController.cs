@@ -6,6 +6,7 @@ using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.CQRS.Query.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Domain.Enums;
+using SharedContracts.Common.Responses;
 
 namespace NotificationService.Api.Controllers;
 
@@ -51,7 +52,12 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { isSuccess = false, message = "Không xác định được user." });
+            return Unauthorized(new CommonResponse<NotificationListResponse>
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status401Unauthorized,
+                Message = "Không xác định được user."
+            });
 
         var query = new GetNotificationsQuery
         {

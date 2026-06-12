@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -8,6 +9,7 @@ namespace BatteryService.Application.CQRS.Command.BatteryAsset;
 
 public class UpdateBatteryAssetCommand : CreateBatteryAssetCommand, IRequest<CommonResponse<BatteryAssetDto>>, IValidatable<CommonResponse<BatteryAssetDto>>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
 
     public WarrantyStatusEnum WarrantyStatus { get; set; } = WarrantyStatusEnum.Active;

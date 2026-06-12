@@ -67,6 +67,10 @@ internal static class PermissionSeed
 
         // Audit
         new(PermissionCodes.AuditView, "Audit", "Xem audit log"),
+
+        // Alert–Ticket Saga ops — Sprint 5B #241
+        new(PermissionCodes.TicketSagaView, "TicketSaga", "Xem danh sách Alert-Ticket Saga + state hiện tại"),
+        new(PermissionCodes.TicketSagaReprocess, "TicketSaga", "Reprocess Saga đang Failed (admin only)"),
     };
 
     /// <summary>Mapping role → list permission codes mặc định cho 4 system roles.</summary>
@@ -88,6 +92,7 @@ internal static class PermissionSeed
                 PermissionCodes.KnowledgeBaseUpdate, PermissionCodes.KnowledgeBasePublish,
                 PermissionCodes.ReportsView, PermissionCodes.ReportsExport,
                 PermissionCodes.AuditView,
+                PermissionCodes.TicketSagaView, // Sprint 5B #241 — Manager read-only
             },
 
             ["STAFF"] = new[]

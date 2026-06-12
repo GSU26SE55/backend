@@ -1,11 +1,15 @@
 {{/*
-  ConfigMap chứa 4 dashboard JSON (Services Overview, Messaging & Reliability,
-  Infrastructure, Logs Overview).
+  ConfigMap chứa 5 dashboard JSON:
+  - Services Overview
+  - Messaging & Reliability
+  - Infrastructure
+  - Logs Overview
+  - Alert-Ticket Saga (Sprint 5B #239)
 
   Grafana sidecar (built-in trong kube-prometheus-stack) auto-discover ConfigMap
   có label `grafana_dashboard: "1"` rồi load vào Grafana.
 
-  File JSON nằm trong monitoring/grafana/dashboards/ — Helm dùng .Files.Glob load.
+  File JSON nằm trong dashboards/ — Helm dùng .Files.Glob load.
 */}}
 {{- if .Values.monitoring.grafanaDashboards.enabled -}}
 {{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}

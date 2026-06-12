@@ -50,4 +50,43 @@ public static class AppMetrics
     public static readonly Counter IdempotencyReservations = Prometheus.Metrics.CreateCounter(
         "idempotency_key_reservations_total",
         "Total new key reservations (first-time request with key).");
+
+    // ===== Alert–Ticket Saga (Sprint 5B #239 — overall.md §9.2 #4) =====
+    public static readonly Counter SagaStarted = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_started_total",
+        "Total Alert–Ticket Saga instances started.");
+
+    public static readonly Counter SagaCompleted = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_completed_total",
+        "Total Saga instances completed (Ticket created + Alert linked).");
+
+    public static readonly Counter SagaFailed = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_failed_total",
+        "Total Saga instances entered Failed state (terminal).",
+        new CounterConfiguration { LabelNames = new[] { "reason" } });
+
+    public static readonly Counter SagaReprocessed = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_reprocessed_total",
+        "Total admin reprocess attempts on Failed sagas.");
+
+    public static readonly Histogram SagaDurationSeconds = Prometheus.Metrics.CreateHistogram(
+        "saga_alert_ticket_duration_seconds",
+        "Saga end-to-end duration from Initial → Completed.",
+        new HistogramConfiguration
+        {
+            Buckets = new double[] { 0.5, 1, 2, 4, 8, 16, 32, 64 }
+        });
+
+    public static readonly Gauge SagaActive = Prometheus.Metrics.CreateGauge(
+        "saga_alert_ticket_active_count",
+        "Current count of in-flight sagas (not terminal).");
+
+    public static readonly Counter SagaTimeoutFired = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_timeout_fired_total",
+        "Total Quartz timeouts fired on stuck sagas.",
+        new CounterConfiguration { LabelNames = new[] { "stage" } });
+
+    public static readonly Counter SagaRedeliveryDeduped = Prometheus.Metrics.CreateCounter(
+        "saga_alert_ticket_redelivery_deduped_total",
+        "Total duplicate event redeliveries deduped via OriginAlertId uniqueness.");
 }

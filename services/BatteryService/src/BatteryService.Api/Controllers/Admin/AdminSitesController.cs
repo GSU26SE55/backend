@@ -35,7 +35,6 @@ public class AdminSitesController : ControllerBase
     /// - <c>Address</c>: tùy chọn, ≤ 500 ký tự.
     /// - <c>Latitude</c>: tùy chọn, [-90, 90].
     /// - <c>Longitude</c>: tùy chọn, [-180, 180].
-    /// - <c>CapacityKw</c>: tùy chọn, ≥ 0 (kW).
     /// - <c>InstallDate</c>: bắt buộc, không ở tương lai.
     /// - <c>Status</c>: enum <c>SiteStatusEnum</c>, mặc định <c>Active</c>.
     /// - <c>ContactPersonName</c>: tùy chọn, ≤ 150 ký tự.

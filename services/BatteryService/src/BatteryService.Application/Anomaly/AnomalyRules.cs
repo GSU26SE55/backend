@@ -93,6 +93,85 @@ public static class AnomalyRules
             }
         }
 
+        // Sprint 5B #105 — Tier 2 anomalies.
+        if (reading.InternalResistanceMilliohm.HasValue && threshold.InternalResistanceMaxMilliohm.HasValue
+            && reading.InternalResistanceMilliohm.Value > threshold.InternalResistanceMaxMilliohm.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighInternalResistance, AlertSeverityEnum.Critical,
+                threshold.InternalResistanceMaxMilliohm.Value,
+                reading.InternalResistanceMilliohm.Value, "mΩ"));
+        }
+
+        if (reading.CellVoltageDeltaMv.HasValue && threshold.CellVoltageDeltaMaxMv.HasValue
+            && reading.CellVoltageDeltaMv.Value > threshold.CellVoltageDeltaMaxMv.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.CellImbalance, AlertSeverityEnum.Critical,
+                threshold.CellVoltageDeltaMaxMv.Value,
+                reading.CellVoltageDeltaMv.Value, "mV"));
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Sprint 5B #93 — Ambient anomaly detection từ <see cref="AmbientReading"/>.
+    /// </summary>
+    public static IReadOnlyList<AnomalyDetection> DetectAmbient(
+        AmbientReading reading,
+        AmbientThresholdConfig threshold)
+    {
+        var anomalies = new List<AnomalyDetection>();
+
+        if (!threshold.Enabled)
+            return anomalies;
+
+        if (threshold.HighAmbientTempCritical.HasValue
+            && reading.AmbientTemperature > threshold.HighAmbientTempCritical.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighAmbientTemp, AlertSeverityEnum.Critical,
+                threshold.HighAmbientTempCritical.Value,
+                reading.AmbientTemperature, "°C"));
+        }
+        else if (threshold.HighAmbientTempWarning.HasValue
+                 && reading.AmbientTemperature > threshold.HighAmbientTempWarning.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighAmbientTemp, AlertSeverityEnum.Warning,
+                threshold.HighAmbientTempWarning.Value,
+                reading.AmbientTemperature, "°C"));
+        }
+
+        if (threshold.HighHumidityCritical.HasValue
+            && reading.Humidity > threshold.HighHumidityCritical.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighHumidity, AlertSeverityEnum.Critical,
+                threshold.HighHumidityCritical.Value,
+                reading.Humidity ?? 0m, "%"));
+        }
+        else if (threshold.HighHumidityWarning.HasValue
+                 && reading.Humidity > threshold.HighHumidityWarning.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighHumidity, AlertSeverityEnum.Warning,
+                threshold.HighHumidityWarning.Value,
+                reading.Humidity ?? 0m, "%"));
+        }
+
+        // Combo rule — cả 2 cùng vượt threshold → Critical riêng.
+        if (threshold.ComboTempThreshold.HasValue && threshold.ComboHumidityThreshold.HasValue
+            && reading.AmbientTemperature >= threshold.ComboTempThreshold.Value
+            && reading.Humidity >= threshold.ComboHumidityThreshold.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighTempHumidityCombo, AlertSeverityEnum.Critical,
+                threshold.ComboTempThreshold.Value,
+                reading.AmbientTemperature, "°C"));
+        }
+
         return anomalies;
     }
 
@@ -107,5 +186,39 @@ public static class AnomalyRules
         return new AnomalyDetection(
             AnomalyTypeEnum.DeviceOffline, AlertSeverityEnum.Warning,
             (decimal)offlineThreshold.TotalMinutes, (decimal)elapsed.TotalMinutes, "min");
+    }
+
+    /// <summary>
+    /// Sprint 5B B10 (#157) — Cross-source validation: so sánh BMS reading vs IoT Gateway reading
+    /// trên cùng asset trong cùng cửa sổ 60s.
+    /// - |Voltage_bms − Voltage_iot| > 0.5V → SensorMismatch Warning.
+    /// - |Temperature_bms − Temperature_iot| > 5°C → SensorMismatch Warning.
+    /// </summary>
+    public const decimal SensorMismatchVoltageDeltaV = 0.5m;
+    public const decimal SensorMismatchTemperatureDeltaC = 5m;
+
+    public static AnomalyDetection? DetectSensorMismatch(SensorReading bms, SensorReading iot)
+    {
+        if (bms.SourceType != SensorReadingSourceTypeEnum.Bms
+            || iot.SourceType != SensorReadingSourceTypeEnum.IotGateway)
+            return null;
+
+        var voltageDelta = Math.Abs(bms.Voltage - iot.Voltage);
+        if (voltageDelta > SensorMismatchVoltageDeltaV)
+        {
+            return new AnomalyDetection(
+                AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
+                SensorMismatchVoltageDeltaV, voltageDelta, "V");
+        }
+
+        var tempDelta = Math.Abs(bms.Temperature - iot.Temperature);
+        if (tempDelta > SensorMismatchTemperatureDeltaC)
+        {
+            return new AnomalyDetection(
+                AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
+                SensorMismatchTemperatureDeltaC, tempDelta, "°C");
+        }
+
+        return null;
     }
 }

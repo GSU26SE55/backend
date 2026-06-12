@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Permission;
 using MediatR;
 using SharedContracts.Common.Responses;
@@ -14,6 +15,7 @@ namespace AuthService.Application.CQRS.Command.Permission;
 public class SetRolePermissionsCommand : IRequest<PermissionActionResponse>, IValidatable<PermissionActionResponse>
 {
     /// <summary>Set bởi controller từ route.</summary>
+    [JsonIgnore]
     public Guid RoleId { get; set; }
 
     public List<Guid> PermissionIds { get; set; } = new();

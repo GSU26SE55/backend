@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 
@@ -6,6 +8,8 @@ namespace FileStorageService.Application.CQRS.Query;
 
 public class GetFilePresignedUrlByIdQuery : IRequest<CommonResponse<string>>, IValidatable<CommonResponse<string>>
 {
+    [JsonIgnore]
+    [BindNever]
     public Guid Id { get; set; }
 
     public int ExpiresInMinutes { get; set; } = 15;

@@ -1,10 +1,10 @@
 using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using SharedInfrastructure.Middleware;
 
 namespace SharedInfrastructure.DependencyInjection.Extensions;
 
@@ -30,7 +30,6 @@ public static class AddJwtAuthenticationAuthorization
                     ValidAudience = jwtSettings["Audience"],
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero,
-
                 };
                 options.Events = new JwtBearerEvents
                 {
@@ -40,71 +39,59 @@ public static class AddJwtAuthenticationAuthorization
                             context.Response.Headers.Append("Token-Expired", "true");
                         return Task.CompletedTask;
                     },
-                    // 1. Xử lý khi chưa đăng nhập hoặc Token sai (401 Unauthorized)
-                    OnChallenge = context =>
+
+                    // 401 Unauthorized — chưa đăng nhập / token sai / token hết hạn.
+                    OnChallenge = async context =>
                     {
-                        // Ngăn chặn hành vi mặc định (trả về rỗng)
+                        // Ngăn behavior mặc định (trả body rỗng).
                         context.HandleResponse();
 
-                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        context.Response.ContentType = "application/json";
+                        string errorMessage;
+                        string errorCode;
 
-                        string errorMessage = "Bạn chưa đăng nhập. Vui lòng cung cấp Token hợp lệ.";
-                        string errorCode = "UNAUTHORIZED";
-
-                        // 2. Phân tích chi tiết nguyên nhân lỗi
-                        if (context.AuthenticateFailure != null)
+                        if (context.AuthenticateFailure is SecurityTokenExpiredException)
                         {
-                            if (context.AuthenticateFailure is SecurityTokenExpiredException)
-                            {
-                                errorMessage = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại hoặc làm mới Token.";
-                                errorCode = "TOKEN_EXPIRED";
-                            }
-                            else if (context.AuthenticateFailure is SecurityTokenInvalidSignatureException)
-                            {
-                                errorMessage = "Token không hợp lệ (Chữ ký bị sai).";
-                                errorCode = "INVALID_SIGNATURE";
-                            }
-                            else
-                            {
-                                errorMessage = "Token không hợp lệ. Vui lòng đăng nhập lại.";
-                                errorCode = "INVALID_TOKEN";
-                            }
+                            errorMessage = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại hoặc làm mới token.";
+                            errorCode = "TOKEN_EXPIRED";
                         }
-                        // Trường hợp không có header Authorization
+                        else if (context.AuthenticateFailure is SecurityTokenInvalidSignatureException)
+                        {
+                            errorMessage = "Token không hợp lệ (chữ ký không đúng).";
+                            errorCode = "INVALID_SIGNATURE";
+                        }
+                        else if (context.AuthenticateFailure != null)
+                        {
+                            errorMessage = "Token không hợp lệ. Vui lòng đăng nhập lại.";
+                            errorCode = "INVALID_TOKEN";
+                        }
                         else if (!context.Request.Headers.ContainsKey("Authorization"))
                         {
-                            errorMessage = "Không tìm thấy thông tin xác thực (Missing Authorization Header).";
+                            errorMessage = "Không tìm thấy thông tin xác thực (thiếu Authorization header).";
                             errorCode = "MISSING_TOKEN";
                         }
-
-                        var response = new
+                        else
                         {
-                            isSuccess = false,
-                            statusCode = 401,
-                            message = errorMessage,
-                            data = new { errorCode },
-                            listErrors = Array.Empty<object>()
-                        };
+                            errorMessage = "Bạn chưa đăng nhập. Vui lòng cung cấp token hợp lệ.";
+                            errorCode = "UNAUTHORIZED";
+                        }
 
-                        return context.Response.WriteAsync(JsonSerializer.Serialize(response));
+                        await CommonResponseWriter.WriteAsync(
+                            context.Response,
+                            StatusCodes.Status401Unauthorized,
+                            errorMessage,
+                            errors: null,
+                            data: new { errorCode });
                     },
 
-                    // 2. Xử lý khi đã đăng nhập nhưng không đủ quyền (403 Forbidden)
-                    OnForbidden = context =>
+                    // 403 Forbidden — đã đăng nhập nhưng không đủ quyền.
+                    OnForbidden = async context =>
                     {
-                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        context.Response.ContentType = "application/json";
-
-                        var response = new
-                        {
-                            isSuccess = false,
-                            message = "You are not allowed to access this endpoint.",
-                            data = (object?)null,
-                            listErrors = Array.Empty<object>()
-                        };
-
-                        return context.Response.WriteAsync(JsonSerializer.Serialize(response));
+                        await CommonResponseWriter.WriteAsync(
+                            context.Response,
+                            StatusCodes.Status403Forbidden,
+                            "Bạn không có quyền truy cập tài nguyên này.",
+                            errors: null,
+                            data: new { errorCode = "FORBIDDEN" });
                     }
                 };
             });

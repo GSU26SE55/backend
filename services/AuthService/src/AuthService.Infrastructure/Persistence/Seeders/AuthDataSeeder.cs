@@ -9,11 +9,6 @@ namespace AuthService.Infrastructure.Persistence.Seeders;
 
 public class AuthDataSeeder
 {
-    private static readonly Guid AdminRoleId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid ManagerRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private static readonly Guid StaffRoleId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
-
     private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
     private readonly IPasswordHasher _passwordHasher;
@@ -36,7 +31,80 @@ public class AuthDataSeeder
         var roles = await SeedRolesAsync(cancellationToken);
         var permissionsByCode = await SeedPermissionsAsync(cancellationToken);
         await SeedRolePermissionsAsync(roles, permissionsByCode, cancellationToken);
-        await SeedAdminAccountAsync(roles["ADMIN"], cancellationToken);
+        var adminAccount = await SeedAdminAccountAsync(roles["ADMIN"], cancellationToken);
+        var sampleAccounts = await SeedSampleAccountsAsync(roles, cancellationToken);
+        await SeedAccountProfilesAsync(adminAccount, sampleAccounts, cancellationToken);
+        await SeedStaffProfilesAsync(sampleAccounts, cancellationToken);
+        await SeedLoginAttemptsAsync(adminAccount, sampleAccounts, cancellationToken);
+    }
+
+    private async Task SeedLoginAttemptsAsync(
+        Account adminAccount,
+        List<Account> sampleAccounts,
+        CancellationToken cancellationToken)
+    {
+        var hasAny = await _dbContext.LoginAttempts.AnyAsync(cancellationToken);
+        if (hasAny)
+            return;
+
+        var now = DateTime.UtcNow;
+        var attempts = new List<LoginAttempt>();
+
+        // Admin: 3 success login từ 3 thiết bị / IP khác nhau
+        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.Success,
+            "Password", "203.0.113.10", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) Safari/605.1.15", "mac-pro-01", now.AddHours(-1)));
+        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.Success,
+            "Password", "203.0.113.11", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "win-desk-01", now.AddDays(-1)));
+        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.WrongPassword,
+            "Password", "203.0.113.99", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "unknown-01", now.AddHours(-3),
+            "Sai mật khẩu — còn 4 lần thử"));
+
+        // Sample accounts: 2 success + 1 fail mỗi account
+        foreach (var account in sampleAccounts)
+        {
+            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.Success,
+                "Password", "192.168.1.50", "ExpoMobile/1.0 (Android 14)", "expo-android-001", now.AddHours(-2)));
+            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.Success,
+                "Google", "192.168.1.51", "Mozilla/5.0 Chrome/124.0", "web-chrome-001", now.AddDays(-2)));
+            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,
+                "Password", "10.0.0.5", "ExpoMobile/1.0 (iOS 17.4)", "expo-ios-001", now.AddHours(-12),
+                "Sai mật khẩu"));
+        }
+
+        // 1 attempt cho email không tồn tại (AccountNotFound)
+        attempts.Add(NewAttempt(null, "ghost@solarbattery.local", LoginAttemptResult.AccountNotFound,
+            "Password", "198.51.100.1", "curl/8.6.0", null, now.AddHours(-6),
+            "Email không tồn tại"));
+
+        _dbContext.LoginAttempts.AddRange(attempts);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded {Count} login attempts.", attempts.Count);
+    }
+
+    private static LoginAttempt NewAttempt(
+        Guid? accountId,
+        string email,
+        LoginAttemptResult result,
+        string method,
+        string ip,
+        string userAgent,
+        string? deviceId,
+        DateTime at,
+        string? note = null)
+    {
+        return new LoginAttempt
+        {
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
+            AttemptedEmail = email,
+            Result = result,
+            Method = method,
+            IpAddress = ip,
+            UserAgent = userAgent,
+            DeviceId = deviceId,
+            Note = note,
+            CreatedAt = at
+        };
     }
 
     private async Task<Dictionary<string, Permission>> SeedPermissionsAsync(CancellationToken cancellationToken)
@@ -122,10 +190,10 @@ public class AuthDataSeeder
     {
         var seedRoles = new[]
         {
-            CreateRole(AdminRoleId, "Admin", "ADMIN", "Quản trị viên hệ thống, có toàn quyền."),
-            CreateRole(ManagerRoleId, "Manager", "MANAGER", "Quản lý vận hành và điều phối nhân sự."),
-            CreateRole(StaffRoleId, "Staff", "STAFF", "Nhân viên vận hành hệ thống."),
-            CreateRole(CustomerRoleId, "Customer", "CUSTOMER", "Khách hàng sử dụng dịch vụ.")
+            CreateRole(Guid.NewGuid(), "Admin", "ADMIN", "Quản trị viên hệ thống, có toàn quyền."),
+            CreateRole(Guid.NewGuid(), "Manager", "MANAGER", "Quản lý vận hành và điều phối nhân sự."),
+            CreateRole(Guid.NewGuid(), "Staff", "STAFF", "Nhân viên vận hành hệ thống."),
+            CreateRole(Guid.NewGuid(), "Customer", "CUSTOMER", "Khách hàng sử dụng dịch vụ.")
         };
         var seedRoleNames = seedRoles.Select(seed => seed.NormalizedName).ToList();
 
@@ -179,7 +247,7 @@ public class AuthDataSeeder
             .ToDictionaryAsync(role => role.NormalizedName, cancellationToken);
     }
 
-    private async Task SeedAdminAccountAsync(Role adminRole, CancellationToken cancellationToken)
+    private async Task<Account> SeedAdminAccountAsync(Role adminRole, CancellationToken cancellationToken)
     {
         var adminEmail = GetSeedValue("ADMIN_EMAIL", "AdminSeed:Email", "admin@gmail.com").Trim().ToLowerInvariant();
         var adminPassword = GetSeedValue("ADMIN_PASSWORD", "AdminSeed:Password", "Admin123@");
@@ -224,6 +292,167 @@ public class AuthDataSeeder
             }
         }
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return adminAccount;
+    }
+
+    private async Task<List<Account>> SeedSampleAccountsAsync(
+        IReadOnlyDictionary<string, Role> roles,
+        CancellationToken cancellationToken)
+    {
+        var defaultPasswordHash = _passwordHasher.Hash("Password123@");
+        var now = DateTime.UtcNow;
+
+        var samples = new[]
+        {
+            ("manager.demo@solarbattery.local", "Demo Manager", "MANAGER"),
+            ("staff.tier1@solarbattery.local", "Staff Tier1 Generalist", "STAFF"),
+            ("staff.tier2@solarbattery.local", "Staff Tier2 Specialist", "STAFF"),
+            ("staff.tier3@solarbattery.local", "Staff Tier3 Senior", "STAFF"),
+            ("customer.demo@solarbattery.local", "Demo Customer", "CUSTOMER")
+        };
+
+        var emails = samples.Select(s => s.Item1).ToList();
+        var existing = await _dbContext.Users
+            .IgnoreQueryFilters()
+            .Where(u => emails.Contains(u.Email))
+            .ToDictionaryAsync(u => u.Email, cancellationToken);
+
+        var added = new List<Account>();
+        foreach (var (email, fullName, roleKey) in samples)
+        {
+            if (existing.TryGetValue(email, out var current))
+            {
+                added.Add(current);
+                continue;
+            }
+            if (!roles.TryGetValue(roleKey, out var role))
+                continue;
+
+            var account = new Account
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                PasswordHash = defaultPasswordHash,
+                FullName = fullName,
+                EmailConfirmed = true,
+                PhoneConfirmed = false,
+                Status = AccountStatusEnum.Active,
+                RoleId = role.Id,
+                RoleAssignedAt = now,
+                CreatedAt = now,
+                IsDeleted = false
+            };
+            _dbContext.Users.Add(account);
+            added.Add(account);
+        }
+
+        if (added.Any(a => _dbContext.Entry(a).State == EntityState.Added))
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return added;
+    }
+
+    private async Task SeedAccountProfilesAsync(
+        Account adminAccount,
+        List<Account> sampleAccounts,
+        CancellationToken cancellationToken)
+    {
+        var accountIds = new List<Guid> { adminAccount.Id };
+        accountIds.AddRange(sampleAccounts.Select(a => a.Id));
+
+        var existing = await _dbContext.AccountProfiles
+            .IgnoreQueryFilters()
+            .Where(p => accountIds.Contains(p.AccountId))
+            .Select(p => p.AccountId)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var toAdd = new List<AccountProfile>();
+
+        foreach (var id in accountIds)
+        {
+            if (existing.Contains(id))
+                continue;
+            toAdd.Add(new AccountProfile
+            {
+                Id = Guid.NewGuid(),
+                AccountId = id,
+                AvatarSource = AvatarSourceEnum.None,
+                TimeZone = "Asia/Ho_Chi_Minh",
+                CreatedAt = now
+            });
+        }
+
+        if (toAdd.Count == 0)
+            return;
+
+        _dbContext.AccountProfiles.AddRange(toAdd);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedStaffProfilesAsync(List<Account> sampleAccounts, CancellationToken cancellationToken)
+    {
+        var staffMap = new (string Email, string EmployeeCode, StaffSkillTierEnum Tier, int MaxTickets, string[] Skills)[]
+        {
+            ("staff.tier1@solarbattery.local", "STF-T1-001", StaffSkillTierEnum.Generalist, 10, new[] { "general" }),
+            ("staff.tier2@solarbattery.local", "STF-T2-001", StaffSkillTierEnum.ModuleSpecialist, 8, new[] { "battery", "charging" }),
+            ("staff.tier3@solarbattery.local", "STF-T3-001", StaffSkillTierEnum.SeniorSpecialist, 5, new[] { "battery", "firmware", "incident" })
+        };
+
+        var emailToAccount = sampleAccounts.ToDictionary(a => a.Email, a => a);
+        var staffAccountIds = staffMap
+            .Where(m => emailToAccount.ContainsKey(m.Email))
+            .Select(m => emailToAccount[m.Email].Id)
+            .ToList();
+
+        var existingProfileIds = await _dbContext.StaffProfiles
+            .IgnoreQueryFilters()
+            .Where(p => staffAccountIds.Contains(p.AccountId))
+            .Select(p => p.AccountId)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var newProfiles = new List<StaffProfile>();
+        var newSkills = new List<StaffSkill>();
+
+        foreach (var entry in staffMap)
+        {
+            if (!emailToAccount.TryGetValue(entry.Email, out var account))
+                continue;
+            if (existingProfileIds.Contains(account.Id))
+                continue;
+
+            newProfiles.Add(new StaffProfile
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                EmployeeCode = entry.EmployeeCode,
+                Department = "Operations",
+                MaxConcurrentTickets = entry.MaxTickets,
+                IsAvailable = true,
+                SkillTier = entry.Tier,
+                CreatedAt = now
+            });
+
+            foreach (var skillCode in entry.Skills)
+            {
+                newSkills.Add(new StaffSkill
+                {
+                    Id = Guid.NewGuid(),
+                    StaffAccountId = account.Id,
+                    SkillCode = skillCode,
+                    SkillLevel = (int)entry.Tier,
+                    CreatedAt = now
+                });
+            }
+        }
+
+        if (newProfiles.Count == 0)
+            return;
+
+        _dbContext.StaffProfiles.AddRange(newProfiles);
+        _dbContext.StaffSkills.AddRange(newSkills);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

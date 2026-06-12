@@ -12,6 +12,11 @@
     <ItemGroup>
         <PackageReference Include="MassTransit" Version="8.5.9" />
         <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.9" />
+        <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.4.1" />
+        <PackageReference Include="MassTransit.Quartz" Version="8.4.1" />
+        <PackageReference Include="Quartz.AspNetCore" Version="3.14.0" />
+        <PackageReference Include="Quartz.Extensions.Hosting" Version="3.14.0" />
+        <PackageReference Include="Quartz.Serialization.Json" Version="3.14.0" />
         <PackageReference Include="MediatR" Version="12.2.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.3" />
         <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />

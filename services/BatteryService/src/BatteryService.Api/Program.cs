@@ -78,6 +78,10 @@ if (!EF.IsDesignTime)
         var seeder = scope.ServiceProvider.GetRequiredService<BatteryDataSeeder>();
         await seeder.SeedAsync();
         Console.WriteLine("? Battery seed data checked.");
+
+        var envSeeder = scope.ServiceProvider.GetRequiredService<EnvironmentDataSeeder>();
+        await envSeeder.SeedAsync();
+        Console.WriteLine("? Environment seed data checked.");
     }
 
     app.UseSharedInfrastructure();

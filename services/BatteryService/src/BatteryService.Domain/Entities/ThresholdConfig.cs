@@ -26,6 +26,16 @@ public class ThresholdConfig : AuditableEntity
 
     public decimal? SohCriticalThreshold { get; set; }
 
+    // Sprint 5B #101 — Tier 2 thresholds (nullable, per-batttery-type).
+    public decimal? InternalResistanceMaxMilliohm { get; set; }
+    public decimal? CellVoltageDeltaMaxMv { get; set; }
+
+    // Sprint 5B B1 (#152) — Noise suppression: chỉ alert nếu vi phạm
+    // >= NoiseSuppressionCount lần trong WindowHours giờ liên tiếp.
+    public int NoiseSuppressionCount { get; set; } = 5;
+    public int NoiseSuppressionWindowHours { get; set; } = 24;
+    public bool NoiseSuppressionEnabled { get; set; } = true;
+
     public DateTime EffectiveFromUtc { get; set; }
 
     public bool IsActive { get; set; } = true;

@@ -256,6 +256,7 @@ public class Sprint3AnomalyFlowIntegrationTests
             SocCriticalThreshold = 10,
             SohWarningThreshold = 85,
             SohCriticalThreshold = 75,
+            NoiseSuppressionEnabled = false,    // Sprint 5B reconcile — test focuses on detection, not noise suppression
             EffectiveFromUtc = DateTime.UtcNow,
             IsActive = true
         });

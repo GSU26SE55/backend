@@ -16,6 +16,12 @@ public class OutboxRelayService : IOutboxRelayService
     private static readonly Dictionary<string, Type> EventTypeMap = new()
     {
         { nameof(BatteryAnomalyDetectedEvent), typeof(BatteryAnomalyDetectedEvent) },
+        { nameof(BatteryAnomalyDetectedV2Event), typeof(BatteryAnomalyDetectedV2Event) },
+        // Sprint 5B #238 — event mới cho NotificationService escalation flow.
+        { nameof(BatteryAlertEscalationRequestedEvent), typeof(BatteryAlertEscalationRequestedEvent) },
+        // Legacy alias — payload schema cũ (BatteryAnomalyDetectedEvent) cho rows
+        // pre-Sprint-5B chưa relay. Deserialize an toàn vì BatteryAnomalyDetectedEvent
+        // có sẵn handler ở TicketService (giờ ignored qua Saga tombstone).
         { "BatteryAnomalyEscalatedEvent", typeof(BatteryAnomalyDetectedEvent) }
     };
 

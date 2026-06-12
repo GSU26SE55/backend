@@ -269,6 +269,34 @@ config:
 
   ADMIN_EMAIL: admin@example.com
 
+  # ----- Sprint 3 — BatteryService Anomaly Engine -----
+  ApiKeys__SensorIngest: "dev-battery-ingest-key"
+  AnomalyEngine__ScanIntervalSeconds: "30"
+  AnomalyEngine__DedupWindowMinutes: "30"
+  AnomalyEngine__OfflineThresholdMinutes: "10"
+  AnomalyEngine__EscalationAfterMinutes: "5"
+  AnomalyEngine__EscalationIntervalSeconds: "60"
+  AnomalyEngine__OutboxRelayIntervalSeconds: "5"
+  AnomalyEngine__OutboxRelayBatchSize: "100"
+
+  # ----- Sprint 5B #91/#102 — Environmental ingest API key -----
+  ApiKeys__EnvironmentalIngest: "dev-battery-environmental-key"
+
+  # ----- Sprint 5B #90/#92 — Open-Meteo client + WeatherSync background -----
+  Weather__BaseUrl: "https://api.open-meteo.com/"
+  Weather__IntervalMinutes: "15"
+  Weather__DedupWindowMinutes: "10"
+  Weather__HttpTimeoutSeconds: "10"
+  Weather__Enabled: "true"
+
+  # ----- Sprint 5B #235 — MassTransit endpoint runtime tuning -----
+  MessageBus__PrefetchCount: "32"
+  MessageBus__ConcurrentMessageLimit: "16"
+
+  # ----- Sprint 5B #238 — Alert-Ticket Saga feature flag cutover -----
+  AlertTicketSaga__AlertTicketDispatchEnabled: "true"
+  AlertTicketSaga__AlertTicketSagaEnabled: "true"
+
 # --------------------------------------------------------------------
 # Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).
 # Dùng `kubectl create secret` hoặc Sealed Secrets thay thế.
