@@ -51,7 +51,8 @@ scrape_configs:
       # 5. KEEP filter — chỉ scrape container app + infra cần xem log.
       #    Skip monitoring stack tự thân (grafana, loki, promtail, prometheus, alertmanager,
       #    cadvisor, *-exporter, minio-init) để tránh log lặp/noise.
-      #    Sprint IoT-1 #253: thêm `mosquitto` để debug auth fail / ACL deny / TLS handshake.
+      #    `mosquitto` giữ trong regex để debug khi user opt-in chạy broker side-car từ iot repo
+      #    join cùng docker network (broker chính KHÔNG thuộc backend repo — xem docker-compose.yml).
       - source_labels: ["__meta_docker_container_name"]
         regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|batteryservice|notificationservice|ticketservice|apigateway|postgres|redis|rabbitmq|minio|mosquitto)"
         action: keep

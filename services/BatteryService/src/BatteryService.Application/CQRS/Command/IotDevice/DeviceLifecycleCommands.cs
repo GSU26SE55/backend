@@ -42,6 +42,33 @@ public class IotDeviceHeartbeatCommand : IRequest<CommonResponse<IotHeartbeatAck
     public long? UptimeSeconds { get; set; }
     public int? QueuedReadingCount { get; set; }
     public DateTime DeviceTimestamp { get; set; }
+
+    // Sprint IoT-2 #IoT2-10 — ESP32 field mapping per overall.md §52.2/§52.4.
+    /// <summary>CPU usage 0..100 — ESP32 không tính được sẽ gửi null.</summary>
+    public decimal? Cpu { get; set; }
+
+    /// <summary>Free disk MB — ESP32 không có disk → null. Để khớp interface với gateway-class device.</summary>
+    public long? DiskFreeMb { get; set; }
+
+    /// <summary>Nhiệt độ MCU (°C). Alias của RssiDbm/FreeMemory cho ESP32.</summary>
+    public decimal? Temperature { get; set; }
+
+    /// <summary>Memory usage (MB) — alias chuẩn ESP32 thay vì percent.</summary>
+    public long? MemoryUsageMb { get; set; }
+
+    /// <summary>RSSI WiFi (dBm) — alias rõ nghĩa của <see cref="RssiDbm"/> theo §52.2.</summary>
+    public int? SignalStrengthDbm
+    {
+        get => RssiDbm;
+        set { if (value.HasValue) RssiDbm = value; }
+    }
+
+    /// <summary>Số reading đang queue trong NVS (alias rõ nghĩa của <see cref="QueuedReadingCount"/>).</summary>
+    public int? LocalQueueDepth
+    {
+        get => QueuedReadingCount;
+        set { if (value.HasValue) QueuedReadingCount = value; }
+    }
 }
 
 /// <summary>Device cập nhật progress OTA.</summary>

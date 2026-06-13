@@ -73,6 +73,15 @@ public class IotDeviceConfiguration : IEntityTypeConfiguration<IotDevice>
 
         builder.Property(d => d.LastClockSkewSeconds).HasColumnName("last_clock_skew_seconds");
 
+        // Sprint IoT-2 #IoT2-17 — auto-disable outlier tracking.
+        builder.Property(d => d.OutlierIncidentCount).HasColumnName("outlier_incident_count").HasDefaultValue(0);
+        builder.Property(d => d.OutlierWindowStartedAt).HasColumnName("outlier_window_started_at");
+        builder.Property(d => d.AutoDecommissionedAt).HasColumnName("auto_decommissioned_at");
+
+        // Sprint IoT-2 #IoT2-26 — MQTT per-device credential.
+        builder.Property(d => d.MqttUsername).HasColumnName("mqtt_username").HasMaxLength(128);
+        builder.Property(d => d.MqttPasswordHash).HasColumnName("mqtt_password_hash").HasMaxLength(256);
+
         builder.Property(d => d.Notes).HasColumnName("notes").HasMaxLength(1000);
 
         builder.Property(d => d.CreatedAt).HasColumnName("created_at").IsRequired();

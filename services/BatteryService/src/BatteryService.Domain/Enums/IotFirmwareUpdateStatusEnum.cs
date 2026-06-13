@@ -21,5 +21,8 @@ public enum IotFirmwareUpdateStatusEnum
     Failed = 5,
 
     /// <summary>Device không đủ điều kiện (battery thấp, không tải) → bỏ qua round này.</summary>
-    Skipped = 6
+    Skipped = 6,
+
+    /// <summary>Sprint IoT-2 #IoT2-37 — flash xong nhưng device fail boot → rollback về bản trước.</summary>
+    RolledBack = 7
 }

@@ -88,6 +88,13 @@ public class NotificationDataSeeder
             "Bất thường pin {{serialNumber}}", "Loại: {{anomalyType}} — Severity: {{severity}}");
         Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Push, "vi-VN",
             "Cảnh báo môi trường tại {{siteName}}", "Loại: {{incidentType}} — Severity: {{severity}}");
+        // Sprint IoT-2 #IoT2-31 — Email + SMS template (Critical channel, bypass quiet hours).
+        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Email, "vi-VN",
+            "[CRITICAL] Sự cố môi trường tại {{siteName}}",
+            "Phát hiện sự cố môi trường (IncidentType={{incidentType}}, Severity={{severity}}) tại site \"{{siteName}}\". Detected at {{detectedAt}}. Yêu cầu xử lý NGAY.\n\n{{description}}");
+        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Sms, "vi-VN",
+            "[CRITICAL]",
+            "ENV INCIDENT {{incidentType}} tại {{siteName}}. Severity {{severity}}. Vào hệ thống xử lý NGAY.");
         Add(NotificationTypeEnum.EnvironmentalIncidentResolved, NotificationChannelEnum.InApp, "vi-VN",
             "Sự cố môi trường đã xử lý", "Site {{siteName}} — incident {{incidentType}} đã được resolved.");
 

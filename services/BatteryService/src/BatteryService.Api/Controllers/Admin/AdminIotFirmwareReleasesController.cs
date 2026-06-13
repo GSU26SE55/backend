@@ -1,9 +1,11 @@
+using System.Security.Cryptography;
 using BatteryService.Application.CQRS.Command.IotFirmware;
 using BatteryService.Application.CQRS.Query.IotFirmware;
 using BatteryService.Application.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Api.Controllers.Admin;
@@ -206,4 +208,129 @@ public class AdminIotFirmwareReleasesController : ControllerBase
         var result = await _mediator.Send(new ArchiveIotFirmwareReleaseCommand { Id = id }, ct);
         return StatusCode(result.StatusCode, result);
     }
+
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-35 (S7-BE-04) — upload firmware binary (.bin) qua multipart.
+    /// Backend tính SHA-256 + lưu file vào storage volume (path config qua <c>Firmware:StorageRoot</c>) → trả về URL/sha/size
+    /// để admin paste vào <c>POST /api/admin/iot-firmware-releases</c>.
+    ///
+    /// Production có thể thay impl bằng forward upload đến <c>FileStorageService</c>.
+    /// </summary>
+    [HttpPost("upload-binary")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(60 * 1024 * 1024)] // 60MB cap (ESP32 partition ≤ 50MB + slack).
+    [ProducesResponseType(typeof(CommonResponse<FirmwareBinaryUploadDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UploadBinary(
+        [FromForm] FirmwareBinaryUploadForm form,
+        [FromServices] IConfiguration configuration,
+        [FromServices] IWebHostEnvironment env,
+        CancellationToken ct)
+    {
+        if (form?.File is null || form.File.Length == 0)
+        {
+            return BadRequest(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "File firmware là bắt buộc.",
+                ListErrors = new() { new() { Field = "File", Detail = "Bắt buộc upload file .bin." } }
+            });
+        }
+
+        var extension = Path.GetExtension(form.File.FileName);
+        if (!string.Equals(extension, ".bin", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "Chỉ chấp nhận file .bin.",
+                ListErrors = new() { new() { Field = "File", Detail = "Extension phải là .bin" } }
+            });
+        }
+
+        // Lấy root path từ config; fallback: ContentRoot/firmware-storage.
+        var root = configuration["Firmware:StorageRoot"];
+        if (string.IsNullOrWhiteSpace(root))
+            root = Path.Combine(env.ContentRootPath, "firmware-storage");
+        Directory.CreateDirectory(root);
+
+        // Tên file an toàn: {hwRev}_{version}_{guid}.bin (sanitize input).
+        var safeHw = SanitizeSegment(form.HardwareRevision);
+        var safeVer = SanitizeSegment(form.Version);
+        var fileName = $"{safeHw}_{safeVer}_{Guid.NewGuid():N}.bin";
+        var fullPath = Path.Combine(root, fileName);
+
+        long size;
+        string sha256;
+        await using (var output = System.IO.File.Create(fullPath))
+        await using (var input = form.File.OpenReadStream())
+        {
+            using var hasher = SHA256.Create();
+            var buffer = new byte[81920];
+            int read;
+            long total = 0;
+            while ((read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), ct)) > 0)
+            {
+                hasher.TransformBlock(buffer, 0, read, null, 0);
+                await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                total += read;
+            }
+            hasher.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            size = total;
+            sha256 = Convert.ToHexString(hasher.Hash!).ToLowerInvariant();
+        }
+
+        // URL public: dùng PublicBaseUrl nếu set, không thì tương đối /firmware-storage/{file}.
+        var publicBase = configuration["Firmware:PublicBaseUrl"];
+        var artifactUrl = !string.IsNullOrWhiteSpace(publicBase)
+            ? $"{publicBase.TrimEnd('/')}/{fileName}"
+            : $"/firmware-storage/{fileName}";
+
+        return StatusCode(201, new CommonResponse<FirmwareBinaryUploadDto>
+        {
+            IsSuccess = true,
+            StatusCode = 201,
+            Message = "Upload firmware binary thành công. Dùng URL + SHA-256 để tạo release.",
+            Data = new FirmwareBinaryUploadDto
+            {
+                ArtifactUrl = artifactUrl,
+                Sha256Checksum = sha256,
+                ArtifactSizeBytes = size,
+                FileName = fileName,
+                Version = form.Version,
+                HardwareRevision = form.HardwareRevision,
+                IsRequired = form.IsRequired,
+                Channel = form.Channel,
+                ReleaseNotes = form.ReleaseNotes,
+                DeviceModel = form.DeviceModel
+            }
+        });
+    }
+
+    private static string SanitizeSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+        var invalid = Path.GetInvalidFileNameChars();
+        var span = value.Where(c => !invalid.Contains(c) && c != ' ' && c != '/').ToArray();
+        return new string(span);
+    }
+}
+
+/// <summary>Sprint IoT-2 #IoT2-35 — multipart form binding.</summary>
+public class FirmwareBinaryUploadForm
+{
+    public IFormFile? File { get; set; }
+    public string Version { get; set; } = string.Empty;
+    public string HardwareRevision { get; set; } = string.Empty;
+
+    // Spec fields per §52.7.
+    public bool IsRequired { get; set; }
+    public BatteryService.Domain.Enums.IotFirmwareChannelEnum Channel { get; set; } = BatteryService.Domain.Enums.IotFirmwareChannelEnum.Stable;
+    public string? ReleaseNotes { get; set; }
+    public string? DeviceModel { get; set; }
 }

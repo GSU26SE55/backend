@@ -28,9 +28,8 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
-  # Sprint IoT-1 #253 — Mosquitto persistence (retained messages, queued for offline subs).
-  mosquitto-data:
-  mosquitto-log:
+  # Sprint IoT-2 #IoT2-35 — firmware storage dùng host bind /opt/solar/firmware-storage
+  # (xem batteryservice.volumes). KHÔNG khai báo named volume để ops backup trực tiếp host path.
 
 services:
 
@@ -293,10 +292,10 @@ services:
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
       # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
-      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-60}
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
       Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
       Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
-      # Sprint IoT-1 #253 — MQTT bridge (P3 optional). Production yêu cầu Mqtt__Password thực + cert CA tin cậy.
+      # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. Production: TLS bắt buộc, cert CA tin cậy.
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
       Mqtt__Port: ${Mqtt__Port:-8883}
@@ -306,8 +305,15 @@ services:
       Mqtt__Password: ${Mqtt__Password}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage.
+      # Production khuyến nghị: dùng object storage (S3/MinIO) + set PublicBaseUrl tới CDN.
+      # Local FS fallback: bind mount /opt/solar/firmware-storage để giữ qua container restart.
+      Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
+      Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
     ports:
       - "4006:8080"
+    volumes:
+      - /opt/solar/firmware-storage:/data/firmware-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -320,33 +326,24 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
-  # ---------- Sprint IoT-1 #253 — Mosquitto MQTT broker (P3 optional) ----------
-  # Production: bind mount config + certs từ /opt/solar/mqtt/.
-  # Yêu cầu trước khi `docker compose up`:
-  #   1. Đẩy infra/mqtt/mosquitto.conf + acl.conf lên /opt/solar/mqtt/config/.
-  #   2. Generate passwd: mosquitto_passwd -c /opt/solar/mqtt/config/passwd backend-bridge "$(openssl rand -base64 32)".
-  #   3. Cấp cert (Let's Encrypt khuyến nghị): ca.crt, server.crt, server.key vào /opt/solar/mqtt/certs/.
-  #   4. Set Mqtt__Password trong /opt/solar/.env.prod khớp với passwd ở (2).
-  mosquitto:
-    image: eclipse-mosquitto:2.0
-    container_name: solar-mosquitto
-    mem_limit: 256m
-    cpus: "0.30"
-    volumes:
-      - /opt/solar/mqtt/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - /opt/solar/mqtt/config/acl.conf:/mosquitto/config/acl.conf:ro
-      - /opt/solar/mqtt/config/passwd:/mosquitto/config/passwd:ro
-      - /opt/solar/mqtt/certs:/mosquitto/certs:ro
-      - mosquitto-data:/mosquitto/data
-      - mosquitto-log:/mosquitto/log
-    ports:
-      # Plain 1883 KHÔNG expose ra public — chỉ internal docker network.
-      # Nếu cần debug local trên VPS, dùng `docker exec -it solar-mosquitto mosquitto_sub ...`.
-      - "127.0.0.1:1883:1883"
-      # TLS 8883 expose ra ngoài cho ESP32 connect.
-      - "8883:8883"
-    networks: [solar-net]
-    restart: unless-stopped
+  # ---------- MQTT broker — KHÔNG nằm trong backend repo ----------
+  # Per architectural decision: broker thuộc capstone/iot/ monorepo (cả dev + prod).
+  # Backend chỉ chạy MQTT CLIENT (MqttBridgeBackgroundService) connect tới broker external.
+  #
+  # Deploy broker production — 2 phương án:
+  #
+  # A) Broker trên cùng VPS (chia sẻ docker network):
+  #    1. Backend compose up trước → network mặc định tên `backend_solar-net`.
+  #    2. iot compose declare network external:
+  #         networks:
+  #           solar-net:
+  #             external: true
+  #             name: backend_solar-net
+  #    3. iot ops: `cd /opt/solar/iot && docker compose -f infra/docker-compose.prod.yml up -d mosquitto`
+  #    4. Backend env: Mqtt__Host=mosquitto + Mqtt__Port=8883 + UseTls=true.
+  #
+  # B) Broker trên VPS khác / managed (EMQX Cloud / HiveMQ Cloud):
+  #    Set Mqtt__Host=<broker-fqdn> + UseTls=true + cấp cert CA tin cậy.
 
   ticketservice:
     image: ghcr.io/gsu26se55/ticketservice:${IMAGE_TAG:-staging}

@@ -102,6 +102,20 @@ if (!EF.IsDesignTime)
         app.UseHttpsRedirection();
 
     app.UseCors("AllowAll");
+
+    // Sprint IoT-2 #IoT2-35 — serve firmware binary đã upload (multipart) qua static path.
+    var firmwareRoot = builder.Configuration["Firmware:StorageRoot"];
+    if (string.IsNullOrWhiteSpace(firmwareRoot))
+        firmwareRoot = Path.Combine(app.Environment.ContentRootPath, "firmware-storage");
+    Directory.CreateDirectory(firmwareRoot);
+    app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(firmwareRoot),
+        RequestPath = "/firmware-storage",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream"
+    });
+
     app.UseAuthentication();
     app.UseAuthorization();
 

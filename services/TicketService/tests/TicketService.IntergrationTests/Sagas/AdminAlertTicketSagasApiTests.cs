@@ -109,7 +109,7 @@ VALUES
         await SeedSagaAsync("Completed");
         await SeedSagaAsync("Failed", "TimedOut");
 
-        var response = await _client.GetAsync("/api/v1/admin/sagas/alert-ticket");
+        var response = await _client.GetAsync("/api/admin/sagas/alert-ticket");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaListResponse>(_jsonOptions);
@@ -124,7 +124,7 @@ VALUES
         await SeedSagaAsync("Failed", "ASSET_NOT_FOUND");
         await SeedSagaAsync("Failed", "TIMEOUT");
 
-        var response = await _client.GetAsync("/api/v1/admin/sagas/alert-ticket?isFailed=true");
+        var response = await _client.GetAsync("/api/admin/sagas/alert-ticket?isFailed=true");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaListResponse>(_jsonOptions);
@@ -137,7 +137,7 @@ VALUES
     {
         var alertId = await SeedSagaAsync("Failed", "ASSET_NOT_FOUND");
 
-        var response = await _client.GetAsync($"/api/v1/admin/sagas/alert-ticket/{alertId}");
+        var response = await _client.GetAsync($"/api/admin/sagas/alert-ticket/{alertId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaDetailResponse>(_jsonOptions);
@@ -152,7 +152,7 @@ VALUES
     {
         var randomId = Guid.NewGuid();
 
-        var response = await _client.GetAsync($"/api/v1/admin/sagas/alert-ticket/{randomId}");
+        var response = await _client.GetAsync($"/api/admin/sagas/alert-ticket/{randomId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaDetailResponse>(_jsonOptions);
@@ -166,7 +166,7 @@ VALUES
         var alertId = await SeedSagaAsync("Failed", "TIMEOUT");
 
         var response = await _client.PostAsync(
-            $"/api/v1/admin/sagas/alert-ticket/{alertId}/reprocess", content: null);
+            $"/api/admin/sagas/alert-ticket/{alertId}/reprocess", content: null);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -177,7 +177,7 @@ VALUES
         var alertId = await SeedSagaAsync("Failed", "TIMEOUT");
 
         var request = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/admin/sagas/alert-ticket/{alertId}/reprocess");
+            $"/api/admin/sagas/alert-ticket/{alertId}/reprocess");
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
 
         var response = await _client.SendAsync(request);
@@ -202,7 +202,7 @@ VALUES
         var alertId = await SeedSagaAsync("TicketRequested");
 
         var request = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/admin/sagas/alert-ticket/{alertId}/reprocess");
+            $"/api/admin/sagas/alert-ticket/{alertId}/reprocess");
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
 
         var response = await _client.SendAsync(request);
@@ -218,14 +218,14 @@ VALUES
 
         // First call.
         var firstReq = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/admin/sagas/alert-ticket/{alertId}/reprocess");
+            $"/api/admin/sagas/alert-ticket/{alertId}/reprocess");
         firstReq.Headers.Add("Idempotency-Key", key);
         var first = await _client.SendAsync(firstReq);
         first.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         // Replay same key.
         var secondReq = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/admin/sagas/alert-ticket/{alertId}/reprocess");
+            $"/api/admin/sagas/alert-ticket/{alertId}/reprocess");
         secondReq.Headers.Add("Idempotency-Key", key);
         var second = await _client.SendAsync(secondReq);
 

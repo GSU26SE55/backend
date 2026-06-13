@@ -7,8 +7,9 @@ using Microsoft.Extensions.Logging;
 namespace BatteryService.Infrastructure.BackgroundServices;
 
 /// <summary>
-/// Sprint IoT-1 (#248) — tick 1 phút, gọi <see cref="IIotDeviceOfflineDetectionService"/>.
+/// Sprint IoT-2 #IoT2-11 (S2-BE-08) — tick 2 phút, gọi <see cref="IIotDeviceOfflineDetectionService"/>.
 /// Threshold default 300s (5 phút) — config qua <c>Iot:OfflineAfterSeconds</c>.
+/// Spec §52.6: chạy 2 phút/lần (120s default).
 /// </summary>
 public class IotDeviceOfflineDetectionBackgroundService : BackgroundService
 {
@@ -28,7 +29,7 @@ public class IotDeviceOfflineDetectionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalSeconds = _configuration.GetValue("Iot:OfflineCheckIntervalSeconds", 60);
+        var intervalSeconds = _configuration.GetValue("Iot:OfflineCheckIntervalSeconds", 120);
         var offlineAfterSeconds = _configuration.GetValue("Iot:OfflineAfterSeconds", 300);
         var batchSize = _configuration.GetValue("Iot:OfflineBatchSize", 100);
 

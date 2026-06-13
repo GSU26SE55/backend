@@ -72,7 +72,7 @@ public class IotDeviceLifecycleHandlerTests
         var device = ActiveDevice(deviceId, Guid.NewGuid());
         device.Status = IotDeviceStatusEnum.Offline; // sẽ flip lên Active
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new IotDeviceHeartbeatCommandHandler(uow.Build());
+        var handler = new IotDeviceHeartbeatCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder());
 
         var result = await handler.Handle(new IotDeviceHeartbeatCommand
         {
@@ -98,13 +98,14 @@ public class IotDeviceLifecycleHandlerTests
         var assetId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-1", IsDeleted = false });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
         {
             Items = new List<SensorReadingItem>
             {
-                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 200m, Current = 1m, Temperature = 25m, SocPercent = 50m },
+                // Sprint IoT-2 #IoT2-17 — MaxVoltage=1000V; 1500V > ngưỡng → outlier reject.
+                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 1500m, Current = 1m, Temperature = 25m, SocPercent = 50m },
                 new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 3.7m, Current = 1m, Temperature = 25m, SocPercent = 50m }
             }
         }, default);
@@ -119,9 +120,11 @@ public class IotDeviceLifecycleHandlerTests
     {
         var assetId = Guid.NewGuid();
         var deviceId = Guid.NewGuid();
+        // Sprint IoT-2 #IoT2-18 — device.SiteId phải khớp asset.SiteId, không sẽ bị reject 403.
+        var siteId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
-            .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-2" })
-            .WithIotDevices(new IotDevice { Id = deviceId, DeviceCode = "ESP32-X", DisplayName = "x", SiteId = Guid.NewGuid(), ApiKeyHash = "h", ApiKeyLastFour = "abcd", ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault })
+            .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-2", SiteId = siteId })
+            .WithIotDevices(new IotDevice { Id = deviceId, DeviceCode = "ESP32-X", DisplayName = "x", SiteId = siteId, ApiKeyHash = "h", ApiKeyLastFour = "abcd", ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault })
             .WithIotDeviceCalibrations(new IotDeviceCalibration
             {
                 Id = Guid.NewGuid(),
@@ -132,7 +135,7 @@ public class IotDeviceLifecycleHandlerTests
                 Unit = "V",
                 CalibratedAt = DateTime.UtcNow.AddDays(-1)
             });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var captured = new List<SensorReading>();
         uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))

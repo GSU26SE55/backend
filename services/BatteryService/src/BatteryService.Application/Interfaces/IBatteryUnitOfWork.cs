@@ -37,4 +37,7 @@ public interface IBatteryUnitOfWork : IUnitOfWork
     IGenericRepository<IotDeviceCalibration> IotDeviceCalibrations { get; }
     IGenericRepository<IotFirmwareRelease> IotFirmwareReleases { get; }
     IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; }
+
+    // Sprint IoT-2 #IoT2-16 — idempotency persistence.
+    IGenericRepository<SensorIngestIdempotencyRecord> SensorIngestIdempotencyRecords { get; }
 }

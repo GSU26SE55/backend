@@ -61,6 +61,21 @@ public class IotDevice : AuditableEntity
     /// <summary>Sai lệch đồng hồ device vs server gần nhất (giây). Dùng để cảnh báo clock drift.</summary>
     public double? LastClockSkewSeconds { get; set; }
 
+    /// <summary>Sprint IoT-2 #IoT2-17 — số outlier reading tích lũy trong cửa sổ 1h gần nhất. &gt;50 → auto-Decommissioned.</summary>
+    public int OutlierIncidentCount { get; set; }
+
+    /// <summary>Sprint IoT-2 #IoT2-17 — mốc bắt đầu cửa sổ đếm outlier hiện tại. Vượt 1h kể từ lúc này → reset counter.</summary>
+    public DateTime? OutlierWindowStartedAt { get; set; }
+
+    /// <summary>Sprint IoT-2 #IoT2-17 — lần cuối hệ thống auto-decommission do outlier vượt ngưỡng.</summary>
+    public DateTime? AutoDecommissionedAt { get; set; }
+
+    /// <summary>Sprint IoT-2 #IoT2-26 — MQTT username cấp cho device (sync EMQX/Mosquitto ACL).</summary>
+    public string? MqttUsername { get; set; }
+
+    /// <summary>Sprint IoT-2 #IoT2-26 — bcrypt hash của MQTT password. Plaintext chỉ trả 1 lần khi tạo/rotate.</summary>
+    public string? MqttPasswordHash { get; set; }
+
     /// <summary>Mô tả vị trí, ghi chú lắp đặt.</summary>
     public string? Notes { get; set; }
 

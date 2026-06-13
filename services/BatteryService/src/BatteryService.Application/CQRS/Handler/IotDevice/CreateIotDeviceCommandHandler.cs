@@ -36,6 +36,7 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
             return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Site." };
 
         var key = _apiKeyService.GenerateKey();
+        var mqttCred = _apiKeyService.GenerateMqttCredential(code);
         var now = DateTime.UtcNow;
 
         var entity = new IotDeviceEntity
@@ -51,13 +52,18 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
             ApiKeyScopes = request.ApiKeyScopes,
             ApiKeyIssuedAt = now,
             HeartbeatIntervalSeconds = request.HeartbeatIntervalSeconds,
-            Notes = request.Notes?.Trim()
+            Notes = request.Notes?.Trim(),
+            // Sprint IoT-2 #IoT2-26.
+            MqttUsername = mqttCred.Username,
+            MqttPasswordHash = mqttCred.PasswordHash
         };
 
         await _unitOfWork.IotDevices.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var dto = IotDeviceMapper.ToCreatedDto(entity, key.RawKey, site.Name);
+        dto.MqttUsername = mqttCred.Username;
+        dto.MqttPassword = mqttCred.RawPassword;
         return new CommonResponse<IotDeviceCreatedDto>
         {
             IsSuccess = true,

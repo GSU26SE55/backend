@@ -122,6 +122,15 @@ services:
       minReplicas: 2
       maxReplicas: 5
       targetCPUUtilizationPercentage: 70
+    # Sprint IoT-2 #IoT2-35 — PVC cho firmware .bin upload (multipart endpoint).
+    # Disable + dùng object storage (S3/MinIO) khi production scale > 1 replica
+    # (PVC ReadWriteOnce không share giữa replicas).
+    firmwareStorage:
+      enabled: true
+      mountPath: /data/firmware-storage
+      size: 2Gi
+      storageClass: ""           # "" = cluster default; set local-path/longhorn/... nếu cần
+      accessMode: ReadWriteOnce
 
   ticketservice:
     enabled: true
@@ -298,14 +307,16 @@ config:
   AlertTicketSaga__AlertTicketSagaEnabled: "true"
 
   # ----- Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService -----
-  Iot__OfflineCheckIntervalSeconds: "60"
+  Iot__OfflineCheckIntervalSeconds: "120"
   Iot__OfflineAfterSeconds: "300"
   Iot__OfflineBatchSize: "100"
 
-  # ----- Sprint IoT-1 #253 — MQTT bridge (P3 optional) -----
+  # ----- Sprint IoT-2 #IoT2-22..26 — MQTT bridge (CLIENT only) -----
+  # Broker KHÔNG nằm trong chart này — deploy từ capstone/iot Helm chart riêng,
+  # hoặc managed service (EMQX Cloud / HiveMQ). Backend chỉ chạy MqttBridgeBackgroundService client.
   # Mqtt__Password đặt trong Secret solar-secrets (xem deploy/README.md).
-  Mqtt__Enabled: "false"           # Bật khi đã deploy Mosquitto + cấp credential
-  Mqtt__Host: "mosquitto"          # K8s Service name (CoreDNS resolve)
+  Mqtt__Enabled: "false"           # Bật khi broker deployed + cấp credential
+  Mqtt__Host: "mosquitto"          # K8s Service DNS (broker chart cùng namespace) hoặc fqdn external
   Mqtt__Port: "8883"
   Mqtt__UseTls: "true"
   Mqtt__AllowUntrustedCertificates: "false"
@@ -313,33 +324,11 @@ config:
   Mqtt__ClientId: "battery-service-bridge"
   Mqtt__ReconnectIntervalSeconds: "5"
 
-# --------------------------------------------------------------------
-# Sprint IoT-1 #253 — Mosquitto MQTT broker (P3 optional)
-# Toggle bằng mosquitto.enabled. Default disabled cho chart core nhẹ.
-# Khi bật, render Deployment + Service + ConfigMap (mosquitto.conf, acl.conf).
-# Password file phải sinh thủ công và inject qua Secret `solar-mqtt-passwd`
-# (xem deploy/README.md — `mosquitto_passwd -c passwd backend-bridge ...`).
-# --------------------------------------------------------------------
-mosquitto:
-  enabled: false
-  image: eclipse-mosquitto:2.0
-  # Port exposed trong Service ClusterIP. ESP32 ngoài cluster connect qua
-  # Ingress / NodePort / LoadBalancer — KHÔNG bao gồm trong chart core.
-  ports:
-    plain: 1883
-    tls: 8883
-  resources:
-    requests: { cpu: 50m,  memory: 64Mi }
-    limits:   { cpu: 200m, memory: 256Mi }
-  persistence:
-    enabled: true
-    size: 1Gi
-  tls:
-    enabled: false              # bật khi đã đẩy cert vào Secret `solar-mqtt-tls`
-    secretName: solar-mqtt-tls  # data: ca.crt, server.crt, server.key
-  # Secret chứa file passwd (sinh bằng `mosquitto_passwd` rồi `kubectl create secret generic`).
-  passwdSecret:
-    name: solar-mqtt-passwd     # data: passwd
+  # ----- Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage -----
+  # Default: local PVC mount /data/firmware-storage (xem services.batteryservice.firmwareStorage).
+  # Production: nên thay bằng object storage (S3/MinIO) — set Firmware__PublicBaseUrl tới CDN.
+  Firmware__StorageRoot: "/data/firmware-storage"
+  Firmware__PublicBaseUrl: ""
 
 # --------------------------------------------------------------------
 # Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).

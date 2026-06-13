@@ -16,7 +16,7 @@ namespace TicketService.Api.Controllers.Admin;
 /// - POST reprocess: permission <c>ticket.saga.reprocess</c> (Admin only).
 /// </summary>
 [ApiController]
-[Route("api/v1/admin/sagas/alert-ticket")]
+[Route("api/admin/sagas/alert-ticket")]
 [Authorize(Roles = "Admin,Manager")]
 [Produces("application/json")]
 public class AdminAlertTicketSagasController : ControllerBase

@@ -29,6 +29,8 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  # Sprint IoT-2 #IoT2-35 — firmware .bin upload persistence.
+  firmware-storage:
 
 services:
   # ---------- Infrastructure ----------
@@ -294,21 +296,27 @@ services:
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
       # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
-      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-60}
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
       Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
       Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
-      # Sprint IoT-1 #253 — MQTT bridge (P3 optional). Set Mqtt__Enabled=true để bật bridge.
+      # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. DEV: listener 1883 plaintext.
+      # Bật: Mqtt__Enabled=true sau khi mosquitto container up + đã sinh passwd cho user backend-bridge.
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
-      Mqtt__Port: ${Mqtt__Port:-8883}
-      Mqtt__UseTls: ${Mqtt__UseTls:-true}
+      Mqtt__Port: ${Mqtt__Port:-1883}
+      Mqtt__UseTls: ${Mqtt__UseTls:-false}
       Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-true}
       Mqtt__Username: ${Mqtt__Username:-backend-bridge}
       Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage (multipart upload).
+      Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
+      Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
     ports:
       - "4006:8080"
+    volumes:
+      - firmware-storage:/data/firmware-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -321,11 +329,18 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
-  # ---------- MQTT broker — MOVED to capstone/iot/infra/mqtt/ ----------
-  # Theo tasksprint.md S0-INF-02 broker thuộc IoT monorepo, không phải backend.
-  # Chạy broker: `cd ../iot && docker compose -f infra/docker-compose.dev.yml up -d mosquitto`
-  # Backend `batteryservice` connect qua hostname `mosquitto` nếu chạy cùng docker network,
-  # hoặc qua `host.docker.internal:1883` khi broker chạy từ iot compose riêng.
+  # ---------- MQTT broker — KHÔNG nằm trong backend repo ----------
+  # Per tasksprint.md S0-INF-02 + architectural decision: broker thuộc IoT monorepo (capstone/iot/),
+  # backend chỉ chạy MQTT CLIENT (MqttBridgeBackgroundService) connect tới broker đó.
+  #
+  # Để test MQTT path từ backend dev:
+  #   1. Clone capstone/iot, chạy: docker compose -f iot/infra/docker-compose.dev.yml up -d mosquitto
+  #   2. Backend connect qua hostname:
+  #        - Nếu iot compose join cùng `solar-net`: Mqtt__Host=mosquitto
+  #        - Nếu iot compose mạng riêng: Mqtt__Host=host.docker.internal, Mqtt__Port=1883
+  #   3. Set Mqtt__Enabled=true trong .env.Docker
+  #
+  # Production: docker-compose.prod.yml HOST mosquitto service (single-VPS deploy).
 
   ticketservice:
     container_name: solar-ticketservice

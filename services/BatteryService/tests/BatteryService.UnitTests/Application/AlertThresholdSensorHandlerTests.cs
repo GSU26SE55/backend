@@ -237,7 +237,7 @@ public class AlertThresholdSensorHandlerTests
     {
         var asset = MakeAsset();
         var b = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
-        var r = await new BatchIngestSensorReadingsCommandHandler(b.Build()).Handle(new BatchIngestSensorReadingsCommand
+        var r = await new BatchIngestSensorReadingsCommandHandler(b.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance).Handle(new BatchIngestSensorReadingsCommand
         {
             Items = new List<SensorReadingItem>
             {

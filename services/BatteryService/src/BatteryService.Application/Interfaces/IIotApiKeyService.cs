@@ -22,6 +22,14 @@ public interface IIotApiKeyService
 
     /// <summary>Device tìm theo hash + scope. Trả null nếu không match hoặc revoked/disabled.</summary>
     Task<IotDevice?> FindDeviceByRawKeyAsync(string rawKey, IotApiKeyScopeEnum requiredScope, CancellationToken ct);
+
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-26 — sinh MQTT username (= deviceCode lowercase) + raw password (~24 chars base64url).
+    /// Trả plaintext + PBKDF2 hash. Plaintext chỉ trả 1 lần khi tạo/rotate device.
+    /// </summary>
+    GeneratedMqttCredential GenerateMqttCredential(string deviceCode);
 }
 
 public record GeneratedApiKey(string RawKey, string Hash, string LastFour);
+
+public record GeneratedMqttCredential(string Username, string RawPassword, string PasswordHash);

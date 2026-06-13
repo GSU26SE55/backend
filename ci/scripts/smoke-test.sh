@@ -20,12 +20,16 @@ ENDPOINTS=(
   "/api/ticket/health/saga"
 )
 
-# Sprint IoT-1 #252 — IoT routes yêu cầu auth. Smoke chỉ verify route exist:
+# Sprint IoT-1/IoT-2 — IoT routes yêu cầu auth. Smoke chỉ verify route exist:
 # 200 (route public — không có ở IoT), 401/403 (auth check chạy — OK), 404 (FAIL, route chưa map).
 IOT_ROUTES=(
   "/api/iot-devices/firmware-check?currentVersion=0.0.0"
   "/api/admin/iot-devices"
   "/api/admin/iot-firmware-releases"
+  # Sprint IoT-2 #IoT2-32 — calibration CRUD (Staff/Admin) + expiring filter (Manager).
+  "/api/iot-devices/calibrations-expiring?within=30"
+  # Sprint 5B #237 — Admin saga reprocess endpoint.
+  "/api/admin/sagas/alert-ticket"
 )
 
 # NotificationService — chỉ probe `/api/notifications` (đã có controller).

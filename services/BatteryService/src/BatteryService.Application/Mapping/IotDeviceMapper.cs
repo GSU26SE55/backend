@@ -56,7 +56,9 @@ public static class IotDeviceMapper
             LastClockSkewSeconds = dto.LastClockSkewSeconds,
             Notes = dto.Notes,
             CreatedAt = dto.CreatedAt,
-            RawApiKey = rawApiKey
+            RawApiKey = rawApiKey,
+            // Sprint IoT-2 #IoT2-07 — provisioning URL để Admin in QR code.
+            ProvisioningQrCode = $"iot://provision?dc={Uri.EscapeDataString(e.DeviceCode)}&key={Uri.EscapeDataString(rawApiKey)}"
         };
     }
 
@@ -72,6 +74,10 @@ public static class IotDeviceMapper
         IsPublished = e.IsPublished,
         PublishedAt = e.PublishedAt,
         IsArchived = e.IsArchived,
-        CreatedAt = e.CreatedAt
+        CreatedAt = e.CreatedAt,
+        // Sprint IoT-2 #IoT2-35.
+        IsRequired = e.IsRequired,
+        Channel = e.Channel,
+        DeviceModel = e.DeviceModel
     };
 }

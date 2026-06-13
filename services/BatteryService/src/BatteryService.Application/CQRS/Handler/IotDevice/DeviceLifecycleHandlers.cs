@@ -61,6 +61,40 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
         _unitOfWork.IotDevices.UpdateAsync(device);
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // Sprint IoT-2 #IoT2-09 — populate configJson: batteryMappings cho site +
+        // calibration profile để device map serial → unitId Modbus + sensorSourceCode.
+        var batteryMappings = await _unitOfWork.BatteryAssets.GetAllAsync()
+            .Where(a => !a.IsDeleted && a.SiteId == device.SiteId)
+            .Select(a => new BatteryMappingEntry
+            {
+                BatteryAssetSerial = a.SerialNumber
+            })
+            .ToListAsync(ct);
+
+        // SensorSourceCode lấy từ calibration nếu có.
+        var calibrations = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
+            .Where(c => !c.IsDeleted && c.IotDeviceId == device.Id)
+            .ToListAsync(ct);
+        foreach (var m in batteryMappings)
+        {
+            var asset = await _unitOfWork.BatteryAssets.GetAllAsync()
+                .FirstOrDefaultAsync(a => a.SerialNumber == m.BatteryAssetSerial && a.SiteId == device.SiteId, ct);
+            if (asset is null)
+                continue;
+            var cal = calibrations.FirstOrDefault(c => c.BatteryAssetId == asset.Id);
+            m.SensorSourceCode = cal?.Channel ?? "primary";
+        }
+
+        // Scope-driven supported sensors.
+        var supported = new List<string> { "voltage", "current", "temperature", "soc" };
+        if ((device.ApiKeyScopes & IotApiKeyScopeEnum.EnvironmentalIngest) == IotApiKeyScopeEnum.EnvironmentalIngest)
+        {
+            supported.Add("ambient-temperature");
+            supported.Add("ambient-humidity");
+            supported.Add("smoke");
+            supported.Add("water-leak");
+        }
+
         return new CommonResponse<IotDeviceProvisionResultDto>
         {
             IsSuccess = true,
@@ -73,7 +107,11 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
                 SiteId = device.SiteId.ToString(),
                 HeartbeatIntervalSeconds = device.HeartbeatIntervalSeconds,
                 ApiKeyScopes = device.ApiKeyScopes,
-                TargetFirmwareVersion = device.TargetFirmwareRelease?.Version
+                TargetFirmwareVersion = device.TargetFirmwareRelease?.Version,
+                PollingIntervalSeconds = 10,
+                NtpServer = "time.google.com",
+                BatteryMappings = batteryMappings,
+                SupportedSensors = supported
             }
         };
     }
@@ -88,7 +126,12 @@ public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbe
     private const double ClockSkewWarnThresholdSeconds = 300;
 
     private readonly IBatteryUnitOfWork _unitOfWork;
-    public IotDeviceHeartbeatCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+    private readonly IIotMetricsRecorder _metrics;
+    public IotDeviceHeartbeatCommandHandler(IBatteryUnitOfWork uow, IIotMetricsRecorder metrics)
+    {
+        _unitOfWork = uow;
+        _metrics = metrics;
+    }
 
     public async Task<CommonResponse<IotHeartbeatAckDto>> Handle(IotDeviceHeartbeatCommand request, CancellationToken ct)
     {
@@ -131,6 +174,10 @@ public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbe
 
         _unitOfWork.IotDevices.UpdateAsync(device);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Sprint IoT-2 #IoT2-38 — label status: ok | clock_drift.
+        var hbStatus = Math.Abs(skew) > ClockSkewWarnThresholdSeconds ? "clock_drift" : "ok";
+        _metrics.HeartbeatRecorded(device.Id.ToString(), hbStatus);
 
         bool fwAvailable = device.TargetFirmwareRelease is not null
                            && !string.Equals(device.TargetFirmwareRelease.Version, device.CurrentFirmwareVersion, StringComparison.Ordinal);
@@ -202,7 +249,10 @@ public class CheckIotFirmwareUpdateQueryHandler : IRequestHandler<CheckIotFirmwa
                 Sha256Checksum = target.Sha256Checksum,
                 ArtifactSizeBytes = target.ArtifactSizeBytes,
                 UpdateLogId = log.Id.ToString(),
-                ReleaseNotes = target.ReleaseNotes
+                ReleaseNotes = target.ReleaseNotes,
+                // Sprint IoT-2 #IoT2-36.
+                IsRequired = target.IsRequired,
+                Channel = target.Channel
             }
         };
     }
@@ -211,7 +261,12 @@ public class CheckIotFirmwareUpdateQueryHandler : IRequestHandler<CheckIotFirmwa
 public class UpdateIotFirmwareUpdateLogCommandHandler : IRequestHandler<UpdateIotFirmwareUpdateLogCommand, CommonResponse<object>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
-    public UpdateIotFirmwareUpdateLogCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+    private readonly IIotMetricsRecorder _metrics;
+    public UpdateIotFirmwareUpdateLogCommandHandler(IBatteryUnitOfWork uow, IIotMetricsRecorder metrics)
+    {
+        _unitOfWork = uow;
+        _metrics = metrics;
+    }
 
     public async Task<CommonResponse<object>> Handle(UpdateIotFirmwareUpdateLogCommand request, CancellationToken ct)
     {
@@ -245,6 +300,13 @@ public class UpdateIotFirmwareUpdateLogCommandHandler : IRequestHandler<UpdateIo
 
         _unitOfWork.IotFirmwareUpdateLogs.UpdateAsync(log);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Sprint IoT-2 #IoT2-38 — emit firmware transition metric.
+        _metrics.FirmwareUpdateRecorded(
+            log.FromVersion ?? "unknown",
+            log.ToVersion ?? "unknown",
+            request.Status.ToString().ToLowerInvariant());
+
         return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã cập nhật log." };
     }
 }

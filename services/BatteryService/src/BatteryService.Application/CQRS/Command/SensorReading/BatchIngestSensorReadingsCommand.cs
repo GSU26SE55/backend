@@ -50,34 +50,21 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
             else if (item.Time.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
                 AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading không được nằm quá xa trong tương lai.");
 
-            // Sprint IoT-1 §247 — clock skew ≤ 5 phút giữa DeviceTimestamp và now.
-            if (item.DeviceTimestamp.HasValue)
-            {
-                var skewMin = Math.Abs((item.DeviceTimestamp.Value.ToUniversalTime() - DateTime.UtcNow).TotalMinutes);
-                if (skewMin > 5)
-                    AddError(response, $"{prefix}.{nameof(item.DeviceTimestamp)}", $"Clock skew {skewMin:F1} phút > 5 phút. Đồng bộ NTP.");
-            }
+            // Clock skew check ĐÃ MOVE vào handler để fire metric reason=clock_drift (#IoT2-15).
 
             if (item.BatteryAssetSerial?.Length > 64)
                 AddError(response, $"{prefix}.{nameof(item.BatteryAssetSerial)}", "BatteryAssetSerial tối đa 64 ký tự.");
 
+            // Sprint IoT-2 #IoT2-15/#IoT2-17 — sanity check ONLY (cực biên hardware noise).
+            // Outlier reject + clock-drift kiểm tra trong HANDLER để metric counters fire đúng (§52.5).
             if (item.Voltage < 0)
                 AddError(response, $"{prefix}.{nameof(item.Voltage)}", "Điện áp không được âm.");
-
-            if (item.Temperature is < -50 or > 120)
-                AddError(response, $"{prefix}.{nameof(item.Temperature)}", "Nhiệt độ phải nằm trong khoảng -50 đến 120 độ C.");
-
-            if (item.SocPercent is < 0 or > 100)
-                AddError(response, $"{prefix}.{nameof(item.SocPercent)}", "SOC phải nằm trong khoảng 0-100.");
 
             if (item.CycleCount is < 0)
                 AddError(response, $"{prefix}.{nameof(item.CycleCount)}", "Số chu kỳ không được âm.");
 
             if (item.SourceDeviceId?.Length > 64)
                 AddError(response, $"{prefix}.{nameof(item.SourceDeviceId)}", "Id thiết bị nguồn tối đa 64 ký tự.");
-
-            if (item.SohPercent is < 0 or > 100)
-                AddError(response, $"{prefix}.{nameof(item.SohPercent)}", "SOH phải nằm trong khoảng 0-100.");
 
             if (item.ChargingState.HasValue && !Enum.IsDefined(typeof(ChargingStateEnum), item.ChargingState.Value))
                 AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "ChargingState không hợp lệ.");

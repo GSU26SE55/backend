@@ -21,6 +21,13 @@ public class CreateNotificationCommand : IRequest<NotificationActionResponse>, I
     public string? EntityType { get; set; }
     public Guid? EntityId { get; set; }
 
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-31 — bypass quiet hours check khi gửi cho EnvironmentalIncident Critical.
+    /// Dispatcher (Sprint 6) đọc flag này → SKIP NotificationPreference.QuietHoursStart/End.
+    /// Mặc định false; chỉ set true cho Critical channels (smoke/water bypass per overall.md §3.4 + §49.3).
+    /// </summary>
+    public bool BypassQuietHours { get; set; }
+
     public Task<NotificationActionResponse> ValidateAsync()
     {
         var response = new NotificationActionResponse();

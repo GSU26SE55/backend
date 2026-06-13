@@ -141,7 +141,7 @@ public class IotResponseContractTests
             HeartbeatIntervalSeconds = 60
         };
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new IotDeviceHeartbeatCommandHandler(uow.Build());
+        var handler = new IotDeviceHeartbeatCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder());
 
         var result = await handler.Handle(new IotDeviceHeartbeatCommand
         {

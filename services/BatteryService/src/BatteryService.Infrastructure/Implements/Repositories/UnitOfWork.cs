@@ -50,6 +50,9 @@ public class UnitOfWork : IBatteryUnitOfWork
     public IGenericRepository<IotFirmwareRelease> IotFirmwareReleases => new GenericRepository<IotFirmwareRelease>(_context);
     public IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs => new GenericRepository<IotFirmwareUpdateLog>(_context);
 
+    // Sprint IoT-2 #IoT2-16 — idempotency persistence.
+    public IGenericRepository<SensorIngestIdempotencyRecord> SensorIngestIdempotencyRecords => new GenericRepository<SensorIngestIdempotencyRecord>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

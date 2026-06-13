@@ -34,7 +34,11 @@ public class CreateIotFirmwareReleaseCommandHandler : IRequestHandler<CreateIotF
             ArtifactSizeBytes = request.ArtifactSizeBytes,
             ReleaseNotes = request.ReleaseNotes?.Trim(),
             IsPublished = request.PublishImmediately,
-            PublishedAt = request.PublishImmediately ? DateTime.UtcNow : null
+            PublishedAt = request.PublishImmediately ? DateTime.UtcNow : null,
+            // Sprint IoT-2 #IoT2-35.
+            IsRequired = request.IsRequired,
+            Channel = request.Channel,
+            DeviceModel = request.DeviceModel?.Trim()
         };
         await _unitOfWork.IotFirmwareReleases.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);

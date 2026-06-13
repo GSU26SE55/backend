@@ -45,6 +45,22 @@ public static class ManageDependencyInjection
         // Sprint IoT-1 (#243) — per-device API key.
         services.AddScoped<IIotApiKeyService, IotApiKeyService>();
 
+        // Sprint IoT-2 #IoT2-38 — Prometheus IoT metrics recorder.
+        services.AddSingleton<IIotMetricsRecorder, BatteryService.Infrastructure.Observability.IotMetricsRecorder>();
+
+        // Sprint IoT-2 #IoT2-28 — Cross-source validation (Bms vs IoT mismatch).
+        services.AddScoped<BatteryService.Application.Services.ICrossSourceValidationService, BatteryService.Application.Services.CrossSourceValidationService>();
+        services.AddHostedService<CrossSourceValidationBackgroundService>();
+
+        // Sprint IoT-2 #IoT2-34 — Redis cache invalidation cho calibration.
+        services.AddScoped<BatteryService.Application.Services.IIotCalibrationCache, BatteryService.Infrastructure.Implements.Services.IotCalibrationCache>();
+
+        // Sprint IoT-2 #IoT2-33 — Calibration expiry notification (daily).
+        services.AddHostedService<CalibrationExpiryNotificationBackgroundService>();
+
+        // Sprint IoT-2 #IoT2-38 — Devices online gauge refresher.
+        services.AddHostedService<DevicesOnlineGaugeBackgroundService>();
+
         // Sprint IoT-1 (#248) — offline detection.
         services.AddScoped<IIotDeviceOfflineDetectionService, IotDeviceOfflineDetectionService>();
         services.AddHostedService<IotDeviceOfflineDetectionBackgroundService>();

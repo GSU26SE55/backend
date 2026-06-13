@@ -47,7 +47,7 @@ public class IotOfflineDetectionTests
             .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-Z", SiteId = siteId });
 
         var outbox = new CapturingOutbox();
-        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, NullLogger<IotDeviceOfflineDetectionService>.Instance);
+        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), NullLogger<IotDeviceOfflineDetectionService>.Instance);
 
         var result = await svc.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
 
@@ -79,7 +79,7 @@ public class IotOfflineDetectionTests
 
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(freshDevice);
         var outbox = new CapturingOutbox();
-        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, NullLogger<IotDeviceOfflineDetectionService>.Instance);
+        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), NullLogger<IotDeviceOfflineDetectionService>.Instance);
 
         var result = await svc.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
         result.MarkedOffline.Should().Be(0);

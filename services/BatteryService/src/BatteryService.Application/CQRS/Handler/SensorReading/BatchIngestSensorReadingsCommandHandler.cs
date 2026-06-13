@@ -1,39 +1,131 @@
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
+using AlertEntity = BatteryService.Domain.Entities.Alert;
+using IotDeviceEntity = BatteryService.Domain.Entities.IotDevice;
 using SensorReadingEntity = BatteryService.Domain.Entities.SensorReading;
 
 namespace BatteryService.Application.CQRS.Handler.SensorReading;
 
 /// <summary>
-/// Sprint IoT-1 (#246, #247):
+/// Sprint IoT-1 (#246, #247) + Sprint IoT-2 (#IoT2-16, #IoT2-17):
 /// - Resolve BatteryAssetId từ serial nếu cần.
-/// - Reject outlier sensor (hard-coded bounds — §1050 overall.md).
+/// - Reject outlier sensor (hard-coded bounds — §1050 overall.md). Count vào device — &gt;50/h → auto-Decommissioned (#IoT2-17).
 /// - Apply IotDeviceCalibration <c>raw * Scale + Offset</c> trước khi lưu.
 /// - Update IotDevice.LastSeenAt.
+/// - Idempotency: trùng <c>(DeviceCode, IdempotencyKey)</c> → trả response cũ, KHÔNG insert (#IoT2-16).
+/// - Emit Prometheus counter (xem <c>IotMetrics</c>) qua interface <see cref="IIotMetricsRecorder"/>.
 /// </summary>
 public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchIngestSensorReadingsCommand, CommonResponse<SensorReadingBatchIngestResult>>
 {
-    // Outlier bounds — §1050 overall.md hardware noise filter.
-    private const decimal MaxVoltage = 100m;
-    private const decimal MinTemperature = -50m;
-    private const decimal MaxTemperature = 120m;
+    // Outlier bounds — Sprint IoT-2 #IoT2-17 spec §52.5.
+    private const decimal MaxVoltage = 1000m;       // spec: voltage > 1000V or < 0
+    private const decimal MinTemperature = -50m;    // spec: temp ngoài [-50..150]
+    private const decimal MaxTemperature = 150m;
     private const decimal MaxCurrent = 1000m;
+    private const decimal MinSoc = 0m;              // spec: SOC ngoài [0..100]
+    private const decimal MaxSoc = 100m;
+    private const decimal MinSoh = 0m;              // spec: SOH ngoài [0..100]
+    private const decimal MaxSoh = 100m;
+
+    // Sprint IoT-2 #IoT2-15 — clock skew threshold (>5 phút → reject + metric).
+    private const double ClockSkewMaxMinutes = 5;
+
+    // Sprint IoT-2 #IoT2-17 — auto-disable threshold.
+    private const int OutlierThresholdPerHour = 50;
+    private static readonly TimeSpan OutlierWindow = TimeSpan.FromHours(1);
+
+    // Sprint IoT-2 #IoT2-16 — idempotency TTL.
+    private static readonly TimeSpan IdempotencyTtl = TimeSpan.FromHours(24);
 
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IIotMetricsRecorder _metrics;
+    private readonly IIotCalibrationCache _calibrationCache;
+    private readonly ILogger<BatchIngestSensorReadingsCommandHandler> _logger;
 
-    public BatchIngestSensorReadingsCommandHandler(IBatteryUnitOfWork unitOfWork)
+    public BatchIngestSensorReadingsCommandHandler(
+        IBatteryUnitOfWork unitOfWork,
+        IIotMetricsRecorder metrics,
+        IIotCalibrationCache calibrationCache,
+        ILogger<BatchIngestSensorReadingsCommandHandler> logger)
     {
         _unitOfWork = unitOfWork;
+        _metrics = metrics;
+        _calibrationCache = calibrationCache;
+        _logger = logger;
     }
 
     public async Task<CommonResponse<SensorReadingBatchIngestResult>> Handle(BatchIngestSensorReadingsCommand request, CancellationToken cancellationToken)
     {
+        // ─── Sprint IoT-2 #IoT2-16 — idempotency check ───
+        if (!string.IsNullOrWhiteSpace(request.DeviceCode) && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var dup = await _unitOfWork.SensorIngestIdempotencyRecords.GetAllAsync()
+                .Where(r => !r.IsDeleted
+                            && r.DeviceCode == request.DeviceCode
+                            && r.IdempotencyKey == request.IdempotencyKey
+                            && r.ExpiresAt > DateTime.UtcNow)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (dup is not null)
+            {
+                _metrics.RejectionRecorded("idempotency_replay");
+                return new CommonResponse<SensorReadingBatchIngestResult>
+                {
+                    IsSuccess = true,
+                    StatusCode = 200,
+                    Message = dup.Message ?? "Idempotent replay — trả response cũ.",
+                    Data = new SensorReadingBatchIngestResult
+                    {
+                        TotalReceived = dup.TotalReceived,
+                        Inserted = dup.Inserted,
+                        Skipped = dup.Skipped
+                    }
+                };
+            }
+        }
+
+        // ─── Sprint IoT-2 #IoT2-15 — clock skew pre-check ───
+        // Spec §52.5: |deviceTimestamp - serverNow| > 5 phút → 400 + fire metric reason=clock_drift.
+        // Check trong handler (KHÔNG trong ValidateAsync) để emit metric counter chính xác.
+        var nowUtc = DateTime.UtcNow;
+        var skewErrors = new List<Errors>();
+        for (var i = 0; i < request.Items.Count; i++)
+        {
+            var item = request.Items[i];
+            if (!item.DeviceTimestamp.HasValue)
+                continue;
+            var skewMin = Math.Abs((item.DeviceTimestamp.Value.ToUniversalTime() - nowUtc).TotalMinutes);
+            if (skewMin > ClockSkewMaxMinutes)
+            {
+                _metrics.RejectionRecorded("clock_drift");
+                skewErrors.Add(new Errors
+                {
+                    Field = $"Items[{i}].DeviceTimestamp",
+                    Detail = $"Clock skew {skewMin:F1} phút > {ClockSkewMaxMinutes} phút. Đồng bộ NTP."
+                });
+            }
+        }
+        if (skewErrors.Count > 0)
+        {
+            var resp = new CommonResponse<SensorReadingBatchIngestResult>
+            {
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "Clock skew vượt ngưỡng — đồng bộ NTP trước khi gửi.",
+                Data = new SensorReadingBatchIngestResult { TotalReceived = request.Items.Count }
+            };
+            foreach (var e in skewErrors)
+                resp.ListErrors.Add(e);
+            return resp;
+        }
+
         // Resolve serial → assetId nếu cần.
         var serialsToResolve = request.Items
             .Where(i => i.BatteryAssetId == Guid.Empty && !string.IsNullOrWhiteSpace(i.BatteryAssetSerial))
@@ -70,15 +162,67 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             .Where(asset => assetIds.Contains(asset.Id) && !asset.IsDeleted)
             .ToDictionaryAsync(asset => asset.Id, cancellationToken);
 
-        // Calibration profiles cho device + những battery asset trong batch.
-        Dictionary<(string Channel, Guid? AssetId), IotDeviceCalibration>? calibrations = null;
+        // ─── Sprint IoT-2 #IoT2-18 — device permission check ───
+        // Device chỉ được ingest cho pin cùng SiteId. Mismatch → 403 toàn batch.
+        if (request.AuthenticatedDeviceId.HasValue && assets.Count > 0)
+        {
+            var deviceSiteId = await _unitOfWork.IotDevices.GetAllAsync()
+                .Where(d => d.Id == request.AuthenticatedDeviceId.Value)
+                .Select(d => (Guid?)d.SiteId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (deviceSiteId.HasValue)
+            {
+                var crossSiteAssets = assets.Values
+                    .Where(a => a.SiteId != deviceSiteId.Value)
+                    .ToList();
+                if (crossSiteAssets.Count > 0)
+                {
+                    foreach (var _ in crossSiteAssets)
+                        _metrics.RejectionRecorded("mapping_invalid");
+                    _logger.LogWarning(
+                        "Device {DeviceId} ingest bị reject — {Count} battery thuộc site khác",
+                        request.AuthenticatedDeviceId.Value, crossSiteAssets.Count);
+                    return new CommonResponse<SensorReadingBatchIngestResult>
+                    {
+                        IsSuccess = false,
+                        StatusCode = 403,
+                        Message = "Device không có quyền ingest cho battery thuộc site khác.",
+                        Data = new SensorReadingBatchIngestResult
+                        {
+                            TotalReceived = request.Items.Count,
+                            Inserted = 0,
+                            Skipped = request.Items.Count
+                        }
+                    };
+                }
+            }
+        }
+
+        // Calibration profiles cho device — Redis cache TTL 5 phút (#IoT2-19/#IoT2-34).
+        Dictionary<(string Channel, Guid? AssetId), IotDeviceCalibrationSnapshot>? calibrations = null;
         if (request.AuthenticatedDeviceId.HasValue)
         {
-            var cals = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
-                .Where(c => !c.IsDeleted && c.IotDeviceId == request.AuthenticatedDeviceId.Value
-                            && (c.ExpiresAt == null || c.ExpiresAt > DateTime.UtcNow))
-                .ToListAsync(cancellationToken);
-            calibrations = cals.ToDictionary(c => (c.Channel.ToLowerInvariant(), (Guid?)c.BatteryAssetId), c => c);
+            var deviceId = request.AuthenticatedDeviceId.Value;
+            var snapshot = await _calibrationCache.GetAsync(deviceId, cancellationToken);
+            if (snapshot is null)
+            {
+                var cals = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
+                    .Where(c => !c.IsDeleted && c.IotDeviceId == deviceId
+                                && (c.ExpiresAt == null || c.ExpiresAt > DateTime.UtcNow))
+                    .ToListAsync(cancellationToken);
+                snapshot = cals.Select(IotDeviceCalibrationSnapshot.FromEntity).ToList();
+                await _calibrationCache.SetAsync(deviceId, snapshot, cancellationToken);
+            }
+            else
+            {
+                // Lọc lại expired (snapshot có thể đã quá hạn ở thời điểm cache miss → đỡ replay calibration cũ).
+                var now = DateTime.UtcNow;
+                snapshot = snapshot.Where(s => s.ExpiresAt == null || s.ExpiresAt > now).ToList();
+            }
+            calibrations = snapshot.ToDictionary(
+                c => (c.Channel.ToLowerInvariant(), c.BatteryAssetId),
+                c => c);
         }
 
         var inserted = 0;
@@ -89,6 +233,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             if (!assets.TryGetValue(item.BatteryAssetId, out var asset))
             {
                 skipped++;
+                _metrics.RejectionRecorded("mapping_invalid");
                 continue;
             }
 
@@ -96,9 +241,10 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             var current = ApplyCalibration(calibrations, "current", item.BatteryAssetId, item.Current);
             var temperature = ApplyCalibration(calibrations, "temperature", item.BatteryAssetId, item.Temperature);
 
-            if (IsOutlier(voltage, current, temperature))
+            if (IsOutlier(voltage, current, temperature, item.SocPercent, item.SohPercent))
             {
                 rejectedOutliers++;
+                _metrics.RejectionRecorded("sensor_outlier");
                 continue;
             }
 
@@ -132,18 +278,85 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             inserted++;
         }
 
-        // Update LastSeenAt cho device đang push.
-        if (request.AuthenticatedDeviceId.HasValue && inserted > 0)
+        // ─── Device-level housekeeping ───
+        IotDeviceEntity? device = null;
+        if (request.AuthenticatedDeviceId.HasValue)
         {
-            var device = await _unitOfWork.IotDevices.GetAllAsync()
+            device = await _unitOfWork.IotDevices.GetAllAsync()
                 .FirstOrDefaultAsync(d => d.Id == request.AuthenticatedDeviceId.Value, cancellationToken);
-            if (device is not null)
+        }
+
+        if (device is not null)
+        {
+            var deviceLabel = device.Id.ToString();
+            _metrics.IngestRecorded(deviceLabel, inserted);
+
+            if (inserted > 0)
             {
                 device.LastSeenAt = DateTime.UtcNow;
                 if (device.Status == IotDeviceStatusEnum.Offline || device.Status == IotDeviceStatusEnum.Pending)
                     device.Status = IotDeviceStatusEnum.Active;
-                _unitOfWork.IotDevices.UpdateAsync(device);
             }
+
+            // ─── Sprint IoT-2 #IoT2-17 — auto-disable outlier ───
+            if (rejectedOutliers > 0)
+            {
+                var now = DateTime.UtcNow;
+                if (!device.OutlierWindowStartedAt.HasValue || (now - device.OutlierWindowStartedAt.Value) > OutlierWindow)
+                {
+                    device.OutlierWindowStartedAt = now;
+                    device.OutlierIncidentCount = rejectedOutliers;
+                }
+                else
+                {
+                    device.OutlierIncidentCount += rejectedOutliers;
+                }
+
+                if (device.OutlierIncidentCount > OutlierThresholdPerHour && device.Status != IotDeviceStatusEnum.Decommissioned)
+                {
+                    device.Status = IotDeviceStatusEnum.Decommissioned;
+                    device.AutoDecommissionedAt = now;
+                    _metrics.DeviceAutoDecommissioned(deviceLabel);
+                    _logger.LogWarning(
+                        "Device {DeviceId} auto-decommissioned — {Count} outliers within window starting {WindowStart}",
+                        device.Id, device.OutlierIncidentCount, device.OutlierWindowStartedAt);
+
+                    // Alert Admin: tạo Alert level Critical liên kết bất kỳ asset gắn device (best-effort).
+                    var firstAsset = assets.Values.FirstOrDefault();
+                    if (firstAsset is not null)
+                    {
+                        await _unitOfWork.Alerts.AddAsync(new AlertEntity
+                        {
+                            BatteryAssetId = firstAsset.Id,
+                            SiteId = firstAsset.SiteId,
+                            AnomalyType = AnomalyTypeEnum.DeviceOffline,
+                            Severity = AlertSeverityEnum.Critical,
+                            DetectedAt = now,
+                            Status = AlertStatusEnum.Open,
+                            DedupWindowEndUtc = now.AddHours(6)
+                        });
+                    }
+                }
+            }
+
+            _unitOfWork.IotDevices.UpdateAsync(device);
+        }
+
+        // ─── Persist idempotency record (#IoT2-16) ───
+        if (!string.IsNullOrWhiteSpace(request.DeviceCode) && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            await _unitOfWork.SensorIngestIdempotencyRecords.AddAsync(new SensorIngestIdempotencyRecord
+            {
+                DeviceCode = request.DeviceCode!,
+                IdempotencyKey = request.IdempotencyKey!,
+                Inserted = inserted,
+                Skipped = skipped + rejectedOutliers,
+                TotalReceived = request.Items.Count,
+                Message = rejectedOutliers > 0
+                    ? $"Ghi nhận readings — {rejectedOutliers} outlier bị loại."
+                    : "Ghi nhận sensor readings thành công.",
+                ExpiresAt = DateTime.UtcNow.Add(IdempotencyTtl)
+            });
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -165,7 +378,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     }
 
     private static decimal ApplyCalibration(
-        Dictionary<(string Channel, Guid? AssetId), IotDeviceCalibration>? cals,
+        Dictionary<(string Channel, Guid? AssetId), IotDeviceCalibrationSnapshot>? cals,
         string channel,
         Guid assetId,
         decimal raw)
@@ -177,13 +390,22 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         return raw;
     }
 
-    private static bool IsOutlier(decimal voltage, decimal current, decimal temperature)
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-17 — outlier filter §52.5.
+    /// Loại reading vượt cực biên phần cứng: V&gt;1000 hoặc &lt;0, |I|&gt;1000, T ngoài [-50..150],
+    /// SOC ngoài [0..100], SOH ngoài [0..100] (nullable — bỏ qua khi null).
+    /// </summary>
+    private static bool IsOutlier(decimal voltage, decimal current, decimal temperature, decimal socPercent, decimal? sohPercent)
     {
         if (voltage < 0 || voltage > MaxVoltage)
             return true;
         if (Math.Abs(current) > MaxCurrent)
             return true;
         if (temperature < MinTemperature || temperature > MaxTemperature)
+            return true;
+        if (socPercent < MinSoc || socPercent > MaxSoc)
+            return true;
+        if (sohPercent.HasValue && (sohPercent.Value < MinSoh || sohPercent.Value > MaxSoh))
             return true;
         return false;
     }

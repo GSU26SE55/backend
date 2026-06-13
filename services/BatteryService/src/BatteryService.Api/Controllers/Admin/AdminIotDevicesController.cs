@@ -1,9 +1,13 @@
+using System.Text.Json;
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Api.Controllers.Admin;
@@ -29,8 +33,15 @@ namespace BatteryService.Api.Controllers.Admin;
 public class AdminIotDevicesController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly IMqttBridgePublisher _mqttPublisher;
+    private readonly IBatteryUnitOfWork _unitOfWork;
 
-    public AdminIotDevicesController(IMediator mediator) => _mediator = mediator;
+    public AdminIotDevicesController(IMediator mediator, IMqttBridgePublisher mqttPublisher, IBatteryUnitOfWork unitOfWork)
+    {
+        _mediator = mediator;
+        _mqttPublisher = mqttPublisher;
+        _unitOfWork = unitOfWork;
+    }
 
     /// <summary>
     /// Lấy danh sách IoT device theo filter + pagination.
@@ -343,5 +354,82 @@ public class AdminIotDevicesController : ControllerBase
     {
         var result = await _mediator.Send(new RevokeIotDeviceApiKeyCommand { Id = id }, ct);
         return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-25 (S4-BE-05) — push downlink command tới device qua MQTT topic <c>solar/{deviceCode}/cmd</c>.
+    /// Device sẽ ack qua topic <c>solar/{deviceCode}/cmd/ack</c> (bridge log lại).
+    /// </summary>
+    /// <remarks>
+    /// Body: <c>{ cmdId, type, params }</c>. Backend không validate sâu — chỉ relay JSON xuống MQTT.
+    /// MQTT bridge phải đang chạy (Mqtt:Enabled=true), nếu không sẽ trả 503.
+    /// </remarks>
+    [HttpPost("{id:guid}/command")]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceCommandAcceptedDto>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> SendCommand(Guid id, [FromBody] IotDeviceCommandPayloadDto body, CancellationToken ct)
+    {
+        if (body is null || string.IsNullOrWhiteSpace(body.Type))
+        {
+            return BadRequest(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "Body command không hợp lệ.",
+                ListErrors = new() { new() { Field = nameof(body.Type), Detail = "Type là bắt buộc." } }
+            });
+        }
+
+        var device = await _unitOfWork.IotDevices.GetAllAsync()
+            .FirstOrDefaultAsync(d => d.Id == id && !d.IsDeleted, ct);
+        if (device is null)
+        {
+            return NotFound(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy device."
+            });
+        }
+
+        var cmdId = string.IsNullOrWhiteSpace(body.CmdId) ? Guid.NewGuid().ToString("N") : body.CmdId;
+        var payload = JsonSerializer.Serialize(new
+        {
+            cmdId,
+            type = body.Type,
+            @params = body.Params,
+            issuedAt = DateTime.UtcNow
+        });
+
+        try
+        {
+            await _mqttPublisher.PublishCommandAsync(device.DeviceCode, payload, ct);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(503, new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 503,
+                Message = $"MQTT bridge không khả dụng: {ex.Message}"
+            });
+        }
+
+        return Accepted(new CommonResponse<IotDeviceCommandAcceptedDto>
+        {
+            IsSuccess = true,
+            StatusCode = 202,
+            Message = "Command đã enqueue xuống MQTT.",
+            Data = new IotDeviceCommandAcceptedDto
+            {
+                CmdId = cmdId,
+                DeviceCode = device.DeviceCode,
+                Topic = $"solar/{device.DeviceCode}/cmd"
+            }
+        });
     }
 }

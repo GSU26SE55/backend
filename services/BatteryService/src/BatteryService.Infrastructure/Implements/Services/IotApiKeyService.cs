@@ -89,4 +89,36 @@ public class IotApiKeyService : IIotApiKeyService
             .Replace('+', '-')
             .Replace('/', '_');
     }
+
+    // Sprint IoT-2 #IoT2-26 — MQTT credential per-device.
+    private const int MqttSaltBytes = 16;
+    private const int MqttHashBytes = 32;
+    private const int MqttPbkdf2Iterations = 10_000;
+
+    public GeneratedMqttCredential GenerateMqttCredential(string deviceCode)
+    {
+        if (string.IsNullOrWhiteSpace(deviceCode))
+            throw new ArgumentException("deviceCode required", nameof(deviceCode));
+
+        // Username = deviceCode lowercase (Mosquitto/EMQX best practice — không chứa ký tự nhạy cảm).
+        var username = deviceCode.Trim().ToLowerInvariant();
+
+        // Raw password: 18 byte random → base64url ~24 chars.
+        Span<byte> raw = stackalloc byte[18];
+        RandomNumberGenerator.Fill(raw);
+        var rawPassword = Base64UrlEncode(raw);
+
+        // PBKDF2 hash + salt (Mosquitto-compatible "PBKDF2$sha256${iter}${salt}${hash}").
+        Span<byte> salt = stackalloc byte[MqttSaltBytes];
+        RandomNumberGenerator.Fill(salt);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(rawPassword),
+            salt.ToArray(),
+            MqttPbkdf2Iterations,
+            HashAlgorithmName.SHA256,
+            MqttHashBytes);
+
+        var stored = $"PBKDF2$sha256${MqttPbkdf2Iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
+        return new GeneratedMqttCredential(username, rawPassword, stored);
+    }
 }

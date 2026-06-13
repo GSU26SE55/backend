@@ -28,25 +28,11 @@ public class Sprint3ValidationTests
     };
 
     // ===== BatchIngest SOH validation =====
-    [Fact]
-    public async Task BatchIngest_SohBelow0_Error()
-    {
-        var item = ValidItem();
-        item.SohPercent = -1m;
-        var cmd = new BatchIngestSensorReadingsCommand { Items = new() { item } };
-        var r = await cmd.ValidateAsync();
-        r.ListErrors.Should().Contain(e => e.Field.EndsWith(".SohPercent"));
-    }
-
-    [Fact]
-    public async Task BatchIngest_SohAbove100_Error()
-    {
-        var item = ValidItem();
-        item.SohPercent = 101m;
-        var cmd = new BatchIngestSensorReadingsCommand { Items = new() { item } };
-        var r = await cmd.ValidateAsync();
-        r.ListErrors.Should().Contain(e => e.Field.EndsWith(".SohPercent"));
-    }
+    // Sprint IoT-2 #IoT2-17 — SOH ngoài [0..100] đã chuyển từ field-validation (400) sang
+    // outlier reject (handler-level + metric reason=sensor_outlier). ValidateAsync KHÔNG còn check SOH.
+    // 2 test cũ `BatchIngest_SohBelow0_Error` / `BatchIngest_SohAbove100_Error` đã xoá vì
+    // không còn relevant — hành vi mới được test trong IotDeviceLifecycleHandlerTests.BatchIngest_RejectsOutlierVoltage
+    // và spec acceptance check (51 outlier voltage → device decommission).
 
     [Fact]
     public async Task BatchIngest_SohInRange_OK()

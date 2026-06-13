@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
@@ -16,6 +17,11 @@ public class CreateIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwa
     public long ArtifactSizeBytes { get; set; }
     public string? ReleaseNotes { get; set; }
     public bool PublishImmediately { get; set; }
+
+    // Sprint IoT-2 #IoT2-35 — spec fields.
+    public bool IsRequired { get; set; }
+    public IotFirmwareChannelEnum Channel { get; set; } = IotFirmwareChannelEnum.Stable;
+    public string? DeviceModel { get; set; }
 
     public Task<CommonResponse<IotFirmwareReleaseDto>> ValidateAsync()
     {

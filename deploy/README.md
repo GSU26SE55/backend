@@ -315,60 +315,51 @@ ASP.NET dùng `__` thay `:` trong env var (chuẩn Microsoft):
 - `ConnectionStrings__BatteryDb` ↔ `ConnectionStrings:BatteryDb`
 - `JwtSettings__SecretKey` ↔ `JwtSettings:SecretKey`
 - `Iot__OfflineAfterSeconds` ↔ `Iot:OfflineAfterSeconds` (Sprint IoT-1 #248)
-- `Mqtt__Host` / `Mqtt__Password` ↔ `Mqtt:*` (Sprint IoT-1 #253)
+- `Mqtt__Host` / `Mqtt__Password` ↔ `Mqtt:*` (Sprint IoT-2 #IoT2-22..26)
+- `Firmware__StorageRoot` / `Firmware__PublicBaseUrl` ↔ `Firmware:*` (Sprint IoT-2 #IoT2-35)
 
-## Sprint IoT-1 — Mosquitto MQTT broker (P3 optional)
+## Sprint IoT-2 — MQTT bridge (broker thuộc iot repo)
 
-Chart không enable Mosquitto mặc định. Khi muốn bật trong K8s:
+Backend chart KHÔNG host broker — chỉ chạy MQTT CLIENT (MqttBridgeBackgroundService).
+Broker (Mosquitto/EMQX) thuộc `capstone/iot/` monorepo + deploy bằng Helm chart riêng,
+hoặc dùng managed service (EMQX Cloud, HiveMQ Cloud).
 
-### 1. Tạo Secret password (sinh hash bằng mosquitto_passwd)
+### 1. Deploy broker từ iot repo (cùng namespace để CoreDNS resolve)
 
 ```bash
-# Trên local hoặc bastion có docker.
-PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
-docker run --rm -v "$PWD:/c" eclipse-mosquitto:2.0 \
-  mosquitto_passwd -c -b /c/passwd backend-bridge "$PASSWORD"
-
-kubectl create secret generic solar-mqtt-passwd \
+# Trong repo capstone/iot
+helm upgrade --install solar-mqtt iot/charts/mosquitto \
   --namespace solar-staging \
-  --from-file=passwd=./passwd
-echo "Plaintext password (paste vào Mqtt__Password Secret): $PASSWORD"
-rm passwd
+  -f iot/charts/mosquitto/values-staging.yaml
 ```
 
-### 2. Tạo Secret TLS (nếu mosquitto.tls.enabled=true)
+Broker service phải expose qua DNS `mosquitto.solar-staging.svc.cluster.local`
+(mặc định khi chart iot đặt name `mosquitto`).
+
+### 2. Inject `Mqtt__Password` vào Secret solar-secrets
+
+iot bootstrap script (`iot/charts/mosquitto/bootstrap.sh`) sinh password ngẫu nhiên
+và print plaintext cho backend đăng ký:
 
 ```bash
-# Dùng cert-manager hoặc copy Let's Encrypt cert.
-kubectl create secret generic solar-mqtt-tls \
-  --namespace solar-staging \
-  --from-file=ca.crt=./fullchain.pem \
-  --from-file=server.crt=./cert.pem \
-  --from-file=server.key=./privkey.pem
-```
+PASSWORD="$(iot/charts/mosquitto/bootstrap.sh backend-bridge)"
 
-### 3. Inject `Mqtt__Password` vào Secret solar-secrets
-
-```bash
 kubectl patch secret solar-secrets \
   --namespace solar-staging \
   --type=json \
   -p='[{"op":"add","path":"/data/Mqtt__Password","value":"'$(echo -n "$PASSWORD" | base64)'"}]'
 ```
 
-### 4. Bật Mosquitto + MQTT bridge
+### 3. Bật MQTT bridge trên backend
 
-`values-staging.yaml` (hoặc override `--set`):
+`values-staging.yaml` override:
 ```yaml
-mosquitto:
-  enabled: true
-  tls:
-    enabled: true
 config:
   Mqtt__Enabled: "true"
+  Mqtt__Host: "mosquitto"        # service DNS broker chart deploy
+  Mqtt__Port: "8883"
+  Mqtt__UseTls: "true"
 ```
-
-### 5. Apply
 
 ```bash
 helm upgrade solar deploy/helm/solar-battery \
@@ -376,15 +367,36 @@ helm upgrade solar deploy/helm/solar-battery \
   -f deploy/helm/solar-battery/values-staging.yaml
 ```
 
-### Verify
+### 4. Verify
 
 ```bash
-kubectl logs -n solar-staging deploy/mosquitto --tail=30
-# Phải thấy: "Opening MQTT listener on port 1883"
-
 kubectl logs -n solar-staging deploy/batteryservice --tail=30 | grep -i mqtt
-# Phải thấy: "MQTT bridge connected to mosquitto:8883"
+# Phải thấy: "MQTT bridge connected to broker, 4 subscriptions (mosquitto:8883)"
 ```
 
 ### Bootstrap cho local docker compose
-Xem `infra/mqtt/README.md` + script `infra/mqtt/bootstrap.sh` (sinh passwd qua container).
+Broker chạy từ `capstone/iot/infra/docker-compose.dev.yml`. Backend docker-compose
+không include mosquitto — xem comment trong `docker-compose.yml`.
+
+---
+
+## Sprint IoT-2 #IoT2-35 — Firmware OTA storage
+
+Backend nhận file `.bin` qua `POST /api/admin/iot-firmware-releases/upload-binary`
+(multipart). File lưu vào PVC `batteryservice-firmware-storage` mặc định 2Gi.
+
+### Disable PVC nếu dùng object storage
+
+`values-staging.yaml`:
+```yaml
+services:
+  batteryservice:
+    firmwareStorage:
+      enabled: false        # tắt PVC khi dùng S3/MinIO
+config:
+  Firmware__StorageRoot: ""                           # không dùng local FS
+  Firmware__PublicBaseUrl: "https://cdn.example.com/firmware"
+```
+
+Khi `Firmware__PublicBaseUrl` rỗng + PVC enabled → backend serve qua static path
+`/firmware-storage/{file}` (chỉ phù hợp staging 1-replica).

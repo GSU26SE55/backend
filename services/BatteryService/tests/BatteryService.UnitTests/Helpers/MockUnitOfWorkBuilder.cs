@@ -30,6 +30,9 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IGenericRepository<IotFirmwareRelease>> IotFirmwareReleases { get; } = new();
     public Mock<IGenericRepository<IotFirmwareUpdateLog>> IotFirmwareUpdateLogs { get; } = new();
 
+    // Sprint IoT-2 #IoT2-16 — idempotency.
+    public Mock<IGenericRepository<SensorIngestIdempotencyRecord>> SensorIngestIdempotencyRecords { get; } = new();
+
     public MockUnitOfWorkBuilder()
     {
         UnitOfWork.SetupGet(x => x.BatteryTypes).Returns(BatteryTypes.Object);
@@ -49,6 +52,7 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.IotDeviceCalibrations).Returns(IotDeviceCalibrations.Object);
         UnitOfWork.SetupGet(x => x.IotFirmwareReleases).Returns(IotFirmwareReleases.Object);
         UnitOfWork.SetupGet(x => x.IotFirmwareUpdateLogs).Returns(IotFirmwareUpdateLogs.Object);
+        UnitOfWork.SetupGet(x => x.SensorIngestIdempotencyRecords).Returns(SensorIngestIdempotencyRecords.Object);
         UnitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         UnitOfWork.Setup(x => x.BeginTransactionAsync()).Returns(Task.CompletedTask);
         UnitOfWork.Setup(x => x.CommitTransactionAsync()).Returns(Task.CompletedTask);
@@ -71,6 +75,7 @@ public sealed class MockUnitOfWorkBuilder
         Seed(IotDeviceCalibrations, Array.Empty<IotDeviceCalibration>());
         Seed(IotFirmwareReleases, Array.Empty<IotFirmwareRelease>());
         Seed(IotFirmwareUpdateLogs, Array.Empty<IotFirmwareUpdateLog>());
+        Seed(SensorIngestIdempotencyRecords, Array.Empty<SensorIngestIdempotencyRecord>());
     }
 
     public MockUnitOfWorkBuilder WithIotDevices(params IotDevice[] data) { Seed(IotDevices, data); return this; }

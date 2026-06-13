@@ -121,12 +121,16 @@ spec:
         summary: "Saga active count {{`{{ $value }}`}} over 15min"
         description: "Quartz timer drift or consumer crash. Runbook: docs/runbooks/09-saga-stuck.md"
 
-  # ---- Sprint IoT-1 — IoT edge device fleet ----
+  # ---- Sprint IoT-2 — IoT edge device fleet (§52.12 metric schema) ----
+  # Metric names: iot_device_heartbeats_total, iot_devices_online_count,
+  #               iot_devices_offline_total, iot_sensor_readings_ingested_total,
+  #               iot_sensor_readings_rejected_total{reason}, iot_firmware_updates_total,
+  #               iot_devices_auto_decommissioned_total, iot_cross_source_mismatch_alerts_total.
   - name: iot-device-fleet
     interval: 30s
     rules:
     - alert: IotDeviceOfflineSpike
-      expr: increase(iot_devices_marked_offline_total[5m]) > 3
+      expr: increase(iot_devices_offline_total[5m]) > 3
       for: 2m
       labels: { severity: warning }
       annotations:
@@ -135,21 +139,21 @@ spec:
 
     - alert: IotHeartbeatStall
       expr: |
-        rate(iot_device_heartbeats_received_total[5m]) == 0
-        and on() iot_devices_active_count > 0
+        rate(iot_device_heartbeats_total[5m]) == 0
+        and on() iot_devices_online_count > 0
       for: 5m
       labels: { severity: critical }
       annotations:
-        summary: "No IoT heartbeats received in 5min while fleet is active"
+        summary: "No IoT heartbeats received in 5min while fleet is online"
         description: "Possible: gateway down, /api/iot-devices/heartbeat route broken, or full-fleet disconnect."
 
     - alert: IotSensorOutlierSpike
       expr: |
         (
-          sum(rate(sensor_readings_rejected_outlier_total[10m]))
+          sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m]))
           /
-          (sum(rate(sensor_readings_inserted_total[10m]))
-           + sum(rate(sensor_readings_rejected_outlier_total[10m])))
+          (sum(rate(iot_sensor_readings_ingested_total[10m]))
+           + sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m])))
         ) > 0.1
       for: 10m
       labels: { severity: warning }
@@ -160,22 +164,22 @@ spec:
     - alert: IotClockDriftFleetWide
       expr: |
         (
-          sum(iot_devices_clock_skew_high_count)
+          sum(rate(iot_device_heartbeats_total{status="clock_drift"}[15m]))
           /
-          sum(iot_devices_active_count)
+          sum(rate(iot_device_heartbeats_total[15m]))
         ) > 0.5
       for: 15m
       labels: { severity: warning }
       annotations:
-        summary: "{{`{{ $value | humanizePercentage }}`}} of fleet has clock skew > 60s"
-        description: "Likely NTP outage — check pool.ntp.org / time.google.com reachability."
+        summary: "{{`{{ $value | humanizePercentage }}`}} of heartbeats have clock_drift status"
+        description: "Likely NTP outage — check time.google.com reachability."
 
     - alert: IotFirmwareUpdateFailureSpike
       expr: |
         (
-          sum(increase(iot_firmware_update_status_total{status="Failed"}[1h]))
+          sum(increase(iot_firmware_updates_total{status=~"failed|rolledback"}[1h]))
           /
-          sum(increase(iot_firmware_update_status_total[1h]))
+          sum(increase(iot_firmware_updates_total[1h]))
         ) > 0.3
       for: 5m
       labels: { severity: critical }
@@ -183,7 +187,34 @@ spec:
         summary: "Firmware update fail rate {{`{{ $value | humanizePercentage }}`}} in last 1h"
         description: "Consider archiving release via POST /api/admin/iot-firmware-releases/{id}/archive."
 
-  # ---- Sprint IoT-1 #253 — MQTT bridge + broker ----
+    # Sprint IoT-2 #IoT2-17 — device tự decommission do outlier > 50/h.
+    - alert: IotDeviceAutoDecommissionedSpike
+      expr: increase(iot_devices_auto_decommissioned_total[1h]) > 0
+      for: 1m
+      labels: { severity: critical }
+      annotations:
+        summary: "{{`{{ $value }}`}} device(s) auto-decommissioned (outlier > 50/h)"
+        description: "Sensor may be faulty. Inspect IotDevice.AutoDecommissionedAt + last calibration."
+
+    # Sprint IoT-2 #IoT2-28 — BMS vs IoT cross-source mismatch burst.
+    - alert: IotCrossSourceMismatchBurst
+      expr: increase(iot_cross_source_mismatch_alerts_total[1h]) > 5
+      for: 10m
+      labels: { severity: warning }
+      annotations:
+        summary: "{{`{{ $value }}`}} SensorMismatch alerts in 1h"
+        description: "BMS calibration drift or IoT sensor lệch. Check Bms vs IotGateway readings."
+
+    # Sprint IoT-2 #IoT2-18 — mapping permission denied burst (key abuse?).
+    - alert: IotIngestMappingDenied
+      expr: increase(iot_sensor_readings_rejected_total{reason="mapping_invalid"}[5m]) > 20
+      for: 5m
+      labels: { severity: warning }
+      annotations:
+        summary: "{{`{{ $value }}`}} readings rejected — device/site mismatch"
+        description: "API key may be misconfigured or compromised. Audit IotDevice.SiteId vs BatteryAsset.SiteId."
+
+  # ---- Sprint IoT-2 — MQTT bridge alerts (broker thuộc iot repo) ----
   - name: iot-mqtt-bridge
     interval: 30s
     rules:
@@ -193,22 +224,7 @@ spec:
       labels: { severity: critical }
       annotations:
         summary: "MQTT bridge disconnected from broker > 2min"
-        description: "Check mosquitto pod, Mqtt__Password, TLS cert, ACL. Bridge auto-reconnects every Mqtt__ReconnectIntervalSeconds."
-
-    - alert: MqttBrokerDown
-      expr: up{component="mosquitto"} == 0
-      for: 2m
-      labels: { severity: warning }
-      annotations:
-        summary: "Mosquitto MQTT broker not reachable"
-
-    - alert: MqttSubscriberLag
-      expr: mqtt_subscriber_queue_depth{topic=~"telemetry/.*"} > 1000
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "MQTT topic {{`{{ $labels.topic }}`}} backlog {{`{{ $value }}`}} messages"
-        description: "Bridge dispatch slow → batteryservice ingest bottleneck."
+        description: "Check broker reachability, Mqtt__Password, TLS cert, ACL. Bridge auto-reconnects every Mqtt__ReconnectIntervalSeconds."
 
   # ---- Infrastructure ----
   - name: infrastructure

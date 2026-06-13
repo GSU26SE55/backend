@@ -36,13 +36,21 @@ else
   echo "PASS: no await on void UpdateAsync/DeleteAsync"
 fi
 
-# Rule 2: await GetAllAsync
-if echo "$DIFF" | grep -E '^\+.*await\s+\w+(\.\w+)*\.GetAllAsync\s*\(' >/dev/null; then
-  echo "FAIL: GetAllAsync trả IQueryable (SYNC) — không được await."
-  echo "$DIFF" | grep -nE '^\+.*await\s+\w+(\.\w+)*\.GetAllAsync\s*\(' || true
+# Rule 2: await GetAllAsync trực tiếp (không qua chain LINQ async terminator).
+#   - SAI:  var x = await uow.Y.GetAllAsync();              ← await IQueryable trực tiếp
+#   - SAI:  return await uow.Y.GetAllAsync();
+#   - ĐÚNG: var x = await uow.Y.GetAllAsync().FirstOrDefaultAsync(...);
+#   - ĐÚNG: var x = await uow.Y.GetAllAsync()
+#                .Where(...)
+#                .ToListAsync();
+# Regex chỉ flag pattern statement-end ngay sau `GetAllAsync()` (`;` hoặc `)` hết arg list).
+# Chain `.FirstOrDefaultAsync` / `.ToListAsync` / `.AnyAsync` được pass vì await thực sự awaits Task<T>.
+if echo "$DIFF" | grep -E '^\+.*await\s+\w+(\.\w+)*\.GetAllAsync\s*\(\s*\)\s*(;|\)\s*[,;])' >/dev/null; then
+  echo "FAIL: GetAllAsync trả IQueryable (SYNC) — không được await trực tiếp."
+  echo "$DIFF" | grep -nE '^\+.*await\s+\w+(\.\w+)*\.GetAllAsync\s*\(\s*\)\s*(;|\)\s*[,;])' || true
   FAILED=1
 else
-  echo "PASS: no await on GetAllAsync"
+  echo "PASS: no await on GetAllAsync (standalone)"
 fi
 
 # Rule 3: entity mới phải extend AuditableEntity
@@ -54,6 +62,12 @@ for file in $NEW_ENTITIES; do
   [ -f "$file" ] || continue
   # Bỏ qua abstract / enum / interface — chỉ check class cụ thể
   if grep -qE '^(\s*public\s+)?(abstract|enum|interface)' "$file"; then
+    continue
+  fi
+  # Bỏ qua hypertable / append-only entity (TimescaleDB) — không có Id/UpdatedAt/IsDeleted
+  # vì partition theo time + retention auto-drop chunks. Pattern: file có comment "hypertable"
+  # hoặc "append-only" hoặc "không AuditableEntity".
+  if grep -qiE 'hypertable|append-only|không AuditableEntity' "$file"; then
     continue
   fi
   if ! grep -qE 'class\s+\w+\s*:\s*(\w+\s*,\s*)*AuditableEntity' "$file"; then

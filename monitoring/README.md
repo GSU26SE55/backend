@@ -225,28 +225,30 @@ Group `iot-mqtt-bridge` (rule 18-20):
 - Timeseries: MQTT subscriber queue depth
 - Logs: Mosquitto + BatteryService IoT-related log streams
 
-### Metrics required từ BatteryService (chưa implement Sprint IoT-1)
-Alert rules dùng các metric sau — cần Sprint IoT-2 wire prometheus-net counters:
+### Metrics emit từ BatteryService (Sprint IoT-2 #IoT2-38 — §52.12)
+Implement tại `BatteryService.Infrastructure.Observability.IotMetrics`.
 
-| Metric | Type | Label |
-|--------|------|-------|
-| `iot_devices_active_count` | gauge | — |
-| `iot_devices_offline_count` | gauge | — |
-| `iot_devices_marked_offline_total` | counter | — |
-| `iot_device_heartbeats_received_total` | counter | — |
-| `iot_device_clock_skew_seconds` | gauge | device_code |
-| `iot_devices_clock_skew_high_count` | gauge | — |
-| `sensor_readings_inserted_total` | counter | — |
-| `sensor_readings_rejected_outlier_total` | counter | — |
-| `iot_firmware_update_status_total` | counter | status |
+| Metric | Type | Labels |
+|--------|------|--------|
+| `iot_device_heartbeats_total` | counter | `device_id`, `status` (`ok`\|`clock_drift`) |
+| `iot_devices_online_count` | gauge | — (refresh 30s) |
+| `iot_devices_offline_total` | counter | — |
+| `iot_sensor_readings_ingested_total` | counter | `device_id` |
+| `iot_sensor_readings_rejected_total` | counter | `reason` (`clock_drift`\|`sensor_outlier`\|`mapping_invalid`\|`idempotency_replay`\|`scope_denied`) |
+| `iot_firmware_updates_total` | counter | `from_version`, `to_version`, `status` |
+| `iot_devices_auto_decommissioned_total` | counter | `device_id` (Sprint IoT-2 #IoT2-17) |
+| `iot_cross_source_mismatch_alerts_total` | counter | — (Sprint IoT-2 #IoT2-28) |
+
+MQTT bridge gauges (Sprint sau implement — alert rule reference):
+
+| Metric | Type | Labels |
+|--------|------|--------|
 | `mqtt_bridge_connected` | gauge (0/1) | — |
 | `mqtt_bridge_enabled` | gauge (0/1) | — |
-| `mqtt_subscriber_queue_depth` | gauge | topic |
-
-Alert sẽ stay silent (no data) cho đến khi metrics được expose.
 
 ### Promtail scope
-File `promtail/promtail-config.yml` đã add `mosquitto` vào KEEP regex → Loki nhận log Mosquitto (auth fail, ACL deny, TLS handshake).
+File `promtail/promtail-config.yml` KEEP regex bao gồm log batteryservice cho IoT events.
+Broker mosquitto KHÔNG thuộc backend repo — log broker scrape ở iot repo Promtail config.
 
 ### Mosquitto $SYS scrape (optional)
 Để scrape Mosquitto internal metrics, deploy thêm container `mosquitto-exporter` (sapcc/mosquitto-exporter). Job đã khai báo trong `prometheus.yml` (target `mosquitto-exporter:9234`) — Prometheus sẽ DOWN silently nếu exporter chưa có (không trigger ServiceDown alert vì filter tier=backend|gateway).

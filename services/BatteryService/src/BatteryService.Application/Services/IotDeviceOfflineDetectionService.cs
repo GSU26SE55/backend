@@ -12,15 +12,18 @@ public class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectionServic
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIntegrationEventOutboxWriter _outbox;
+    private readonly IIotMetricsRecorder _metrics;
     private readonly ILogger<IotDeviceOfflineDetectionService> _logger;
 
     public IotDeviceOfflineDetectionService(
         IBatteryUnitOfWork unitOfWork,
         IIntegrationEventOutboxWriter outbox,
+        IIotMetricsRecorder metrics,
         ILogger<IotDeviceOfflineDetectionService> logger)
     {
         _unitOfWork = unitOfWork;
         _outbox = outbox;
+        _metrics = metrics;
         _logger = logger;
     }
 
@@ -93,6 +96,7 @@ public class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectionServic
                 ), ct);
 
                 markedOffline++;
+                _metrics.DeviceOfflineRecorded();
             }
             await _unitOfWork.CommitTransactionAsync();
         }

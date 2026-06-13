@@ -34,12 +34,13 @@ public class IngestHeaderCaptureTests
         var deviceId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var device = MakeDevice(deviceId);
-        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-HDR" };
+        // Sprint IoT-2 #IoT2-18 — asset.SiteId phải match device.SiteId, không sẽ bị 403.
+        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-HDR", SiteId = device.SiteId };
 
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(device)
             .WithBatteryAssets(asset);
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var before = device.LastSeenAt;
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
@@ -66,12 +67,13 @@ public class IngestHeaderCaptureTests
         var assetId = Guid.NewGuid();
         var device = MakeDevice(deviceId);
         device.Status = IotDeviceStatusEnum.Offline;
-        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-OFF" };
+        // Sprint IoT-2 #IoT2-18 — asset.SiteId phải match device.SiteId.
+        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-OFF", SiteId = device.SiteId };
 
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(device)
             .WithBatteryAssets(asset);
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         await handler.Handle(new BatchIngestSensorReadingsCommand
         {
@@ -93,7 +95,7 @@ public class IngestHeaderCaptureTests
         var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-RESOLVE", IsDeleted = false };
 
         var uow = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         // Item chỉ có BatteryAssetSerial — handler phải resolve về Id.
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
@@ -119,7 +121,7 @@ public class IngestHeaderCaptureTests
     public async Task BatchIngest_SkipsItem_WhenSerialNotFound()
     {
         var uow = new MockUnitOfWorkBuilder();
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
         {
@@ -153,7 +155,7 @@ public class IngestHeaderCaptureTests
            .Callback<SensorReading>(captured.Add)
            .Returns(Task.CompletedTask);
 
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build());
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         // B9 (#154) — ingest accept sourceType per item (BMS/IotGateway/External).
         await handler.Handle(new BatchIngestSensorReadingsCommand

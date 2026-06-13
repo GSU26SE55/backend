@@ -14,7 +14,7 @@
       "id": 1,
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
       "targets": [
-        { "expr": "sum(iot_devices_active_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "expr": "sum(iot_devices_online_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ],
       "fieldConfig": {
         "defaults": {
@@ -29,7 +29,7 @@
       "id": 2,
       "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
       "targets": [
-        { "expr": "sum(iot_devices_offline_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "expr": "sum(iot_devices_online_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ],
       "fieldConfig": {
         "defaults": {
@@ -44,7 +44,7 @@
       "id": 3,
       "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
       "targets": [
-        { "expr": "sum(rate(iot_device_heartbeats_received_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "expr": "sum(rate(iot_device_heartbeats_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ],
       "fieldConfig": { "defaults": { "unit": "ops" } }
     },
@@ -54,7 +54,7 @@
       "id": 4,
       "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
       "targets": [
-        { "expr": "sum(rate(sensor_readings_inserted_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "expr": "sum(rate(iot_sensor_readings_ingested_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ],
       "fieldConfig": { "defaults": { "unit": "ops" } }
     },
@@ -64,7 +64,7 @@
       "id": 10,
       "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
       "targets": [
-        { "expr": "increase(iot_devices_marked_offline_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "marked offline" }
+        { "expr": "increase(iot_devices_offline_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "marked offline" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -80,7 +80,7 @@
       "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum(rate(sensor_readings_rejected_outlier_total[10m])) / (sum(rate(sensor_readings_inserted_total[10m])) + sum(rate(sensor_readings_rejected_outlier_total[10m])))",
+          "expr": "sum(rate(iot_sensor_readings_rejected_total{reason=\"sensor_outlier\"}[10m])) / (sum(rate(iot_sensor_readings_ingested_total[10m])) + sum(rate(iot_sensor_readings_rejected_total{reason=\"sensor_outlier\"}[10m])))",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "legendFormat": "reject %"
@@ -99,19 +99,18 @@
       "id": 12,
       "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
       "targets": [
-        { "expr": "sum by (status) (increase(iot_firmware_update_status_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{status}}" }
+        { "expr": "sum by (status) (increase(iot_firmware_updates_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{status}}" }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Clock skew distribution (fleet avg seconds)",
+      "title": "Heartbeat clock_drift ratio (fleet)",
       "id": 13,
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
       "targets": [
-        { "expr": "avg(iot_device_clock_skew_seconds)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "avg" },
-        { "expr": "max(iot_device_clock_skew_seconds)", "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "max" }
+        { "expr": "sum(rate(iot_device_heartbeats_total{status=\"clock_drift\"}[5m])) / clamp_min(sum(rate(iot_device_heartbeats_total[5m])), 1)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "drift ratio" }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
     },
     {
       "type": "stat",
@@ -139,21 +138,49 @@
       ]
     },
     {
-      "type": "logs",
-      "title": "Mosquitto broker logs",
-      "id": 30,
-      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "type": "stat",
+      "title": "Sprint IoT-2 — Auto-decommissioned (1h, #IoT2-17)",
+      "id": 32,
+      "gridPos": { "x": 0, "y": 24, "w": 6, "h": 6 },
       "targets": [
-        { "expr": "{container=\"solar-mosquitto\"}", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+        { "expr": "sum(increase(iot_devices_auto_decommissioned_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "devices" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 1 },
+            { "color": "red", "value": 3 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sprint IoT-2 — Cross-source mismatch alerts (#IoT2-28)",
+      "id": 33,
+      "gridPos": { "x": 6, "y": 24, "w": 6, "h": 6 },
+      "targets": [
+        { "expr": "rate(iot_cross_source_mismatch_alerts_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "alert/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sprint IoT-2 — Reject reasons breakdown (#IoT2-15..18)",
+      "id": 34,
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "sum by (reason) (rate(iot_sensor_readings_rejected_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{reason}}" }
       ]
     },
     {
       "type": "logs",
       "title": "BatteryService IoT logs",
       "id": 31,
-      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 30, "w": 24, "h": 8 },
       "targets": [
-        { "expr": "{container=\"solar-batteryservice\"} |~ \"(?i)(IotDevice|iot-devices|mqtt|firmware-check|provision)\"", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+        { "expr": "{container=\"solar-batteryservice\"} |~ \"(?i)(IotDevice|iot-devices|mqtt|firmware-check|provision|SensorMismatch|auto-decommission)\"", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
       ]
     }
   ]

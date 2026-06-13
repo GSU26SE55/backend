@@ -1,3 +1,4 @@
+using BatteryService.Domain.Enums;
 using SharedKernels.Domain;
 
 namespace BatteryService.Domain.Entities;
@@ -32,6 +33,16 @@ public class IotFirmwareRelease : AuditableEntity
 
     /// <summary>Bản này đã bị admin rollback / disable.</summary>
     public bool IsArchived { get; set; }
+
+    // Sprint IoT-2 #IoT2-35 (S7-BE-04) — spec field set.
+    /// <summary>Buộc OTA — device phải apply (force update). Default false.</summary>
+    public bool IsRequired { get; set; }
+
+    /// <summary>Channel rollout: <c>Stable</c> | <c>Beta</c>. Default Stable.</summary>
+    public IotFirmwareChannelEnum Channel { get; set; } = IotFirmwareChannelEnum.Stable;
+
+    /// <summary>Model device tương thích (vd "ESP32-S3-WROOM-1"). Khác HardwareRevision (revision PCB).</summary>
+    public string? DeviceModel { get; set; }
 
     public ICollection<IotFirmwareUpdateLog> UpdateLogs { get; set; } = new List<IotFirmwareUpdateLog>();
 }

@@ -50,6 +50,18 @@ public class IotFirmwareReleaseConfiguration : IEntityTypeConfiguration<IotFirmw
             .HasColumnName("is_archived")
             .HasDefaultValue(false);
 
+        // Sprint IoT-2 #IoT2-35 — IsRequired/Channel/DeviceModel.
+        builder.Property(r => r.IsRequired)
+            .HasColumnName("is_required")
+            .HasDefaultValue(false);
+        builder.Property(r => r.Channel)
+            .HasColumnName("channel")
+            .HasConversion<int>()
+            .HasDefaultValue(BatteryService.Domain.Enums.IotFirmwareChannelEnum.Stable);
+        builder.Property(r => r.DeviceModel)
+            .HasColumnName("device_model")
+            .HasMaxLength(64);
+
         builder.Property(r => r.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(r => r.CreatedBy).HasColumnName("created_by");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
