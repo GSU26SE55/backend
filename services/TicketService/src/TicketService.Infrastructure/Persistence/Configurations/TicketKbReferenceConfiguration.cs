@@ -51,5 +51,10 @@ public class TicketKbReferenceConfiguration : IEntityTypeConfiguration<TicketKbR
             .HasColumnName("deleted_at");
 
         builder.HasIndex(e => new { e.TicketId, e.KbArticleId }).IsUnique();
+
+        builder.HasOne<Ticket>()
+            .WithMany(e => e.KbReferences)
+            .HasForeignKey(e => e.TicketId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
