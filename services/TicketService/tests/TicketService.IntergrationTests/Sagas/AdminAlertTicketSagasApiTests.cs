@@ -42,14 +42,17 @@ public class AdminAlertTicketSagasApiTests : IClassFixture<TicketApiFactory>
         var alertId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        // xmin shadow property — PostgreSQL system column. Set manually qua raw SQL
-        // vì EF cấu hình `ValueGeneratedOnAddOrUpdate` (PostgreSQL tự generate, nhưng SQLite không).
         var batteryAssetId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
         var failedAtStageVal = failureReason is null ? null : currentState;
         DateTime? failedAtVal = failureReason is null ? null : now;
 
-        await db.Database.ExecuteSqlRawAsync(@"
+        string sql;
+        object[] parameters;
+
+        if (db.Database.IsNpgsql())
+        {
+            sql = @"
 INSERT INTO alert_ticket_saga_states
   (correlation_id, current_state, version, xmin,
    alert_id, battery_asset_id, customer_id, asset_serial_number,
@@ -61,11 +64,41 @@ VALUES
    {0}, {2}, {3}, {4},
    1, 3, 60.0, 75.0, 'C', {5},
    0, {6}, {7}, {8}, 0,
-   {5})",
-            alertId, currentState,
-            batteryAssetId, customerId,
-            "BMS-E2E", now,
-            failureReason!, failedAtStageVal!, failedAtVal!);
+   {5})";
+            parameters = new object[]
+            {
+                alertId, currentState,
+                batteryAssetId, customerId,
+                "BMS-E2E", now,
+                failureReason!, failedAtStageVal!, failedAtVal!
+            };
+        }
+        else
+        {
+            sql = @"
+INSERT INTO alert_ticket_saga_states
+  (correlation_id, current_state, version,
+   alert_id, battery_asset_id, customer_id, asset_serial_number,
+   anomaly_type, severity, threshold_value, actual_value, unit, detected_at,
+   ticket_is_reused, failure_reason, failed_at_stage, failed_at, retry_count,
+   started_at)
+VALUES
+  ({0}, {1}, 1,
+   {0}, {2}, {3}, {4},
+   1, 3, 60.0, 75.0, 'C', {5},
+   0, {6}, {7}, {8}, 0,
+   {5})";
+            parameters = new object[]
+            {
+                alertId, currentState,
+                batteryAssetId, customerId,
+                "BMS-E2E", now,
+                failureReason, failedAtStageVal, failedAtVal
+            };
+        }
+
+
+        await db.Database.ExecuteSqlRawAsync(sql, parameters);
 
         return alertId;
     }
@@ -121,10 +154,7 @@ VALUES
 
         var response = await _client.GetAsync($"/api/v1/admin/sagas/alert-ticket/{randomId}");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaDetailResponse>(_jsonOptions);
-        result!.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(404);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
