@@ -48,6 +48,10 @@ using (var scope = app.Services.CreateScope())
     {
         Console.WriteLine("No pending migrations.");
     }
+
+    var seeder = scope.ServiceProvider.GetRequiredService<NotificationService.Infrastructure.Persistence.Seeders.NotificationDataSeeder>();
+    await seeder.SeedAsync();
+    Console.WriteLine("Notification seed data checked.");
 }
 
 app.UseSharedInfrastructure();

@@ -282,6 +282,17 @@ services:
       AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
       AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
       AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
+      # Sprint 5B #91/#102 — Environmental ingest API key (smoke/fire/water IoT)
+      ApiKeys__EnvironmentalIngest: ${BATTERY_ENVIRONMENTAL_INGEST_API_KEY:-dev-battery-environmental-key}
+      # Sprint 5B #90/#92 — OpenMeteo + WeatherSyncBackgroundService
+      Weather__BaseUrl: ${BATTERY_WEATHER_BASE_URL:-https://api.open-meteo.com/}
+      Weather__IntervalMinutes: ${BATTERY_WEATHER_INTERVAL_MINUTES:-15}
+      Weather__DedupWindowMinutes: ${BATTERY_WEATHER_DEDUP_WINDOW_MINUTES:-10}
+      Weather__HttpTimeoutSeconds: ${BATTERY_WEATHER_HTTP_TIMEOUT_SECONDS:-10}
+      Weather__Enabled: ${BATTERY_WEATHER_ENABLED:-true}
+      # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
     ports:
       - "4006:8080"
     depends_on:
@@ -311,6 +322,12 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      # Sprint 5B #235 — MassTransit endpoint runtime
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
+      # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
+      AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
+      AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
     ports:
       - "4007:8080"
     depends_on:

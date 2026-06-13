@@ -51,7 +51,12 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 CycleCount = item.CycleCount,
                 SohPercent = item.SohPercent,
                 ChargingState = item.ChargingState,
-                SourceDeviceId = item.SourceDeviceId?.Trim()
+                SourceDeviceId = item.SourceDeviceId?.Trim(),
+                InternalResistanceMilliohm = item.InternalResistanceMilliohm,
+                CellVoltageDeltaMv = item.CellVoltageDeltaMv,
+                SourceType = item.SourceType,
+                BmsErrorCode = item.BmsErrorCode?.Trim(),
+                SensorSourceCode = item.SensorSourceCode?.Trim()
             });
 
             if (!asset.LastSensorReadingAt.HasValue || asset.LastSensorReadingAt.Value < readingTime)

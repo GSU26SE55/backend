@@ -18,8 +18,6 @@ public class CreateSiteCommand : IRequest<CommonResponse<SiteDto>>, IValidatable
 
     public decimal? Longitude { get; set; }
 
-    public decimal? CapacityKw { get; set; }
-
     public DateTime InstallDate { get; set; }
 
     public SiteStatusEnum Status { get; set; } = SiteStatusEnum.Active;
@@ -54,9 +52,6 @@ public class CreateSiteCommand : IRequest<CommonResponse<SiteDto>>, IValidatable
 
         if (Longitude is < -180 or > 180)
             AddError(response, nameof(Longitude), "Kinh độ phải nằm trong khoảng -180 đến 180.");
-
-        if (CapacityKw is < 0)
-            AddError(response, nameof(CapacityKw), "Công suất site không được âm.");
 
         if (InstallDate == default)
             AddError(response, nameof(InstallDate), "Ngày lắp đặt là bắt buộc.");

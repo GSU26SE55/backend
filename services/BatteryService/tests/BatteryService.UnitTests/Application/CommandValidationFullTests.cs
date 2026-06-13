@@ -145,7 +145,6 @@ public class CommandValidationFullTests
             CustomerId = Guid.Empty,
             Latitude = 100,
             Longitude = 200,
-            CapacityKw = -1,
             InstallDate = DateTime.UtcNow.AddDays(1),
             ContactPersonName = new string('n', 151),
             ContactPersonPhone = new string('p', 31)

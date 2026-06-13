@@ -18,8 +18,6 @@ public class SiteDto
 
     public decimal? Longitude { get; set; }
 
-    public decimal? CapacityKw { get; set; }
-
     public DateTime InstallDate { get; set; }
 
     public SiteStatusEnum Status { get; set; }

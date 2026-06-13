@@ -4,6 +4,7 @@
 #   1. await UpdateAsync/DeleteAsync (void method)
 #   2. await GetAllAsync (sync, trả IQueryable)
 #   3. Entity mới trong Domain/Entities/ phải extend AuditableEntity
+#   4. Sprint 5B #233 ADR-017 — Energy/CO2 scope creep guard
 #
 # Env:
 #   BASE_REF  → ref so sánh (default: origin/dev)
@@ -65,6 +66,24 @@ if [ "$ENTITY_FAILED" -eq 0 ]; then
   echo "PASS: new domain entities extend AuditableEntity"
 else
   FAILED=1
+fi
+
+# Rule 4: Sprint 5B #233 ADR-017 — Energy/CO2 scope creep guard.
+# Mirror pre-commit hook `energy-co2-scope-guard` trong .pre-commit-config.yaml.
+# Block tokens: EnergySession, EnergyDailySummary, BatteryCycleLog, SiteEnergySummary,
+#               ElectricityRate, CarbonEmissionFactor, CapacityKw, kWh, CO2*.
+SCOPE_HITS="$(grep -rInE 'EnergySession|EnergyDailySummary|BatteryCycleLog|SiteEnergySummary|ElectricityRate|CarbonEmissionFactor|CapacityKw|kWh|CO2' \
+              services/BatteryService/src shared/src 2>/dev/null \
+              | grep -vE '/(bin|obj|Migrations)/' || true)"
+
+if [ -n "$SCOPE_HITS" ]; then
+  echo "FAIL: Energy/CO2 scope creep detected (ADR-017). Vi phạm:"
+  echo "$SCOPE_HITS"
+  echo
+  echo "Fix: xóa tokens trên, hoặc cập nhật ADR-017 (docs/adr/0017-remove-energy-co2-analytics.md) nếu thay đổi scope."
+  FAILED=1
+else
+  echo "PASS: no Energy/CO2 scope creep (ADR-017)"
 fi
 
 exit "$FAILED"

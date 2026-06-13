@@ -17,6 +17,7 @@ using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
+using TicketService.Infrastructure.Sagas;
 
 namespace TicketService.Infrastructure.DependencyInjection;
 
@@ -31,7 +32,19 @@ public static class ManageDependencyInjection
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
         services.AddInboxIdempotency(configuration);
-        services.AddMessageBus(configuration, typeof(ManageDependencyInjection).Assembly, typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
+
+        // Sprint 5B #237 — Quartz cluster persistent store (cho Saga timeout).
+        services.AddAlertTicketSaga(configuration);
+
+        // Sprint 5B #237/#238 — add Saga + consumers vào MassTransit bus.
+        services.AddMessageBus(
+            configuration,
+            configure: SagaServiceCollectionExtensions.ConfigureAlertTicketSaga,
+            typeof(ManageDependencyInjection).Assembly,
+            typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
+
+        // Sprint 5B #238 — feature flag override cho cutover.
+        services.Configure<AlertTicketSagaOptions>(configuration.GetSection(AlertTicketSagaOptions.SectionName));
 
         return services;
     }
@@ -40,7 +53,9 @@ public static class ManageDependencyInjection
     {
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
+        services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
     }

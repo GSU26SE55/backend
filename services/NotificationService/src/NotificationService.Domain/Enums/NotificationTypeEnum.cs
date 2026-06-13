@@ -20,5 +20,18 @@ public enum NotificationTypeEnum
     AccountActivated = 12,
     AdminInvite = 13,
     IncidentDeclared = 14,
+
+    /// <summary>
+    /// Sprint 5B #238 — Critical Alert chưa-ack > 5 phút
+    /// (<c>BatteryAlertEscalationRequestedEvent</c>).
+    /// </summary>
+    BatteryAlertEscalationPending = 16,
+
+    /// <summary>
+    /// Sprint 5B #238 — Alert–Ticket Saga vào terminal state Failed,
+    /// admin reprocess required (<c>AlertTicketSagaFailedEvent</c>).
+    /// </summary>
+    AlertTicketSagaFailed = 17,
+
     System = 99
 }

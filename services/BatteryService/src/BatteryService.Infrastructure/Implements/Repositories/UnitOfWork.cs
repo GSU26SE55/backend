@@ -33,6 +33,16 @@ public class UnitOfWork : IBatteryUnitOfWork
 
     public IGenericRepository<OutboxMessage> OutboxMessages => new GenericRepository<OutboxMessage>(_context);
 
+    // Sprint 5B #89 — Ambient monitoring.
+    public IGenericRepository<AmbientReading> AmbientReadings => new GenericRepository<AmbientReading>(_context);
+    public IGenericRepository<AmbientThresholdConfig> AmbientThresholdConfigs => new GenericRepository<AmbientThresholdConfig>(_context);
+
+    // Sprint 5B #100 — Environmental incident.
+    public IGenericRepository<EnvironmentalIncident> EnvironmentalIncidents => new GenericRepository<EnvironmentalIncident>(_context);
+
+    // Sprint 5B B1 (#152) — Noise breach hypertable.
+    public IGenericRepository<NoiseBreachEvent> NoiseBreachEvents => new GenericRepository<NoiseBreachEvent>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

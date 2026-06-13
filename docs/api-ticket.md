@@ -95,22 +95,22 @@ Dữ liệu nằm trong field `data` của `CommonResponse` khi truy vấn danh 
 
 ### `TicketStatusEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `New` | Vừa tạo, chờ triage |
-| `Open` | Đã triage sơ bộ, chờ Manager phê duyệt |
-| `Approved` | Manager đã phê duyệt tính hợp lệ, chờ gán Staff |
-| `Assigned` | Đã gán Staff, chờ Staff xác nhận và bắt đầu |
-| `InProgress` | Staff đang xử lý |
-| `WaitingCustomer` | Tạm dừng — chờ khách hàng phản hồi |
-| `WaitingParts` | Tạm dừng — chờ linh kiện |
-| `WaitingOnsiteSchedule` | Tạm dừng — chờ lịch hẹn tại chỗ |
-| `Resolved` | Staff báo đã xong, chờ Manager kiểm tra |
-| `Escalated` | Đã được chuyển cấp xử lý (SLA breach hoặc Staff/Manager request) |
-| `ClosedPendingRate` | Manager đã phê duyệt kết quả, chờ Customer đánh giá |
-| `Closed` | Đã đóng chính thức (sau khi Customer rate) |
-| `ClosedRejected` | Manager từ chối kết quả — trạng thái lưu lại sau khi quay về `InProgress` |
-| `Incident` | Sự cố nghiêm trọng được Admin/Manager đánh dấu |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `New` | 1 | Vừa tạo, chờ triage |
+| `Open` | 2 | Đã triage sơ bộ, chờ Manager phê duyệt |
+| `Assigned` | 3 | Đã gán Staff, chờ Staff xác nhận và bắt đầu |
+| `InProgress` | 4 | Staff đang xử lý |
+| `WaitingCustomer` | 5 | Tạm dừng — chờ khách hàng phản hồi |
+| `WaitingParts` | 6 | Tạm dừng — chờ linh kiện |
+| `WaitingOnsiteSchedule` | 7 | Tạm dừng — chờ lịch hẹn tại chỗ |
+| `Resolved` | 8 | Staff báo đã xong, chờ Manager kiểm tra |
+| `Escalated` | 9 | Đã được chuyển cấp xử lý (SLA breach hoặc Staff/Manager request) |
+| `ClosedPendingRate` | 10 | Manager đã phê duyệt kết quả, chờ Customer đánh giá |
+| `Closed` | 11 | Đã đóng chính thức (sau khi Customer rate) |
+| `ClosedRejected` | 12 | Manager từ chối kết quả — trạng thái lưu lại sau khi quay về `InProgress` |
+| `Incident` | 13 | Sự cố nghiêm trọng được Admin/Manager đánh dấu |
+| `Approved` | 14 | Manager đã phê duyệt tính hợp lệ, chờ gán Staff |
 
 **State machine chính:**
 ```
@@ -126,122 +126,123 @@ Any        → Incident (Manager/Admin declare)
 
 ### `TicketPriorityEnum`
 
-| Giá trị | SLA | Ý nghĩa |
-|---|---|---|
-| `P1Critical` | 4h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
-| `P2High` | 24h | Cao — degradation đáng kể |
-| `P3Normal` | 72h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
+| Giá trị | Int | SLA | Ý nghĩa |
+|---|---|---|---|
+| `P1Critical` | 1 | 4h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
+| `P2High` | 2 | 24h | Cao — degradation đáng kể |
+| `P3Normal` | 3 | 72h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
 
 **Lưu ý:** Priority được tính tự động từ `ImpactScope × UrgencyLevel` matrix tại bước triage. **Không thay đổi** trong toàn bộ vòng đời ticket. Override thủ công chỉ khi có lý do an toàn (`priorityOverrideReason`).
 
 ### `TicketCategoryEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `Charging` | Lỗi sạc |
-| `Overheat` | Quá nhiệt |
-| `NoPower` | Không có điện |
-| `Performance` | Hiệu suất kém |
-| `Repair` | Yêu cầu sửa chữa |
-| `Other` | Khác |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Charging` | 1 | Lỗi sạc |
+| `Overheat` | 2 | Quá nhiệt |
+| `NoPower` | 3 | Không có điện |
+| `Performance` | 4 | Hiệu suất kém |
+| `Other` | 5 | Khác |
+| `Repair` | 6 | Yêu cầu sửa chữa |
 
 ### `TicketOriginEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `ManualByCustomer` | Customer tự tạo qua app/web |
-| `AutoFromAlert` | Tự động tạo từ `BatteryAnomalyDetectedEvent` |
-| `CreatedByStaff` | Staff tạo thay cho Customer |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `ManualByCustomer` | 1 | Customer tự tạo qua app/web |
+| `AutoFromAlert` | 2 | Tự động tạo từ `BatteryAnomalyDetectedEvent` |
+| `CreatedByStaff` | 3 | Staff tạo thay cho Customer |
 
 ### `ImpactScopeEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `SingleAsset` | Một thiết bị |
-| `Site` | Một khu vực/trạm |
-| `MultiSite` | Nhiều khu vực |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `SingleAsset` | 1 | Một thiết bị |
+| `Site` | 2 | Một khu vực/trạm |
+| `MultiSite` | 3 | Nhiều khu vực |
 
 ### `UrgencyLevelEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `Low` | Thấp |
-| `Medium` | Trung bình |
-| `High` | Cao |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Low` | 1 | Thấp |
+| `Medium` | 2 | Trung bình |
+| `High` | 3 | Cao |
 
 ### `EscalationReasonEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `SkillGap` | Vượt quá năng lực kỹ thuật của Staff hiện tại |
-| `PartsRequired` | Cần linh kiện không có sẵn |
-| `SafetyConcern` | Lo ngại về an toàn |
-| `SlaBreach` | SLA đã vi phạm |
-| `CustomerComplaint` | Khiếu nại của khách hàng |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `SkillGap` | 1 | Vượt quá năng lực kỹ thuật của Staff hiện tại |
+| `PartsRequired` | 2 | Cần linh kiện không có sẵn |
+| `SafetyConcern` | 3 | Lo ngại về an toàn |
+| `SlaBreach` | 4 | SLA đã vi phạm |
+| `CustomerComplaint` | 5 | Khiếu nại của khách hàng |
 
 ### `PauseReasonEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `WaitingCustomer` | Chờ khách hàng cung cấp thêm thông tin |
-| `WaitingParts` | Chờ linh kiện về |
-| `WaitingOnsiteSchedule` | Chờ lịch hẹn đến tận nơi |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `WaitingCustomer` | 1 | Chờ khách hàng cung cấp thêm thông tin |
+| `WaitingParts` | 2 | Chờ linh kiện về |
+| `WaitingOnsiteSchedule` | 3 | Chờ lịch hẹn đến tận nơi |
 
 ### `SlaTimerStatusEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `Running` | Đang đếm ngược |
-| `Paused` | Đang tạm dừng (hold) |
-| `Met` | Đã giải quyết đúng hạn |
-| `Breached` | Đã vi phạm SLA |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Running` | 1 | Đang đếm ngược |
+| `Paused` | 2 | Đang tạm dừng (hold) |
+| `Met` | 3 | Đã giải quyết đúng hạn |
+| `Breached` | 4 | Đã vi phạm SLA |
 
 ### `MaintenanceLogTypeEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `RemoteSupport` | Hỗ trợ từ xa |
-| `OnSite` | Đến tại chỗ |
-| `PartReplacement` | Thay linh kiện |
-| `Inspection` | Kiểm tra định kỳ |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `RemoteSupport` | 1 | Hỗ trợ từ xa |
+| `OnSite` | 2 | Đến tại chỗ |
+| `PartReplacement` | 3 | Thay linh kiện |
+| `Inspection` | 4 | Kiểm tra định kỳ |
 
 ### `ActivityActionEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `Created` | Ticket được tạo |
-| `StatusChanged` | Trạng thái thay đổi |
-| `PriorityAssigned` | Priority được gán (tại triage) |
-| `StaffAssigned` | Staff được gán |
-| `StaffReassigned` | Staff được điều chuyển |
-| `Commented` | Có bình luận mới |
-| `MaintenanceLogged` | Nhật ký bảo trì được thêm |
-| `AttachmentAdded` | File đính kèm được thêm |
-| `SlaPaused` | SLA bị tạm dừng |
-| `SlaResumed` | SLA tiếp tục |
-| `SlaWarning` | Cảnh báo sắp vi phạm SLA |
-| `SlaBreached` | SLA đã bị vi phạm |
-| `EscalationRequested` | Staff yêu cầu chuyển cấp |
-| `Escalated` | Ticket đã được chuyển cấp |
-| `IncidentDeclared` | Ticket được đánh dấu là sự cố |
-| `Resolved` | Staff báo đã xử lý xong |
-| `Approved` | Manager phê duyệt kết quả |
-| `Rejected` | Manager từ chối kết quả |
-| `Rated` | Customer đã đánh giá |
-| `Reopened` | Customer yêu cầu mở lại |
-| `AutoClosed` | Tự động đóng (hệ thống) |
-| `ResolvedByEscalatedStaff` | Được giải quyết bởi Staff cấp cao sau escalation |
-| `TriageApproved` | Manager phê duyệt tính hợp lệ tại bước triage |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Created` | 1 | Ticket được tạo |
+| `StatusChanged` | 2 | Trạng thái thay đổi |
+| `PriorityAssigned` | 3 | Priority được gán (tại triage) |
+| `StaffAssigned` | 4 | Staff được gán |
+| `StaffReassigned` | 5 | Staff được điều chuyển |
+| `Commented` | 6 | Có bình luận mới |
+| `MaintenanceLogged` | 7 | Nhật ký bảo trì được thêm |
+| `AttachmentAdded` | 8 | File đính kèm được thêm |
+| `SlaPaused` | 9 | SLA bị tạm dừng |
+| `SlaResumed` | 10 | SLA tiếp tục |
+| `SlaWarning` | 11 | Cảnh báo sắp vi phạm SLA |
+| `SlaBreached` | 12 | SLA đã bị vi phạm |
+| `EscalationRequested` | 13 | Staff yêu cầu chuyển cấp |
+| `Escalated` | 14 | Ticket đã được chuyển cấp |
+| `IncidentDeclared` | 15 | Ticket được đánh dấu là sự cố |
+| `Resolved` | 16 | Staff báo đã xử lý xong |
+| `Approved` | 17 | Manager phê duyệt kết quả |
+| `Rejected` | 18 | Manager từ chối kết quả |
+| `Rated` | 19 | Customer đã đánh giá |
+| `Reopened` | 20 | Customer yêu cầu mở lại |
+| `AutoClosed` | 22 | Tự động đóng (hệ thống) |
+| `ResolvedByEscalatedStaff` | 23 | Được giải quyết bởi Staff cấp cao sau escalation |
+| `TriageApproved` | 24 | Manager phê duyệt tính hợp lệ tại bước triage |
+| `Closed` | 25 | Ticket đã đóng chính thức |
 
 ### `ActorRoleEnum`
 
-| Giá trị | Ý nghĩa |
-|---|---|
-| `Admin` | Quản trị viên |
-| `Manager` | Quản lý |
-| `Staff` | Nhân viên kỹ thuật |
-| `Customer` | Khách hàng |
-| `System` | Hành động tự động của hệ thống |
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Admin` | 1 | Quản trị viên |
+| `Manager` | 2 | Quản lý |
+| `Staff` | 3 | Nhân viên kỹ thuật |
+| `Customer` | 4 | Khách hàng |
+| `System` | 5 | Hành động tự động của hệ thống |
 
 ---
 
@@ -287,7 +288,7 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `ratingComment` | `string?` | Null | Nhận xét của Customer |
 | `ratedAt` | `string?` | Null | Thời điểm Customer đánh giá |
 | `escalatedAt` | `string?` | Null | Thời điểm chuyển cấp |
-| `escalationReason` | `EscalationReasonEnum` | **Không nullable** (Swagger) — khi ticket chưa escalate có thể là enum default, FE nên treat như optional | Lý do chuyển cấp |
+| `escalationReason` | `EscalationReasonEnum` | **Không nullable** (Swagger) — BE trả về `0` (giá trị mặc định) khi ticket chưa escalate; FE phải kiểm tra `escalatedAt != null` trước khi tin `escalationReason`. | Lý do chuyển cấp |
 | `originAlertId` | `string?` | Null nếu không từ alert | ID cảnh báo nguồn (khi `origin = AutoFromAlert`) |
 | `activities` | `TicketActivityDTO[]?` | Nullable | Lịch sử hành động (timeline) |
 | `comments` | `TicketCommentDTO[]?` | Nullable | Danh sách bình luận |
@@ -401,7 +402,7 @@ Base path: `/api/tickets`
 
 **Quyền hạn:**
 - Customer: Chỉ xem ticket của chính mình.
-- Staff: Chỉ xem ticket được gán for mình.
+- Staff: Chỉ xem ticket được gán cho mình.
 - Manager/Admin: Xem toàn bộ.
 
 **Path param:** `id` — UUID của ticket.
@@ -511,7 +512,7 @@ Base path: `/api/tickets`
 
 **Mục đích:** Staff ghi nhật ký bảo trì cho ticket — quá trình sửa chữa, thời gian, linh kiện, ảnh chụp, tọa độ check-in.
 
-**Auth:** Bắt buộc (Staff hoặc Manager)
+**Auth:** Bắt buộc (Staff, Manager hoặc Admin)
 
 **Path param:** `ticketId` — UUID của ticket.
 
@@ -806,7 +807,7 @@ Base path: `/api/admin/tickets`
 
 **Mục đích:** Manager xem queue ticket đang chờ phê duyệt — các ticket ở trạng thái `Open`, sắp xếp theo Priority (P1 trước).
 
-**Auth:** Bắt buộc (Manager)
+**Auth:** Bắt buộc (Manager hoặc Admin)
 
 **Query params:**
 
@@ -840,6 +841,53 @@ Base path: `/api/admin/tickets`
 | `managerComment` | `string?` | Không | Nhận xét của Manager |
 
 **Response thành công `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/admin/tickets/{id}/triage-reject`
+
+**Mục đích:** Manager/Admin từ chối ticket ngay từ bước phân loại (Triage) khi ticket không hợp lệ (spam, trùng lặp, ngoài scope dịch vụ). Chuyển trạng thái `Open → ClosedRejected`. Lưu activity `Rejected` kèm `reason` vào timeline.
+
+**Auth:** Bắt buộc (Manager hoặc Admin)
+
+**Path param:** `id` — UUID của ticket.
+
+**Request body:**
+
+```json
+{
+  "reason": "Ticket trùng lặp với #TKT-2606-0001 — đã xử lý ở ticket gốc."
+}
+```
+
+**Field rules:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `reason` | `string` | ✅ | Không rỗng/whitespace | Lý do từ chối — bắt buộc, lưu audit trail |
+
+> `ticketId` được bind từ route param (`[JsonIgnore]`), không gửi trong body. `managerId` + `managerName` được resolve từ JWT.
+
+**Response thành công `200`:** `TicketActionResponse`
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Triage rejected.",
+  "data": {
+    "id": "guid",
+    "code": "TKT-2606-0001",
+    "status": "ClosedRejected"
+  }
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — Thiếu `reason` (`listErrors[].field = "Reason"`) hoặc `ticketId` rỗng
+- `401` — Chưa đăng nhập
+- `403` — Không có role Manager/Admin, hoặc ticket không ở trạng thái `Open`
+- `404` — Không tìm thấy ticket
 
 ---
 
@@ -970,7 +1018,7 @@ Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ v�
 
 ---
 
-### `GET /api/staff/maintenance-logs/me`
+### `GET /api/staff/tickets/maintenance-logs/me`
 
 **Mục đích:** Staff xem lịch sử bảo trì cá nhân, gom nhóm theo từng Ticket.
 
@@ -1025,6 +1073,229 @@ Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ v�
 | `attachments` | `Input[]?` | File đính kèm mới |
 | `beforePhotos` | `Input[]?` | Ảnh trước khi sửa |
 | `afterPhotos` | `Input[]?` | Ảnh sau khi sửa |
+
+---
+
+## Nhóm 6 — Alert–Ticket Saga (Admin/Manager)
+
+Base path: `/api/v1/admin/sagas/alert-ticket`
+**Auth:** Bắt buộc — Admin hoặc Manager role
+
+Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Alert (Sprint 5B #239). Dùng cho debug & vận hành khi pipeline event-driven gặp sự cố.
+
+---
+
+### `GET /api/v1/admin/sagas/alert-ticket`
+
+**Mục đích:** Liệt kê trạng thái Alert–Ticket Saga (filter + phân trang) — dùng cho trang Admin debug & vận hành khi pipeline event-driven gặp sự cố. Sort mặc định `StartedAt DESC`.
+
+**Auth:** Bắt buộc — role `Admin` hoặc `Manager` (permission `ticket.saga.view`).
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `State` | `string?` | ❌ | State cụ thể (vd `"TicketRequested"`, `"Failed"`, `"Completed"`, `"Compensated"`) |
+| `AlertId` | `Guid?` | ❌ | Tìm Saga của 1 alert cụ thể |
+| `BatteryAssetId` | `Guid?` | ❌ | Lọc Saga theo asset |
+| `CustomerId` | `Guid?` | ❌ | Lọc Saga theo customer |
+| `StartedFrom` | `DateTime?` | ❌ | UTC, lọc `StartedAt >= from` |
+| `StartedTo` | `DateTime?` | ❌ | UTC, lọc `StartedAt <= to` |
+| `IsFailed` | `bool?` | ❌ | `true` = chỉ Saga có `FailedAt != null` |
+| `PageNumber` | `int` | ❌ (mặc định 1) | Trang |
+| `PageSize` | `int` | ❌ (mặc định 50) | Số item/trang |
+| `IsDescending` | `bool` | ❌ (mặc định `true`) | Sort theo `StartedAt` |
+
+**Response thành công `200`:** `AlertTicketSagaListResponse` = `CommonResponse<PaginationResponse<AlertTicketSagaDto>>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "items": [
+      {
+        "correlationId": "guid",
+        "currentState": "TicketRequested",
+        "alertId": "guid",
+        "batteryAssetId": "guid",
+        "customerId": "guid",
+        "assetSerialNumber": "BAT-001",
+        "anomalyType": 1,
+        "severity": 3,
+        "ticketId": null,
+        "ticketCode": null,
+        "ticketIsReused": false,
+        "failedAtStage": null,
+        "failureReason": null,
+        "failureErrorCode": null,
+        "failedAt": null,
+        "retryCount": 0,
+        "startedAt": "2026-06-12T08:00:00Z",
+        "completedAt": null
+      }
+    ],
+    "totalItems": 1, "pageNumber": 1, "pageSize": 50,
+    "totalPages": 1, "hasNextPage": false, "hasPreviousPage": false
+  }
+}
+```
+
+**Chi tiết `AlertTicketSagaDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `correlationId` | `string` | Không | ID Saga instance (MassTransit Correlation) |
+| `currentState` | `string` | Không | State hiện tại (`TicketRequested`, `Completed`, `Failed`, …) |
+| `alertId` | `string` | Không | Alert gốc trigger Saga |
+| `batteryAssetId` | `string?` | Có | Asset của alert (null nếu alert site-level) |
+| `customerId` | `string` | Không | Customer sở hữu |
+| `assetSerialNumber` | `string?` | Có | Serial number (snapshot tại thời điểm Saga start) |
+| `anomalyType` | `int` | Không | `AnomalyTypeEnum` value |
+| `severity` | `int` | Không | `AlertSeverityEnum` value |
+| `ticketId` | `string?` | Có | Null khi chưa tạo ticket xong |
+| `ticketCode` | `string?` | Có | Null khi chưa tạo ticket xong |
+| `ticketIsReused` | `bool` | Không | `true` nếu Saga reuse ticket Open có sẵn thay vì tạo mới |
+| `failedAtStage` | `string?` | Có | Stage failed (vd `"CreateTicket"`, `"NotifyCustomer"`) |
+| `failureReason` | `string?` | Có | Message exception |
+| `failureErrorCode` | `string?` | Có | Mã lỗi nội bộ |
+| `failedAt` | `DateTime?` | Có | Thời điểm Failed |
+| `retryCount` | `int` | Không | Số lần đã retry |
+| `startedAt` | `DateTime` | Không | UTC thời điểm Saga start |
+| `completedAt` | `DateTime?` | Có | UTC thời điểm Completed/Failed final |
+
+---
+
+### `GET /api/v1/admin/sagas/alert-ticket/{alertId}`
+
+**Mục đích:** Chi tiết Saga theo `alertId` — đầy đủ trạng thái + lịch sử bước thực thi (step name, status, retry count, error message). Dùng để debug khi Saga rơi vào state `Failed`.
+
+**Auth:** Bắt buộc — role `Admin` hoặc `Manager` (permission `ticket.saga.view`).
+
+**Path param:** `alertId` — UUID của alert gốc trigger Saga.
+
+**Response thành công `200`:** `AlertTicketSagaDetailResponse` = `CommonResponse<AlertTicketSagaDto>` (shape giống item trong list).
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `403` — Không có role Admin/Manager
+- `404` — Không tìm thấy Saga cho `alertId` (alert chưa được Saga consume)
+
+---
+
+### `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess`
+
+**Mục đích:** Reprocess Saga đang ở state `Failed`. Reset bước Failed và enqueue lại để chạy bất đồng bộ (response 202 ngay, Saga chạy trong background). Ghi audit `PerformedBy = user hiện tại`.
+
+**Auth:** Bắt buộc — **chỉ role `Admin`** (permission `ticket.saga.reprocess`). Manager không được phép.
+
+**Path param:** `alertId` — UUID của alert thuộc Saga cần reprocess.
+
+**Headers:**
+
+| Header | Bắt buộc | Mô tả |
+|---|---|---|
+| `Idempotency-Key` | ✅ | Chuỗi unique cho mỗi lần gọi (vd GUID client gen) — chống double-trigger trong race condition. Server kiểm tra inbox cache: key trùng → trả response cũ qua `409`. |
+
+**Request body:** Không có.
+
+**Response thành công `202 Accepted`:** `SagaReprocessResponse` = `CommonResponse<object>`
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 202,
+  "message": "Saga reprocess enqueued.",
+  "data": { "correlationId": "guid" }
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — Thiếu/rỗng `Idempotency-Key`, `alertId` rỗng, hoặc Saga không ở state `Failed`
+- `401` — Chưa đăng nhập
+- `403` — Role không phải Admin
+- `404` — Không tìm thấy Saga
+- `409` — `Idempotency-Key` đã được xử lý trước đó (trả response của lần gọi đầu)
+
+---
+
+## Nhóm 7 — Health & Diagnostics
+
+Base path: `/api/ticket/health`
+**Auth:** Không yêu cầu (public health endpoint).
+
+---
+
+### `GET /api/ticket/health`
+
+**Mục đích:** Liveness probe đơn giản cho Kubernetes / Docker / ApiGateway aggregated health. Endpoint anonymous, không validate DB/RabbitMQ.
+
+**Auth:** Không yêu cầu.
+
+**Response thành công `200`:**
+
+```json
+{
+  "status": "Healthy",
+  "service": "TicketService",
+  "timestamp": "2026-06-12T08:00:00Z"
+}
+```
+
+---
+
+### `GET /api/ticket/health/sync-lag`
+
+**Mục đích:** Đo độ trễ đồng bộ read model (`CustomerAccount` / `StaffAccount` được TicketService cache từ AuthService events). Giúp Admin phát hiện consumer chậm/bị stop.
+
+**Auth:** Không yêu cầu.
+
+**Response thành công `200`:**
+
+```json
+{
+  "status": "Healthy",
+  "customerLagSeconds": 4.21,
+  "staffLagSeconds": 6.05,
+  "maxLagSeconds": 6.05,
+  "timestamp": "2026-06-12T08:00:00Z"
+}
+```
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `status` | `string` | `"Warning"` nếu `maxLagSeconds > 60`, else `"Healthy"` |
+| `customerLagSeconds` | `double` | Lag (giây) giữa `UtcNow` và `LastSyncedAt` mới nhất của `CustomerAccount` |
+| `staffLagSeconds` | `double` | Tương tự cho `StaffAccount` |
+| `maxLagSeconds` | `double` | Max của 2 lag trên |
+| `timestamp` | `DateTime` | UTC hiện tại |
+
+> Nếu read model chưa có record nào, lag được set = 365 ngày để báo Critical.
+
+---
+
+### `GET /api/ticket/health/saga`
+
+**Mục đích:** Health metrics cho Alert–Ticket Saga — counter số Saga `Failed` 24h gần nhất, số Saga stuck ở `TicketRequested` > 15 phút. Dùng cho admin dashboard + Prometheus scrape.
+
+**Auth:** Không yêu cầu.
+
+**Response thành công `200`:**
+
+```json
+{
+  "status": "Healthy",
+  "failedLast24h": 0,
+  "stuckOver15min": 0,
+  "timestamp": "2026-06-12T08:00:00Z"
+}
+```
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `status` | `string` | `"Healthy"` (failed ≤ 5 & stuck ≤ 10), `"Warning"` (failed > 5 hoặc stuck > 10), `"Degraded"` (failed > 20 hoặc stuck > 50) |
+| `failedLast24h` | `int` | Số Saga ở state `Failed` xảy ra trong 24h qua |
+| `stuckOver15min` | `int` | Số Saga ở state `TicketRequested` quá 15 phút (có thể đang treo) |
+| `timestamp` | `DateTime` | UTC hiện tại |
 
 ---
 

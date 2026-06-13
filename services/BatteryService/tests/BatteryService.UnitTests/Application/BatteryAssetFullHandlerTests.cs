@@ -73,7 +73,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Create_CustomerMissing_Returns404()
     {
         var b = new MockUnitOfWorkBuilder().WithBatteryTypes(MakeType());
-        var handler = new CreateBatteryAssetCommandHandler(b.Build());
+        var handler = new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance);
         var r = await handler.Handle(BuildCreateCmd(), CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
@@ -87,7 +87,7 @@ public class BatteryAssetFullHandlerTests
             .WithBatteryAssets(MakeAsset());
         var cmd = BuildCreateCmd();
         cmd.SerialNumber = "ABC-123";
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(409);
     }
 
@@ -95,7 +95,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Create_BatteryTypeMissing_Returns404()
     {
         var b = new MockUnitOfWorkBuilder().WithCustomerAccounts(Customer());
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(BuildCreateCmd(), CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(BuildCreateCmd(), CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -107,7 +107,7 @@ public class BatteryAssetFullHandlerTests
         var b = new MockUnitOfWorkBuilder()
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType());
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -122,7 +122,7 @@ public class BatteryAssetFullHandlerTests
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType())
             .WithSites(site);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(409);
     }
 
@@ -137,7 +137,7 @@ public class BatteryAssetFullHandlerTests
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType())
             .WithSites(site);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(cmd, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.StatusCode.Should().Be(201);
         b.BatteryAssets.Verify(x => x.AddAsync(It.IsAny<BatteryAsset>()), Times.Once);
@@ -270,7 +270,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Transfer_NotFound_Returns404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build()).Handle(new TransferBatteryAssetOwnerCommand { Id = Guid.NewGuid(), NewCustomerId = Guid.NewGuid() }, CancellationToken.None);
+        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(new TransferBatteryAssetOwnerCommand { Id = Guid.NewGuid(), NewCustomerId = Guid.NewGuid() }, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -279,7 +279,7 @@ public class BatteryAssetFullHandlerTests
     {
         var asset = MakeAsset();
         var b = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
-        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build()).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = asset.CustomerId }, CancellationToken.None);
+        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = asset.CustomerId }, CancellationToken.None);
         r.StatusCode.Should().Be(409);
     }
 
@@ -288,7 +288,7 @@ public class BatteryAssetFullHandlerTests
     {
         var asset = MakeAsset();
         var b = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
-        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build()).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = Guid.NewGuid() }, CancellationToken.None);
+        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = Guid.NewGuid() }, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -301,7 +301,7 @@ public class BatteryAssetFullHandlerTests
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(asset)
             .WithCustomerAccounts(Customer(id: newCustomerId));
-        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build()).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = newCustomerId, Reason = "moved" }, CancellationToken.None);
+        var r = await new TransferBatteryAssetOwnerCommandHandler(b.Build(), NoOpOutbox.Instance).Handle(new TransferBatteryAssetOwnerCommand { Id = asset.Id, NewCustomerId = newCustomerId, Reason = "moved" }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         asset.CustomerId.Should().Be(newCustomerId);
         asset.SiteId.Should().BeNull();

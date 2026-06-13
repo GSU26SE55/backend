@@ -55,6 +55,11 @@ public class TicketApiFactory : WebApplicationFactory<Program>
             // Add TimeProvider (default to system, can be overridden)
             services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
+            // Sprint 5B #239 — In-memory IIdempotencyKeyStore stub cho integration test
+            // (production dùng RedisIdempotencyKeyStore, không sẵn trong test env).
+            services.AddSingleton<SharedInfrastructure.Idempotency.IIdempotencyKeyStore,
+                                  StubIdempotencyKeyStore>();
+
             // --- FIX SLOWNESS: Override MassTransit and HostedServices ---
             services.AddMassTransitTestHarness();
 

@@ -60,7 +60,6 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
         entity.Address = request.Address?.Trim();
         entity.Latitude = request.Latitude;
         entity.Longitude = request.Longitude;
-        entity.CapacityKw = request.CapacityKw;
         entity.InstallDate = ToUtc(request.InstallDate);
         entity.Status = request.Status;
         entity.ContactPersonName = request.ContactPersonName?.Trim();

@@ -14,11 +14,11 @@ public class AlertDto
 
     public AlertSeverityEnum Severity { get; set; }
 
-    public decimal ThresholdValue { get; set; }
+    public decimal? ThresholdValue { get; set; }
 
-    public decimal ActualValue { get; set; }
+    public decimal? ActualValue { get; set; }
 
-    public string Unit { get; set; } = string.Empty;
+    public string? Unit { get; set; }
 
     public DateTime DetectedAt { get; set; }
 

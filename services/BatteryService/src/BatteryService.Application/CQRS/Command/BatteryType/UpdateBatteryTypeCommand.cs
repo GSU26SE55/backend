@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -8,6 +9,7 @@ namespace BatteryService.Application.CQRS.Command.BatteryType;
 
 public class UpdateBatteryTypeCommand : IRequest<CommonResponse<BatteryTypeDto>>, IValidatable<CommonResponse<BatteryTypeDto>>
 {
+    [JsonIgnore]
     public Guid Id { get; set; }
 
     public string Name { get; set; } = string.Empty;

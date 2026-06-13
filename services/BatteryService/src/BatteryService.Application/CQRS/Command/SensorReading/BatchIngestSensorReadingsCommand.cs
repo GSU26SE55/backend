@@ -53,6 +53,23 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
 
             if (item.ChargingState.HasValue && !Enum.IsDefined(typeof(ChargingStateEnum), item.ChargingState.Value))
                 AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "ChargingState không hợp lệ.");
+
+            // Sprint 5B #105 — Tier 2 validation.
+            if (item.InternalResistanceMilliohm is <= 0)
+                AddError(response, $"{prefix}.{nameof(item.InternalResistanceMilliohm)}", "Internal resistance phải > 0 mΩ.");
+
+            if (item.CellVoltageDeltaMv is < 0)
+                AddError(response, $"{prefix}.{nameof(item.CellVoltageDeltaMv)}", "Cell voltage delta không được âm.");
+
+            // Sprint 5B B9 — SourceType + length validation.
+            if (!Enum.IsDefined(typeof(SensorReadingSourceTypeEnum), item.SourceType))
+                AddError(response, $"{prefix}.{nameof(item.SourceType)}", "SourceType không hợp lệ.");
+
+            if (item.BmsErrorCode?.Length > 64)
+                AddError(response, $"{prefix}.{nameof(item.BmsErrorCode)}", "BmsErrorCode tối đa 64 ký tự.");
+
+            if (item.SensorSourceCode?.Length > 20)
+                AddError(response, $"{prefix}.{nameof(item.SensorSourceCode)}", "SensorSourceCode tối đa 20 ký tự.");
         }
 
         return Task.FromResult(response);
@@ -88,4 +105,17 @@ public class SensorReadingItem
     public ChargingStateEnum? ChargingState { get; set; }
 
     public string? SourceDeviceId { get; set; }
+
+    // Sprint 5B #101/#105 — Tier 2 battery health metrics.
+    public decimal? InternalResistanceMilliohm { get; set; }
+    public decimal? CellVoltageDeltaMv { get; set; }
+
+    // Sprint 5B B9 (#154) — phân biệt nguồn đo (BMS vs IoT vs External).
+    public SensorReadingSourceTypeEnum SourceType { get; set; } = SensorReadingSourceTypeEnum.IotGateway;
+
+    /// <summary>BMS error raw code (vd "0x0A", "OverCurrent,CellImbalance"). Tối đa 64 ký tự.</summary>
+    public string? BmsErrorCode { get; set; }
+
+    /// <summary>§52.9 — "primary"/"redundant"/"external-temp". Tối đa 20 ký tự.</summary>
+    public string? SensorSourceCode { get; set; }
 }

@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Login;
 using AuthService.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Requests;
 
 namespace AuthService.Application.CQRS.Query.Login;
@@ -12,7 +14,9 @@ namespace AuthService.Application.CQRS.Query.Login;
 /// </summary>
 public class GetLoginHistoryQuery : PaginationRequest, IRequest<LoginAttemptListResponse>
 {
-    /// <summary>Account id cần xem login history.</summary>
+    /// <summary>Account id cần xem login history. Set bởi controller từ route hoặc JWT.</summary>
+    [JsonIgnore]
+    [BindNever]
     public Guid AccountId { get; set; }
 
     /// <summary>Lọc theo kết quả (Success/WrongPassword/...).</summary>

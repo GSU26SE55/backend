@@ -15,8 +15,6 @@ public class Site : AuditableEntity
 
     public decimal? Longitude { get; set; }
 
-    public decimal? CapacityKw { get; set; }
-
     public DateTime InstallDate { get; set; }
 
     public SiteStatusEnum Status { get; set; } = SiteStatusEnum.Active;

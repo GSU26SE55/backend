@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 
@@ -7,6 +9,8 @@ namespace AuthService.Application.CQRS.Query.Account;
 
 public class GetStaffAssignmentProfileQuery : IRequest<StaffAssignmentProfileResponse>, IValidatable<StaffAssignmentProfileResponse>
 {
+    [JsonIgnore]
+    [BindNever]
     public Guid StaffAccountId { get; set; }
 
     public Task<StaffAssignmentProfileResponse> ValidateAsync()

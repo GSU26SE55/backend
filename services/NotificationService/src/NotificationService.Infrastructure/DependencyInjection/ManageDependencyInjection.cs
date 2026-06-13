@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
+using NotificationService.Infrastructure.Persistence.Seeders;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 
@@ -20,6 +21,8 @@ public static class ManageDependencyInjection
         // MassTransit consumers sẽ được thêm ở Sprint 6 (15 consumers). Hiện tại chỉ
         // wire bus để có thể publish event nếu cần (không có consumer assembly).
         services.AddMessageBus(configuration);
+
+        services.AddScoped<NotificationDataSeeder>();
 
         return services;
     }
