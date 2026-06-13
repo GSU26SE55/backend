@@ -32,6 +32,7 @@ public static class ManageDependencyInjection
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
         services.AddInboxIdempotency(configuration);
+        services.AddIdempotencyKey(configuration);
 
         // Sprint 5B #237 — Quartz cluster persistent store (cho Saga timeout).
         services.AddAlertTicketSaga(configuration);
