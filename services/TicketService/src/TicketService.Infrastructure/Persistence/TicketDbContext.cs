@@ -37,6 +37,17 @@ public class TicketDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TicketDbContext).Assembly);
+
+        if (Database.IsNpgsql())
+        {
+            // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
+            modelBuilder.Entity<AlertTicketSagaState>()
+                .Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+        }
+
         base.OnModelCreating(modelBuilder);
     }
 }
