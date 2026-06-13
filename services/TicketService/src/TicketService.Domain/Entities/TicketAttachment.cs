@@ -11,6 +11,7 @@ public class TicketAttachment : AuditableEntity
     public required string FileName { get; set; }
     public required string ContentType { get; set; }
     public long SizeBytes { get; set; }
+    public string? PublicUrl { get; set; }
     public AttachmentSourceEnum Source { get; set; }
 
     public required Ticket Ticket { get; set; }

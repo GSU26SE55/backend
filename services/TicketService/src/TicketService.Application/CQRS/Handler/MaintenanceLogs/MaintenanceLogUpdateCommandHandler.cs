@@ -103,7 +103,8 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             Message = "Cập nhật nhật ký bảo trì thành công.",
             Data = new TicketActionDto
             {
-                Id = ticket.Id.ToString(),
+                Id = log.Id.ToString(),
+                TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
                 Status = ticket.Status
             }
@@ -135,6 +136,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
                     FileName = input.FileName,
                     ContentType = input.ContentType,
                     SizeBytes = input.SizeBytes,
+                    PublicUrl = input.PublicUrl,
                     Source = source
                 };
                 await _uow.TicketAttachments.AddAsync(attachment);

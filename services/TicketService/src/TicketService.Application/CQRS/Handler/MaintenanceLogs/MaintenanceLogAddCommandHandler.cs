@@ -125,6 +125,7 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
                 FileName = input.FileName,
                 ContentType = input.ContentType,
                 SizeBytes = input.SizeBytes,
+                PublicUrl = input.PublicUrl,
                 Source = source
             };
             await _uow.TicketAttachments.AddAsync(attachment);

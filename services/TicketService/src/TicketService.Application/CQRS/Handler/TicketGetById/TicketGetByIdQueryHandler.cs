@@ -113,13 +113,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             }).ToList(),
             Attachments = ticket.Attachments.Select(a => new TicketAttachmentDTO
             {
-                // Id = a.Id.ToString(),
-                FileId = a.FileId.ToString(),
-                // FileName = a.FileName,
-                // ContentType = a.ContentType,
-                // SizeBytes = a.SizeBytes,
-                // UploadedByUserId = a.UploadedByUserId.ToString(),
-                // CreatedAt = a.CreatedAt
+                Url = a.PublicUrl ?? string.Empty
             }).ToList()
         };
 

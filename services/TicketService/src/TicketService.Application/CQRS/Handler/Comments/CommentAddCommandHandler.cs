@@ -55,6 +55,7 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
                     FileName = att.FileName,
                     ContentType = att.ContentType,
                     SizeBytes = att.SizeBytes,
+                    PublicUrl = att.PublicUrl,
                     Source = request.UserRole == ActorRoleEnum.Customer
                         ? AttachmentSourceEnum.CustomerSubmission
                         : AttachmentSourceEnum.StaffWork
@@ -82,7 +83,8 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             Message = "Thêm bình luận thành công.",
             Data = new TicketActionDto
             {
-                Id = ticket.Id.ToString(),
+                Id = comment.Id.ToString(),
+                TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
                 Status = ticket.Status
             }
