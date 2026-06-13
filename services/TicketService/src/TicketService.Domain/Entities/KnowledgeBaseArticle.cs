@@ -18,4 +18,12 @@ public class KnowledgeBaseArticle : AuditableEntity
     public int ViewCount { get; set; }
     public int HelpfulCount { get; set; }
     public Guid CreatedByUserId { get; set; }
+
+    // New fields for approval workflow
+    public Guid? PendingReviewBy { get; set; }
+    public bool ReviewRequired { get; set; }
+    public string? ManagerRejectReason { get; set; }
+
+    // Navigation
+    public ICollection<KbArticleVersion> Versions { get; set; } = new List<KbArticleVersion>();
 }

@@ -1,0 +1,850 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SharedContracts -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedContracts\bin\Debug\net8.0\SharedContracts.dll
+  SharedKernels -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedKernels\bin\Debug\net8.0\SharedKernels.dll
+  TicketService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Domain\bin\Debug\net8.0\TicketService.Domain.dll
+  BatteryService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Domain\bin\Debug\net8.0\BatteryService.Domain.dll
+  AuthService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Domain\bin\Debug\net8.0\AuthService.Domain.dll
+  SharedInfrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedInfrastructure\bin\Debug\net8.0\SharedInfrastructure.dll
+  FileStorageService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Domain\bin\Debug\net8.0\FileStorageService.Domain.dll
+  EmailService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\src\EmailService.Infrastructure\bin\Debug\net8.0\EmailService.Infrastructure.dll
+  BatteryService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Application\bin\Debug\net8.0\BatteryService.Application.dll
+  TicketService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Application\bin\Debug\net8.0\TicketService.Application.dll
+  AuthService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Application\bin\Debug\net8.0\AuthService.Application.dll
+  EmailService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.UnitTests\bin\Debug\net8.0\EmailService.UnitTests.dll
+  SharedInfrastructure.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\tests\SharedInfrastructure.UnitTests\bin\Debug\net8.0\SharedInfrastructure.UnitTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.UnitTests\bin\Debug\net8.0\EmailService.UnitTests.dll (.NETCoreApp,Version=v8.0)
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\shared\tests\SharedInfrastructure.UnitTests\bin\Debug\net8.0\SharedInfrastructure.UnitTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+VSTest version 17.14.1 (x64)
+
+  BatteryService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Infrastructure\bin\Debug\net8.0\BatteryService.Infrastructure.dll
+Starting test execution, please wait...
+Starting test execution, please wait...
+  AuthService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Infrastructure\bin\Debug\net8.0\AuthService.Infrastructure.dll
+A total of 1 test files matched the specified pattern.
+A total of 1 test files matched the specified pattern.
+  EmailService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\src\EmailService.Api\bin\Debug\net8.0\EmailService.Api.dll
+  TicketService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Infrastructure\bin\Debug\net8.0\TicketService.Infrastructure.dll
+  EmailService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.IntegrationTests\bin\Debug\net8.0\EmailService.IntegrationTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.IntegrationTests\bin\Debug\net8.0\EmailService.IntegrationTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   164, Skipped:     0, Total:   164, Duration: 1 s - SharedInfrastructure.UnitTests.dll (net8.0)
+  FileStorageService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Application\bin\Debug\net8.0\FileStorageService.Application.dll
+  AuthService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Api\bin\Debug\net8.0\AuthService.Api.dll
+  FileStorageService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\tests\FileStorageService.UnitTests\bin\Debug\net8.0\FileStorageService.UnitTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\tests\FileStorageService.UnitTests\bin\Debug\net8.0\FileStorageService.UnitTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+  AuthService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.UnitTests\bin\Debug\net8.0\AuthService.UnitTests.dll
+Starting test execution, please wait...
+  AuthService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\bin\Debug\net8.0\AuthService.IntegrationTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.UnitTests\bin\Debug\net8.0\AuthService.UnitTests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+VSTest version 17.14.1 (x64)
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\bin\Debug\net8.0\AuthService.IntegrationTests.dll (.NETCoreApp,Version=v8.0)
+
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    28, Skipped:     0, Total:    28, Duration: 3 s - EmailService.UnitTests.dll (net8.0)
+  BatteryService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.IntegrationTests\bin\Debug\net8.0\BatteryService.IntegrationTests.dll
+  BatteryService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.UnitTests\bin\Debug\net8.0\BatteryService.UnitTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.IntegrationTests\bin\Debug\net8.0\BatteryService.IntegrationTests.dll (.NETCoreApp,Version=v8.0)
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.UnitTests\bin\Debug\net8.0\BatteryService.UnitTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+VSTest version 17.14.1 (x64)
+
+
+Passed!  - Failed:     0, Passed:    20, Skipped:     0, Total:    20, Duration: 1 s - EmailService.IntegrationTests.dll (net8.0)
+Starting test execution, please wait...
+Starting test execution, please wait...
+  TicketService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Api\bin\Debug\net8.0\TicketService.Api.dll
+A total of 1 test files matched the specified pattern.
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    15, Skipped:     0, Total:    15, Duration: 531 ms - FileStorageService.UnitTests.dll (net8.0)
+[xUnit.net 00:00:00.73]     RefreshToken_RotatesPair_MarksOldAsUsed [FAIL]
+[xUnit.net 00:00:00.75]     Logout_RevokesRefreshToken [FAIL]
+[xUnit.net 00:00:00.75]     Register_DuplicateActiveEmail_Returns409 [FAIL]
+[xUnit.net 00:00:00.76]     Register_NewEmail_CreatesPendingAccount_PublishesEvent [FAIL]
+[xUnit.net 00:00:00.76]     RefreshToken_ReuseAttack_RevokesAll [FAIL]
+[xUnit.net 00:00:00.78]     VerifyOtp_WrongOtp_Returns401_IncrementsCounter [FAIL]
+[xUnit.net 00:00:00.78]     Logout_WithoutBearer_Returns401 [FAIL]
+[xUnit.net 00:00:00.79]     VerifyOtp_CorrectOtp_ActivatesAccount_NoTokenIssued [FAIL]
+[xUnit.net 00:00:00.79]     Login_WrongPassword_5Times_LocksAccount [FAIL]
+  Failed RefreshToken_RotatesPair_MarksOldAsUsed [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed Logout_RevokesRefreshToken [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed Register_DuplicateActiveEmail_Returns409 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed Register_NewEmail_CreatesPendingAccount_PublishesEvent [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed RefreshToken_ReuseAttack_RevokesAll [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed VerifyOtp_WrongOtp_Returns401_IncrementsCounter [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed Logout_WithoutBearer_Returns401 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed VerifyOtp_CorrectOtp_ActivatesAccount_NoTokenIssued [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed Login_WrongPassword_5Times_LocksAccount [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+[xUnit.net 00:00:00.87]     Login_ActiveAccount_CorrectPassword_ReturnsTokens [FAIL]
+[xUnit.net 00:00:00.88]     ForgotPassword_NonExistent_Returns200_NoLeak_NoEvent [FAIL]
+[xUnit.net 00:00:00.89]     FullResetFlow_Forgot_VerifyOtp_ResetPassword_LoginWithNew [FAIL]
+[xUnit.net 00:00:00.90]     ForgotPassword_Active_GeneratesOtp_PublishesEvent [FAIL]
+[xUnit.net 00:00:00.90]     VerifyResetOtp_WrongOtp_Returns401 [FAIL]
+[xUnit.net 00:00:00.90]     ResendResetOtp_RateLimit_Returns429 [FAIL]
+[xUnit.net 00:00:00.90]     RevokeAllSessions_ForcesLogoutOfTargetUser [FAIL]
+[xUnit.net 00:00:00.90]     ChangeStatus_ToBanned_CascadeRevokesTokens [FAIL]
+[xUnit.net 00:00:00.91]     GetList_NoToken_Returns401 [FAIL]
+  Failed Login_ActiveAccount_CorrectPassword_ReturnsTokens [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ForgotPassword_NonExistent_Returns200_NoLeak_NoEvent [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed FullResetFlow_Forgot_VerifyOtp_ResetPassword_LoginWithNew [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ForgotPassword_Active_GeneratesOtp_PublishesEvent [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed VerifyResetOtp_WrongOtp_Returns401 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ResendResetOtp_RateLimit_Returns429 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed RevokeAllSessions_ForcesLogoutOfTargetUser [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ChangeStatus_ToBanned_CascadeRevokesTokens [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetList_NoToken_Returns401 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+[xUnit.net 00:00:00.95]     DeleteAccount_AsAdmin_SoftDeletesAndRevokesTokens [FAIL]
+[xUnit.net 00:00:00.95]     GetList_AsCustomer_Returns403 [FAIL]
+[xUnit.net 00:00:00.95]     GetList_AsAdmin_Returns200 [FAIL]
+[xUnit.net 00:00:00.95]     GetSessions_OfAnotherUser_Returns200_WithSessionList [FAIL]
+[xUnit.net 00:00:00.95]     UnlockAccount_ResetsCounter [FAIL]
+[xUnit.net 00:00:00.96]     GetRoleList_ReturnsSystemRoles [FAIL]
+[xUnit.net 00:00:00.96]     UpdateRole_SystemRole_Returns403 [FAIL]
+[xUnit.net 00:00:00.96]     DeleteRole_SystemRole_Returns403 [FAIL]
+[xUnit.net 00:00:00.96]     ChangeRole_UpdatesAccountRoleId_AndAudit [FAIL]
+  Failed DeleteAccount_AsAdmin_SoftDeletesAndRevokesTokens [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetList_AsCustomer_Returns403 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetList_AsAdmin_Returns200 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetSessions_OfAnotherUser_Returns200_WithSessionList [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed UnlockAccount_ResetsCounter [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetRoleList_ReturnsSystemRoles [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed UpdateRole_SystemRole_Returns403 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed DeleteRole_SystemRole_Returns403 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ChangeRole_UpdatesAccountRoleId_AndAudit [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+[xUnit.net 00:00:00.98]     CreateRole_AsAdmin_Returns201 [FAIL]
+[xUnit.net 00:00:00.98]     GetMyProfile_Authorized_ReturnsCurrentUser [FAIL]
+[xUnit.net 00:00:00.99]     GetMySessions_AfterLogin_Returns1Active [FAIL]
+[xUnit.net 00:00:01.00]     RevokeAllSessions_LogsOutEverywhere [FAIL]
+[xUnit.net 00:00:01.00]     DeactivateMe_SetsInactive [FAIL]
+[xUnit.net 00:00:01.01]     UpdateMe_ChangePhone_ResetsPhoneConfirmed [FAIL]
+[xUnit.net 00:00:01.01]     ChangePassword_CorrectCurrent_RevokesAllSessions [FAIL]
+[xUnit.net 00:00:01.01]     GetMyProfile_NoToken_Returns401 [FAIL]
+  Failed CreateRole_AsAdmin_Returns201 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetMyProfile_Authorized_ReturnsCurrentUser [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetMySessions_AfterLogin_Returns1Active [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed RevokeAllSessions_LogsOutEverywhere [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed DeactivateMe_SetsInactive [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed UpdateMe_ChangePhone_ResetsPhoneConfirmed [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed ChangePassword_CorrectCurrent_RevokesAllSessions [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+  Failed GetMyProfile_NoToken_Returns401 [1 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')) (The following constructor parameters did not have matching fixture data: AuthApiFactory factory)
+---- System.ArgumentException : Docker is either not running or misconfigured. Please ensure that Docker is running and that the endpoint is properly configured. You can customize your configuration using either the environment variables or the ~/.testcontainers.properties file. For more information, visit:
+https://dotnet.testcontainers.org/custom_configuration/ (Parameter 'DockerEndpointAuthConfig')
+---- The following constructor parameters did not have matching fixture data: AuthApiFactory factory
+  Stack Trace:
+
+----- Inner Stack Trace #1 (System.ArgumentException) -----
+   at DotNet.Testcontainers.Guard.ThrowIf[TType](ArgumentInfo`1& argument, Func`2 condition, Func`2 ifClause) in /_/src/Testcontainers/Guard.Null.cs:line 62
+   at DotNet.Testcontainers.Builders.AbstractBuilder`4.Validate() in /_/src/Testcontainers/Builders/AbstractBuilder`4.cs:line 145
+   at DotNet.Testcontainers.Builders.ContainerBuilder`3.Validate() in /_/src/Testcontainers/Builders/ContainerBuilder`3.cs:line 383
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Validate() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 101
+   at Testcontainers.PostgreSql.PostgreSqlBuilder.Build() in /_/src/Testcontainers.PostgreSql/PostgreSqlBuilder.cs:line 75
+   at AuthService.IntegrationTests.Fixtures.AuthApiFactory..ctor() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\Fixtures\AuthApiFactory.cs:line 33
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace #2 (Xunit.Sdk.TestClassException) -----
+
+
+Failed!  - Failed:    35, Passed:     0, Skipped:     0, Total:    35, Duration: 274 ms - AuthService.IntegrationTests.dll (net8.0)
+
+Passed!  - Failed:     0, Passed:   164, Skipped:     0, Total:   164, Duration: 636 ms - BatteryService.UnitTests.dll (net8.0)
+[xUnit.net 00:00:02.53]     AuthService.UnitTests.Infrastructure.AuthDataSeederTests.SeedAsync_FreshDb_Creates4Roles_AndAdminAccountWithAdminRole [FAIL]
+  Failed AuthService.UnitTests.Infrastructure.AuthDataSeederTests.SeedAsync_FreshDb_Creates4Roles_AndAdminAccountWithAdminRole [1 s]
+  Error Message:
+   Expected admin.Email to be "admin@test.local" with a length of 16, but "admin@gmail.com" has a length of 15, differs near "gma" (index 6).
+  Stack Trace:
+     at FluentAssertions.Execution.XUnit2TestFramework.Throw(String message)
+   at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+   at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+   at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+   at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+   at FluentAssertions.Primitives.StringEqualityValidator.ValidateAgainstLengthDifferences()
+   at FluentAssertions.Primitives.StringValidator.Validate()
+   at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+   at AuthService.UnitTests.Infrastructure.AuthDataSeederTests.SeedAsync_FreshDb_Creates4Roles_AndAdminAccountWithAdminRole() in C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.UnitTests\Infrastructure\AuthDataSeederTests.cs:line 65
+--- End of stack trace from previous location ---
+
+Passed!  - Failed:     0, Passed:    16, Skipped:     0, Total:    16, Duration: 1 s - BatteryService.IntegrationTests.dll (net8.0)
+  TicketService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.UnitTests\bin\Debug\net8.0\TicketService.UnitTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.UnitTests\bin\Debug\net8.0\TicketService.UnitTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Failed!  - Failed:     1, Passed:   473, Skipped:     0, Total:   474, Duration: 3 s - AuthService.UnitTests.dll (net8.0)
+  TicketService.IntergrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.IntergrationTests\bin\Debug\net8.0\TicketService.IntergrationTests.dll
+Test run for C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.IntergrationTests\bin\Debug\net8.0\TicketService.IntergrationTests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   187, Skipped:     0, Total:   187, Duration: 1 s - TicketService.UnitTests.dll (net8.0)
+
+Passed!  - Failed:     0, Passed:     5, Skipped:     0, Total:     5, Duration: 2 s - TicketService.IntergrationTests.dll (net8.0)

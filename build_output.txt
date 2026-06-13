@@ -1,0 +1,46 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SharedKernels -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedKernels\bin\Debug\net8.0\SharedKernels.dll
+  SharedContracts -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedContracts\bin\Debug\net8.0\SharedContracts.dll
+  AuthService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Domain\bin\Debug\net8.0\AuthService.Domain.dll
+  TicketService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Domain\bin\Debug\net8.0\TicketService.Domain.dll
+  NotificationService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\NotificationService\src\NotificationService.Domain\bin\Debug\net8.0\NotificationService.Domain.dll
+  BatteryService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Domain\bin\Debug\net8.0\BatteryService.Domain.dll
+  FileStorageService.Domain -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Domain\bin\Debug\net8.0\FileStorageService.Domain.dll
+  SharedInfrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\src\SharedInfrastructure\bin\Debug\net8.0\SharedInfrastructure.dll
+  EmailService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\src\EmailService.Infrastructure\bin\Debug\net8.0\EmailService.Infrastructure.dll
+  SmsService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\SmsService\src\SmsService.Infrastructure\bin\Debug\net8.0\SmsService.Infrastructure.dll
+  FileStorageService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Application\bin\Debug\net8.0\FileStorageService.Application.dll
+  SharedInfrastructure.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\shared\tests\SharedInfrastructure.UnitTests\bin\Debug\net8.0\SharedInfrastructure.UnitTests.dll
+  AuthService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Application\bin\Debug\net8.0\AuthService.Application.dll
+  TicketService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Application\bin\Debug\net8.0\TicketService.Application.dll
+  FileStorageService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Infrastructure\bin\Debug\net8.0\FileStorageService.Infrastructure.dll
+  NotificationService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\NotificationService\src\NotificationService.Application\bin\Debug\net8.0\NotificationService.Application.dll
+  BatteryService.Application -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Application\bin\Debug\net8.0\BatteryService.Application.dll
+  FileStorageService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\tests\FileStorageService.UnitTests\bin\Debug\net8.0\FileStorageService.UnitTests.dll
+  EmailService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.UnitTests\bin\Debug\net8.0\EmailService.UnitTests.dll
+  NotificationService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\NotificationService\src\NotificationService.Infrastructure\bin\Debug\net8.0\NotificationService.Infrastructure.dll
+  TicketService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Infrastructure\bin\Debug\net8.0\TicketService.Infrastructure.dll
+  BatteryService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Infrastructure\bin\Debug\net8.0\BatteryService.Infrastructure.dll
+  AuthService.Infrastructure -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Infrastructure\bin\Debug\net8.0\AuthService.Infrastructure.dll
+  BatteryService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.UnitTests\bin\Debug\net8.0\BatteryService.UnitTests.dll
+  SmsService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\SmsService\src\SmsService.Api\bin\Debug\net8.0\SmsService.Api.dll
+  TicketService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.UnitTests\bin\Debug\net8.0\TicketService.UnitTests.dll
+  EmailService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\src\EmailService.Api\bin\Debug\net8.0\EmailService.Api.dll
+  TicketService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\src\TicketService.Api\bin\Debug\net8.0\TicketService.Api.dll
+  ApiGateway -> C:\Users\Thais_Mai\Desktop\AI\backend\services\ApiGateway\src\ApiGateway\bin\Debug\net8.0\ApiGateway.dll
+  FileStorageService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\FileStorageService\src\FileStorageService.Api\bin\Debug\net8.0\FileStorageService.Api.dll
+  AuthService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\src\AuthService.Api\bin\Debug\net8.0\AuthService.Api.dll
+  BatteryService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\src\BatteryService.Api\bin\Debug\net8.0\BatteryService.Api.dll
+  NotificationService.Api -> C:\Users\Thais_Mai\Desktop\AI\backend\services\NotificationService\src\NotificationService.Api\bin\Debug\net8.0\NotificationService.Api.dll
+  EmailService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\EmailService\tests\EmailService.IntegrationTests\bin\Debug\net8.0\EmailService.IntegrationTests.dll
+  BatteryService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\BatteryService\tests\BatteryService.IntegrationTests\bin\Debug\net8.0\BatteryService.IntegrationTests.dll
+  TicketService.IntergrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\TicketService\tests\TicketService.IntergrationTests\bin\Debug\net8.0\TicketService.IntergrationTests.dll
+  AuthService.UnitTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.UnitTests\bin\Debug\net8.0\AuthService.UnitTests.dll
+  AuthService.IntegrationTests -> C:\Users\Thais_Mai\Desktop\AI\backend\services\AuthService\tests\AuthService.IntegrationTests\bin\Debug\net8.0\AuthService.IntegrationTests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.13

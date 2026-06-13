@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612085426_UpdateKnowledgeBaseArticleSchema")]
+    partial class UpdateKnowledgeBaseArticleSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -129,18 +132,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<int>("MajorVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("major_version");
-
-                    b.Property<string>("ManagerRejectReason")
-                        .HasColumnType("text")
-                        .HasColumnName("manager_reject_reason");
-
-                    b.Property<int>("MinorVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("minor_version");
-
                     b.Property<string>("RecommendedParts")
                         .HasColumnType("jsonb")
                         .HasColumnName("recommended_parts");
@@ -149,10 +140,6 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("solution_steps");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasColumnName("status");
 
                     b.Property<string>("Symptoms")
                         .IsRequired()
@@ -174,13 +161,17 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("version_number");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ArticleId");
 
-                    b.HasIndex("MajorVersion");
+                    b.HasIndex("VersionNumber");
 
-                    b.HasIndex("ArticleId", "MajorVersion", "MinorVersion")
+                    b.HasIndex("ArticleId", "VersionNumber")
                         .IsUnique();
 
                     b.ToTable("kb_article_versions", (string)null);

@@ -50,6 +50,7 @@ public static class ManageDependencyInjection
         services.AddScoped<IPriorityCalculator, PriorityCalculator>();
         services.AddScoped<IActivityLogger, ActivityLogger>();
         services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
+        services.AddScoped<IKbCodeGenerator, KbCodeGenerator>();
         services.AddScoped<ISlaCalculator, SlaCalculator>();
         services.AddScoped<ISlaService, SlaService>();
 

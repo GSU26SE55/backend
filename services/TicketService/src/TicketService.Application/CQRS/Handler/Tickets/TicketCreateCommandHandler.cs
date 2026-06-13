@@ -34,7 +34,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
     {
         // Validate Customer
-        var customer = (await _uow.CustomerAccounts.GetAllAsync().Where(c => c.AccountId == request.CustomerId).ToListAsync(ct)).FirstOrDefault();
+        var customer = await _uow.CustomerAccounts.GetAllAsync()
+            .FirstOrDefaultAsync(c => c.AccountId == request.CustomerId, ct);
 
         if (customer == null)
             return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.");
@@ -81,6 +82,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Data = new TicketActionDto
             {
                 Id = ticket.Id.ToString(),
+                TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
                 Status = ticket.Status
             }

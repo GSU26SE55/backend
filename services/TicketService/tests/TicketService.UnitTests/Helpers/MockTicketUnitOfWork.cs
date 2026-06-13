@@ -41,7 +41,9 @@ public static class MockTicketUnitOfWork
                    Mock<IGenericRepository<SlaPauseEvent>> slaPauseEvents,
                    Mock<IGenericRepository<TicketComment>> comments,
                    Mock<IGenericRepository<TicketAttachment>> attachments,
-                   Mock<IGenericRepository<MaintenanceLog>> logs)
+                   Mock<IGenericRepository<MaintenanceLog>> logs,
+                   Mock<IGenericRepository<KnowledgeBaseArticle>> kbArticles,
+                   Mock<IGenericRepository<KbArticleVersion>> kbVersions)
         BuildExtended(
             IEnumerable<Ticket>? ticketSeed = null,
             IEnumerable<TicketActivity>? activitySeed = null,
@@ -52,7 +54,9 @@ public static class MockTicketUnitOfWork
             IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null,
             IEnumerable<TicketComment>? commentSeed = null,
             IEnumerable<TicketAttachment>? attachmentSeed = null,
-            IEnumerable<MaintenanceLog>? logSeed = null)
+            IEnumerable<MaintenanceLog>? logSeed = null,
+            IEnumerable<KnowledgeBaseArticle>? kbSeed = null,
+            IEnumerable<KbArticleVersion>? kbVersionSeed = null)
     {
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
@@ -94,6 +98,15 @@ public static class MockTicketUnitOfWork
         var logs = new Mock<IGenericRepository<MaintenanceLog>>();
         logs.Setup(r => r.GetAllAsync()).Returns(logsMock);
 
+        var kbMock = (kbSeed ?? Array.Empty<KnowledgeBaseArticle>()).BuildMock();
+        var kb = new Mock<IGenericRepository<KnowledgeBaseArticle>>();
+        kb.Setup(r => r.GetAllAsync()).Returns(kbMock);
+        kb.Setup(r => r.GetByIdAsync(It.IsAny<object>())).ReturnsAsync((object id) => kbSeed?.FirstOrDefault(x => x.Id == (Guid)id));
+
+        var kbVersionMock = (kbVersionSeed ?? Array.Empty<KbArticleVersion>()).BuildMock();
+        var kbVersion = new Mock<IGenericRepository<KbArticleVersion>>();
+        kbVersion.Setup(r => r.GetAllAsync()).Returns(kbVersionMock);
+
         var outboxMock = (outboxSeed ?? Array.Empty<OutboxMessage>()).BuildMock();
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
         outbox.Setup(r => r.GetAllAsync()).Returns(outboxMock);
@@ -108,6 +121,8 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.TicketComments).Returns(comments.Object);
         uow.SetupGet(u => u.TicketAttachments).Returns(attachments.Object);
         uow.SetupGet(u => u.MaintenanceLogs).Returns(logs.Object);
+        uow.SetupGet(u => u.KnowledgeBaseArticles).Returns(kb.Object);
+        uow.SetupGet(u => u.KbArticleVersions).Returns(kbVersion.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
 
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -115,6 +130,6 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, comments, attachments, logs);
+        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, comments, attachments, logs, kb, kbVersion);
     }
 }
