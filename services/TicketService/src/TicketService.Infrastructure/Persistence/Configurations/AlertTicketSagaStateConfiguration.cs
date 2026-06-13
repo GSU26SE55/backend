@@ -30,12 +30,6 @@ public class AlertTicketSagaStateConfiguration : IEntityTypeConfiguration<AlertT
         builder.Property(s => s.Version)
             .HasColumnName("version");
 
-        // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
-        builder.Property<uint>("xmin")
-            .HasColumnType("xid")
-            .ValueGeneratedOnAddOrUpdate()
-            .IsConcurrencyToken();
-
         builder.Property(s => s.AlertId).HasColumnName("alert_id").IsRequired();
         builder.Property(s => s.BatteryAssetId).HasColumnName("battery_asset_id");
         builder.Property(s => s.CustomerId).HasColumnName("customer_id").IsRequired();

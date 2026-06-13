@@ -8,12 +8,12 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.Consumers;
 
-public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
+public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
 
-    public AccountActivatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
+    public TicketAccountActivatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
     {
         _uow = uow;
         _inbox = inbox;
@@ -22,12 +22,11 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
     public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(AccountActivatedConsumer), context.CancellationToken))
+        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountActivatedConsumer), context.CancellationToken))
             return;
 
         var isStaff = @event.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase) ||
                       @event.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
-                      @event.Role.Equals("Technician", StringComparison.OrdinalIgnoreCase) ||
                       @event.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase);
 
         if (isStaff)
@@ -91,12 +90,12 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
     }
 }
 
-public class AccountStatusChangedConsumer : IConsumer<AccountStatusChangedEvent>
+public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChangedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
 
-    public AccountStatusChangedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
+    public TicketAccountStatusChangedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
     {
         _uow = uow;
         _inbox = inbox;
@@ -105,7 +104,7 @@ public class AccountStatusChangedConsumer : IConsumer<AccountStatusChangedEvent>
     public async Task Consume(ConsumeContext<AccountStatusChangedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(AccountStatusChangedConsumer), context.CancellationToken))
+        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountStatusChangedConsumer), context.CancellationToken))
             return;
 
         var staff = await _uow.StaffAccounts.GetAllAsync()
@@ -130,12 +129,12 @@ public class AccountStatusChangedConsumer : IConsumer<AccountStatusChangedEvent>
     }
 }
 
-public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEvent>
+public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
 
-    public AccountProfileUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
+    public TicketAccountProfileUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
     {
         _uow = uow;
         _inbox = inbox;
@@ -144,7 +143,7 @@ public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEven
     public async Task Consume(ConsumeContext<AccountProfileUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(AccountProfileUpdatedConsumer), context.CancellationToken))
+        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountProfileUpdatedConsumer), context.CancellationToken))
             return;
 
         var staff = await _uow.StaffAccounts.GetAllAsync()
@@ -170,12 +169,12 @@ public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEven
     }
 }
 
-public class StaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEvent>
+public class TicketStaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
 
-    public StaffProfileUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
+    public TicketStaffProfileUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
     {
         _uow = uow;
         _inbox = inbox;
@@ -184,7 +183,7 @@ public class StaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEvent>
     public async Task Consume(ConsumeContext<StaffProfileUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(StaffProfileUpdatedConsumer), context.CancellationToken))
+        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketStaffProfileUpdatedConsumer), context.CancellationToken))
             return;
 
         var staff = await _uow.StaffAccounts.GetAllAsync()
@@ -202,12 +201,12 @@ public class StaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEvent>
     }
 }
 
-public class StaffSkillsUpdatedConsumer : IConsumer<StaffSkillsUpdatedEvent>
+public class TicketStaffSkillsUpdatedConsumer : IConsumer<StaffSkillsUpdatedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
 
-    public StaffSkillsUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
+    public TicketStaffSkillsUpdatedConsumer(ITicketUnitOfWork uow, IInboxStore inbox)
     {
         _uow = uow;
         _inbox = inbox;
@@ -216,7 +215,7 @@ public class StaffSkillsUpdatedConsumer : IConsumer<StaffSkillsUpdatedEvent>
     public async Task Consume(ConsumeContext<StaffSkillsUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(StaffSkillsUpdatedConsumer), context.CancellationToken))
+        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketStaffSkillsUpdatedConsumer), context.CancellationToken))
             return;
 
         var staff = await _uow.StaffAccounts.GetAllAsync()

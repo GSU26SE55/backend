@@ -17,18 +17,20 @@ public static class CommonResponseStatusCodeMiddleware
         {
             var response = context.HttpContext.Response;
 
-            if (response.HasStarted) return;
-            if (response.ContentLength is > 0) return;
+            if (response.HasStarted)
+                return;
+            if (response.ContentLength is > 0)
+                return;
 
             var message = response.StatusCode switch
             {
                 StatusCodes.Status401Unauthorized => "Chưa xác thực hoặc token không hợp lệ.",
-                StatusCodes.Status403Forbidden    => "Không có quyền truy cập tài nguyên này.",
-                StatusCodes.Status404NotFound     => "Không tìm thấy tài nguyên hoặc endpoint yêu cầu.",
+                StatusCodes.Status403Forbidden => "Không có quyền truy cập tài nguyên này.",
+                StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên hoặc endpoint yêu cầu.",
                 StatusCodes.Status405MethodNotAllowed => "HTTP method không được hỗ trợ cho endpoint này.",
                 StatusCodes.Status415UnsupportedMediaType => "Content-Type không được hỗ trợ.",
                 StatusCodes.Status429TooManyRequests => "Quá nhiều request, vui lòng thử lại sau.",
-                StatusCodes.Status502BadGateway   => "Upstream service không phản hồi hợp lệ.",
+                StatusCodes.Status502BadGateway => "Upstream service không phản hồi hợp lệ.",
                 StatusCodes.Status503ServiceUnavailable => "Service đang tạm ngừng phục vụ.",
                 StatusCodes.Status504GatewayTimeout => "Upstream service phản hồi quá thời gian cho phép.",
                 _ => $"Request thất bại với mã trạng thái {response.StatusCode}."

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260613140346_AddAttachmentPublicUrl")]
+    partial class AddAttachmentPublicUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -256,7 +259,7 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnName("log_type");
 
                     b.Property<string>("PartsUsed")
-                        .HasColumnType("text")
+                        .HasColumnType("jsonb")
                         .HasColumnName("parts_used");
 
                     b.Property<string>("RelatedKbArticleIds")
@@ -1021,164 +1024,6 @@ namespace TicketService.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ticket_kb_references", (string)null);
-                });
-
-            modelBuilder.Entity("TicketService.Infrastructure.Sagas.AlertTicketSagaState", b =>
-                {
-                    b.Property<Guid>("CorrelationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("correlation_id");
-
-                    b.Property<decimal>("ActualValue")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)")
-                        .HasColumnName("actual_value");
-
-                    b.Property<Guid>("AlertId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("alert_id");
-
-                    b.Property<int>("AnomalyType")
-                        .HasColumnType("integer")
-                        .HasColumnName("anomaly_type");
-
-                    b.Property<string>("AssetSerialNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("asset_serial_number");
-
-                    b.Property<Guid?>("BatteryAssetId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("battery_asset_id");
-
-                    b.Property<decimal?>("CellVoltageDeltaMv")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)")
-                        .HasColumnName("cell_voltage_delta_mv");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<string>("CurrentState")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("current_state");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<DateTime>("DetectedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("detected_at");
-
-                    b.Property<Guid?>("EnvironmentalIncidentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("environmental_incident_id");
-
-                    b.Property<DateTime?>("FailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("failed_at");
-
-                    b.Property<string>("FailedAtStage")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("failed_at_stage");
-
-                    b.Property<string>("FailureErrorCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("failure_error_code");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("failure_reason");
-
-                    b.Property<decimal?>("InternalResistanceMilliohm")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)")
-                        .HasColumnName("internal_resistance_milliohm");
-
-                    b.Property<Guid?>("PendingTimeoutTokenId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_timeout_token_id");
-
-                    b.Property<int>("RetryCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("retry_count");
-
-                    b.Property<int>("Severity")
-                        .HasColumnType("integer")
-                        .HasColumnName("severity");
-
-                    b.Property<Guid?>("SiteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("site_id");
-
-                    b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<decimal>("ThresholdValue")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)")
-                        .HasColumnName("threshold_value");
-
-                    b.Property<string>("TicketCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("ticket_code");
-
-                    b.Property<Guid?>("TicketId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ticket_id");
-
-                    b.Property<bool>("TicketIsReused")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("ticket_is_reused");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("unit");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("integer")
-                        .HasColumnName("version");
-
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("CorrelationId");
-
-                    b.HasIndex("AlertId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_alert_ticket_saga_states_alert_id");
-
-                    b.HasIndex("BatteryAssetId")
-                        .HasDatabaseName("ix_alert_ticket_saga_states_battery_asset_id");
-
-                    b.HasIndex("CurrentState")
-                        .HasDatabaseName("ix_alert_ticket_saga_states_current_state");
-
-                    b.HasIndex("StartedAt")
-                        .HasDatabaseName("ix_alert_ticket_saga_states_started_at");
-
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_alert_ticket_saga_states_ticket_id");
-
-                    b.ToTable("alert_ticket_saga_states", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.MaintenanceLog", b =>

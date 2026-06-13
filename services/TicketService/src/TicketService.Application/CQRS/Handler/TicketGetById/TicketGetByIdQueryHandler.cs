@@ -26,6 +26,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             .Include(t => t.Activities.OrderByDescending(a => a.CreatedAt))
             .Include(t => t.Comments.Where(c => !c.IsDeleted).OrderByDescending(c => c.CreatedAt))
             .Include(t => t.MaintenanceLogs.Where(m => !m.IsDeleted).OrderByDescending(m => m.CreatedAt))
+            .Include(t => t.Attachments.Where(a => !a.IsDeleted).OrderByDescending(a => a.CreatedAt))
             .FirstOrDefaultAsync(t => t.Id == request.Id && !t.IsDeleted, cancellationToken);
 
         if (ticket is null)
@@ -93,6 +94,11 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
                     AuthorDisplayName = c.AuthorDisplayName,
                     Body = c.Body,
                     IsInternal = c.IsInternal,
+                    AttachmentUrls = (c.AttachmentFileIds ?? new List<Guid>())
+                        .Select(fid => ticket.Attachments.FirstOrDefault(a => a.FileId == fid)?.PublicUrl)
+                        .Where(url => !string.IsNullOrEmpty(url))
+                        .Select(url => url!)
+                        .ToList(),
                     CreatedAt = c.CreatedAt
                 }).ToList(),
             MaintenanceLogs = ticket.MaintenanceLogs.Select(m => new MaintenanceLogDTO
@@ -109,6 +115,10 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
                 StartedAt = m.StartedAt,
                 CompletedAt = m.CompletedAt,
                 CreatedAt = m.CreatedAt
+            }).ToList(),
+            Attachments = ticket.Attachments.Select(a => new TicketAttachmentDTO
+            {
+                Url = a.PublicUrl ?? string.Empty
             }).ToList()
         };
 

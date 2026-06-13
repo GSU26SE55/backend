@@ -142,12 +142,21 @@ public class TicketDataSeeder
     private async Task<List<CustomerAccount>> SeedCustomerAccountsAsync(CancellationToken ct)
     {
         var existing = await _context.CustomerAccounts.ToListAsync(ct);
-        if (existing.Count > 0)
-            return existing;
 
         var now = DateTime.UtcNow;
         var customers = new List<CustomerAccount>
         {
+            new()
+            {
+                Id = Guid.Parse("0a334d70-349c-4f76-90f1-4340798e4d1f"), // Fixed ID for seeder consistency
+                AccountId = Guid.Parse("6f3a3f3a-3f3a-3f3a-3f3a-3f3a3f3a3f3a"), // Match AuthService demo customer
+                Email = "customer.demo@solarbattery.local",
+                FullName = "Demo Customer",
+                PhoneNumber = "0901000000",
+                Status = AccountStatusEnum.Active,
+                LastSyncedAt = now,
+                CreatedAt = now
+            },
             new()
             {
                 Id = Guid.NewGuid(),
@@ -158,40 +167,36 @@ public class TicketDataSeeder
                 Status = AccountStatusEnum.Active,
                 LastSyncedAt = now,
                 CreatedAt = now
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                AccountId = Guid.NewGuid(),
-                Email = "customer.b@solarbattery.local",
-                FullName = "Tran Thi B",
-                PhoneNumber = "0901000002",
-                Status = AccountStatusEnum.Active,
-                LastSyncedAt = now,
-                CreatedAt = now
             }
         };
 
-        _context.CustomerAccounts.AddRange(customers);
-        await _context.SaveChangesAsync(ct);
-        return customers;
+        foreach (var customer in customers)
+        {
+            if (existing.Any(e => e.Email == customer.Email))
+                continue;
+            _context.CustomerAccounts.Add(customer);
+            existing.Add(customer);
+        }
+
+        if (_context.ChangeTracker.HasChanges())
+            await _context.SaveChangesAsync(ct);
+
+        return existing;
     }
 
     private async Task<List<StaffAccount>> SeedStaffAccountsAsync(CancellationToken ct)
     {
         var existing = await _context.StaffAccounts.ToListAsync(ct);
-        if (existing.Count > 0)
-            return existing;
 
         var now = DateTime.UtcNow;
         var staffs = new List<StaffAccount>
         {
             new()
             {
-                Id = Guid.NewGuid(),
-                AccountId = Guid.NewGuid(),
+                Id = Guid.Parse("f6b3d1b0-2b1a-4d7a-8b1a-4d7a8b1a4d7a"),
+                AccountId = Guid.Parse("1f3a3f3a-3f3a-3f3a-3f3a-3f3a3f3a3f3a"), // Match staff.tier1
                 Email = "staff.tier1@solarbattery.local",
-                FullName = "Le Van Tier1",
+                FullName = "Staff Tier1 Generalist",
                 EmployeeCode = "STF-T1-001",
                 Status = AccountStatusEnum.Active,
                 IsAvailable = true,
@@ -203,10 +208,10 @@ public class TicketDataSeeder
             },
             new()
             {
-                Id = Guid.NewGuid(),
-                AccountId = Guid.NewGuid(),
+                Id = Guid.Parse("a2d3e4f5-b6c7-4d8e-9f0a-b1c2d3e4f5a6"),
+                AccountId = Guid.Parse("2f3a3f3a-3f3a-3f3a-3f3a-3f3a3f3a3f3a"), // Match staff.tier2
                 Email = "staff.tier2@solarbattery.local",
-                FullName = "Pham Thi Tier2",
+                FullName = "Staff Tier2 Specialist",
                 EmployeeCode = "STF-T2-001",
                 Status = AccountStatusEnum.Active,
                 IsAvailable = true,
@@ -218,10 +223,10 @@ public class TicketDataSeeder
             },
             new()
             {
-                Id = Guid.NewGuid(),
-                AccountId = Guid.NewGuid(),
+                Id = Guid.Parse("d4e5f6a7-b8c9-4d0e-9f1a-b2c3d4e5f6a7"),
+                AccountId = Guid.Parse("3f3a3f3a-3f3a-3f3a-3f3a-3f3a3f3a3f3a"), // Match staff.tier3
                 Email = "staff.tier3@solarbattery.local",
-                FullName = "Hoang Senior",
+                FullName = "Staff Tier3 Senior",
                 EmployeeCode = "STF-T3-001",
                 Status = AccountStatusEnum.Active,
                 IsAvailable = true,
@@ -230,12 +235,36 @@ public class TicketDataSeeder
                 SkillCodes = new List<string> { "battery", "firmware", "incident" },
                 LastSyncedAt = now,
                 CreatedAt = now
+            },
+            new()
+            {
+                Id = Guid.Parse("5f6a7b8c-9d0e-4f1a-b2c3-d4e5f6a7b8c9"),
+                AccountId = Guid.Parse("4f3a3f3a-3f3a-3f3a-3f3a-3f3a3f3a3f3a"), // Match manager.demo
+                Email = "manager.demo@solarbattery.local",
+                FullName = "Demo Manager",
+                EmployeeCode = "MGR-001",
+                Status = AccountStatusEnum.Active,
+                IsAvailable = true,
+                MaxConcurrentTickets = 10,
+                SkillTier = StaffSkillTierEnum.SeniorSpecialist,
+                SkillCodes = new List<string> { "management" },
+                LastSyncedAt = now,
+                CreatedAt = now
             }
         };
 
-        _context.StaffAccounts.AddRange(staffs);
-        await _context.SaveChangesAsync(ct);
-        return staffs;
+        foreach (var staff in staffs)
+        {
+            if (existing.Any(e => e.Email == staff.Email))
+                continue;
+            _context.StaffAccounts.Add(staff);
+            existing.Add(staff);
+        }
+
+        if (_context.ChangeTracker.HasChanges())
+            await _context.SaveChangesAsync(ct);
+
+        return existing;
     }
 
     private async Task<List<KnowledgeBaseArticle>> SeedKnowledgeBaseAsync(Guid authorId, CancellationToken ct)

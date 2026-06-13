@@ -25,6 +25,7 @@ repos:
 
       - id: energy-co2-scope-guard
         name: Energy/CO2 scope guard (ADR-017)
-        entry: bash -c 'if grep -rInE "EnergySession|EnergyDailySummary|BatteryCycleLog|SiteEnergySummary|ElectricityRate|CarbonEmissionFactor|CapacityKw|kWh|CO2" services/BatteryService/src shared/src 2>/dev/null | grep -vE "/(bin|obj|Migrations)/"; then echo; echo "ERROR: Energy/CO2 scope creep detected (ADR-017). Remove the tokens above or update ADR-017 if scope changes."; exit 1; fi'
+        entry: >-
+          bash -c 'if grep -rInE "EnergySession|EnergyDailySummary|BatteryCycleLog|SiteEnergySummary|ElectricityRate|CarbonEmissionFactor|CapacityKw|kWh|CO2" services/BatteryService/src shared/src 2>/dev/null | grep -vE "/(bin|obj|Migrations)/"; then echo; echo "ERROR: Energy/CO2 scope creep detected (ADR-017). Remove the tokens above or update ADR-017 if scope changes."; exit 1; fi'
         language: system
         pass_filenames: false

@@ -53,6 +53,24 @@ public class TicketCommentsQueryHandler : IRequestHandler<TicketCommentsQuery, C
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
+        // 5. Lấy danh sách PublicUrl từ TicketAttachments dựa trên FileIds
+        var allFileIds = rawComments.SelectMany(c => c.AttachmentFileIds).Distinct().ToList();
+        var attachmentsMap = new Dictionary<Guid, string>();
+
+        if (allFileIds.Any())
+        {
+            var attachmentData = await _unitOfWork.TicketAttachments.GetAllAsync()
+                .AsNoTracking()
+                .Where(a => allFileIds.Contains(a.FileId) && a.TicketId == request.TicketId)
+                .Select(a => new { a.FileId, a.PublicUrl })
+                .ToListAsync(cancellationToken);
+
+            attachmentsMap = attachmentData
+                .Where(a => !string.IsNullOrEmpty(a.PublicUrl))
+                .GroupBy(a => a.FileId)
+                .ToDictionary(g => g.Key, g => g.First().PublicUrl!);
+        }
+
         var items = rawComments.Select(c => new TicketCommentDTO
         {
             Id = c.Id.ToString(),
@@ -62,7 +80,11 @@ public class TicketCommentsQueryHandler : IRequestHandler<TicketCommentsQuery, C
             AuthorDisplayName = c.AuthorDisplayName,
             Body = c.Body,
             IsInternal = c.IsInternal,
-            AttachmentFileIds = c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+            AttachmentUrls = c.AttachmentFileIds
+                .Select(id => attachmentsMap.TryGetValue(id, out var url) ? url : null)
+                .Where(url => !string.IsNullOrEmpty(url))
+                .Select(url => url!)
+                .ToList(),
             CreatedAt = c.CreatedAt
         }).ToList();
 

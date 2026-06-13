@@ -7,7 +7,7 @@ allowed-tools: Bash, Write, Read, Edit
 
 # Scaffold Entity `$ARGUMENTS`
 
-Usage: `/scaffold-entity ServiceName EntityName`  
+Usage: `/scaffold-entity ServiceName EntityName`
 Example: `/scaffold-entity BatteryService Battery`
 
 ## Step 1 — Entity: `Domain/Entities/{Entity}.cs`

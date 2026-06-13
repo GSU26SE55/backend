@@ -34,6 +34,9 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.Property(e => e.SizeBytes)
             .HasColumnName("size_bytes");
 
+        builder.Property(e => e.PublicUrl)
+            .HasColumnName("public_url");
+
         builder.Property(e => e.Source)
             .HasColumnName("source")
             .HasConversion<int>();
@@ -57,7 +60,7 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.HasIndex(e => e.FileId);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
+            .WithMany(e => e.Attachments)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
     }
