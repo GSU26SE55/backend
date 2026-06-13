@@ -1,0 +1,184 @@
+{{/*
+  Sprint IoT-1 #253 — Mosquitto MQTT broker (P3 optional).
+  Toggle: .Values.mosquitto.enabled (default false).
+
+  Render khi enabled:
+    - ConfigMap mosquitto-config: mosquitto.conf + acl.conf
+    - PVC mosquitto-data (nếu persistence.enabled)
+    - Deployment mosquitto (1 replica — MQTT khó scale horizontally)
+    - Service mosquitto (ClusterIP) — batteryservice connect qua DNS internal
+
+  Pre-requirement (manual ngoài Helm):
+    - Secret `solar-mqtt-passwd` (key: passwd) — sinh bằng mosquitto_passwd.
+    - Secret `solar-mqtt-tls` (keys: ca.crt, server.crt, server.key) nếu tls.enabled.
+    - Mqtt__Password (env của batteryservice) khớp với plaintext trong passwd.
+
+  Xem deploy/README.md cho lệnh bootstrap.
+*/}}
+{{- if .Values.mosquitto.enabled -}}
+{{- $mq := .Values.mosquitto -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+data:
+  mosquitto.conf: |
+    # Sprint IoT-1 #253 — auto-rendered từ Helm.
+    listener {{ $mq.ports.plain }} 0.0.0.0
+    allow_anonymous false
+    password_file /mosquitto/config/passwd
+    acl_file /mosquitto/config/acl.conf
+
+    {{- if $mq.tls.enabled }}
+    listener {{ $mq.ports.tls }} 0.0.0.0
+    cafile /mosquitto/certs/ca.crt
+    certfile /mosquitto/certs/server.crt
+    keyfile /mosquitto/certs/server.key
+    require_certificate false
+    tls_version tlsv1.2
+    {{- end }}
+
+    persistence true
+    persistence_location /mosquitto/data/
+    autosave_interval 60
+
+    log_dest stdout
+    log_type error
+    log_type warning
+    log_type notice
+    connection_messages true
+
+    max_connections 1000
+    max_inflight_messages 50
+    max_packet_size 1048576
+    retain_available true
+    max_queued_messages 1000
+
+  acl.conf: |
+    # Per-device ACL via username (= deviceCode).
+    pattern write telemetry/%u
+    pattern write heartbeat/%u
+    pattern write status/%u
+    pattern read  cmd/%u
+
+    user backend-bridge
+    topic readwrite telemetry/#
+    topic readwrite heartbeat/#
+    topic readwrite status/#
+    topic readwrite cmd/#
+---
+{{- if $mq.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-data
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ $mq.persistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "mosquitto") | nindent 4 }}
+spec:
+  replicas: 1
+  # MQTT broker không scale horizontally trong cluster nhỏ — recreate đảm bảo
+  # session/queued message không lệch giữa 2 replica.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mosquitto
+  template:
+    metadata:
+      labels:
+        {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "mosquitto") | nindent 8 }}
+    spec:
+      containers:
+      - name: mosquitto
+        image: {{ $mq.image | quote }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - name: mqtt
+          containerPort: {{ $mq.ports.plain }}
+        {{- if $mq.tls.enabled }}
+        - name: mqtts
+          containerPort: {{ $mq.ports.tls }}
+        {{- end }}
+        volumeMounts:
+        - name: config
+          mountPath: /mosquitto/config/mosquitto.conf
+          subPath: mosquitto.conf
+        - name: config
+          mountPath: /mosquitto/config/acl.conf
+          subPath: acl.conf
+        - name: passwd
+          mountPath: /mosquitto/config/passwd
+          subPath: passwd
+        {{- if $mq.tls.enabled }}
+        - name: certs
+          mountPath: /mosquitto/certs
+          readOnly: true
+        {{- end }}
+        {{- if $mq.persistence.enabled }}
+        - name: data
+          mountPath: /mosquitto/data
+        {{- end }}
+        livenessProbe:
+          tcpSocket:
+            port: mqtt
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: mqtt
+          periodSeconds: 10
+        resources:
+          {{- toYaml $mq.resources | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: mosquitto-config
+      - name: passwd
+        secret:
+          secretName: {{ $mq.passwdSecret.name | quote }}
+          # Mosquitto 2.0 yêu cầu passwd không world-readable.
+          defaultMode: 0640
+      {{- if $mq.tls.enabled }}
+      - name: certs
+        secret:
+          secretName: {{ $mq.tls.secretName | quote }}
+          defaultMode: 0640
+      {{- end }}
+      {{- if $mq.persistence.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: mosquitto-data
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  labels:
+    # Label `component=mosquitto` để Prometheus scrape job mosquitto-exporter relabel theo.
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "mosquitto") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: mosquitto
+  ports:
+  - { name: mqtt, port: {{ $mq.ports.plain }}, targetPort: mqtt }
+  {{- if $mq.tls.enabled }}
+  - { name: mqtts, port: {{ $mq.ports.tls }}, targetPort: mqtts }
+  {{- end }}
+{{- end }}

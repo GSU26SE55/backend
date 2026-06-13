@@ -45,6 +45,13 @@ public class ApplicationDbContext : DbContext
     // Sprint 5B B1 (#152) — Noise breach hypertable.
     public virtual DbSet<NoiseBreachEvent> NoiseBreachEvents { get; set; }
 
+    // Sprint IoT-1 (#242) — IoT edge device management.
+    public virtual DbSet<IotDevice> IotDevices { get; set; }
+    public virtual DbSet<IotDeviceHeartbeat> IotDeviceHeartbeats { get; set; }
+    public virtual DbSet<IotDeviceCalibration> IotDeviceCalibrations { get; set; }
+    public virtual DbSet<IotFirmwareRelease> IotFirmwareReleases { get; set; }
+    public virtual DbSet<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (_auditableEntityInterceptor is not null)

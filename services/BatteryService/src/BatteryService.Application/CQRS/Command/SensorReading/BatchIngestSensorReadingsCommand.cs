@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 
@@ -9,6 +11,21 @@ namespace BatteryService.Application.CQRS.Command.SensorReading;
 public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorReadingBatchIngestResult>>, IValidatable<CommonResponse<SensorReadingBatchIngestResult>>
 {
     public List<SensorReadingItem> Items { get; set; } = new();
+
+    /// <summary>Sprint IoT-1 (#246) — header <c>X-Device-Code</c>. Backend cross-check với device được auth.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public string? DeviceCode { get; set; }
+
+    /// <summary>Sprint IoT-1 (#246) — header <c>Idempotency-Key</c>. Retry an toàn cùng key trả response cũ.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>Sprint IoT-1 (#246) — DeviceId resolve từ X-Api-Key (per-device). Null nếu dùng legacy global key.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public Guid? AuthenticatedDeviceId { get; set; }
 
     public Task<CommonResponse<SensorReadingBatchIngestResult>> ValidateAsync()
     {
@@ -25,13 +42,24 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
             var item = Items[i];
             var prefix = $"{nameof(Items)}[{i}]";
 
-            if (item.BatteryAssetId == Guid.Empty)
-                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "Id tài sản pin là bắt buộc.");
+            if (item.BatteryAssetId == Guid.Empty && string.IsNullOrWhiteSpace(item.BatteryAssetSerial))
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "Phải có BatteryAssetId hoặc BatteryAssetSerial.");
 
             if (item.Time == default)
                 AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading là bắt buộc.");
             else if (item.Time.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
                 AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading không được nằm quá xa trong tương lai.");
+
+            // Sprint IoT-1 §247 — clock skew ≤ 5 phút giữa DeviceTimestamp và now.
+            if (item.DeviceTimestamp.HasValue)
+            {
+                var skewMin = Math.Abs((item.DeviceTimestamp.Value.ToUniversalTime() - DateTime.UtcNow).TotalMinutes);
+                if (skewMin > 5)
+                    AddError(response, $"{prefix}.{nameof(item.DeviceTimestamp)}", $"Clock skew {skewMin:F1} phút > 5 phút. Đồng bộ NTP.");
+            }
+
+            if (item.BatteryAssetSerial?.Length > 64)
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetSerial)}", "BatteryAssetSerial tối đa 64 ký tự.");
 
             if (item.Voltage < 0)
                 AddError(response, $"{prefix}.{nameof(item.Voltage)}", "Điện áp không được âm.");
@@ -87,6 +115,18 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
 public class SensorReadingItem
 {
     public DateTime Time { get; set; }
+
+    /// <summary>
+    /// Sprint IoT-1 (#246) — timestamp ghi nhận tại device. Có thể khác Time (Time = backend persist).
+    /// Backend dùng để tính clock skew + validate &lt;= 5 phút (§247).
+    /// </summary>
+    public DateTime? DeviceTimestamp { get; set; }
+
+    /// <summary>
+    /// Sprint IoT-1 (#246) — Serial của BatteryAsset (vd "BAT-001"). Mapping → BatteryAssetId tại backend.
+    /// Ưu tiên field này; nếu null backend dùng <see cref="BatteryAssetId"/> (legacy/simulator).
+    /// </summary>
+    public string? BatteryAssetSerial { get; set; }
 
     public Guid BatteryAssetId { get; set; }
 

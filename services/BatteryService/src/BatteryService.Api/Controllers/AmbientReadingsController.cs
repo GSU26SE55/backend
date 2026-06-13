@@ -47,7 +47,7 @@ public class AmbientReadingsController : ControllerBase
     /// </remarks>
     /// <param name="cmd">Batch readings.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Ingest thành công, trả số reading đã insert/skip.</response>
+    /// <response code="201">Ingest thành công, trả số reading đã insert/skip.</response>
     /// <response code="400">Batch vượt 100 record hoặc thiếu field bắt buộc.</response>
     /// <response code="401">Thiếu ApiKey.</response>
     /// <response code="403">ApiKey không có scope <c>EnvironmentalIngest</c>.</response>

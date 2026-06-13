@@ -293,6 +293,20 @@ services:
       # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
+      # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-60}
+      Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
+      Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
+      # Sprint IoT-1 #253 — MQTT bridge (P3 optional). Set Mqtt__Enabled=true để bật bridge.
+      Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      Mqtt__Host: ${Mqtt__Host:-mosquitto}
+      Mqtt__Port: ${Mqtt__Port:-8883}
+      Mqtt__UseTls: ${Mqtt__UseTls:-true}
+      Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-true}
+      Mqtt__Username: ${Mqtt__Username:-backend-bridge}
+      Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
+      Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
+      Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
     ports:
       - "4006:8080"
     depends_on:
@@ -306,6 +320,12 @@ services:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
+
+  # ---------- MQTT broker — MOVED to capstone/iot/infra/mqtt/ ----------
+  # Theo tasksprint.md S0-INF-02 broker thuộc IoT monorepo, không phải backend.
+  # Chạy broker: `cd ../iot && docker compose -f infra/docker-compose.dev.yml up -d mosquitto`
+  # Backend `batteryservice` connect qua hostname `mosquitto` nếu chạy cùng docker network,
+  # hoặc qua `host.docker.internal:1883` khi broker chạy từ iot compose riêng.
 
   ticketservice:
     container_name: solar-ticketservice

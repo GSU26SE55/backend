@@ -297,6 +297,50 @@ config:
   AlertTicketSaga__AlertTicketDispatchEnabled: "true"
   AlertTicketSaga__AlertTicketSagaEnabled: "true"
 
+  # ----- Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService -----
+  Iot__OfflineCheckIntervalSeconds: "60"
+  Iot__OfflineAfterSeconds: "300"
+  Iot__OfflineBatchSize: "100"
+
+  # ----- Sprint IoT-1 #253 — MQTT bridge (P3 optional) -----
+  # Mqtt__Password đặt trong Secret solar-secrets (xem deploy/README.md).
+  Mqtt__Enabled: "false"           # Bật khi đã deploy Mosquitto + cấp credential
+  Mqtt__Host: "mosquitto"          # K8s Service name (CoreDNS resolve)
+  Mqtt__Port: "8883"
+  Mqtt__UseTls: "true"
+  Mqtt__AllowUntrustedCertificates: "false"
+  Mqtt__Username: "backend-bridge"
+  Mqtt__ClientId: "battery-service-bridge"
+  Mqtt__ReconnectIntervalSeconds: "5"
+
+# --------------------------------------------------------------------
+# Sprint IoT-1 #253 — Mosquitto MQTT broker (P3 optional)
+# Toggle bằng mosquitto.enabled. Default disabled cho chart core nhẹ.
+# Khi bật, render Deployment + Service + ConfigMap (mosquitto.conf, acl.conf).
+# Password file phải sinh thủ công và inject qua Secret `solar-mqtt-passwd`
+# (xem deploy/README.md — `mosquitto_passwd -c passwd backend-bridge ...`).
+# --------------------------------------------------------------------
+mosquitto:
+  enabled: false
+  image: eclipse-mosquitto:2.0
+  # Port exposed trong Service ClusterIP. ESP32 ngoài cluster connect qua
+  # Ingress / NodePort / LoadBalancer — KHÔNG bao gồm trong chart core.
+  ports:
+    plain: 1883
+    tls: 8883
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+  persistence:
+    enabled: true
+    size: 1Gi
+  tls:
+    enabled: false              # bật khi đã đẩy cert vào Secret `solar-mqtt-tls`
+    secretName: solar-mqtt-tls  # data: ca.crt, server.crt, server.key
+  # Secret chứa file passwd (sinh bằng `mosquitto_passwd` rồi `kubectl create secret generic`).
+  passwdSecret:
+    name: solar-mqtt-passwd     # data: passwd
+
 # --------------------------------------------------------------------
 # Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).
 # Dùng `kubectl create secret` hoặc Sealed Secrets thay thế.

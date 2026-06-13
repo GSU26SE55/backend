@@ -42,6 +42,19 @@ public static class ManageDependencyInjection
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddScoped<SharedContracts.Interfaces.IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
 
+        // Sprint IoT-1 (#243) — per-device API key.
+        services.AddScoped<IIotApiKeyService, IotApiKeyService>();
+
+        // Sprint IoT-1 (#248) — offline detection.
+        services.AddScoped<IIotDeviceOfflineDetectionService, IotDeviceOfflineDetectionService>();
+        services.AddHostedService<IotDeviceOfflineDetectionBackgroundService>();
+
+        // Sprint IoT-1 (#253) — MQTT bridge (P3, optional).
+        services.Configure<BatteryService.Infrastructure.Mqtt.MqttOptions>(configuration.GetSection(BatteryService.Infrastructure.Mqtt.MqttOptions.SectionName));
+        services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>();
+        services.AddSingleton<BatteryService.Application.Services.IMqttBridgePublisher>(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
+        services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
+
         services.AddHostedService<ThresholdCheckBackgroundService>();
         services.AddHostedService<AlertEscalationBackgroundService>();
         services.AddHostedService<AlertAutoResolveBackgroundService>();

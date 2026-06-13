@@ -155,6 +155,9 @@ VALUES
         var response = await _client.GetAsync($"/api/v1/admin/sagas/alert-ticket/{randomId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var result = await response.Content.ReadFromJsonAsync<AlertTicketSagaDetailResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
     }
 
     [Fact]

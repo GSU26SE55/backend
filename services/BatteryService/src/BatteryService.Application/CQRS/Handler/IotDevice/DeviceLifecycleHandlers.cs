@@ -1,0 +1,250 @@
+using BatteryService.Application.CQRS.Command.IotDevice;
+using BatteryService.Application.CQRS.Query.IotDevice;
+using BatteryService.Application.DTOs;
+using BatteryService.Application.Interfaces;
+using BatteryService.Domain.Enums;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Responses;
+using HeartbeatEntity = BatteryService.Domain.Entities.IotDeviceHeartbeat;
+using UpdateLogEntity = BatteryService.Domain.Entities.IotFirmwareUpdateLog;
+
+namespace BatteryService.Application.CQRS.Handler.IotDevice;
+
+/// <summary>
+/// Sprint IoT-1 (#245, #247) — Provision: device báo "tôi đã boot, firmware version X".
+/// Backend chuyển status Pending→Active, lưu firmware version, ack với heartbeat interval + scopes.
+/// </summary>
+public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDeviceCommand, CommonResponse<IotDeviceProvisionResultDto>>
+{
+    private const double ClockSkewWarnThresholdSeconds = 300; // 5 phút (§247).
+
+    private readonly IBatteryUnitOfWork _unitOfWork;
+    public ProvisionIotDeviceCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+
+    public async Task<CommonResponse<IotDeviceProvisionResultDto>> Handle(ProvisionIotDeviceCommand request, CancellationToken ct)
+    {
+        var device = await _unitOfWork.IotDevices.GetAllAsync()
+            .Include(d => d.TargetFirmwareRelease)
+            .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
+        if (device is null)
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+
+        if (!string.Equals(device.DeviceCode, request.DeviceCode, StringComparison.Ordinal))
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 403, Message = "DeviceCode không khớp với API key." };
+
+        // 409: state conflict — device đang ở trạng thái không cho phép provision.
+        if (device.Status == IotDeviceStatusEnum.Disabled || device.Status == IotDeviceStatusEnum.Decommissioned)
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 409, Message = "Device đang ở trạng thái Disabled/Decommissioned, không thể provision." };
+
+        var now = DateTime.UtcNow;
+        var skew = Math.Abs((request.DeviceTimestamp.ToUniversalTime() - now).TotalSeconds);
+        if (skew > ClockSkewWarnThresholdSeconds)
+        {
+            // 422: format đúng nhưng vi phạm business rule (clock skew).
+            return new CommonResponse<IotDeviceProvisionResultDto>
+            {
+                IsSuccess = false,
+                StatusCode = 422,
+                Message = $"Clock skew {skew:F0}s vượt ngưỡng {ClockSkewWarnThresholdSeconds}s. Đồng bộ NTP trước khi provision."
+            };
+        }
+
+        device.CurrentFirmwareVersion = request.FirmwareVersion.Trim();
+        if (!string.IsNullOrWhiteSpace(request.HardwareRevision))
+            device.HardwareRevision = request.HardwareRevision.Trim();
+        device.Status = IotDeviceStatusEnum.Active;
+        device.LastProvisionedAt = now;
+        device.LastSeenAt = now;
+        device.LastClockSkewSeconds = skew;
+
+        _unitOfWork.IotDevices.UpdateAsync(device);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return new CommonResponse<IotDeviceProvisionResultDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Provision thành công.",
+            Data = new IotDeviceProvisionResultDto
+            {
+                DeviceId = device.Id.ToString(),
+                DeviceCode = device.DeviceCode,
+                SiteId = device.SiteId.ToString(),
+                HeartbeatIntervalSeconds = device.HeartbeatIntervalSeconds,
+                ApiKeyScopes = device.ApiKeyScopes,
+                TargetFirmwareVersion = device.TargetFirmwareRelease?.Version
+            }
+        };
+    }
+}
+
+/// <summary>
+/// Sprint IoT-1 (#245, #247) — heartbeat tick: insert heartbeat hypertable row, update LastSeenAt,
+/// nếu vừa từ Offline trở lại → set Active. Trả ack có server time + skew.
+/// </summary>
+public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbeatCommand, CommonResponse<IotHeartbeatAckDto>>
+{
+    private const double ClockSkewWarnThresholdSeconds = 300;
+
+    private readonly IBatteryUnitOfWork _unitOfWork;
+    public IotDeviceHeartbeatCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+
+    public async Task<CommonResponse<IotHeartbeatAckDto>> Handle(IotDeviceHeartbeatCommand request, CancellationToken ct)
+    {
+        var device = await _unitOfWork.IotDevices.GetAllAsync()
+            .Include(d => d.TargetFirmwareRelease)
+            .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
+        if (device is null)
+            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+
+        // 409: state conflict — device hiện không cho phép heartbeat.
+        if (device.ApiKeyRevokedAt.HasValue || device.Status == IotDeviceStatusEnum.Disabled || device.Status == IotDeviceStatusEnum.Decommissioned)
+            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 409, Message = "Device đang ở trạng thái Disabled/Decommissioned hoặc API key đã bị revoke." };
+
+        var now = DateTime.UtcNow;
+        var deviceTs = request.DeviceTimestamp.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(request.DeviceTimestamp, DateTimeKind.Utc)
+            : request.DeviceTimestamp.ToUniversalTime();
+        var skew = (deviceTs - now).TotalSeconds;
+
+        var heartbeat = new HeartbeatEntity
+        {
+            Time = now,
+            IotDeviceId = device.Id,
+            FirmwareVersion = request.FirmwareVersion?.Trim(),
+            RssiDbm = request.RssiDbm,
+            FreeMemoryPercent = request.FreeMemoryPercent,
+            UptimeSeconds = request.UptimeSeconds,
+            QueuedReadingCount = request.QueuedReadingCount,
+            DeviceTimestamp = deviceTs,
+            ClockSkewSeconds = skew
+        };
+        await _unitOfWork.IotDeviceHeartbeats.AddAsync(heartbeat);
+
+        device.LastSeenAt = now;
+        device.LastClockSkewSeconds = skew;
+        if (!string.IsNullOrWhiteSpace(request.FirmwareVersion))
+            device.CurrentFirmwareVersion = request.FirmwareVersion.Trim();
+        if (device.Status == IotDeviceStatusEnum.Offline || device.Status == IotDeviceStatusEnum.Pending)
+            device.Status = IotDeviceStatusEnum.Active;
+
+        _unitOfWork.IotDevices.UpdateAsync(device);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        bool fwAvailable = device.TargetFirmwareRelease is not null
+                           && !string.Equals(device.TargetFirmwareRelease.Version, device.CurrentFirmwareVersion, StringComparison.Ordinal);
+
+        return new CommonResponse<IotHeartbeatAckDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Data = new IotHeartbeatAckDto
+            {
+                ServerTime = now,
+                ClockSkewSeconds = skew,
+                ClockSkewWarning = Math.Abs(skew) > ClockSkewWarnThresholdSeconds,
+                NextHeartbeatInSeconds = device.HeartbeatIntervalSeconds,
+                FirmwareUpdateAvailable = fwAvailable
+            }
+        };
+    }
+}
+
+public class CheckIotFirmwareUpdateQueryHandler : IRequestHandler<CheckIotFirmwareUpdateQuery, CommonResponse<IotFirmwareCheckDto>>
+{
+    private readonly IBatteryUnitOfWork _unitOfWork;
+    public CheckIotFirmwareUpdateQueryHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+
+    public async Task<CommonResponse<IotFirmwareCheckDto>> Handle(CheckIotFirmwareUpdateQuery request, CancellationToken ct)
+    {
+        var device = await _unitOfWork.IotDevices.GetAllAsync()
+            .Include(d => d.TargetFirmwareRelease)
+            .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
+        if (device is null)
+            return new CommonResponse<IotFirmwareCheckDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+
+        var target = device.TargetFirmwareRelease;
+        if (target is null || target.IsArchived || !target.IsPublished
+            || string.Equals(target.Version, request.CurrentVersion, StringComparison.Ordinal))
+        {
+            return new CommonResponse<IotFirmwareCheckDto>
+            {
+                IsSuccess = true,
+                StatusCode = 200,
+                Data = new IotFirmwareCheckDto { UpdateAvailable = false }
+            };
+        }
+
+        // Tạo update log Pending.
+        var log = new UpdateLogEntity
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            IotFirmwareReleaseId = target.Id,
+            FromVersion = request.CurrentVersion,
+            ToVersion = target.Version,
+            Status = IotFirmwareUpdateStatusEnum.Pending,
+            StartedAt = DateTime.UtcNow
+        };
+        await _unitOfWork.IotFirmwareUpdateLogs.AddAsync(log);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return new CommonResponse<IotFirmwareCheckDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Data = new IotFirmwareCheckDto
+            {
+                UpdateAvailable = true,
+                TargetVersion = target.Version,
+                ArtifactUrl = target.ArtifactUrl,
+                Sha256Checksum = target.Sha256Checksum,
+                ArtifactSizeBytes = target.ArtifactSizeBytes,
+                UpdateLogId = log.Id.ToString(),
+                ReleaseNotes = target.ReleaseNotes
+            }
+        };
+    }
+}
+
+public class UpdateIotFirmwareUpdateLogCommandHandler : IRequestHandler<UpdateIotFirmwareUpdateLogCommand, CommonResponse<object>>
+{
+    private readonly IBatteryUnitOfWork _unitOfWork;
+    public UpdateIotFirmwareUpdateLogCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+
+    public async Task<CommonResponse<object>> Handle(UpdateIotFirmwareUpdateLogCommand request, CancellationToken ct)
+    {
+        var log = await _unitOfWork.IotFirmwareUpdateLogs.GetAllAsync()
+            .FirstOrDefaultAsync(l => l.Id == request.LogId && l.IotDeviceId == request.DeviceId && !l.IsDeleted, ct);
+        if (log is null)
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Update log không tồn tại." };
+
+        log.Status = request.Status;
+        if (request.BytesDownloaded.HasValue)
+            log.BytesDownloaded = request.BytesDownloaded;
+        if (!string.IsNullOrWhiteSpace(request.FailureReason))
+            log.FailureReason = request.FailureReason.Trim();
+        if (request.Status == IotFirmwareUpdateStatusEnum.Success
+            || request.Status == IotFirmwareUpdateStatusEnum.Failed
+            || request.Status == IotFirmwareUpdateStatusEnum.Skipped)
+        {
+            log.CompletedAt = DateTime.UtcNow;
+
+            if (request.Status == IotFirmwareUpdateStatusEnum.Success)
+            {
+                var device = await _unitOfWork.IotDevices.GetAllAsync()
+                    .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
+                if (device is not null)
+                {
+                    device.CurrentFirmwareVersion = log.ToVersion;
+                    _unitOfWork.IotDevices.UpdateAsync(device);
+                }
+            }
+        }
+
+        _unitOfWork.IotFirmwareUpdateLogs.UpdateAsync(log);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã cập nhật log." };
+    }
+}

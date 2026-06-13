@@ -57,13 +57,15 @@ public class AccountsController : ControllerBase
     /// <param name="command">Mật khẩu hiện tại, mật khẩu mới và xác nhận mật khẩu.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Kết quả đổi mật khẩu.</returns>
-    /// <response code="200">Đổi mật khẩu thành công.</response>
-    /// <response code="400">Dữ liệu không hợp lệ hoặc mật khẩu hiện tại không đúng theo logic handler.</response>
-    /// <response code="401">Chưa đăng nhập hoặc JWT không có AccountId hợp lệ.</response>
+    /// <response code="200">Đổi mật khẩu thành công. Toàn bộ session/refresh token đã bị revoke, client cần đăng nhập lại.</response>
+    /// <response code="400">Validation lỗi (NewPassword không đạt độ phức tạp, ConfirmPassword không khớp) HOẶC mật khẩu hiện tại không đúng. Đây là input error của user đã authenticated, KHÔNG phải auth fail.</response>
+    /// <response code="401">Chưa đăng nhập hoặc JWT không có AccountId hợp lệ (middleware-level).</response>
+    /// <response code="404">Không tìm thấy account (AccountId từ JWT không match record nào).</response>
     [HttpPatch("me/password")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangeMyPassword([FromBody] ChangePasswordCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -138,13 +140,21 @@ public class AccountsController : ControllerBase
     /// <param name="command">OTP xác minh số điện thoại.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Thông báo kết quả xác minh số điện thoại.</returns>
-    /// <response code="200">Xác minh số điện thoại thành công.</response>
-    /// <response code="400">OTP không đúng định dạng, sai, hết hạn hoặc không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="200">Xác minh số điện thoại thành công. <c>PhoneConfirmed</c> được set <c>true</c>.</response>
+    /// <response code="400">OTP sai định dạng (validation: phải đủ 6 chữ số).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC OTP không chính xác (sai giá trị OTP user nhập).</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Số điện thoại đã được xác thực trước đó (state conflict).</response>
+    /// <response code="422">OTP hết hạn, OTP không phải dành cho mục đích xác minh phone, hoặc account chưa có OTP nào được gửi (business rule violation).</response>
+    /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
     [HttpPost("me/verify-phone-otp")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status423Locked)]
     public async Task<IActionResult> VerifyPhoneOtp([FromBody] VerifyPhoneOtpCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();

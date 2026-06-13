@@ -58,7 +58,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// </remarks>
     /// <param name="cmd">Thông tin incident.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Report thành công, trả id incident.</response>
+    /// <response code="201">Report thành công, trả id incident mới tạo.</response>
+    /// <response code="200">Đã có incident active đang mở — trả về incident cũ thay vì tạo mới (dedup).</response>
     /// <response code="400">Site không tồn tại hoặc payload thiếu field.</response>
     /// <response code="401">Thiếu ApiKey.</response>
     /// <response code="403">ApiKey không có scope <c>EnvironmentalIngest</c>.</response>

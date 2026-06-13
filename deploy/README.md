@@ -314,3 +314,77 @@ ASP.NET dùng `__` thay `:` trong env var (chuẩn Microsoft):
 - `ConnectionStrings__FileStorageDb` ↔ `ConnectionStrings:FileStorageDb`
 - `ConnectionStrings__BatteryDb` ↔ `ConnectionStrings:BatteryDb`
 - `JwtSettings__SecretKey` ↔ `JwtSettings:SecretKey`
+- `Iot__OfflineAfterSeconds` ↔ `Iot:OfflineAfterSeconds` (Sprint IoT-1 #248)
+- `Mqtt__Host` / `Mqtt__Password` ↔ `Mqtt:*` (Sprint IoT-1 #253)
+
+## Sprint IoT-1 — Mosquitto MQTT broker (P3 optional)
+
+Chart không enable Mosquitto mặc định. Khi muốn bật trong K8s:
+
+### 1. Tạo Secret password (sinh hash bằng mosquitto_passwd)
+
+```bash
+# Trên local hoặc bastion có docker.
+PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+docker run --rm -v "$PWD:/c" eclipse-mosquitto:2.0 \
+  mosquitto_passwd -c -b /c/passwd backend-bridge "$PASSWORD"
+
+kubectl create secret generic solar-mqtt-passwd \
+  --namespace solar-staging \
+  --from-file=passwd=./passwd
+echo "Plaintext password (paste vào Mqtt__Password Secret): $PASSWORD"
+rm passwd
+```
+
+### 2. Tạo Secret TLS (nếu mosquitto.tls.enabled=true)
+
+```bash
+# Dùng cert-manager hoặc copy Let's Encrypt cert.
+kubectl create secret generic solar-mqtt-tls \
+  --namespace solar-staging \
+  --from-file=ca.crt=./fullchain.pem \
+  --from-file=server.crt=./cert.pem \
+  --from-file=server.key=./privkey.pem
+```
+
+### 3. Inject `Mqtt__Password` vào Secret solar-secrets
+
+```bash
+kubectl patch secret solar-secrets \
+  --namespace solar-staging \
+  --type=json \
+  -p='[{"op":"add","path":"/data/Mqtt__Password","value":"'$(echo -n "$PASSWORD" | base64)'"}]'
+```
+
+### 4. Bật Mosquitto + MQTT bridge
+
+`values-staging.yaml` (hoặc override `--set`):
+```yaml
+mosquitto:
+  enabled: true
+  tls:
+    enabled: true
+config:
+  Mqtt__Enabled: "true"
+```
+
+### 5. Apply
+
+```bash
+helm upgrade solar deploy/helm/solar-battery \
+  --namespace solar-staging \
+  -f deploy/helm/solar-battery/values-staging.yaml
+```
+
+### Verify
+
+```bash
+kubectl logs -n solar-staging deploy/mosquitto --tail=30
+# Phải thấy: "Opening MQTT listener on port 1883"
+
+kubectl logs -n solar-staging deploy/batteryservice --tail=30 | grep -i mqtt
+# Phải thấy: "MQTT bridge connected to mosquitto:8883"
+```
+
+### Bootstrap cho local docker compose
+Xem `infra/mqtt/README.md` + script `infra/mqtt/bootstrap.sh` (sinh passwd qua container).

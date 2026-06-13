@@ -83,7 +83,8 @@ public class SitesController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
-    /// - Parse <c>UserId</c> từ token; nếu không hợp lệ trả 401.
+    /// - <c>[Authorize]</c> middleware đảm bảo token hợp lệ trước khi vào handler (sai/hết hạn → 401 do middleware trả).
+    /// - Parse <c>UserId</c> từ <c>CurrentUserService</c> (claim được issue bởi AuthService).
     /// - Filter <c>CustomerId == currentUserId &amp;&amp; !IsDeleted</c>.
     /// - Tương tự GetAll, trả các count thống kê asset trong DTO.
     /// </remarks>
@@ -91,13 +92,15 @@ public class SitesController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="SiteDto"/>.</returns>
     /// <response code="200">Trả danh sách (có thể rỗng).</response>
-    /// <response code="401">Token không hợp lệ hoặc không có claim UserId.</response>
+    /// <response code="401">Chưa đăng nhập / token thiếu / token hết hạn (do middleware trả).</response>
     /// <response code="403">Không có role Customer.</response>
+    /// <response code="500">Lỗi server: <c>CurrentUserService.UserId</c> không parse được sang Guid — đây là vấn đề data integrity của JWT (claim bị thiếu hoặc malformed do AuthService cấp sai), KHÔNG phải client error.</response>
     [HttpGet("me")]
     [Authorize(Roles = "Customer")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetMine([FromQuery] GetMySitesQuery query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);

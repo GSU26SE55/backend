@@ -30,4 +30,11 @@ public interface IBatteryUnitOfWork : IUnitOfWork
 
     // Sprint 5B B1 (#152) — Noise suppression hypertable.
     IGenericRepository<NoiseBreachEvent> NoiseBreachEvents { get; }
+
+    // Sprint IoT-1 (#242) — IoT device management.
+    IGenericRepository<IotDevice> IotDevices { get; }
+    IGenericRepository<IotDeviceHeartbeat> IotDeviceHeartbeats { get; }
+    IGenericRepository<IotDeviceCalibration> IotDeviceCalibrations { get; }
+    IGenericRepository<IotFirmwareRelease> IotFirmwareReleases { get; }
+    IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; }
 }

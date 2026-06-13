@@ -142,6 +142,123 @@ groups:
           description: "Quartz timer drift hoặc consumer crash. Runbook: docs/runbooks/09-saga-stuck.md"
 
   # =====================================================================
+  # Sprint IoT-1 — IoT edge device fleet (§52, #248)
+  # =====================================================================
+  - name: iot-device-fleet
+    interval: 30s
+    rules:
+      # 13. IoT device offline spike — > 3 device chuyển sang Offline trong 5 phút.
+      # Có thể: WiFi outage tại 1 site, broker MQTT down, NTP server lost,
+      # firmware mới gây crash, hoặc backend overload từ chối heartbeat.
+      - alert: IotDeviceOfflineSpike
+        expr: increase(iot_devices_marked_offline_total[5m]) > 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} IoT device(s) chuyển sang Offline trong 5 phút"
+          description: "Kiểm tra: WiFi/network tại site, MQTT broker status, batteryservice heartbeat handler."
+
+      # 14. IoT heartbeat ingestion stall — không nhận heartbeat nào > 5 phút khi fleet active.
+      # Tránh fire khi chưa deploy device (predicate `iot_devices_active_count > 0`).
+      - alert: IotHeartbeatStall
+        expr: |
+          rate(iot_device_heartbeats_received_total[5m]) == 0
+          and on() iot_devices_active_count > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Không nhận heartbeat IoT > 5 phút (fleet đang active {{ $value }} device)"
+          description: "Có thể: gateway down, route /api/iot-devices/heartbeat lỗi, hoặc fleet mất kết nối toàn bộ."
+
+      # 15. Sensor outlier reject rate spike — > 10% reading bị loại trong 10 phút.
+      # Khả năng: BMS lỗi sensor, calibration sai (Scale/Offset), noise hardware nặng.
+      - alert: IotSensorOutlierSpike
+        expr: |
+          (
+            sum(rate(sensor_readings_rejected_outlier_total[10m]))
+            /
+            (sum(rate(sensor_readings_inserted_total[10m]))
+             + sum(rate(sensor_readings_rejected_outlier_total[10m])))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outlier reject rate {{ $value | humanizePercentage }} > 10%"
+          description: "Kiểm tra calibration profile (iot_device_calibrations) hoặc raw BMS reading."
+
+      # 16. Clock drift fleet-wide — > 50% device có skew > 60s.
+      # NTP outage thường gây drift đồng loạt cả fleet.
+      - alert: IotClockDriftFleetWide
+        expr: |
+          (
+            sum(iot_devices_clock_skew_high_count)
+            /
+            sum(iot_devices_active_count)
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} fleet bị clock drift > 60s"
+          description: "Kiểm tra NTP server (pool.ntp.org / time.google.com) — drift đồng loạt thường do NTP outage."
+
+      # 17. Firmware update failure rate — > 30% attempt trả Failed trong 1 giờ.
+      # Bản firmware mới có thể có bug.
+      - alert: IotFirmwareUpdateFailureSpike
+        expr: |
+          (
+            sum(increase(iot_firmware_update_status_total{status="Failed"}[1h]))
+            /
+            sum(increase(iot_firmware_update_status_total[1h]))
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Firmware update fail rate {{ $value | humanizePercentage }} trong 1h"
+          description: "Cân nhắc archive bản qua POST /api/admin/iot-firmware-releases/{id}/archive."
+
+  # =====================================================================
+  # Sprint IoT-1 #253 — MQTT bridge + broker (P3 optional)
+  # Chỉ fire khi Mqtt__Enabled=true. Bridge tự log + idle nếu disabled.
+  # =====================================================================
+  - name: iot-mqtt-bridge
+    interval: 30s
+    rules:
+      # 18. MQTT bridge disconnected — > 2 phút mất kết nối broker.
+      - alert: MqttBridgeDisconnected
+        expr: mqtt_bridge_connected == 0 and on() mqtt_bridge_enabled == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MQTT bridge mất kết nối tới broker > 2 phút"
+          description: "Kiểm tra: container solar-mosquitto, Mqtt__Password, cert TLS, ACL config. Bridge tự reconnect mỗi Mqtt__ReconnectIntervalSeconds (default 5s)."
+
+      # 19. Mosquitto broker down.
+      - alert: MqttBrokerDown
+        expr: up{component="mosquitto"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mosquitto MQTT broker không reachable"
+          description: "Container solar-mosquitto có thể đã crash. Check `docker logs solar-mosquitto`."
+
+      # 20. MQTT subscriber lag — backlog topic telemetry > 1000.
+      - alert: MqttSubscriberLag
+        expr: mqtt_subscriber_queue_depth{topic=~"telemetry/.*"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MQTT topic {{ $labels.topic }} backlog {{ $value }} messages"
+          description: "Bridge dispatch chậm → batteryservice ingest handler nghẽn. Tăng MessageBus__PrefetchCount hoặc scale batteryservice."
+
+  # =====================================================================
   # Infrastructure
   # =====================================================================
   - name: infrastructure

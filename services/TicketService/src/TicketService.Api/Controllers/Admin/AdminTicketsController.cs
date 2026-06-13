@@ -237,16 +237,28 @@ public class AdminTicketsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Phân loại ticket nghiêm trọng/diện rộng để có quy trình xử lý ưu tiên.
+    ///
+    /// Cách hoạt động:
+    /// - Set <c>IsIncident = true</c> cho ticket.
+    /// - Ghi <c>TicketActivity</c> log lại hành động này (kèm UserId của Manager/Admin).
+    ///
+    /// Idempotency:
+    /// - Không thể declare incident hai lần — nếu ticket đã là incident, trả 409.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="command">Thông tin sự cố (Mô tả).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Đánh dấu thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Manager/Admin.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
+    /// <response code="409">Ticket đã được đánh dấu là incident từ trước (state conflict — không thể declare lại).</response>
     [HttpPost("{id}/declare-incident")]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeclareIncident(Guid id, [FromBody] TicketDeclareIncidentCommand command, CancellationToken ct)
     {
         command.TicketId = id;

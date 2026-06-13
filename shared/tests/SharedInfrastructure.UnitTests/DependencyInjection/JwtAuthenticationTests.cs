@@ -180,6 +180,8 @@ public class JwtAuthenticationTests
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
-        doc.RootElement.GetProperty("message").GetString().Should().Contain("not allowed");
+        // Handler trả Vietnamese localized + data.errorCode = "FORBIDDEN" (xem AddJWTAuthenticationAuthorization.cs).
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Bạn không có quyền truy cập tài nguyên này.");
+        doc.RootElement.GetProperty("data").GetProperty("errorCode").GetString().Should().Be("FORBIDDEN");
     }
 }

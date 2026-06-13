@@ -72,9 +72,28 @@ public class MaintenanceLogsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Dành cho Staff ghi lại quá trình sửa chữa, bảo trì thiết bị.
+    ///
+    /// Cách hoạt động:
+    /// - Staff phải đang assigned vào ticket.
+    /// - Ticket phải đang ở trạng thái có thể thêm log (KHÔNG phải <c>PendingApproval</c>/<c>Resolved</c>/<c>Closed</c>).
+    /// - Nếu <c>CompletedAt = null</c> (log đang mở), ticket KHÔNG được có log nào khác đang mở — phải đóng log cũ trước.
     /// </remarks>
+    /// <param name="ticketId">Id của ticket.</param>
+    /// <param name="command">Nội dung nhật ký bảo trì (LogType, Description, …).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Tạo log thành công, trả về <c>MaintenanceLogId</c>.</response>
+    /// <response code="400">Validation lỗi field (Description rỗng, LogType không hợp lệ…).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Ticket đã ở trạng thái không cho phép thêm log (chờ phê duyệt / đã hoàn thành) — Staff không có quyền tác động.</response>
+    /// <response code="404">Không tìm thấy Ticket.</response>
+    /// <response code="409">Đã có một nhật ký bảo trì khác chưa hoàn thành cho ticket này (state conflict — phải đóng log cũ trước khi mở log mới).</response>
     [HttpPost("tickets/{ticketId:guid}/maintenance-logs")]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddLog(Guid ticketId, [FromBody] MaintenanceLogAddCommand command, CancellationToken ct)
     {
         command.TicketId = ticketId;

@@ -123,3 +123,16 @@ scrape_configs:
         labels:
           tier: infrastructure
           component: minio
+
+  # ---------- Sprint IoT-1 #253 — Mosquitto MQTT broker exporter ----------
+  # Cần container `mosquitto-exporter` (sapcc/mosquitto-exporter) connect tới Mosquitto $SYS topics.
+  # Hiện tại job khai báo trước để Prometheus không phàn nàn khi rule iot-mqtt-bridge fire.
+  # Khi triển khai thật, thêm service `mosquitto-exporter:9234` vào docker-compose.
+  - job_name: mosquitto
+    static_configs:
+      - targets: ["mosquitto-exporter:9234"]
+        labels:
+          tier: infrastructure
+          component: mosquitto
+    # Mosquitto exporter optional → cho phép down mà không spam alert ServiceDown.
+    # ServiceDown chỉ filter tier=backend|gateway → mosquitto không trigger.

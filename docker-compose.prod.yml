@@ -28,6 +28,9 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  # Sprint IoT-1 #253 — Mosquitto persistence (retained messages, queued for offline subs).
+  mosquitto-data:
+  mosquitto-log:
 
 services:
 
@@ -289,6 +292,20 @@ services:
       # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
+      # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-60}
+      Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
+      Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
+      # Sprint IoT-1 #253 — MQTT bridge (P3 optional). Production yêu cầu Mqtt__Password thực + cert CA tin cậy.
+      Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      Mqtt__Host: ${Mqtt__Host:-mosquitto}
+      Mqtt__Port: ${Mqtt__Port:-8883}
+      Mqtt__UseTls: ${Mqtt__UseTls:-true}
+      Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-false}
+      Mqtt__Username: ${Mqtt__Username:-backend-bridge}
+      Mqtt__Password: ${Mqtt__Password}
+      Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
+      Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
     ports:
       - "4006:8080"
     depends_on:
@@ -300,6 +317,34 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # ---------- Sprint IoT-1 #253 — Mosquitto MQTT broker (P3 optional) ----------
+  # Production: bind mount config + certs từ /opt/solar/mqtt/.
+  # Yêu cầu trước khi `docker compose up`:
+  #   1. Đẩy infra/mqtt/mosquitto.conf + acl.conf lên /opt/solar/mqtt/config/.
+  #   2. Generate passwd: mosquitto_passwd -c /opt/solar/mqtt/config/passwd backend-bridge "$(openssl rand -base64 32)".
+  #   3. Cấp cert (Let's Encrypt khuyến nghị): ca.crt, server.crt, server.key vào /opt/solar/mqtt/certs/.
+  #   4. Set Mqtt__Password trong /opt/solar/.env.prod khớp với passwd ở (2).
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: solar-mosquitto
+    mem_limit: 256m
+    cpus: "0.30"
+    volumes:
+      - /opt/solar/mqtt/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - /opt/solar/mqtt/config/acl.conf:/mosquitto/config/acl.conf:ro
+      - /opt/solar/mqtt/config/passwd:/mosquitto/config/passwd:ro
+      - /opt/solar/mqtt/certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    ports:
+      # Plain 1883 KHÔNG expose ra public — chỉ internal docker network.
+      # Nếu cần debug local trên VPS, dùng `docker exec -it solar-mosquitto mosquitto_sub ...`.
+      - "127.0.0.1:1883:1883"
+      # TLS 8883 expose ra ngoài cho ESP32 connect.
+      - "8883:8883"
     networks: [solar-net]
     restart: unless-stopped
 

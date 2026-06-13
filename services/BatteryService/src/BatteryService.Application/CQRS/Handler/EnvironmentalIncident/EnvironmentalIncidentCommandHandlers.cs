@@ -104,7 +104,7 @@ public class ReportEnvironmentalIncidentCommandHandler
         return new EnvironmentalIncidentResponse
         {
             IsSuccess = true,
-            StatusCode = 200,
+            StatusCode = 201,
             Data = Map(incident)
         };
     }

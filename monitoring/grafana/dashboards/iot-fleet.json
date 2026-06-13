@@ -1,0 +1,160 @@
+{
+  "uid": "solar-iot-fleet",
+  "title": "Sprint IoT-1 — Fleet & MQTT",
+  "tags": ["solar-battery", "iot", "sprint-iot-1"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"] },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Devices — Active",
+      "id": 1,
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(iot_devices_active_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Devices — Offline",
+      "id": 2,
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(iot_devices_offline_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Heartbeats/sec (5m avg)",
+      "id": 3,
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(iot_device_heartbeats_received_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "type": "stat",
+      "title": "Sensor Inserts/sec",
+      "id": 4,
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(sensor_readings_inserted_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Device offline events (cumulative 5m)",
+      "id": 10,
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "increase(iot_devices_marked_offline_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "marked offline" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 50 },
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 3 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sensor outlier reject rate",
+      "id": 11,
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(sensor_readings_rejected_outlier_total[10m])) / (sum(rate(sensor_readings_inserted_total[10m])) + sum(rate(sensor_readings_rejected_outlier_total[10m])))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "reject %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.1 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Firmware update status (1h cumulative)",
+      "id": 12,
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum by (status) (increase(iot_firmware_update_status_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Clock skew distribution (fleet avg seconds)",
+      "id": 13,
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "avg(iot_device_clock_skew_seconds)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "avg" },
+        { "expr": "max(iot_device_clock_skew_seconds)", "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "max" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "stat",
+      "title": "MQTT Bridge connected",
+      "id": 20,
+      "gridPos": { "x": 0, "y": 20, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "mqtt_bridge_connected", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DISCONNECTED", "color": "red" }, "1": { "text": "CONNECTED", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "MQTT subscriber queue depth",
+      "id": 21,
+      "gridPos": { "x": 6, "y": 20, "w": 18, "h": 4 },
+      "targets": [
+        { "expr": "mqtt_subscriber_queue_depth", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{topic}}" }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Mosquitto broker logs",
+      "id": 30,
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "{container=\"solar-mosquitto\"}", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "BatteryService IoT logs",
+      "id": 31,
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "{container=\"solar-batteryservice\"} |~ \"(?i)(IotDevice|iot-devices|mqtt|firmware-check|provision)\"", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+      ]
+    }
+  ]
+}

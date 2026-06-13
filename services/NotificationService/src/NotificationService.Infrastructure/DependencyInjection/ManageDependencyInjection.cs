@@ -18,9 +18,9 @@ public static class ManageDependencyInjection
         services.AddScopedInterface();
         services.AddSharedInfrastructure(configuration, "NotificationService.Application", "Notification Service API");
 
-        // MassTransit consumers sẽ được thêm ở Sprint 6 (15 consumers). Hiện tại chỉ
-        // wire bus để có thể publish event nếu cần (không có consumer assembly).
-        services.AddMessageBus(configuration);
+        // MassTransit consumers — Sprint IoT-1 (#249) đăng ký consumer assembly để consume
+        // IotDeviceWentOfflineEvent (và sẵn sàng cho các consumer Sprint 6 khác trong cùng assembly).
+        services.AddMessageBus(configuration, typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly);
 
         services.AddScoped<NotificationDataSeeder>();
 

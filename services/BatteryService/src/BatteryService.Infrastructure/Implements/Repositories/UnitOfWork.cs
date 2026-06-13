@@ -43,6 +43,13 @@ public class UnitOfWork : IBatteryUnitOfWork
     // Sprint 5B B1 (#152) — Noise breach hypertable.
     public IGenericRepository<NoiseBreachEvent> NoiseBreachEvents => new GenericRepository<NoiseBreachEvent>(_context);
 
+    // Sprint IoT-1 (#242) — IoT device management.
+    public IGenericRepository<IotDevice> IotDevices => new GenericRepository<IotDevice>(_context);
+    public IGenericRepository<IotDeviceHeartbeat> IotDeviceHeartbeats => new GenericRepository<IotDeviceHeartbeat>(_context);
+    public IGenericRepository<IotDeviceCalibration> IotDeviceCalibrations => new GenericRepository<IotDeviceCalibration>(_context);
+    public IGenericRepository<IotFirmwareRelease> IotFirmwareReleases => new GenericRepository<IotFirmwareRelease>(_context);
+    public IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs => new GenericRepository<IotFirmwareUpdateLog>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

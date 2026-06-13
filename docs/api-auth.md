@@ -265,6 +265,21 @@ Base route: `/api/auth`
 
 **Phân biệt với password lockout:** Khi sai mật khẩu login 5 lần, `account.Status` bị set `Locked` — trường hợp đó Admin mới cần dùng `POST /api/admin/accounts/{id}/unlock`. OTP lockout ở endpoint này chỉ dùng `LockoutEndAt`, không set `Status = Locked`.
 
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | Validation: email sai định dạng hoặc OTP không đúng 6 chữ số |
+| `401` | OTP đã hết hạn HOẶC OTP sai giá trị (vẫn coi là credential invalid) |
+| `404` | Account không tồn tại |
+| `409` | Account đã verified hoặc không ở trạng thái `PendingVerification` |
+| `422` | OTP không phải dành cho mục đích đăng ký (purpose mismatch — business rule). Ví dụ: user gửi OTP reset password đến endpoint verify-otp này |
+| `423` | Lockout 15 phút do sai OTP ≥ 5 lần (dựa trên `LockoutEndAt`, không set `Status = Locked`) |
+
+**Phân biệt `401` vs `422`:**
+- `401` — OTP **sai giá trị** hoặc **hết hạn**: vẫn cùng mục đích Register nhưng credential không hợp lệ.
+- `422` — OTP **đúng giá trị** nhưng `OtpPurpose` không phải `Register` (ví dụ OTP được tạo cho luồng reset password, change-email, hoặc verify-phone). Đây là vi phạm business rule về purpose, không phải lỗi credential.
+
 ---
 
 ### `POST /api/auth/resend-otp`
@@ -510,9 +525,19 @@ Header: `Authorization: Bearer {accessToken}`
 | `newPassword` | `string` | Bắt buộc | 8–100 ký tự, có chữ hoa/thường/số/ký tự đặc biệt | Mật khẩu mới |
 | `confirmPassword` | `string` | Bắt buộc | Phải trùng với `newPassword` | Xác nhận mật khẩu mới |
 
-**Response thành công `200`:** `isSuccess = true`.
+**Response thành công `200`:** `isSuccess = true`. Toàn bộ refresh token bị revoke, user cần đăng nhập lại.
 
 **Lưu ý bảo mật:** Rule mật khẩu mới đồng bộ với register/reset/accept-invite. Khi đổi mật khẩu thành công, tất cả refresh token của account bị revoke. Access token hiện tại vẫn valid đến khi hết hạn; FE phải clear token và redirect về login sau khi nhận response thành công.
+
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | Validation lỗi (`NewPassword` không đạt độ phức tạp, `ConfirmPassword` không khớp) HOẶC `currentPassword` không đúng |
+| `401` | Chỉ khi JWT thiếu/sai `AccountId` (auth middleware-level fail) |
+| `404` | Account không tồn tại |
+
+**Phân biệt `400` vs `401`:** `currentPassword` sai trả `400`, KHÔNG phải `401`. Đây là input error của một user đã authenticated (JWT hợp lệ) — coi như validation business rule, không phải auth fail. `401` được dành riêng cho trường hợp JWT thiếu/sai do auth middleware xử lý trước khi handler được gọi.
 
 ---
 
@@ -585,6 +610,21 @@ Header: `Authorization: Bearer {accessToken}`
 | `otp` | `string` | Bắt buộc | OTP 6 chữ số nhận qua SMS |
 
 **Response thành công `200`:** `isSuccess = true`, `phoneConfirmed = true`.
+
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | Validation: OTP sai định dạng (không đúng 6 chữ số) |
+| `401` | Chưa đăng nhập (JWT thiếu/sai) HOẶC OTP sai giá trị (credential invalid) |
+| `404` | Không tìm thấy account |
+| `409` | Số điện thoại đã được xác thực trước đó (`phoneConfirmed = true`) |
+| `422` | OTP không phải dành cho mục đích `PhoneVerify`, HOẶC OTP đã hết hạn, HOẶC account chưa được gửi OTP nào (state/business rule violation) |
+| `423` | Lockout do sai OTP quá số lần cho phép |
+
+**Phân biệt `401` vs `422`:**
+- `401` — OTP **sai giá trị** (credential invalid), cùng cơ chế với password mismatch.
+- `422` — Vi phạm state/business rule: OTP đúng giá trị nhưng `OtpPurpose != PhoneVerify`, hoặc OTP đã hết hạn, hoặc account chưa từng request gửi OTP. Đây là vi phạm trạng thái, không phải credential sai.
 
 ---
 

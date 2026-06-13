@@ -154,15 +154,19 @@ public class AuthController : ControllerBase
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns><see cref="CommonResponse{T}"/> thông báo kết quả xác thực.</returns>
     /// <response code="200">Verify thành công. Tài khoản đã kích hoạt, client tự gọi login để lấy token.</response>
-    /// <response code="400">OTP hết hạn / không phải dành cho register / đã verify.</response>
-    /// <response code="401">OTP sai (kèm số lần thử còn lại).</response>
+    /// <response code="400">Email/OTP sai định dạng (validation).</response>
+    /// <response code="401">OTP sai giá trị (kèm số lần thử còn lại).</response>
     /// <response code="404">Tài khoản không tồn tại.</response>
-    /// <response code="423">Bị khóa do sai OTP nhiều lần.</response>
+    /// <response code="409">Tài khoản đã được kích hoạt trước đó.</response>
+    /// <response code="422">OTP hết hạn HOẶC OTP không phải dành cho mục đích đăng ký (purpose mismatch — business rule violation, không phải auth fail).</response>
+    /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
     [HttpPost("verify-otp")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status423Locked)]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpCommand command, CancellationToken cancellationToken)
     {

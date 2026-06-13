@@ -97,6 +97,17 @@ public class NotificationDataSeeder
         Add(NotificationTypeEnum.AdminInvite, NotificationChannelEnum.Email, "vi-VN",
             "Lời mời tham gia hệ thống", "Bạn được {{inviter}} mời làm {{role}}. Bấm link để kích hoạt: {{activationLink}}");
 
+        // Sprint IoT-1 (#249) — IoT device offline.
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "vi-VN",
+            "Device offline: {{deviceCode}}",
+            "Device \"{{displayName}}\" tại site {{siteName}} mất heartbeat {{durationMinutes}} phút. Ảnh hưởng {{affectedBatteryCount}} pin.");
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.InApp, "vi-VN",
+            "IoT device offline: {{deviceCode}}",
+            "Last seen {{lastSeenAt}}. Kiểm tra nguồn điện / mạng cho device tại site {{siteName}}.");
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "en-US",
+            "Device offline: {{deviceCode}}",
+            "Device \"{{displayName}}\" at site {{siteName}} lost heartbeat for {{durationMinutes}} min. {{affectedBatteryCount}} battery affected.");
+
         // English fallbacks for high-priority types
         Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "en-US",
             "Ticket {{ticketCode}} assigned to you", "{{title}} — Priority {{priority}}");

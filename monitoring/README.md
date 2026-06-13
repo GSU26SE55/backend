@@ -199,3 +199,54 @@ Có thể import thêm các dashboard có sẵn (Grafana → Dashboards → New 
 - RabbitMQ Prometheus: ID **10991**
 - Node exporter Full: ID **1860**
 - cAdvisor: ID **14282**
+
+---
+
+## Sprint IoT-1 — IoT fleet observability (#248, #253)
+
+### Alert rules mới
+Group `iot-device-fleet` (rule 13-17):
+- `IotDeviceOfflineSpike` — > 3 device chuyển Offline trong 5 phút
+- `IotHeartbeatStall` — không heartbeat nào > 5 phút (critical)
+- `IotSensorOutlierSpike` — > 10% reading bị reject outlier
+- `IotClockDriftFleetWide` — > 50% fleet có skew cao (NTP outage)
+- `IotFirmwareUpdateFailureSpike` — > 30% OTA fail (rollback gấp)
+
+Group `iot-mqtt-bridge` (rule 18-20):
+- `MqttBridgeDisconnected` — bridge mất kết nối broker > 2 phút (critical)
+- `MqttBrokerDown` — Mosquitto exporter không up
+- `MqttSubscriberLag` — backlog telemetry/+ > 1000
+
+### Dashboard mới
+`monitoring/grafana/dashboards/iot-fleet.json` — Grafana auto-load. Panel:
+- Stat: Active / Offline / Heartbeats/sec / Sensor inserts/sec
+- Timeseries: device offline events, outlier reject rate, firmware status, clock skew
+- Stat: MQTT bridge connected status
+- Timeseries: MQTT subscriber queue depth
+- Logs: Mosquitto + BatteryService IoT-related log streams
+
+### Metrics required từ BatteryService (chưa implement Sprint IoT-1)
+Alert rules dùng các metric sau — cần Sprint IoT-2 wire prometheus-net counters:
+
+| Metric | Type | Label |
+|--------|------|-------|
+| `iot_devices_active_count` | gauge | — |
+| `iot_devices_offline_count` | gauge | — |
+| `iot_devices_marked_offline_total` | counter | — |
+| `iot_device_heartbeats_received_total` | counter | — |
+| `iot_device_clock_skew_seconds` | gauge | device_code |
+| `iot_devices_clock_skew_high_count` | gauge | — |
+| `sensor_readings_inserted_total` | counter | — |
+| `sensor_readings_rejected_outlier_total` | counter | — |
+| `iot_firmware_update_status_total` | counter | status |
+| `mqtt_bridge_connected` | gauge (0/1) | — |
+| `mqtt_bridge_enabled` | gauge (0/1) | — |
+| `mqtt_subscriber_queue_depth` | gauge | topic |
+
+Alert sẽ stay silent (no data) cho đến khi metrics được expose.
+
+### Promtail scope
+File `promtail/promtail-config.yml` đã add `mosquitto` vào KEEP regex → Loki nhận log Mosquitto (auth fail, ACL deny, TLS handshake).
+
+### Mosquitto $SYS scrape (optional)
+Để scrape Mosquitto internal metrics, deploy thêm container `mosquitto-exporter` (sapcc/mosquitto-exporter). Job đã khai báo trong `prometheus.yml` (target `mosquitto-exporter:9234`) — Prometheus sẽ DOWN silently nếu exporter chưa có (không trigger ServiceDown alert vì filter tier=backend|gateway).

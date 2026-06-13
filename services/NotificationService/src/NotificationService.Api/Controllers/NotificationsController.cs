@@ -39,9 +39,14 @@ public class NotificationsController : ControllerBase
     ///
     /// Sắp xếp theo `CreatedAt` giảm dần.
     /// </remarks>
+    /// <response code="200">Trả danh sách notification (có thể rỗng).</response>
+    /// <response code="400">JWT đã pass `[Authorize]` nhưng không trích xuất được claim `UserId` (claim missing/malformed trong token). Đây là client request error chứ không phải auth fail.</response>
+    /// <response code="401">Chưa đăng nhập / token không hợp lệ (do middleware trả).</response>
     [HttpGet]
     [Authorize]
     [ProducesResponseType(typeof(NotificationListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<NotificationListResponse>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyNotifications(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
@@ -52,10 +57,10 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new CommonResponse<NotificationListResponse>
+            return BadRequest(new CommonResponse<NotificationListResponse>
             {
                 IsSuccess = false,
-                StatusCode = StatusCodes.Status401Unauthorized,
+                StatusCode = StatusCodes.Status400BadRequest,
                 Message = "Không xác định được user."
             });
 
@@ -80,8 +85,10 @@ public class NotificationsController : ControllerBase
     /// <remarks>
     /// **Quyền:** Admin.
     ///
-    /// Production flow chính tạo notification qua RabbitMQ consumer (TicketCreated,
-    /// BatteryAnomalyDetected, …) — endpoint này dùng cho test và backfill thủ công.
+    /// Production flow chính tạo notification qua RabbitMQ consumer:
+    /// `AlertTicketSagaFailedConsumer`, `BatteryAlertEscalationRequestedConsumer`,
+    /// `IotDeviceWentOfflineConsumer` (xem `NotificationService.Application/Consumers/`).
+    /// Endpoint này dùng cho test, backfill thủ công, hoặc các integration event chưa có consumer riêng.
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "Admin")]
