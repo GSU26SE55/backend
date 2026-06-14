@@ -1111,12 +1111,17 @@ Header: `Authorization: Bearer {accessToken}`
         "createdAt": "2026-05-16T08:00:00Z"
       }
     ],
-    "totalCount": 42,
+    "totalItems": 42,
     "pageNumber": 1,
-    "pageSize": 10
+    "pageSize": 10,
+    "totalPages": 5,
+    "hasNextPage": true,
+    "hasPreviousPage": false
   }
 }
 ```
+
+> **Pagination shape (`PaginationResponse<T>`):** `items`, `totalItems` (KHÔNG phải `totalCount`), `pageNumber`, `pageSize`, `totalPages` (computed = ceil(totalItems/pageSize)), `hasNextPage`, `hasPreviousPage`. Áp dụng cho mọi endpoint trả `PaginationResponse<T>` (login-history, accounts list, roles list, audit-logs...).
 
 **Chi tiết `LoginAttemptDto`:**
 
@@ -1450,6 +1455,18 @@ Base route: `/api/admin/accounts`
 | `fullName` | `string` | Bắt buộc | Họ tên |
 | `phoneNumber` | `string?` | Không | Số điện thoại |
 | `roleId` | `Guid` | Bắt buộc | Role gán cho user khi accept invite (1 role/account — quan hệ 1-N) |
+
+**Response thành công `201`:** `AccountActionResponse` (= `CommonResponse<Guid>`) — `data` là Guid của account vừa tạo (trạng thái `PendingVerification`).
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "message": "Đã gửi email invite. User cần accept để kích hoạt tài khoản.",
+  "data": "ab67cb7c-e960-4d2d-ac45-bc1393581ca6",
+  "listErrors": []
+}
+```
 
 **Luồng:** Sau khi invite, user nhận email chứa link với `invitationToken`. User truy cập link và gọi `POST /api/auth/accept-invite` để đặt mật khẩu và kích hoạt.
 
