@@ -55,7 +55,6 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
                     FileName = att.FileName,
                     ContentType = att.ContentType,
                     SizeBytes = att.SizeBytes,
-                    PublicUrl = att.PublicUrl,
                     Source = request.UserRole == ActorRoleEnum.Customer
                         ? AttachmentSourceEnum.CustomerSubmission
                         : AttachmentSourceEnum.StaffWork
