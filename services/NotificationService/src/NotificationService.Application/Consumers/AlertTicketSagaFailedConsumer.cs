@@ -11,7 +11,7 @@ namespace NotificationService.Application.Consumers;
 /// <summary>
 /// Consumer cho <see cref="AlertTicketSagaFailedEvent"/>:
 /// notify Admin (primary) + Manager (CC) khi Alert-Ticket Saga vào terminal Failed.
-/// Admin reprocess via <c>POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess</c>.
+/// Admin reprocess via <c>POST /api/admin/sagas/alert-ticket/{alertId}/reprocess</c>.
 ///
 /// Notification debounce 5 phút per AlertId.
 ///

@@ -22,7 +22,7 @@ COMPOSE      := docker compose
 ENV_FILE     := .env.Docker
 
 # Danh sách services (dùng cho run-all, build-all)
-SERVICES := ApiGateway AuthService BatteryService TicketService EmailService SmsService FileStorageService
+SERVICES := ApiGateway AuthService BatteryService TicketService NotificationService EmailService SmsService FileStorageService
 
 # Service mặc định cho các lệnh cần SVC=...
 SVC ?=

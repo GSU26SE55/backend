@@ -51,7 +51,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             return new AccountActionResponse
             {
                 IsSuccess = false,
-                StatusCode = 401,
+                StatusCode = 400,
                 Message = "Mật khẩu hiện tại không chính xác.",
             };
         }

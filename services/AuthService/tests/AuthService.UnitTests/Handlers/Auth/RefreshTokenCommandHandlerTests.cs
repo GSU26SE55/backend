@@ -61,8 +61,8 @@ public class RefreshTokenCommandHandlerTests
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
 
         response.IsSuccess.Should().BeTrue();
-        response.Data!.AccessToken.Should().Be("new-access");
-        response.Data.RefreshToken.Should().Be("new-refresh");
+        response.Data!.Tokens!.AccessToken.Should().Be("new-access");
+        response.Data.Tokens!.RefreshToken.Should().Be("new-refresh");
 
         oldToken.Status.Should().Be(RefreshTokenStatus.Used);
         oldToken.UsedAt.Should().NotBeNull();

@@ -824,10 +824,12 @@ Base route: `/api/sensor-readings`
 | `chargingState` | `ChargingStateEnum?` | Không | — | Trạng thái nạp/xả |
 | `sourceDeviceId` | `string?` | Không | Max 64 ký tự | Device ID |
 
-**Response thành công `200`:**
+**Response thành công `201 Created`:** Tạo resource mới (sensor readings trong TimescaleDB hypertable).
+
 ```json
 {
   "isSuccess": true,
+  "statusCode": 201,
   "data": {
     "totalReceived": 10,
     "inserted": 9,
@@ -840,11 +842,15 @@ Base route: `/api/sensor-readings`
 |---|---|---|
 | `totalReceived` | `int` | Tổng số reading nhận được trong batch |
 | `inserted` | `int` | Số reading đã insert thành công vào TimescaleDB |
-| `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc đã xóa |
+| `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc bị outlier |
 
-**Lỗi thường gặp:**
-- `401` — Thiếu hoặc sai `X-Api-Key` header
-- `400` — `items` rỗng, vượt giới hạn 1000 readings, hoặc có item không hợp lệ (trả `listErrors` chi tiết từng item)
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | `items` rỗng, vượt giới hạn 1000 readings, hoặc có item không hợp lệ (trả `listErrors` chi tiết từng item) |
+| `401` | Thiếu/sai `X-Api-Key` header hoặc scope `SensorIngest` không match |
+| `500` | Duplicate `(BatteryAssetId, Time)` raise unique constraint từ TimescaleDB |
 
 > **Lưu ý hiệu suất:** Không gửi quá nhiều batch nhỏ liên tiếp. Gateway nên gom readings trong 1 batch mỗi 30–60 giây. Không có rate limit cứng trong Sprint 3, nhưng sẽ thêm khi scale lên.
 
@@ -904,6 +910,16 @@ Base route: `/api/sites`
 **Auth:** Bắt buộc (Customer)
 
 **Query params:** `pageNumber`, `pageSize`
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<SiteDto>>` — danh sách site (có thể rỗng nếu Customer chưa có site nào).
+
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `401` | Token thiếu/invalid (middleware `[Authorize]` trả) |
+| `403` | Không có role Customer |
+| `500` | `UserId` claim trong JWT không parse được sang Guid — server-side data integrity issue (JWT do AuthService cấp sai/missing claim). Client không thể fix; cần alert dev team. |
 
 ---
 
@@ -1280,24 +1296,27 @@ Base route: `/api/ambient`
 | `source` | `AmbientReadingSourceEnum` | ❌ (mặc định `IotSensor` = 1) | enum hợp lệ | Nguồn dữ liệu — xem enum |
 | `sourceDeviceId` | `string?` | ❌ | — | ID gateway / device gửi data |
 
-**Response thành công `200`:** `CommonResponse<int>` — `data` là số reading đã insert.
+**Response thành công `201 Created`:** Tạo resource mới (ambient readings trong TimescaleDB). `CommonResponse<int>` — `data` là số reading đã insert.
 
 ```json
 {
   "isSuccess": true,
-  "statusCode": 200,
-  "message": "Ingest 100 ambient readings.",
+  "statusCode": 201,
+  "message": null,
   "data": 100,
   "listErrors": []
 }
 ```
 
-> Trùng `(SiteId, Time)` → idempotent skip (không tính vào `data`).
+> Handler không set `message` (chỉ trả `isSuccess`, `statusCode`, `data`). `data` = `request.Items.Count` (số reading client gửi lên — handler chưa filter duplicate ở application layer, dedup phụ thuộc DB constraint / TimescaleDB hypertable).
 
-**Lỗi thường gặp:**
-- `400` — `items` rỗng, vượt 100 record, hoặc item không hợp lệ (xem `listErrors` chi tiết từng item: `Items[0].SiteId`, `Items[0].Humidity`, …)
-- `401` — Thiếu `X-Api-Key`
-- `403` — ApiKey không có scope `EnvironmentalIngest`
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | `items` rỗng, vượt 100 record, hoặc item không hợp lệ (xem `listErrors` chi tiết từng item: `Items[0].SiteId`, `Items[0].Humidity`, …) |
+| `401` | Thiếu `X-Api-Key` |
+| `403` | ApiKey không có scope `EnvironmentalIngest` |
 
 ---
 
@@ -1499,7 +1518,7 @@ Base route: `/api/environmental-incidents`
 
 ### `POST /api/environmental-incidents`
 
-**Mục đích:** Report incident mới từ IoT edge (smoke/fire/gas leak/flood/overheat hazard cấp site). Khi tạo thành công, hệ thống tự động phát `EnvironmentalIncidentRaisedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1).
+**Mục đích:** Report incident mới từ IoT edge (smoke/fire/gas leak/flood/overheat hazard cấp site). Khi tạo thành công, hệ thống tự động phát `EnvironmentalIncidentDetectedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1).
 
 **Auth:** API Key — scheme `ApiKey` + policy `EnvironmentalIngest`.
 
@@ -1527,12 +1546,30 @@ Base route: `/api/environmental-incidents`
 | `reportedBy` | `string?` | ❌ | Max 256 ký tự | Định danh device/gateway hoặc operator báo cáo |
 | `notes` | `string?` | ❌ | Max 1000 ký tự | Ghi chú/mô tả chi tiết |
 
-**Response thành công `200`:** `CommonResponse<EnvironmentalIncidentDto>` — payload đầy đủ incident vừa tạo (shape giống `GET /{id}` bên dưới). Status được set `Open`, `acknowledgedAt`/`resolvedAt`/`falseAlarmAt` đều `null`.
+**Response thành công — 2 paths:**
 
-**Lỗi thường gặp:**
-- `400` — `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ, `DetectedAt` rỗng/vượt quá hiện tại 5'
-- `401` — Thiếu `X-Api-Key`
-- `403` — ApiKey không có scope `EnvironmentalIngest`
+| Status | Path | Mô tả |
+|---|---|---|
+| `201 Created` | **Create** (normal path) | Incident mới được tạo. Status set `Open`, `acknowledgedAt`/`resolvedAt`/`falseAlarmAt` đều `null`. Hệ thống phát `EnvironmentalIncidentDetectedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1). |
+| `200 OK` | **Dedup** (idempotency) | Đã tồn tại incident active đang `Open`/`Acknowledged` cho cùng `SiteId` (+ cùng `IncidentType`) → trả lại incident cũ thay vì tạo mới. KHÔNG phát event lần nữa. Idempotency-friendly cho IoT gateway spam cùng sự cố. |
+
+Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload đầy đủ incident (shape giống `GET /{id}` bên dưới).
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "data": { "id": "…", "siteId": "…", "status": 1, "incidentType": 2, "severity": 3, "detectedAt": "…", "acknowledgedAt": null, "resolvedAt": null, "falseAlarmAt": null }
+}
+```
+
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ, `DetectedAt` rỗng/vượt quá hiện tại 5' |
+| `401` | Thiếu/sai `X-Api-Key` |
+| `403` | ApiKey không có scope `EnvironmentalIngest` |
 
 ---
 

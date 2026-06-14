@@ -74,7 +74,7 @@ public class StaffProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy hồ sơ phân công chi tiết của một staff.
+    /// Lấy hồ sơ phân công chi tiết của 1 staff (tier + skills + current workload + max concurrent) — Manager dùng để tính fitness score khi assign ticket.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi Manager/Admin cần xem chi tiết một staff trước khi gán ticket hoặc kiểm tra năng lực xử lý.

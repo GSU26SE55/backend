@@ -142,6 +142,31 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                         Payload = JsonSerializer.Serialize(evt),
                         OccurredAtUtc = now
                     });
+
+                    // Sprint IoT-2 #IoT2-30 — V2 event với SiteId + Tier-2 fields.
+                    var v2 = new BatteryAnomalyDetectedV2Event(
+                        AlertId: alert.Id,
+                        BatteryAssetId: alert.BatteryAssetId,
+                        CustomerId: asset.CustomerId,
+                        SiteId: asset.SiteId,
+                        AssetSerialNumber: asset.SerialNumber,
+                        AnomalyType: (int)alert.AnomalyType,
+                        Severity: (int)alert.Severity,
+                        ThresholdValue: alert.ThresholdValue ?? 0m,
+                        ActualValue: alert.ActualValue ?? 0m,
+                        Unit: alert.Unit ?? string.Empty,
+                        DetectedAt: alert.DetectedAt,
+                        InternalResistanceMilliohm: reading.InternalResistanceMilliohm,
+                        CellVoltageDeltaMv: reading.CellVoltageDeltaMv,
+                        EnvironmentalIncidentId: alert.EnvironmentalIncidentId);
+                    await _unitOfWork.OutboxMessages.AddAsync(new OutboxEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        AggregateId = alert.Id,
+                        Type = nameof(BatteryAnomalyDetectedV2Event),
+                        Payload = JsonSerializer.Serialize(v2),
+                        OccurredAtUtc = now
+                    });
                     result.OutboxEventsQueued++;
                 }
             }

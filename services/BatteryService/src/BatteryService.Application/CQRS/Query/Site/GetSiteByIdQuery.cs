@@ -8,6 +8,7 @@ namespace BatteryService.Application.CQRS.Query.Site;
 
 public class GetSiteByIdQuery : IRequest<CommonResponse<SiteDto>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }

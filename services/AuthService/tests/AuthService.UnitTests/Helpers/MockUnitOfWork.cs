@@ -29,7 +29,8 @@ public static class MockUnitOfWork
             IEnumerable<StaffProfile>? staffProfileSeed = null,
             IEnumerable<StaffSkill>? staffSkillSeed = null,
             IEnumerable<Permission>? permissionSeed = null,
-            IEnumerable<RolePermission>? rolePermissionSeed = null)
+            IEnumerable<RolePermission>? rolePermissionSeed = null,
+            IEnumerable<BackupCode>? backupCodeSeed = null)
     {
         var accounts = new Mock<IGenericRepository<Account>>();
         accounts.Setup(r => r.GetAllAsync()).Returns((accountSeed ?? Array.Empty<Account>()).AsQueryable().BuildMock());
@@ -61,6 +62,9 @@ public static class MockUnitOfWork
         var staffSkills = new Mock<IGenericRepository<StaffSkill>>();
         staffSkills.Setup(r => r.GetAllAsync()).Returns((staffSkillSeed ?? Array.Empty<StaffSkill>()).AsQueryable().BuildMock());
 
+        var backupCodes = new Mock<IGenericRepository<BackupCode>>();
+        backupCodes.Setup(r => r.GetAllAsync()).Returns((backupCodeSeed ?? Array.Empty<BackupCode>()).AsQueryable().BuildMock());
+
         var uow = new Mock<IAuthUnitOfWork>();
         uow.SetupGet(u => u.Accounts).Returns(accounts.Object);
         uow.SetupGet(u => u.RefreshTokens).Returns(refreshTokens.Object);
@@ -72,6 +76,7 @@ public static class MockUnitOfWork
         uow.SetupGet(u => u.AccountProfiles).Returns(accountProfiles.Object);
         uow.SetupGet(u => u.StaffProfiles).Returns(staffProfiles.Object);
         uow.SetupGet(u => u.StaffSkills).Returns(staffSkills.Object);
+        uow.SetupGet(u => u.BackupCodes).Returns(backupCodes.Object);
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);

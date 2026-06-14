@@ -26,7 +26,7 @@ public class AdminBatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới một BatteryAsset.
+    /// Tạo mới 1 BatteryAsset (đăng ký pin vào hệ thống) — assign vào Site + Customer + BatteryType. Serial number unique global. Status default Active.
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -75,7 +75,7 @@ public class AdminBatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật một BatteryAsset.
+    /// Cập nhật metadata BatteryAsset (Status/WarrantyEndDate/Location) — KHÔNG đổi được SerialNumber/BatteryTypeId/CustomerId qua endpoint này (dùng TransferOwner riêng).
     /// </summary>
     /// <remarks>
     /// Body request: kế thừa toàn bộ field của <see cref="CreateBatteryAssetCommand"/>, thêm:
@@ -116,7 +116,7 @@ public class AdminBatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa mềm một BatteryAsset.
+    /// Xoá mềm 1 BatteryAsset (soft delete) — pin không còn xuất hiện trong list Customer; sensor readings + alerts cũ vẫn giữ cho audit.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
@@ -147,7 +147,7 @@ public class AdminBatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Khôi phục một BatteryAsset đã soft delete.
+    /// Khôi phục 1 BatteryAsset đã soft delete — set IsDeleted=false, DeletedAt=null. Pin trở lại trong list active của Customer; resume ingest sensor reading.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:

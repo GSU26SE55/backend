@@ -7,6 +7,7 @@ namespace BatteryService.Application.CQRS.Command.Alert;
 
 public class AcknowledgeAlertCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     public Guid Id { get; set; }
 

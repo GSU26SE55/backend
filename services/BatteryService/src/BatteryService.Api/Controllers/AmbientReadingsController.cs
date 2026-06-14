@@ -1,9 +1,11 @@
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Query.Ambient;
+using BatteryService.Application.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
 
 namespace BatteryService.Api.Controllers;
 
@@ -47,11 +49,13 @@ public class AmbientReadingsController : ControllerBase
     /// </remarks>
     /// <param name="cmd">Batch readings.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Ingest thành công, trả số reading đã insert/skip.</response>
+    /// <response code="201">Ingest thành công, trả số reading đã insert/skip.</response>
     /// <response code="400">Batch vượt 100 record hoặc thiếu field bắt buộc.</response>
     /// <response code="401">Thiếu ApiKey.</response>
     /// <response code="403">ApiKey không có scope <c>EnvironmentalIngest</c>.</response>
     [HttpPost("readings/batch")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(AuthenticationSchemes = "ApiKey", Policy = "EnvironmentalIngest")]
     public async Task<IActionResult> BatchIngest([FromBody] BatchIngestAmbientReadingsCommand cmd, CancellationToken ct)
     {
@@ -77,6 +81,8 @@ public class AmbientReadingsController : ControllerBase
     /// <response code="200">Trả danh sách readings.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("readings/history")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     public async Task<IActionResult> GetHistory([FromQuery] GetAmbientReadingHistoryQuery query, CancellationToken ct)
     {
@@ -85,7 +91,7 @@ public class AmbientReadingsController : ControllerBase
     }
 
     /// <summary>
-    /// Reading ambient mới nhất của một site.
+    /// Reading ambient mới nhất của 1 site (snapshot tức thời) — dùng cho dashboard widget hiển thị nhiệt độ/độ ẩm/bức xạ hiện tại; refresh polling 30s từ FE.
     /// </summary>
     /// <remarks>
     /// Dùng cho dashboard widget. Trả 1 record duy nhất — record có <c>Time</c> lớn nhất theo <c>SiteId</c>.
@@ -96,6 +102,8 @@ public class AmbientReadingsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Site chưa có data.</response>
     [HttpGet("readings/latest")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     public async Task<IActionResult> GetLatest([FromQuery] Guid siteId, CancellationToken ct)
     {
@@ -124,6 +132,8 @@ public class AmbientReadingsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager.</response>
     [HttpPut("threshold-configs")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpsertThreshold([FromBody] UpsertAmbientThresholdConfigCommand cmd, CancellationToken ct)
     {
@@ -132,16 +142,31 @@ public class AmbientReadingsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy threshold config theo site.
+    /// Lấy ambient threshold config theo site — Manager dashboard view.
     /// </summary>
-    /// <param name="siteId">Id của site.</param>
+    /// <remarks>
+    /// Trả về <see cref="AmbientThresholdConfigDto"/> chứa các ngưỡng cảnh báo môi trường:
+    /// <list type="bullet">
+    ///   <item><description><c>HighAmbientTempWarning</c> / <c>HighAmbientTempCritical</c> (°C) — overheating server room.</description></item>
+    ///   <item><description><c>HighHumidityWarning</c> / <c>HighHumidityCritical</c> (%) — chống ăn mòn.</description></item>
+    ///   <item><description><c>ComboTempThreshold</c> + <c>ComboHumidityThreshold</c> — combined warning khi cả 2 đồng thời cao.</description></item>
+    ///   <item><description><c>Enabled</c>: bật/tắt threshold check cho site.</description></item>
+    /// </list>
+    ///
+    /// Use case: Manager dashboard hiển thị ngưỡng đang áp dụng cho từng site — so sánh với ambient readings live.
+    /// </remarks>
+    /// <param name="siteId">Site ID.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Trả config.</response>
+    /// <response code="200">Trả config (200 với <c>Data: null</c> nếu site chưa cấu hình).</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager.</response>
-    /// <response code="404">Site chưa được cấu hình threshold.</response>
+    /// <response code="404">Site chưa được cấu hình threshold (handler trả 404 nếu null).</response>
     [HttpGet("threshold-configs/by-site/{siteId:guid}")]
     [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(CommonResponse<AmbientThresholdConfigDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetThresholdBySite(Guid siteId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAmbientThresholdBySiteQuery { SiteId = siteId }, ct);
@@ -161,6 +186,8 @@ public class AmbientReadingsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager.</response>
     [HttpGet("threshold-configs")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ListThresholds([FromQuery] ListAmbientThresholdsQuery query, CancellationToken ct)
     {

@@ -45,7 +45,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách Site có phân trang + filter.
+    /// Liệt kê Site có phân trang + filter (customer/status/keyword) — Manager/Admin dashboard quản lý fleet site. Mỗi entry kèm asset count + alert count.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -79,11 +79,12 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Customer xem danh sách Site của chính mình.
+    /// Customer xem danh sách Site của chính mình (auto filter theo CustomerId từ JWT) — mobile/web render trang 'Trạm của tôi'.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
-    /// - Parse <c>UserId</c> từ token; nếu không hợp lệ trả 401.
+    /// - <c>[Authorize]</c> middleware đảm bảo token hợp lệ trước khi vào handler (sai/hết hạn → 401 do middleware trả).
+    /// - Parse <c>UserId</c> từ <c>CurrentUserService</c> (claim được issue bởi AuthService).
     /// - Filter <c>CustomerId == currentUserId &amp;&amp; !IsDeleted</c>.
     /// - Tương tự GetAll, trả các count thống kê asset trong DTO.
     /// </remarks>
@@ -91,13 +92,15 @@ public class SitesController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="SiteDto"/>.</returns>
     /// <response code="200">Trả danh sách (có thể rỗng).</response>
-    /// <response code="401">Token không hợp lệ hoặc không có claim UserId.</response>
+    /// <response code="401">Chưa đăng nhập / token thiếu / token hết hạn (do middleware trả).</response>
     /// <response code="403">Không có role Customer.</response>
+    /// <response code="500">Lỗi server: <c>CurrentUserService.UserId</c> không parse được sang Guid — đây là vấn đề data integrity của JWT (claim bị thiếu hoặc malformed do AuthService cấp sai), KHÔNG phải client error.</response>
     [HttpGet("me")]
     [Authorize(Roles = "Customer")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetMine([FromQuery] GetMySitesQuery query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
@@ -105,7 +108,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một Site theo Id.
+    /// Lấy chi tiết 1 Site theo Id (metadata + contact + location coords) — Customer chỉ xem được Site thuộc về mình; Admin/Manager xem được tất cả.
     /// </summary>
     /// <remarks>
     /// Trả về <see cref="SiteDto"/> với thông tin Site + count BatteryAsset, ActiveBatteryAsset.
@@ -132,7 +135,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách BatteryAsset thuộc một Site.
+    /// Lấy danh sách BatteryAsset thuộc 1 Site — filter theo status nếu cần. Manager dùng để xem inventory pin tại site cụ thể.
     /// </summary>
     /// <remarks>
     /// Query parameters (cùng với <c>{id}</c> trong URL):
@@ -167,7 +170,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy dashboard tóm tắt sức khỏe của một Site.
+    /// Lấy dashboard tóm tắt sức khỏe của 1 Site — TotalAssets/Active/AlertsCount/HealthScore (0-100) + LastAlertAt; dùng cho Customer mobile homepage.
     /// </summary>
     /// <remarks>
     /// Trả <see cref="SiteDashboardDto"/> gồm:

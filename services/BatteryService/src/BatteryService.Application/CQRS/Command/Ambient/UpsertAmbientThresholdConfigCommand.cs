@@ -11,13 +11,21 @@ namespace BatteryService.Application.CQRS.Command.Ambient;
 public class UpsertAmbientThresholdConfigCommand
     : IRequest<AmbientThresholdConfigResponse>, IValidatable<AmbientThresholdConfigResponse>
 {
+    /// <summary>ID Site (Guid).</summary>
     public Guid SiteId { get; set; }
+    /// <summary>Ambient temp Warning threshold (°C).</summary>
     public decimal? HighAmbientTempWarning { get; set; }
+    /// <summary>Ambient temp Critical threshold (°C).</summary>
     public decimal? HighAmbientTempCritical { get; set; }
+    /// <summary>Humidity Warning threshold (%).</summary>
     public decimal? HighHumidityWarning { get; set; }
+    /// <summary>Humidity Critical threshold (%).</summary>
     public decimal? HighHumidityCritical { get; set; }
+    /// <summary>Combo temp threshold (cùng với humidity).</summary>
     public decimal? ComboTempThreshold { get; set; }
+    /// <summary>Combo humidity threshold.</summary>
     public decimal? ComboHumidityThreshold { get; set; }
+    /// <summary>Tính năng bật/tắt.</summary>
     public bool Enabled { get; set; } = true;
 
     public Task<AmbientThresholdConfigResponse> ValidateAsync()

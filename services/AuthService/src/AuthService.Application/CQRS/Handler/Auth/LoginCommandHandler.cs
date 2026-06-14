@@ -1,17 +1,14 @@
-using AuthService.Application.Authorization;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.CQRS.Notification.Login;
-using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
-using AuthService.Domain.Entities;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -19,24 +16,27 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 {
     private const int MaxFailedAttempts = 5;
     private const int LockoutDurationMinutes = 15;
-    private const int RefreshTokenExpirationDays = 7;
+    private static readonly TimeSpan ChallengeTtl = TimeSpan.FromMinutes(5);
 
     private readonly IAuthUnitOfWork _unitOfWork;
-    private readonly IJwtHelper _jwtHelper;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IAuthTokenIssuer _tokenIssuer;
+    private readonly ITwoFactorChallengeStore _challengeStore;
     private readonly IPublisher _publisher;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public LoginCommandHandler(
         IAuthUnitOfWork unitOfWork,
-        IJwtHelper jwtHelper,
         IPasswordHasher passwordHasher,
+        IAuthTokenIssuer tokenIssuer,
+        ITwoFactorChallengeStore challengeStore,
         IPublisher publisher,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
-        _jwtHelper = jwtHelper;
         _passwordHasher = passwordHasher;
+        _tokenIssuer = tokenIssuer;
+        _challengeStore = challengeStore;
         _publisher = publisher;
         _httpContextAccessor = httpContextAccessor;
     }
@@ -185,43 +185,52 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
-        account.FailedLoginAttempts = 0;
-        account.LockoutEndAt = null;
-        account.LastLoginAt = DateTime.UtcNow;
-        account.LastLoginIp = ipAddress;
-        _unitOfWork.Accounts.UpdateAsync(account);
+        // 2FA enabled → trả challenge token thay vì JWT. KHÔNG reset FailedLoginAttempts ở đây — chỉ reset
+        // sau khi verify-2fa thành công (để brute force TOTP cũng tốn quota password).
+        // Cũng KHÔNG ghi LoginAttempt success — đợi verify-2fa.
+        if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
+        {
+            var challengeToken = await _challengeStore.CreateAsync(
+                account.Id,
+                ipAddress ?? string.Empty,
+                userAgent ?? string.Empty,
+                ChallengeTtl,
+                cancellationToken);
+
+            await PublishAudit(AuditActionEnum.LoginPending2FA, account.Id, isSuccess: true,
+                targetEmail: account.Email,
+                reason: "Password OK, 2FA pending",
+                actorAccountIdOverride: account.Id,
+                cancellationToken: cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return new LoginResponse
+            {
+                IsSuccess = true,
+                StatusCode = 200,
+                Message = "Yêu cầu xác thực 2FA. Gửi mã TOTP hoặc backup code qua /api/auth/login/verify-2fa.",
+                Data = new LoginResultDto
+                {
+                    Challenge = new TwoFactorChallengeDto
+                    {
+                        ChallengeToken = challengeToken,
+                        ExpiresInSeconds = (int)ChallengeTtl.TotalSeconds,
+                        Methods = new List<string> { "totp", "backupCode" }
+                    }
+                }
+            };
+        }
+
+        var (tokens, sessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
 
         var roleName = account.Role?.Name ?? string.Empty;
-
-        var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
-        var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
-        var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
-
-        var refreshToken = new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            AccountId = account.Id,
-            Token = refreshTokenValue,
-            IssuedAt = DateTime.UtcNow,
-            ExpiredAt = DateTime.UtcNow.AddDays(RefreshTokenExpirationDays),
-            Status = RefreshTokenStatus.Active,
-            IpAddress = ipAddress,
-            UserAgent = userAgent,
-            DeviceId = deviceId
-        };
-
-        await _unitOfWork.RefreshTokens.AddAsync(refreshToken);
-
-        // Enforce concurrent session limit (FIFO revoke oldest if exceeded).
-        await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
-
         await PublishAudit(AuditActionEnum.LoginSuccess, account.Id, true,
             targetEmail: account.Email,
             actorAccountIdOverride: account.Id,
             metadata: new Dictionary<string, object?>
             {
                 ["role"] = roleName,
-                ["sessionId"] = refreshToken.Id
+                ["sessionId"] = sessionId
             },
             cancellationToken: cancellationToken);
 
@@ -235,11 +244,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             IsSuccess = true,
             StatusCode = 200,
             Message = "Đăng nhập thành công.",
-            Data = new TokenDTO
-            {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
-            }
+            Data = new LoginResultDto { Tokens = tokens }
         };
     }
 

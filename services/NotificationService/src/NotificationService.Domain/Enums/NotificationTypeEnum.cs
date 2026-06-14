@@ -33,5 +33,8 @@ public enum NotificationTypeEnum
     /// </summary>
     AlertTicketSagaFailed = 17,
 
+    /// <summary>Sprint IoT-1 (#249) — IoT edge device mất heartbeat &gt; 5 phút.</summary>
+    IotDeviceWentOffline = 18,
+
     System = 99
 }

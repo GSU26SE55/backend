@@ -9,14 +9,19 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
 {
     public const int MaxLimit = 1000;
 
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid BatteryAssetId { get; set; }
 
+    /// <summary>Filter timestamp bắt đầu (UTC inclusive).</summary>
     public DateTime? From { get; set; }
 
+    /// <summary>Filter timestamp kết thúc (UTC inclusive).</summary>
     public DateTime? To { get; set; }
 
+    /// <summary>Giới hạn số bản ghi trả về.</summary>
     public int Limit { get; set; } = 100;
 
+    /// <summary>Cursor pagination — timestamp record cuối trang trước.</summary>
     public DateTime? Cursor { get; set; }
 
     public Task<CommonResponse<SensorReadingHistoryResponseDto>> ValidateAsync()

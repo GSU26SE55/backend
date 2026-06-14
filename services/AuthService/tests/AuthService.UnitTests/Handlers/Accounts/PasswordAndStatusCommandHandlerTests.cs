@@ -76,7 +76,7 @@ public class ChangePasswordCommandHandlerTests
             ConfirmPassword = "new"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        resp.StatusCode.Should().Be(400);
     }
 
     [Fact]

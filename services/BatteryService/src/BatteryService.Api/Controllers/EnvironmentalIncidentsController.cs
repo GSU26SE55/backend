@@ -46,7 +46,7 @@ public class EnvironmentalIncidentsController : ControllerBase
     }
 
     /// <summary>
-    /// Report incident mới từ IoT edge.
+    /// Report incident mới từ IoT edge device hoặc Staff thủ công (SmokeDetected/WaterLeak/Overheating) — tạo Alert(Critical) + publish event tới NotificationService (bypass quiet hours).
     /// </summary>
     /// <remarks>
     /// Authorize bằng <c>ApiKey</c> scheme + policy <c>EnvironmentalIngest</c>.
@@ -58,11 +58,14 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// </remarks>
     /// <param name="cmd">Thông tin incident.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Report thành công, trả id incident.</response>
+    /// <response code="201">Report thành công, trả id incident mới tạo.</response>
+    /// <response code="200">Đã có incident active đang mở — trả về incident cũ thay vì tạo mới (dedup).</response>
     /// <response code="400">Site không tồn tại hoặc payload thiếu field.</response>
     /// <response code="401">Thiếu ApiKey.</response>
     /// <response code="403">ApiKey không có scope <c>EnvironmentalIngest</c>.</response>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(AuthenticationSchemes = "ApiKey", Policy = "EnvironmentalIngest")]
     public async Task<IActionResult> Report([FromBody] ReportEnvironmentalIncidentCommand cmd, CancellationToken ct)
     {
@@ -84,6 +87,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="404">Incident không tồn tại.</response>
     /// <response code="409">State hiện tại không cho phép acknowledge.</response>
     [HttpPost("{id:guid}/acknowledge")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> Acknowledge(Guid id, CancellationToken ct)
     {
@@ -109,6 +114,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="404">Incident không tồn tại.</response>
     /// <response code="409">State không cho phép resolve.</response>
     [HttpPost("{id:guid}/resolve")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> Resolve(Guid id, [FromBody] ResolveEnvironmentalIncidentRequest body, CancellationToken ct)
     {
@@ -123,7 +130,7 @@ public class EnvironmentalIncidentsController : ControllerBase
     }
 
     /// <summary>
-    /// Đánh dấu <c>FalseAlarm</c> — incident không thật.
+    /// Đánh dấu incident là FalseAlarm (không phải sự cố thật) — set Status=FalseAlarm + WasFalseAlarm=true, publish EnvironmentalIncidentResolvedEvent để clear in-app banner.
     /// </summary>
     /// <remarks>
     /// Chỉ Admin/Manager được phép đánh dấu false alarm để tránh lạm dụng.
@@ -139,6 +146,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="404">Incident không tồn tại.</response>
     /// <response code="409">State đang là Resolved.</response>
     [HttpPost("{id:guid}/false-alarm")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> FalseAlarm(Guid id, [FromBody] FalseAlarmEnvironmentalIncidentRequest body, CancellationToken ct)
     {
@@ -153,7 +162,7 @@ public class EnvironmentalIncidentsController : ControllerBase
     }
 
     /// <summary>
-    /// Liệt kê incident (filter + phân trang).
+    /// Liệt kê incident (filter theo siteId/status/incidentType/time range) + phân trang — sort theo DetectedAt DESC; admin/manager review historical incidents.
     /// </summary>
     /// <remarks>
     /// Query parameters hỗ trợ filter theo <c>SiteId</c>, <c>Status</c>, <c>IncidentType</c>, <c>Severity</c>, date range.
@@ -164,6 +173,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="200">Trả danh sách incident.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     public async Task<IActionResult> GetList([FromQuery] GetEnvironmentalIncidentsQuery query, CancellationToken ct)
     {
@@ -172,7 +183,7 @@ public class EnvironmentalIncidentsController : ControllerBase
     }
 
     /// <summary>
-    /// Chi tiết incident theo id.
+    /// Lấy chi tiết 1 incident theo id — full metadata + resolution note + acknowledged/resolved user info + linked Alert.
     /// </summary>
     /// <remarks>
     /// Trả đầy đủ thông tin lifecycle (Acknowledged/Resolved/FalseAlarm actor + timestamps) và danh sách <c>Alert</c> liên quan.
@@ -183,6 +194,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Incident không tồn tại.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
@@ -201,6 +214,8 @@ public class EnvironmentalIncidentsController : ControllerBase
     /// <response code="200">Trả danh sách incident active.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("by-site/{siteId:guid}/active")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager,Staff,Customer")]
     public async Task<IActionResult> ActiveBySite(Guid siteId, CancellationToken ct)
     {

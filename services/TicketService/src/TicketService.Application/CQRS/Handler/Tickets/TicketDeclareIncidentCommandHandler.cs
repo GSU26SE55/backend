@@ -37,7 +37,7 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
 
         if (ticket.IsIncident)
         {
-            return Fail(400, "Ticket is already an incident.");
+            return Fail(409, "Ticket is already an incident.");
         }
 
         ticket.IsIncident = true;

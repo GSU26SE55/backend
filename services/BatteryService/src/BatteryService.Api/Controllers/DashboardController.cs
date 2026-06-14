@@ -18,7 +18,7 @@ public class DashboardController : ControllerBase
     public DashboardController(IMediator mediator) => _mediator = mediator;
 
     /// <summary>
-    /// Thống kê tổng quan Battery dashboard.
+    /// Thống kê tổng quan Battery dashboard (total/active/offline assets, open alerts breakdown, env incidents, asset status distribution, SOH distribution) — UI homepage Admin/Manager.
     /// </summary>
     /// <remarks>
     /// Trả các chỉ số tổng hợp dùng cho dashboard Admin/Manager:
@@ -41,6 +41,8 @@ public class DashboardController : ControllerBase
     /// <response code="200">Trả thống kê thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("stats")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Stats([FromQuery] Guid? siteId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetBatteryDashboardStatsQuery { SiteId = siteId }, ct);

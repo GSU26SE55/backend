@@ -173,10 +173,13 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             IsSuccess = true,
             StatusCode = 200,
             Message = "Đăng nhập Google thành công.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshTokenValue
+                }
             }
         };
     }

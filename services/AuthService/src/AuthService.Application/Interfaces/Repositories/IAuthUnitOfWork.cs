@@ -15,4 +15,5 @@ public interface IAuthUnitOfWork : IUnitOfWork
     IGenericRepository<AccountProfile> AccountProfiles { get; }
     IGenericRepository<StaffProfile> StaffProfiles { get; }
     IGenericRepository<StaffSkill> StaffSkills { get; }
+    IGenericRepository<BackupCode> BackupCodes { get; }
 }

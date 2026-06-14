@@ -28,6 +28,11 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  # GH-295 — ASP.NET Data Protection keys cho encrypt 2FA TwoFactorSecret.
+  # ⚠️ MẤT VOLUME = MẤT ALL 2FA. Backup cùng schedule với postgres-data.
+  auth-dataprotection-keys:
+  # Sprint IoT-2 #IoT2-35 — firmware storage dùng host bind /opt/solar/firmware-storage
+  # (xem batteryservice.volumes). KHÔNG khai báo named volume để ops backup trực tiếp host path.
 
 services:
 
@@ -180,8 +185,14 @@ services:
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+      # GH-295 — Data Protection keys cho 2FA secret encryption (persist qua volume mount bên dưới).
+      DataProtection__KeysPath: "/app/keys"
     ports:
       - "4002:8080"
+    volumes:
+      # GH-295 — bind mount volume cho DataProtection keys. KHÔNG ĐƯỢC XÓA volume này
+      # (mất key = mất khả năng decrypt mọi 2FA secret trong DB). Backup cùng postgres-data.
+      - auth-dataprotection-keys:/app/keys
     depends_on:
       postgres:
         condition: service_healthy
@@ -289,8 +300,29 @@ services:
       # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
+      # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
+      Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
+      Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
+      # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. Production: TLS bắt buộc, cert CA tin cậy.
+      Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      Mqtt__Host: ${Mqtt__Host:-mosquitto}
+      Mqtt__Port: ${Mqtt__Port:-8883}
+      Mqtt__UseTls: ${Mqtt__UseTls:-true}
+      Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-false}
+      Mqtt__Username: ${Mqtt__Username:-backend-bridge}
+      Mqtt__Password: ${Mqtt__Password}
+      Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
+      Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage.
+      # Production khuyến nghị: dùng object storage (S3/MinIO) + set PublicBaseUrl tới CDN.
+      # Local FS fallback: bind mount /opt/solar/firmware-storage để giữ qua container restart.
+      Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
+      Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
     ports:
       - "4006:8080"
+    volumes:
+      - /opt/solar/firmware-storage:/data/firmware-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -302,6 +334,25 @@ services:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
+
+  # ---------- MQTT broker — KHÔNG nằm trong backend repo ----------
+  # Per architectural decision: broker thuộc capstone/iot/ monorepo (cả dev + prod).
+  # Backend chỉ chạy MQTT CLIENT (MqttBridgeBackgroundService) connect tới broker external.
+  #
+  # Deploy broker production — 2 phương án:
+  #
+  # A) Broker trên cùng VPS (chia sẻ docker network):
+  #    1. Backend compose up trước → network mặc định tên `backend_solar-net`.
+  #    2. iot compose declare network external:
+  #         networks:
+  #           solar-net:
+  #             external: true
+  #             name: backend_solar-net
+  #    3. iot ops: `cd /opt/solar/iot && docker compose -f infra/docker-compose.prod.yml up -d mosquitto`
+  #    4. Backend env: Mqtt__Host=mosquitto + Mqtt__Port=8883 + UseTls=true.
+  #
+  # B) Broker trên VPS khác / managed (EMQX Cloud / HiveMQ Cloud):
+  #    Set Mqtt__Host=<broker-fqdn> + UseTls=true + cấp cert CA tin cậy.
 
   ticketservice:
     image: ghcr.io/gsu26se55/ticketservice:${IMAGE_TAG:-staging}

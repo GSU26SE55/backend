@@ -202,6 +202,22 @@ public class BatteryDataSeeder
                 Longitude = 106.245m,
                 Status = BatteryStatusEnum.Active,
                 CreatedAt = SeedTime()
+            },
+            new BatteryAsset
+            {
+                Id = Guid.NewGuid(),
+                SerialNumber = "BAT-2026-004",
+                BatteryTypeId = nmcTypeId,
+                SiteId = siteId,
+                CustomerId = customerId,
+                InstallDate = new DateTime(2026, 2, 5, 0, 0, 0, DateTimeKind.Utc),
+                WarrantyEndDate = new DateTime(2031, 2, 5, 0, 0, 0, DateTimeKind.Utc),
+                WarrantyStatus = WarrantyStatusEnum.Active,
+                Location = "Block B - Rack 02",
+                Latitude = 10.698m,
+                Longitude = 106.246m,
+                Status = BatteryStatusEnum.Active,
+                CreatedAt = SeedTime()
             }
         };
 

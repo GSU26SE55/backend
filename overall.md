@@ -123,6 +123,7 @@
 | TimescaleDB extension + hypertable | 🟠 P1 | §6 | 0.5 sprint |
 | FileStorage metadata (`UploadedFile`) | ✅ Done | §6bis | Completed 13/5/2026 |
 | AuthService profile expansion (avatar, phone, skill) | ✅ Done | §7 | Completed 13/5/2026 |
+| AuthService 2FA Hardening (login challenge + confirm setup + encrypt secret + backup codes + admin reset) | 🟠 P1 | §0.5, ADR-019 | Sprint 3 — GH-295 (in-flight, supersedes Option B) |
 | BatteryService scope cleanup (bỏ Energy/CO2 + `Site.CapacityKw`) | 🔴 P0 | §53.1–§53.3 | Sprint 5B `#233`/`#234` |
 | Outbox/Inbox hardening + Alert–Ticket Saga | 🔴 P0 | §8.1–§8.3, §53.4–§53.12 | Sprint 5B `#235`–`#239` |
 | AuthService permission seed cho Saga (`ticket.saga.view/reprocess`) | 🔴 P0 | §7.5bis, §53.9 | Sprint 5B `#241` |
@@ -159,7 +160,7 @@
 - [x] Bổ sung response schema cho `GET /api/staff/{id}/assignment-profile` → trả `StaffAssignmentProfileDto` (cùng shape với `GET /api/staff`).
 - [x] Làm rõ `avatarUrl` trong `PUT /api/admin/accounts/{id}`: field legacy, không khuyến khích — dùng `avatarFileId` thay thế.
 - [x] Bổ sung TTL token mời: `invitationToken` hết hạn sau **72 giờ**; trả `400 isSuccess=false` nếu expired hoặc đã dùng.
-- [x] Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.
+- [x] ~~Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.~~ **→ Superseded by ADR-019 (GH-295, 2026-06-14)** — chuyển sang flow init+confirm có verify TOTP, login enforce 2FA qua challenge token, disable yêu cầu password+TOTP, secret encrypt at-rest, backup codes recovery. Admin reset endpoint giữ nguyên đường dẫn `DELETE /api/admin/accounts/{id}/2fa` nhưng nay thực sự được implement (trước đây chỉ document). Xem §0.5 và §40.1 ADR-019.
 - [x] Bổ sung lifecycle temporary role: tự expire qua background job, có audit log khi expire, không cần manual revoke.
 - [x] Bổ sung error codes cho `GET /api/admin/accounts/{id}` (404), `DELETE /api/admin/accounts/{id}` (404, 409 nếu đang active), `POST /api/admin/accounts/{id}/unlock` (404, 409 nếu chưa bị khóa).
 
@@ -185,6 +186,50 @@
 - [x] **Doc:** Sửa endpoint acknowledge alert: trả `409` (không phải `400`) cho state transition không hợp lệ; block cả `Resolved` lẫn `Merged`.
 - [x] **Doc:** Sửa validation batch sensor readings: `voltage >= 0` (cho phép 0), temperature `-50..120°C`, timestamp cho phép +5 phút so với server time.
 - [x] **Doc:** Bổ sung 4 trường hợp `409` còn thiếu cho `POST /api/battery-assets` (serial trùng, batteryType mismatch với group, group không thuộc site, site không thuộc customer).
+
+---
+
+### 0.5. Quyết định trong lượt cập nhật 14/6/2026
+
+**Auth — 2FA Hardening (GH-295, in-flight Sprint 3):**
+
+Reverse Option B (§0.4 dòng 162) — biến 2FA từ feature cosmetic thành cơ chế bảo vệ thực sự. Toàn bộ chi tiết tại `logs/GH-295/plan.md`; ADR đầy đủ tại §40.1 ADR-019.
+
+- [ ] **Login enforcement:** `LoginCommandHandler` check `Account.TwoFactorEnabled`. Nếu true → trả `TwoFactorChallengeDto { challengeToken, expiresInSeconds:300, methods:["totp","backupCode"] }` thay vì JWT. Challenge token lưu Redis key `2fa:challenge:{token}` TTL 5’, max 5 attempts/token.
+- [ ] **Endpoint mới:** `POST /api/auth/login/verify-2fa { challengeToken, code, isBackupCode }` → verify TOTP hoặc backup code → cấp JWT + refresh token. Rate limit 5 attempts/5min/token.
+- [ ] **Enable 2 bước:** tách `POST /api/accounts/me/2fa/enable` (deprecated → 410 Gone) thành:
+  - `POST /api/accounts/me/2fa/init` → sinh secret + otpAuthUri + `pendingToken`, cache Redis `2fa:pending:{accountId}` TTL 10’, KHÔNG set `TwoFactorEnabled=true` ở bước này
+  - `POST /api/accounts/me/2fa/confirm { pendingToken, code }` → verify TOTP → activate + sinh 8 backup codes (plain trả 1 lần)
+- [ ] **Disable re-auth:** `POST /api/accounts/me/2fa/disable` đổi body `{ password, totpCode }` — verify cả hai trước khi clear. Chống session hijack + stolen device.
+- [ ] **Encrypt secret:** `TwoFactorSecret` lưu qua `IDataProtector` (purpose `"AuthService.Account.TwoFactorSecret.v1"`), format `enc:v1:{base64}` để detect plaintext legacy. Lazy re-encrypt khi user verify TOTP lần đầu sau migration (cột mới `TwoFactorSecretEncryptedAt nullable`). Data Protection key persist qua Docker volume `auth-dataprotection-keys`.
+- [ ] **Backup codes:** entity mới `BackupCode { AccountId, CodeHash, RedeemedAt? }`. 8 codes/account, format `xxxx-xxxx` (10-char alphanum bỏ 0/o/l/1), bcrypt cost 11, single-use. Endpoint regenerate `POST /api/accounts/me/2fa/backup-codes/regenerate { totpCode }` xóa codes cũ + sinh 8 mới.
+- [ ] **Admin reset:** `DELETE /api/admin/accounts/{id}/2fa` (policy `AdminOnly`, mới — overall.md cũ document nhưng code chưa có) → clear secret + backup codes + `TwoFactorEnabled=false` + ghi `AuditLog.Admin2FAReset` actor=admin target=user.
+- [ ] **AuditLog actions mới:** `TwoFactorEnabled`, `TwoFactorDisabled`, `TwoFactorReset`, `BackupCodeRedeemed`, `BackupCodesRegenerated`, `Admin2FAReset`.
+- [ ] **Migration:** `Add2FAHardening` — cột `accounts.two_factor_secret_encrypted_at` (timestamp nullable) + table `backup_codes (id, account_id FK cascade, code_hash, redeemed_at nullable, created_at, ...)`.
+- [ ] **Out of scope (defer):** step-up auth cho sensitive admin actions (cần ticket riêng để decide pattern); SMS/email OTP làm 2FA factor; WebAuthn/FIDO2; trusted-device remember; force-enroll Admin.
+
+**Library decisions:**
+- TOTP: NuGet `Otp.NET` (MIT, RFC 6238) — replace tự build base32 trong `Enable2FACommandHandler` cũ
+- Backup code hash: BCrypt cost 11 — match existing password hash config
+- Challenge/pending store: `IDistributedCache` (Redis) — đã có sẵn trong `SharedInfrastructure`
+
+**Post-implementation review additions (2026-06-14):**
+
+- [x] **HTTP status code convention** — strict mapping theo user policy:
+  - `400` = field validation (body field user submit, format/required sai)
+  - `401` = no token / token expired (chỉ cho endpoint protected)
+  - `403` = no permission / sai role
+  - `404` = không có trong DB
+  - `409` = conflict với state hiện tại (vd 2FA đã enable khi enroll)
+  - `422` = business rule violation (format đúng nhưng value/state sai — vd wrong TOTP, expired challenge, wrong password)
+  - `429` = rate limit
+  - Áp dụng: Confirm2FA wrong code/expired → 422; Disable2FA wrong password/TOTP → 422; RegenerateBackupCodes wrong TOTP → 422; Verify2FALogin wrong code/expired challenge → 422, account deleted → 404, 2FA disabled mid-session → 409
+- [x] **`[BindNever]` defense-in-depth** — combo `[JsonIgnore] + [BindNever]` cho mọi field set từ JWT/route (AccountId, TargetAccountId) trong 5 commands. Chống attacker query string override.
+- [x] **Field-vs-Message convention** — `ErrorsListJsonConverter` đã convert empty list → JSON `null`. Handler chỉ add vào `ListErrors` cho body field validation; business/system errors chỉ set `Message` (ListErrors → JSON `null`).
+- [x] **`env.prod.example` + `docker-compose.prod.yml`** — thêm `DataProtection__KeysPath=/app/keys` + volume `auth-dataprotection-keys` mount `/app/keys` + comment cảnh báo OPS backup. **Critical:** nếu thiếu → restart container prod = mất 2FA cho mọi user enrolled.
+- [x] **`api-auth.md` doc rewrite** — 8 endpoint sections (login response shape mới, verify-2fa, init, confirm, deprecated enable, disable body mới, backup-codes regenerate, admin reset), AuditAction table thêm 8 entries (40-47), refresh-token/google-callback/accept-invite update sang shape `data.tokens.*`.
+- [ ] **`.env` local + `.gitignore`** — user tự edit theo hướng dẫn (`DataProtection__KeysPath=./.dataprotection-keys` + ignore `.dataprotection-keys/`).
+- [ ] **FE ticket riêng** — handle LoginResponse breaking change + render 2FA challenge screen + 8 backup codes display (1-time) + admin reset UI. Plan FE sẽ tạo sau khi BE merge.
 
 ---
 
@@ -4562,61 +4607,61 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 
 #### Phase A — Bootstrap & MVP shim (S0–S1 trong IoT plan)
 
-- [ ] **S0-BE-01** — Pull BatteryService, `dotnet build` xanh, chạy migration cũ trên DB dev mới (`battery_service_dev` + TimescaleDB extension). Swagger UI mở được — #IoT2-01 → #255
-- [ ] **S1-BE-01** — Seed script `tools/seed-iot-mvp.sh`: 1× Site + 4× BatteryAsset (serial `BAT-2026-001..004`) + threshold config mặc định (voltage 11–14V, temp -10..60°C, SOC 20–100%). `dotnet run --seed` → DB có dữ liệu — #IoT2-02 → #256
-- [ ] **S1-BE-02** — Endpoint legacy `POST /api/sensor-readings/batch` nhận payload simulator MVP: shim `serial → BatteryAssetId` nội bộ nếu cần. POST từ ESP32 mock → row mới trong `sensor_readings` — #IoT2-03 → #257
+- [x] **S0-BE-01** — Pull BatteryService, `dotnet build` xanh, chạy migration cũ trên DB dev mới (`battery_service_dev` + TimescaleDB extension). Swagger UI mở được — #IoT2-01 → #255
+- [x] **S1-BE-01** — Seed script `tools/seed-iot-mvp.sh`: 1× Site + 4× BatteryAsset (serial `BAT-2026-001..004`) + threshold config mặc định (voltage 11–14V, temp -10..60°C, SOC 20–100%). `dotnet run --seed` → DB có dữ liệu — #IoT2-02 → #256
+- [x] **S1-BE-02** — Endpoint legacy `POST /api/sensor-readings/batch` nhận payload simulator MVP: shim `serial → BatteryAssetId` nội bộ nếu cần. POST từ ESP32 mock → row mới trong `sensor_readings` — #IoT2-03 → #257
 
 #### Phase B — Device Management (S2 trong IoT plan)
 
-- [ ] **S2-BE-01** — Migration `AddIotDeviceManagement`: 5 entity (`IotDevice`, `IotDeviceHeartbeat`, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`) + 3 enum (`IotDeviceTypeEnum`, `IotDeviceStatusEnum`, `SensorReadingSourceTypeEnum`) + cột `SourceType` (NOT NULL default `IotGateway`) + `SensorSourceCode` (string(20)?) vào `SensorReading`. `dotnet ef database update` pass; bảng + index tạo đầy đủ — xem §52.2, §1.3.4 — #IoT2-04 → #258
-- [ ] **S2-BE-02** — Hypertable hóa `iot_device_heartbeats` (`time` column, chunk 1 ngày, retention 30 ngày). `SELECT * FROM timescaledb_information.hypertables` thấy bảng — xem §52.2 retention — #IoT2-05 → #259
-- [ ] **S2-BE-03** — `DeviceApiKeyService`: sinh key 32 byte random, hash SHA-256 lưu DB; xác thực header `X-Api-Key` + `X-Device-Code`; rotate/revoke. **Scope key (§52.2):** `sensor.ingest` + `device.heartbeat` mặc định; nếu device có sensor môi trường (SHT31/MQ-2/water) thêm `environmental.ingest` để gọi cùng key vào `/api/ambient-readings/batch` + `/api/environmental-incidents`. Unit test: key đúng → pass, sai → 401, revoked → 403, scope thiếu → 403 — #IoT2-06 → #260
-- [ ] **S2-BE-04** — `POST /api/v1/admin/iot-devices` (Admin) tạo device + trả `apiKey` plaintext **đúng 1 lần** trong response. Lần GET sau không trả lại key (chỉ lastFour). Response: `{deviceCode, apiKey, provisioningQrCode}` — xem §52.3 — #IoT2-07 → #261
-- [ ] **S2-BE-05** — Admin endpoints còn lại: `GET /api/v1/admin/iot-devices?status=&siteId=`, `GET /api/v1/admin/iot-devices/{id}`, `PUT /api/v1/admin/iot-devices/{id}/config` (push config), `DELETE /api/v1/admin/iot-devices/{id}` (soft decommission). Swagger test pass — xem §52.11 — #IoT2-08 → #262
-- [ ] **S2-BE-06** — `POST /api/v1/iot-devices/provision`: set `Status=Active`, trả `configJson` chứa `pollingInterval`, `heartbeatInterval=60s`, `batteryMappings[]` (serial+unitId+sensorSourceCode), `ntpServer`, `supportedSensors`. Provisioning → Active trên DB — xem §52.3, §52.4 — #IoT2-09 → #263
-- [ ] **S2-BE-07** — `POST /api/v1/iot-devices/heartbeat`: ghi 1 row hypertable + update `IotDevice.LastSeenAt`. Frequency expected 60s. Field mapping ESP32: `Cpu`/`DiskFreeMb` cho phép null; map `Temperature`/`MemoryUsageMb`/`SignalStrengthDbm`/`LocalQueueDepth`. Sau 5 phút có 5 row — xem §52.4, §52.2 ESP32 mapping — #IoT2-10 → #264
-- [ ] **S2-BE-08** — `IotDeviceOfflineDetectionBackgroundService` chạy 2 phút/lần: device `Active` + `LastSeenAt < now-5min` → `Status=Offline` + publish `IotDeviceWentOfflineEvent` (outbox) + tạo `Alert(DeviceOffline)` (AnomalyType=7, Warning) cho mọi battery liên kết. **Phân vai dedup (§52.6):** Customer được báo qua `DeviceOffline` Alert đi đường BatteryAlert (§3.4); Staff/ops được báo qua `IotDeviceWentOfflineEvent` đến NotificationService (xem #IoT2-13). Dedup theo `DeviceId` cửa sổ offline. Tắt ESP32 6 phút → đổi Offline + Customer push 1 lần + Staff in-app 1 lần — #IoT2-11 → #265
-- [ ] **S2-BE-09** — ApiGateway route `/api/v1/iot-devices/*` + `/api/v1/admin/iot-devices/*` (xem §0bis.3). Gọi qua gateway hoạt động — #IoT2-12 → #266
-- [ ] **S2-BE-10** — Khai báo `IotDeviceWentOfflineEvent` trong `SharedContracts/IntegrationEvents/`. **NotificationService:** viết `IotDeviceWentOfflineConsumer` + template `device-offline.hbs` (push/in-app cho Staff/ops, routing §3.4 — KHÔNG gửi Customer ở đây vì đã đi qua Alert). +1 consumer / +1 template ngoài baseline. Event publish từ #IoT2-11 → Staff nhận in-app/push, Customer KHÔNG nhận từ kênh này — #IoT2-13 → #267
+- [x] **S2-BE-01** — Migration `AddIotDeviceManagement`: 5 entity (`IotDevice`, `IotDeviceHeartbeat`, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`) + 3 enum (`IotDeviceTypeEnum`, `IotDeviceStatusEnum`, `SensorReadingSourceTypeEnum`) + cột `SourceType` (NOT NULL default `IotGateway`) + `SensorSourceCode` (string(20)?) vào `SensorReading`. `dotnet ef database update` pass; bảng + index tạo đầy đủ — xem §52.2, §1.3.4 — #IoT2-04 → #258
+- [x] **S2-BE-02** — Hypertable hóa `iot_device_heartbeats` (`time` column, chunk 1 ngày, retention 30 ngày). `SELECT * FROM timescaledb_information.hypertables` thấy bảng — xem §52.2 retention — #IoT2-05 → #259
+- [x] **S2-BE-03** — `DeviceApiKeyService`: sinh key 32 byte random, hash SHA-256 lưu DB; xác thực header `X-Api-Key` + `X-Device-Code`; rotate/revoke. **Scope key (§52.2):** `sensor.ingest` + `device.heartbeat` mặc định; nếu device có sensor môi trường (SHT31/MQ-2/water) thêm `environmental.ingest` để gọi cùng key vào `/api/ambient-readings/batch` + `/api/environmental-incidents`. Unit test: key đúng → pass, sai → 401, revoked → 403, scope thiếu → 403 — #IoT2-06 → #260
+- [x] **S2-BE-04** — `POST /api/v1/admin/iot-devices` (Admin) tạo device + trả `apiKey` plaintext **đúng 1 lần** trong response. Lần GET sau không trả lại key (chỉ lastFour). Response: `{deviceCode, apiKey, provisioningQrCode}` — xem §52.3 — #IoT2-07 → #261
+- [x] **S2-BE-05** — Admin endpoints còn lại: `GET /api/v1/admin/iot-devices?status=&siteId=`, `GET /api/v1/admin/iot-devices/{id}`, `PUT /api/v1/admin/iot-devices/{id}/config` (push config), `DELETE /api/v1/admin/iot-devices/{id}` (soft decommission). Swagger test pass — xem §52.11 — #IoT2-08 → #262
+- [x] **S2-BE-06** — `POST /api/v1/iot-devices/provision`: set `Status=Active`, trả `configJson` chứa `pollingInterval`, `heartbeatInterval=60s`, `batteryMappings[]` (serial+unitId+sensorSourceCode), `ntpServer`, `supportedSensors`. Provisioning → Active trên DB — xem §52.3, §52.4 — #IoT2-09 → #263
+- [x] **S2-BE-07** — `POST /api/v1/iot-devices/heartbeat`: ghi 1 row hypertable + update `IotDevice.LastSeenAt`. Frequency expected 60s. Field mapping ESP32: `Cpu`/`DiskFreeMb` cho phép null; map `Temperature`/`MemoryUsageMb`/`SignalStrengthDbm`/`LocalQueueDepth`. Sau 5 phút có 5 row — xem §52.4, §52.2 ESP32 mapping — #IoT2-10 → #264
+- [x] **S2-BE-08** — `IotDeviceOfflineDetectionBackgroundService` chạy 2 phút/lần: device `Active` + `LastSeenAt < now-5min` → `Status=Offline` + publish `IotDeviceWentOfflineEvent` (outbox) + tạo `Alert(DeviceOffline)` (AnomalyType=7, Warning) cho mọi battery liên kết. **Phân vai dedup (§52.6):** Customer được báo qua `DeviceOffline` Alert đi đường BatteryAlert (§3.4); Staff/ops được báo qua `IotDeviceWentOfflineEvent` đến NotificationService (xem #IoT2-13). Dedup theo `DeviceId` cửa sổ offline. Tắt ESP32 6 phút → đổi Offline + Customer push 1 lần + Staff in-app 1 lần — #IoT2-11 → #265
+- [x] **S2-BE-09** — ApiGateway route `/api/v1/iot-devices/*` + `/api/v1/admin/iot-devices/*` (xem §0bis.3). Gọi qua gateway hoạt động — #IoT2-12 → #266
+- [x] **S2-BE-10** — Khai báo `IotDeviceWentOfflineEvent` trong `SharedContracts/IntegrationEvents/`. **NotificationService:** viết `IotDeviceWentOfflineConsumer` + template `device-offline.hbs` (push/in-app cho Staff/ops, routing §3.4 — KHÔNG gửi Customer ở đây vì đã đi qua Alert). +1 consumer / +1 template ngoài baseline. Event publish từ #IoT2-11 → Staff nhận in-app/push, Customer KHÔNG nhận từ kênh này — #IoT2-13 → #267
 
 #### Phase C — Production Contract & Resilience (S3 trong IoT plan)
 
-- [ ] **S3-BE-01** — Update `SensorReadingBatchIngestCommand`: nhận header `X-Device-Code`, `Idempotency-Key`, body `deviceTimestamp` + readings (`batteryAssetSerial`, `sensorSourceCode`, `sourceType`, optional `bmsErrorCode ≤ 64`). **GIỮ song song backward compat (§52.5):** vẫn chấp nhận legacy `items[].batteryAssetId` để simulator MVP (Phase A) chạy không gãy — detect format qua presence của `deviceTimestamp`/`readings[]`. Regression test cho cả 2 schema — #IoT2-14 → #268
-- [ ] **S3-BE-02** — Validate clock skew: `|deviceTimestamp - serverNow| > 5 phút` → 400 + tăng `iot_sensor_readings_rejected_total{reason=clock_drift}`. Test: timestamp -10 phút → 400 — xem §52.5 — #IoT2-15 → #269
-- [ ] **S3-BE-03** — Idempotency: lưu `(deviceCode, idempotencyKey)` vào table riêng (TTL 24h) + index unique. Trùng → 200 trả lại result cũ (không insert). Test: POST 2 lần cùng key → 200, DB chỉ 1 batch — xem §8.6 — #IoT2-16 → #270
-- [ ] **S3-BE-04** — Outlier reject: voltage `>1000V` hoặc `<0`, temp ngoài `[-50..150]`, soc ngoài `[0..100]`, soh ngoài `[0..100]`, `bmsErrorCode > 64 chars`. Tăng `iot_sensor_readings_rejected_total{reason=sensor_outlier}` + counter `IotDevice.OutlierIncidentCount`. **Auto-disable (§52.15 / EC-25):** vượt N=50 outlier trong 1h → `Status=Decommissioned` tự động + alert Admin. Test: voltage=-5 → 400; 51 outlier liên tiếp → device tự decommission — #IoT2-17 → #271
-- [ ] **S3-BE-05** — Map `batteryAssetSerial` → `BatteryAssetId` + kiểm tra `device.BatteryAssetIds` / `batteryMappings` có chứa battery này (nếu không → 403 + log + metric `reason=mapping_invalid`). Test: device không quyền pin X → 403 — xem §52.5 — #IoT2-18 → #272
-- [ ] **S3-BE-06** — Apply calibration trước khi insert: lấy active calibration của `(deviceId, sensorMetric)` từ cache (Redis TTL 5 phút). `calibrated_value = raw_value * ScaleFactor + OffsetValue`. Test: tạo calibration offset=0.5 → voltage insert lệch +0.5 — xem §52.8 — #IoT2-19 → #273
-- [ ] **S3-BE-07** — Update `IotDevice.LastSeenAt` mỗi lần ingest thành công. LastSeenAt nhảy mỗi 5s khi simulator chạy — xem §52.5 — #IoT2-20 → #274
+- [x] **S3-BE-01** — Update `SensorReadingBatchIngestCommand`: nhận header `X-Device-Code`, `Idempotency-Key`, body `deviceTimestamp` + readings (`batteryAssetSerial`, `sensorSourceCode`, `sourceType`, optional `bmsErrorCode ≤ 64`). **GIỮ song song backward compat (§52.5):** vẫn chấp nhận legacy `items[].batteryAssetId` để simulator MVP (Phase A) chạy không gãy — detect format qua presence của `deviceTimestamp`/`readings[]`. Regression test cho cả 2 schema — #IoT2-14 → #268
+- [x] **S3-BE-02** — Validate clock skew: `|deviceTimestamp - serverNow| > 5 phút` → 400 + tăng `iot_sensor_readings_rejected_total{reason=clock_drift}`. Test: timestamp -10 phút → 400 — xem §52.5 — #IoT2-15 → #269
+- [x] **S3-BE-03** — Idempotency: lưu `(deviceCode, idempotencyKey)` vào table riêng (TTL 24h) + index unique. Trùng → 200 trả lại result cũ (không insert). Test: POST 2 lần cùng key → 200, DB chỉ 1 batch — xem §8.6 — #IoT2-16 → #270
+- [x] **S3-BE-04** — Outlier reject: voltage `>1000V` hoặc `<0`, temp ngoài `[-50..150]`, soc ngoài `[0..100]`, soh ngoài `[0..100]`, `bmsErrorCode > 64 chars`. Tăng `iot_sensor_readings_rejected_total{reason=sensor_outlier}` + counter `IotDevice.OutlierIncidentCount`. **Auto-disable (§52.15 / EC-25):** vượt N=50 outlier trong 1h → `Status=Decommissioned` tự động + alert Admin. Test: voltage=-5 → 400; 51 outlier liên tiếp → device tự decommission — #IoT2-17 → #271
+- [x] **S3-BE-05** — Map `batteryAssetSerial` → `BatteryAssetId` + kiểm tra `device.BatteryAssetIds` / `batteryMappings` có chứa battery này (nếu không → 403 + log + metric `reason=mapping_invalid`). Test: device không quyền pin X → 403 — xem §52.5 — #IoT2-18 → #272
+- [x] **S3-BE-06** — Apply calibration trước khi insert: lấy active calibration của `(deviceId, sensorMetric)` từ cache (Redis TTL 5 phút). `calibrated_value = raw_value * ScaleFactor + OffsetValue`. Test: tạo calibration offset=0.5 → voltage insert lệch +0.5 — xem §52.8 — #IoT2-19 → #273
+- [x] **S3-BE-07** — Update `IotDevice.LastSeenAt` mỗi lần ingest thành công. LastSeenAt nhảy mỗi 5s khi simulator chạy — xem §52.5 — #IoT2-20 → #274
 
 #### Phase D — MQTT Bridge (S4 trong IoT plan, P3 — optional/giãn)
 
 > Nếu thiếu thời gian, phase này trượt sang sau capstone. HTTPS đủ cho MVP/demo. Topic 5 cái — bắt buộc đủ `cmd/ack` để trace downlink (§52.14).
 
-- [ ] **S4-BE-01** — Add NuGet `MQTTnet` + `MQTTnet.Extensions.ManagedClient` vào `BatteryService.Infrastructure`. Build pass — #IoT2-21 → #275
-- [ ] **S4-BE-02** — `MqttBridgeBackgroundService` subscribe **4 topic** (publish-side 5 nếu tính `cmd`): `solar/+/+/telemetry`, `solar/+/heartbeat`, `solar/+/status`, `solar/+/cmd/ack`. Đăng ký qua `AddHostedService`. Service start log "connected to broker, 4 subscriptions"; ack từ ESP32 sau khi exec cmd được log để admin trace — xem §52.14 — #IoT2-22 → #276
-- [ ] **S4-BE-03** — `TelemetryMessageHandler`: parse JSON payload từ `solar/+/+/telemetry` → gọi `SensorReadingBatchIngestCommand` (reuse logic validate/calibrate/insert từ Phase C, KHÔNG viết lại). Publish 1 batch qua MQTT → DB ghi đúng — xem §52.14 — #IoT2-23 → #277
-- [ ] **S4-BE-04** — `LastWillHandler`: nhận `solar/{dev}/status` payload `offline` → `IotDeviceMarkOfflineCommand` (mark Offline tức thì) + alert `DeviceOffline` + publish `IotDeviceWentOfflineEvent`. Rút điện ESP32 → ≤ 90s sau (keep-alive 60s + xử lý) DB `Status=Offline` — xem §52.6 cơ chế 1 — #IoT2-24 → #278
-- [ ] **S4-BE-05** — `IMqttBridgePublisher` để service khác publish downlink `solar/{dev}/cmd`. Endpoint `POST /api/v1/admin/iot-devices/{id}/command` body `{cmdId, type, params}`. API test: POST cmd → ESP32 nhận → bridge log ack `{cmdId, status:"ok"}` từ topic `cmd/ack` — #IoT2-25 → #279
-- [ ] **S4-BE-06** — Cấp credential MQTT per-device khi tạo `IotDevice` (lưu hash hoặc bcrypt; sync lên EMQX qua HTTP auth hook hoặc bảng built-in). ACL phân quyền topic per-device (`infra/mqtt/acl.conf`). Tạo device mới → ESP32 connect được; xóa device → connect bị từ chối — xem §52.14 — #IoT2-26 → #280
+- [x] **S4-BE-01** — Add NuGet `MQTTnet` + `MQTTnet.Extensions.ManagedClient` vào `BatteryService.Infrastructure`. Build pass — #IoT2-21 → #275
+- [x] **S4-BE-02** — `MqttBridgeBackgroundService` subscribe **4 topic** (publish-side 5 nếu tính `cmd`): `solar/+/+/telemetry`, `solar/+/heartbeat`, `solar/+/status`, `solar/+/cmd/ack`. Đăng ký qua `AddHostedService`. Service start log "connected to broker, 4 subscriptions"; ack từ ESP32 sau khi exec cmd được log để admin trace — xem §52.14 — #IoT2-22 → #276
+- [x] **S4-BE-03** — `TelemetryMessageHandler`: parse JSON payload từ `solar/+/+/telemetry` → gọi `SensorReadingBatchIngestCommand` (reuse logic validate/calibrate/insert từ Phase C, KHÔNG viết lại). Publish 1 batch qua MQTT → DB ghi đúng — xem §52.14 — #IoT2-23 → #277
+- [x] **S4-BE-04** — `LastWillHandler`: nhận `solar/{dev}/status` payload `offline` → `IotDeviceMarkOfflineCommand` (mark Offline tức thì) + alert `DeviceOffline` + publish `IotDeviceWentOfflineEvent`. Rút điện ESP32 → ≤ 90s sau (keep-alive 60s + xử lý) DB `Status=Offline` — xem §52.6 cơ chế 1 — #IoT2-24 → #278
+- [x] **S4-BE-05** — `IMqttBridgePublisher` để service khác publish downlink `solar/{dev}/cmd`. Endpoint `POST /api/v1/admin/iot-devices/{id}/command` body `{cmdId, type, params}`. API test: POST cmd → ESP32 nhận → bridge log ack `{cmdId, status:"ok"}` từ topic `cmd/ack` — #IoT2-25 → #279
+- [x] **S4-BE-06** — Cấp credential MQTT per-device khi tạo `IotDevice` (lưu hash hoặc bcrypt; sync lên EMQX qua HTTP auth hook hoặc bảng built-in). ACL phân quyền topic per-device (`infra/mqtt/acl.conf`). Tạo device mới → ESP32 connect được; xóa device → connect bị từ chối — xem §52.14 — #IoT2-26 → #280
 
 #### Phase E — Anomaly · Cross-source · Environmental (S6 trong IoT plan)
 
-- [ ] **S6-BE-01** — Thêm `AnomalyTypeEnum.SensorMismatch = 15` + entry vào catalog (§1.3.6). Migration thêm enum value — B10 (Sprint 7 #157, có thể carry-over) — #IoT2-27 → #281
-- [ ] **S6-BE-02** — `CrossSourceValidationService`: khi insert reading mới, query reading cùng `BatteryAssetId` trong cửa sổ 60s ở `sourceType` khác (Bms vs IotGateway); lệch V > 0.5V hoặc temp > 5°C → tạo `Alert(SensorMismatch, Warning)`. Test: bơm 2 reading lệch → alert xuất hiện — xem §1.6.6 — #IoT2-28 → #282
-- [ ] **S6-BE-03** — Verify `ThresholdCheckBackgroundService` cũ vẫn quét reading mới, trigger `Alert(Overheat/LowSoc/...)`; nếu chưa có thì viết. Bơm voltage = 15V → alert Critical xuất hiện — xem §1.6 — #IoT2-29 → #283
-- [ ] **S6-BE-04** — Publish outbox event `BatteryAnomalyDetectedEvent` **V2** từ BatteryService (schema đầy đủ `AlertId/AnomalyType/Severity/Source/BatteryAssetId/Site` theo §53.7). **KHÔNG để TicketService consume trực tiếp** — Sprint 5B đã chuyển sang **Alert–Ticket Saga** (§53, MassTransit State Machine): event → Saga orchestrate qua 8 message (`CreateTicketFromAlertCommand` → `TicketProvisionedForAlertEvent` → `LinkAlertToTicketCommand` → `AlertLinkedToTicketEvent` → `Completed`). Direct consumer sẽ tạo Ticket trùng. IoT track CHỈ chịu trách nhiệm emit event đúng schema; Saga state machine + retry/compensation thuộc Sprint 5B `#237`. NotificationService consume `BatteryAnomalyDetectedEvent` riêng cho push/email (§3.4) — không qua Saga. Test: Ticket được Saga tạo (state `TicketProvisioned` → `Completed`); `Alert.TicketId` được link; không Ticket trùng nếu Saga retry — xem §53, §52.12bis — #IoT2-30 → #284
-- [ ] **S6-BE-05** — Endpoint `POST /api/ambient-readings/batch` (AmbientReading — `Source=IotSensor`, `SourceDeviceId=<DeviceCode>`) + `POST /api/environmental-incidents` (EnvironmentalIncident: `SmokeDetected`/`WaterLeak`). Khi tạo incident → publish `EnvironmentalIncidentDetectedEvent` (§1.7) → NotificationService route lên **Critical channel** (push + email + SMS), **bypass quiet hours** (§3.4 + §49.3) — page Manager + Admin. Cùng device API key (scope `environmental.ingest` — xem #IoT2-06). Test: smoke incident → Manager nhận push **trong quiet hours** + email + SMS — xem §52.9bis — #IoT2-31 → #285
+- [x] **S6-BE-01** — Thêm `AnomalyTypeEnum.SensorMismatch = 15` + entry vào catalog (§1.3.6). Migration thêm enum value — B10 (Sprint 7 #157, có thể carry-over) — #IoT2-27 → #281
+- [x] **S6-BE-02** — `CrossSourceValidationService`: khi insert reading mới, query reading cùng `BatteryAssetId` trong cửa sổ 60s ở `sourceType` khác (Bms vs IotGateway); lệch V > 0.5V hoặc temp > 5°C → tạo `Alert(SensorMismatch, Warning)`. Test: bơm 2 reading lệch → alert xuất hiện — xem §1.6.6 — #IoT2-28 → #282
+- [x] **S6-BE-03** — Verify `ThresholdCheckBackgroundService` cũ vẫn quét reading mới, trigger `Alert(Overheat/LowSoc/...)`; nếu chưa có thì viết. Bơm voltage = 15V → alert Critical xuất hiện — xem §1.6 — #IoT2-29 → #283
+- [x] **S6-BE-04** — Publish outbox event `BatteryAnomalyDetectedEvent` **V2** từ BatteryService (schema đầy đủ `AlertId/AnomalyType/Severity/Source/BatteryAssetId/Site` theo §53.7). **KHÔNG để TicketService consume trực tiếp** — Sprint 5B đã chuyển sang **Alert–Ticket Saga** (§53, MassTransit State Machine): event → Saga orchestrate qua 8 message (`CreateTicketFromAlertCommand` → `TicketProvisionedForAlertEvent` → `LinkAlertToTicketCommand` → `AlertLinkedToTicketEvent` → `Completed`). Direct consumer sẽ tạo Ticket trùng. IoT track CHỈ chịu trách nhiệm emit event đúng schema; Saga state machine + retry/compensation thuộc Sprint 5B `#237`. NotificationService consume `BatteryAnomalyDetectedEvent` riêng cho push/email (§3.4) — không qua Saga. Test: Ticket được Saga tạo (state `TicketProvisioned` → `Completed`); `Alert.TicketId` được link; không Ticket trùng nếu Saga retry — xem §53, §52.12bis — #IoT2-30 → #284
+- [x] **S6-BE-05** — Endpoint `POST /api/ambient-readings/batch` (AmbientReading — `Source=IotSensor`, `SourceDeviceId=<DeviceCode>`) + `POST /api/environmental-incidents` (EnvironmentalIncident: `SmokeDetected`/`WaterLeak`). Khi tạo incident → publish `EnvironmentalIncidentDetectedEvent` (§1.7) → NotificationService route lên **Critical channel** (push + email + SMS), **bypass quiet hours** (§3.4 + §49.3) — page Manager + Admin. Cùng device API key (scope `environmental.ingest` — xem #IoT2-06). Test: smoke incident → Manager nhận push **trong quiet hours** + email + SMS — xem §52.9bis — #IoT2-31 → #285
 
 #### Phase F — Calibration · OTA · Observability (S7 trong IoT plan)
 
-- [ ] **S7-BE-01** — Endpoint `POST /api/v1/iot-devices/{id}/calibrations` (Staff/Admin) + `GET` list + `GET /api/v1/iot-devices/calibrations-expiring?within=30d` (Manager). Tạo, list, filter expiring trong 30d hoạt động — xem §52.8, §52.11 — #IoT2-32 → #286
-- [ ] **S7-BE-02** — `CalibrationExpiryNotificationService` (background, hằng ngày): scan calibration `ValidUntil < now+30d` → notify Manager. Tạo calibration ValidUntil = hôm nay → service báo — xem §52.8 — #IoT2-33 → #287
-- [ ] **S7-BE-03** — Invalidate Redis cache calibration khi tạo mới (xem #IoT2-19). Tạo mới → reading kế tiếp dùng calibration mới — xem §52.8 — #IoT2-34 → #288
-- [ ] **S7-BE-04** — `POST /api/v1/admin/iot-firmware-releases` (multipart): upload `.bin` + sha256 + isRequired + channel (Stable/Beta) + releaseNotes + deviceModel + version. Upload thành công, file lưu `FileStorageService` — xem §52.7 — #IoT2-35 → #289
-- [ ] **S7-BE-05** — `GET /api/v1/iot-devices/firmware-check` → trả `{hasUpdate, version, downloadUrl signed, sha256, isRequired, releaseNotes}`. ESP32 GET thấy update khi có firmware version cao hơn — xem §52.7 — #IoT2-36 → #290
-- [ ] **S7-BE-06** — `PUT /api/v1/iot-devices/firmware-update-log/{id}` cho ESP32 update status (`Pending → Downloading → Installing → Success | Failed | RolledBack`). Trạng thái hiển thị web — xem §52.7 — #IoT2-37 → #291
-- [ ] **S7-BE-07** — Expose Prometheus metrics đầy đủ label theo §52.12: `iot_device_heartbeats_total{device_id, status}` (label `status`), `iot_devices_online_count` (gauge), `iot_devices_offline_total` (counter), `iot_sensor_readings_ingested_total{device_id}`, `iot_sensor_readings_rejected_total{reason=clock_drift|sensor_outlier|mapping_invalid|...}`, `iot_firmware_updates_total{from_version, to_version, status}`. `/metrics` endpoint trả đúng schema — #IoT2-38 → #292
+- [x] **S7-BE-01** — Endpoint `POST /api/v1/iot-devices/{id}/calibrations` (Staff/Admin) + `GET` list + `GET /api/v1/iot-devices/calibrations-expiring?within=30d` (Manager). Tạo, list, filter expiring trong 30d hoạt động — xem §52.8, §52.11 — #IoT2-32 → #286
+- [x] **S7-BE-02** — `CalibrationExpiryNotificationService` (background, hằng ngày): scan calibration `ValidUntil < now+30d` → notify Manager. Tạo calibration ValidUntil = hôm nay → service báo — xem §52.8 — #IoT2-33 → #287
+- [x] **S7-BE-03** — Invalidate Redis cache calibration khi tạo mới (xem #IoT2-19). Tạo mới → reading kế tiếp dùng calibration mới — xem §52.8 — #IoT2-34 → #288
+- [x] **S7-BE-04** — `POST /api/v1/admin/iot-firmware-releases` (multipart): upload `.bin` + sha256 + isRequired + channel (Stable/Beta) + releaseNotes + deviceModel + version. Upload thành công, file lưu `FileStorageService` — xem §52.7 — #IoT2-35 → #289
+- [x] **S7-BE-05** — `GET /api/v1/iot-devices/firmware-check` → trả `{hasUpdate, version, downloadUrl signed, sha256, isRequired, releaseNotes}`. ESP32 GET thấy update khi có firmware version cao hơn — xem §52.7 — #IoT2-36 → #290
+- [x] **S7-BE-06** — `PUT /api/v1/iot-devices/firmware-update-log/{id}` cho ESP32 update status (`Pending → Downloading → Installing → Success | Failed | RolledBack`). Trạng thái hiển thị web — xem §52.7 — #IoT2-37 → #291
+- [x] **S7-BE-07** — Expose Prometheus metrics đầy đủ label theo §52.12: `iot_device_heartbeats_total{device_id, status}` (label `status`), `iot_devices_online_count` (gauge), `iot_devices_offline_total` (counter), `iot_sensor_readings_ingested_total{device_id}`, `iot_sensor_readings_rejected_total{reason=clock_drift|sensor_outlier|mapping_invalid|...}`, `iot_firmware_updates_total{from_version, to_version, status}`. `/metrics` endpoint trả đúng schema — #IoT2-38 → #292
 
 #### Acceptance Sprint IoT-2
 
@@ -6456,6 +6501,7 @@ Folder `docs/adrs/`:
 | ADR-016 | IoT edge = **ESP32-S3** (pivot từ Raspberry Pi); transport **hybrid**: HTTPS REST (v1 — bulk/admin/firmware/flush) + **MQTT** (v2 — realtime <100ms, LWT offline, downlink command). BMS đọc qua RS485/Modbus RTU multi-drop. — xem §52.10 |
 | ADR-017 | Remove Energy and CO2 analytics from BatteryService scope — xem §53.1 |
 | ADR-018 | Orchestrated Alert–Ticket Saga + forward recovery (vs choreography hoặc 2PC) — xem §8.3, §53.4–§53.8 |
+| ADR-019 | 2FA Hardening — enforce TOTP in login (challenge token Redis 5’) + confirm setup (2-step init/confirm) + disable re-auth (password+TOTP) + encrypt secret at rest (Data Protection `enc:v1:` + lazy re-encrypt) + backup codes (8 codes bcrypt single-use) + admin reset. **Supersedes Option B** (§0.4 dòng 162). — xem §0.5, GH-295 |
 
 **ADR template:**
 ```markdown

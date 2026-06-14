@@ -634,6 +634,491 @@ namespace BatteryService.Infrastructure.Migrations
                     b.ToTable("environmental_incidents", (string)null);
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApiKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("api_key_hash");
+
+                    b.Property<DateTime>("ApiKeyIssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("api_key_issued_at");
+
+                    b.Property<string>("ApiKeyLastFour")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("api_key_last_four");
+
+                    b.Property<DateTime?>("ApiKeyRevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("api_key_revoked_at");
+
+                    b.Property<int>("ApiKeyScopes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(11)
+                        .HasColumnName("api_key_scopes");
+
+                    b.Property<DateTime?>("AutoDecommissionedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("auto_decommissioned_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CurrentFirmwareVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("current_firmware_version");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("device_code");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("HardwareRevision")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hardware_revision");
+
+                    b.Property<int>("HeartbeatIntervalSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(60)
+                        .HasColumnName("heartbeat_interval_seconds");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<double?>("LastClockSkewSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("last_clock_skew_seconds");
+
+                    b.Property<DateTime?>("LastOfflineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_offline_at");
+
+                    b.Property<DateTime?>("LastProvisionedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_provisioned_at");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("MqttPasswordHash")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("mqtt_password_hash");
+
+                    b.Property<string>("MqttUsername")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("mqtt_username");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("OutlierIncidentCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("outlier_incident_count");
+
+                    b.Property<DateTime?>("OutlierWindowStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("outlier_window_started_at");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TargetFirmwareReleaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_firmware_release_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyHash")
+                        .HasDatabaseName("idx_iot_devices_api_key_hash");
+
+                    b.HasIndex("DeviceCode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_iot_devices_device_code")
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex("SiteId")
+                        .HasDatabaseName("idx_iot_devices_site");
+
+                    b.HasIndex("TargetFirmwareReleaseId");
+
+                    b.HasIndex("Status", "LastSeenAt")
+                        .HasDatabaseName("idx_iot_devices_status_last_seen");
+
+                    b.ToTable("iot_devices", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDeviceCalibration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BatteryAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("battery_asset_id");
+
+                    b.Property<DateTime>("CalibratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("calibrated_at");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("IotDeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iot_device_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<decimal>("Offset")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("offset_value");
+
+                    b.Property<decimal>("Scale")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasDefaultValue(1m)
+                        .HasColumnName("scale");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IotDeviceId", "Channel", "BatteryAssetId")
+                        .HasDatabaseName("idx_iot_calibrations_lookup")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("iot_device_calibrations", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDeviceHeartbeat", b =>
+                {
+                    b.Property<DateTime>("Time")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("time");
+
+                    b.Property<Guid>("IotDeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iot_device_id");
+
+                    b.Property<double?>("ClockSkewSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("clock_skew_seconds");
+
+                    b.Property<DateTime?>("DeviceTimestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("device_timestamp");
+
+                    b.Property<string>("FirmwareVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("firmware_version");
+
+                    b.Property<decimal?>("FreeMemoryPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("free_memory_percent");
+
+                    b.Property<int?>("QueuedReadingCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("queued_reading_count");
+
+                    b.Property<int?>("RssiDbm")
+                        .HasColumnType("integer")
+                        .HasColumnName("rssi_dbm");
+
+                    b.Property<long?>("UptimeSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("uptime_seconds");
+
+                    b.HasKey("Time", "IotDeviceId");
+
+                    b.HasIndex("IotDeviceId", "Time")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("idx_iot_heartbeats_device_time");
+
+                    b.ToTable("iot_device_heartbeats", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotFirmwareRelease", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ArtifactSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("artifact_size_bytes");
+
+                    b.Property<string>("ArtifactUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("artifact_url");
+
+                    b.Property<int>("Channel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("channel");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceModel")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("device_model");
+
+                    b.Property<string>("HardwareRevision")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hardware_revision");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_archived");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_published");
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_required");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("ReleaseNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("release_notes");
+
+                    b.Property<string>("Sha256Checksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256_checksum");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Version", "HardwareRevision")
+                        .IsUnique()
+                        .HasDatabaseName("idx_iot_firmware_version_hw")
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex("HardwareRevision", "IsPublished", "IsArchived")
+                        .HasDatabaseName("idx_iot_firmware_rollout");
+
+                    b.ToTable("iot_firmware_releases", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotFirmwareUpdateLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long?>("BytesDownloaded")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bytes_downloaded");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("FromVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("from_version");
+
+                    b.Property<Guid>("IotDeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iot_device_id");
+
+                    b.Property<Guid>("IotFirmwareReleaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iot_firmware_release_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("status");
+
+                    b.Property<string>("ToVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("to_version");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IotFirmwareReleaseId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("idx_iot_firmware_log_status");
+
+                    b.HasIndex("IotDeviceId", "StartedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("idx_iot_firmware_log_device_time");
+
+                    b.ToTable("iot_firmware_update_logs", (string)null);
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
                 {
                     b.Property<DateTime>("Time")
@@ -733,6 +1218,79 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasFilter("processed_at_utc IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.SensorIngestIdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("device_code");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("Inserted")
+                        .HasColumnType("integer")
+                        .HasColumnName("inserted");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer")
+                        .HasColumnName("skipped");
+
+                    b.Property<int>("TotalReceived")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_received");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("idx_sensor_ingest_idempotency_expires_at");
+
+                    b.HasIndex("DeviceCode", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sensor_ingest_idempotency_device_key");
+
+                    b.ToTable("sensor_ingest_idempotency_records", (string)null);
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.SensorReading", b =>
@@ -1119,6 +1677,65 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("Site");
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BatteryService.Domain.Entities.IotFirmwareRelease", "TargetFirmwareRelease")
+                        .WithMany()
+                        .HasForeignKey("TargetFirmwareReleaseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Site");
+
+                    b.Navigation("TargetFirmwareRelease");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDeviceCalibration", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.IotDevice", "IotDevice")
+                        .WithMany("Calibrations")
+                        .HasForeignKey("IotDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("IotDevice");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDeviceHeartbeat", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.IotDevice", "IotDevice")
+                        .WithMany("Heartbeats")
+                        .HasForeignKey("IotDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("IotDevice");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotFirmwareUpdateLog", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.IotDevice", "IotDevice")
+                        .WithMany("FirmwareUpdateLogs")
+                        .HasForeignKey("IotDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BatteryService.Domain.Entities.IotFirmwareRelease", "IotFirmwareRelease")
+                        .WithMany("UpdateLogs")
+                        .HasForeignKey("IotFirmwareReleaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IotDevice");
+
+                    b.Navigation("IotFirmwareRelease");
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
                 {
                     b.HasOne("BatteryService.Domain.Entities.BatteryAsset", "BatteryAsset")
@@ -1174,6 +1791,20 @@ namespace BatteryService.Infrastructure.Migrations
             modelBuilder.Entity("BatteryService.Domain.Entities.EnvironmentalIncident", b =>
                 {
                     b.Navigation("Alerts");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
+                {
+                    b.Navigation("Calibrations");
+
+                    b.Navigation("FirmwareUpdateLogs");
+
+                    b.Navigation("Heartbeats");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.IotFirmwareRelease", b =>
+                {
+                    b.Navigation("UpdateLogs");
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.Site", b =>

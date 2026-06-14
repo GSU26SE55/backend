@@ -77,7 +77,10 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
 
         builder.Property(a => a.TwoFactorSecret)
             .HasColumnName("two_factor_secret")
-            .HasMaxLength(256);
+            .HasMaxLength(1024);
+
+        builder.Property(a => a.TwoFactorSecretEncryptedAt)
+            .HasColumnName("two_factor_secret_encrypted_at");
 
         builder.Property(a => a.FailedLoginAttempts)
             .HasColumnName("failed_login_attempts")

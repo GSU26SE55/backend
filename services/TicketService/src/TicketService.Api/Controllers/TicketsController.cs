@@ -26,7 +26,7 @@ public class TicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy thông tin chi tiết của một ticket cụ thể.
+    /// Lấy thông tin chi tiết của 1 ticket (full metadata + SLA timer + assignee + originAlert) — role-based filtering: Customer chỉ thấy ticket của mình, Staff thấy ticket assigned.
     /// </summary>
     /// <remarks>
     /// Thông tin bao gồm:
@@ -44,6 +44,8 @@ public class TicketsController : ControllerBase
     /// <response code="200">Tìm thấy ticket.</response>
     /// <response code="404">Không tìm thấy hoặc không có quyền xem.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<TicketDetailDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -72,6 +74,8 @@ public class TicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lấy dữ liệu thành công.</response>
     [HttpGet("{id:guid}/activities")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<List<TicketActivityDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ActivityTimeline(Guid id, CancellationToken ct)
     {

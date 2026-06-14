@@ -28,7 +28,7 @@ public class CustomerTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Khách hàng lấy danh sách ticket của chính mình.
+    /// Khách hàng lấy danh sách ticket của chính mình (filter theo status/priority) — auto-filter CustomerId từ JWT, sort theo CreatedAt DESC mặc định.
     /// </summary>
     /// <remarks>
     /// Các tham số lọc:
@@ -42,6 +42,7 @@ public class CustomerTicketsController : ControllerBase
     /// <response code="200">Lấy danh sách thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("me")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyTickets([FromQuery] MyTicketsAsCustomerQuery query, CancellationToken ct)
@@ -63,6 +64,8 @@ public class CustomerTicketsController : ControllerBase
     /// <response code="201">Tạo thành công.</response>
     /// <response code="400">Dữ liệu không hợp lệ.</response>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] TicketCreateCommand command, CancellationToken ct)
@@ -86,6 +89,7 @@ public class CustomerTicketsController : ControllerBase
     /// <response code="200">Yêu cầu thành công.</response>
     /// <response code="403">Không đủ điều kiện (quá hạn, sai trạng thái).</response>
     [HttpPost("{id}/reopen")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Reopen(Guid id, [FromBody] TicketReopenCommand command, CancellationToken ct)
@@ -111,6 +115,7 @@ public class CustomerTicketsController : ControllerBase
     /// <response code="200">Đánh giá và đóng ticket thành công.</response>
     /// <response code="403">Sai trạng thái ticket.</response>
     [HttpPost("{id}/rate")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Rate(Guid id, [FromBody] TicketRateCommand command, CancellationToken ct)

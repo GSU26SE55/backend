@@ -60,7 +60,7 @@ public class EnvironmentalIncidentHandlersTests
         }, default);
 
         result.IsSuccess.Should().BeTrue();
-        result.StatusCode.Should().Be(200);
+        result.StatusCode.Should().Be(201);
         result.Data!.Status.Should().Be(EnvironmentalIncidentStatusEnum.Open);
 
         incRepo.Verify(r => r.AddAsync(It.IsAny<IncidentEntity>()), Times.Once);

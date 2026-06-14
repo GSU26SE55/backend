@@ -67,11 +67,17 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[TicketService] No pending migrations.");
     }
 
-    if (!app.Environment.IsProduction())
+    // Skip seeder khi SkipSeeder=true (integration test với SQLite — xmin column Postgres-only).
+    var skipSeeder = app.Configuration.GetValue("SkipSeeder", false);
+    if (!app.Environment.IsProduction() && !skipSeeder)
     {
         var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
         await seeder.SeedAsync();
         Console.WriteLine("[TicketService] Seed data checked for non-production environment.");
+    }
+    else if (skipSeeder)
+    {
+        Console.WriteLine("[TicketService] Skipping seed (SkipSeeder=true).");
     }
 }
 
