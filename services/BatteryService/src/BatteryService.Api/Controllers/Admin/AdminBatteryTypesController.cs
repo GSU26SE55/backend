@@ -26,7 +26,7 @@ public class AdminBatteryTypesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới một BatteryType.
+    /// Tạo mới 1 BatteryType (LiFePO4/NMC/NCA) — định nghĩa NominalCapacityAh/NominalVoltage/MaxCycleCount; thường tạo 1 lần khi seed, ít khi mới sau đó.
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -70,7 +70,7 @@ public class AdminBatteryTypesController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật toàn bộ thông tin một BatteryType.
+    /// Cập nhật toàn bộ thông tin một BatteryType — thay đổi spec ảnh hưởng tới tất cả asset đang dùng type này, dùng cẩn thận (chỉ khi nhà sản xuất ra revision mới).
     /// </summary>
     /// <remarks>
     /// Body request: giống <see cref="Create"/>; <c>Id</c> trong URL được gán đè vào command body để đảm bảo nhất quán.
@@ -112,7 +112,7 @@ public class AdminBatteryTypesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa mềm một BatteryType (soft delete).
+    /// Xoá mềm 1 BatteryType — chặn nếu còn BatteryAsset đang reference; phải migrate asset sang type khác trước hoặc soft-delete asset trước.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
@@ -147,7 +147,7 @@ public class AdminBatteryTypesController : ControllerBase
     }
 
     /// <summary>
-    /// Khôi phục một BatteryType đã soft delete.
+    /// Khôi phục 1 BatteryType đã soft delete — set IsDeleted=false. Asset cũ vẫn reference được nếu chưa bị migrate.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:

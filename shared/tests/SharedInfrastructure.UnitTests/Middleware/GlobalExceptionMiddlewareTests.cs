@@ -54,9 +54,11 @@ public class GlobalExceptionMiddlewareTests
         var body = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(body);
         doc.RootElement.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
+        // Middleware trả Vietnamese localized message (xem GlobalExceptionMiddleware.cs).
         doc.RootElement.GetProperty("message").GetString()
-            .Should().Be("An error was caught in global exception middleware.");
-        doc.RootElement.GetProperty("data").GetString().Should().Be("boom");
+            .Should().Be("Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.");
+        // Middleware không expose chi tiết exception (giảm attack surface).
+        doc.RootElement.GetProperty("data").ValueKind.Should().Be(JsonValueKind.Null);
         doc.RootElement.GetProperty("listErrors").ValueKind.Should().Be(JsonValueKind.Null);
     }
 

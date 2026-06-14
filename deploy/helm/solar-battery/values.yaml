@@ -122,6 +122,15 @@ services:
       minReplicas: 2
       maxReplicas: 5
       targetCPUUtilizationPercentage: 70
+    # Sprint IoT-2 #IoT2-35 — PVC cho firmware .bin upload (multipart endpoint).
+    # Disable + dùng object storage (S3/MinIO) khi production scale > 1 replica
+    # (PVC ReadWriteOnce không share giữa replicas).
+    firmwareStorage:
+      enabled: true
+      mountPath: /data/firmware-storage
+      size: 2Gi
+      storageClass: ""           # "" = cluster default; set local-path/longhorn/... nếu cần
+      accessMode: ReadWriteOnce
 
   ticketservice:
     enabled: true
@@ -296,6 +305,30 @@ config:
   # ----- Sprint 5B #238 — Alert-Ticket Saga feature flag cutover -----
   AlertTicketSaga__AlertTicketDispatchEnabled: "true"
   AlertTicketSaga__AlertTicketSagaEnabled: "true"
+
+  # ----- Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService -----
+  Iot__OfflineCheckIntervalSeconds: "120"
+  Iot__OfflineAfterSeconds: "300"
+  Iot__OfflineBatchSize: "100"
+
+  # ----- Sprint IoT-2 #IoT2-22..26 — MQTT bridge (CLIENT only) -----
+  # Broker KHÔNG nằm trong chart này — deploy từ capstone/iot Helm chart riêng,
+  # hoặc managed service (EMQX Cloud / HiveMQ). Backend chỉ chạy MqttBridgeBackgroundService client.
+  # Mqtt__Password đặt trong Secret solar-secrets (xem deploy/README.md).
+  Mqtt__Enabled: "false"           # Bật khi broker deployed + cấp credential
+  Mqtt__Host: "mosquitto"          # K8s Service DNS (broker chart cùng namespace) hoặc fqdn external
+  Mqtt__Port: "8883"
+  Mqtt__UseTls: "true"
+  Mqtt__AllowUntrustedCertificates: "false"
+  Mqtt__Username: "backend-bridge"
+  Mqtt__ClientId: "battery-service-bridge"
+  Mqtt__ReconnectIntervalSeconds: "5"
+
+  # ----- Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage -----
+  # Default: local PVC mount /data/firmware-storage (xem services.batteryservice.firmwareStorage).
+  # Production: nên thay bằng object storage (S3/MinIO) — set Firmware__PublicBaseUrl tới CDN.
+  Firmware__StorageRoot: "/data/firmware-storage"
+  Firmware__PublicBaseUrl: ""
 
 # --------------------------------------------------------------------
 # Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).

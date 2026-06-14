@@ -88,6 +88,13 @@ public class NotificationDataSeeder
             "Bất thường pin {{serialNumber}}", "Loại: {{anomalyType}} — Severity: {{severity}}");
         Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Push, "vi-VN",
             "Cảnh báo môi trường tại {{siteName}}", "Loại: {{incidentType}} — Severity: {{severity}}");
+        // Sprint IoT-2 #IoT2-31 — Email + SMS template (Critical channel, bypass quiet hours).
+        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Email, "vi-VN",
+            "[CRITICAL] Sự cố môi trường tại {{siteName}}",
+            "Phát hiện sự cố môi trường (IncidentType={{incidentType}}, Severity={{severity}}) tại site \"{{siteName}}\". Detected at {{detectedAt}}. Yêu cầu xử lý NGAY.\n\n{{description}}");
+        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Sms, "vi-VN",
+            "[CRITICAL]",
+            "ENV INCIDENT {{incidentType}} tại {{siteName}}. Severity {{severity}}. Vào hệ thống xử lý NGAY.");
         Add(NotificationTypeEnum.EnvironmentalIncidentResolved, NotificationChannelEnum.InApp, "vi-VN",
             "Sự cố môi trường đã xử lý", "Site {{siteName}} — incident {{incidentType}} đã được resolved.");
 
@@ -96,6 +103,17 @@ public class NotificationDataSeeder
             "Tài khoản đã kích hoạt", "Chào {{fullName}}, tài khoản của bạn đã được kích hoạt thành công.");
         Add(NotificationTypeEnum.AdminInvite, NotificationChannelEnum.Email, "vi-VN",
             "Lời mời tham gia hệ thống", "Bạn được {{inviter}} mời làm {{role}}. Bấm link để kích hoạt: {{activationLink}}");
+
+        // Sprint IoT-1 (#249) — IoT device offline.
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "vi-VN",
+            "Device offline: {{deviceCode}}",
+            "Device \"{{displayName}}\" tại site {{siteName}} mất heartbeat {{durationMinutes}} phút. Ảnh hưởng {{affectedBatteryCount}} pin.");
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.InApp, "vi-VN",
+            "IoT device offline: {{deviceCode}}",
+            "Last seen {{lastSeenAt}}. Kiểm tra nguồn điện / mạng cho device tại site {{siteName}}.");
+        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "en-US",
+            "Device offline: {{deviceCode}}",
+            "Device \"{{displayName}}\" at site {{siteName}} lost heartbeat for {{durationMinutes}} min. {{affectedBatteryCount}} battery affected.");
 
         // English fallbacks for high-priority types
         Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "en-US",

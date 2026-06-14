@@ -38,6 +38,7 @@ public class StaffTicketsController : ControllerBase
     /// <response code="200">Lấy danh sách thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("me")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyTickets([FromQuery] MyTicketsAsStaffQuery query, CancellationToken ct)
@@ -47,7 +48,7 @@ public class StaffTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Staff xác nhận bắt đầu xử lý ticket đã được giao.
+    /// Staff xác nhận bắt đầu xử lý ticket đã được assigned — chuyển Status từ Assigned → InProgress, set StartedAt; SLA timer chính thức bắt đầu đếm.
     /// </summary>
     /// <remarks>
     /// - Ticket phải ở trạng thái <c>Assigned</c>.
@@ -59,6 +60,7 @@ public class StaffTicketsController : ControllerBase
     /// <response code="403">Sai trạng thái hoặc không có quyền.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
     [HttpPost("{id}/start")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
@@ -76,7 +78,7 @@ public class StaffTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Staff tạm dừng xử lý ticket vì lý do khách quan.
+    /// Staff tạm dừng xử lý ticket vì lý do khách quan (chờ phụ tùng/Customer/Manager) — chuyển Status → OnHold, pause SLA timer; bắt buộc HoldReason + EstimatedResumeAt.
     /// </summary>
     /// <remarks>
     /// Tạm dừng tính SLA. Các lý do: WaitingCustomer, WaitingParts, WaitingOnsiteSchedule.
@@ -86,6 +88,8 @@ public class StaffTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Tạm dừng thành công.</response>
     [HttpPost("{id}/hold")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Hold(Guid id, [FromBody] TicketHoldCommand command, CancellationToken ct)
     {
@@ -98,7 +102,7 @@ public class StaffTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Staff tiếp tục xử lý ticket từ trạng thái tạm dừng.
+    /// Staff tiếp tục xử lý ticket từ trạng thái tạm dừng — chuyển OnHold → InProgress, resume SLA timer (tính bù thời gian đã hold).
     /// </summary>
     /// <remarks>
     /// Trạng thái quay lại <c>InProgress</c>, tiếp tục tính SLA.
@@ -107,6 +111,8 @@ public class StaffTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Tiếp tục thành công.</response>
     [HttpPost("{id}/resume")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Resume(Guid id, CancellationToken ct)
     {
@@ -134,6 +140,7 @@ public class StaffTicketsController : ControllerBase
     /// <response code="200">Báo cáo thành công.</response>
     /// <response code="403">Không đủ thẩm quyền (với ticket đã Escalated).</response>
     [HttpPost("{id}/resolve")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Resolve(Guid id, [FromBody] TicketResolveCommand command, CancellationToken ct)
@@ -157,6 +164,8 @@ public class StaffTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Gửi yêu cầu thành công.</response>
     [HttpPost("{id}/escalate-request")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> EscalateRequest(Guid id, [FromBody] TicketEscalateRequestCommand command,
         CancellationToken ct)

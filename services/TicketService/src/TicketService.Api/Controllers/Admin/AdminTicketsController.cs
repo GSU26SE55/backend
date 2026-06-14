@@ -44,6 +44,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Thành công.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList([FromQuery] TicketGetListQuery query, CancellationToken ct)
     {
@@ -61,6 +63,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Thành công.</response>
     [HttpGet("queue")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ManagerQueue([FromQuery] ManagerQueueQuery query, CancellationToken ct)
     {
@@ -80,6 +84,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Triage thành công.</response>
     [HttpPost("{id}/triage")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Triage(Guid id, [FromBody] TicketTriageCommand command, CancellationToken ct)
     {
@@ -103,6 +109,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Từ chối thành công.</response>
     [HttpPost("{id}/triage-reject")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> TriageReject(Guid id, [FromBody] TicketTriageRejectCommand command, CancellationToken ct)
     {
@@ -127,6 +135,7 @@ public class AdminTicketsController : ControllerBase
     /// <response code="200">Gán thành công.</response>
     /// <response code="403">Sai trạng thái ticket.</response>
     [HttpPost("{id}/assign")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Assign(Guid id, [FromBody] TicketAssignCommand command, CancellationToken ct)
@@ -140,7 +149,7 @@ public class AdminTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Manager điều chuyển ticket sang cho nhân viên khác.
+    /// Manager điều chuyển ticket sang Staff khác — yêu cầu lý do (ManagerReassignReason), log lịch sử thay đổi assignee; SLA timer KHÔNG reset, vẫn đếm tiếp.
     /// </summary>
     /// <remarks>
     /// Yêu cầu lý do điều chuyển. Lưu lịch sử thay đổi Staff.
@@ -150,6 +159,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Điều chuyển thành công.</response>
     [HttpPost("{id}/reassign")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reassign(Guid id, [FromBody] TicketReassignCommand command, CancellationToken ct)
     {
@@ -173,6 +184,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Phê duyệt thành công.</response>
     [HttpPost("{id}/approve")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Approve(Guid id, [FromQuery] string? comment, CancellationToken ct)
     {
@@ -199,6 +212,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Từ chối thành công.</response>
     [HttpPost("{id}/reject")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] TicketRejectCommand command, CancellationToken ct)
     {
@@ -211,7 +226,7 @@ public class AdminTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Manager ép buộc chuyển cấp xử lý cho ticket.
+    /// Manager ép buộc chuyển cấp xử lý ticket (Senior tier hoặc thêm helper) — dùng khi SLA breach hoặc Critical incident yêu cầu thêm nhân lực; không đổi Priority.
     /// </summary>
     /// <remarks>
     /// Dùng trong trường hợp khẩn cấp hoặc điều phối lại nguồn lực.
@@ -221,6 +236,8 @@ public class AdminTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Ép chuyển cấp thành công.</response>
     [HttpPost("{id}/escalate")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Escalate(Guid id, [FromBody] TicketEscalateForceCommand command, CancellationToken ct)
     {
@@ -237,16 +254,28 @@ public class AdminTicketsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Phân loại ticket nghiêm trọng/diện rộng để có quy trình xử lý ưu tiên.
+    ///
+    /// Cách hoạt động:
+    /// - Set <c>IsIncident = true</c> cho ticket.
+    /// - Ghi <c>TicketActivity</c> log lại hành động này (kèm UserId của Manager/Admin).
+    ///
+    /// Idempotency:
+    /// - Không thể declare incident hai lần — nếu ticket đã là incident, trả 409.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="command">Thông tin sự cố (Mô tả).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Đánh dấu thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Manager/Admin.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
+    /// <response code="409">Ticket đã được đánh dấu là incident từ trước (state conflict — không thể declare lại).</response>
     [HttpPost("{id}/declare-incident")]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeclareIncident(Guid id, [FromBody] TicketDeclareIncidentCommand command, CancellationToken ct)
     {
         command.TicketId = id;

@@ -8,6 +8,7 @@ namespace BatteryService.Application.CQRS.Query.Alert;
 
 public class GetAlertByIdQuery : IRequest<CommonResponse<AlertDto>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }

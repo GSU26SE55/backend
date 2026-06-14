@@ -539,12 +539,20 @@ Base path: `/api/tickets`
 
 **`MaintenanceAttachmentInput`:** Cùng shape với `CommentAttachmentInput` — `fileId` (string UUID), `fileName`, `contentType`, `sizeBytes`.
 
-**Response thành công `201`:** `TicketActionResponse`
+**Response thành công `201`:** `TicketActionResponse` — kèm `MaintenanceLogId` của log vừa tạo.
 
-**Lỗi thường gặp:**
-- `401` — Chưa đăng nhập
-- `403` — Không có quyền Staff/Manager
-- `404` — Không tìm thấy ticket
+**Business rule — Một log đang mở tại một thời điểm:**
+Một ticket chỉ được có **1 log đang mở** (`CompletedAt = null`) tại 1 thời điểm. Phải đóng log cũ (set `CompletedAt`) trước khi mở log mới. Nếu request gửi lên có `CompletedAt = null` (đang bắt đầu log mới) mà ticket đã có một log khác chưa đóng → trả về `409`.
+
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | Validation field lỗi (ví dụ: `Summary` rỗng, `LogType` không hợp lệ) |
+| `401` | Chưa đăng nhập |
+| `403` | Ticket đã ở trạng thái không cho phép thêm log (`Resolved` / `ClosedPendingRate` / `Closed`) — Staff đã đánh dấu giải quyết hoặc ticket đã đóng |
+| `404` | Không tìm thấy ticket |
+| `409` | Đang có một maintenance log khác chưa hoàn thành (`CompletedAt = null`) cho ticket này — phải đóng log cũ trước khi mở log mới |
 
 ---
 
@@ -991,19 +999,39 @@ Base path: `/api/admin/tickets`
 
 ### `POST /api/admin/tickets/{id}/declare-incident`
 
-**Mục đích:** Manager/Admin đánh dấu ticket là sự cố nghiêm trọng (Incident) để có quy trình xử lý ưu tiên.
+**Mục đích:** Manager/Admin đánh dấu ticket là sự cố nghiêm trọng (Incident) để có quy trình xử lý ưu tiên. Hệ thống đồng thời ghi một bản ghi `TicketActivity` để lưu vết.
 
 **Auth:** Bắt buộc (Admin hoặc Manager)
 
 **Path param:** `id` — UUID của ticket.
 
-**Request body:** Không có.
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `incidentDescription` | `string` | Bắt buộc | Mô tả ngắn lý do declare incident (lưu vào `TicketActivity`). Không được rỗng/whitespace |
+
+```json
+{
+  "incidentDescription": "Site mất điện diện rộng — ảnh hưởng 3 cluster pin"
+}
+```
+
+> Hai field `ticketId` và `userId` cũng có trong command nhưng được gắn `[JsonIgnore]` — server tự bind từ path param và JWT claim, client không cần (và không thể) gửi trong body.
 
 **Response thành công `200`:** `TicketActionResponse` — `isIncident = true`.
 
-**Lỗi thường gặp:**
-- `403` — Không có quyền
-- `404` — Không tìm thấy ticket
+**Error responses:**
+
+| Status | Trường hợp |
+|---|---|
+| `400` | Validation: `incidentDescription` rỗng/whitespace (đi qua `ValidateAsync` của command) |
+| `401` | Chưa đăng nhập |
+| `403` | Không có role Manager/Admin |
+| `404` | Không tìm thấy ticket |
+| `409` | Ticket đã được đánh dấu là incident từ trước (idempotency — không thể declare lại) |
+
+> **Lưu ý:** `409` là state conflict (vi phạm idempotency), không phải input error — phía client không nên retry bằng cách gửi lại request.
 
 ---
 
@@ -1046,9 +1074,11 @@ Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ v�
 
 **Auth:** Bắt buộc (Staff hoặc Manager)
 
-**Điều kiện:** Không cho phép tạo log mới nếu đang có một log khác chưa hoàn thành (`completedAt` là null) cho ticket này.
+**Điều kiện:** Một ticket chỉ được có 1 log đang mở (`completedAt = null`) tại 1 thời điểm. Phải đóng log cũ trước khi mở log mới — nếu vi phạm, hệ thống trả `409 Conflict`.
 
 **Request body:** (Xem bảng `MaintenanceLogDTO` để biết các field, lưu ý `startedAt` là bắt buộc).
+
+> Xem chi tiết status codes & business rule ở mục `POST /api/tickets/{ticketId}/maintenance-logs` thuộc Nhóm 1.
 
 ---
 

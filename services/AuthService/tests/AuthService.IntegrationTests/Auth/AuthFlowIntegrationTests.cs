@@ -194,14 +194,14 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         var resp = await _client.PostAsJsonAsync("/api/auth/refresh-token", new { RefreshToken = oldRefresh });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<LoginResponse>();
-        body!.Data!.RefreshToken.Should().NotBe(oldRefresh);
-        body.Data.AccessToken.Should().NotBeNullOrEmpty();
+        body!.Data!.Tokens!.RefreshToken.Should().NotBe(oldRefresh);
+        body.Data.Tokens!.AccessToken.Should().NotBeNullOrEmpty();
 
         using var db2 = _factory.CreateDbContext();
         var oldRt = await db2.RefreshTokens.FirstAsync(r => r.Token == oldRefresh);
         oldRt.Status.Should().Be(RefreshTokenStatus.Used);
         oldRt.UsedAt.Should().NotBeNull();
-        oldRt.ReplacedByToken.Should().Be(body.Data.RefreshToken);
+        oldRt.ReplacedByToken.Should().Be(body.Data.Tokens!.RefreshToken);
     }
 
     [Fact]

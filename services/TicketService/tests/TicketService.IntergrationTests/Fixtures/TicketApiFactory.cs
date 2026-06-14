@@ -32,6 +32,9 @@ public class TicketApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "SkipMigration", "true" },
+                // Seeder INSERT alert_ticket_saga_states gặp NOT NULL `xmin` (Postgres system column).
+                // SQLite không support xmin → skip seeder trong integration test.
+                { "SkipSeeder", "true" },
                 { "ConnectionStrings:TicketDb", "Host=localhost;Database=ticket_test;Username=test;Password=test" }
             });
         });

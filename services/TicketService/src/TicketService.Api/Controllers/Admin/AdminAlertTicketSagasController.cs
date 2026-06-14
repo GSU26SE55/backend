@@ -16,7 +16,7 @@ namespace TicketService.Api.Controllers.Admin;
 /// - POST reprocess: permission <c>ticket.saga.reprocess</c> (Admin only).
 /// </summary>
 [ApiController]
-[Route("api/v1/admin/sagas/alert-ticket")]
+[Route("api/admin/sagas/alert-ticket")]
 [Authorize(Roles = "Admin,Manager")]
 [Produces("application/json")]
 public class AdminAlertTicketSagasController : ControllerBase
@@ -51,6 +51,8 @@ public class AdminAlertTicketSagasController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AlertTicketSagaListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList([FromQuery] GetAlertTicketSagasQuery query, CancellationToken ct)
     {
@@ -73,6 +75,8 @@ public class AdminAlertTicketSagasController : ControllerBase
     /// <response code="403">Không có role Admin/Manager.</response>
     /// <response code="404">Không tìm thấy Saga cho <paramref name="alertId"/>.</response>
     [HttpGet("{alertId:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AlertTicketSagaDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid alertId, CancellationToken ct)
@@ -105,6 +109,8 @@ public class AdminAlertTicketSagasController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="409">Idempotency-Key đã được xử lý trước đó.</response>
     [HttpPost("{alertId:guid}/reprocess")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(SagaReprocessResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

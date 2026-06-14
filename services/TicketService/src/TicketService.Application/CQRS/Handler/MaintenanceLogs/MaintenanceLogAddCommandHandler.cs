@@ -46,7 +46,7 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
 
             if (activeLog)
             {
-                return Fail(400, "Đang có một nhật ký bảo trì chưa hoàn thành cho Ticket này. Vui lòng hoàn thành nhật ký cũ trước khi bắt đầu cái mới.");
+                return Fail(409, "Đang có một nhật ký bảo trì chưa hoàn thành cho Ticket này. Vui lòng hoàn thành nhật ký cũ trước khi bắt đầu cái mới.");
             }
         }
 

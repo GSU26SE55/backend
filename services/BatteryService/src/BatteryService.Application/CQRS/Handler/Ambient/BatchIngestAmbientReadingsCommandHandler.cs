@@ -37,7 +37,7 @@ public class BatchIngestAmbientReadingsCommandHandler
         return new CommonResponse<int>
         {
             IsSuccess = true,
-            StatusCode = 200,
+            StatusCode = 201,
             Data = request.Items.Count
         };
     }

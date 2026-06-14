@@ -26,7 +26,7 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
             return new CommonResponse<PaginationResponse<SiteDto>>
             {
                 IsSuccess = false,
-                StatusCode = 401,
+                StatusCode = 500,
                 Message = "Không xác định được người dùng hiện tại."
             };
         }

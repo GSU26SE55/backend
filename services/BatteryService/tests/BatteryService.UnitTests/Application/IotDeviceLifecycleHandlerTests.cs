@@ -1,0 +1,158 @@
+using BatteryService.Application.CQRS.Command.IotDevice;
+using BatteryService.Application.CQRS.Command.SensorReading;
+using BatteryService.Application.CQRS.Handler.IotDevice;
+using BatteryService.Application.CQRS.Handler.SensorReading;
+using BatteryService.Domain.Entities;
+using BatteryService.Domain.Enums;
+using BatteryService.UnitTests.Helpers;
+
+namespace BatteryService.UnitTests.Application;
+
+public class IotDeviceLifecycleHandlerTests
+{
+    private static IotDevice ActiveDevice(Guid id, Guid siteId) => new()
+    {
+        Id = id,
+        DeviceCode = "ESP32-LF",
+        DisplayName = "test",
+        SiteId = siteId,
+        Status = IotDeviceStatusEnum.Pending,
+        ApiKeyHash = "hash",
+        ApiKeyLastFour = "abcd",
+        ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault,
+        ApiKeyIssuedAt = DateTime.UtcNow.AddDays(-1),
+        HeartbeatIntervalSeconds = 60
+    };
+
+    [Fact]
+    public async Task Provision_FlipsStatusActive_AndStoresFirmwareVersion()
+    {
+        var deviceId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+
+        var result = await handler.Handle(new ProvisionIotDeviceCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            HardwareRevision = "v1.0",
+            DeviceTimestamp = DateTime.UtcNow
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.HeartbeatIntervalSeconds.Should().Be(60);
+    }
+
+    [Fact]
+    public async Task Provision_Fails_WhenClockSkewExceedsThreshold()
+    {
+        var deviceId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+
+        var result = await handler.Handle(new ProvisionIotDeviceCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow.AddMinutes(10) // > 5 phút
+        }, default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(422);
+    }
+
+    [Fact]
+    public async Task Heartbeat_InsertsHistoryRowAndUpdatesLastSeen()
+    {
+        var deviceId = Guid.NewGuid();
+        var device = ActiveDevice(deviceId, Guid.NewGuid());
+        device.Status = IotDeviceStatusEnum.Offline; // sẽ flip lên Active
+        var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
+        var handler = new IotDeviceHeartbeatCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder());
+
+        var result = await handler.Handle(new IotDeviceHeartbeatCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow,
+            RssiDbm = -55,
+            FreeMemoryPercent = 65m,
+            UptimeSeconds = 3600,
+            QueuedReadingCount = 0
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.NextHeartbeatInSeconds.Should().Be(60);
+        result.Data.ClockSkewWarning.Should().BeFalse();
+        uow.IotDeviceHeartbeats.Verify(r => r.AddAsync(It.IsAny<IotDeviceHeartbeat>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BatchIngest_RejectsOutlierVoltage()
+    {
+        var assetId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-1", IsDeleted = false });
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+
+        var result = await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            Items = new List<SensorReadingItem>
+            {
+                // Sprint IoT-2 #IoT2-17 — MaxVoltage=1000V; 1500V > ngưỡng → outlier reject.
+                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 1500m, Current = 1m, Temperature = 25m, SocPercent = 50m },
+                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 3.7m, Current = 1m, Temperature = 25m, SocPercent = 50m }
+            }
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Inserted.Should().Be(1);
+        result.Data.Skipped.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BatchIngest_AppliesCalibrationScaleAndOffset()
+    {
+        var assetId = Guid.NewGuid();
+        var deviceId = Guid.NewGuid();
+        // Sprint IoT-2 #IoT2-18 — device.SiteId phải khớp asset.SiteId, không sẽ bị reject 403.
+        var siteId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-2", SiteId = siteId })
+            .WithIotDevices(new IotDevice { Id = deviceId, DeviceCode = "ESP32-X", DisplayName = "x", SiteId = siteId, ApiKeyHash = "h", ApiKeyLastFour = "abcd", ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault })
+            .WithIotDeviceCalibrations(new IotDeviceCalibration
+            {
+                Id = Guid.NewGuid(),
+                IotDeviceId = deviceId,
+                Channel = "voltage",
+                Scale = 1.1m,
+                Offset = 0.5m,
+                Unit = "V",
+                CalibratedAt = DateTime.UtcNow.AddDays(-1)
+            });
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+
+        var captured = new List<SensorReading>();
+        uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))
+           .Callback<SensorReading>(captured.Add)
+           .Returns(Task.CompletedTask);
+
+        var result = await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            AuthenticatedDeviceId = deviceId,
+            Items = new List<SensorReadingItem>
+            {
+                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 3m, Current = 1m, Temperature = 25m, SocPercent = 50m }
+            }
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        captured.Should().ContainSingle();
+        captured[0].Voltage.Should().Be(3m * 1.1m + 0.5m);
+    }
+}

@@ -34,6 +34,12 @@ public enum AuditActionEnum
     // 2FA (40-49)
     TwoFactorEnabled = 40,
     TwoFactorDisabled = 41,
+    TwoFactorReset = 42,
+    BackupCodeRedeemed = 43,
+    BackupCodesRegenerated = 44,
+    Admin2FAReset = 45,
+    LoginWith2FA = 46,
+    LoginPending2FA = 47,
 
     // Google Linking (50-59)
     GoogleLinked = 50,

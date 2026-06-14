@@ -26,7 +26,7 @@ public class AdminSitesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới một Site.
+    /// Tạo mới 1 Site (cluster vật lý chứa nhiều BatteryAsset) — định nghĩa Address/Latitude/Longitude + contact person. SiteId dùng để gắn IotDevice và alert routing.
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -70,7 +70,7 @@ public class AdminSitesController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật một Site.
+    /// Cập nhật metadata Site (Name/Address/ContactPerson) — KHÔNG đổi được CustomerId (transfer ownership qua flow riêng).
     /// </summary>
     /// <remarks>
     /// Body request: giống Create, thêm các field trong <see cref="UpdateSiteCommand"/>.
@@ -107,7 +107,7 @@ public class AdminSitesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa mềm một Site.
+    /// Xoá mềm 1 Site — chặn nếu còn BatteryAsset active reference; phải transfer asset hoặc delete trước. Site bị xóa không nhận sensor reading mới.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
@@ -140,7 +140,7 @@ public class AdminSitesController : ControllerBase
     }
 
     /// <summary>
-    /// Khôi phục một Site đã soft delete.
+    /// Khôi phục 1 Site đã soft delete — set IsDeleted=false. Asset trong site được restore độc lập (cascade restore không tự động).
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:

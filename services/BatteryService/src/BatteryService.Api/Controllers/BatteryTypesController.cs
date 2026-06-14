@@ -71,7 +71,7 @@ public class BatteryTypesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một BatteryType theo Id.
+    /// Lấy chi tiết 1 BatteryType theo Id — Customer/Staff xem thông số kỹ thuật (NominalCapacity/Voltage/Chemistry) của pin trong list dropdown khi tạo asset.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:

@@ -52,7 +52,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
 
         if (account.OtpPurpose != OtpPurposeEnum.Register)
-            return Fail(401, "OTP không phải dành cho đăng ký.");
+            return Fail(422, "OTP không phải dành cho đăng ký.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {

@@ -133,7 +133,8 @@ public class Sprint3AnomalyFlowIntegrationTests
         openAlerts.Should().HaveCount(1);
         mergedAlerts.Should().HaveCount(1);
         mergedAlerts[0].MergedIntoAlertId.Should().Be(openAlerts[0].Id);
-        (await db.OutboxMessages.CountAsync()).Should().Be(1); // chỉ event cho alert gốc
+        // Sprint IoT-2 #IoT2-30 — emit cả V1 + V2 event cho alert gốc (Saga subscribe cả 2 trong cutover).
+        (await db.OutboxMessages.CountAsync()).Should().Be(2);
     }
 
     [Fact]
@@ -158,7 +159,8 @@ public class Sprint3AnomalyFlowIntegrationTests
         await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
 
         (await db.Alerts.SingleAsync()).AnomalyType.Should().Be(AnomalyTypeEnum.SohDegradation);
-        (await db.OutboxMessages.CountAsync()).Should().Be(1);
+        // Sprint IoT-2 #IoT2-30 — dual emit V1 + V2 event.
+        (await db.OutboxMessages.CountAsync()).Should().Be(2);
     }
 
     [Fact]

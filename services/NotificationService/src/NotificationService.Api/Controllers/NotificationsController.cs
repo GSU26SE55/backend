@@ -39,9 +39,15 @@ public class NotificationsController : ControllerBase
     ///
     /// Sắp xếp theo `CreatedAt` giảm dần.
     /// </remarks>
+    /// <response code="200">Trả danh sách notification (có thể rỗng).</response>
+    /// <response code="400">JWT đã pass `[Authorize]` nhưng không trích xuất được claim `UserId` (claim missing/malformed trong token). Đây là client request error chứ không phải auth fail.</response>
+    /// <response code="401">Chưa đăng nhập / token không hợp lệ (do middleware trả).</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize]
     [ProducesResponseType(typeof(NotificationListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<NotificationListResponse>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyNotifications(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
@@ -52,10 +58,10 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new CommonResponse<NotificationListResponse>
+            return BadRequest(new CommonResponse<NotificationListResponse>
             {
                 IsSuccess = false,
-                StatusCode = StatusCodes.Status401Unauthorized,
+                StatusCode = StatusCodes.Status400BadRequest,
                 Message = "Không xác định được user."
             });
 
@@ -75,18 +81,28 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo 1 notification mới (admin/test endpoint).
+    /// Tạo 1 notification thủ công (admin/test endpoint) — flow production chính dùng RabbitMQ consumer (BatteryAnomaly/EnvIncident/IotDeviceOffline events). Dùng cho backfill hoặc integration test.
     /// </summary>
     /// <remarks>
     /// **Quyền:** Admin.
     ///
-    /// Production flow chính tạo notification qua RabbitMQ consumer (TicketCreated,
-    /// BatteryAnomalyDetected, …) — endpoint này dùng cho test và backfill thủ công.
+    /// Production flow chính tạo notification qua RabbitMQ consumer:
+    /// `AlertTicketSagaFailedConsumer`, `BatteryAlertEscalationRequestedConsumer`,
+    /// `IotDeviceWentOfflineConsumer` (xem `NotificationService.Application/Consumers/`).
+    /// Endpoint này dùng cho test, backfill thủ công, hoặc các integration event chưa có consumer riêng.
     /// </remarks>
+    /// <param name="command">Notification payload — UserId, Type (enum), Channel (Push/Email/Sms/InApp), Title, Body, PayloadJson tự do.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="201">Tạo notification thành công.</response>
+    /// <response code="400">Field validation lỗi (UserId rỗng / Type không hợp lệ / Title quá dài / ...).</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
     [HttpPost]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Create(
         [FromBody] CreateNotificationCommand command,
         CancellationToken cancellationToken)

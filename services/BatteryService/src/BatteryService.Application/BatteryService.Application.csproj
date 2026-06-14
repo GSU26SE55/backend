@@ -4,6 +4,10 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- Sinh XML doc → Swagger pickup DTOs/Commands/Queries từ project này. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- 1591 missing XML, 1573 missing param, 1570 invalid XML, 1574 broken cref — soft warn. -->
+        <NoWarn>$(NoWarn);1591;1573;1570;1574</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

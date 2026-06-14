@@ -8,6 +8,7 @@ namespace BatteryService.Application.CQRS.Query.BatteryType;
 
 public class GetBatteryTypeByIdQuery : IRequest<CommonResponse<BatteryTypeDto>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }

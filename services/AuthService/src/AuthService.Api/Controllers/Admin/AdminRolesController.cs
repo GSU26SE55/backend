@@ -27,7 +27,7 @@ public class AdminRolesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách role có phân trang và lọc.
+    /// Liệt kê tất cả role trong hệ thống (system roles + custom) — phân trang + filter theo keyword. Mỗi role kèm permission count + assigned user count.
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** Admin, Manager.
@@ -42,6 +42,8 @@ public class AdminRolesController : ControllerBase
     /// </remarks>
     /// <response code="200">Danh sách role kèm metadata phân trang (TotalItems, TotalPages, HasNextPage...).</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(RoleListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll(
@@ -65,7 +67,7 @@ public class AdminRolesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết 1 role theo Id.
+    /// Lấy chi tiết 1 role theo Id — trả tên/mô tả + list permission đã gán + flag IsSystemRole (Admin/Manager/Staff/Customer KHÔNG cho phép edit cấu trúc).
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** Admin, Manager.
@@ -76,6 +78,8 @@ public class AdminRolesController : ControllerBase
     /// <response code="200">Trả về `RoleDto` trong `Data`.</response>
     /// <response code="404">Không tìm thấy role với Id đã cho.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(RoleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(RoleResponse), StatusCodes.Status404NotFound)]
@@ -86,7 +90,7 @@ public class AdminRolesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới 1 role tùy chỉnh.
+    /// Tạo mới 1 custom role (ngoài system roles) — cấp role cho user qua AdminAccountsController.ChangeRole; gán permission qua AdminPermissionsController.SetRolePermissions.
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** Admin.
@@ -102,6 +106,8 @@ public class AdminRolesController : ControllerBase
     /// <response code="400">Dữ liệu không hợp lệ.</response>
     /// <response code="409">Tên role đã tồn tại (trùng `NormalizedName`).</response>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status400BadRequest)]
@@ -113,7 +119,7 @@ public class AdminRolesController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật tên và mô tả của role.
+    /// Cập nhật tên và mô tả của role — KHÔNG được rename system roles (Admin/Manager/Staff/Customer). Để đổi permissions, dùng PUT roles/{id}/permissions.
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** Admin.
@@ -130,6 +136,8 @@ public class AdminRolesController : ControllerBase
     /// <response code="404">Không tìm thấy role.</response>
     /// <response code="409">Tên role mới đã trùng với role khác.</response>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status400BadRequest)]
@@ -160,6 +168,8 @@ public class AdminRolesController : ControllerBase
     /// <response code="403">Role hệ thống không cho đổi trạng thái.</response>
     /// <response code="404">Không tìm thấy role.</response>
     [HttpPatch("{id:guid}/status")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status404NotFound)]
@@ -171,7 +181,7 @@ public class AdminRolesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa (soft delete) 1 role.
+    /// Xoá mềm 1 custom role — KHÔNG cho xoá system roles. User đang giữ role bị xóa sẽ được fallback về Customer (default) ở lần issue JWT tiếp theo.
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** Admin.
@@ -188,6 +198,7 @@ public class AdminRolesController : ControllerBase
     /// <response code="404">Không tìm thấy role.</response>
     /// <response code="409">Role đang được sử dụng bởi tài khoản nào đó.</response>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(RoleActionResponse), StatusCodes.Status403Forbidden)]

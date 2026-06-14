@@ -60,6 +60,7 @@ public class AuthProfilesController : ControllerBase
     /// <response code="200">Lấy profile thành công.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
     [HttpGet("me")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
@@ -102,6 +103,7 @@ public class AuthProfilesController : ControllerBase
     /// <response code="404">Không tìm thấy tài khoản hiện tại.</response>
     /// <response code="409">Dữ liệu cập nhật bị xung đột với account khác hoặc rule nghiệp vụ.</response>
     [HttpPut("me/profile")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
@@ -119,7 +121,7 @@ public class AuthProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Gắn avatar upload cho tài khoản đang đăng nhập.
+    /// Gắn avatar upload (đã upload qua FileStorageService) cho tài khoản đang đăng nhập — endpoint nhận avatar URL/fileId từ FileStorage response, save vào account.AvatarUrl.
     /// </summary>
     /// <remarks>
     /// Endpoint này là bước thứ hai của flow upload avatar:
@@ -149,6 +151,7 @@ public class AuthProfilesController : ControllerBase
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
     /// <response code="404">Không tìm thấy tài khoản hiện tại.</response>
     [HttpPost("me/avatar")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]

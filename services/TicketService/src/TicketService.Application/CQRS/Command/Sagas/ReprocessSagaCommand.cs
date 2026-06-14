@@ -10,7 +10,7 @@ namespace TicketService.Application.CQRS.Command.Sagas;
 /// Admin reprocess Saga đang ở Failed state.
 ///
 /// Sprint 5B #239 — required permission <c>ticket.saga.reprocess</c> (Admin only).
-/// Endpoint <c>POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess</c>
+/// Endpoint <c>POST /api/admin/sagas/alert-ticket/{alertId}/reprocess</c>
 /// PHẢI có header <c>Idempotency-Key</c> (xem §8.6).
 ///
 /// Mechanism: trigger re-republish anomaly event (V1/V2) qua MassTransit để Saga
