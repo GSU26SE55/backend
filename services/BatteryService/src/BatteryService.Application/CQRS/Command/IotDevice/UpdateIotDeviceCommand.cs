@@ -14,13 +14,21 @@ public class UpdateIotDeviceCommand : IRequest<CommonResponse<IotDeviceDto>>, IV
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }
+    /// <summary>Tên gợi nhớ hiển thị UI.</summary>
     public string DisplayName { get; set; } = string.Empty;
+    /// <summary>ID Site (Guid).</summary>
     public Guid SiteId { get; set; }
+    /// <summary>Hardware revision (vd "v1.0-S3-MAX485").</summary>
     public string? HardwareRevision { get; set; }
+    /// <summary>Filter theo status enum.</summary>
     public IotDeviceStatusEnum Status { get; set; }
+    /// <summary>Bitmask scopes API key (SensorIngest | DeviceHeartbeat | EnvironmentalIngest | FirmwareCheck).</summary>
     public IotApiKeyScopeEnum ApiKeyScopes { get; set; } = IotApiKeyScopeEnum.EdgeDeviceDefault;
+    /// <summary>Tần suất heartbeat (giây, default 60).</summary>
     public int HeartbeatIntervalSeconds { get; set; } = 60;
+    /// <summary>ID firmware release đang đặt làm target OTA (nullable).</summary>
     public Guid? TargetFirmwareReleaseId { get; set; }
+    /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
     public Task<CommonResponse<IotDeviceDto>> ValidateAsync()
@@ -60,6 +68,7 @@ public class UpdateIotDeviceCommand : IRequest<CommonResponse<IotDeviceDto>>, IV
 
 public class DeleteIotDeviceCommand : IRequest<CommonResponse<object>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }
@@ -67,6 +76,7 @@ public class DeleteIotDeviceCommand : IRequest<CommonResponse<object>>
 
 public class RotateIotDeviceApiKeyCommand : IRequest<CommonResponse<IotDeviceCreatedDto>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }
@@ -74,6 +84,7 @@ public class RotateIotDeviceApiKeyCommand : IRequest<CommonResponse<IotDeviceCre
 
 public class RevokeIotDeviceApiKeyCommand : IRequest<CommonResponse<object>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }

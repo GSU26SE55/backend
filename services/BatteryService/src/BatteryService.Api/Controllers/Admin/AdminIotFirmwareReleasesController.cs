@@ -44,7 +44,7 @@ public class AdminIotFirmwareReleasesController : ControllerBase
     public AdminIotFirmwareReleasesController(IMediator mediator) => _mediator = mediator;
 
     /// <summary>
-    /// Lấy danh sách firmware releases.
+    /// Liệt kê firmware releases (filter theo HardwareRevision + PublishedOnly) + pagination — UI dropdown 'chọn firmware để đặt làm target' lọc theo device hardware revision.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -210,12 +210,52 @@ public class AdminIotFirmwareReleasesController : ControllerBase
     }
 
     /// <summary>
-    /// Sprint IoT-2 #IoT2-35 (S7-BE-04) — upload firmware binary (.bin) qua multipart.
-    /// Backend tính SHA-256 + lưu file vào storage volume (path config qua <c>Firmware:StorageRoot</c>) → trả về URL/sha/size
-    /// để admin paste vào <c>POST /api/admin/iot-firmware-releases</c>.
-    ///
-    /// Production có thể thay impl bằng forward upload đến <c>FileStorageService</c>.
+    /// Sprint IoT-2 #IoT2-35 (S7-BE-04) — upload firmware binary (.bin) qua multipart form-data.
     /// </summary>
+    /// <remarks>
+    /// Backend xử lý 3 việc:
+    /// <list type="number">
+    ///   <item><description>Stream file vào storage volume (path config qua <c>Firmware:StorageRoot</c>, default <c>ContentRoot/firmware-storage</c>).</description></item>
+    ///   <item><description>Tính SHA-256 in-stream (không buffer toàn file) để verify integrity.</description></item>
+    ///   <item><description>Sanitize filename: <c>{hwRev}_{version}_{guid:N}.bin</c> — tránh path traversal.</description></item>
+    /// </list>
+    ///
+    /// Body multipart fields:
+    /// <list type="bullet">
+    ///   <item><description><c>File</c>: file <c>.bin</c> (bắt buộc, ≤ 60MB).</description></item>
+    ///   <item><description><c>Version</c>: SemVer X.Y.Z.</description></item>
+    ///   <item><description><c>HardwareRevision</c>: hardware tương thích (vd <c>"v1.0-S3-MAX485"</c>).</description></item>
+    ///   <item><description><c>IsRequired</c>: force update — device bắt buộc apply (default false).</description></item>
+    ///   <item><description><c>Channel</c>: <c>Stable</c> hoặc <c>Beta</c> (default Stable).</description></item>
+    ///   <item><description><c>ReleaseNotes</c>: markdown changelog (tùy chọn).</description></item>
+    ///   <item><description><c>DeviceModel</c>: model device (vd <c>"ESP32-S3-WROOM-1"</c>, tùy chọn).</description></item>
+    /// </list>
+    ///
+    /// Response 201 trả <see cref="FirmwareBinaryUploadDto"/> gồm <c>ArtifactUrl</c> + <c>Sha256Checksum</c> + <c>ArtifactSizeBytes</c>.
+    /// Admin paste 3 giá trị này vào <c>POST /api/admin/iot-firmware-releases</c> để tạo metadata release chính thức.
+    ///
+    /// Storage backend:
+    /// <list type="bullet">
+    ///   <item><description><b>Dev/Staging</b>: local PVC mount <c>/data/firmware-storage</c> + serve static qua <c>/firmware-storage/{file}</c>.</description></item>
+    ///   <item><description><b>Production</b>: set <c>Firmware:PublicBaseUrl</c> tới CDN/object storage URL.</description></item>
+    /// </list>
+    ///
+    /// Lưu ý:
+    /// <list type="bullet">
+    ///   <item><description>RequestSizeLimit = 60MB (ESP32 partition tối đa 50MB + slack header).</description></item>
+    ///   <item><description>File quá lớn → 413 Request Entity Too Large (ASP.NET default response).</description></item>
+    ///   <item><description>SHA-256 tính ở backend — admin KHÔNG cần tự hash bằng <c>sha256sum</c>.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="form">Multipart form binding.</param>
+    /// <param name="configuration">Config DI để lấy Firmware:StorageRoot + PublicBaseUrl.</param>
+    /// <param name="env">Web host environment DI cho fallback path.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Upload thành công, trả URL + SHA-256 + size.</response>
+    /// <response code="400">File missing, extension ≠ .bin, hoặc field validation lỗi.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="413">File &gt; 60MB (ASP.NET response).</response>
     [HttpPost("upload-binary")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(60 * 1024 * 1024)] // 60MB cap (ESP32 partition ≤ 50MB + slack).
@@ -223,6 +263,7 @@ public class AdminIotFirmwareReleasesController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
     public async Task<IActionResult> UploadBinary(
         [FromForm] FirmwareBinaryUploadForm form,
         [FromServices] IConfiguration configuration,

@@ -80,7 +80,7 @@ public class BatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Customer lấy danh sách BatteryAsset của chính mình.
+    /// Customer xem danh sách BatteryAsset của chính mình (auto filter theo current userId từ JWT) — Mobile app render danh sách pin trong account.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
@@ -112,7 +112,7 @@ public class BatteryAssetsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một BatteryAsset theo Id.
+    /// Lấy chi tiết 1 BatteryAsset theo Id — full metadata + warranty + location + last reading snapshot. Customer chỉ xem được asset thuộc về mình.
     /// </summary>
     /// <remarks>
     /// Trả đầy đủ thông tin asset + tên BatteryType, Site.

@@ -123,6 +123,7 @@
 | TimescaleDB extension + hypertable | 🟠 P1 | §6 | 0.5 sprint |
 | FileStorage metadata (`UploadedFile`) | ✅ Done | §6bis | Completed 13/5/2026 |
 | AuthService profile expansion (avatar, phone, skill) | ✅ Done | §7 | Completed 13/5/2026 |
+| AuthService 2FA Hardening (login challenge + confirm setup + encrypt secret + backup codes + admin reset) | 🟠 P1 | §0.5, ADR-019 | Sprint 3 — GH-295 (in-flight, supersedes Option B) |
 | BatteryService scope cleanup (bỏ Energy/CO2 + `Site.CapacityKw`) | 🔴 P0 | §53.1–§53.3 | Sprint 5B `#233`/`#234` |
 | Outbox/Inbox hardening + Alert–Ticket Saga | 🔴 P0 | §8.1–§8.3, §53.4–§53.12 | Sprint 5B `#235`–`#239` |
 | AuthService permission seed cho Saga (`ticket.saga.view/reprocess`) | 🔴 P0 | §7.5bis, §53.9 | Sprint 5B `#241` |
@@ -159,7 +160,7 @@
 - [x] Bổ sung response schema cho `GET /api/staff/{id}/assignment-profile` → trả `StaffAssignmentProfileDto` (cùng shape với `GET /api/staff`).
 - [x] Làm rõ `avatarUrl` trong `PUT /api/admin/accounts/{id}`: field legacy, không khuyến khích — dùng `avatarFileId` thay thế.
 - [x] Bổ sung TTL token mời: `invitationToken` hết hạn sau **72 giờ**; trả `400 isSuccess=false` nếu expired hoặc đã dùng.
-- [x] Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.
+- [x] ~~Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.~~ **→ Superseded by ADR-019 (GH-295, 2026-06-14)** — chuyển sang flow init+confirm có verify TOTP, login enforce 2FA qua challenge token, disable yêu cầu password+TOTP, secret encrypt at-rest, backup codes recovery. Admin reset endpoint giữ nguyên đường dẫn `DELETE /api/admin/accounts/{id}/2fa` nhưng nay thực sự được implement (trước đây chỉ document). Xem §0.5 và §40.1 ADR-019.
 - [x] Bổ sung lifecycle temporary role: tự expire qua background job, có audit log khi expire, không cần manual revoke.
 - [x] Bổ sung error codes cho `GET /api/admin/accounts/{id}` (404), `DELETE /api/admin/accounts/{id}` (404, 409 nếu đang active), `POST /api/admin/accounts/{id}/unlock` (404, 409 nếu chưa bị khóa).
 
@@ -185,6 +186,50 @@
 - [x] **Doc:** Sửa endpoint acknowledge alert: trả `409` (không phải `400`) cho state transition không hợp lệ; block cả `Resolved` lẫn `Merged`.
 - [x] **Doc:** Sửa validation batch sensor readings: `voltage >= 0` (cho phép 0), temperature `-50..120°C`, timestamp cho phép +5 phút so với server time.
 - [x] **Doc:** Bổ sung 4 trường hợp `409` còn thiếu cho `POST /api/battery-assets` (serial trùng, batteryType mismatch với group, group không thuộc site, site không thuộc customer).
+
+---
+
+### 0.5. Quyết định trong lượt cập nhật 14/6/2026
+
+**Auth — 2FA Hardening (GH-295, in-flight Sprint 3):**
+
+Reverse Option B (§0.4 dòng 162) — biến 2FA từ feature cosmetic thành cơ chế bảo vệ thực sự. Toàn bộ chi tiết tại `logs/GH-295/plan.md`; ADR đầy đủ tại §40.1 ADR-019.
+
+- [ ] **Login enforcement:** `LoginCommandHandler` check `Account.TwoFactorEnabled`. Nếu true → trả `TwoFactorChallengeDto { challengeToken, expiresInSeconds:300, methods:["totp","backupCode"] }` thay vì JWT. Challenge token lưu Redis key `2fa:challenge:{token}` TTL 5’, max 5 attempts/token.
+- [ ] **Endpoint mới:** `POST /api/auth/login/verify-2fa { challengeToken, code, isBackupCode }` → verify TOTP hoặc backup code → cấp JWT + refresh token. Rate limit 5 attempts/5min/token.
+- [ ] **Enable 2 bước:** tách `POST /api/accounts/me/2fa/enable` (deprecated → 410 Gone) thành:
+  - `POST /api/accounts/me/2fa/init` → sinh secret + otpAuthUri + `pendingToken`, cache Redis `2fa:pending:{accountId}` TTL 10’, KHÔNG set `TwoFactorEnabled=true` ở bước này
+  - `POST /api/accounts/me/2fa/confirm { pendingToken, code }` → verify TOTP → activate + sinh 8 backup codes (plain trả 1 lần)
+- [ ] **Disable re-auth:** `POST /api/accounts/me/2fa/disable` đổi body `{ password, totpCode }` — verify cả hai trước khi clear. Chống session hijack + stolen device.
+- [ ] **Encrypt secret:** `TwoFactorSecret` lưu qua `IDataProtector` (purpose `"AuthService.Account.TwoFactorSecret.v1"`), format `enc:v1:{base64}` để detect plaintext legacy. Lazy re-encrypt khi user verify TOTP lần đầu sau migration (cột mới `TwoFactorSecretEncryptedAt nullable`). Data Protection key persist qua Docker volume `auth-dataprotection-keys`.
+- [ ] **Backup codes:** entity mới `BackupCode { AccountId, CodeHash, RedeemedAt? }`. 8 codes/account, format `xxxx-xxxx` (10-char alphanum bỏ 0/o/l/1), bcrypt cost 11, single-use. Endpoint regenerate `POST /api/accounts/me/2fa/backup-codes/regenerate { totpCode }` xóa codes cũ + sinh 8 mới.
+- [ ] **Admin reset:** `DELETE /api/admin/accounts/{id}/2fa` (policy `AdminOnly`, mới — overall.md cũ document nhưng code chưa có) → clear secret + backup codes + `TwoFactorEnabled=false` + ghi `AuditLog.Admin2FAReset` actor=admin target=user.
+- [ ] **AuditLog actions mới:** `TwoFactorEnabled`, `TwoFactorDisabled`, `TwoFactorReset`, `BackupCodeRedeemed`, `BackupCodesRegenerated`, `Admin2FAReset`.
+- [ ] **Migration:** `Add2FAHardening` — cột `accounts.two_factor_secret_encrypted_at` (timestamp nullable) + table `backup_codes (id, account_id FK cascade, code_hash, redeemed_at nullable, created_at, ...)`.
+- [ ] **Out of scope (defer):** step-up auth cho sensitive admin actions (cần ticket riêng để decide pattern); SMS/email OTP làm 2FA factor; WebAuthn/FIDO2; trusted-device remember; force-enroll Admin.
+
+**Library decisions:**
+- TOTP: NuGet `Otp.NET` (MIT, RFC 6238) — replace tự build base32 trong `Enable2FACommandHandler` cũ
+- Backup code hash: BCrypt cost 11 — match existing password hash config
+- Challenge/pending store: `IDistributedCache` (Redis) — đã có sẵn trong `SharedInfrastructure`
+
+**Post-implementation review additions (2026-06-14):**
+
+- [x] **HTTP status code convention** — strict mapping theo user policy:
+  - `400` = field validation (body field user submit, format/required sai)
+  - `401` = no token / token expired (chỉ cho endpoint protected)
+  - `403` = no permission / sai role
+  - `404` = không có trong DB
+  - `409` = conflict với state hiện tại (vd 2FA đã enable khi enroll)
+  - `422` = business rule violation (format đúng nhưng value/state sai — vd wrong TOTP, expired challenge, wrong password)
+  - `429` = rate limit
+  - Áp dụng: Confirm2FA wrong code/expired → 422; Disable2FA wrong password/TOTP → 422; RegenerateBackupCodes wrong TOTP → 422; Verify2FALogin wrong code/expired challenge → 422, account deleted → 404, 2FA disabled mid-session → 409
+- [x] **`[BindNever]` defense-in-depth** — combo `[JsonIgnore] + [BindNever]` cho mọi field set từ JWT/route (AccountId, TargetAccountId) trong 5 commands. Chống attacker query string override.
+- [x] **Field-vs-Message convention** — `ErrorsListJsonConverter` đã convert empty list → JSON `null`. Handler chỉ add vào `ListErrors` cho body field validation; business/system errors chỉ set `Message` (ListErrors → JSON `null`).
+- [x] **`env.prod.example` + `docker-compose.prod.yml`** — thêm `DataProtection__KeysPath=/app/keys` + volume `auth-dataprotection-keys` mount `/app/keys` + comment cảnh báo OPS backup. **Critical:** nếu thiếu → restart container prod = mất 2FA cho mọi user enrolled.
+- [x] **`api-auth.md` doc rewrite** — 8 endpoint sections (login response shape mới, verify-2fa, init, confirm, deprecated enable, disable body mới, backup-codes regenerate, admin reset), AuditAction table thêm 8 entries (40-47), refresh-token/google-callback/accept-invite update sang shape `data.tokens.*`.
+- [ ] **`.env` local + `.gitignore`** — user tự edit theo hướng dẫn (`DataProtection__KeysPath=./.dataprotection-keys` + ignore `.dataprotection-keys/`).
+- [ ] **FE ticket riêng** — handle LoginResponse breaking change + render 2FA challenge screen + 8 backup codes display (1-time) + admin reset UI. Plan FE sẽ tạo sau khi BE merge.
 
 ---
 
@@ -6456,6 +6501,7 @@ Folder `docs/adrs/`:
 | ADR-016 | IoT edge = **ESP32-S3** (pivot từ Raspberry Pi); transport **hybrid**: HTTPS REST (v1 — bulk/admin/firmware/flush) + **MQTT** (v2 — realtime <100ms, LWT offline, downlink command). BMS đọc qua RS485/Modbus RTU multi-drop. — xem §52.10 |
 | ADR-017 | Remove Energy and CO2 analytics from BatteryService scope — xem §53.1 |
 | ADR-018 | Orchestrated Alert–Ticket Saga + forward recovery (vs choreography hoặc 2PC) — xem §8.3, §53.4–§53.8 |
+| ADR-019 | 2FA Hardening — enforce TOTP in login (challenge token Redis 5’) + confirm setup (2-step init/confirm) + disable re-auth (password+TOTP) + encrypt secret at rest (Data Protection `enc:v1:` + lazy re-encrypt) + backup codes (8 codes bcrypt single-use) + admin reset. **Supersedes Option B** (§0.4 dòng 162). — xem §0.5, GH-295 |
 
 **ADR template:**
 ```markdown

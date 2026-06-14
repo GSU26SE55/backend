@@ -4,39 +4,57 @@ namespace BatteryService.Application.DTOs;
 
 public class BatteryAssetDto
 {
+    /// <summary>Định danh resource.</summary>
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Serial number của asset (unique).</summary>
     public string SerialNumber { get; set; } = string.Empty;
 
+    /// <summary>ID BatteryType (Guid).</summary>
     public string BatteryTypeId { get; set; } = string.Empty;
 
+    /// <summary>Tên của batterytype.</summary>
     public string BatteryTypeName { get; set; } = string.Empty;
 
+    /// <summary>ID Site (Guid).</summary>
     public string? SiteId { get; set; }
 
+    /// <summary>Tên của site.</summary>
     public string? SiteName { get; set; }
 
+    /// <summary>ID Customer (Guid).</summary>
     public string CustomerId { get; set; } = string.Empty;
 
+    /// <summary>Tên của customer.</summary>
     public string CustomerName { get; set; } = string.Empty;
 
+    /// <summary>Ngày lắp đặt.</summary>
     public DateTime InstallDate { get; set; }
 
+    /// <summary>Ngày hết bảo hành.</summary>
     public DateTime? WarrantyEndDate { get; set; }
 
+    /// <summary>Trạng thái bảo hành (Active | Expired).</summary>
     public WarrantyStatusEnum WarrantyStatus { get; set; }
 
+    /// <summary>Vị trí lắp đặt (vd "Block A - Rack 01").</summary>
     public string? Location { get; set; }
 
+    /// <summary>Vĩ độ (-90..90).</summary>
     public decimal? Latitude { get; set; }
 
+    /// <summary>Kinh độ (-180..180).</summary>
     public decimal? Longitude { get; set; }
 
+    /// <summary>Filter theo status enum.</summary>
     public BatteryStatusEnum Status { get; set; }
 
+    /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>Timestamp reading gần nhất cho asset.</summary>
     public DateTime? LastSensorReadingAt { get; set; }
 
+    /// <summary>Timestamp tạo (UTC).</summary>
     public DateTime CreatedAt { get; set; }
 }

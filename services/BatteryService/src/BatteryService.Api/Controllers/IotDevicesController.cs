@@ -163,7 +163,7 @@ public class IotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Device polling check xem có firmware mới không.
+    /// Device polling check firmware mới (gọi mỗi 1h từ ESP32) — trả {hasUpdate, version, downloadUrl signed, sha256, isRequired, releaseNotes}; tạo UpdateLog Pending để track.
     /// </summary>
     /// <remarks>
     /// Authentication: yêu cầu scope <c>FirmwareCheck</c>.

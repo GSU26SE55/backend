@@ -44,7 +44,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách IoT device theo filter + pagination.
+    /// Liệt kê IoT device theo filter (status/siteId/keyword) + pagination — dùng cho admin fleet management dashboard, sort theo CreatedAt DESC mặc định.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -87,7 +87,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết 1 IoT device theo Id.
+    /// Lấy chi tiết 1 IoT device theo Id — bao gồm Site/TargetFirmwareRelease + ApiKeyLastFour + LastSeenAt + heartbeat stats. KHÔNG trả raw API key (chỉ 1 lần lúc create).
     /// </summary>
     /// <remarks>
     /// Route parameter:
@@ -126,7 +126,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo IoT device mới + sinh API key per-device.
+    /// Tạo IoT device mới + sinh API key per-device + MQTT credential — response trả raw key + raw MQTT password ĐÚNG 1 LẦN, sau đó chỉ giữ hash trong DB.
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -234,7 +234,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa mềm (decommission) 1 device.
+    /// Xoá mềm (decommission) 1 device — set Status=Decommissioned + revoke API key. Heartbeat tiếp theo bị reject 401; sensor readings cũ giữ cho forensic.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:

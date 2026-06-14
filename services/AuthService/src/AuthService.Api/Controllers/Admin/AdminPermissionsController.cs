@@ -27,10 +27,30 @@ public class AdminPermissionsController : ControllerBase
     /// <summary>
     /// Danh sách tất cả permission trong hệ thống. Filter optional theo module.
     /// </summary>
+    /// <remarks>
+    /// Trả flat list <c>PermissionDto</c> sort theo <c>Code</c>. Mỗi entry có:
+    /// <list type="bullet">
+    ///   <item><description><c>Id</c>: Guid identifier.</description></item>
+    ///   <item><description><c>Code</c>: dot-separated key (vd <c>"ticket.view"</c>, <c>"alert.acknowledge"</c>) — match với <c>P.*</c> constant ở FE.</description></item>
+    ///   <item><description><c>Module</c>: namespace logic (Ticket / Alert / Battery / Account / Admin) — filter qua <c>?module=Ticket</c>.</description></item>
+    ///   <item><description><c>Description</c>: mô tả tiếng Việt cho UI gán permission.</description></item>
+    /// </list>
+    ///
+    /// Use case:
+    /// <list type="bullet">
+    ///   <item><description>Admin dashboard render dropdown "chọn permission" khi tạo/edit role.</description></item>
+    ///   <item><description>FE migration check — đảm bảo <c>P.*</c> constants khớp với DB.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="module">Filter theo module name (Ticket/Alert/Battery/...). Để trống = trả tất cả.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
     /// <response code="200">Lấy danh sách permission thành công.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     [HttpGet("permissions")]
     [ProducesResponseType(typeof(PermissionListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAllPermissions(
         [FromQuery] string? module = null,
         CancellationToken cancellationToken = default)
@@ -40,12 +60,28 @@ public class AdminPermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách permission hiện gán cho 1 role.
+    /// Lấy danh sách permission hiện được gán cho 1 role cụ thể.
     /// </summary>
+    /// <remarks>
+    /// Trả về <c>RolePermissionsResponse</c> gồm:
+    /// <list type="bullet">
+    ///   <item><description><c>RoleId</c> + <c>RoleName</c></description></item>
+    ///   <item><description><c>Permissions</c>: list <c>PermissionDto</c> đã gán (sort theo Code).</description></item>
+    /// </list>
+    ///
+    /// Use case: Admin edit role — load list current permissions để pre-check checkbox UI.
+    /// Để thay đổi gán, gọi <c>PUT /roles/{roleId}/permissions</c> với toàn bộ list mới (replace semantics).
+    /// </remarks>
+    /// <param name="roleId">Guid role.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
     /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Role không tồn tại.</response>
     [HttpGet("roles/{roleId:guid}/permissions")]
     [ProducesResponseType(typeof(RolePermissionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(RolePermissionsResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetRolePermissions(
         Guid roleId,
@@ -69,6 +105,8 @@ public class AdminPermissionsController : ControllerBase
     /// <response code="400">Permission không tồn tại / Cố modify system role mà không allowSystemRole.</response>
     /// <response code="404">Role không tồn tại.</response>
     [HttpPut("roles/{roleId:guid}/permissions")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(PermissionActionResponse), StatusCodes.Status404NotFound)]

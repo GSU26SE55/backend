@@ -26,7 +26,7 @@ public class SessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách session của tài khoản hiện tại.
+    /// Lấy danh sách session đang active của tài khoản hiện tại — mỗi session kèm DeviceId, IP, User-Agent, IssuedAt, LastSeenAt. Dùng cho 'Manage devices' UI.
     /// </summary>
     /// <remarks>
     /// **Quyền truy cập:** mọi user đã đăng nhập (chỉ thấy session của chính mình).
@@ -47,6 +47,7 @@ public class SessionsController : ControllerBase
     /// <response code="200">Danh sách `SessionDto`.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("me")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(SessionListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(SessionListResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMySessions(
@@ -80,6 +81,7 @@ public class SessionsController : ControllerBase
     /// <response code="403">Session không thuộc về user hiện tại.</response>
     /// <response code="404">Không tìm thấy session.</response>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(SessionActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(SessionActionResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(SessionActionResponse), StatusCodes.Status404NotFound)]
@@ -111,6 +113,7 @@ public class SessionsController : ControllerBase
     /// <response code="200">Trả về số session đã thu hồi trong `Data`.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpPost("revoke-all")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(SessionActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(SessionActionResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RevokeAll([FromBody] RevokeAllSessionsCommand command, CancellationToken cancellationToken)

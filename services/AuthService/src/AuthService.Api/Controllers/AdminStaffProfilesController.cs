@@ -37,7 +37,7 @@ public class AdminStaffProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo hoặc cập nhật hồ sơ staff cho một account.
+    /// Tạo hoặc cập nhật hồ sơ staff (tier, working location, max concurrent tickets, availability) cho 1 account — dùng khi promote Customer → Staff hoặc đổi skill tier.
     /// </summary>
     /// <remarks>
     /// Endpoint này cấu hình phần staff-specific tách khỏi bảng <c>Account</c>.
@@ -89,7 +89,7 @@ public class AdminStaffProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Thêm hoặc cập nhật kỹ năng của một staff.
+    /// Thêm/cập nhật skill cho staff (level Junior/Senior/Expert per skill name) — dùng cho Manager assign ticket dựa trên skill match với AnomalyType.
     /// </summary>
     /// <remarks>
     /// Endpoint này quản lý bảng <c>StaffSkill</c> theo cặp <c>StaffAccountId</c> và <c>SkillCode</c>.
@@ -136,7 +136,7 @@ public class AdminStaffProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa một kỹ năng khỏi hồ sơ staff.
+    /// Xoá 1 skill khỏi hồ sơ staff — staff không còn được pick cho ticket category yêu cầu skill này; ticket đang assigned KHÔNG bị unassign tự động.
     /// </summary>
     /// <remarks>
     /// Endpoint này xóa mềm một <c>StaffSkill</c> dựa theo AccountId của staff và skill code.

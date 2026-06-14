@@ -14,12 +14,15 @@ public class GetIotDeviceCalibrationsQuery : IRequest<CommonResponse<List<IotDev
     [BindNever]
     public Guid IotDeviceId { get; set; }
 
+    /// <summary>Channel sensor (vd "voltage", "current", "temperature").</summary>
     public string? Channel { get; set; }
+    /// <summary>Bao gồm calibration đã expired.</summary>
     public bool IncludeExpired { get; set; }
 }
 
 /// <summary>Sprint IoT-2 #IoT2-32 — calibration sắp expire trong N ngày (default 30).</summary>
 public class GetIotCalibrationsExpiringQuery : IRequest<CommonResponse<List<IotDeviceCalibrationDto>>>
 {
+    /// <summary>Filter calibration expire trong N ngày tới (default 30).</summary>
     public int WithinDays { get; set; } = 30;
 }

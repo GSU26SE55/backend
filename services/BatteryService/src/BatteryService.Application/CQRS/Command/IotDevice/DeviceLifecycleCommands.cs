@@ -20,27 +20,38 @@ public class ProvisionIotDeviceCommand : IRequest<CommonResponse<IotDeviceProvis
     [BindNever]
     public string DeviceCode { get; set; } = string.Empty;
 
+    /// <summary>Phiên bản firmware (vd "1.2.3").</summary>
     public string FirmwareVersion { get; set; } = string.Empty;
+    /// <summary>Hardware revision (vd "v1.0-S3-MAX485").</summary>
     public string? HardwareRevision { get; set; }
+    /// <summary>Timestamp ghi nhận tại device (UTC) — backend check clock skew.</summary>
     public DateTime DeviceTimestamp { get; set; }
 }
 
 /// <summary>Heartbeat — telemetry health + tiến độ queue + clock skew.</summary>
 public class IotDeviceHeartbeatCommand : IRequest<CommonResponse<IotHeartbeatAckDto>>
 {
+    /// <summary>ID IoT device (Guid).</summary>
     [JsonIgnore]
     [BindNever]
     public Guid DeviceId { get; set; }
 
+    /// <summary>Mã device duy nhất (vd ESP32-001).</summary>
     [JsonIgnore]
     [BindNever]
     public string DeviceCode { get; set; } = string.Empty;
 
+    /// <summary>Phiên bản firmware (vd "1.2.3").</summary>
     public string? FirmwareVersion { get; set; }
+    /// <summary>WiFi RSSI (dBm). Thường âm: -50 mạnh, -90 yếu.</summary>
     public int? RssiDbm { get; set; }
+    /// <summary>% RAM free (0..100).</summary>
     public decimal? FreeMemoryPercent { get; set; }
+    /// <summary>Uptime device (giây) từ lần boot cuối.</summary>
     public long? UptimeSeconds { get; set; }
+    /// <summary>Số reading đang queue tại device chưa upload.</summary>
     public int? QueuedReadingCount { get; set; }
+    /// <summary>Timestamp ghi nhận tại device (UTC) — backend check clock skew.</summary>
     public DateTime DeviceTimestamp { get; set; }
 
     // Sprint IoT-2 #IoT2-10 — ESP32 field mapping per overall.md §52.2/§52.4.
@@ -84,7 +95,10 @@ public class UpdateIotFirmwareUpdateLogCommand : IRequest<CommonResponse<object>
     [BindNever]
     public Guid DeviceId { get; set; }
 
+    /// <summary>Filter theo status enum.</summary>
     public IotFirmwareUpdateStatusEnum Status { get; set; }
+    /// <summary>Số byte device đã download (firmware OTA).</summary>
     public long? BytesDownloaded { get; set; }
+    /// <summary>Lý do thất bại (nếu Status=Failed/RolledBack).</summary>
     public string? FailureReason { get; set; }
 }

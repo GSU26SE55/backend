@@ -10,17 +10,27 @@ namespace BatteryService.Application.CQRS.Command.IotFirmware;
 
 public class CreateIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwareReleaseDto>>, IValidatable<CommonResponse<IotFirmwareReleaseDto>>
 {
+    /// <summary>Phiên bản theo SemVer X.Y.Z.</summary>
     public string Version { get; set; } = string.Empty;
+    /// <summary>Hardware revision (vd "v1.0-S3-MAX485").</summary>
     public string HardwareRevision { get; set; } = string.Empty;
+    /// <summary>URL absolute của artifact .bin (FileStorage presigned).</summary>
     public string ArtifactUrl { get; set; } = string.Empty;
+    /// <summary>SHA-256 hex (64 chars) của artifact để device verify.</summary>
     public string Sha256Checksum { get; set; } = string.Empty;
+    /// <summary>Kích thước artifact (bytes, &le; 50MB).</summary>
     public long ArtifactSizeBytes { get; set; }
+    /// <summary>Changelog/release notes (markdown).</summary>
     public string? ReleaseNotes { get; set; }
+    /// <summary>Publish ngay sau khi tạo (skip bước publish riêng).</summary>
     public bool PublishImmediately { get; set; }
 
     // Sprint IoT-2 #IoT2-35 — spec fields.
+    /// <summary>Force update — device bắt buộc apply.</summary>
     public bool IsRequired { get; set; }
+    /// <summary>Channel sensor (vd "voltage", "current", "temperature").</summary>
     public IotFirmwareChannelEnum Channel { get; set; } = IotFirmwareChannelEnum.Stable;
+    /// <summary>Model device (vd "ESP32-S3-WROOM-1").</summary>
     public string? DeviceModel { get; set; }
 
     public Task<CommonResponse<IotFirmwareReleaseDto>> ValidateAsync()
@@ -52,6 +62,7 @@ public class CreateIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwa
 
 public class PublishIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwareReleaseDto>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }
@@ -59,6 +70,7 @@ public class PublishIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmw
 
 public class ArchiveIotFirmwareReleaseCommand : IRequest<CommonResponse<object>>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     [BindNever]
     public Guid Id { get; set; }

@@ -104,6 +104,7 @@ public class SensorReadingsController : ControllerBase
     /// <response code="400">Dữ liệu không hợp lệ (xem <c>ListErrors</c> — field-level).</response>
     /// <response code="401">Thiếu / sai <c>X-Api-Key</c>, hoặc API key thiếu scope <c>SensorIngest</c>.</response>
     [HttpPost("batch")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(AuthenticationSchemes = ApiKeyAuthenticationHandler.SchemeName)]
     [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.SensorIngest)]
     [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status201Created)]
@@ -219,7 +220,7 @@ public class SensorReadingsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy SensorReading mới nhất của một BatteryAsset.
+    /// Lấy SensorReading mới nhất của 1 BatteryAsset (snapshot tức thời) — dùng cho Customer mobile app widget hiển thị voltage/current/SOC real-time; TimescaleDB index hỗ trợ.
     /// </summary>
     /// <remarks>
     /// Route parameter:

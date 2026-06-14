@@ -10,9 +10,11 @@ namespace BatteryService.Application.CQRS.Query.Site;
 
 public class GetSiteAssetsQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<BatteryAssetDto>>>
 {
+    /// <summary>ID Site (Guid).</summary>
     [JsonIgnore]
     [BindNever]
     public Guid SiteId { get; set; }
 
+    /// <summary>Filter theo status enum.</summary>
     public BatteryStatusEnum? Status { get; set; }
 }

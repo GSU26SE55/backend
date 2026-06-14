@@ -9,12 +9,19 @@ namespace BatteryService.Application.CQRS.Command.IotDevice;
 
 public class CreateIotDeviceCommand : IRequest<CommonResponse<IotDeviceCreatedDto>>, IValidatable<CommonResponse<IotDeviceCreatedDto>>
 {
+    /// <summary>Mã device duy nhất (vd ESP32-001).</summary>
     public string DeviceCode { get; set; } = string.Empty;
+    /// <summary>Tên gợi nhớ hiển thị UI.</summary>
     public string DisplayName { get; set; } = string.Empty;
+    /// <summary>ID Site (Guid).</summary>
     public Guid SiteId { get; set; }
+    /// <summary>Hardware revision (vd "v1.0-S3-MAX485").</summary>
     public string? HardwareRevision { get; set; }
+    /// <summary>Bitmask scopes API key (SensorIngest | DeviceHeartbeat | EnvironmentalIngest | FirmwareCheck).</summary>
     public IotApiKeyScopeEnum ApiKeyScopes { get; set; } = IotApiKeyScopeEnum.EdgeDeviceDefault;
+    /// <summary>Tần suất heartbeat (giây, default 60).</summary>
     public int HeartbeatIntervalSeconds { get; set; } = 60;
+    /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
     public Task<CommonResponse<IotDeviceCreatedDto>> ValidateAsync()

@@ -79,6 +79,33 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Bước 2 login khi account bật 2FA — verify mã TOTP (hoặc backup code) bằng challenge token từ <c>/login</c>.
+    /// </summary>
+    /// <remarks>
+    /// Body: <c>{ challengeToken, code, isBackupCode }</c>.
+    /// - <c>challengeToken</c>: lấy từ <c>Data.Challenge.ChallengeToken</c> của <c>POST /api/auth/login</c>.
+    /// - <c>code</c>: 6 số TOTP từ Authenticator app, hoặc backup code (8 ký tự ± dash).
+    /// - <c>isBackupCode</c>: true nếu là backup code.
+    ///
+    /// Verify thành công → trả <see cref="LoginResponse"/> với <c>Data.Tokens</c> giống <c>/login</c> không-2FA.
+    /// Max 5 attempts/challenge — vượt → 429 + challenge bị invalidate, phải login lại.
+    /// </remarks>
+    [HttpPost("login/verify-2fa")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(AuthService.Api.Extensions.RateLimitingExtensions.PolicyTwoFactorVerify)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> VerifyLogin2FA([FromBody] Verify2FALoginCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode == 0 ? StatusCodes.Status200OK : result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Đăng ký tài khoản mới cho người dùng tự tạo tài khoản.
     /// </summary>
     /// <remarks>
@@ -128,7 +155,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Xác thực OTP đăng ký để kích hoạt tài khoản.
+    /// Xác thực OTP đăng ký để kích hoạt tài khoản — user nhập 6-digit OTP từ email; thành công → AccountStatus chuyển Pending → Active, được phép login.
     /// </summary>
     /// <remarks>
     /// Endpoint này được gọi sau khi người dùng đăng ký và nhận OTP qua email.
@@ -218,7 +245,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Làm mới access token bằng refresh token.
+    /// Làm mới access token bằng refresh token — rotate refresh token (single-use); access token mới expire 1h, refresh token 7d. Detect token reuse → revoke toàn bộ family.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi access token hết hạn nhưng refresh token vẫn còn hợp lệ.
@@ -298,7 +325,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Yêu cầu gửi OTP đặt lại mật khẩu qua email.
+    /// Yêu cầu gửi OTP đặt lại mật khẩu qua email — rate limit 1 request/2 phút per email. Trả 200 cả khi email không tồn tại (chống enumeration attack).
     /// </summary>
     /// <remarks>
     /// Endpoint này là bước đầu tiên của luồng quên mật khẩu.
@@ -369,7 +396,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Đặt lại mật khẩu bằng reset token đã xác thực.
+    /// Đặt lại mật khẩu bằng reset token + OTP đã xác thực — token TTL 15 phút, single-use. Sau khi reset thành công, revoke mọi refresh token (force re-login).
     /// </summary>
     /// <remarks>
     /// Endpoint này là bước cuối của luồng quên mật khẩu.
@@ -403,7 +430,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Gửi lại OTP đặt lại mật khẩu.
+    /// Gửi lại OTP đặt lại mật khẩu (nếu user không nhận được email) — rate limit 1 request/2 phút. Mỗi resend invalidate OTP cũ, sinh OTP mới TTL 15 phút.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi người dùng không nhận được OTP reset password hoặc OTP cũ đã hết hạn.

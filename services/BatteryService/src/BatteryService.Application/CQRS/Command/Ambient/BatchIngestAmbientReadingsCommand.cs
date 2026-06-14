@@ -12,6 +12,7 @@ namespace BatteryService.Application.CQRS.Command.Ambient;
 /// </summary>
 public class BatchIngestAmbientReadingsCommand : IRequest<CommonResponse<int>>, IValidatable<CommonResponse<int>>
 {
+    /// <summary>Danh sách items.</summary>
     public List<AmbientReadingItem> Items { get; set; } = new();
 
     public Task<CommonResponse<int>> ValidateAsync()
@@ -46,11 +47,18 @@ public class BatchIngestAmbientReadingsCommand : IRequest<CommonResponse<int>>, 
 
 public class AmbientReadingItem
 {
+    /// <summary>ID Site (Guid).</summary>
     public Guid SiteId { get; set; }
+    /// <summary>Timestamp của reading (UTC).</summary>
     public DateTime Time { get; set; }
+    /// <summary>Nhiệt độ môi trường (°C).</summary>
     public decimal AmbientTemperature { get; set; }
+    /// <summary>Độ ẩm tương đối (%).</summary>
     public decimal? Humidity { get; set; }
+    /// <summary>Bức xạ mặt trời (W/m²).</summary>
     public decimal? SolarIrradiance { get; set; }
+    /// <summary>Nguồn dữ liệu (IotSensor | Manual | External).</summary>
     public AmbientReadingSourceEnum Source { get; set; } = AmbientReadingSourceEnum.IotSensor;
+    /// <summary>ID thiết bị nguồn (≤ 64 ký tự).</summary>
     public string? SourceDeviceId { get; set; }
 }

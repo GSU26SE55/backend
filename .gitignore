@@ -40,3 +40,5 @@ logs/
 # ---------- Helm subchart cache (auto-download bằng `helm dependency update`) ----------
 deploy/helm/*/charts/
 .config/dotnet-tools.json
+
+.dataprotection-keys/

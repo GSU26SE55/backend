@@ -12,6 +12,7 @@ namespace BatteryService.Application.CQRS.Command.IotDevice;
 /// </summary>
 public class CreateIotDeviceCalibrationCommand : IRequest<CommonResponse<IotDeviceCalibrationDto>>, IValidatable<CommonResponse<IotDeviceCalibrationDto>>
 {
+    /// <summary>ID IoT device (Guid).</summary>
     [JsonIgnore]
     [BindNever]
     public Guid IotDeviceId { get; set; }
@@ -19,18 +20,25 @@ public class CreateIotDeviceCalibrationCommand : IRequest<CommonResponse<IotDevi
     /// <summary>"voltage" | "current" | "temperature" | "soc" (lowercase).</summary>
     public string Channel { get; set; } = string.Empty;
 
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid? BatteryAssetId { get; set; }
 
+    /// <summary>Scale factor calibration (default 1.0).</summary>
     public decimal Scale { get; set; } = 1m;
 
+    /// <summary>Offset cộng thêm calibration (default 0.0).</summary>
     public decimal Offset { get; set; }
 
+    /// <summary>Đơn vị đo (V | A | °C | %).</summary>
     public string Unit { get; set; } = string.Empty;
 
+    /// <summary>Ngày calibration thực hiện.</summary>
     public DateTime CalibratedAt { get; set; }
 
+    /// <summary>Ngày hết hạn.</summary>
     public DateTime? ExpiresAt { get; set; }
 
+    /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
     public Task<CommonResponse<IotDeviceCalibrationDto>> ValidateAsync()

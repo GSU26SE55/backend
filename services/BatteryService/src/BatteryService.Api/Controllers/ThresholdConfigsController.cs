@@ -71,7 +71,7 @@ public class ThresholdConfigsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy ThresholdConfig hiện tại của một BatteryType.
+    /// Lấy ThresholdConfig hiện hành của 1 BatteryType (voltage/temp/SOC thresholds) — sensor reading được so với config này để trigger Alert.
     /// </summary>
     /// <remarks>
     /// Trả 1 config duy nhất - cái có <c>EffectiveFromUtc</c> mới nhất.

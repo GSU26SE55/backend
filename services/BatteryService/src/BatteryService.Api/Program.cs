@@ -28,10 +28,16 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.DocInclusionPredicate((_, _) => true);
 
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    // Include XML doc từ:
+    //   - BatteryService.Api.xml      → controller summaries + remarks
+    //   - BatteryService.Application.xml → DTOs / Commands / Queries → Swagger schema fields
+    //   - BatteryService.Domain.xml      → entity / enum doc nếu reference từ DTO
+    foreach (var asm in new[] { "BatteryService.Api", "BatteryService.Application", "BatteryService.Domain" })
+    {
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, $"{asm}.xml");
+        if (File.Exists(xmlPath))
+            options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
 
     options.AddSecurityDefinition(ApiKeyAuthenticationHandler.SchemeName, new OpenApiSecurityScheme
     {

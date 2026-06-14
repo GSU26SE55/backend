@@ -14,11 +14,17 @@ namespace BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 public class ReportEnvironmentalIncidentCommand
     : IRequest<EnvironmentalIncidentResponse>, IValidatable<EnvironmentalIncidentResponse>
 {
+    /// <summary>ID Site (Guid).</summary>
     public Guid SiteId { get; set; }
+    /// <summary>Loại incident (SmokeDetected | WaterLeak | ...).</summary>
     public EnvironmentalIncidentTypeEnum IncidentType { get; set; }
+    /// <summary>Severity của alert (Warning | Critical).</summary>
     public AlertSeverityEnum Severity { get; set; } = AlertSeverityEnum.Critical;
+    /// <summary>User ID đã report incident.</summary>
     public string? ReportedBy { get; set; }
+    /// <summary>Timestamp phát hiện (UTC).</summary>
     public DateTime DetectedAt { get; set; }
+    /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
     public Task<EnvironmentalIncidentResponse> ValidateAsync()
@@ -60,8 +66,10 @@ public class ReportEnvironmentalIncidentCommand
 public class AcknowledgeEnvironmentalIncidentCommand
     : IRequest<EnvironmentalIncidentResponse>, IValidatable<EnvironmentalIncidentResponse>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     public Guid Id { get; set; }
+    /// <summary>User ID acknowledge incident.</summary>
     public Guid AcknowledgedBy { get; set; }
 
     public Task<EnvironmentalIncidentResponse> ValidateAsync()
@@ -89,9 +97,12 @@ public class AcknowledgeEnvironmentalIncidentCommand
 public class ResolveEnvironmentalIncidentCommand
     : IRequest<EnvironmentalIncidentResponse>, IValidatable<EnvironmentalIncidentResponse>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     public Guid Id { get; set; }
+    /// <summary>User ID resolve incident.</summary>
     public Guid ResolvedBy { get; set; }
+    /// <summary>Ghi chú khi resolve.</summary>
     public string ResolutionNote { get; set; } = string.Empty;
 
     public Task<EnvironmentalIncidentResponse> ValidateAsync()
@@ -124,9 +135,12 @@ public class ResolveEnvironmentalIncidentCommand
 public class MarkFalseAlarmEnvironmentalIncidentCommand
     : IRequest<EnvironmentalIncidentResponse>, IValidatable<EnvironmentalIncidentResponse>
 {
+    /// <summary>Định danh resource.</summary>
     [JsonIgnore]
     public Guid Id { get; set; }
+    /// <summary>Field FalseAlarmBy.</summary>
     public Guid FalseAlarmBy { get; set; }
+    /// <summary>Field FalseAlarmReason.</summary>
     public string FalseAlarmReason { get; set; } = string.Empty;
 
     public Task<EnvironmentalIncidentResponse> ValidateAsync()

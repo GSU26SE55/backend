@@ -31,6 +31,8 @@ volumes:
   loki-data:
   # Sprint IoT-2 #IoT2-35 — firmware .bin upload persistence.
   firmware-storage:
+  # GH-295 — ASP.NET Data Protection keys cho 2FA TwoFactorSecret encryption.
+  auth-dataprotection-keys:
 
 services:
   # ---------- Infrastructure ----------
@@ -177,8 +179,12 @@ services:
       ASPNETCORE_URLS: http://+:8080
       # AuthService chỉ dùng database riêng của Auth.
       ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      # Data Protection keys cho 2FA secret encryption (GH-295). Volume bên dưới mount /app/keys persist cross-restart.
+      DataProtection__KeysPath: "/app/keys"
     ports:
       - "4002:8080"
+    volumes:
+      - auth-dataprotection-keys:/app/keys
     depends_on:
       postgres:
         condition: service_healthy

@@ -24,17 +24,84 @@
 | `statusCode` | `int` | HTTP status code |
 | `message` | `string?` | Thông báo tóm tắt kết quả |
 | `data` | `T?` | Dữ liệu trả về, `null` khi thất bại |
-| `listErrors` | `Errors[]` | Danh sách lỗi validation — mỗi phần tử có `field` và `detail` |
+| `listErrors` | `Errors[] \| null` | Field-level validation errors — null nếu không có lỗi field-level (business/system errors chỉ ghi vào `message`) |
 
-**Lỗi HTTP chung:**
-- `400` — Validation hoặc input không hợp lệ, body vẫn theo `CommonResponse<T>` nếu lỗi đi qua application validation
-- `401` — Token thiếu/hết hạn/không hợp lệ hoặc credential sai
-- `403` — Có token nhưng không đủ quyền hoặc resource không thuộc user hiện tại
-- `404` — Không tìm thấy resource
-- `409` — Xung đột dữ liệu/nghiệp vụ
-- `423` — Account bị lockout tạm thời
-- `429` — Bị rate limit
+**Quy ước ListErrors vs Message (GH-295 strict):**
+- **Field validation** (user nhập sai body field) → `listErrors` chứa `{field, detail}`, `message = "Dữ liệu không hợp lệ."` generic
+- **Business rule / system error** (vd wrong password, expired session, conflict state) → `message` chứa mô tả cụ thể, `listErrors = null`
+- `ErrorsListJsonConverter` tự convert `List<Errors>` rỗng → JSON `null` — handler không cần handle thủ công
+
+**HTTP status code convention (GH-295 strict):**
+- `200` — Thành công
+- `201` — Tạo resource mới
+- `400` — Field validation fail (body field user submit format/required sai) → có `listErrors`
+- `401` — Token thiếu/hết hạn — chỉ cho endpoint có `[Authorize]`
+- `403` — Có token nhưng không đủ permission / sai role
+- `404` — Resource không có trong DB
+- `409` — Conflict với state hiện tại (vd 2FA đã enable khi user gọi `/enable` lại)
+- `410` — Endpoint đã deprecated (vd `/2fa/enable` cũ sau GH-295)
+- `422` — Business rule violation: format đúng nhưng value/state sai (vd wrong TOTP, wrong password khi disable, expired challenge token)
+- `423` — Account bị lockout tạm thời (sai password quá số lần)
+- `429` — Rate limit
 - `500` — Lỗi server ngoài dự kiến
+
+---
+
+## FE Migration Guide — GH-295 Breaking Changes
+
+**Endpoints affected:**
+
+| Endpoint | Method | Trước GH-295 | Sau GH-295 |
+|---|---|---|---|
+| `/api/auth/login` | POST | Trả `data.accessToken` + `data.refreshToken` trực tiếp | Trả discriminated union `data.tokens.*` HOẶC `data.challenge.*` |
+| `/api/auth/refresh-token` | POST | Tương tự login cũ | Wrap trong `data.tokens.*` (luôn `data.challenge = null`) |
+| `/api/auth/google/callback` | GET | Tương tự login cũ | Wrap trong `data.tokens.*` |
+| `/api/auth/accept-invite` | POST | Tương tự login cũ | Wrap trong `data.tokens.*` |
+| `/api/accounts/me/2fa/enable` | POST | Activate ngay, trả secret + URI | **410 Gone** — đổi sang `/2fa/init` + `/2fa/confirm` |
+| `/api/accounts/me/2fa/disable` | POST | Body rỗng | Body bắt buộc `{password, totpCode}` |
+
+**Endpoints mới:**
+
+| Endpoint | Method | Mục đích FE |
+|---|---|---|
+| `/api/auth/login/verify-2fa` | POST | Bước 2 login khi user bật 2FA |
+| `/api/accounts/me/2fa/init` | POST | Bước 1 enroll — sinh QR + pendingToken |
+| `/api/accounts/me/2fa/confirm` | POST | Bước 2 enroll — verify TOTP, trả 8 backup codes (1 lần) |
+| `/api/accounts/me/2fa/backup-codes/regenerate` | POST | User sinh lại 8 codes mới (cần TOTP) |
+| `/api/admin/accounts/{id}/2fa` | DELETE | Admin reset 2FA của user khác |
+
+**Migration steps cho FE:**
+
+1. **Sửa Login handler:**
+   ```js
+   const res = await api.post('/api/auth/login', { email, password });
+   if (res.data.data.requiresTwoFactor) {
+     // 2FA on: lưu challengeToken trong memory, redirect màn hình OTP
+     setChallengeToken(res.data.data.challenge.challengeToken);
+     navigate('/login/2fa');
+   } else {
+     // 2FA off: save tokens như cũ
+     saveTokens(res.data.data.tokens.accessToken, res.data.data.tokens.refreshToken);
+     navigate('/');
+   }
+   ```
+2. **Màn hình 2FA verify** — POST `/api/auth/login/verify-2fa` với `{challengeToken, code, isBackupCode}`. Response giống login Case A (`data.tokens.*`).
+3. **Cập nhật Refresh + Google callback + Accept invite handler** — đường truy cập tokens đổi từ `data.accessToken` → `data.tokens.accessToken`.
+4. **Setup 2FA wizard** (replace single-screen enable):
+   - Step 1: POST `/2fa/init` → render QR từ `data.otpAuthUri`, hiển thị `data.secret` để nhập tay
+   - Step 2: User scan + nhập 6 số → POST `/2fa/confirm` với `pendingToken` + `code`
+   - Step 3: Hiển thị 8 backup codes từ `data.backupCodes` với UI bắt buộc user "Tôi đã lưu" trước khi đóng (codes không hiển thị lại được)
+5. **Disable 2FA form** — thêm 2 input password + totpCode, submit `{password, totpCode}`.
+6. **Settings page** — thêm button "Regenerate backup codes" (modal nhập TOTP) + button "Disable 2FA".
+7. **Admin panel** — thêm button "Reset 2FA" cho admin user (confirm dialog → DELETE `/api/admin/accounts/{id}/2fa`).
+
+**Error handling pattern theo status code:**
+- `422` (wrong code, expired session, wrong password) → hiển thị message dưới input field hoặc toast, KHÔNG redirect login
+- `429` (rate limit) → countdown disable button + hiển thị "Thử lại sau {Retry-After}s"
+- `403` (account suspended/locked giữa 2FA challenge) → clear local session, redirect login với toast warning
+- `404` (account deleted giữa challenge) → clear local session, redirect login
+
+---
 
 ---
 
@@ -125,8 +192,14 @@
 | `EmailChangeRequested` | 24 | Password/OTP |
 | `EmailChangeConfirmed` | 25 | Password/OTP |
 | `PhoneVerified` | 26 | Password/OTP |
-| `TwoFactorEnabled` | 40 | 2FA |
-| `TwoFactorDisabled` | 41 | 2FA |
+| `TwoFactorEnabled` | 40 | 2FA — user kích hoạt thành công qua `POST /me/2fa/confirm` |
+| `TwoFactorDisabled` | 41 | 2FA — user tắt qua `POST /me/2fa/disable` (sau khi verify password + TOTP) |
+| `TwoFactorReset` | 42 | 2FA — reserved cho self-reset flow (chưa expose endpoint) |
+| `BackupCodeRedeemed` | 43 | 2FA — user dùng backup code để login (single-use); ghi cùng `LoginWith2FA` |
+| `BackupCodesRegenerated` | 44 | 2FA — user gọi `POST /me/2fa/backup-codes/regenerate` (vô hiệu hóa codes cũ) |
+| `Admin2FAReset` | 45 | 2FA — admin reset 2FA của user khác qua `DELETE /api/admin/accounts/{id}/2fa` |
+| `LoginWith2FA` | 46 | 2FA — login hoàn tất bước 2 (`POST /api/auth/login/verify-2fa`) — metadata.method=`totp`/`backupCode` |
+| `LoginPending2FA` | 47 | 2FA — login bước 1 đã verify password OK, đang chờ verify TOTP (status pending) |
 | `GoogleLinked` | 50 | Google |
 | `GoogleUnlinked` | 51 | Google |
 | `AccountRegistered` | 60 | Account Lifecycle |
@@ -162,7 +235,9 @@ Base route: `/api/auth`
 
 ### `POST /api/auth/login`
 
-**Mục đích:** Đăng nhập bằng email + mật khẩu, nhận cặp access token / refresh token.
+**Mục đích:** Đăng nhập bằng email + mật khẩu. **Response shape là discriminated union** — tuỳ theo `Account.TwoFactorEnabled`:
+- 2FA **OFF** → trả tokens ngay (`data.tokens` set, `data.challenge` null)
+- 2FA **ON** → trả challenge token để bước 2 verify TOTP/backup code (`data.tokens` null, `data.challenge` set)
 
 **Auth:** Không yêu cầu
 
@@ -175,28 +250,122 @@ Base route: `/api/auth`
 
 **Lưu ý:** Login chỉ validate password ở mức sanity check để tránh gửi field rỗng. Đây không phải security gate; server vẫn verify password bằng hash hiện có và không áp dụng regex strong-password tại endpoint login.
 
-**Response thành công `200`:**
+**Response `200` — Case A: 2FA OFF (login hoàn tất):**
 ```json
 {
   "isSuccess": true,
   "statusCode": 200,
+  "message": "Đăng nhập thành công.",
   "data": {
-    "accessToken": "eyJ...",
-    "refreshToken": "abc123..."
-  }
+    "tokens": {
+      "accessToken": "eyJ...",
+      "refreshToken": "abc123..."
+    },
+    "challenge": null,
+    "requiresTwoFactor": false
+  },
+  "listErrors": null
 }
 ```
 
+**Response `200` — Case B: 2FA ON (cần verify bước 2):**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Yêu cầu xác thực 2FA. Gửi mã TOTP hoặc backup code qua /api/auth/login/verify-2fa.",
+  "data": {
+    "tokens": null,
+    "challenge": {
+      "challengeToken": "e7b9c1a2f0d44e0d9c5b3a1e8f2c0d3b",
+      "expiresInSeconds": 300,
+      "methods": ["totp", "backupCode"]
+    },
+    "requiresTwoFactor": true
+  },
+  "listErrors": null
+}
+```
+
+**Field reference (LoginResultDto):**
+
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data.accessToken` | `string` | Có thể null khi lỗi | JWT access token, thời hạn 1 giờ |
-| `data.refreshToken` | `string` | Có thể null khi lỗi | Refresh token, thời hạn 7 ngày, lưu trong Redis |
+| `data.tokens` | `TokenDTO` | **Có** | Set khi login complete (Case A). Null trong Case B. |
+| `data.tokens.accessToken` | `string` | Có thể null khi lỗi | JWT access token, thời hạn 1 giờ |
+| `data.tokens.refreshToken` | `string` | Có thể null khi lỗi | Refresh token, thời hạn 7 ngày, lưu trong Redis |
+| `data.challenge` | `TwoFactorChallengeDto` | **Có** | Set khi 2FA on (Case B). Null trong Case A. |
+| `data.challenge.challengeToken` | `string` | Không (nếu challenge set) | Token (32 ký tự hex) để gửi kèm `/login/verify-2fa`. Lưu Redis TTL 5 phút. |
+| `data.challenge.expiresInSeconds` | `int` | Không | Luôn `300` (TTL của challenge token) |
+| `data.challenge.methods` | `string[]` | Không | Phương thức cho phép — luôn `["totp", "backupCode"]` |
+| `data.requiresTwoFactor` | `bool` | Không | Computed: `challenge != null`. Tiện cho FE detect flow. |
+
+**FE flow:**
+```
+POST /api/auth/login
+  ├─ data.requiresTwoFactor == false → save tokens.accessToken + tokens.refreshToken, redirect home
+  └─ data.requiresTwoFactor == true  → giữ data.challenge.challengeToken trong memory,
+                                        hiển thị màn hình nhập TOTP / backup code,
+                                        gọi POST /api/auth/login/verify-2fa
+```
 
 **Lỗi thường gặp:**
-- `400` — Dữ liệu không hợp lệ (email sai định dạng, password rỗng)
-- `401` — Email hoặc mật khẩu không chính xác
+- `400` — Dữ liệu không hợp lệ (email sai định dạng, password rỗng) — field validation, có `listErrors`
+- `400 isSuccess=false` — Email hoặc mật khẩu không chính xác (counter tăng, gần khóa)
 - `403` — Tài khoản chưa verify, inactive, suspended hoặc banned
 - `423` — Tài khoản bị khóa tạm thời do sai mật khẩu quá số lần cho phép
+
+> **Breaking change (GH-295):** Trước GH-295, response shape là `data.accessToken` / `data.refreshToken` trực tiếp. Sau GH-295, được wrap trong `data.tokens.*`. Client cũ cần migrate đường truy cập. `AcceptInvite`, `GoogleAuth`, `RefreshToken` cũng dùng shape mới.
+
+---
+
+### `POST /api/auth/login/verify-2fa`
+
+**Mục đích:** Bước 2 của 2FA login flow — verify TOTP code (hoặc backup code) bằng `challengeToken` từ bước 1 → cấp JWT + refresh token. **GH-295.**
+
+**Auth:** Không yêu cầu (nhưng cần `challengeToken` hợp lệ — tương đương "session đã verify password")
+
+**Rate limit:** 5 attempts / 5 phút / `challengeToken` (vượt → 429 + challenge bị invalidate).
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `challengeToken` | `string` | Bắt buộc | Không rỗng | Lấy từ `data.challenge.challengeToken` của `/api/auth/login` Case B |
+| `code` | `string` | Bắt buộc | Nếu `isBackupCode=false`: đúng 6 chữ số. Nếu `isBackupCode=true`: không validate format (server tự normalize). | Mã TOTP 6 số từ Authenticator hoặc backup code (`xxxx-xxxx`, không phân biệt hoa thường, dash optional) |
+| `isBackupCode` | `bool` | Mặc định `false` | — | `true` khi user dùng backup code thay vì TOTP |
+
+**Response thành công `200`:** Giống `/login` Case A — `data.tokens.accessToken` + `data.tokens.refreshToken`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đăng nhập thành công.",
+  "data": {
+    "tokens": { "accessToken": "eyJ...", "refreshToken": "abc..." },
+    "challenge": null,
+    "requiresTwoFactor": false
+  },
+  "listErrors": null
+}
+```
+
+**Side effect khi success:**
+- Account `FailedLoginAttempts` reset về 0
+- Account `LastLoginAt`, `LastLoginIp` cập nhật
+- `RefreshToken` row mới insert (session limit enforcement có thể revoke session cũ nhất)
+- Nếu `isBackupCode=true`: row `BackupCode` đó set `RedeemedAt = UtcNow` (single-use)
+- Nếu `TwoFactorSecret` còn dạng plaintext legacy (pre-GH-295): tự động lazy re-encrypt sau khi verify thành công
+- Audit log: `LoginWith2FA` (metadata.method=`totp`/`backupCode`), `BackupCodeRedeemed` (nếu backup code), `LoginAttempt` row Success
+
+**Lỗi thường gặp:**
+- `400` — Field validation (challengeToken/code rỗng, TOTP code không phải 6 chữ số) — có `listErrors`
+- `403` — Account suspended/banned/inactive giữa lúc challenge còn sống → challenge bị invalidate
+- `404` — Account bị xóa giữa lúc challenge còn sống → challenge bị invalidate
+- `409` — Account đã disable 2FA giữa lúc challenge còn sống → challenge bị invalidate
+- `422` — Challenge token expired/invalid, hoặc mã TOTP/backup code sai (business rule, không phải field format)
+- `429` — Quá 5 attempts cho cùng 1 challenge → challenge bị xóa, user phải login lại
 
 ---
 
@@ -396,14 +565,22 @@ Base route: `/api/auth`
 |---|---|---|---|
 | `refreshToken` | `string` | Bắt buộc | Refresh token hiện tại còn hiệu lực |
 
-**Response thành công `200`:**
+**Response thành công `200`:** Dùng cùng shape `LoginResultDto` (GH-295) — `data.tokens.accessToken` + `data.tokens.refreshToken`. `data.challenge` luôn null cho refresh-token endpoint (không cần re-verify 2FA khi đã có refresh token hợp lệ).
+
 ```json
 {
   "isSuccess": true,
+  "statusCode": 200,
+  "message": "Cấp lại token thành công.",
   "data": {
-    "accessToken": "eyJ...",
-    "refreshToken": "newtoken..."
-  }
+    "tokens": {
+      "accessToken": "eyJ...",
+      "refreshToken": "newtoken..."
+    },
+    "challenge": null,
+    "requiresTwoFactor": false
+  },
+  "listErrors": null
 }
 ```
 
@@ -457,7 +634,7 @@ Base route: `/api/auth`
 | `state` | `string` | Bắt buộc | State Google trả về, phải khớp cookie `g_oauth_state` |
 | `error` | `string` | Không | Lỗi Google trả về nếu user hủy hoặc OAuth fail |
 
-**Response thành công `200`:** Giống `POST /api/auth/login`.
+**Response thành công `200`:** Dùng cùng shape `LoginResultDto` như `POST /api/auth/login` Case A (Google login bypass 2FA — không trả challenge). `data.tokens.accessToken` + `data.tokens.refreshToken`, `data.challenge = null`.
 
 **Lưu ý bảo mật:** Endpoint callback không accept `redirectUri` từ query param. Backend exchange code bằng redirect URI cố định trong whitelist cấu hình; request không thể override redirect URI nên không mở hướng open redirect theo input từ FE.
 
@@ -477,7 +654,7 @@ Base route: `/api/auth`
 | `password` | `string` | Bắt buộc | 8–100 ký tự, có chữ hoa/thường/số/ký tự đặc biệt | Mật khẩu mới |
 | `confirmPassword` | `string` | Bắt buộc | Phải trùng với `password` | Xác nhận mật khẩu |
 
-**Response thành công `200`:** Giống `POST /api/auth/login` — trả về `accessToken` + `refreshToken`.
+**Response thành công `200`:** Dùng cùng shape `LoginResultDto` như `POST /api/auth/login` Case A (Accept invite hoàn tất = login luôn, bypass 2FA cho lần đầu — user enroll 2FA sau nếu muốn). `data.tokens.accessToken` + `data.tokens.refreshToken`, `data.challenge = null`.
 
 **Lỗi thường gặp:**
 - `400` — Body không hợp lệ (password rỗng, confirmPassword không khớp, invitationToken rỗng)
@@ -628,47 +805,218 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
-### `POST /api/accounts/me/2fa/enable`
+### `POST /api/accounts/me/2fa/enable` — **DEPRECATED (GH-295)**
 
-**Mục đích:** Bật xác thực hai yếu tố (TOTP). Trả về secret và URI để quét QR code với Google Authenticator.
+**Status:** Endpoint cũ — luôn trả `410 Gone`. Dùng flow 2 bước mới: `POST /me/2fa/init` → `POST /me/2fa/confirm`.
+
+**Response `410 Gone`:**
+```json
+{
+  "isSuccess": false,
+  "statusCode": 410,
+  "message": "Endpoint này đã bị thay thế. Dùng POST /api/accounts/me/2fa/init rồi POST /api/accounts/me/2fa/confirm.",
+  "data": null,
+  "listErrors": null
+}
+```
+
+> **Lý do reverse:** Behavior cũ (Option B) activate 2FA ngay khi gọi `/enable` mà chưa verify user đã quét QR thành công → user có thể tự lock-out chính mình. GH-295 tách thành 2 bước để bắt buộc verify TOTP trước khi activate. Xem `overall.md` §0.5 + ADR-019.
+
+---
+
+### `POST /api/accounts/me/2fa/init` — **(GH-295)**
+
+**Mục đích:** Bước 1/2 của enable 2FA flow — sinh secret + QR URI, cache pending state vào Redis (TTL 10 phút). **CHƯA activate 2FA** ở bước này.
 
 **Auth:** Bắt buộc (mọi role)
 
-**Request body:** Không có
+**Rate limit:** `AuthOtp` (3 req / phút / userId)
+
+**Request body:** Không có (AccountId lấy từ JWT)
 
 **Response thành công `200`:**
 ```json
 {
   "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã sinh secret. Quét QR bằng Authenticator rồi gọi /2fa/confirm với mã 6 số để kích hoạt.",
   "data": {
-    "secret": "BASE32SECRETKEY",
-    "otpAuthUri": "otpauth://totp/SolarBattery:user@example.com?secret=...&issuer=..."
-  }
+    "secret": "JBSWY3DPEHPK3PXP",
+    "otpAuthUri": "otpauth://totp/GSU26SE55%20Auth:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=GSU26SE55%20Auth&algorithm=SHA1&digits=6&period=30",
+    "pendingToken": "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.secret` | `string` | Không | Base32 secret (20 bytes ≈ 32 ký tự) — user nhập tay nếu không quét được QR |
+| `data.otpAuthUri` | `string` | Không | URI `otpauth://totp/...` — render thành QR code bằng `qrcode.js` |
+| `data.pendingToken` | `string` | Không | Token (32 hex) gắn với pending state Redis — gửi kèm bước confirm |
+
+**Side effect:**
+- Sinh secret bằng `Otp.NET` (RFC 6238 SHA1/6digits/30s)
+- Cache `2fa:pending:{accountId}` Redis TTL 10’ chứa `{secret, pendingToken, createdAtUtc}`
+- **KHÔNG** set `Account.TwoFactorEnabled = true` — đợi confirm
+- Gọi init lần 2 → overwrite pending cũ (idempotent — pendingToken mới invalidate token cũ)
+
+**Lỗi thường gặp:**
+- `401` — JWT empty/expired
+- `404` — Account không tồn tại
+- `409` — 2FA đã được bật trên account (phải disable trước nếu muốn enroll lại)
+- `429` — Rate limit
+
+---
+
+### `POST /api/accounts/me/2fa/confirm` — **(GH-295)**
+
+**Mục đích:** Bước 2/2 của enable 2FA flow — verify mã TOTP từ Authenticator → activate 2FA, encrypt secret, sinh 8 backup codes.
+
+**Auth:** Bắt buộc (mọi role)
+
+**Rate limit:** `AuthOtp` (3 req / phút / userId)
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `pendingToken` | `string` | Bắt buộc | Không rỗng | Token nhận từ `/2fa/init` |
+| `code` | `string` | Bắt buộc | Đúng 6 chữ số | Mã TOTP hiện tại từ Authenticator |
+
+**Response thành công `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Bật 2FA thành công. LƯU LẠI 8 backup codes — chúng chỉ hiển thị 1 lần.",
+  "data": {
+    "enabled": true,
+    "backupCodes": [
+      "abcd-2345", "efgh-6789", "jkmn-pqrs", "tuvw-xyz2",
+      "3456-789a", "bcde-fghj", "kmnp-qrst", "uvwx-yz23"
+    ]
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.enabled` | `bool` | Không | Luôn `true` khi success |
+| `data.backupCodes` | `string[]` | Không | **8 plaintext codes** format `xxxx-xxxx` (8 ký tự alphanum bỏ `0/o/l/1` + 1 dash). DB lưu BCrypt hash. **Trả 1 lần duy nhất** — FE bắt buộc cho user lưu/print/copy trước khi đóng modal. |
+
+**Side effect:**
+- `Account.TwoFactorSecret = enc:v1:{base64}` (encrypt qua ASP.NET Data Protection)
+- `Account.TwoFactorSecretEncryptedAt = UtcNow`
+- `Account.TwoFactorEnabled = true`
+- Insert 8 rows `backup_codes` (CodeHash = BCrypt cost 11, RedeemedAt = null)
+- Xóa Redis pending state
+- Audit log `TwoFactorEnabled` (metadata.backupCodesIssued = 8)
+
+**Lỗi thường gặp:**
+- `400` — Field validation (pendingToken/code rỗng, code không phải 6 chữ số) — có `listErrors`
+- `401` — JWT empty/expired
+- `404` — Account không tồn tại
+- `409` — 2FA đã được bật (race condition)
+- `422` — Pending session expired/init lại / pendingToken không khớp / mã TOTP sai — business rule, không touch ListErrors. Pending state vẫn còn (retry với code đúng vẫn được).
+- `429` — Rate limit
+
+---
+
+### `POST /api/accounts/me/2fa/disable` — **(updated GH-295)**
+
+**Mục đích:** Tắt 2FA — yêu cầu re-auth bằng **cả** password **và** TOTP để chống session hijack (attacker chiếm JWT vẫn không disable được vì không biết password) + chống stolen device (attacker có device vẫn không biết password).
+
+**Auth:** Bắt buộc (mọi role)
+
+**Rate limit:** `TwoFactorDisable` (3 req / 5 phút / userId)
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `password` | `string` | Bắt buộc | Không rỗng | Mật khẩu hiện tại |
+| `totpCode` | `string` | Bắt buộc | Đúng 6 chữ số | Mã TOTP hiện tại từ Authenticator |
+
+> **Không hỗ trợ backup code** để disable — chỉ TOTP (để tránh attacker có 1 backup code đoán được + chiếm session là disable luôn 2FA của user).
+
+**Response thành công `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Tắt 2FA thành công.",
+  "data": "8f3a5b9d-...",
+  "listErrors": null
 }
 ```
 
 | Field | Type | Mô tả |
 |---|---|---|
-| `data.secret` | `string` | Secret key (Base32) để nhập thủ công vào app authenticator |
-| `data.otpAuthUri` | `string` | URI để tạo QR code, quét bằng Google Authenticator / Authy |
+| `data` | `string (Guid)` | AccountId vừa disable |
 
-**Lưu ý — 2FA activation behavior:**
-- 2FA **kích hoạt ngay** sau khi endpoint này thành công — không có bước confirm TOTP riêng biệt.
-- FE phải hiển thị QR code / secret và yêu cầu user scan + lưu **trước khi** cho phép rời màn hình, vì sau đó secret không được trả lại nữa.
-- **Recovery path nếu user mất access TOTP authenticator:** User tự gọi `POST /api/accounts/me/2fa/disable` (cần access token hợp lệ). Nếu user không thể login được, Admin cần can thiệp trực tiếp ở DB — hiện tại chưa có admin endpoint để disable 2FA cho account khác; backup codes cũng chưa được implement.
-- **Trạng thái triển khai hiện tại:** Backend lưu secret và đánh dấu `twoFactorEnabled = true`, nhưng **TOTP chưa được enforce tại bước login** (sẽ implement ở sprint sau). FE hiện tại không cần xử lý TOTP challenge khi login — chỉ cần hiển thị setup screen để user sẵn sàng cho sprint sau. Khi TOTP enforcement được bật, tài liệu này sẽ được cập nhật.
+**Idempotent:** Nếu 2FA vốn đã OFF → trả `200` ngay với message `"2FA vốn đã chưa bật."`, không yêu cầu verify password/TOTP.
+
+**Side effect khi success:**
+- `Account.TwoFactorSecret = null`, `TwoFactorEnabled = false`, `TwoFactorSecretEncryptedAt = null`
+- Xóa toàn bộ `backup_codes` rows của account (soft delete via interceptor)
+- Audit log `TwoFactorDisabled` (success/fail)
+
+**Lỗi thường gặp:**
+- `400` — Field validation (password/totpCode rỗng, totpCode không phải 6 chữ số) — có `listErrors`
+- `401` — JWT empty/expired
+- `404` — Account không tồn tại
+- `422` — Password sai hoặc TOTP sai. Response message **generic** `"Mật khẩu hoặc mã không đúng."` (chống attacker dò xem field nào sai)
+- `429` — Rate limit
 
 ---
 
-### `POST /api/accounts/me/2fa/disable`
+### `POST /api/accounts/me/2fa/backup-codes/regenerate` — **(GH-295)**
 
-**Mục đích:** Tắt xác thực hai yếu tố.
+**Mục đích:** Sinh lại 8 backup codes mới — vô hiệu hóa codes cũ. Dùng khi user lo codes cũ bị lộ hoặc đã dùng gần hết.
 
 **Auth:** Bắt buộc (mọi role)
 
-**Request body:** Không có
+**Rate limit:** `BackupCodeRegenerate` (3 req / giờ / userId)
 
-**Response thành công `200`:** `isSuccess = true`.
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `totpCode` | `string` | Bắt buộc | Đúng 6 chữ số | Mã TOTP hiện tại (chứng minh user còn giữ device) |
+
+**Response thành công `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã sinh 8 backup codes mới. Codes cũ đã bị vô hiệu hóa.",
+  "data": {
+    "backupCodes": [
+      "wxyz-3456", "..."
+    ]
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.backupCodes` | `string[8]` | Không | Plain codes mới, format `xxxx-xxxx`. **Trả 1 lần duy nhất.** |
+
+**Side effect:**
+- Xóa toàn bộ `backup_codes` rows cũ của account (soft delete)
+- Insert 8 rows mới (CodeHash = BCrypt)
+- Audit log `BackupCodesRegenerated` (metadata.oldCodesInvalidated, newCodesIssued=8)
+
+**Lỗi thường gặp:**
+- `400` — Field validation (totpCode rỗng / không phải 6 chữ số) — có `listErrors`
+- `401` — JWT empty/expired
+- `404` — Account không tồn tại
+- `409` — 2FA chưa được bật (phải enroll trước)
+- `422` — TOTP code sai
+- `429` — Rate limit (3/giờ rất chặt vì đây là endpoint nhạy cảm)
 
 ---
 
@@ -1198,6 +1546,51 @@ Base route: `/api/admin/accounts`
 - `403` — Không có role Admin
 - `404` — Không tìm thấy account
 - `409` — *(Planned)* Không thể xóa account đang có ticket ở trạng thái active (`OPEN`, `ASSIGNED`, `IN_PROGRESS`, `ESCALATED`) — business rule này dự kiến implement cùng TicketService integration; hiện tại backend chưa enforce.
+
+---
+
+### `DELETE /api/admin/accounts/{id}/2fa` — **(GH-295)**
+
+**Mục đích:** Admin reset 2FA của user khác — clear secret + xóa toàn bộ backup codes + set `TwoFactorEnabled=false`. Dùng cho case user mất hoàn toàn device + hết backup codes, không thể self-recovery.
+
+**Auth:** **Admin** (chỉ Admin role, không phải Manager)
+
+**Path param:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `Guid` | AccountId của user cần reset 2FA |
+
+**Request body:** Không có
+
+**Response thành công `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã reset 2FA cho tài khoản. User phải enroll lại nếu muốn dùng 2FA.",
+  "data": "8f3a5b9d-...",
+  "listErrors": null
+}
+```
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `data` | `string (Guid)` | AccountId vừa reset (= target id từ route) |
+
+**Idempotent:** Gọi trên account chưa bật 2FA cũng trả `200` với message `"Tài khoản vốn chưa bật 2FA. Đã clear sạch dữ liệu liên quan để chắc chắn."`
+
+**Side effect khi success:**
+- `Account.TwoFactorSecret = null`, `TwoFactorEnabled = false`, `TwoFactorSecretEncryptedAt = null`
+- Xóa toàn bộ `backup_codes` rows của target account (soft delete)
+- Audit log `Admin2FAReset`: `ActorAccountId = admin`, `TargetAccountId = user`, `Reason` ghi rõ pre-state, `Metadata` chứa `wasEnabled`, `backupCodesCleared`
+
+**Lỗi thường gặp:**
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin (Manager/Staff/Customer đều bị chặn)
+- `404` — Không tìm thấy target account
+
+> **Use case operational:** User báo support mất hoàn toàn device + hết backup codes → Admin verify danh tính qua channel khác (email/phone) → gọi endpoint này → notify user enroll lại. **Không có cách self-recovery** — đây là design có chủ ý để 2FA thực sự là factor thứ hai an toàn.
 
 ---
 

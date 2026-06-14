@@ -10,12 +10,16 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
     private static readonly HashSet<string> ValidIntervals =
         new(StringComparer.OrdinalIgnoreCase) { "1m", "5m", "15m", "1h", "1d" };
 
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid BatteryAssetId { get; set; }
 
+    /// <summary>Filter timestamp bắt đầu (UTC inclusive).</summary>
     public DateTime? From { get; set; }
 
+    /// <summary>Filter timestamp kết thúc (UTC inclusive).</summary>
     public DateTime? To { get; set; }
 
+    /// <summary>Bucket size aggregate (1m | 5m | 15m | 1h | 1d).</summary>
     public string Interval { get; set; } = "1h";
 
     public Task<CommonResponse<List<SensorReadingAggregateDto>>> ValidateAsync()

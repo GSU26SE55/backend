@@ -8,18 +8,25 @@ namespace BatteryService.Application.CQRS.Command.BatteryType;
 
 public class CreateBatteryTypeCommand : IRequest<CommonResponse<BatteryTypeDto>>, IValidatable<CommonResponse<BatteryTypeDto>>
 {
+    /// <summary>Tên hiển thị.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Tên nhà sản xuất.</summary>
     public string? Manufacturer { get; set; }
 
+    /// <summary>Dung lượng danh nghĩa (Ah).</summary>
     public decimal NominalCapacityAh { get; set; }
 
+    /// <summary>Điện áp danh nghĩa (V).</summary>
     public decimal NominalVoltage { get; set; }
 
+    /// <summary>Hoá học pin (LiFePO4 | NMC | NCA).</summary>
     public BatteryChemistryEnum Chemistry { get; set; } = BatteryChemistryEnum.LiFePO4;
 
+    /// <summary>Tối đa số chu kỳ trước EOL.</summary>
     public int MaxCycleCount { get; set; } = 2000;
 
+    /// <summary>Mô tả chi tiết.</summary>
     public string? Description { get; set; }
 
     public Task<CommonResponse<BatteryTypeDto>> ValidateAsync()

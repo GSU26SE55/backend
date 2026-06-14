@@ -10,6 +10,7 @@ namespace BatteryService.Application.CQRS.Command.SensorReading;
 
 public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorReadingBatchIngestResult>>, IValidatable<CommonResponse<SensorReadingBatchIngestResult>>
 {
+    /// <summary>Danh sách items.</summary>
     public List<SensorReadingItem> Items { get; set; } = new();
 
     /// <summary>Sprint IoT-1 (#246) — header <c>X-Device-Code</c>. Backend cross-check với device được auth.</summary>
@@ -101,6 +102,7 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
 
 public class SensorReadingItem
 {
+    /// <summary>Timestamp của reading (UTC).</summary>
     public DateTime Time { get; set; }
 
     /// <summary>
@@ -115,29 +117,41 @@ public class SensorReadingItem
     /// </summary>
     public string? BatteryAssetSerial { get; set; }
 
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid BatteryAssetId { get; set; }
 
+    /// <summary>Điện áp (V).</summary>
     public decimal Voltage { get; set; }
 
+    /// <summary>Cường độ dòng (A). Âm = xả, dương = sạc.</summary>
     public decimal Current { get; set; }
 
+    /// <summary>Nhiệt độ (°C).</summary>
     public decimal Temperature { get; set; }
 
+    /// <summary>State of Charge — % pin còn (0..100).</summary>
     public decimal SocPercent { get; set; }
 
+    /// <summary>Số chu kỳ sạc/xả của pin.</summary>
     public int? CycleCount { get; set; }
 
+    /// <summary>State of Health — % sức khoẻ pin (0..100).</summary>
     public decimal? SohPercent { get; set; }
 
+    /// <summary>Trạng thái sạc (Idle / Charging / Discharging / Full).</summary>
     public ChargingStateEnum? ChargingState { get; set; }
 
+    /// <summary>ID thiết bị nguồn (≤ 64 ký tự).</summary>
     public string? SourceDeviceId { get; set; }
 
     // Sprint 5B #101/#105 — Tier 2 battery health metrics.
+    /// <summary>Điện trở nội (mΩ) — tier 2 health metric.</summary>
     public decimal? InternalResistanceMilliohm { get; set; }
+    /// <summary>Chênh điện áp giữa cell max và cell min (mV).</summary>
     public decimal? CellVoltageDeltaMv { get; set; }
 
     // Sprint 5B B9 (#154) — phân biệt nguồn đo (BMS vs IoT vs External).
+    /// <summary>Phân loại nguồn (Bms | IotGateway | External).</summary>
     public SensorReadingSourceTypeEnum SourceType { get; set; } = SensorReadingSourceTypeEnum.IotGateway;
 
     /// <summary>BMS error raw code (vd "0x0A", "OverCurrent,CellImbalance"). Tối đa 64 ký tự.</summary>

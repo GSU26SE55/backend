@@ -120,10 +120,13 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             IsSuccess = true,
             StatusCode = 200,
             Message = "Cấp lại token thành công.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = newAccessToken,
-                RefreshToken = newRefreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = newAccessToken,
+                    RefreshToken = newRefreshTokenValue
+                }
             }
         };
     }

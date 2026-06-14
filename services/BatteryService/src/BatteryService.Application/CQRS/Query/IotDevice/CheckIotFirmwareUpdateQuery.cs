@@ -13,5 +13,6 @@ public class CheckIotFirmwareUpdateQuery : IRequest<CommonResponse<IotFirmwareCh
     [BindNever]
     public Guid DeviceId { get; set; }
 
+    /// <summary>Field CurrentVersion.</summary>
     public string CurrentVersion { get; set; } = string.Empty;
 }

@@ -28,6 +28,9 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  # GH-295 — ASP.NET Data Protection keys cho encrypt 2FA TwoFactorSecret.
+  # ⚠️ MẤT VOLUME = MẤT ALL 2FA. Backup cùng schedule với postgres-data.
+  auth-dataprotection-keys:
   # Sprint IoT-2 #IoT2-35 — firmware storage dùng host bind /opt/solar/firmware-storage
   # (xem batteryservice.volumes). KHÔNG khai báo named volume để ops backup trực tiếp host path.
 
@@ -182,8 +185,14 @@ services:
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+      # GH-295 — Data Protection keys cho 2FA secret encryption (persist qua volume mount bên dưới).
+      DataProtection__KeysPath: "/app/keys"
     ports:
       - "4002:8080"
+    volumes:
+      # GH-295 — bind mount volume cho DataProtection keys. KHÔNG ĐƯỢC XÓA volume này
+      # (mất key = mất khả năng decrypt mọi 2FA secret trong DB). Backup cùng postgres-data.
+      - auth-dataprotection-keys:/app/keys
     depends_on:
       postgres:
         condition: service_healthy

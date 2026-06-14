@@ -116,10 +116,13 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             IsSuccess = true,
             StatusCode = 200,
             Message = "Đã kích hoạt tài khoản và đăng nhập.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshTokenValue
+                }
             }
         };
     }

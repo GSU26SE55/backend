@@ -21,7 +21,10 @@ public class IotDeviceCommandPayloadDto
 /// </summary>
 public class IotDeviceCommandAcceptedDto
 {
+    /// <summary>ID command (UUID/idempotency key — backend tự sinh nếu null).</summary>
     public string CmdId { get; set; } = string.Empty;
+    /// <summary>Mã device duy nhất (vd ESP32-001).</summary>
     public string DeviceCode { get; set; } = string.Empty;
+    /// <summary>MQTT topic full path.</summary>
     public string Topic { get; set; } = string.Empty;
 }

@@ -13,6 +13,12 @@ public static class RateLimitingExtensions
 {
     public const string PolicyAnonOtp = "AnonOtp";
     public const string PolicyAuthOtp = "AuthOtp";
+    /// <summary>Rate limit cho /api/auth/login/verify-2fa: 5 req/5min theo challengeToken (form/body). Fallback IP.</summary>
+    public const string PolicyTwoFactorVerify = "TwoFactorVerify";
+    /// <summary>Rate limit cho /api/accounts/me/2fa/disable: 3 req/5min theo UserId.</summary>
+    public const string PolicyTwoFactorDisable = "TwoFactorDisable";
+    /// <summary>Rate limit cho /api/accounts/me/2fa/backup-codes/regenerate: 3 req/giờ theo UserId.</summary>
+    public const string PolicyBackupCodeRegenerate = "BackupCodeRegenerate";
 
     public static IServiceCollection AddOtpRateLimiting(this IServiceCollection services, TimeSpan? window = null)
     {
@@ -43,6 +49,56 @@ public static class RateLimitingExtensions
                     {
                         PermitLimit = 3,
                         Window = w,
+                        QueueLimit = 0,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    });
+            });
+
+            // 2FA Hardening (GH-295) — 3 policy thêm
+            options.AddPolicy(PolicyTwoFactorVerify, ctx =>
+            {
+                // Partition theo challengeToken (header X-Challenge-Token hoặc query) — fallback IP
+                var token = ctx.Request.Headers["X-Challenge-Token"].ToString();
+                if (string.IsNullOrWhiteSpace(token))
+                    token = ctx.Connection.RemoteIpAddress?.ToString() ?? "anon";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: "vfy:" + token,
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(5),
+                        QueueLimit = 0,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    });
+            });
+
+            options.AddPolicy(PolicyTwoFactorDisable, ctx =>
+            {
+                var key = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? ctx.Connection.RemoteIpAddress?.ToString()
+                          ?? "anon";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: "dis:" + key,
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 3,
+                        Window = TimeSpan.FromMinutes(5),
+                        QueueLimit = 0,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    });
+            });
+
+            options.AddPolicy(PolicyBackupCodeRegenerate, ctx =>
+            {
+                var key = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? ctx.Connection.RemoteIpAddress?.ToString()
+                          ?? "anon";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: "regen:" + key,
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 3,
+                        Window = TimeSpan.FromHours(1),
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                     });

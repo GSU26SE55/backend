@@ -45,7 +45,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách Site có phân trang + filter.
+    /// Liệt kê Site có phân trang + filter (customer/status/keyword) — Manager/Admin dashboard quản lý fleet site. Mỗi entry kèm asset count + alert count.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -79,7 +79,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Customer xem danh sách Site của chính mình.
+    /// Customer xem danh sách Site của chính mình (auto filter theo CustomerId từ JWT) — mobile/web render trang 'Trạm của tôi'.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
@@ -108,7 +108,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một Site theo Id.
+    /// Lấy chi tiết 1 Site theo Id (metadata + contact + location coords) — Customer chỉ xem được Site thuộc về mình; Admin/Manager xem được tất cả.
     /// </summary>
     /// <remarks>
     /// Trả về <see cref="SiteDto"/> với thông tin Site + count BatteryAsset, ActiveBatteryAsset.
@@ -135,7 +135,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách BatteryAsset thuộc một Site.
+    /// Lấy danh sách BatteryAsset thuộc 1 Site — filter theo status nếu cần. Manager dùng để xem inventory pin tại site cụ thể.
     /// </summary>
     /// <remarks>
     /// Query parameters (cùng với <c>{id}</c> trong URL):
@@ -170,7 +170,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy dashboard tóm tắt sức khỏe của một Site.
+    /// Lấy dashboard tóm tắt sức khỏe của 1 Site — TotalAssets/Active/AlertsCount/HealthScore (0-100) + LastAlertAt; dùng cho Customer mobile homepage.
     /// </summary>
     /// <remarks>
     /// Trả <see cref="SiteDashboardDto"/> gồm:

@@ -27,7 +27,7 @@ public class TicketCommentsController : ControllerBase
     }
 
     /// <summary>
-    /// Thêm bình luận vào Ticket.
+    /// Thêm bình luận vào Ticket (Customer/Staff/Manager) — Internal=true chỉ Staff/Manager thấy (hidden từ Customer). Hỗ trợ attachment file.
     /// </summary>
     /// <remarks>
     /// Áp dụng cho cả Customer và Staff.
@@ -41,6 +41,7 @@ public class TicketCommentsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -66,7 +67,7 @@ public class TicketCommentsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách bình luận của Ticket (phân trang).
+    /// Lấy danh sách bình luận của Ticket (phân trang) — sort theo CreatedAt ASC (timeline conversation); Customer KHÔNG thấy comment có Internal=true.
     /// </summary>
     /// <remarks>
     /// - Nếu là Customer: Chỉ xem được các bình luận công khai (IsInternal = false).
@@ -80,6 +81,8 @@ public class TicketCommentsController : ControllerBase
     /// <response code="403">Không có quyền truy cập ticket.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketCommentDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetComments(
         Guid ticketId,

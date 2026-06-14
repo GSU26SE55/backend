@@ -45,6 +45,8 @@ public class AdminAuditLogsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AuditLogListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AuditLogListResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll(
@@ -75,10 +77,37 @@ public class AdminAuditLogsController : ControllerBase
     }
 
     /// <summary>
-    /// Lịch sử audit log của 1 account cụ thể (shortcut của endpoint chính với targetAccountId cố định).
+    /// Lịch sử audit log của 1 account cụ thể — shortcut của <c>GET /audit-logs?targetAccountId={id}</c>.
     /// </summary>
+    /// <remarks>
+    /// Endpoint tiện ích cho Admin xem activity của 1 user (login attempts, password changes, role changes,
+    /// 2FA enable/disable). Sort theo <c>CreatedAt DESC</c> (mới nhất trên đầu).
+    ///
+    /// Query parameters:
+    /// <list type="bullet">
+    ///   <item><description><c>pageNumber</c>: default 1.</description></item>
+    ///   <item><description><c>pageSize</c>: default 20, clamp [1..100].</description></item>
+    ///   <item><description><c>action</c>: filter theo loại action (Login | PasswordChange | RoleChange | StatusChange | ...).</description></item>
+    ///   <item><description><c>isSuccess</c>: true = chỉ trả action thành công, false = thất bại.</description></item>
+    /// </list>
+    ///
+    /// Mỗi entry gồm IP, User-Agent, DeviceId, target field thay đổi, before/after value, reason fail.
+    ///
+    /// Use case: investigate khi user báo "tôi không làm gì sao bị logout" — admin xem audit để track.
+    /// </remarks>
+    /// <param name="accountId">Account ID cần xem audit.</param>
+    /// <param name="pageNumber">Số trang (1-based).</param>
+    /// <param name="pageSize">Số entry mỗi trang.</param>
+    /// <param name="action">Filter theo loại action.</param>
+    /// <param name="isSuccess">Filter theo success/fail.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Trả danh sách audit log (có thể rỗng).</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
     [HttpGet("by-account/{accountId:guid}")]
     [ProducesResponseType(typeof(AuditLogListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetByAccount(
         Guid accountId,
         [FromQuery] int pageNumber = 1,
