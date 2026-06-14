@@ -65,6 +65,5 @@ public record MaintenanceAttachmentInput(
     Guid FileId,
     string FileName,
     string ContentType,
-    long SizeBytes,
-    string? PublicUrl = null
+    long SizeBytes
 );

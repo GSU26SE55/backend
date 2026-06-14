@@ -64,6 +64,5 @@ public record CommentAttachmentInput(
     Guid FileId,
     string FileName,
     string ContentType,
-    long SizeBytes,
-    string? PublicUrl = null
+    long SizeBytes
 );
