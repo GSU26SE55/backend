@@ -42,3 +42,6 @@ deploy/helm/*/charts/
 .config/dotnet-tools.json
 
 .dataprotection-keys/
+
+# ---------- CodeGraph index (local code intelligence) ----------
+.codegraph/

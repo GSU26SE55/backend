@@ -1108,14 +1108,14 @@ Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ v�
 
 ## Nhóm 6 — Alert–Ticket Saga (Admin/Manager)
 
-Base path: `/api/v1/admin/sagas/alert-ticket`
+Base path: `/api/admin/sagas/alert-ticket`
 **Auth:** Bắt buộc — Admin hoặc Manager role
 
 Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Alert (Sprint 5B #239). Dùng cho debug & vận hành khi pipeline event-driven gặp sự cố.
 
 ---
 
-### `GET /api/v1/admin/sagas/alert-ticket`
+### `GET /api/admin/sagas/alert-ticket`
 
 **Mục đích:** Liệt kê trạng thái Alert–Ticket Saga (filter + phân trang) — dùng cho trang Admin debug & vận hành khi pipeline event-driven gặp sự cố. Sort mặc định `StartedAt DESC`.
 
@@ -1195,7 +1195,7 @@ Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Aler
 
 ---
 
-### `GET /api/v1/admin/sagas/alert-ticket/{alertId}`
+### `GET /api/admin/sagas/alert-ticket/{alertId}`
 
 **Mục đích:** Chi tiết Saga theo `alertId` — đầy đủ trạng thái + lịch sử bước thực thi (step name, status, retry count, error message). Dùng để debug khi Saga rơi vào state `Failed`.
 
@@ -1212,7 +1212,7 @@ Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Aler
 
 ---
 
-### `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess`
+### `POST /api/admin/sagas/alert-ticket/{alertId}/reprocess`
 
 **Mục đích:** Reprocess Saga đang ở state `Failed`. Reset bước Failed và enqueue lại để chạy bất đồng bộ (response 202 ngay, Saga chạy trong background). Ghi audit `PerformedBy = user hiện tại`.
 
