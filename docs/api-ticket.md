@@ -54,15 +54,17 @@ Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hà
 
 | Field | Type | Mô tả |
 |---|---|---|
-| `data.id` | `string \| null` | ID của ticket vừa thao tác |
-| `data.code` | `string \| null` | Mã hiển thị của ticket |
+| `data.id` | `string` | ID của ticket vừa thao tác. **Ngoại lệ:** với `POST .../maintenance-logs`, đây là ID của **maintenance log**, không phải ticket |
+| `data.ticketId` | `string?` | Chỉ xuất hiện ở `POST .../maintenance-logs` (ID ticket). Các endpoint khác **bỏ field này** (`JsonIgnore` khi null) |
+| `data.code` | `string` | Mã hiển thị của ticket |
 | `data.status` | `TicketStatusEnum` | Trạng thái mới của ticket sau hành động |
 
 **TypeScript types:**
 ```ts
 interface TicketActionDto {
-  id: string | null;
-  code: string | null;
+  id: string;
+  ticketId?: string; // chỉ có ở response của POST maintenance-logs
+  code: string;
   status: TicketStatusEnum;
 }
 
@@ -108,7 +110,7 @@ Dữ liệu nằm trong field `data` của `CommonResponse` khi truy vấn danh 
 | `Escalated` | 9 | Đã được chuyển cấp xử lý (SLA breach hoặc Staff/Manager request) |
 | `ClosedPendingRate` | 10 | Manager đã phê duyệt kết quả, chờ Customer đánh giá |
 | `Closed` | 11 | Đã đóng chính thức (sau khi Customer rate) |
-| `ClosedRejected` | 12 | Manager từ chối kết quả — trạng thái lưu lại sau khi quay về `InProgress` |
+| `ClosedRejected` | 12 | Manager từ chối ticket tại **triage** (`Open → ClosedRejected`) hoặc reject ticket đã `Escalated`. ⚠️ KHÔNG dùng cho reject kết quả resolve — luồng đó chuyển thẳng `Resolved → InProgress` |
 | `Incident` | 13 | Sự cố nghiêm trọng được Admin/Manager đánh dấu |
 | `Approved` | 14 | Manager đã phê duyệt tính hợp lệ, chờ gán Staff |
 
@@ -118,11 +120,22 @@ New → Open → Approved → Assigned → InProgress → Resolved → ClosedPen
                                         ↕ (hold/resume)
                                WaitingCustomer / WaitingParts / WaitingOnsiteSchedule
 
-InProgress → Escalated (SLA breach hoặc Staff request)
-Resolved   → ClosedRejected → InProgress (Manager reject)
-ClosedPendingRate → InProgress (Customer reopen, lần 2+ → Escalated)
-Any        → Incident (Manager/Admin declare)
+New        → Approved (Manager approve trực tiếp) | → Escalated
+Open       → ClosedRejected (Manager triage-reject)
+Approved   → Escalated
+Assigned   → Assigned (Manager reassign) | → Escalated (System: SLA breach)
+InProgress → Escalated (Staff/Manager request hoặc SLA breach)
+Resolved   → InProgress (Manager reject — KHÔNG qua ClosedRejected)
+Escalated  → Assigned (reassign) | → Incident | → ClosedRejected
+Incident   → Assigned
+ClosedPendingRate → Open (Customer reopen → Manager triage lại; lần 2+ tự Escalated)
 ```
+
+> **Lưu ý quan trọng (đã verify với `TicketStateMachine`):**
+> - **Reopen** chuyển `ClosedPendingRate → **Open**` (chờ Manager triage lại), **KHÔNG phải `InProgress`**.
+> - **Manager reject kết quả** (`reject`) chuyển `Resolved → **InProgress**` trực tiếp; `ClosedRejected` chỉ dùng cho **triage-reject** (`Open/Escalated → ClosedRejected`). Enum `ClosedRejected` được mô tả là "Manager từ chối kết quả... quay về InProgress" — thực tế đó là 2 luồng khác nhau.
+> - **Auto-escalate khi reopen**: kích hoạt từ **lần reopen thứ 2** (`ReopenCount >= 2`, count được tăng trước khi check).
+> - State `Closed` là terminal — mọi transition tiếp theo bị chặn.
 
 ### `TicketPriorityEnum`
 
@@ -254,14 +267,14 @@ Any        → Incident (Manager/Admin declare)
 |---|---|---|---|
 | `id` | `string` | Không | ID ticket |
 | `code` | `string` | Không | Mã hiển thị (e.g. `TKT-2606-0001`) |
-| `batteryAssetId` | `string?` | Null nếu không liên quan pin cụ thể | ID thiết bị pin |
+| `batteryAssetId` | `string` | Không (default `""`) | ID thiết bị pin — BE trả chuỗi rỗng (không phải `null`) khi không liên quan pin cụ thể |
 | `customerId` | `string` | Không | ID khách hàng tạo ticket |
 | `assignedStaffId` | `string?` | Null khi chưa gán | ID Staff được gán |
 | `title` | `string` | Không | Tiêu đề ticket |
 | `category` | `TicketCategoryEnum` | Không | Phân loại lỗi |
-| `priority` | `TicketPriorityEnum` | Không | Mức độ ưu tiên (auto từ matrix) |
-| `impactScope` | `ImpactScopeEnum` | Không | Phạm vi ảnh hưởng |
-| `urgencyLevel` | `UrgencyLevelEnum` | Không | Độ khẩn cấp |
+| `priority` | `TicketPriorityEnum?` | **Null khi chưa triage** | Mức độ ưu tiên (auto từ matrix tại bước triage) — `null` ở các state `New`/`Open` |
+| `impactScope` | `ImpactScopeEnum?` | **Null khi chưa triage** | Phạm vi ảnh hưởng (gán tại triage) |
+| `urgencyLevel` | `UrgencyLevelEnum?` | **Null khi chưa triage** | Độ khẩn cấp (gán tại triage) |
 | `status` | `TicketStatusEnum` | Không | Trạng thái hiện tại |
 | `origin` | `TicketOriginEnum` | Không | Nguồn tạo ticket |
 | `reopenCount` | `int` | Không | Số lần Customer mở lại |
@@ -276,7 +289,7 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `description` | `string?` | Null | Mô tả chi tiết vấn đề |
+| `description` | `string` | Không (default `""`) | Mô tả chi tiết vấn đề |
 | `resolutionSummary` | `string?` | Null khi chưa resolve | Tóm tắt cách giải quyết |
 | `resolvedAt` | `string?` | Null | Thời điểm Staff báo xong |
 | `resolvedByStaffId` | `string?` | Null | Staff thực hiện resolve |
@@ -284,16 +297,16 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `approvedByManagerId` | `string?` | Null | Manager phê duyệt |
 | `rejectionReason` | `string?` | Null | Lý do Manager từ chối |
 | `closedAt` | `string?` | Null | Thời điểm đóng ticket chính thức |
-| `rating` | `int?` | Null khi chưa rate | Điểm đánh giá 1–5 sao |
+| `rating` | `int?` (BE: `short?`) | Null khi chưa rate | Điểm đánh giá 1–5 sao. `ratedAt` được set **đồng thời** với `closedAt` khi Customer rate |
 | `ratingComment` | `string?` | Null | Nhận xét của Customer |
-| `ratedAt` | `string?` | Null | Thời điểm Customer đánh giá |
+| `ratedAt` | `string?` | Null | Thời điểm Customer đánh giá (= `closedAt`) |
 | `escalatedAt` | `string?` | Null | Thời điểm chuyển cấp |
-| `escalationReason` | `EscalationReasonEnum` | **Không nullable** (Swagger) — BE trả về `0` (giá trị mặc định) khi ticket chưa escalate; FE phải kiểm tra `escalatedAt != null` trước khi tin `escalationReason`. | Lý do chuyển cấp |
+| `escalationReason` | `EscalationReasonEnum?` | **Nullable** — trả về `null` khi ticket chưa escalate (KHÔNG phải `0`). | Lý do chuyển cấp |
 | `originAlertId` | `string?` | Null nếu không từ alert | ID cảnh báo nguồn (khi `origin = AutoFromAlert`) |
-| `activities` | `TicketActivityDTO[]?` | Nullable | Lịch sử hành động (timeline) |
-| `comments` | `TicketCommentDTO[]?` | Nullable | Danh sách bình luận |
-| `maintenanceLogs` | `MaintenanceLogDTO[]?` | Nullable | Nhật ký bảo trì |
-| `attachments` | `TicketAttachmentDTO[]?` | Nullable | File đính kèm của ticket |
+| `activities` | `TicketActivityDTO[]` | Không (default `[]`) | Lịch sử hành động (timeline) |
+| `comments` | `TicketCommentDTO[]` | Không (default `[]`) | Danh sách bình luận |
+| `maintenanceLogs` | `MaintenanceLogDTO[]` | Không (default `[]`) | Nhật ký bảo trì |
+| `attachmentFileIds` | `string[]` | Không (default `[]`) | **Mảng FileId (string)** của file đính kèm — KHÔNG phải mảng `TicketAttachmentDTO`. Field thực tế tên `attachmentFileIds` |
 
 ### `SlaTimerDTO`
 
@@ -347,7 +360,7 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `ticketId` | `string` | Không | ID ticket |
 | `staffId` | `string` | Không | ID Staff tạo nhật ký |
 | `logType` | `MaintenanceLogTypeEnum` | Không | Loại nhật ký |
-| `summary` | `string?` | Null | Tóm tắt công việc |
+| `summary` | `string` | Không (default `""`) | Tóm tắt công việc |
 | `diagnosisDetails` | `string?` | Null | Chi tiết chẩn đoán |
 | `actionsTaken` | `string?` | Null | Các hành động đã thực hiện |
 | `durationMinutes` | `int` | Không | Thời lượng thực hiện (phút) |
@@ -374,6 +387,8 @@ Dữ liệu trả về khi Staff xem lịch sử nhật ký cá nhân (đã gom 
 > **Lưu ý:** Field `partsUsed` chỉ tồn tại trong request body khi tạo log — **không có** trong response DTO.
 
 ### `TicketAttachmentDTO`
+
+> ⚠️ **Lưu ý:** DTO này **không xuất hiện trong bất kỳ response nào hiện tại**. `TicketDetailDTO` chỉ trả về `attachmentFileIds: string[]` (mảng FileId), không trả object attachment đầy đủ. Giữ lại đây để tham khảo shape entity nội bộ.
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
@@ -520,7 +535,7 @@ Base path: `/api/tickets`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `logType` | `MaintenanceLogTypeEnum` | Không (mặc định `RemoteSupport`) | Loại nhật ký |
+| `logType` | `MaintenanceLogTypeEnum` | Không | Loại nhật ký. ⚠️ KHÔNG có default — nếu gửi thiếu, giá trị sẽ là `0` (không hợp lệ, ngoài range enum 1–4). FE nên gửi tường minh, vd `RemoteSupport=1` |
 | `summary` | `string` | Bắt buộc | Tóm tắt công việc |
 | `diagnosisDetails` | `string?` | Không | Chi tiết chẩn đoán |
 | `actionsTaken` | `string?` | Không | Các hành động đã thực hiện |
@@ -539,7 +554,10 @@ Base path: `/api/tickets`
 
 **`MaintenanceAttachmentInput`:** Cùng shape với `CommentAttachmentInput` — `fileId` (string UUID), `fileName`, `contentType`, `sizeBytes`.
 
-**Response thành công `201`:** `TicketActionResponse` — kèm `MaintenanceLogId` của log vừa tạo.
+**Response thành công `201`:** `TicketActionResponse` với semantics **khác** các endpoint ticket:
+- `data.id` = **ID của maintenance log** vừa tạo (KHÔNG phải ticketId).
+- `data.ticketId` = ID của ticket (chỉ endpoint này mới populate field này).
+- `data.status` = trạng thái hiện tại của ticket.
 
 **Business rule — Một log đang mở tại một thời điểm:**
 Một ticket chỉ được có **1 log đang mở** (`CompletedAt = null`) tại 1 thời điểm. Phải đóng log cũ (set `CompletedAt`) trước khi mở log mới. Nếu request gửi lên có `CompletedAt = null` (đang bắt đầu log mới) mà ticket đã có một log khác chưa đóng → trả về `409`.
@@ -574,8 +592,8 @@ Base path: `/api/customer/tickets`
 | Param | Type | Mô tả |
 |---|---|---|
 | `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
-| `PageNumber` | `int` | Trang (mặc định 1) |
-| `PageSize` | `int` | Số item/trang |
+| `PageNumber` | `int` | Trang (mặc định 1; giá trị ≤ 0 → tự về 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 10; max 100; ≤ 0 → về 10) |
 
 > **Internal param:** BE expose thêm `ActorCustomerId` (uuid) dùng nội bộ để BE đọc từ JWT. FE **không gửi** param này.
 
@@ -625,12 +643,13 @@ Base path: `/api/customer/tickets`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `reopenReason` | `string?` | Không | Lý do mở lại |
+| `reopenReason` | `string` | **Bắt buộc** | Lý do mở lại — không được rỗng/whitespace (`400` nếu thiếu) |
 
-**Response thành công `200`:** `TicketActionResponse`
+**Response thành công `200`:** `TicketActionResponse` — ticket chuyển sang `Open` (chờ Manager triage lại). Lần reopen thứ 2 trở đi (`ReopenCount >= 2`) → tự động `Escalated`.
 
 **Lỗi thường gặp:**
-- `403` — Quá hạn 7 ngày hoặc sai trạng thái ticket
+- `400` — Thiếu `reopenReason`
+- `403` — Quá hạn 7 ngày (tính từ `approvedAt` — thời điểm Manager approve kết quả resolve) hoặc sai trạng thái ticket. Admin bypass được rule 7 ngày.
 
 ---
 
@@ -676,8 +695,8 @@ Base path: `/api/staff/tickets`
 | Param | Type | Mô tả |
 |---|---|---|
 | `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
-| `PageNumber` | `int` | Trang (mặc định 1) |
-| `PageSize` | `int` | Số item/trang |
+| `PageNumber` | `int` | Trang (mặc định 1; giá trị ≤ 0 → tự về 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 10; max 100; ≤ 0 → về 10) |
 
 > **Internal param:** BE expose thêm `ActorStaffId` (uuid) dùng nội bộ để BE đọc từ JWT. FE **không gửi** param này.
 
@@ -753,12 +772,17 @@ Base path: `/api/staff/tickets`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `resolutionSummary` | `string?` | Không | Tóm tắt cách giải quyết |
+| `resolutionSummary` | `string` | **Bắt buộc** | Tóm tắt cách giải quyết — không được rỗng/whitespace (`400` nếu thiếu) |
+
+**Hành động phụ:** Khi resolve, hệ thống tự động đóng (`completedAt = now`) **tất cả** maintenance log đang mở của ticket; log nào còn `summary` rỗng / `"Đang thực hiện..."` sẽ được điền bằng `resolutionSummary`.
 
 **Response thành công `200`:** `TicketActionResponse`
 
 **Lỗi thường gặp:**
-- `403` — Không đủ thẩm quyền (với ticket đã Escalated, cần Staff cấp cao hơn)
+- `400` — Thiếu `resolutionSummary`
+- `403` — Với ticket đã `Escalated`:
+  - Chỉ Staff **đang được assign sau escalation** mới resolve được (Staff cũ → `403`).
+  - Nếu escalate vì `SkillGap`: Staff phải có `SkillTier >= 2` (Tier 2 trở lên), nếu không → `403`.
 
 ---
 
@@ -803,7 +827,7 @@ Base path: `/api/admin/tickets`
 | `Priority` | `TicketPriorityEnum?` | Lọc theo priority |
 | `Category` | `TicketCategoryEnum?` | Lọc theo loại lỗi |
 | `BatteryAssetId` | `Guid?` | Lọc theo thiết bị |
-| `IsDescending` | `bool` | Sắp xếp giảm dần theo `createdAt` (mặc định `false`) |
+| `IsDescending` | `bool` | Sắp xếp giảm dần theo `createdAt` (**mặc định `true`** — mới nhất lên đầu) |
 | `PageNumber` | `int` | Trang (mặc định 1) |
 | `PageSize` | `int` | Số item/trang |
 
@@ -934,7 +958,7 @@ Base path: `/api/admin/tickets`
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `newStaffId` | `Guid` | Bắt buộc | ID Staff mới |
-| `reason` | `string?` | Không | Lý do điều chuyển |
+| `reason` | `string` | **Bắt buộc** | Lý do điều chuyển — không được rỗng/whitespace (`400` nếu thiếu) |
 
 **Response thành công `200`:** `TicketActionResponse`
 
@@ -962,7 +986,7 @@ Base path: `/api/admin/tickets`
 
 ### `POST /api/admin/tickets/{id}/reject`
 
-**Mục đích:** Manager từ chối kết quả giải quyết của Staff (kết quả chưa đạt). Trạng thái quay về `InProgress` để Staff tiếp tục xử lý.
+**Mục đích:** Manager từ chối kết quả giải quyết của Staff (kết quả chưa đạt). Trạng thái chuyển thẳng `Resolved → InProgress` để Staff tiếp tục xử lý (**không** đi qua `ClosedRejected`).
 
 **Auth:** Bắt buộc (Manager)
 
@@ -972,9 +996,13 @@ Base path: `/api/admin/tickets`
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `reason` | `string?` | Không | Lý do từ chối |
+| `reason` | `string` | **Bắt buộc** | Lý do từ chối — không được rỗng/whitespace (`400` nếu thiếu). Được lưu vào `ticket.reason` + activity `Rejected` |
 
 **Response thành công `200`:** `TicketActionResponse`
+
+**Lỗi thường gặp:**
+- `400` — Thiếu `reason`
+- `403` — Ticket không ở trạng thái `Resolved`
 
 ---
 
@@ -1098,11 +1126,13 @@ Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ v�
 | `summary` | `string?` | Tóm tắt (Không được để trống nếu gửi) |
 | `diagnosisDetails` | `string?` | Chẩn đoán |
 | `actionsTaken` | `string?` | Hành động xử lý |
-| `durationMinutes` | `int?` | Thời lượng |
+| `durationMinutes` | `int?` | Thời lượng (`< 0` → `400`) |
 | `resolutionNote` | `string?` | Ghi chú kết quả |
+| `partsUsed` | `string?` | Linh kiện đã dùng (mô tả text) |
 | `attachments` | `Input[]?` | File đính kèm mới |
 | `beforePhotos` | `Input[]?` | Ảnh trước khi sửa |
 | `afterPhotos` | `Input[]?` | Ảnh sau khi sửa |
+| `relatedKbArticleIds` | `Guid[]?` | ID bài viết KB liên quan |
 
 ---
 

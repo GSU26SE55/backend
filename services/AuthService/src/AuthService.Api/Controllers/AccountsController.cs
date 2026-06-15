@@ -171,6 +171,85 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
+    /// Yêu cầu đổi email — gửi OTP 6 số tới email mới để xác thực. Hoàn tất bằng <c>POST /api/accounts/me/confirm-email-change</c>.
+    /// </summary>
+    /// <remarks>
+    /// Body request:
+    /// - <c>NewEmail</c>: email mới, bắt buộc, max 256 ký tự, đúng định dạng.
+    /// - <c>CurrentPassword</c>: mật khẩu hiện tại để xác nhận danh tính, bắt buộc.
+    ///
+    /// Cách hoạt động:
+    /// - AccountId lấy từ JWT, client không tự truyền.
+    /// - Handler verify password hiện tại, lưu email mới vào <c>PendingEmail</c>, sinh OTP purpose <c>EmailChange</c> (TTL 10 phút) và gửi OTP tới email mới qua outbox.
+    /// </remarks>
+    /// <param name="command">Email mới và mật khẩu hiện tại.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns>Thông báo kết quả gửi OTP đổi email.</returns>
+    /// <response code="200">Đã gửi OTP tới email mới.</response>
+    /// <response code="400">Validation lỗi (email sai định dạng, password rỗng).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC mật khẩu hiện tại không chính xác.</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Email mới đã được tài khoản khác sử dụng.</response>
+    /// <response code="422">Email mới trùng email hiện tại.</response>
+    [HttpPost("me/change-email")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xác thực OTP để hoàn tất đổi email. Email mới (đã lưu ở <c>PendingEmail</c>) chính thức có hiệu lực; mọi session bị revoke.
+    /// </summary>
+    /// <remarks>
+    /// Body request:
+    /// - <c>Otp</c>: mã OTP đúng 6 chữ số gửi tới email mới.
+    ///
+    /// Cách hoạt động:
+    /// - AccountId lấy từ JWT; FE không cần gửi lại email mới (đọc từ <c>PendingEmail</c> trong DB).
+    /// - Handler verify OTP purpose <c>EmailChange</c> còn hạn, copy <c>PendingEmail</c> sang <c>Email</c>, set <c>EmailConfirmed = true</c>, revoke toàn bộ refresh token (email = identity).
+    /// </remarks>
+    /// <param name="command">OTP xác thực đổi email.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns>Thông báo kết quả đổi email.</returns>
+    /// <response code="200">Đổi email thành công. Client cần đăng nhập lại bằng email mới.</response>
+    /// <response code="400">OTP sai định dạng (phải đủ 6 chữ số).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC OTP sai/hết hạn.</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Không có yêu cầu đổi email đang chờ verify, hoặc email mới đã bị tài khoản khác chiếm trong lúc chờ.</response>
+    /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
+    [HttpPost("me/confirm-email-change")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status423Locked)]
+    public async Task<IActionResult> ConfirmEmailChange([FromBody] ConfirmEmailChangeCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// [DEPRECATED — GH-295] Endpoint cũ kích hoạt 2FA 1 bước. Trả 410 Gone.
     /// Dùng flow mới: <c>POST /api/accounts/me/2fa/init</c> rồi <c>POST /api/accounts/me/2fa/confirm</c>.
     /// </summary>
