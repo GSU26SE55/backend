@@ -62,7 +62,21 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
         _unitOfWork.Accounts.UpdateAsync(account);
 
         // Outbox: publish TRƯỚC SaveChanges để event atomic với Account update.
-        await _messageProducer.PublishAsync(new SendPhoneOtpEvent(account.PhoneNumber, otp), cancellationToken);
+        // Phase 9 atomic switch (Sprint SMS): publish SendSmsCommand qua SmsService gateway thay vì
+        // SendPhoneOtpEvent trực tiếp. SendPhoneOtpEvent đã được xoá khỏi flow này — backward-compat
+        // consumer ở SmsService vẫn chạy thêm 1-2 sprint phòng rollback rồi xoá.
+        // ⚠️ KHÔNG publish cả 2 event cùng commit — Inbox dedup theo (consumerName, messageId), 2 event
+        // khác Id → tạo 2 row sms_messages → customer nhận 2 SMS OTP.
+        var smsBody = $"Ma OTP cua ban la {otp}. Vui long khong chia se ma nay.";
+        // CorrelationId fresh per OTP request — KHÔNG dùng account.Id (nhiều OTP cùng account
+        // sẽ trùng correlation, break tracking khi subscriber consume SmsDeliveryReportEvent).
+        await _messageProducer.PublishAsync(new SendSmsCommand(
+            PhoneNumber: account.PhoneNumber,
+            Message: smsBody,
+            SourceService: "auth",
+            CorrelationId: Guid.NewGuid(),
+            Category: "otp"
+        ), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

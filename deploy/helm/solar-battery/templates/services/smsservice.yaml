@@ -33,11 +33,25 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
+        env:
+        # Sprint SMS — SMS Gateway Hub owns sms_db.
+        # Pattern khớp AuthService: build ConnectionString inline để Kubernetes expand POSTGRES_PASSWORD secret.
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
+        - name: ConnectionStrings__SmsDb
+          value: "Host=postgres;Port=5432;Database={{ .Values.postgres.smsDatabase }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size={{ .Values.postgres.connectionPool.maximumPoolSize }};Minimum Pool Size={{ .Values.postgres.connectionPool.minimumPoolSize }}"
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }
+        # EF Core migration chạy lúc startup → cần startupProbe rộng tay (pattern khớp AuthService).
+        startupProbe:
+          httpGet: { path: /metrics, port: http }
+          failureThreshold: 30
+          periodSeconds: 5
         readinessProbe:
           httpGet: { path: /metrics, port: http }
+          periodSeconds: 5
         livenessProbe:
           httpGet: { path: /metrics, port: http }
           periodSeconds: 10

@@ -172,6 +172,7 @@ postgres:
   batteryDatabase: battery_db
   ticketDatabase: ticket_db
   notificationDatabase: notification_db
+  smsDatabase: sms_db
   username: postgres
   storage: 5Gi
   # Tăng max_connections để hỗ trợ pool nhiều service × replica.

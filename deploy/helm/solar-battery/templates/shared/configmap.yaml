@@ -17,6 +17,9 @@ data:
   ReverseProxy__Clusters__authCluster__Destinations__destination1__Address: "http://authservice:80"
   ReverseProxy__Clusters__fileStorageCluster__Destinations__destination1__Address: "http://filestorageservice:80"
   ReverseProxy__Clusters__batteryCluster__Destinations__destination1__Address: "http://batteryservice:80"
+  ReverseProxy__Clusters__ticketCluster__Destinations__destination1__Address: "http://ticketservice:80"
+  ReverseProxy__Clusters__notificationCluster__Destinations__destination1__Address: "http://notificationservice:80"
+  ReverseProxy__Clusters__smsCluster__Destinations__destination1__Address: "http://smsservice:80"
 
   # Object Storage URLs build từ domain
   ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"

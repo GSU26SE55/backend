@@ -89,7 +89,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, ticketservice, notificationservice, postgres-database-init, postgres-backup] }
+        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, ticketservice, notificationservice, smsservice, postgres-database-init, postgres-backup] }
     ports:
     - { protocol: TCP, port: 5432 }
 ---
