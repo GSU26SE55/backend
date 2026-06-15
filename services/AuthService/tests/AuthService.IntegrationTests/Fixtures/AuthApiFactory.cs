@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using AuthService.Api.Extensions;
 using AuthService.Application.Interfaces.Helpers;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
@@ -118,7 +119,17 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
                     RateLimitPartition.GetNoLimiter("test-anon-otp"));
                 options.AddPolicy(RateLimitingExtensions.PolicyAuthOtp, _ =>
                     RateLimitPartition.GetNoLimiter("test-auth-otp"));
+                options.AddPolicy(RateLimitingExtensions.PolicyTwoFactorVerify, _ =>
+                    RateLimitPartition.GetNoLimiter("test-2fa-verify"));
+                options.AddPolicy(RateLimitingExtensions.PolicyTwoFactorDisable, _ =>
+                    RateLimitPartition.GetNoLimiter("test-2fa-disable"));
+                options.AddPolicy(RateLimitingExtensions.PolicyBackupCodeRegenerate, _ =>
+                    RateLimitPartition.GetNoLimiter("test-2fa-regen"));
             });
+
+            // 2FA stores — Redis-backed in prod, replace with in-memory for tests.
+            services.RemoveAll<ITwoFactorChallengeStore>();
+            services.AddSingleton<ITwoFactorChallengeStore, InMemoryTwoFactorChallengeStore>();
 
             // 7. Đảm bảo DB Test đã migrate xong khi factory build.
             using var scope = services.BuildServiceProvider().CreateScope();
@@ -140,7 +151,11 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            "TRUNCATE TABLE refresh_tokens, accounts, roles RESTART IDENTITY CASCADE;");
+            "TRUNCATE TABLE backup_codes, refresh_tokens, accounts, roles RESTART IDENTITY CASCADE;");
+
+        // Cũng clear 2FA challenge/pending stores giữa các test.
+        if (Services.GetService<ITwoFactorChallengeStore>() is InMemoryTwoFactorChallengeStore mem)
+            mem.Clear();
     }
 
     private Dictionary<string, string?> CreateTestConfiguration() => new()

@@ -281,7 +281,7 @@ public class LinkGoogleCommandHandlerTests
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 
     [Fact]
@@ -361,7 +361,7 @@ public class UnlinkGoogleCommandHandlerTests
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]
@@ -381,6 +381,6 @@ public class UnlinkGoogleCommandHandlerTests
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 }

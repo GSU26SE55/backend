@@ -1,10 +1,11 @@
-using TicketService.UnitTests.Helpers;
+using SharedInfrastructure.Services;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.MyTicketsAsCustomer;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -12,12 +13,13 @@ public class MyTicketsAsCustomerQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockRepo = new();
+    private readonly Mock<ICurrentUserService> _mockCurrentUserService = new();
     private readonly MyTicketsAsCustomerQueryHandler _handler;
 
     public MyTicketsAsCustomerQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
-        _handler = new MyTicketsAsCustomerQueryHandler(_mockUow.Object);
+        _handler = new MyTicketsAsCustomerQueryHandler(_mockUow.Object, _mockCurrentUserService.Object);
     }
 
     private static Ticket MakeTicket(Guid customerId, TicketStatusEnum status = TicketStatusEnum.Open) => new()
@@ -41,11 +43,13 @@ public class MyTicketsAsCustomerQueryHandlerTests
     public async Task Handle_ReturnsOnlyCurrentCustomerTickets()
     {
         var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
         SetupMock([MakeTicket(myId), MakeTicket(myId), MakeTicket(Guid.NewGuid())]);
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, PageNumber = 1, PageSize = 10
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -57,6 +61,7 @@ public class MyTicketsAsCustomerQueryHandlerTests
     public async Task Handle_FilterByStatus_ReturnsMatchingOnly()
     {
         var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
         SetupMock([
             MakeTicket(myId, TicketStatusEnum.Open),
             MakeTicket(myId, TicketStatusEnum.Resolved),
@@ -65,7 +70,9 @@ public class MyTicketsAsCustomerQueryHandlerTests
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, Status = TicketStatusEnum.Resolved, PageNumber = 1, PageSize = 10
+            Status = TicketStatusEnum.Resolved,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -76,11 +83,13 @@ public class MyTicketsAsCustomerQueryHandlerTests
     public async Task Handle_Pagination_ReturnsCorrectPage()
     {
         var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
         SetupMock(Enumerable.Range(1, 4).Select(_ => MakeTicket(myId)).ToList());
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            ActorCustomerId = myId, PageNumber = 2, PageSize = 3
+            PageNumber = 2,
+            PageSize = 3
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);

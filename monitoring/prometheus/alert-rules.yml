@@ -114,6 +114,177 @@ groups:
           description: "Client may be sending parallel duplicate requests with same key."
 
   # =====================================================================
+  # Alert–Ticket Saga (Sprint 5B #239 — overall.md §9.2)
+  # =====================================================================
+  - name: alert-ticket-saga
+    interval: 30s
+    rules:
+      # 11. Saga failure rate spike — > 5 failures trong 5 phút (SEV2 page).
+      # NotificationService AlertTicketSagaFailedConsumer cũng fire email/push parallel.
+      - alert: SagaFailedRateSpike
+        expr: increase(saga_alert_ticket_failed_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alert-Ticket Saga failures {{ $value }} in 5m"
+          description: "Reason: {{ $labels.reason }}. Runbook: docs/runbooks/08-saga-failed.md"
+
+      # 12. Saga stuck — > 50 in-flight sagas (TicketRequested/AlertLinkRequested) > 15 phút.
+      # Khả năng: Quartz timer mất hoặc consumer DI crash giữa pipeline.
+      - alert: SagaStuck
+        expr: saga_alert_ticket_active_count > 50
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Saga active count {{ $value }} over 15min"
+          description: "Quartz timer drift hoặc consumer crash. Runbook: docs/runbooks/09-saga-stuck.md"
+
+  # =====================================================================
+  # Sprint IoT-2 — IoT edge device fleet (§52.12 metric schema)
+  # Metrics emit từ BatteryService.Infrastructure.Observability.IotMetrics:
+  #   iot_device_heartbeats_total{device_id, status}      (counter, status=ok|clock_drift)
+  #   iot_devices_online_count                            (gauge — refresher 30s)
+  #   iot_devices_offline_total                           (counter)
+  #   iot_sensor_readings_ingested_total{device_id}       (counter)
+  #   iot_sensor_readings_rejected_total{reason}          (counter; reason=clock_drift|sensor_outlier|mapping_invalid|idempotency_replay|scope_denied)
+  #   iot_firmware_updates_total{from_version, to_version, status}
+  #   iot_devices_auto_decommissioned_total{device_id}    (counter — outlier auto-disable)
+  #   iot_cross_source_mismatch_alerts_total              (counter — BMS vs IoT mismatch)
+  # =====================================================================
+  - name: iot-device-fleet
+    interval: 30s
+    rules:
+      # 13. IoT device offline spike — > 3 device chuyển sang Offline trong 5 phút.
+      # Có thể: WiFi outage tại 1 site, broker MQTT down, NTP server lost,
+      # firmware mới gây crash, hoặc backend overload từ chối heartbeat.
+      - alert: IotDeviceOfflineSpike
+        expr: increase(iot_devices_offline_total[5m]) > 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} IoT device(s) chuyển sang Offline trong 5 phút"
+          description: "Kiểm tra: WiFi/network tại site, MQTT broker status, batteryservice heartbeat handler."
+
+      # 14. IoT heartbeat ingestion stall — không nhận heartbeat nào > 5 phút khi fleet active.
+      # Tránh fire khi chưa deploy device (predicate `iot_devices_online_count > 0`).
+      - alert: IotHeartbeatStall
+        expr: |
+          rate(iot_device_heartbeats_total[5m]) == 0
+          and on() iot_devices_online_count > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Không nhận heartbeat IoT > 5 phút (fleet đang online {{ $value }} device)"
+          description: "Có thể: gateway down, route /api/iot-devices/heartbeat lỗi, hoặc fleet mất kết nối toàn bộ."
+
+      # 15. Sensor outlier reject rate spike — > 10% reading bị loại trong 10 phút.
+      # Khả năng: BMS lỗi sensor, calibration sai (Scale/Offset), noise hardware nặng.
+      - alert: IotSensorOutlierSpike
+        expr: |
+          (
+            sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m]))
+            /
+            (sum(rate(iot_sensor_readings_ingested_total[10m]))
+             + sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m])))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outlier reject rate {{ $value | humanizePercentage }} > 10%"
+          description: "Kiểm tra calibration profile (iot_device_calibrations) hoặc raw BMS reading."
+
+      # 16. Clock drift fleet-wide — > 50% heartbeat có status=clock_drift trong 15 phút.
+      # NTP outage thường gây drift đồng loạt cả fleet.
+      - alert: IotClockDriftFleetWide
+        expr: |
+          (
+            sum(rate(iot_device_heartbeats_total{status="clock_drift"}[15m]))
+            /
+            sum(rate(iot_device_heartbeats_total[15m]))
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} heartbeat bị clock drift > 5 phút"
+          description: "Kiểm tra NTP server (time.google.com) — drift đồng loạt thường do NTP outage."
+
+      # 17. Firmware update failure rate — > 30% attempt trả failed/rolled_back trong 1 giờ.
+      # Bản firmware mới có thể có bug.
+      - alert: IotFirmwareUpdateFailureSpike
+        expr: |
+          (
+            sum(increase(iot_firmware_updates_total{status=~"failed|rolledback"}[1h]))
+            /
+            sum(increase(iot_firmware_updates_total[1h]))
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Firmware update fail rate {{ $value | humanizePercentage }} trong 1h"
+          description: "Cân nhắc archive bản qua POST /api/admin/iot-firmware-releases/{id}/archive."
+
+      # 18. Sprint IoT-2 #IoT2-17 — auto-decommission spike (>50 outlier/h → disable device).
+      # Indicator: device đang hỏng phần cứng hoặc bị tamper.
+      - alert: IotDeviceAutoDecommissionedSpike
+        expr: increase(iot_devices_auto_decommissioned_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} device(s) tự decommission do outlier vượt ngưỡng 50/h"
+          description: "Device sensor có thể hỏng. Kiểm tra IotDevice.AutoDecommissionedAt + last calibration."
+
+      # 19. Sprint IoT-2 #IoT2-28 — cross-source mismatch (BMS vs IoT lệch).
+      # Burst > 5 alert/h gợi ý 1 trong 2 nguồn đang sai (sensor lệch hoặc calibration drift).
+      - alert: IotCrossSourceMismatchBurst
+        expr: increase(iot_cross_source_mismatch_alerts_total[1h]) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} SensorMismatch alert trong 1h"
+          description: "Kiểm tra calibration BMS hoặc IoT sensor — 2 nguồn có thể đã drift quá ngưỡng (V>0.5V hoặc T>5°C)."
+
+      # 20. Sprint IoT-2 #IoT2-18 — mapping permission violations.
+      # Spike → có khả năng key bị compromise và dùng cho site khác.
+      - alert: IotIngestMappingDenied
+        expr: increase(iot_sensor_readings_rejected_total{reason="mapping_invalid"}[5m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} reading bị reject do device không quyền cho asset/site"
+          description: "Có thể API key bị tái sử dụng sai site hoặc serial config sai. Audit IotDevice.SiteId vs BatteryAsset.SiteId."
+
+  # =====================================================================
+  # Sprint IoT-2 — MQTT bridge alerts (CLIENT, broker thuộc iot repo)
+  # Chỉ fire khi Mqtt__Enabled=true. Bridge tự log + idle nếu disabled.
+  # Note: broker `up{component="mosquitto"}` alert KHÔNG ở đây vì broker
+  # do iot repo own — alert đó nằm trong iot Helm chart.
+  # =====================================================================
+  - name: iot-mqtt-bridge
+    interval: 30s
+    rules:
+      # 21. MQTT bridge log "connected to broker, 4 subscriptions" không xuất hiện > 5min sau startup
+      # → bridge không connect được (broker down / cred sai / cert hết hạn).
+      # NOTE: cần expose `mqtt_bridge_connected` gauge từ code — Sprint sau implement.
+      - alert: MqttBridgeDisconnected
+        expr: mqtt_bridge_connected == 0 and on() mqtt_bridge_enabled == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MQTT bridge mất kết nối tới broker > 2 phút"
+          description: "Kiểm tra: Mqtt__Host reachable, Mqtt__Password, cert TLS (production), ACL config. Bridge tự reconnect mỗi Mqtt__ReconnectIntervalSeconds (default 5s)."
+
+  # =====================================================================
   # Infrastructure
   # =====================================================================
   - name: infrastructure

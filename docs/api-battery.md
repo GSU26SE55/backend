@@ -112,6 +112,50 @@ Open ──→ Acknowledged ──→ Resolved
 | `AbnormalCharging` | 6 | Quá trình nạp bất thường | Charging current vượt `CurrentMaxCharge` |
 | `DeviceOffline` | 7 | Thiết bị mất kết nối | Không nhận sensor reading trong X phút |
 | `SohDegradation` | 8 | SOH giảm dưới ngưỡng (pin xuống cấp) | `SohPercent < ThresholdConfig.SohCriticalThreshold` |
+| `HighAmbientTemp` | 9 | Nhiệt độ môi trường xung quanh site vượt ngưỡng | Ambient `Temperature > AmbientThresholdConfig.HighAmbientTempCritical` |
+| `HighHumidity` | 10 | Độ ẩm môi trường vượt ngưỡng | Ambient `Humidity > AmbientThresholdConfig.HighHumidityCritical` |
+| `HighTempHumidityCombo` | 11 | Combo nhiệt độ cao + độ ẩm cao đồng thời | Temp ≥ `ComboTempThreshold` AND Humidity ≥ `ComboHumidityThreshold` |
+| `HighInternalResistance` | 12 | Điện trở trong tăng (Tier 2 battery health) | Tính từ Voltage/Current pattern |
+| `CellImbalance` | 13 | Mất cân bằng giữa các cell | Tier 2 battery health analysis |
+| `EnvironmentalIncident` | 14 | Liên kết tới `EnvironmentalIncident` cấp site (smoke/fire/flood…) | Tạo từ incident raise |
+| `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check |
+
+### `EnvironmentalIncidentTypeEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Smoke` | 1 | Phát hiện khói |
+| `FireDetected` | 2 | Phát hiện cháy |
+| `GasLeak` | 3 | Rò rỉ khí |
+| `Flood` | 4 | Ngập nước |
+| `OverheatHazard` | 5 | Nguy cơ quá nhiệt diện rộng |
+| `Other` | 99 | Loại sự cố khác |
+
+### `EnvironmentalIncidentStatusEnum`
+
+| Giá trị | Int | Ý nghĩa | Chuyển sang |
+|---|---|---|---|
+| `Open` | 1 | Vừa report, chưa ai xử lý | → `Acknowledged` / `Resolved` / `FalseAlarm` |
+| `Acknowledged` | 2 | Đã xác nhận, đang xử lý | → `Resolved` / `FalseAlarm` |
+| `Resolved` | 3 | Đã xử lý xong (kèm `ResolutionNote`) | Terminal |
+| `FalseAlarm` | 4 | Không phải incident thật (kèm `FalseAlarmReason`) | Terminal |
+
+### `AmbientReadingSourceEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `IotSensor` | 1 | Cảm biến IoT thật tại site (vd DHT22, BME280) |
+| `WeatherApi` | 2 | Dữ liệu sync từ OpenMeteo HTTP API qua `WeatherSyncBackgroundService` |
+
+### `SensorReadingSourceTypeEnum`
+
+> Phân loại nguồn của một sensor reading — phục vụ cross-source mismatch check (Sprint 7, anomaly `SensorMismatch`).
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Bms` | 1 | Reading từ BMS gắn trực tiếp trong pack (qua RS485/Modbus) — mặc định |
+| `IotGateway` | 2 | Reading từ IoT edge device (ESP32-S3 + sensor ngoài). Tên giữ legacy "Gateway" |
+| `External` | 3 | Manual import / third-party feed |
 
 ### `ChargingStateEnum`
 
@@ -373,7 +417,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `POST /api/battery-assets`
+### `POST /api/admin/battery-assets`
 
 **Mục đích:** Tạo battery asset mới (đăng ký pin vào hệ thống).
 
@@ -383,29 +427,33 @@ Base route: `/api/battery-assets`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `serialNumber` | `string` | **Bắt buộc** | 5–64 ký tự, chỉ `A-Z`, `0-9`, `-` (chữ in hoa) | Serial number duy nhất |
-| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin |
-| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
-| `siteId` | `string?` | Không | UUID hợp lệ nếu truyền | Site lắp đặt |
-| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
-| `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền | Ngày hết bảo hành |
+| `serialNumber` | `string` | **Bắt buộc** | 5–64 ký tự, regex `^[A-Z0-9-]+$`. Hệ thống tự `Trim().ToUpperInvariant()` trước khi check trùng | Serial number duy nhất |
+| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB (BatteryType chưa xóa) | Loại pin |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong `CustomerAccount` (read-model sync từ AuthService) và `IsActive = true` | Khách hàng sở hữu |
+| `siteId` | `string?` | Không | UUID hợp lệ nếu truyền. Nếu có, Site phải tồn tại, chưa xóa và thuộc cùng `customerId` | Site lắp đặt |
+| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai và không cũ hơn 5 năm | Ngày lắp đặt |
+| `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền. Nếu đã qua hiện tại → `warrantyStatus` tự set `Expired`, ngược lại `Active` | Ngày hết bảo hành |
 | `location` | `string?` | Không | Max 255 ký tự | Mô tả vị trí |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
 | `notes` | `string?` | Không | Max 1000 ký tự | Ghi chú |
 
-**Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
+**Cách hoạt động:**
+- Validate đầu vào (gom toàn bộ lỗi → `400`).
+- Check customer active → check trùng serial → check BatteryType → check Site → validate relation.
+- Tạo asset với `Status = Active` (muốn đổi sang Inactive/Decommissioned phải dùng PUT). Lưu xuống DB.
+
+**Response thành công `201`:** `CommonResponse<BatteryAssetDto>`
 
 **Lỗi thường gặp:**
 - `400` — Validation field lỗi (xem `listErrors`)
+- `404` — Không tìm thấy Customer / BatteryType / Site được tham chiếu
 - `409` — Serial number đã tồn tại trong hệ thống
-- `409` — `siteId` không thuộc `customerId` đã truyền
-
-> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
+- `409` — Vi phạm ràng buộc Site/BatteryType (ví dụ `siteId` không thuộc `customerId` đã truyền)
 
 ---
 
-### `PUT /api/battery-assets/{id}`
+### `PUT /api/admin/battery-assets/{id}`
 
 **Mục đích:** Cập nhật thông tin battery asset.
 
@@ -426,7 +474,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `DELETE /api/battery-assets/{id}`
+### `DELETE /api/admin/battery-assets/{id}`
 
 **Mục đích:** Xóa mềm (soft delete) battery asset.
 
@@ -436,7 +484,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `PATCH /api/battery-assets/{id}/restore`
+### `PATCH /api/admin/battery-assets/{id}/restore`
 
 **Mục đích:** Khôi phục battery asset đã bị soft-delete.
 
@@ -446,7 +494,7 @@ Base route: `/api/battery-assets`
 
 ---
 
-### `PUT /api/battery-assets/{id}/transfer-owner`
+### `PUT /api/admin/battery-assets/{id}/transfer-owner`
 
 **Mục đích:** Chuyển quyền sở hữu battery asset sang khách hàng khác.
 
@@ -510,7 +558,7 @@ Base route: `/api/battery-types`
 
 ---
 
-### `POST /api/battery-types`
+### `POST /api/admin/battery-types`
 
 **Auth:** Bắt buộc (Admin)
 
@@ -518,25 +566,32 @@ Base route: `/api/battery-types`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên model |
+| `name` | `string` | **Bắt buộc** | Max 100 ký tự, duy nhất (case-insensitive, đã trim) trong các BatteryType chưa xóa | Tên model |
 | `manufacturer` | `string?` | Không | Max 100 ký tự | Nhà sản xuất |
 | `nominalCapacityAh` | `decimal` | **Bắt buộc** | > 0 | Dung lượng danh định (Ah) |
 | `nominalVoltage` | `decimal` | **Bắt buộc** | > 0 | Điện áp danh định (V) |
-| `chemistry` | `BatteryChemistryEnum` | Không (mặc định `LiFePO4`) | — | Loại hóa học |
-| `maxCycleCount` | `int` | Không (mặc định 2000) | > 0 | Số chu kỳ tối đa |
+| `chemistry` | `BatteryChemistryEnum` | Không (mặc định `LiFePO4`) | enum hợp lệ | Loại hóa học |
+| `maxCycleCount` | `int` | **Bắt buộc** | > 0, mặc định 2000 | Số chu kỳ sạc/xả tối đa |
 | `description` | `string?` | Không | Max 500 ký tự | Mô tả |
 
-**Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
+**Cách hoạt động:**
+- Validate tất cả field qua `ValidateAsync`; mọi lỗi gom vào `ListErrors` rồi trả `400`.
+- Kiểm tra trùng tên (case-insensitive, đã trim) trong các BatteryType chưa xóa; nếu trùng trả `409`.
+- Sinh `Id = Guid.NewGuid()` và persist. `CreatedAt`/`CreatedBy` được `AuditableEntityInterceptor` tự set.
+
+> **Lưu ý:** Sau khi tạo BatteryType, Admin nên gọi tiếp `PUT /api/admin/thresholds/by-type/{id}` để cấu hình ngưỡng cảnh báo cho loại pin này.
+
+**Response thành công `201`:** `CommonResponse<BatteryTypeDto>`
 
 **Lỗi thường gặp:**
 - `400` — Validation field lỗi (xem `listErrors`)
 - `409` — Tên loại pin đã tồn tại trong hệ thống
 
-> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
+> **Lưu ý:** Endpoint create trả HTTP `201 Created`; `CommonResponse.statusCode` trong body khớp HTTP status thật. FE nên kiểm tra `isSuccess` để xác định thành công.
 
 ---
 
-### `PUT /api/battery-types/{id}`
+### `PUT /api/admin/battery-types/{id}`
 
 **Auth:** Bắt buộc (Admin)
 
@@ -560,7 +615,7 @@ Base route: `/api/battery-types`
 
 ---
 
-### `DELETE /api/battery-types/{id}`
+### `DELETE /api/admin/battery-types/{id}`
 
 Soft delete loại pin.
 
@@ -576,7 +631,7 @@ Soft delete loại pin.
 
 ---
 
-### `PATCH /api/battery-types/{id}/restore`
+### `PATCH /api/admin/battery-types/{id}/restore`
 
 Khôi phục loại pin đã xóa.
 
@@ -649,6 +704,8 @@ Base route: `/api/sensor-readings`
 | `limit` | `int` | Không (mặc định 100) | Số record mỗi trang, range `1–1000` |
 | `cursor` | `DateTime?` | Không | Timestamp của record cuối trang trước; BE lấy record có `time < cursor` |
 
+> **Lưu ý:** Swagger còn liệt kê một query param `BatteryAssetId` (trùng tên với path param) do model-binding của BE. FE **bỏ qua** query param này — chỉ truyền `batteryAssetId` qua path.
+
 **Response thành công `200`:**
 ```json
 {
@@ -686,11 +743,68 @@ Base route: `/api/sensor-readings`
 
 **Lưu ý hiệu suất:** TimescaleDB có thể chứa hàng triệu rows. Luôn truyền `from`/`to` để giới hạn scan range. Endpoint này không trả `totalItems`. FE dùng `hasMore`/`nextCursor` để infinite scroll; không render pagination kiểu page number.
 
-### `GET /api/sensor-readings/{batteryAssetId}/aggregate` — Planned Sprint 7
+### `GET /api/sensor-readings/{batteryAssetId}/aggregate`
 
-Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3. FE không dùng raw `/history` để tự aggregate chart dài hạn; task này được đưa vào Sprint 7 để implement bằng TimescaleDB `time_bucket()`.
+**Mục đích:** Lấy dữ liệu SensorReading đã được gộp theo bucket thời gian (dùng TimescaleDB `time_bucket()`) — phục vụ vẽ chart dài hạn.
 
-> **FE/Mobile:** Không implement chart dài hạn (> 24h) bằng `/history` — số lượng raw rows quá lớn. Chờ endpoint `/aggregate` ở Sprint 7. Trong Sprint 3, chart dùng khoảng `from`/`to` ngắn (≤ 24h) với `limit` phù hợp. Leader đã xác nhận timeline Sprint 7.
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Path param:** `batteryAssetId` — Guid của battery asset
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `from` | `DateTime?` | Không | Từ thời điểm (UTC) — lọc `Time >= From` |
+| `to` | `DateTime?` | Không | Đến thời điểm (UTC) — lọc `Time <= To` |
+| `interval` | `string` | Không (mặc định `1h`) | Bucket: `1m`, `5m`, `15m`, `1h`, `1d` |
+
+> **Lưu ý:** Swagger còn liệt kê query param `BatteryAssetId` trùng tên path param (model-binding artifact) — FE bỏ qua, chỉ dùng `batteryAssetId` qua path.
+
+**Response thành công `200`:** `CommonResponse<SensorReadingAggregateDto[]>` — danh sách bucket sắp xếp tăng dần theo thời gian.
+
+```json
+{
+  "isSuccess": true,
+  "data": [
+    {
+      "time": "2026-06-12T07:00:00Z",
+      "avgVoltage": 52.34,
+      "avgCurrent": -1.82,
+      "avgTemperature": 28.5,
+      "avgSocPercent": 76.4,
+      "avgSohPercent": 91.2
+    }
+  ]
+}
+```
+
+**Chi tiết `SensorReadingAggregateDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `time` | `DateTime` | Không | Thời điểm bắt đầu bucket (UTC) — field tên là `time` (không phải `bucket`) |
+| `avgVoltage` | `decimal` | Không | AVG điện áp (V) trong bucket |
+| `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket |
+| `avgTemperature` | `decimal` | Không | AVG nhiệt độ (°C) |
+| `avgSocPercent` | `decimal` | Không | AVG SOC (%) |
+| `avgSohPercent` | `decimal?` | Null nếu bucket không có reading nào có SohPercent | AVG SOH (%) |
+
+> **Lưu ý:** `SensorReadingAggregateDto` **không có** field `sampleCount` (số reading trong bucket) — không trả về trong response.
+
+**Lỗi thường gặp:**
+- `400` — `BatteryAssetId` rỗng hoặc `interval` không thuộc `{1m, 5m, 15m, 1h, 1d}`
+- `422` — `from > to` (cross-field business rule)
+- `401` — Chưa đăng nhập
+
+**Lỗi thường gặp:**
+- `400` — `interval` không thuộc tập hợp lệ hoặc `from > to`
+
+**Use case:**
+- FE/Mobile vẽ biểu đồ SOC/Voltage/Temperature theo thời gian (≥ 24h).
+- Thay thế `/history` cho time range lớn để tránh quá nhiều data points.
+
+> **Lưu ý:** Không trả `totalItems`. FE dùng độ dài mảng `items` từ data.
 
 ---
 
@@ -714,7 +828,14 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
       "temperature": 28.4,
       "socPercent": 78.5,
       "cycleCount": 234,
-      "sourceDeviceId": "DEVICE-001"
+      "sohPercent": 91.2,
+      "chargingState": 3,
+      "sourceDeviceId": "DEVICE-001",
+      "internalResistanceMilliohm": 12.5,
+      "cellVoltageDeltaMv": 30.0,
+      "sourceType": 1,
+      "bmsErrorCode": null,
+      "sensorSourceCode": null
     }
   ]
 }
@@ -734,11 +855,17 @@ Endpoint aggregate theo bucket thời gian chưa được expose trong Sprint 3.
 | `sohPercent` | `decimal?` | Không | 0–100 nếu truyền | SOH từ AI module |
 | `chargingState` | `ChargingStateEnum?` | Không | — | Trạng thái nạp/xả |
 | `sourceDeviceId` | `string?` | Không | Max 64 ký tự | Device ID |
+| `internalResistanceMilliohm` | `decimal?` | Không | — | Điện trở trong (mΩ) — Tier-2 battery health, dùng phát hiện `HighInternalResistance` |
+| `cellVoltageDeltaMv` | `decimal?` | Không | — | Chênh lệch điện áp giữa các cell (mV) — dùng phát hiện `CellImbalance` |
+| `sourceType` | `SensorReadingSourceTypeEnum` | Không (mặc định `1`) | enum hợp lệ | Nguồn dữ liệu reading (xem enum) — phục vụ cross-source mismatch check (Sprint 7) |
+| `bmsErrorCode` | `string?` | Không | — | Mã lỗi raw từ BMS (nếu device gửi) |
+| `sensorSourceCode` | `string?` | Không | — | Mã nguồn/định danh kênh cảm biến (nếu device gửi) |
 
-**Response thành công `200`:**
+**Response thành công `201 Created`:** Tạo resource mới (sensor readings trong TimescaleDB hypertable).
 ```json
 {
   "isSuccess": true,
+  "statusCode": 201,
   "data": {
     "totalReceived": 10,
     "inserted": 9,
@@ -797,7 +924,6 @@ Base route: `/api/sites`
 | `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ |
 | `latitude` | `decimal?` | Null nếu không có tọa độ | Vĩ độ (-90 đến 90) |
 | `longitude` | `decimal?` | Null nếu không có tọa độ | Kinh độ (-180 đến 180) |
-| `capacityKw` | `decimal?` | Null nếu chưa cung cấp | Công suất hệ thống (kW) |
 | `installDate` | `DateTime` | Không | Ngày lắp đặt hệ thống (UTC) |
 | `status` | `SiteStatusEnum` | Không | Trạng thái site (xem enum) |
 | `contactPersonName` | `string?` | Null nếu chưa cung cấp | Tên người liên hệ tại site |
@@ -845,7 +971,6 @@ Base route: `/api/sites`
     "totalAssets": 48,
     "activeAssets": 46,
     "assetsWithActiveAlerts": 2,
-    "totalCapacityKw": 500.0,
     "lastAlertAt": "2026-05-16T06:30:00Z",
     "healthScore": 87
   }
@@ -862,7 +987,6 @@ Base route: `/api/sites`
 | `totalAssets` | `int` | Không | Tổng số pin (bao gồm cả Inactive, Decommissioned) |
 | `activeAssets` | `int` | Không | Số pin đang Active |
 | `assetsWithActiveAlerts` | `int` | Không | Số pin có ít nhất 1 alert Open/Acknowledged |
-| `totalCapacityKw` | `decimal?` | Null nếu site chưa có `capacityKw` | Tổng công suất (kW) |
 | `lastAlertAt` | `DateTime?` | Null nếu chưa có alert nào | Thời điểm alert gần nhất (UTC) |
 | `healthScore` | `int` | Không | Điểm sức khỏe hệ thống 0–100, tính theo công thức bên dưới |
 
@@ -895,6 +1019,8 @@ Nếu site không có asset nào, healthScore = 100.
 
 **Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
+> **Lưu ý route param:** Swagger đăng ký route này là `/api/sites/{id}/assets` (path param tên `id`, không phải `siteId`). Đường dẫn thực tế giống nhau — chỉ khác tên biến trong spec.
+
 **Query params:**
 
 | Param | Type | Mô tả |
@@ -907,7 +1033,7 @@ Nếu site không có asset nào, healthScore = 100.
 
 ---
 
-### `POST /api/sites`
+### `POST /api/admin/sites`
 
 **Mục đích:** Tạo site mới.
 
@@ -917,28 +1043,55 @@ Nếu site không có asset nào, healthScore = 100.
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `name` | `string` | **Bắt buộc** | Max 200 ký tự | Tên site |
-| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
-| `address` | `string?` | Không | — | Địa chỉ |
+| `name` | `string` | **Bắt buộc** | Max 200 ký tự, unique trong phạm vi 1 Customer (case-insensitive) | Tên site |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, Customer phải tồn tại và active trong read-model | Khách hàng sở hữu |
+| `address` | `string?` | Không | Max 500 ký tự | Địa chỉ |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
-| `capacityKw` | `decimal?` | Không | > 0 nếu truyền | Công suất (kW) |
 | `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
 | `status` | `SiteStatusEnum` | Không (mặc định `Active`) | — | Trạng thái ban đầu |
-| `contactPersonName` | `string?` | Không | — | Tên người liên hệ |
-| `contactPersonPhone` | `string?` | Không | — | SĐT người liên hệ |
+| `contactPersonName` | `string?` | Không | Max 150 ký tự | Tên người liên hệ |
+| `contactPersonPhone` | `string?` | Không | Max 30 ký tự | SĐT người liên hệ |
+
+> **Lưu ý:** `CreateSiteCommand` **không có** field `capacityKw` — site không nhận `capacityKw` từ client qua endpoint này. `SiteDto.capacityKw` và `SiteDashboardDto.totalCapacityKw` do đó luôn `null` trừ khi được set ở nơi khác.
+
+**Cách hoạt động:**
+- Validate đầy đủ.
+- Check Customer tồn tại + active (`404` nếu không).
+- Check trùng tên trong phạm vi customer (`409` nếu trùng).
+- Lưu site với `Id = Guid.NewGuid()`.
+
+**Response thành công `201`:** `CommonResponse<SiteDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi (xem `listErrors`)
+- `404` — `customerId` không tồn tại hoặc không active
+- `409` — Tên site đã tồn tại trong phạm vi customer
 
 ---
 
-### `PUT /api/sites/{id}`
+### `PUT /api/admin/sites/{id}`
 
-Cập nhật thông tin site. Giống POST thêm `id` từ route.
+Cập nhật thông tin site. Body giống POST (các field trong `UpdateSiteCommand` — **không có** `capacityKw`), thêm `id` từ route.
 
 **Auth:** Bắt buộc (Admin)
 
+**Cách hoạt động:**
+- Tìm site (include Assets); `404` nếu không có.
+- Nếu `customerId` trong body khác customer hiện tại (và khác `Guid.Empty`) → trả `409` — không cho phép đổi chủ sở hữu qua Update (dùng `transfer-owner`).
+- Check trùng tên (loại trừ chính nó); trùng trả `409`.
+- Update toàn bộ field còn lại; **KHÔNG** đụng đến `customerId`.
+
+**Response thành công `200`:** `CommonResponse<SiteDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi
+- `404` — Site không tìm thấy
+- `409` — Trùng tên trong phạm vi customer, hoặc cố đổi `customerId` qua Update
+
 ---
 
-### `DELETE /api/sites/{id}`
+### `DELETE /api/admin/sites/{id}`
 
 Soft delete site.
 
@@ -946,7 +1099,7 @@ Soft delete site.
 
 ---
 
-### `PATCH /api/sites/{id}/restore`
+### `PATCH /api/admin/sites/{id}/restore`
 
 Khôi phục site đã xóa.
 
@@ -1017,7 +1170,7 @@ Base route: `/api/thresholds`
 
 ---
 
-### `PUT /api/thresholds/by-type/{batteryTypeId}`
+### `PUT /api/admin/thresholds/by-type/{batteryTypeId}`
 
 **Mục đích:** Upsert (tạo mới hoặc cập nhật) cấu hình ngưỡng cho một loại pin.
 
@@ -1041,11 +1194,622 @@ Base route: `/api/thresholds`
 
 **Path param:** `batteryTypeId` — Guid của loại pin cần cấu hình.
 
+> **Lưu ý:** Body của `UpsertThresholdConfigCommand` cũng chứa field `batteryTypeId`, nhưng giá trị từ **path param** mới là nguồn quyết định. FE không cần set `batteryTypeId` trong body (BE gán từ route).
+
 **Cách hoạt động:**
 - Nếu chưa có config cho `batteryTypeId` → tạo mới với `isActive = true`
 - Nếu đã có config active → ghi đè các field threshold trên record đó
 
 **Response thành công `200`:** `CommonResponse<ThresholdConfigDto>`
+
+---
+
+## Nhóm 7 — Dashboard
+
+Base route: `/api/battery/dashboard`
+
+---
+
+### `GET /api/battery/dashboard/stats`
+
+**Mục đích:** Thống kê tổng quan Battery dashboard cho Admin/Manager UI (Sprint 5B B11) — KPI cards + nhiều chart (donut/bar/line/heatmap) chỉ qua 1 endpoint.
+
+**Auth:** Bắt buộc (JWT hợp lệ — `[Authorize]`). Mọi role đã đăng nhập đều gọi được; tuỳ FE quyết định hiển thị.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `siteId` | `Guid?` | Không | Nếu truyền → mọi count filter theo site đó; không truyền → tổng hợp toàn hệ thống |
+
+**Response thành công `200`:** `CommonResponse<BatteryDashboardStatsDto>`
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": {
+    "totalAssets": 48,
+    "activeAssets": 46,
+    "offlineAssets": 2,
+    "openAlerts": 7,
+    "openAlertsCritical": 2,
+    "openAlertsWarning": 5,
+    "openEnvironmentalIncidents": 1,
+    "sites": 3,
+    "assetStatusDistribution": [
+      { "status": 1, "statusName": "Active", "count": 46 },
+      { "status": 2, "statusName": "Inactive", "count": 1 },
+      { "status": 3, "statusName": "Decommissioned", "count": 1 }
+    ],
+    "sohDistribution": {
+      "healthy": 30, "normal": 10, "warning": 5, "eol": 1, "unknown": 2
+    },
+    "alertSeverityBreakdown": { "critical": 2, "warning": 5, "info": 0 },
+    "openAlertsByType": [
+      { "anomalyType": 1, "anomalyName": "Overheat", "count": 3 }
+    ],
+    "alertTrend7Days": [
+      { "date": "2026-06-06", "critical": 0, "warning": 1, "info": 0, "total": 1 }
+    ],
+    "ambientTrend24Hours": [
+      { "hourUtc": "2026-06-12T00:00:00Z", "avgTemperature": 31.4, "avgHumidity": 68.2, "avgSolarIrradiance": 420.1 }
+    ],
+    "sensorAggregate24Hours": {
+      "avgVoltage": 52.1, "avgCurrent": -1.8, "avgTemperature": 29.4,
+      "avgSoc": 76.0, "avgSoh": 91.2, "readingsCount": 12480
+    },
+    "topAlertingAssets": [
+      { "batteryAssetId": "guid", "serialNumber": "BAT-001", "alertCount": 6, "criticalCount": 1 }
+    ],
+    "environmentalIncidentsByType": [
+      { "incidentType": 2, "incidentName": "FireDetected", "count": 1 }
+    ],
+    "chemistryDistribution": [
+      { "chemistry": 1, "chemistryName": "LiFePO4", "assetCount": 42 }
+    ]
+  }
+}
+```
+
+**Chi tiết `BatteryDashboardStatsDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `totalAssets` | `int` | Không | Tổng asset (bao gồm mọi status, không tính `IsDeleted`) |
+| `activeAssets` | `int` | Không | Số asset `Active` |
+| `offlineAssets` | `int` | Không | Số asset không nhận sensor reading trong 15 phút gần nhất |
+| `openAlerts` | `int` | Không | Tổng alert đang `Open` hoặc `Acknowledged` |
+| `openAlertsCritical` | `int` | Không | Alert severity `Critical` đang mở |
+| `openAlertsWarning` | `int` | Không | Alert severity `Warning` đang mở |
+| `openEnvironmentalIncidents` | `int` | Không | Số `EnvironmentalIncident` đang `Open` hoặc `Acknowledged` |
+| `sites` | `int` | Không | Tổng số site (theo filter) |
+| `assetStatusDistribution` | `AssetStatusBucketDto[]` | Không | Donut chart: mỗi bucket gồm `status` (enum int), `statusName`, `count` |
+| `sohDistribution` | `SohBucketDto` | Không | Donut SOH: `healthy` (≥90%), `normal` (80–89%), `warning` (75–79%), `eol` (<75%), `unknown` (chưa có reading SOH) |
+| `alertSeverityBreakdown` | `AlertSeverityBreakdownDto` | Không | Donut alert by severity toàn thời gian: `critical`, `warning`, `info` |
+| `openAlertsByType` | `AlertByTypeDto[]` | Không | Bar chart: alert đang mở phân theo `AnomalyTypeEnum` |
+| `alertTrend7Days` | `DailyTrendPointDto[]` | Không | Line chart 7 ngày — mỗi điểm: `date` (DateOnly), `critical`, `warning`, `info`, `total` |
+| `ambientTrend24Hours` | `AmbientTrendPointDto[]` | Không | Line chart 24h gần nhất — mỗi điểm: `hourUtc`, `avgTemperature?`, `avgHumidity?`, `avgSolarIrradiance?` (có thể null nếu giờ đó không có data) |
+| `sensorAggregate24Hours` | `SensorAggregateDto` | Không | Aggregated sensor metrics 24h: `avgVoltage?`, `avgCurrent?`, `avgTemperature?`, `avgSoc?`, `avgSoh?`, `readingsCount` (decimal fields nullable nếu không có data) |
+| `topAlertingAssets` | `TopAlertingAssetDto[]` | Không | Top 5 asset có nhiều alert nhất 30 ngày qua |
+| `environmentalIncidentsByType` | `EnvironmentalIncidentByTypeDto[]` | Không | Donut incident `Open`+`Acknowledged` theo type |
+| `chemistryDistribution` | `ChemistryBucketDto[]` | Không | Donut phân phối asset theo `BatteryChemistryEnum` |
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+
+---
+
+## Nhóm 8 — Ambient Readings (Dữ liệu môi trường site)
+
+Base route: `/api/ambient`
+
+> Quản lý dữ liệu môi trường xung quanh site (ambient temperature, humidity, solar irradiance). Tách khỏi sensor readings cấp battery. Phục vụ phát hiện anomaly cấp site (`HighAmbientTemp`, `HighHumidity`, `HighTempHumidityCombo`).
+
+---
+
+### `POST /api/ambient/readings/batch`
+
+**Mục đích:** Ingest batch ambient readings (ambient temperature, humidity, solar irradiance) từ IoT edge device hoặc `WeatherSyncBackgroundService` (OpenMeteo) — phục vụ phát hiện anomaly cấp site (`HighAmbientTemp`, `HighHumidity`, `HighTempHumidityCombo`).
+
+**Auth:** API Key — scheme `ApiKey` + policy `EnvironmentalIngest` (không dùng JWT).
+
+**Giới hạn batch:** Tối đa **100** readings mỗi request. Vượt → `400 isSuccess=false`.
+
+**Request body:** Wrapper object có field `items` (mảng `AmbientReadingItem`).
+
+```json
+{
+  "items": [
+    {
+      "siteId": "11111111-1111-1111-1111-111111111111",
+      "time": "2026-06-12T08:00:00Z",
+      "ambientTemperature": 34.2,
+      "humidity": 72.5,
+      "solarIrradiance": 580.0,
+      "source": 1,
+      "sourceDeviceId": "GATEWAY-AG01"
+    }
+  ]
+}
+```
+
+**Field rules (cho mỗi item):**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `siteId` | `Guid` | ✅ | Không được `Guid.Empty` | ID site |
+| `time` | `DateTime` | ✅ | UTC | Timestamp đo lường |
+| `ambientTemperature` | `decimal` | ✅ | -90 đến 90 | Nhiệt độ môi trường (°C) |
+| `humidity` | `decimal?` | ❌ | 0–100 nếu truyền | Độ ẩm tương đối (%) |
+| `solarIrradiance` | `decimal?` | ❌ | — | Cường độ bức xạ mặt trời (W/m²) |
+| `source` | `AmbientReadingSourceEnum` | ❌ (mặc định `IotSensor` = 1) | enum hợp lệ | Nguồn dữ liệu — xem enum |
+| `sourceDeviceId` | `string?` | ❌ | — | ID gateway / device gửi data |
+
+**Response thành công `201 Created`:** `CommonResponse<int>` — `data` là số reading đã insert.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "data": 100
+}
+```
+
+> Handler không set `message`. `data` = `request.Items.Count` (số reading client gửi lên — dedup phụ thuộc DB constraint / TimescaleDB hypertable, không filter ở application layer).
+
+**Lỗi thường gặp:**
+- `400` — `items` rỗng, vượt 100 record, hoặc item không hợp lệ (xem `listErrors` chi tiết từng item: `Items[0].SiteId`, `Items[0].Humidity`, …)
+- `401` — Thiếu `X-Api-Key`
+- `403` — ApiKey không có scope `EnvironmentalIngest`
+
+---
+
+### `GET /api/ambient/readings/history`
+
+**Mục đích:** Lịch sử ambient readings của một site, dùng cho chart/timeline.
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `siteId` | `Guid` | ✅ | ID site |
+| `from` | `DateTime?` | ❌ | Lọc `Time >= from` (UTC) |
+| `to` | `DateTime?` | ❌ | Lọc `Time <= to` (UTC) |
+| `pageNumber` | `int` | ❌ (mặc định 1) | Trang |
+| `pageSize` | `int` | ❌ (mặc định 100) | Số item/trang |
+
+> **Lưu ý:** Ambient readings tần suất thấp (theo giờ) nên dùng **offset pagination**, KHÔNG cursor như SensorReading. Sort `Time DESC`.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<AmbientReadingDto>>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "items": [
+      {
+        "time": "2026-06-12T08:00:00Z",
+        "siteId": "guid",
+        "ambientTemperature": 34.2,
+        "humidity": 72.5,
+        "solarIrradiance": 580.0,
+        "source": 2,
+        "sourceDeviceId": null
+      }
+    ],
+    "totalItems": 240,
+    "pageNumber": 1,
+    "pageSize": 100,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  }
+}
+```
+
+**Chi tiết `AmbientReadingDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `time` | `DateTime` | Không | Timestamp đo (UTC) |
+| `siteId` | `string` | Không | ID site |
+| `ambientTemperature` | `decimal` | Không | Nhiệt độ môi trường (°C) |
+| `humidity` | `decimal?` | Có | Độ ẩm (%) |
+| `solarIrradiance` | `decimal?` | Có | Cường độ bức xạ (W/m²) |
+| `source` | `AmbientReadingSourceEnum` | Không | Nguồn (xem enum) — mặc định `WeatherApi` |
+| `sourceDeviceId` | `string?` | Có | ID device/gateway |
+
+---
+
+### `GET /api/ambient/readings/latest`
+
+**Mục đích:** Reading ambient mới nhất của một site — dùng cho dashboard widget (tile hiển thị nhiệt độ/độ ẩm hiện tại).
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `siteId` | `Guid` | ✅ | ID site |
+
+**Response thành công `200`:** `CommonResponse<AmbientReadingDto>` — record có `Time` lớn nhất. Field rules giống `GET /history`.
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "time": "2026-06-12T08:00:00Z",
+    "siteId": "guid",
+    "ambientTemperature": 34.2,
+    "humidity": 72.5,
+    "solarIrradiance": 580.0,
+    "source": 2,
+    "sourceDeviceId": null
+  }
+}
+```
+
+**Lỗi thường gặp:**
+- `404` — Site chưa có ambient reading nào
+
+---
+
+### `PUT /api/ambient/threshold-configs`
+
+**Mục đích:** Upsert `AmbientThresholdConfig` cho 1 site (mỗi site có duy nhất 1 config active). Có config → cập nhật; chưa có → tạo mới.
+
+**Auth:** Bắt buộc (Admin/Manager)
+
+**Request body:**
+
+```json
+{
+  "siteId": "11111111-1111-1111-1111-111111111111",
+  "highAmbientTempWarning": 38.0,
+  "highAmbientTempCritical": 45.0,
+  "highHumidityWarning": 80.0,
+  "highHumidityCritical": 90.0,
+  "comboTempThreshold": 35.0,
+  "comboHumidityThreshold": 75.0,
+  "enabled": true
+}
+```
+
+**Field rules:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `siteId` | `Guid` | ✅ | Không được `Guid.Empty` | ID site |
+| `highAmbientTempWarning` | `decimal?` | ❌ | — | Ngưỡng cảnh báo nhiệt độ (°C) |
+| `highAmbientTempCritical` | `decimal?` | ❌ | >= `highAmbientTempWarning` nếu cả 2 cùng truyền | Ngưỡng nguy hiểm nhiệt độ (°C) |
+| `highHumidityWarning` | `decimal?` | ❌ | — | Ngưỡng cảnh báo độ ẩm (%) |
+| `highHumidityCritical` | `decimal?` | ❌ | >= `highHumidityWarning` nếu cả 2 cùng truyền | Ngưỡng nguy hiểm độ ẩm (%) |
+| `comboTempThreshold` | `decimal?` | ❌ | — | Ngưỡng nhiệt cho combo rule (temp ≥ X AND humidity ≥ Y → `HighTempHumidityCombo`) |
+| `comboHumidityThreshold` | `decimal?` | ❌ | — | Ngưỡng ẩm cho combo rule |
+| `enabled` | `bool` | ❌ (mặc định `true`) | — | Tắt nhanh threshold mà không xóa config |
+
+> Tất cả threshold fields đều **nullable** — gửi `null` để bỏ qua không monitor metric đó. Combo rule chỉ active khi cả 2 field combo đều có giá trị.
+
+**Response thành công `200`:** `CommonResponse<AmbientThresholdConfigDto>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "id": "guid",
+    "siteId": "guid",
+    "highAmbientTempWarning": 38.0,
+    "highAmbientTempCritical": 45.0,
+    "highHumidityWarning": 80.0,
+    "highHumidityCritical": 90.0,
+    "comboTempThreshold": 35.0,
+    "comboHumidityThreshold": 75.0,
+    "enabled": true,
+    "createdAt": "2026-06-12T08:00:00Z"
+  }
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — `SiteId` rỗng, hoặc `Critical < Warning`
+
+---
+
+### `GET /api/ambient/threshold-configs/by-site/{siteId}`
+
+**Mục đích:** Lấy threshold config hiện tại của 1 site (dùng cho trang config UI).
+
+**Auth:** Bắt buộc (Admin/Manager)
+
+**Path param:** `siteId` — Guid của site.
+
+**Response thành công `200`:** `CommonResponse<AmbientThresholdConfigDto>` (shape giống response của PUT ở trên).
+
+**Lỗi thường gặp:**
+- `404` — Site chưa được cấu hình threshold (`data = null`, `isSuccess = false`)
+
+---
+
+### `GET /api/ambient/threshold-configs`
+
+**Mục đích:** Liệt kê toàn bộ threshold config — trang Admin xem nhanh tất cả site đã cấu hình.
+
+**Auth:** Bắt buộc (Admin/Manager)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `pageNumber` | `int` | ❌ (mặc định 1) | Trang |
+| `pageSize` | `int` | ❌ (mặc định 50, max 200) | Số item/trang |
+
+> **Lưu ý:** Endpoint **không** có filter động (siteId/enabled) — chỉ phân trang. Sort mặc định `CreatedAt DESC`. Filter `!IsDeleted` luôn áp dụng.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<AmbientThresholdConfigDto>>` (items shape giống response PUT).
+
+---
+
+## Nhóm 9 — Environmental Incidents (Sự cố môi trường site)
+
+Base route: `/api/environmental-incidents`
+
+> Quản lý vòng đời `EnvironmentalIncident` (smoke, fire, gas leak, flood, overheat hazard) ở cấp **site** — tách khỏi `Alert` cấp battery, nhưng Alert có thể reference incident qua `EnvironmentalIncidentId`.
+
+---
+
+### `POST /api/environmental-incidents`
+
+**Mục đích:** Report incident mới từ IoT edge (smoke/fire/gas leak/flood/overheat hazard cấp site). Khi tạo thành công, hệ thống tự động phát `EnvironmentalIncidentDetectedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1).
+
+**Auth:** API Key — scheme `ApiKey` + policy `EnvironmentalIngest`.
+
+**Request body:**
+
+```json
+{
+  "siteId": "11111111-1111-1111-1111-111111111111",
+  "incidentType": 2,
+  "severity": 3,
+  "detectedAt": "2026-06-12T08:00:00Z",
+  "reportedBy": "GATEWAY-AG01",
+  "notes": "Cảm biến khói khu cabinet B kích hoạt."
+}
+```
+
+**Field rules:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `siteId` | `Guid` | ✅ | Không `Guid.Empty` | ID site |
+| `incidentType` | `EnvironmentalIncidentTypeEnum` | ✅ | Enum hợp lệ | Loại sự cố (xem enum) |
+| `severity` | `AlertSeverityEnum` | ❌ (mặc định `Critical` = 3) | Enum hợp lệ | Mức độ nghiêm trọng (xem enum) |
+| `detectedAt` | `DateTime` | ✅ | Không lệch quá `UtcNow + 5 phút` | Thời điểm phát hiện (UTC) |
+| `reportedBy` | `string?` | ❌ | Max 256 ký tự | Định danh device/gateway hoặc operator báo cáo |
+| `notes` | `string?` | ❌ | Max 1000 ký tự | Ghi chú/mô tả chi tiết |
+
+**Response thành công — 2 paths:**
+
+| Status | Path | Mô tả |
+|---|---|---|
+| `201 Created` | **Create** (normal path) | Incident mới được tạo. Status set `Open`, `acknowledgedAt`/`resolvedAt`/`falseAlarmAt` đều `null`. Hệ thống phát `EnvironmentalIncidentDetectedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1). |
+| `200 OK` | **Dedup** (idempotency) | Đã tồn tại incident active đang `Open`/`Acknowledged` cho cùng `SiteId` + cùng `IncidentType` → trả lại incident cũ thay vì tạo mới. KHÔNG phát event lần nữa. Idempotency-friendly cho IoT gateway spam cùng sự cố. |
+
+Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload đầy đủ incident (shape giống `GET /{id}` bên dưới).
+
+**Lỗi thường gặp:**
+- `400` — `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ, `DetectedAt` rỗng/vượt quá hiện tại 5'
+- `401` — Thiếu `X-Api-Key`
+- `403` — ApiKey không có scope `EnvironmentalIngest`
+
+---
+
+### `POST /api/environmental-incidents/{id}/acknowledge`
+
+**Mục đích:** Acknowledge incident — chuyển state `Open → Acknowledged`. Hệ thống set `acknowledgedBy = userId hiện tại (từ JWT)` và `acknowledgedAt = UtcNow`.
+
+**Auth:** Bắt buộc (Admin/Manager/Staff). Customer KHÔNG được phép.
+
+**Path param:** `id` — Guid của incident.
+
+**Request body:** Không có.
+
+**Response thành công `200`:** `CommonResponse<EnvironmentalIncidentDto>` — trả incident sau khi update (status mới `Acknowledged`, `acknowledgedAt` có giá trị).
+
+**Lỗi thường gặp:**
+- `400` — `id` rỗng hoặc JWT không có UserId hợp lệ
+- `401` — Chưa đăng nhập
+- `403` — Role không nằm trong Admin/Manager/Staff
+- `404` — Incident không tồn tại
+- `409` — State hiện tại không phải `Open` (đã `Acknowledged`/`Resolved`/`FalseAlarm`)
+
+---
+
+### `POST /api/environmental-incidents/{id}/resolve`
+
+**Mục đích:** Resolve incident — chuyển state `Open` hoặc `Acknowledged → Resolved`. Set `resolvedBy = userId hiện tại`, `resolvedAt = UtcNow`, lưu `resolutionNote` (audit trail).
+
+**Auth:** Bắt buộc (Admin/Manager/Staff). Customer KHÔNG được phép.
+
+**Path param:** `id` — Guid của incident.
+
+**Request body:**
+
+```json
+{
+  "resolutionNote": "Đã bơm thoát nước cabinet, đo điện trở cách điện đạt chuẩn."
+}
+```
+
+**Field rules:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `resolutionNote` | `string` | ✅ | 5–2000 ký tự, không whitespace | Mô tả cách xử lý — audit trail bắt buộc |
+
+**Response thành công `200`:** `CommonResponse<EnvironmentalIncidentDto>` — incident sau update (status `Resolved`, `resolvedAt` và `resolutionNote` có giá trị).
+
+**Lỗi thường gặp:**
+- `400` — Thiếu/quá ngắn/quá dài `resolutionNote`, `id` rỗng
+- `401` — Chưa đăng nhập
+- `404` — Incident không tồn tại
+- `409` — State đang là `Resolved` / `FalseAlarm`
+
+---
+
+### `POST /api/environmental-incidents/{id}/false-alarm`
+
+**Mục đích:** Đánh dấu `FalseAlarm` — incident không thật (ví dụ sương khói do vệ sinh module bằng cồn). Set `falseAlarmBy` = user hiện tại, `falseAlarmAt = UtcNow`, lưu `falseAlarmReason`.
+
+**Auth:** Bắt buộc (chỉ Admin/Manager — Staff/Customer không được phép, để tránh lạm dụng).
+
+**Path param:** `id` — Guid của incident.
+
+**Request body:**
+
+```json
+{
+  "falseAlarmReason": "Vệ sinh module bằng cồn — bay hơi giả gas leak."
+}
+```
+
+**Field rules:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `falseAlarmReason` | `string` | ✅ | 5–2000 ký tự | Lý do đánh dấu false alarm — audit trail |
+
+**Response thành công `200`:** `CommonResponse<EnvironmentalIncidentDto>` — status `FalseAlarm`, `falseAlarmAt` + `falseAlarmReason` có giá trị.
+
+**Lỗi thường gặp:**
+- `400` — Thiếu/quá ngắn/quá dài `falseAlarmReason`
+- `401` — Chưa đăng nhập
+- `403` — Role không nằm trong Admin/Manager
+- `404` — Incident không tồn tại
+- `409` — State đang là `Resolved`
+
+---
+
+### `GET /api/environmental-incidents`
+
+**Mục đích:** Liệt kê incident (filter + phân trang). Sort mặc định `DetectedAt DESC`. Filter `!IsDeleted` luôn áp dụng.
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `pageNumber` | `int` | ❌ (mặc định 1) | Trang |
+| `pageSize` | `int` | ❌ (mặc định 50) | Số item/trang |
+| `siteId` | `Guid?` | ❌ | Lọc theo site |
+| `status` | `EnvironmentalIncidentStatusEnum?` | ❌ | Lọc theo trạng thái (xem enum) |
+| `incidentType` | `EnvironmentalIncidentTypeEnum?` | ❌ | Lọc theo loại sự cố |
+| `from` | `DateTime?` | ❌ | Range `DetectedAt >= from` (UTC) |
+| `to` | `DateTime?` | ❌ | Range `DetectedAt <= to` (UTC) |
+
+> **Lưu ý:** Endpoint hiện **không** filter theo `severity` (mặc dù enum tồn tại). Nếu cần, FE filter client-side.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<EnvironmentalIncidentDto>>` (mỗi item shape giống `GET /{id}` bên dưới).
+
+---
+
+### `GET /api/environmental-incidents/{id}`
+
+**Mục đích:** Chi tiết incident — đầy đủ lifecycle (Acknowledged/Resolved/FalseAlarm timestamps + actor) phục vụ trang chi tiết.
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Path param:** `id` — Guid của incident.
+
+**Response thành công `200`:** `CommonResponse<EnvironmentalIncidentDto>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "id": "guid",
+    "siteId": "guid",
+    "incidentType": 2,
+    "status": 3,
+    "severity": 3,
+    "reportedBy": "GATEWAY-AG01",
+    "detectedAt": "2026-06-12T08:00:00Z",
+    "acknowledgedAt": "2026-06-12T08:05:00Z",
+    "resolvedAt": "2026-06-12T09:30:00Z",
+    "resolutionNote": "Đã dập hoàn toàn, không thiệt hại pin.",
+    "falseAlarmAt": null,
+    "falseAlarmReason": null,
+    "createdAt": "2026-06-12T08:00:01Z"
+  }
+}
+```
+
+**Chi tiết `EnvironmentalIncidentDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID incident |
+| `siteId` | `string` | Không | ID site phát sinh |
+| `incidentType` | `EnvironmentalIncidentTypeEnum` | Không | Loại (xem enum) |
+| `status` | `EnvironmentalIncidentStatusEnum` | Không | Trạng thái lifecycle (xem enum) |
+| `severity` | `AlertSeverityEnum` | Không | Mức độ nghiêm trọng |
+| `reportedBy` | `string?` | Có | Device/gateway/operator báo cáo |
+| `detectedAt` | `DateTime` | Không | Thời điểm phát hiện (UTC) |
+| `acknowledgedAt` | `DateTime?` | Có | Thời điểm acknowledge |
+| `resolvedAt` | `DateTime?` | Có | Thời điểm resolve |
+| `resolutionNote` | `string?` | Có | Ghi chú resolve (`null` khi chưa resolve) |
+| `falseAlarmAt` | `DateTime?` | Có | Thời điểm đánh dấu false alarm |
+| `falseAlarmReason` | `string?` | Có | Lý do false alarm (`null` khi chưa mark) |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo record |
+
+**Lỗi thường gặp:**
+- `404` — Incident không tồn tại hoặc đã soft-delete
+
+---
+
+### `GET /api/environmental-incidents/by-site/{siteId}/active`
+
+**Mục đích:** Liệt kê incident đang Active (`Open` hoặc `Acknowledged`) của 1 site — dùng cho dashboard site (widget cảnh báo đang xảy ra).
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Path param:** `siteId` — Guid của site.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<EnvironmentalIncidentDto>>` — wrapper PaginationResponse nhưng chỉ trả các record active (không phân trang theo client). Items shape giống `GET /{id}`.
+
+---
+
+## Nhóm 10 — Health
+
+Base route: `/api/battery/health`
+
+---
+
+### `GET /api/battery/health`
+
+**Mục đích:** Liveness probe đơn giản cho Docker/Kubernetes/ApiGateway aggregated health. Endpoint anonymous, không validate DB/RabbitMQ/Redis.
+
+**Auth:** Không yêu cầu (public).
+
+**Response thành công `200`:**
+
+```json
+{
+  "status": "Healthy",
+  "service": "BatteryService",
+  "timestamp": "2026-06-12T08:00:00Z"
+}
+```
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `status` | `string` | Luôn `"Healthy"` nếu reach được endpoint |
+| `service` | `string` | Tên service (`"BatteryService"`) |
+| `timestamp` | `DateTime` | UTC hiện tại |
 
 ---
 
@@ -1061,29 +1825,45 @@ Base route: `/api/thresholds`
 | GET | `/api/battery-assets/me` | Danh sách pin (customer) | Customer |
 | GET | `/api/battery-assets/{id}` | Chi tiết pin | Mọi role |
 | GET | `/api/battery-assets/{id}/realtime` | Realtime snapshot pin | Mọi role |
-| POST | `/api/battery-assets` | Tạo pin | Admin |
-| PUT | `/api/battery-assets/{id}` | Cập nhật pin | Admin |
-| DELETE | `/api/battery-assets/{id}` | Xóa pin | Admin |
-| PATCH | `/api/battery-assets/{id}/restore` | Khôi phục pin | Admin |
-| PUT | `/api/battery-assets/{id}/transfer-owner` | Chuyển chủ sở hữu | Admin |
+| POST | `/api/admin/battery-assets` | Tạo pin | Admin |
+| PUT | `/api/admin/battery-assets/{id}` | Cập nhật pin | Admin |
+| DELETE | `/api/admin/battery-assets/{id}` | Xóa pin | Admin |
+| PATCH | `/api/admin/battery-assets/{id}/restore` | Khôi phục pin | Admin |
+| PUT | `/api/admin/battery-assets/{id}/transfer-owner` | Chuyển chủ sở hữu | Admin |
 | GET | `/api/battery-types` | Danh sách loại pin | Admin/Manager/Staff |
 | GET | `/api/battery-types/{id}` | Chi tiết loại pin | Admin/Manager/Staff |
-| POST | `/api/battery-types` | Tạo loại pin | Admin |
-| PUT | `/api/battery-types/{id}` | Cập nhật loại pin | Admin |
-| DELETE | `/api/battery-types/{id}` | Xóa loại pin | Admin |
-| PATCH | `/api/battery-types/{id}/restore` | Khôi phục loại pin | Admin |
+| POST | `/api/admin/battery-types` | Tạo loại pin | Admin |
+| PUT | `/api/admin/battery-types/{id}` | Cập nhật loại pin | Admin |
+| DELETE | `/api/admin/battery-types/{id}` | Xóa loại pin | Admin |
+| PATCH | `/api/admin/battery-types/{id}/restore` | Khôi phục loại pin | Admin |
 | GET | `/api/sensor-readings/{id}/latest` | Reading mới nhất | Mọi role |
 | GET | `/api/sensor-readings/{id}/history` | Lịch sử readings cursor-based | Mọi role |
+| GET | `/api/sensor-readings/{id}/aggregate` | Aggregate theo bucket (chart) | Mọi role |
 | POST | `/api/sensor-readings/batch` | Ingest batch (IoT) | API Key |
 | GET | `/api/sites` | Danh sách site | Admin/Manager |
 | GET | `/api/sites/me` | Site của customer | Customer |
 | GET | `/api/sites/{id}` | Chi tiết site | Mọi role |
 | GET | `/api/sites/{id}/dashboard` | Dashboard site | Mọi role |
 | GET | `/api/sites/{siteId}/assets` | Pin tại site | Mọi role |
-| POST | `/api/sites` | Tạo site | Admin |
-| PUT | `/api/sites/{id}` | Cập nhật site | Admin |
-| DELETE | `/api/sites/{id}` | Xóa site | Admin |
-| PATCH | `/api/sites/{id}/restore` | Khôi phục site | Admin |
+| POST | `/api/admin/sites` | Tạo site | Admin |
+| PUT | `/api/admin/sites/{id}` | Cập nhật site | Admin |
+| DELETE | `/api/admin/sites/{id}` | Xóa site | Admin |
+| PATCH | `/api/admin/sites/{id}/restore` | Khôi phục site | Admin |
 | GET | `/api/thresholds` | Danh sách ngưỡng | Admin/Manager |
 | GET | `/api/thresholds/by-type/{id}` | Ngưỡng theo loại pin | Admin/Manager |
-| PUT | `/api/thresholds/by-type/{id}` | Upsert ngưỡng | Admin |
+| PUT | `/api/admin/thresholds/by-type/{id}` | Upsert ngưỡng | Admin |
+| GET | `/api/battery/dashboard/stats` | Battery dashboard stats | Mọi role auth |
+| POST | `/api/ambient/readings/batch` | Ingest ambient (IoT) | API Key |
+| GET | `/api/ambient/readings/history` | Lịch sử ambient | Mọi role |
+| GET | `/api/ambient/readings/latest` | Ambient mới nhất theo site | Mọi role |
+| PUT | `/api/ambient/threshold-configs` | Upsert ambient threshold | Admin/Manager |
+| GET | `/api/ambient/threshold-configs/by-site/{siteId}` | Ambient threshold theo site | Admin/Manager |
+| GET | `/api/ambient/threshold-configs` | List ambient threshold | Admin/Manager |
+| POST | `/api/environmental-incidents` | Report incident (IoT) | API Key |
+| POST | `/api/environmental-incidents/{id}/acknowledge` | Acknowledge incident | Admin/Manager/Staff |
+| POST | `/api/environmental-incidents/{id}/resolve` | Resolve incident | Admin/Manager/Staff |
+| POST | `/api/environmental-incidents/{id}/false-alarm` | Mark false alarm | Admin/Manager |
+| GET | `/api/environmental-incidents` | Danh sách incident | Mọi role |
+| GET | `/api/environmental-incidents/{id}` | Chi tiết incident | Mọi role |
+| GET | `/api/environmental-incidents/by-site/{siteId}/active` | Incident active theo site | Mọi role |
+| GET | `/api/battery/health` | Health check | Public |

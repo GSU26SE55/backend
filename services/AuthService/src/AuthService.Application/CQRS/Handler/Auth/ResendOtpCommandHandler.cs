@@ -42,7 +42,7 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(400, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
+            return Fail(409, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
 
         if (account.OtpExpiredAt.HasValue)
         {
@@ -80,6 +80,5 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Auth", Detail = message } }
     };
 }

@@ -68,6 +68,26 @@ public static class TestDataSeeder
                       ?? throw new InvalidOperationException("Login response empty");
         if (!payload.IsSuccess || payload.Data == null)
             throw new InvalidOperationException($"Login failed: {payload.Message}");
-        return (payload.Data.AccessToken!, payload.Data.RefreshToken!);
+        if (payload.Data.RequiresTwoFactor)
+            throw new InvalidOperationException("Account requires 2FA. Use LoginViaTwoFactorAsync instead.");
+        return (payload.Data.Tokens!.AccessToken!, payload.Data.Tokens!.RefreshToken!);
+    }
+
+    /// <summary>Full 2FA login flow: POST /login → POST /login/verify-2fa. Trả về tokens.</summary>
+    public static async Task<(string accessToken, string refreshToken)> LoginViaTwoFactorAsync(HttpClient client, string email, string password, string totpCode)
+    {
+        var loginResp = await client.PostAsJsonAsync("/api/auth/login", new { Email = email, Password = password });
+        var login = await loginResp.Content.ReadFromJsonAsync<global::AuthService.Application.DTOs.Response.Auth.LoginResponse>()
+                    ?? throw new InvalidOperationException("Login response empty");
+        if (login.Data?.Challenge == null)
+            throw new InvalidOperationException("Expected 2FA challenge, got direct tokens.");
+
+        var verifyResp = await client.PostAsJsonAsync("/api/auth/login/verify-2fa",
+            new { challengeToken = login.Data.Challenge.ChallengeToken, code = totpCode, isBackupCode = false });
+        var verify = await verifyResp.Content.ReadFromJsonAsync<global::AuthService.Application.DTOs.Response.Auth.LoginResponse>()
+                     ?? throw new InvalidOperationException("Verify-2fa response empty");
+        if (!verify.IsSuccess || verify.Data?.Tokens == null)
+            throw new InvalidOperationException($"Verify-2FA failed: {verify.Message}");
+        return (verify.Data.Tokens.AccessToken!, verify.Data.Tokens.RefreshToken!);
     }
 }

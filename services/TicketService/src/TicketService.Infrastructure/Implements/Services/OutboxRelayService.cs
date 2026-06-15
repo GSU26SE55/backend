@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
-using TicketService.Application.Common.Events;
 using TicketService.Application.Common.Models;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 
@@ -27,6 +27,14 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketApprovedIntegrationEvent), typeof(TicketApprovedIntegrationEvent) },
         { nameof(TicketRejectedIntegrationEvent), typeof(TicketRejectedIntegrationEvent) },
         { nameof(TicketStatusChangedIntegrationEvent), typeof(TicketStatusChangedIntegrationEvent) },
+        { nameof(TicketReopenedIntegrationEvent), typeof(TicketReopenedIntegrationEvent) },
+        { nameof(TicketRatedIntegrationEvent), typeof(TicketRatedIntegrationEvent) },
+        { nameof(TicketEscalatedIntegrationEvent), typeof(TicketEscalatedIntegrationEvent) },
+        { nameof(SlaBreachedIntegrationEvent), typeof(SlaBreachedIntegrationEvent) },
+        { nameof(SlaWarningIntegrationEvent), typeof(SlaWarningIntegrationEvent) },
+        { nameof(IncidentDeclaredIntegrationEvent), typeof(IncidentDeclaredIntegrationEvent) },
+        { nameof(TicketHeldIntegrationEvent), typeof(TicketHeldIntegrationEvent) },
+        { nameof(TicketResumedIntegrationEvent), typeof(TicketResumedIntegrationEvent) },
     };
 
     public OutboxRelayService(

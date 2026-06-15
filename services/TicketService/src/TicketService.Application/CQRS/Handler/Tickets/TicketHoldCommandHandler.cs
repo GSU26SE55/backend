@@ -2,11 +2,13 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -18,15 +20,21 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly ISlaService _slaService;
+    private readonly IMessageProducerService _producer;
 
     public TicketHoldCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        ISlaService slaService,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _slaService = slaService;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketHoldCommand request, CancellationToken ct)
@@ -58,6 +66,9 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason }, { "Note", request.Note } }
         }, ct);
 
+        // SLA Timer logic
+        await _slaService.PauseSlaAsync(ticket.Id, request.Reason, request.Note, request.StaffId, ct);
+
         await _activityLogger.LogAsync(
             ticket.Id,
             request.StaffId,
@@ -68,18 +79,9 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
             newValue: targetStatus.ToString(),
             reason: request.Note);
 
-        // Outbox: Status Changed
-        var statusEvent = new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus);
-        var outboxMessage = new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketStatusChangedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(statusEvent),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        };
-        await _uow.OutboxMessages.AddAsync(outboxMessage);
+        // Outbox: Status Changed & Ticket Held
+        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
+        await _producer.PublishAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -97,17 +99,13 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message)
     {
         return new TicketActionResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }

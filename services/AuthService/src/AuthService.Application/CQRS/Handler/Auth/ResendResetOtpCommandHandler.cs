@@ -53,7 +53,6 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
                         IsSuccess = false,
                         StatusCode = 429,
                         Message = $"Vui lòng đợi {waitSeconds} giây trước khi yêu cầu gửi lại.",
-                        ListErrors = { new Errors { Field = "Auth", Detail = "Resend too fast." } }
                     };
                 }
             }

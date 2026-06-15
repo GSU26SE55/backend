@@ -37,6 +37,13 @@
     <Project Path="services/SmsService/src/SmsService.Api/SmsService.Api.csproj" />
     <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/Services/NotificationService/">
+    <Project Path="services/NotificationService/src/NotificationService.Api/NotificationService.Api.csproj" />
+    <Project Path="services/NotificationService/src/NotificationService.Application/NotificationService.Application.csproj" />
+    <Project Path="services/NotificationService/src/NotificationService.Domain/NotificationService.Domain.csproj" />
+    <Project Path="services/NotificationService/src/NotificationService.Infrastructure/NotificationService.Infrastructure.csproj" />
+    <Project Path="services/NotificationService/tests/NotificationService.UnitTests/NotificationService.UnitTests.csproj" />
+  </Folder>
   <Folder Name="/Services/TicketService/">
     <Project Path="services/TicketService/src/TicketService.Infrastructure/TicketService.Infrastructure.csproj" />
     <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" />

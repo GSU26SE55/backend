@@ -4,6 +4,7 @@ using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Query.Account;
 using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.DTOs.Response.Login;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -34,7 +35,7 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Đổi mật khẩu của tài khoản đang đăng nhập.
+    /// Đổi mật khẩu của tài khoản đang đăng nhập — yêu cầu xác minh password cũ trước khi áp dụng password mới (BCrypt rehash). Logout mọi session khác sau khi đổi thành công.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi user biết mật khẩu hiện tại và muốn đổi sang mật khẩu mới.
@@ -57,13 +58,16 @@ public class AccountsController : ControllerBase
     /// <param name="command">Mật khẩu hiện tại, mật khẩu mới và xác nhận mật khẩu.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Kết quả đổi mật khẩu.</returns>
-    /// <response code="200">Đổi mật khẩu thành công.</response>
-    /// <response code="400">Dữ liệu không hợp lệ hoặc mật khẩu hiện tại không đúng theo logic handler.</response>
-    /// <response code="401">Chưa đăng nhập hoặc JWT không có AccountId hợp lệ.</response>
+    /// <response code="200">Đổi mật khẩu thành công. Toàn bộ session/refresh token đã bị revoke, client cần đăng nhập lại.</response>
+    /// <response code="400">Validation lỗi (NewPassword không đạt độ phức tạp, ConfirmPassword không khớp) HOẶC mật khẩu hiện tại không đúng. Đây là input error của user đã authenticated, KHÔNG phải auth fail.</response>
+    /// <response code="401">Chưa đăng nhập hoặc JWT không có AccountId hợp lệ (middleware-level).</response>
+    /// <response code="404">Không tìm thấy account (AccountId từ JWT không match record nào).</response>
     [HttpPatch("me/password")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangeMyPassword([FromBody] ChangePasswordCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -101,6 +105,7 @@ public class AccountsController : ControllerBase
     /// <response code="404">Không tìm thấy tài khoản.</response>
     /// <response code="429">Gửi OTP quá nhanh, cần chờ trước khi gửi lại.</response>
     [HttpPost("me/send-phone-otp")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
@@ -138,13 +143,22 @@ public class AccountsController : ControllerBase
     /// <param name="command">OTP xác minh số điện thoại.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Thông báo kết quả xác minh số điện thoại.</returns>
-    /// <response code="200">Xác minh số điện thoại thành công.</response>
-    /// <response code="400">OTP không đúng định dạng, sai, hết hạn hoặc không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="200">Xác minh số điện thoại thành công. <c>PhoneConfirmed</c> được set <c>true</c>.</response>
+    /// <response code="400">OTP sai định dạng (validation: phải đủ 6 chữ số).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC OTP không chính xác (sai giá trị OTP user nhập).</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Số điện thoại đã được xác thực trước đó (state conflict).</response>
+    /// <response code="422">OTP hết hạn, OTP không phải dành cho mục đích xác minh phone, hoặc account chưa có OTP nào được gửi (business rule violation).</response>
+    /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
     [HttpPost("me/verify-phone-otp")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status423Locked)]
     public async Task<IActionResult> VerifyPhoneOtp([FromBody] VerifyPhoneOtpCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -157,35 +171,12 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Bật 2FA cho tài khoản hiện tại và nhận secret để cấu hình ứng dụng authenticator.
+    /// [DEPRECATED — GH-295] Endpoint cũ kích hoạt 2FA 1 bước. Trả 410 Gone.
+    /// Dùng flow mới: <c>POST /api/accounts/me/2fa/init</c> rồi <c>POST /api/accounts/me/2fa/confirm</c>.
     /// </summary>
-    /// <remarks>
-    /// Endpoint này tạo secret TOTP cho user hiện tại.
-    ///
-    /// Cách hoạt động:
-    /// - AccountId được lấy từ JWT.
-    /// - Handler sinh <c>TwoFactorSecret</c> dạng base32.
-    /// - Response trả về <c>Secret</c> và <c>OtpAuthUri</c>.
-    /// - Frontend có thể dùng <c>OtpAuthUri</c> để render QR code cho Google Authenticator, Microsoft Authenticator hoặc app tương thích TOTP.
-    ///
-    /// Lưu ý:
-    /// - Secret cần được bảo vệ như thông tin nhạy cảm.
-    /// - 2FA được bật ngay sau khi endpoint này thành công. Hiện chưa có bước confirm TOTP riêng.
-    ///
-    /// Idempotency:
-    /// - Client NÊN gửi header <c>Idempotency-Key</c> (UUID v4) để chống bật 2FA trùng (sinh secret mới). Cache 24h.
-    /// </remarks>
-    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
-    /// <returns>Secret và otpauth URI để cấu hình 2FA.</returns>
-    /// <response code="200">Tạo/bật 2FA thành công.</response>
-    /// <response code="400">Không thể bật 2FA do trạng thái tài khoản không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
     [HttpPost("me/2fa/enable")]
-    [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)]
-    [ProducesResponseType(typeof(CommonResponse<TwoFactorSecretDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(CommonResponse<TwoFactorSecretDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(CommonResponse<TwoFactorSecretDto>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorSecretDto>), StatusCodes.Status410Gone)]
+    [Obsolete("Use POST /api/accounts/me/2fa/init + /confirm (GH-295)")]
     public async Task<IActionResult> Enable2FA(CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -197,7 +188,61 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Tắt 2FA cho tài khoản hiện tại.
+    /// Bước 1/2 của enable 2FA — sinh secret + QR; CHƯA activate. Phải gọi tiếp <c>/2fa/confirm</c>.
+    /// </summary>
+    /// <remarks>
+    /// Cách hoạt động:
+    /// - AccountId được lấy từ JWT.
+    /// - Handler sinh secret base32 (20 bytes) + cache pending state vào Redis TTL 10 phút.
+    /// - Response trả <c>secret</c>, <c>otpAuthUri</c> (cho QR), <c>pendingToken</c> (cần gửi lại khi confirm).
+    /// - 2FA CHƯA bật. <c>TwoFactorEnabled</c> chỉ flip true sau khi <c>/2fa/confirm</c> verify TOTP thành công.
+    /// </remarks>
+    [HttpPost("me/2fa/init")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorSetupDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorSetupDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorSetupDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorSetupDto>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Init2FA(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<TwoFactorSetupDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var result = await _mediator.Send(new Init2FACommand { AccountId = userId.Value }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Bước 2/2 của enable 2FA — verify mã TOTP để chứng minh user đã quét QR.
+    /// Activate 2FA + encrypt secret + sinh 8 backup codes (trả về plain CHỈ 1 LẦN).
+    /// </summary>
+    /// <remarks>
+    /// Body: <c>{ pendingToken, code }</c>. <c>code</c> là 6 số từ Authenticator app.
+    /// </remarks>
+    [HttpPost("me/2fa/confirm")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<TwoFactorConfirmDto>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Confirm2FA([FromBody] Confirm2FACommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<TwoFactorConfirmDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Tắt two-factor authentication (TOTP) cho tài khoản hiện tại — yêu cầu mã OTP cuối cùng để xác minh quyền sở hữu device, tránh attacker đã chiếm session bypass 2FA.
     /// </summary>
     /// <remarks>
     /// Endpoint này xóa cấu hình 2FA của user đang đăng nhập.
@@ -215,20 +260,50 @@ public class AccountsController : ControllerBase
     /// <returns>Thông báo kết quả tắt 2FA.</returns>
     /// <response code="200">Tắt 2FA thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
+    /// <summary>
+    /// Sinh lại 8 backup codes — vô hiệu hóa codes cũ. Yêu cầu TOTP để chứng minh còn giữ device.
+    /// </summary>
+    [HttpPost("me/2fa/backup-codes/regenerate")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyBackupCodeRegenerate)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<BackupCodesDto>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RegenerateBackupCodes([FromBody] RegenerateBackupCodesCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<BackupCodesDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
     [HttpPost("me/2fa/disable")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyTwoFactorDisable)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Disable2FA(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Disable2FA([FromBody] Disable2FACommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
         if (userId == null)
             return Unauthorized(UnauthString());
 
-        var result = await _mediator.Send(new Disable2FACommand { AccountId = userId.Value }, cancellationToken);
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>
-    /// Liên kết tài khoản Google vào account hiện tại.
+    /// Liên kết tài khoản Google OAuth vào account hiện tại — bind subject ID từ Google ID token vào ProviderLinks; sau đó user có thể login bằng Google nút SSO.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi user đã đăng nhập bằng tài khoản local và muốn thêm phương thức đăng nhập Google.
@@ -256,6 +331,7 @@ public class AccountsController : ControllerBase
     /// <response code="404">Không tìm thấy tài khoản hiện tại.</response>
     /// <response code="409">Google account/email đã liên kết hoặc xung đột với dữ liệu hiện có.</response>
     [HttpPost("me/link-google")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
@@ -273,7 +349,7 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Bỏ liên kết Google khỏi account hiện tại.
+    /// Bỏ liên kết Google OAuth khỏi account hiện tại — xóa entry ProviderLinks; KHÔNG cho phép nếu Google là phương thức đăng nhập duy nhất (chặn lock-out).
     /// </summary>
     /// <remarks>
     /// Endpoint này xóa liên kết Google để user không còn đăng nhập bằng Google account đó.
@@ -293,6 +369,7 @@ public class AccountsController : ControllerBase
     /// <response code="400">Không thể bỏ liên kết do account không có phương thức đăng nhập thay thế.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpPost("me/unlink-google")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
@@ -307,7 +384,7 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Tự vô hiệu hóa tài khoản hiện tại.
+    /// Tự vô hiệu hóa tài khoản — chuyển AccountStatus sang Deactivated (reversible bởi Admin). Logout mọi session ngay. Khác Delete: không soft-delete data.
     /// </summary>
     /// <remarks>
     /// Endpoint này cho phép user chủ động chuyển account của mình sang trạng thái inactive.
@@ -326,6 +403,8 @@ public class AccountsController : ControllerBase
     /// <response code="200">Vô hiệu hóa tài khoản thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpPost("me/deactivate")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeactivateMe(CancellationToken cancellationToken)
     {
@@ -338,7 +417,7 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Tự xóa mềm tài khoản hiện tại.
+    /// Tự xóa mềm tài khoản (soft delete) — set IsDeleted=true + revoke mọi refresh token. Data giữ 90 ngày cho GDPR audit, sau đó hard delete via cleanup job.
     /// </summary>
     /// <remarks>
     /// Endpoint này cho phép user yêu cầu xóa account của chính mình theo cơ chế soft delete.
@@ -358,6 +437,8 @@ public class AccountsController : ControllerBase
     /// <response code="200">Xóa mềm tài khoản thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpDelete("me")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteMe(CancellationToken cancellationToken)
     {
@@ -369,7 +450,19 @@ public class AccountsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Lấy profile chi tiết của tài khoản đang đăng nhập (self).
+    /// </summary>
+    /// <remarks>
+    /// Trả về full profile gồm: AccountId, Email, FullName, PhoneNumber, AvatarUrl, Role,
+    /// AccountStatus, Is2FAEnabled, ProviderLinks (Google), CreatedAt, LastLoginAt.
+    /// Endpoint này KHÔNG nhận tham số — userId resolve từ JWT claim <c>nameid</c>.
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Lấy profile thành công.</response>
+    /// <response code="401">Chưa đăng nhập hoặc token hết hạn.</response>
     [HttpGet("me/profile")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
@@ -382,9 +475,31 @@ public class AccountsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Cập nhật profile theo accountId (chỉ owner — userId trong JWT phải khớp <paramref name="id"/>).
+    /// </summary>
+    /// <remarks>
+    /// Endpoint kế thừa pattern <c>PUT /accounts/{id}</c> cho FE Web Admin cần edit tài khoản trực tiếp.
+    /// Ràng buộc: <c>currentUserId == id</c>, nếu không trả 403 — KHÔNG cho phép user A update profile user B
+    /// qua endpoint này. Admin override dùng <c>PUT /admin/accounts/{id}</c>.
+    ///
+    /// Body fields tối thiểu: <c>FullName</c>, <c>PhoneNumber</c>, <c>AvatarUrl</c>. Email/Role/Status
+    /// không update qua đây — dùng endpoint Admin riêng.
+    /// </remarks>
+    /// <param name="id">Account ID — phải khớp current user JWT.</param>
+    /// <param name="command">Field cần update.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Update thành công.</response>
+    /// <response code="400">Field validation lỗi (xem ListErrors).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">User cố update account khác (id mismatch).</response>
+    /// <response code="404">Account không tồn tại.</response>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -396,9 +511,28 @@ public class AccountsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Cập nhật profile của user hiện tại — alias của <c>PUT /accounts/{id}</c> nhưng không cần truyền id.
+    /// </summary>
+    /// <remarks>
+    /// Endpoint tiện hơn cho Mobile/Web khi không muốn track accountId. Backend resolve userId từ JWT
+    /// claim <c>nameid</c> rồi set vào <c>command.Id</c> trước khi gửi MediatR.
+    ///
+    /// Body fields giống <c>PUT /accounts/{id}</c>: <c>FullName</c>, <c>PhoneNumber</c>, <c>AvatarUrl</c>.
+    /// Validation field-level qua <c>UpdateAccountCommand.ValidateAsync</c>.
+    /// </remarks>
+    /// <param name="command">Field cần update — Id sẽ bị overwrite bằng userId từ JWT.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Update thành công.</response>
+    /// <response code="400">Field validation lỗi.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="404">Account không tồn tại (rất hiếm — JWT valid nhưng account bị xoá).</response>
     [HttpPut("me/profile")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateMe([FromBody] UpdateAccountCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -411,7 +545,7 @@ public class AccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Xem lịch sử login của tài khoản đang đăng nhập.
+    /// Xem lịch sử login (thành công + thất bại) của tài khoản đang đăng nhập — sort theo CreatedAt DESC, mỗi entry kèm IP/User-Agent/DeviceId/reason. FE render trang 'Hoạt động đăng nhập'.
     /// </summary>
     /// <remarks>
     /// Trả về các login attempt (thành công + thất bại) của chính user, sort theo thời gian giảm dần.
@@ -425,6 +559,7 @@ public class AccountsController : ControllerBase
     /// <response code="400">Filter không hợp lệ (FromUtc >= ToUtc).</response>
     /// <response code="401">Chưa đăng nhập.</response>
     [HttpGet("me/login-history")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status401Unauthorized)]

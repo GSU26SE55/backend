@@ -25,10 +25,10 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (string.IsNullOrEmpty(account.GoogleId))
-            return Fail(400, "Tài khoản chưa được liên kết với Google.");
+            return Fail(409, "Tài khoản chưa được liên kết với Google.");
 
         if (string.IsNullOrEmpty(account.PasswordHash))
-            return Fail(400, "Không thể bỏ liên kết: tài khoản chưa có mật khẩu local. Vui lòng đặt mật khẩu trước.");
+            return Fail(422, "Không thể bỏ liên kết: tài khoản chưa có mật khẩu local. Vui lòng đặt mật khẩu trước.");
 
         account.GoogleId = null;
         account.Provider = null;
@@ -49,6 +49,5 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Google", Detail = message } }
     };
 }

@@ -40,9 +40,9 @@ public class TicketStateMachineTests
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Escalated, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
@@ -460,6 +460,29 @@ public class TicketStateMachineTests
         result.IsAllowed.Should().BeTrue();
         ticket.ClosedAt.Should().NotBeNull();
         ticket.ClosedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ClosedRejected_SetsMetadata()
+    {
+        // Arrange
+        var managerId = Guid.NewGuid();
+        var ticket = CreateTicket(TicketStatusEnum.Open);
+        var ctx = new TransitionContext
+        {
+            ActorRole = ActorRoleEnum.Manager,
+            ActorUserId = managerId,
+            Payload = new Dictionary<string, object?> { { "Reason", "Invalid ticket" } }
+        };
+
+        // Act
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, ctx, CancellationToken.None);
+
+        // Assert
+        result.IsAllowed.Should().BeTrue();
+        ticket.Status.Should().Be(TicketStatusEnum.ClosedRejected);
+        ticket.ClosedAt.Should().NotBeNull();
+        ticket.Reason.Should().Be("Invalid ticket");
     }
 
     [Fact]

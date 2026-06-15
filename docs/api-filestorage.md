@@ -35,17 +35,17 @@
 | `KbImage` | 4 | Hình ảnh trong knowledge base | Upload cho bài viết KB |
 | `Firmware` | 5 | File firmware thiết bị | Upload firmware cho battery management system |
 
-> **Lưu ý `Other = 0`:** Đây là ngoại lệ có chủ ý so với quy tắc BE chuẩn (enum bắt đầu từ 1). Giá trị `0` được chọn để `Other` là default value của C# enum — khi client không truyền `purpose` trong form upload, backend nhận `(FilePurposeEnum)0 = Other` và áp dụng whitelist `Other`. Không thay đổi giá trị này để tránh ảnh hưởng data đã có trong DB (`migration defaultValue: 0`). `FileStatusEnum` bắt đầu từ `1` theo quy tắc BE chuẩn — không áp dụng exception này.
+> **Lưu ý `Other = 0`:** Đây là ngoại lệ có chủ ý so với quy tắc BE chuẩn (enum bắt đầu từ 1). Giá trị `0` được chọn để `Other` là default value của C# enum — khi client không truyền `purpose` trong form upload, backend nhận `(FilePurposeEnum)0 = Other` và áp dụng whitelist `Other`. Không thay đổi giá trị này để tránh ảnh hưởng data đã có trong DB (`migration defaultValue: 0`). `FileStatusEnum` cũng bắt đầu từ `0` (`Uploaded=0`) — xem bảng bên dưới.
 
 ### `FileStatusEnum`
 
 | Giá trị | Int | Ý nghĩa | Có thể tải không |
 |---|---|---|---|
-| `Uploaded` | 1 | Vừa upload xong, chưa qua xử lý | Có (legacy state) |
-| `Processing` | 2 | Đang trong pipeline xử lý (virus scan, resize...) | **Không** — download/presigned-url trả `409 Conflict` |
-| `Ready` | 3 | Đã xử lý xong, sẵn sàng phục vụ | Có |
-| `Quarantined` | 4 | Bị cách ly (phát hiện virus hoặc nội dung vi phạm) | **Không** — trả 409 |
-| `Deleted` | 5 | Đã bị xóa (soft delete) | **Không** — trả 404 |
+| `Uploaded` | 0 | Vừa upload xong, chưa qua xử lý | Có (legacy state) |
+| `Processing` | 1 | Đang trong pipeline xử lý (virus scan, resize...) | **Không** — download/presigned-url trả `409 Conflict` |
+| `Ready` | 2 | Đã xử lý xong, sẵn sàng phục vụ | Có |
+| `Quarantined` | 3 | Bị cách ly (phát hiện virus hoặc nội dung vi phạm) | **Không** — trả 409 |
+| `Deleted` | 4 | Đã bị xóa (soft delete) | **Không** — trả 404 |
 
 > **Sprint 1:** Pipeline xử lý (resize, virus scan) chưa active. File upload xong được lưu metadata với trạng thái `Ready`. `Uploaded` là state dự phòng cho pipeline Sprint 2+ — Sprint 1 không sử dụng.
 
@@ -67,11 +67,11 @@ export enum FilePurposeEnum {
 }
 
 export enum FileStatusEnum {
-  Uploaded = 1,
-  Processing = 2,
-  Ready = 3,
-  Quarantined = 4,
-  Deleted = 5,
+  Uploaded = 0,
+  Processing = 1,
+  Ready = 2,
+  Quarantined = 3,
+  Deleted = 4,
 }
 
 export interface FileUploadResponse {
@@ -80,7 +80,7 @@ export interface FileUploadResponse {
   fileName: string;        // tên file gốc client gửi lên
   contentType: string;     // MIME type (e.g. "image/png")
   size: number;            // bytes
-  publicUrl: string | null; // null ở Sprint 1 (MinIO local) — fallback GET /{id}/download
+  publicUrl: string | null; // có giá trị nếu PublicBaseUrl được cấu hình — fallback GET /{id}/download khi null
 }
 
 export interface FileMetadataResponse {
@@ -98,7 +98,7 @@ export interface FileMetadataResponse {
 }
 ```
 
-> **`publicUrl: null`:** Sprint 1 với MinIO local luôn trả `null`. FE phải handle `null` và fallback về `GET /api/files/{fileId}/download`. Khi production deploy với public bucket, `publicUrl` sẽ có giá trị — test lại path này trước khi release.
+> **`publicUrl`:** Có giá trị khi `ObjectStorageOptions.PublicBaseUrl` được cấu hình (môi trường dev local với MinIO port 9090 đã có giá trị). FE **phải handle cả 2 case** — không assume `null`. Fallback về `GET /api/files/{fileId}/download` khi `null`. Dùng helper: `publicUrl ?? \`/api/files/${fileId}/download\``.
 
 ---
 
@@ -204,10 +204,12 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
     "fileName": "my-photo.png",
     "contentType": "image/png",
     "size": 204800,
-    "publicUrl": null
+    "publicUrl": "http://localhost:9090/solar-battery-files/avatars/3fa85f64-abc1-...png"
   }
 }
 ```
+
+> **`publicUrl` trong example:** Giá trị trên là ví dụ khi `PublicBaseUrl` được cấu hình (môi trường dev). Khi `PublicBaseUrl` không set, field này trả `null`. FE phải handle cả 2 case.
 
 **Chi tiết `FileUploadResponse`:**
 
@@ -220,7 +222,7 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
 | `size` | `long` | Không | Kích thước file theo byte |
 | `publicUrl` | `string?` | Null nếu storage không cấu hình public base URL | URL public trực tiếp nếu bucket public; ngược lại null và phải dùng download/presigned-url |
 
-> **Sprint 1 (MinIO local):** `publicUrl` luôn `null`. FE phải handle `null` và fallback về `GET /{id}/download`. Khi deploy production với public bucket, `publicUrl` sẽ có giá trị — cần test lại path này.
+> **`publicUrl`:** Có giá trị khi `ObjectStorageOptions.PublicBaseUrl` được cấu hình — môi trường dev local với MinIO đã trả giá trị (xác nhận qua Swagger). FE phải handle cả 2 case, không assume `null`.
 
 **Lỗi thường gặp:**
 - `400` — Không có file trong request
@@ -295,7 +297,7 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
     "folderName": "avatars",
     "purpose": 1,
     "status": 2,
-    "publicUrl": null,
+    "publicUrl": "http://localhost:9090/solar-battery-files/avatars/3fa85f64-abc1-...png",
     "createdAt": "2026-05-16T08:00:00Z",
     "updatedAt": null
   }
@@ -598,9 +600,15 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 
 ## Changelog
 
+### 2026-05-19 — Fix enum values sau verify source code
+
+- **FileStatusEnum values sai** — tài liệu 2026-05-18 ghi `1–5` nhưng source code thực tế là `0–4`. Đã sửa lại bảng enum, TypeScript types, và notes. Giá trị đúng: `Uploaded=0, Processing=1, Ready=2, Quarantined=3, Deleted=4`.
+- **`publicUrl` không luôn `null`** — `publicUrl` có giá trị khi `PublicBaseUrl` config được set (môi trường dev MinIO port 9090 đã trả giá trị, xác nhận qua Swagger). Đã sửa note "luôn null" thành "handle cả 2 case".
+- **`Uploaded` state với download** — xác nhận qua source code: handler chỉ block `Processing` và `Quarantined` bằng `409`; `Uploaded` không bị block, download trả `200`.
+
 ### 2026-05-18
 
-- **FileStatusEnum** đổi giá trị từ `0–4` sang `1–5` theo quy tắc BE chuẩn (enum bắt đầu từ 1). Migration `FixFileStatusEnumDefaultValue` đã chạy để cập nhật DB default và migrate data hiện có.
+- **FileStatusEnum** đổi giá trị từ `0–4` sang `1–5` theo quy tắc BE chuẩn (enum bắt đầu từ 1). Migration `FixFileStatusEnumDefaultValue` đã chạy để cập nhật DB default và migrate data hiện có. *(Giá trị này sau đó được xác nhận lại qua source code ngày 2026-05-19 — thực tế vẫn là `0–4`.)*
 - Bổ sung section **TypeScript Types** để FE copy trực tiếp thay vì tự suy ra từ bảng.
 - Làm rõ **KbImage open access** — intentional, Customer được đọc.
 - Làm rõ **JWT claim priority** — `NameIdentifier` trước, fallback `AccountId`.

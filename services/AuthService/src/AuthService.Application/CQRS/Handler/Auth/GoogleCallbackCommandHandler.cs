@@ -44,6 +44,5 @@ public class GoogleCallbackCommandHandler : IRequestHandler<GoogleCallbackComman
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = "Auth", Detail = message } }
     };
 }

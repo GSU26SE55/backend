@@ -40,6 +40,13 @@ public class Account : AuditableEntity
 
     public string? TwoFactorSecret { get; set; }
 
+    /// <summary>
+    /// Thời điểm <see cref="TwoFactorSecret"/> được encrypt qua Data Protection.
+    /// Null = legacy plaintext (chưa migrate). Set bởi lazy re-encrypt khi user verify TOTP lần đầu sau migration,
+    /// hoặc set ngay khi user enroll mới qua <c>/2fa/confirm</c>.
+    /// </summary>
+    public DateTime? TwoFactorSecretEncryptedAt { get; set; }
+
     public int FailedLoginAttempts { get; set; } = 0;
 
     public DateTime? LockoutEndAt { get; set; }
@@ -79,4 +86,6 @@ public class Account : AuditableEntity
     public AccountProfile? Profile { get; set; }
 
     public StaffProfile? StaffProfile { get; set; }
+
+    public ICollection<BackupCode> BackupCodes { get; set; } = new List<BackupCode>();
 }

@@ -8,24 +8,31 @@ namespace BatteryService.Application.CQRS.Command.Site;
 
 public class CreateSiteCommand : IRequest<CommonResponse<SiteDto>>, IValidatable<CommonResponse<SiteDto>>
 {
+    /// <summary>Tên hiển thị.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>ID Customer (Guid).</summary>
     public Guid CustomerId { get; set; }
 
+    /// <summary>Địa chỉ vật lý.</summary>
     public string? Address { get; set; }
 
+    /// <summary>Vĩ độ (-90..90).</summary>
     public decimal? Latitude { get; set; }
 
+    /// <summary>Kinh độ (-180..180).</summary>
     public decimal? Longitude { get; set; }
 
-    public decimal? CapacityKw { get; set; }
-
+    /// <summary>Ngày lắp đặt.</summary>
     public DateTime InstallDate { get; set; }
 
+    /// <summary>Filter theo status enum.</summary>
     public SiteStatusEnum Status { get; set; } = SiteStatusEnum.Active;
 
+    /// <summary>Tên người liên hệ.</summary>
     public string? ContactPersonName { get; set; }
 
+    /// <summary>Số điện thoại người liên hệ.</summary>
     public string? ContactPersonPhone { get; set; }
 
     public Task<CommonResponse<SiteDto>> ValidateAsync()
@@ -54,9 +61,6 @@ public class CreateSiteCommand : IRequest<CommonResponse<SiteDto>>, IValidatable
 
         if (Longitude is < -180 or > 180)
             AddError(response, nameof(Longitude), "Kinh độ phải nằm trong khoảng -180 đến 180.");
-
-        if (CapacityKw is < 0)
-            AddError(response, nameof(CapacityKw), "Công suất site không được âm.");
 
         if (InstallDate == default)
             AddError(response, nameof(InstallDate), "Ngày lắp đặt là bắt buộc.");

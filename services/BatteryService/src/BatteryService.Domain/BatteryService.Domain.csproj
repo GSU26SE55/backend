@@ -4,6 +4,9 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- Sinh XML doc → Swagger hiển thị doc enum/entity nếu reference từ DTO/Command. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591;1573;1570;1574</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

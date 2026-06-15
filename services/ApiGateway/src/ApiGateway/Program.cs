@@ -28,6 +28,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("filestorage", new OpenApiInfo { Title = "File Storage Service API", Version = "v1" });
     c.SwaggerDoc("battery", new OpenApiInfo { Title = "Battery Service API", Version = "v1" });
     c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
+    c.SwaggerDoc("notification", new OpenApiInfo { Title = "Notification Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -79,6 +80,7 @@ if (!app.Environment.IsProduction())
         options.SwaggerEndpoint("/file-storage-service/swagger/v1/swagger.json", "File Storage Service API");
         options.SwaggerEndpoint("/battery-service/swagger/v1/swagger.json", "Battery Service API");
         options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
+        options.SwaggerEndpoint("/notification-service/swagger/v1/swagger.json", "Notification Service API");
     });
 }
 
@@ -93,6 +95,11 @@ if (!app.Environment.IsEnvironment("Docker")
 //app.UseWebSockets();
 
 app.UseCors("AllowAll");
+
+// Bọc mọi response status-only (404/401/403/405/...) thành CommonResponse để client luôn parse cùng schema.
+// Phải đặt TRƯỚC MapReverseProxy/MapMetrics để bắt được cả 404 do YARP không match route lẫn 404 do controller.
+app.UseCommonResponseStatusCodes();
+
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 app.MapReverseProxy();
 

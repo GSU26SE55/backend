@@ -48,7 +48,6 @@ public class UpdateBatteryTypeCommandHandler : IRequestHandler<UpdateBatteryType
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Tên loại pin đã tồn tại.",
-                ListErrors = { new Errors { Field = nameof(request.Name), Detail = "Tên loại pin đã tồn tại." } }
             };
         }
 

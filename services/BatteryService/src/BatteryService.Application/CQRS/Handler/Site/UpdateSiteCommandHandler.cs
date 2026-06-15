@@ -53,7 +53,6 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Tên site đã tồn tại cho khách hàng này.",
-                ListErrors = { new Errors { Field = nameof(request.Name), Detail = "Tên site đã tồn tại cho khách hàng này." } }
             };
         }
 
@@ -61,7 +60,6 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
         entity.Address = request.Address?.Trim();
         entity.Latitude = request.Latitude;
         entity.Longitude = request.Longitude;
-        entity.CapacityKw = request.CapacityKw;
         entity.InstallDate = ToUtc(request.InstallDate);
         entity.Status = request.Status;
         entity.ContactPersonName = request.ContactPersonName?.Trim();

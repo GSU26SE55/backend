@@ -8,6 +8,9 @@
 #   make run SVC=BatteryService     # chạy 1 service
 #   make migration-add SVC=BatteryService NAME=AddBatteryStatus
 #   make docker-up                  # khởi động stack docker-compose
+#   make ci                         # chạy full CI local trước khi push
+#   make ci-fast                    # CI nhanh (bỏ format + trivy)
+#   make ci-full                    # CI + integration tests (cần Docker)
 # =====================================================================
 
 SHELL := /bin/bash
@@ -19,7 +22,7 @@ COMPOSE      := docker compose
 ENV_FILE     := .env.Docker
 
 # Danh sách services (dùng cho run-all, build-all)
-SERVICES := ApiGateway AuthService BatteryService TicketService EmailService SmsService FileStorageService
+SERVICES := ApiGateway AuthService BatteryService TicketService NotificationService EmailService SmsService FileStorageService
 
 # Service mặc định cho các lệnh cần SVC=...
 SVC ?=
@@ -68,6 +71,64 @@ test-coverage: ## Test + coverage (XPlat Code Coverage)
 
 test-svc: _require-svc ## Test 1 service (SVC=BatteryService)
 	dotnet test $(SERVICES_DIR)/$(SVC)/$(SVC).slnx --verbosity minimal
+
+# ---------------------------------------------------------------------
+# CI — chạy local trước khi push (mirror Jenkinsfile stage 0-7)
+# ---------------------------------------------------------------------
+# Biến điều khiển:
+#   BASE_REF=origin/main     # ref so sánh cho rule-checks (default: origin/dev)
+#   SKIP_TRIVY=1             # bỏ qua security scan
+#   REQUIRE_TRIVY=1          # ép preflight fail nếu chưa cài trivy
+.PHONY: ci ci-fast ci-full ci-preflight ci-format ci-build ci-test ci-rules ci-trivy ci-integration
+
+BASE_REF ?= origin/dev
+
+ci: ci-preflight ci-format ci-build ci-test ci-rules ci-trivy ## Full local CI (preflight → format → build → unit test → rules → trivy)
+	@printf '\n\033[1;32m========== CI PASS ==========\033[0m\n'
+
+ci-fast: ci-preflight ci-build ci-test ci-rules ## CI nhanh (bỏ format + trivy) — cho vòng lặp dev
+	@printf '\n\033[1;32m========== CI-FAST PASS ==========\033[0m\n'
+
+ci-full: ci ci-integration ## CI + integration tests (cần Docker)
+	@printf '\n\033[1;32m========== CI-FULL PASS ==========\033[0m\n'
+
+ci-preflight: ## [stage 0] Check tool versions (git, dotnet ≥ 9, trivy optional)
+	@printf '\n\033[1;34m[1/6] Preflight\033[0m\n'
+	@./ci/scripts/ci-preflight.sh
+
+ci-format: ## [stage 2] dotnet format --verify-no-changes
+	@printf '\n\033[1;34m[2/6] Format check\033[0m\n'
+	dotnet format $(SLN) --verify-no-changes --severity error
+
+ci-build: ## [stage 1+3] dotnet restore + build Release
+	@printf '\n\033[1;34m[3/6] Restore + Build (Release)\033[0m\n'
+	dotnet restore $(SLN)
+	dotnet build $(SLN) -c Release --no-restore
+
+ci-test: ## [stage 4] Unit tests (exclude IntegrationTests)
+	@printf '\n\033[1;34m[4/6] Unit tests\033[0m\n'
+	@mkdir -p TestResults
+	dotnet test $(SLN) -c Release --no-build \
+		--filter "FullyQualifiedName!~IntegrationTests" \
+		--logger "trx" \
+		--results-directory ./TestResults
+
+ci-rules: ## [stage 5] Project rule checks (await void / AuditableEntity) — diff vs BASE_REF
+	@printf '\n\033[1;34m[5/6] Project rule checks (BASE_REF=$(BASE_REF))\033[0m\n'
+	@BASE_REF=$(BASE_REF) ./ci/scripts/rule-checks.sh
+
+ci-trivy: ## [stage 6] Trivy fs scan (CRITICAL, ignore-unfixed) — SKIP_TRIVY=1 để bỏ qua
+	@printf '\n\033[1;34m[6/6] Security scan (trivy)\033[0m\n'
+	@./ci/scripts/trivy-scan.sh
+
+ci-integration: ## [stage 7] Integration tests (cần Docker daemon)
+	@printf '\n\033[1;34m[+] Integration tests\033[0m\n'
+	@docker info >/dev/null 2>&1 || { echo "FAIL: Docker daemon không chạy."; exit 1; }
+	@mkdir -p TestResults
+	dotnet test $(SLN) -c Release --no-build \
+		--filter "FullyQualifiedName~IntegrationTests" \
+		--logger "trx" \
+		--results-directory ./TestResults
 
 # ---------------------------------------------------------------------
 # Run service (dotnet run)

@@ -33,7 +33,7 @@ public class SendPhoneOtpCommandHandlerTests
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class SendPhoneOtpCommandHandlerTests
 
         var resp = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class VerifyPhoneOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     }
 
     [Fact]
-    public async Task Verify_OtpExpired_Returns400()
+    public async Task Verify_OtpExpired_Returns422()
     {
         var account = WithPhoneOtp(expired: DateTime.UtcNow.AddMinutes(-1));
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
@@ -146,6 +146,6 @@ public class VerifyPhoneOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 }

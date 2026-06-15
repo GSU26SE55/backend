@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -13,6 +15,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
     private readonly Mock<ITicketCodeGenerator> _codeGen = new();
     private readonly Mock<IPriorityCalculator> _priorityCalc = new();
     private readonly Mock<IActivityLogger> _logger = new();
+    private readonly Mock<IMessageProducerService> _producer = new();
 
     [Theory]
     [InlineData("EnvironmentalIncident", ImpactScopeEnum.Site, UrgencyLevelEnum.High, TicketPriorityEnum.P1Critical)]
@@ -34,9 +37,9 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-AUTO-001");
         _priorityCalc.Setup(x => x.Calculate(expectedImpact, expectedUrgency)).Returns(expectedPriority);
 
-        var (uow, tickets, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
-        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object);
+        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -51,5 +54,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.ImpactScope == expectedImpact &&
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
+
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

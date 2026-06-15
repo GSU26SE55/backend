@@ -1,5 +1,25 @@
 {{- $svc := .Values.services.batteryservice -}}
 {{- if $svc.enabled -}}
+{{- $fw := $svc.firmwareStorage | default dict -}}
+{{- if $fw.enabled }}
+---
+# Sprint IoT-2 #IoT2-35 — PVC cho firmware OTA artifact (multipart upload).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: batteryservice-firmware-storage
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "batteryservice") | nindent 4 }}
+spec:
+  accessModes:
+  - {{ $fw.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ $fw.size | default "2Gi" }}
+  {{- if $fw.storageClass }}
+  storageClassName: {{ $fw.storageClass | quote }}
+  {{- end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -87,6 +107,17 @@ spec:
           initialDelaySeconds: 20
         resources:
           {{- toYaml $svc.resources | nindent 10 }}
+        {{- if $fw.enabled }}
+        volumeMounts:
+        - name: firmware-storage
+          mountPath: {{ $fw.mountPath | default "/data/firmware-storage" }}
+        {{- end }}
+      {{- if $fw.enabled }}
+      volumes:
+      - name: firmware-storage
+        persistentVolumeClaim:
+          claimName: batteryservice-firmware-storage
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

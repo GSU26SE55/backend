@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 
@@ -8,7 +10,23 @@ namespace BatteryService.Application.CQRS.Command.SensorReading;
 
 public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorReadingBatchIngestResult>>, IValidatable<CommonResponse<SensorReadingBatchIngestResult>>
 {
+    /// <summary>Danh sách items.</summary>
     public List<SensorReadingItem> Items { get; set; } = new();
+
+    /// <summary>Sprint IoT-1 (#246) — header <c>X-Device-Code</c>. Backend cross-check với device được auth.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public string? DeviceCode { get; set; }
+
+    /// <summary>Sprint IoT-1 (#246) — header <c>Idempotency-Key</c>. Retry an toàn cùng key trả response cũ.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>Sprint IoT-1 (#246) — DeviceId resolve từ X-Api-Key (per-device). Null nếu dùng legacy global key.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public Guid? AuthenticatedDeviceId { get; set; }
 
     public Task<CommonResponse<SensorReadingBatchIngestResult>> ValidateAsync()
     {
@@ -25,22 +43,23 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
             var item = Items[i];
             var prefix = $"{nameof(Items)}[{i}]";
 
-            if (item.BatteryAssetId == Guid.Empty)
-                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "Id tài sản pin là bắt buộc.");
+            if (item.BatteryAssetId == Guid.Empty && string.IsNullOrWhiteSpace(item.BatteryAssetSerial))
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "Phải có BatteryAssetId hoặc BatteryAssetSerial.");
 
             if (item.Time == default)
                 AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading là bắt buộc.");
             else if (item.Time.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
                 AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading không được nằm quá xa trong tương lai.");
 
+            // Clock skew check ĐÃ MOVE vào handler để fire metric reason=clock_drift (#IoT2-15).
+
+            if (item.BatteryAssetSerial?.Length > 64)
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetSerial)}", "BatteryAssetSerial tối đa 64 ký tự.");
+
+            // Sprint IoT-2 #IoT2-15/#IoT2-17 — sanity check ONLY (cực biên hardware noise).
+            // Outlier reject + clock-drift kiểm tra trong HANDLER để metric counters fire đúng (§52.5).
             if (item.Voltage < 0)
                 AddError(response, $"{prefix}.{nameof(item.Voltage)}", "Điện áp không được âm.");
-
-            if (item.Temperature is < -50 or > 120)
-                AddError(response, $"{prefix}.{nameof(item.Temperature)}", "Nhiệt độ phải nằm trong khoảng -50 đến 120 độ C.");
-
-            if (item.SocPercent is < 0 or > 100)
-                AddError(response, $"{prefix}.{nameof(item.SocPercent)}", "SOC phải nằm trong khoảng 0-100.");
 
             if (item.CycleCount is < 0)
                 AddError(response, $"{prefix}.{nameof(item.CycleCount)}", "Số chu kỳ không được âm.");
@@ -48,11 +67,25 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
             if (item.SourceDeviceId?.Length > 64)
                 AddError(response, $"{prefix}.{nameof(item.SourceDeviceId)}", "Id thiết bị nguồn tối đa 64 ký tự.");
 
-            if (item.SohPercent is < 0 or > 100)
-                AddError(response, $"{prefix}.{nameof(item.SohPercent)}", "SOH phải nằm trong khoảng 0-100.");
-
             if (item.ChargingState.HasValue && !Enum.IsDefined(typeof(ChargingStateEnum), item.ChargingState.Value))
                 AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "ChargingState không hợp lệ.");
+
+            // Sprint 5B #105 — Tier 2 validation.
+            if (item.InternalResistanceMilliohm is <= 0)
+                AddError(response, $"{prefix}.{nameof(item.InternalResistanceMilliohm)}", "Internal resistance phải > 0 mΩ.");
+
+            if (item.CellVoltageDeltaMv is < 0)
+                AddError(response, $"{prefix}.{nameof(item.CellVoltageDeltaMv)}", "Cell voltage delta không được âm.");
+
+            // Sprint 5B B9 — SourceType + length validation.
+            if (!Enum.IsDefined(typeof(SensorReadingSourceTypeEnum), item.SourceType))
+                AddError(response, $"{prefix}.{nameof(item.SourceType)}", "SourceType không hợp lệ.");
+
+            if (item.BmsErrorCode?.Length > 64)
+                AddError(response, $"{prefix}.{nameof(item.BmsErrorCode)}", "BmsErrorCode tối đa 64 ký tự.");
+
+            if (item.SensorSourceCode?.Length > 20)
+                AddError(response, $"{prefix}.{nameof(item.SensorSourceCode)}", "SensorSourceCode tối đa 20 ký tự.");
         }
 
         return Task.FromResult(response);
@@ -69,23 +102,61 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
 
 public class SensorReadingItem
 {
+    /// <summary>Timestamp của reading (UTC).</summary>
     public DateTime Time { get; set; }
 
+    /// <summary>
+    /// Sprint IoT-1 (#246) — timestamp ghi nhận tại device. Có thể khác Time (Time = backend persist).
+    /// Backend dùng để tính clock skew + validate &lt;= 5 phút (§247).
+    /// </summary>
+    public DateTime? DeviceTimestamp { get; set; }
+
+    /// <summary>
+    /// Sprint IoT-1 (#246) — Serial của BatteryAsset (vd "BAT-001"). Mapping → BatteryAssetId tại backend.
+    /// Ưu tiên field này; nếu null backend dùng <see cref="BatteryAssetId"/> (legacy/simulator).
+    /// </summary>
+    public string? BatteryAssetSerial { get; set; }
+
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid BatteryAssetId { get; set; }
 
+    /// <summary>Điện áp (V).</summary>
     public decimal Voltage { get; set; }
 
+    /// <summary>Cường độ dòng (A). Âm = xả, dương = sạc.</summary>
     public decimal Current { get; set; }
 
+    /// <summary>Nhiệt độ (°C).</summary>
     public decimal Temperature { get; set; }
 
+    /// <summary>State of Charge — % pin còn (0..100).</summary>
     public decimal SocPercent { get; set; }
 
+    /// <summary>Số chu kỳ sạc/xả của pin.</summary>
     public int? CycleCount { get; set; }
 
+    /// <summary>State of Health — % sức khoẻ pin (0..100).</summary>
     public decimal? SohPercent { get; set; }
 
+    /// <summary>Trạng thái sạc (Idle / Charging / Discharging / Full).</summary>
     public ChargingStateEnum? ChargingState { get; set; }
 
+    /// <summary>ID thiết bị nguồn (≤ 64 ký tự).</summary>
     public string? SourceDeviceId { get; set; }
+
+    // Sprint 5B #101/#105 — Tier 2 battery health metrics.
+    /// <summary>Điện trở nội (mΩ) — tier 2 health metric.</summary>
+    public decimal? InternalResistanceMilliohm { get; set; }
+    /// <summary>Chênh điện áp giữa cell max và cell min (mV).</summary>
+    public decimal? CellVoltageDeltaMv { get; set; }
+
+    // Sprint 5B B9 (#154) — phân biệt nguồn đo (BMS vs IoT vs External).
+    /// <summary>Phân loại nguồn (Bms | IotGateway | External).</summary>
+    public SensorReadingSourceTypeEnum SourceType { get; set; } = SensorReadingSourceTypeEnum.IotGateway;
+
+    /// <summary>BMS error raw code (vd "0x0A", "OverCurrent,CellImbalance"). Tối đa 64 ký tự.</summary>
+    public string? BmsErrorCode { get; set; }
+
+    /// <summary>§52.9 — "primary"/"redundant"/"external-temp". Tối đa 20 ký tự.</summary>
+    public string? SensorSourceCode { get; set; }
 }

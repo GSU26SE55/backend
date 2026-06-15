@@ -1,10 +1,10 @@
-using TicketService.UnitTests.Helpers;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.TicketGetList;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.UnitTests.Helpers;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -29,20 +29,20 @@ public class TicketGetListQueryHandlerTests
         Guid? batteryAssetId = null,
         bool isDeleted = false,
         DateTime? createdAt = null) => new()
-    {
-        Id = Guid.NewGuid(),
-        Code = code,
-        BatteryAssetId = batteryAssetId ?? Guid.NewGuid(),
-        CustomerId = Guid.NewGuid(),
-        Title = title,
-        Description = "description",
-        Category = category,
-        Priority = priority,
-        Status = status,
-        Origin = TicketOriginEnum.ManualByCustomer,
-        CreatedAt = createdAt ?? DateTime.UtcNow,
-        IsDeleted = isDeleted
-    };
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            BatteryAssetId = batteryAssetId ?? Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            Title = title,
+            Description = "description",
+            Category = category,
+            Priority = priority,
+            Status = status,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
+            IsDeleted = isDeleted
+        };
 
     private void SetupMock(List<Ticket> tickets)
         => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
@@ -70,7 +70,9 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            Status = TicketStatusEnum.Open, PageNumber = 1, PageSize = 10
+            Status = TicketStatusEnum.Open,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -87,7 +89,9 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            Keyword = "overheat", PageNumber = 1, PageSize = 10
+            Keyword = "overheat",
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -105,7 +109,9 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            Priority = TicketPriorityEnum.P1Critical, PageNumber = 1, PageSize = 10
+            Priority = TicketPriorityEnum.P1Critical,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -119,7 +125,9 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            BatteryAssetId = targetId, PageNumber = 1, PageSize = 10
+            BatteryAssetId = targetId,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
@@ -136,7 +144,9 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            IsDescending = true, PageNumber = 1, PageSize = 10
+            IsDescending = true,
+            PageNumber = 1,
+            PageSize = 10
         }, default);
 
         result.Data!.Items[0].Code.Should().Be("NEW");
@@ -150,7 +160,8 @@ public class TicketGetListQueryHandlerTests
 
         var result = await _handler.Handle(new TicketGetListQuery
         {
-            PageNumber = 2, PageSize = 3
+            PageNumber = 2,
+            PageSize = 3
         }, default);
 
         result.Data!.Items.Should().HaveCount(2);

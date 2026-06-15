@@ -11,5 +11,6 @@ public class TicketCommentDTO
     public string? AuthorDisplayName { get; set; }
     public string Body { get; set; } = string.Empty;
     public bool IsInternal { get; set; }
+    public List<string> AttachmentFileIds { get; set; } = new();
     public DateTime CreatedAt { get; set; }
 }

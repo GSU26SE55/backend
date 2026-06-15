@@ -41,7 +41,6 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
                 Address = site.Address,
                 Latitude = site.Latitude,
                 Longitude = site.Longitude,
-                CapacityKw = site.CapacityKw,
                 InstallDate = site.InstallDate,
                 Status = site.Status,
                 ContactPersonName = site.ContactPersonName,

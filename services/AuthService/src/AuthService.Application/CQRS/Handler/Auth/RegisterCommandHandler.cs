@@ -45,7 +45,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (existing != null && existing.Status != AccountStatusEnum.PendingVerification)
-            return Fail(409, "Email", "Email đã được sử dụng.");
+            return Fail(409, "Email đã được sử dụng.");
 
         if (!string.IsNullOrEmpty(phone))
         {
@@ -56,7 +56,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (phoneOwnerId.HasValue && (existing == null || phoneOwnerId.Value != existing.Id))
-                return Fail(409, "PhoneNumber", "Số điện thoại đã được sử dụng.");
+                return Fail(409, "Số điện thoại đã được sử dụng.");
         }
 
         var otp = OtpHelper.GenerateOtp(6);
@@ -124,7 +124,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         }
         catch (DbUpdateException)
         {
-            return Fail(409, "Email", "Email hoặc số điện thoại đã được sử dụng.");
+            return Fail(409, "Email hoặc số điện thoại đã được sử dụng.");
         }
 
         return new RegisterResponse
@@ -140,14 +140,13 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         };
     }
 
-    private static RegisterResponse Fail(int statusCode, string field, string message)
+    private static RegisterResponse Fail(int statusCode, string message)
     {
         return new RegisterResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = { new Errors { Field = field, Detail = message } }
         };
     }
 }

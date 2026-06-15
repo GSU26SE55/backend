@@ -173,20 +173,22 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             IsSuccess = true,
             StatusCode = 200,
             Message = "Đăng nhập Google thành công.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshTokenValue
+                }
             }
         };
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "Auth") => new()
+    private static LoginResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
 
     private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)

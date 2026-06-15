@@ -28,7 +28,7 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (account.PhoneConfirmed)
-            return Fail(400, "Số điện thoại đã được xác thực.");
+            return Fail(409, "Số điện thoại đã được xác thực.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
             return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
@@ -37,7 +37,7 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value < DateTime.UtcNow)
-            return Fail(400, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(422, "OTP không hợp lệ hoặc đã hết hạn.");
 
         if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
         {
@@ -71,6 +71,5 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Phone", Detail = message } }
     };
 }

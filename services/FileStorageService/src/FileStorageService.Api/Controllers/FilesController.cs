@@ -39,7 +39,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Upload một file lên object storage.
+    /// Upload 1 file lên object storage (MinIO) — accept multipart form-data, generate UUID filename + lưu metadata DB; trả về fileId + presigned download URL.
     /// </summary>
     /// <remarks>
     /// Endpoint này nhận request dạng <c>multipart/form-data</c> gồm file cần lưu, tên thư mục logic và mục đích sử dụng file.
@@ -100,7 +100,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy metadata của file theo <c>fileId</c>.
+    /// Lấy metadata của file theo fileId (filename gốc, size, content-type, uploader, uploadedAt) — KHÔNG trả content. Dùng cho UI hiển thị info trước khi download.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi client hoặc service khác cần biết thông tin mô tả file mà không tải binary.
@@ -198,7 +198,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Tải nội dung file trực tiếp theo <c>fileId</c>.
+    /// Tải nội dung file trực tiếp theo fileId — backend stream từ object storage qua API; phù hợp file nhỏ < 5MB. File lớn hơn dùng GetPresignedUrl.
     /// </summary>
     /// <remarks>
     /// Endpoint này là phiên bản metadata-aware của endpoint download cũ theo <c>objectKey</c>.
@@ -311,7 +311,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo presigned URL để tải file theo <c>fileId</c>.
+    /// Tạo presigned URL để FE/Mobile tải file trực tiếp từ MinIO (bypass backend) — TTL 1h default, dùng cho file lớn để giảm tải backend bandwidth.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng khi client cần tải file trực tiếp từ object storage nhưng chỉ đang giữ <c>fileId</c>.
@@ -368,7 +368,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa file bằng <c>objectKey</c>.
+    /// Xoá file bằng objectKey (raw MinIO path) — endpoint legacy cho migration; production khuyến nghị dùng DeleteById có audit trail.
     /// </summary>
     /// <remarks>
     /// Endpoint legacy này lookup metadata theo objectKey, enforce quyền xóa, xóa object trong bucket và soft-delete metadata.
@@ -423,7 +423,7 @@ public class FilesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa file theo <c>fileId</c>.
+    /// Xoá file theo fileId — xoá metadata DB + xoá object trong MinIO. Soft delete (giữ row metadata với IsDeleted=true) cho audit.
     /// </summary>
     /// <remarks>
     /// Endpoint này là phiên bản metadata-aware của endpoint xóa file cũ theo <c>objectKey</c>.

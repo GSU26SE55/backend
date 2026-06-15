@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -48,23 +49,28 @@ public class MaintenanceLogConfiguration : IEntityTypeConfiguration<MaintenanceL
 
         builder.Property(e => e.PartsUsed)
             .HasColumnName("parts_used")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<string>>();
 
         builder.Property(e => e.AttachmentFileIds)
             .HasColumnName("attachment_file_ids")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<List<Guid>>>();
 
         builder.Property(e => e.BeforePhotosFileIds)
             .HasColumnName("before_photos_file_ids")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<List<Guid>>>();
 
         builder.Property(e => e.AfterPhotosFileIds)
             .HasColumnName("after_photos_file_ids")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<List<Guid>>>();
 
         builder.Property(e => e.RelatedKbArticleIds)
             .HasColumnName("related_kb_article_ids")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion<JsonValueConverter<List<Guid>>>();
 
         builder.Property(e => e.CheckInLatitude)
             .HasColumnName("check_in_latitude");

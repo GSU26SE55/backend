@@ -49,7 +49,6 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
                     IsSuccess = false,
                     StatusCode = 409,
                     Message = "Số điện thoại đã được sử dụng.",
-                    ListErrors = { new Errors { Field = "PhoneNumber", Detail = "Số điện thoại đã được sử dụng." } }
                 };
             }
 

@@ -26,10 +26,18 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    options.DocInclusionPredicate((_, _) => true);
+
+    // Include XML doc từ:
+    //   - BatteryService.Api.xml      → controller summaries + remarks
+    //   - BatteryService.Application.xml → DTOs / Commands / Queries → Swagger schema fields
+    //   - BatteryService.Domain.xml      → entity / enum doc nếu reference từ DTO
+    foreach (var asm in new[] { "BatteryService.Api", "BatteryService.Application", "BatteryService.Domain" })
+    {
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, $"{asm}.xml");
+        if (File.Exists(xmlPath))
+            options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
 
     options.AddSecurityDefinition(ApiKeyAuthenticationHandler.SchemeName, new OpenApiSecurityScheme
     {
@@ -76,6 +84,10 @@ if (!EF.IsDesignTime)
         var seeder = scope.ServiceProvider.GetRequiredService<BatteryDataSeeder>();
         await seeder.SeedAsync();
         Console.WriteLine("? Battery seed data checked.");
+
+        var envSeeder = scope.ServiceProvider.GetRequiredService<EnvironmentDataSeeder>();
+        await envSeeder.SeedAsync();
+        Console.WriteLine("? Environment seed data checked.");
     }
 
     app.UseSharedInfrastructure();
@@ -96,6 +108,20 @@ if (!EF.IsDesignTime)
         app.UseHttpsRedirection();
 
     app.UseCors("AllowAll");
+
+    // Sprint IoT-2 #IoT2-35 — serve firmware binary đã upload (multipart) qua static path.
+    var firmwareRoot = builder.Configuration["Firmware:StorageRoot"];
+    if (string.IsNullOrWhiteSpace(firmwareRoot))
+        firmwareRoot = Path.Combine(app.Environment.ContentRootPath, "firmware-storage");
+    Directory.CreateDirectory(firmwareRoot);
+    app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(firmwareRoot),
+        RequestPath = "/firmware-storage",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream"
+    });
+
     app.UseAuthentication();
     app.UseAuthorization();
 

@@ -27,5 +27,21 @@ public class SensorReading
 
     public string? SourceDeviceId { get; set; }
 
+    // Sprint 5B #101 — Tier 2 battery health metrics (nullable, backward-compat).
+    public decimal? InternalResistanceMilliohm { get; set; }
+    public decimal? CellVoltageDeltaMv { get; set; }
+
+    // Sprint 5B B9 (#154) — phân biệt nguồn đo (BMS vs IoT vs External) cho cross-source validation B10.
+    public SensorReadingSourceTypeEnum SourceType { get; set; } = SensorReadingSourceTypeEnum.IotGateway;
+
+    /// <summary>BMS error raw code (vd "0x0A", "OverCurrent,CellImbalance"). Nullable.</summary>
+    public string? BmsErrorCode { get; set; }
+
+    /// <summary>
+    /// §52.9 — phân biệt nhiều sensor cùng đo 1 pin (vd "primary"/"redundant"/"external-temp").
+    /// 1 pin có thể có nhiều reading cùng timestamp khác <c>SensorSourceCode</c>.
+    /// </summary>
+    public string? SensorSourceCode { get; set; }
+
     public BatteryAsset BatteryAsset { get; set; } = null!;
 }

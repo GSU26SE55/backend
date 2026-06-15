@@ -1,14 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\TicketService.Domain\TicketService.Domain.csproj" />
+        <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\shared\src\SharedKernels\SharedKernels.csproj" />
     <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="CQRS\Command\" />
-    <Folder Include="CQRS\Handler\" />
     <Folder Include="StateMachine\" />
   </ItemGroup>
 
@@ -24,6 +24,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
 </Project>

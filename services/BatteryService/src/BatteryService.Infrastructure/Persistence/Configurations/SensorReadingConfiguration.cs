@@ -55,6 +55,30 @@ public class SensorReadingConfiguration : IEntityTypeConfiguration<SensorReading
             .HasColumnName("source_device_id")
             .HasMaxLength(64);
 
+        // Sprint 5B #101 — Tier 2 battery health metrics.
+        builder.Property(reading => reading.InternalResistanceMilliohm)
+            .HasColumnName("internal_resistance_milliohm")
+            .HasPrecision(10, 3);
+
+        builder.Property(reading => reading.CellVoltageDeltaMv)
+            .HasColumnName("cell_voltage_delta_mv")
+            .HasPrecision(10, 3);
+
+        // Sprint 5B B9 — phân biệt nguồn đo.
+        builder.Property(reading => reading.SourceType)
+            .HasColumnName("source_type")
+            .HasConversion<int>()
+            .HasDefaultValue(BatteryService.Domain.Enums.SensorReadingSourceTypeEnum.IotGateway)
+            .IsRequired();
+
+        builder.Property(reading => reading.BmsErrorCode)
+            .HasColumnName("bms_error_code")
+            .HasMaxLength(64);
+
+        builder.Property(reading => reading.SensorSourceCode)
+            .HasColumnName("sensor_source_code")
+            .HasMaxLength(20);
+
         builder.HasOne(reading => reading.BatteryAsset)
             .WithMany(asset => asset.SensorReadings)
             .HasForeignKey(reading => reading.BatteryAssetId)

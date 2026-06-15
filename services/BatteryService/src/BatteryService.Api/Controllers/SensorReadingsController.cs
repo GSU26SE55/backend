@@ -2,6 +2,7 @@ using BatteryService.Api.Authentication;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -38,55 +39,90 @@ public class SensorReadingsController : ControllerBase
     }
 
     /// <summary>
-    /// Ingest hàng loạt SensorReading (dành cho IoT gateway).
+    /// Ingest hàng loạt SensorReading từ IoT gateway / ESP32 / simulator.
     /// </summary>
     /// <remarks>
-    /// Authentication:
-    /// - Yêu cầu header <c>X-Api-Key: {key}</c> khớp với cấu hình <c>ApiKeys:SensorIngest</c>.
-    /// - <b>Không</b> cần JWT.
+    /// Authentication (Sprint IoT-1 #243/#246):
+    /// <list type="bullet">
+    ///   <item><description><b>Per-device key</b> (production): <c>X-Api-Key: iotk_...</c> + <c>X-Device-Code: ESP32-001</c>. Key phải có scope <c>SensorIngest</c>.</description></item>
+    ///   <item><description><b>Legacy global key</b> (simulator/MVP, sẽ deprecate): <c>X-Api-Key: {ApiKeys:SensorIngest}</c>. Không có claim device → không apply calibration.</description></item>
+    ///   <item><description><b>Không</b> cần JWT.</description></item>
+    /// </list>
+    ///
+    /// Optional headers:
+    /// <list type="bullet">
+    ///   <item><description><c>X-Device-Code</c>: backend cross-check với device gắn key. Mismatch sẽ bị reject ở auth handler.</description></item>
+    ///   <item><description><c>Idempotency-Key</c>: UUID. Device gửi lại cùng key khi retry sau timeout — Sprint IoT-2 sẽ dedup; hiện tại lưu vào command để inbox idempotency middleware xử lý.</description></item>
+    /// </list>
     ///
     /// Body request:
-    /// - <c>Items</c>: list các <see cref="SensorReadingItem"/>, bắt buộc có ít nhất 1 phần tử.
-    ///   Mỗi item:
-    ///   - <c>BatteryAssetId</c>: bắt buộc, GUID của asset đang đo.
-    ///   - <c>Time</c>: bắt buộc, thời điểm đo. Không được ở tương lai quá 5 phút. Hệ thống tự convert sang UTC.
-    ///   - <c>Voltage</c>: ≥ 0 (V).
-    ///   - <c>Current</c>: số thực, có thể âm (đang xả) hoặc dương (đang sạc) - tùy convention.
-    ///   - <c>Temperature</c>: [-50, 120] (°C).
-    ///   - <c>SocPercent</c>: [0, 100] (%).
-    ///   - <c>CycleCount</c>: tùy chọn, ≥ 0.
-    ///   - <c>SourceDeviceId</c>: tùy chọn, ≤ 64 ký tự (định danh thiết bị đo).
+    /// <list type="bullet">
+    ///   <item><description><c>Items</c>: list <see cref="SensorReadingItem"/>, &gt;= 1 và &lt;= 1000 phần tử.</description></item>
+    /// </list>
+    /// Mỗi item:
+    /// <list type="bullet">
+    ///   <item><description><c>BatteryAssetId</c> HOẶC <c>BatteryAssetSerial</c>: bắt buộc 1 trong 2. Serial được resolve về Id ở backend (so khớp <c>SerialNumber.ToUpperInvariant()</c>).</description></item>
+    ///   <item><description><c>Time</c>: bắt buộc, UTC, không được tương lai quá 5 phút.</description></item>
+    ///   <item><description><c>DeviceTimestamp</c>: tùy chọn — timestamp ghi nhận tại device. Backend check skew vs <c>UtcNow</c>; lệch &gt; 5 phút → 400 (field validation).</description></item>
+    ///   <item><description><c>Voltage</c>: ≥ 0 (V). Outlier check sau calibration: bị loại nếu &gt; 100V.</description></item>
+    ///   <item><description><c>Current</c>: số thực (± sạc/xả). Outlier: <c>|current| &gt; 1000A</c>.</description></item>
+    ///   <item><description><c>Temperature</c>: [-50, 120] field-validate; outlier check sau calibration cũng [-50, 120].</description></item>
+    ///   <item><description><c>SocPercent</c>: [0, 100].</description></item>
+    ///   <item><description><c>CycleCount</c>: tùy chọn, ≥ 0.</description></item>
+    ///   <item><description><c>SourceDeviceId</c>: tùy chọn, ≤ 64 ký tự — định danh tự do từ device.</description></item>
+    ///   <item><description><c>SourceType</c>: <see cref="SensorReadingSourceTypeEnum"/> — <c>Bms=1, IotGateway=2, External=3</c>. Default <c>IotGateway</c>.</description></item>
+    ///   <item><description><c>BmsErrorCode</c> ≤ 64, <c>SensorSourceCode</c> ≤ 20 (§52.9 multi-sensor cùng pin).</description></item>
+    ///   <item><description>Tier 2 metrics: <c>InternalResistanceMilliohm</c> (&gt; 0), <c>CellVoltageDeltaMv</c> (≥ 0).</description></item>
+    /// </list>
     ///
-    /// Cách hoạt động:
-    /// - Validate toàn bộ items (gom hết lỗi → 400).
-    /// - Lọc các <c>BatteryAssetId</c> hợp lệ, query 1 lần để check tồn tại + <c>!IsDeleted</c> → dictionary.
-    /// - Với mỗi item:
-    ///   - Nếu asset không tồn tại trong dictionary → <b>skip</b> (không throw, được tính vào <c>Skipped</c>).
-    ///   - Convert <c>Time</c> sang UTC.
-    ///   - Insert SensorReading mới.
-    ///   - Cập nhật <c>asset.LastSensorReadingAt</c> nếu reading mới hơn timestamp đang lưu.
-    /// - Một <c>SaveChangesAsync</c> cho cả batch để tối ưu.
-    /// - Trả <see cref="SensorReadingBatchIngestResult"/> với count <c>TotalReceived</c>, <c>Inserted</c>, <c>Skipped</c>.
+    /// Cách hoạt động (Sprint IoT-1):
+    /// <list type="number">
+    ///   <item><description>Validate field-level → 400 + <c>ListErrors</c> nếu lỗi.</description></item>
+    ///   <item><description>Pull <c>X-Device-Code</c> + <c>Idempotency-Key</c> từ header; pull <c>AuthenticatedDeviceId</c> từ claim API key.</description></item>
+    ///   <item><description>Resolve <c>BatteryAssetSerial</c> → Id (1 batch query).</description></item>
+    ///   <item><description>Query asset hợp lệ (<c>!IsDeleted</c>) → dictionary.</description></item>
+    ///   <item><description>Load <c>IotDeviceCalibration</c> của device hiện tại (nếu auth per-device) — chỉ những calibration chưa expire.</description></item>
+    ///   <item><description>Với mỗi item: skip nếu asset không có → tăng <c>Skipped</c>. Apply calibration <c>raw * Scale + Offset</c>. Reject outlier (voltage/current/temperature ngoài bound) → tăng <c>Skipped</c>.</description></item>
+    ///   <item><description>Insert SensorReading + update <c>asset.LastSensorReadingAt</c>.</description></item>
+    ///   <item><description>Nếu có device đang push: update <c>IotDevice.LastSeenAt</c>, flip <c>Status</c> Offline/Pending → Active.</description></item>
+    ///   <item><description>1 SaveChanges cho cả batch.</description></item>
+    /// </list>
     ///
     /// Lưu ý:
-    /// - Endpoint <b>không</b> throw khi gặp asset không tồn tại; gateway có thể tiếp tục gửi data các asset khác.
-    ///   Trường <c>Skipped</c> trong response giúp gateway phát hiện sai cấu hình mapping.
-    /// - Duplicate (BatteryAssetId, Time) sẽ raise unique constraint của hypertable → throw 500. Gateway cần đảm bảo Time đủ resolution.
-    /// - Sprint 3: AnomalyDetector sẽ quét reading mới và phát sinh Alert dựa trên ThresholdConfig.
+    /// <list type="bullet">
+    ///   <item><description>Endpoint <b>không throw</b> khi asset không tồn tại; gateway tiếp tục gửi data asset khác. <c>Skipped</c> trong response giúp gateway phát hiện sai mapping.</description></item>
+    ///   <item><description>Duplicate <c>(BatteryAssetId, Time)</c> → unique constraint của hypertable raise 500. Device cần đảm bảo Time đủ resolution (ms) hoặc dùng <c>SensorSourceCode</c> khác.</description></item>
+    ///   <item><description>Outlier bị loại <b>không</b> raise exception — chỉ count vào <c>Skipped</c> + ghi log warning. Calibration sai nghiêm trọng sẽ thấy <c>Skipped</c> tăng đột biến trên dashboard.</description></item>
+    ///   <item><description>AnomalyDetector chạy background quét reading mới → phát sinh Alert dựa trên ThresholdConfig.</description></item>
+    ///   <item><description>Field <c>DeviceCode</c>, <c>IdempotencyKey</c>, <c>AuthenticatedDeviceId</c> trong command có <c>[JsonIgnore][BindNever]</c> — client không thể override qua body.</description></item>
+    /// </list>
     /// </remarks>
     /// <param name="command">Batch sensor readings.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SensorReadingBatchIngestResult"/>.</returns>
-    /// <response code="200">Batch xử lý thành công.</response>
-    /// <response code="400">Dữ liệu không hợp lệ (xem <c>ListErrors</c>).</response>
-    /// <response code="401">Thiếu hoặc sai <c>X-Api-Key</c>.</response>
+    /// <response code="201">Batch tạo readings thành công (xem <c>Inserted</c> / <c>Skipped</c> / <c>TotalReceived</c>). Sensor readings là resource mới được persist vào hypertable.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (xem <c>ListErrors</c> — field-level).</response>
+    /// <response code="401">Thiếu / sai <c>X-Api-Key</c>, hoặc API key thiếu scope <c>SensorIngest</c>.</response>
     [HttpPost("batch")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(AuthenticationSchemes = ApiKeyAuthenticationHandler.SchemeName)]
-    [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status200OK)]
+    [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.SensorIngest)]
+    [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CommonResponse<SensorReadingBatchIngestResult>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BatchIngest([FromBody] BatchIngestSensorReadingsCommand command, CancellationToken cancellationToken)
     {
+        // Sprint IoT-1 (#246) — pull headers.
+        if (Request.Headers.TryGetValue(ApiKeyAuthenticationHandler.DeviceCodeHeader, out var dc))
+            command.DeviceCode = dc.FirstOrDefault();
+        if (Request.Headers.TryGetValue("Idempotency-Key", out var ik))
+            command.IdempotencyKey = ik.FirstOrDefault();
+
+        // Map per-device claim → AuthenticatedDeviceId.
+        var idClaim = User.FindFirst(ApiKeyAuthenticationHandler.ClaimDeviceId)?.Value;
+        if (!string.IsNullOrEmpty(idClaim) && Guid.TryParse(idClaim, out var did))
+            command.AuthenticatedDeviceId = did;
+
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
@@ -184,7 +220,7 @@ public class SensorReadingsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy SensorReading mới nhất của một BatteryAsset.
+    /// Lấy SensorReading mới nhất của 1 BatteryAsset (snapshot tức thời) — dùng cho Customer mobile app widget hiển thị voltage/current/SOC real-time; TimescaleDB index hỗ trợ.
     /// </summary>
     /// <remarks>
     /// Route parameter:

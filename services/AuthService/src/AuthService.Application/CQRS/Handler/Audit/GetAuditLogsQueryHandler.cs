@@ -23,7 +23,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Audit
             return new AuditLogListResponse
             {
                 IsSuccess = false,
-                StatusCode = 400,
+                StatusCode = 422,
                 Message = "FromUtc phải nhỏ hơn ToUtc."
             };
         }

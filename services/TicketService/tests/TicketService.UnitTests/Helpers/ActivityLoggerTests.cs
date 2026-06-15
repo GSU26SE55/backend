@@ -16,7 +16,7 @@ public class ActivityLoggerTests
         // Arrange
         var ticketId = Guid.NewGuid();
         var actorId = Guid.NewGuid();
-        var (uow, _, activities, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, _, activities, _, _, _, _) = MockTicketUnitOfWork.Build();
         var logger = new ActivityLogger(uow.Object);
 
         // Act

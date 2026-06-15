@@ -82,7 +82,7 @@ public class PasswordResetIntegrationTests : IAsyncLifetime
         // Step 4: login bằng password mới OK, password cũ fail
         var oldLogin = await _client.PostAsJsonAsync("/api/auth/login",
             new { Email = "reset@example.com", Password = "OldPass123" });
-        oldLogin.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        oldLogin.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var (access, _) = await TestDataSeeder.LoginAsync(_client, "reset@example.com", "NewStrong1!");
         access.Should().NotBeNullOrEmpty();

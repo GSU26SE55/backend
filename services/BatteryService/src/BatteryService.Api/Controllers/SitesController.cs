@@ -1,4 +1,3 @@
-using BatteryService.Application.CQRS.Command.Site;
 using BatteryService.Application.CQRS.Query.Site;
 using BatteryService.Application.DTOs;
 using MediatR;
@@ -46,7 +45,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách Site có phân trang + filter.
+    /// Liệt kê Site có phân trang + filter (customer/status/keyword) — Manager/Admin dashboard quản lý fleet site. Mỗi entry kèm asset count + alert count.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -80,11 +79,12 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Customer xem danh sách Site của chính mình.
+    /// Customer xem danh sách Site của chính mình (auto filter theo CustomerId từ JWT) — mobile/web render trang 'Trạm của tôi'.
     /// </summary>
     /// <remarks>
     /// Cách hoạt động:
-    /// - Parse <c>UserId</c> từ token; nếu không hợp lệ trả 401.
+    /// - <c>[Authorize]</c> middleware đảm bảo token hợp lệ trước khi vào handler (sai/hết hạn → 401 do middleware trả).
+    /// - Parse <c>UserId</c> từ <c>CurrentUserService</c> (claim được issue bởi AuthService).
     /// - Filter <c>CustomerId == currentUserId &amp;&amp; !IsDeleted</c>.
     /// - Tương tự GetAll, trả các count thống kê asset trong DTO.
     /// </remarks>
@@ -92,13 +92,15 @@ public class SitesController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="SiteDto"/>.</returns>
     /// <response code="200">Trả danh sách (có thể rỗng).</response>
-    /// <response code="401">Token không hợp lệ hoặc không có claim UserId.</response>
+    /// <response code="401">Chưa đăng nhập / token thiếu / token hết hạn (do middleware trả).</response>
     /// <response code="403">Không có role Customer.</response>
+    /// <response code="500">Lỗi server: <c>CurrentUserService.UserId</c> không parse được sang Guid — đây là vấn đề data integrity của JWT (claim bị thiếu hoặc malformed do AuthService cấp sai), KHÔNG phải client error.</response>
     [HttpGet("me")]
     [Authorize(Roles = "Customer")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetMine([FromQuery] GetMySitesQuery query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
@@ -106,7 +108,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một Site theo Id.
+    /// Lấy chi tiết 1 Site theo Id (metadata + contact + location coords) — Customer chỉ xem được Site thuộc về mình; Admin/Manager xem được tất cả.
     /// </summary>
     /// <remarks>
     /// Trả về <see cref="SiteDto"/> với thông tin Site + count BatteryAsset, ActiveBatteryAsset.
@@ -133,7 +135,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách BatteryAsset thuộc một Site.
+    /// Lấy danh sách BatteryAsset thuộc 1 Site — filter theo status nếu cần. Manager dùng để xem inventory pin tại site cụ thể.
     /// </summary>
     /// <remarks>
     /// Query parameters (cùng với <c>{id}</c> trong URL):
@@ -168,14 +170,13 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy dashboard tóm tắt sức khỏe của một Site.
+    /// Lấy dashboard tóm tắt sức khỏe của 1 Site — TotalAssets/Active/AlertsCount/HealthScore (0-100) + LastAlertAt; dùng cho Customer mobile homepage.
     /// </summary>
     /// <remarks>
     /// Trả <see cref="SiteDashboardDto"/> gồm:
     /// - <c>TotalAssets</c>: tổng asset chưa xóa thuộc site.
     /// - <c>ActiveAssets</c>: số asset có <c>Status = Active</c>.
     /// - <c>AssetsWithActiveAlerts</c>: số asset đang có ít nhất 1 alert ở trạng thái Open/Acknowledged.
-    /// - <c>TotalCapacityKw</c>: dung lượng site (nullable, copy từ <c>Site.CapacityKw</c>).
     /// - <c>LastAlertAt</c>: thời điểm alert gần nhất trên các asset của site (nullable).
     /// - <c>HealthScore</c>: số nguyên 0-100, tính theo công thức:
     ///   <c>100 - (assets_inactive × 5) - (assets_with_active_alerts × 10)</c>, clamp về [0, 100].
@@ -207,148 +208,4 @@ public class SitesController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>
-    /// Tạo mới một Site.
-    /// </summary>
-    /// <remarks>
-    /// Body request:
-    /// - <c>Name</c>: bắt buộc, ≤ 200 ký tự. Unique trong phạm vi 1 Customer (case-insensitive).
-    /// - <c>CustomerId</c>: bắt buộc, Customer phải tồn tại và active trong read-model.
-    /// - <c>Address</c>: tùy chọn, ≤ 500 ký tự.
-    /// - <c>Latitude</c>: tùy chọn, [-90, 90].
-    /// - <c>Longitude</c>: tùy chọn, [-180, 180].
-    /// - <c>CapacityKw</c>: tùy chọn, ≥ 0 (kW).
-    /// - <c>InstallDate</c>: bắt buộc, không ở tương lai.
-    /// - <c>Status</c>: enum <c>SiteStatusEnum</c>, mặc định <c>Active</c>.
-    /// - <c>ContactPersonName</c>: tùy chọn, ≤ 150 ký tự.
-    /// - <c>ContactPersonPhone</c>: tùy chọn, ≤ 30 ký tự.
-    ///
-    /// Cách hoạt động:
-    /// - Validate đầy đủ.
-    /// - Check Customer tồn tại + active (404 nếu không).
-    /// - Check trùng tên trong phạm vi customer (409 nếu trùng).
-    /// - Lưu site với <c>Id = Guid.NewGuid()</c>.
-    /// </remarks>
-    /// <param name="command">Thông tin Site.</param>
-    /// <param name="cancellationToken">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SiteDto"/> vừa tạo.</returns>
-    /// <response code="201">Tạo thành công.</response>
-    /// <response code="400">Dữ liệu không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Customer không tồn tại.</response>
-    /// <response code="409">Tên Site đã tồn tại trong Customer.</response>
-    [HttpPost]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Create([FromBody] CreateSiteCommand command, CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(command, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Cập nhật một Site.
-    /// </summary>
-    /// <remarks>
-    /// Body request: giống Create, thêm các field trong <see cref="UpdateSiteCommand"/>.
-    ///
-    /// Cách hoạt động:
-    /// - Tìm site (include Assets); 404 nếu không có.
-    /// - Nếu <c>CustomerId</c> trong body khác customer hiện tại (và khác <c>Guid.Empty</c>), trả 409 - không cho phép đổi chủ sở hữu qua Update.
-    /// - Check trùng tên (loại trừ chính nó); trùng trả 409.
-    /// - Update toàn bộ field còn lại; KHÔNG đụng đến <c>CustomerId</c>.
-    /// </remarks>
-    /// <param name="id">Id Site.</param>
-    /// <param name="command">Thông tin cập nhật.</param>
-    /// <param name="cancellationToken">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="SiteDto"/> sau update.</returns>
-    /// <response code="200">Update thành công.</response>
-    /// <response code="400">Dữ liệu không hợp lệ.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Site không tồn tại.</response>
-    /// <response code="409">Tên trùng hoặc cố ý đổi CustomerId.</response>
-    [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(CommonResponse<SiteDto>), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSiteCommand command, CancellationToken cancellationToken)
-    {
-        command.Id = id;
-        var result = await _mediator.Send(command, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Xóa mềm một Site.
-    /// </summary>
-    /// <remarks>
-    /// Cách hoạt động:
-    /// - 404 nếu site không tồn tại / đã xóa.
-    /// - 409 nếu còn BatteryAsset chưa xóa thuộc site.
-    /// - Nếu pass check, soft delete site.
-    ///
-    /// Lưu ý:
-    /// - Để xóa site có asset, cần xóa hoặc transfer các thực thể con trước.
-    /// </remarks>
-    /// <param name="id">Id Site.</param>
-    /// <param name="cancellationToken">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> thông báo xóa.</returns>
-    /// <response code="200">Xóa thành công.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Site không tồn tại.</response>
-    /// <response code="409">Còn asset thuộc site.</response>
-    [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new DeleteSiteCommand { Id = id }, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Khôi phục một Site đã soft delete.
-    /// </summary>
-    /// <remarks>
-    /// Cách hoạt động:
-    /// - Tìm site <c>IsDeleted = true</c>; 404 nếu không có.
-    /// - Check trùng tên trong các site active của cùng customer; trùng trả 409.
-    /// - Set <c>IsDeleted = false</c>, <c>DeletedAt = null</c>.
-    /// </remarks>
-    /// <param name="id">Id Site đã xóa.</param>
-    /// <param name="cancellationToken">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> thông báo khôi phục.</returns>
-    /// <response code="200">Khôi phục thành công.</response>
-    /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin.</response>
-    /// <response code="404">Không tìm thấy site đã xóa.</response>
-    /// <response code="409">Tên trùng với site active khác.</response>
-    [HttpPatch("{id:guid}/restore")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new RestoreSiteCommand { Id = id }, cancellationToken);
-        return StatusCode(result.StatusCode, result);
-    }
 }

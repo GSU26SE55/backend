@@ -120,19 +120,21 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             IsSuccess = true,
             StatusCode = 200,
             Message = "Cấp lại token thành công.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = newAccessToken,
-                RefreshToken = newRefreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = newAccessToken,
+                    RefreshToken = newRefreshTokenValue
+                }
             }
         };
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "Auth") => new()
+    private static LoginResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
 }

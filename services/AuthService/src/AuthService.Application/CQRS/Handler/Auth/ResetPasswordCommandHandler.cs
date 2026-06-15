@@ -83,6 +83,5 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Auth", Detail = message } }
     };
 }

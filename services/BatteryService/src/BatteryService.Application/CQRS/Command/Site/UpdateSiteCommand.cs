@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using BatteryService.Application.DTOs;
 using MediatR;
 using SharedContracts.Common.Responses;
@@ -7,6 +8,8 @@ namespace BatteryService.Application.CQRS.Command.Site;
 
 public class UpdateSiteCommand : CreateSiteCommand, IRequest<CommonResponse<SiteDto>>, IValidatable<CommonResponse<SiteDto>>
 {
+    /// <summary>Định danh resource.</summary>
+    [JsonIgnore]
     public Guid Id { get; set; }
 
     Task<CommonResponse<SiteDto>> IValidatable<CommonResponse<SiteDto>>.ValidateAsync()

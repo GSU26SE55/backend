@@ -1,8 +1,8 @@
 # IoT Implementation Plan — Solar Battery Monitoring
 
-> **Document type:** IoT architecture, hardware checklist, backend backlog, gateway implementation plan  
-> **Scope:** Từ phần cứng/BMS/gateway tới backend `BatteryService` và flow alert/ticket/notification  
-> **Source of truth liên quan:** `overall.md` §52/§52bis  
+> **Document type:** IoT architecture, hardware checklist, backend backlog, gateway implementation plan
+> **Scope:** Từ phần cứng/BMS/gateway tới backend `BatteryService` và flow alert/ticket/notification
+> **Source of truth liên quan:** `overall.md` §52/§52bis
 > **Cập nhật:** 2026-05-15
 
 ---
@@ -582,4 +582,3 @@ Lý do: backend + simulator giúp chứng minh flow nghiệp vụ trước. Ph�
 - [ ] Dừng gateway > 5 phút.
 - [ ] Backend mark device Offline và tạo `DeviceOffline` alert.
 - [ ] Có script/reset data để chạy lại demo.
-

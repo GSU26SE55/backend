@@ -10,12 +10,16 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
     private static readonly HashSet<string> ValidIntervals =
         new(StringComparer.OrdinalIgnoreCase) { "1m", "5m", "15m", "1h", "1d" };
 
+    /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid BatteryAssetId { get; set; }
 
+    /// <summary>Filter timestamp bắt đầu (UTC inclusive).</summary>
     public DateTime? From { get; set; }
 
+    /// <summary>Filter timestamp kết thúc (UTC inclusive).</summary>
     public DateTime? To { get; set; }
 
+    /// <summary>Bucket size aggregate (1m | 5m | 15m | 1h | 1d).</summary>
     public string Interval { get; set; } = "1h";
 
     public Task<CommonResponse<List<SensorReadingAggregateDto>>> ValidateAsync()
@@ -29,7 +33,7 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
             AddError(response, nameof(Interval), $"Interval không hợp lệ. Chấp nhận: {string.Join(", ", ValidIntervals)}.");
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
-            AddError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
+            AddCrossFieldError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
 
         return Task.FromResult(response);
     }
@@ -38,6 +42,17 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
+        response.Message = "Dữ liệu không hợp lệ.";
+        response.ListErrors.Add(new Errors { Field = field, Detail = detail });
+    }
+
+    private static void AddCrossFieldError(CommonResponse<List<SensorReadingAggregateDto>> response, string field, string detail)
+    {
+        response.IsSuccess = false;
+        // Cross-field business rule violation → 422.
+        // Do not overwrite 400 (field-level format errors take precedence).
+        if (response.StatusCode != 400)
+            response.StatusCode = 422;
         response.Message = "Dữ liệu không hợp lệ.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
