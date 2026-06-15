@@ -60,7 +60,16 @@ public class SendPhoneOtpCommandHandlerTests
         resp.IsSuccess.Should().BeTrue();
         account.OtpCode!.Length.Should().Be(6);
         account.OtpPurpose.Should().Be(OtpPurposeEnum.PhoneVerify);
-        _producer.Verify(p => p.PublishAsync(It.Is<SendPhoneOtpEvent>(e => e.PhoneNumber == "0900111"), It.IsAny<CancellationToken>()), Times.Once);
+        // Sprint SMS Phase 9 atomic switch (#SMS-38): publish SendSmsCommand qua SmsService gateway
+        // thay vì SendPhoneOtpEvent trực tiếp. Body chứa OTP code, source="auth", category="otp".
+        _producer.Verify(p => p.PublishAsync(It.Is<SendSmsCommand>(c =>
+            c.PhoneNumber == "0900111" &&
+            c.Message.Contains(account.OtpCode!) &&
+            c.SourceService == "auth" &&
+            c.Category == "otp"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        // KHÔNG còn publish SendPhoneOtpEvent — atomic switch yêu cầu xoá hẳn trong cùng commit.
+        _producer.Verify(p => p.PublishAsync(It.IsAny<SendPhoneOtpEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

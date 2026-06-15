@@ -29,6 +29,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("battery", new OpenApiInfo { Title = "Battery Service API", Version = "v1" });
     c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
     c.SwaggerDoc("notification", new OpenApiInfo { Title = "Notification Service API", Version = "v1" });
+    c.SwaggerDoc("sms", new OpenApiInfo { Title = "SMS Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -81,6 +82,7 @@ if (!app.Environment.IsProduction())
         options.SwaggerEndpoint("/battery-service/swagger/v1/swagger.json", "Battery Service API");
         options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
         options.SwaggerEndpoint("/notification-service/swagger/v1/swagger.json", "Notification Service API");
+        options.SwaggerEndpoint("/sms-service/swagger/v1/swagger.json", "SMS Service API");
     });
 }
 
@@ -92,7 +94,10 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-//app.UseWebSockets();
+// WebSockets BẮT BUỘC cho SignalR Hub forwarding (SmsService /hubs/sms-gateway).
+// YARP forward WebSocket upgrade headers tự động, nhưng app.UseWebSockets() phải enable
+// để middleware pipeline chấp nhận upgrade từ Connection: Upgrade + Upgrade: websocket.
+app.UseWebSockets();
 
 app.UseCors("AllowAll");
 

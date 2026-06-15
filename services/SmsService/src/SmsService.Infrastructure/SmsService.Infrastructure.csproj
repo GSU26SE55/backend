@@ -7,10 +7,31 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.9" />
+        <!-- Cần FrameworkReference Microsoft.AspNetCore.App vì Infrastructure project dùng:
+             - Microsoft.AspNetCore.SignalR (cho SmsGatewayHub + IHubContext)
+             - Microsoft.AspNetCore.Authentication (cho GatewayApiKeyAuthenticationHandler)
+             - Microsoft.AspNetCore.Authorization (cho [Authorize] trên Hub) -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+        <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.9" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.2">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\SmsService.Application\SmsService.Application.csproj" />
+      <ProjectReference Include="..\SmsService.Domain\SmsService.Domain.csproj" />
       <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
       <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
     </ItemGroup>
