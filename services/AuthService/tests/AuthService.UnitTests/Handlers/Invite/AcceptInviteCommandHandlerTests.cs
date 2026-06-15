@@ -54,8 +54,8 @@ public class AcceptInviteCommandHandlerTests
 
         resp.IsSuccess.Should().BeTrue();
         resp.StatusCode.Should().Be(200);
-        resp.Data!.AccessToken.Should().Be("access");
-        resp.Data.RefreshToken.Should().Be("refresh");
+        resp.Data!.Tokens!.AccessToken.Should().Be("access");
+        resp.Data.Tokens!.RefreshToken.Should().Be("refresh");
 
         account.PasswordHash.Should().Be("NEW-HASH");
         account.Status.Should().Be(AccountStatusEnum.Active);
@@ -100,7 +100,7 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(410);
+        resp.StatusCode.Should().Be(401);
         account.Status.Should().Be(AccountStatusEnum.PendingVerification);
     }
 

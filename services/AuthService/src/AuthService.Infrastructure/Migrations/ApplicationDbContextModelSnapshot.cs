@@ -176,9 +176,13 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnName("two_factor_enabled");
 
                     b.Property<string>("TwoFactorSecret")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("two_factor_secret");
+
+                    b.Property<DateTime?>("TwoFactorSecretEncryptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("two_factor_secret_encrypted_at");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -379,6 +383,57 @@ namespace AuthService.Infrastructure.Migrations
                         .HasDatabaseName("ix_audit_logs_target_created_at");
 
                     b.ToTable("audit_logs", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.BackupCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("RedeemedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redeemed_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDeleted");
+
+                    b.HasIndex("AccountId", "RedeemedAt");
+
+                    b.ToTable("backup_codes", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
@@ -766,52 +821,6 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("roles", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Quản trị viên hệ thống, có toàn quyền.",
-                            IsDeleted = false,
-                            IsSystemRole = true,
-                            Name = "Admin",
-                            NormalizedName = "ADMIN",
-                            Status = 1
-                        },
-                        new
-                        {
-                            Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Quản lý vận hành, điều phối kỹ thuật viên và đơn bảo trì.",
-                            IsDeleted = false,
-                            IsSystemRole = true,
-                            Name = "Manager",
-                            NormalizedName = "MANAGER",
-                            Status = 1
-                        },
-                        new
-                        {
-                            Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Nhân viên vận hành hệ thống.",
-                            IsDeleted = false,
-                            IsSystemRole = true,
-                            Name = "Staff",
-                            NormalizedName = "STAFF",
-                            Status = 1
-                        },
-                        new
-                        {
-                            Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Khách hàng sử dụng dịch vụ bảo trì pin năng lượng mặt trời.",
-                            IsDeleted = false,
-                            IsSystemRole = true,
-                            Name = "Customer",
-                            NormalizedName = "CUSTOMER",
-                            Status = 1
-                        });
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.RolePermission", b =>
@@ -929,6 +938,9 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("notes");
 
+                    b.Property<int>("SkillTier")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1031,6 +1043,17 @@ namespace AuthService.Infrastructure.Migrations
                     b.Navigation("Account");
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.BackupCode", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
+                        .WithMany("BackupCodes")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.LoginAttempt", b =>
                 {
                     b.HasOne("AuthService.Domain.Entities.Account", "Account")
@@ -1096,6 +1119,8 @@ namespace AuthService.Infrastructure.Migrations
 
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
                 {
+                    b.Navigation("BackupCodes");
+
                     b.Navigation("Profile");
 
                     b.Navigation("RefreshTokens");

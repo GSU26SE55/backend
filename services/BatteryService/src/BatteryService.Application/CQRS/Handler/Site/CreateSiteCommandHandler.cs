@@ -34,7 +34,6 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Không tìm thấy khách hàng đang hoạt động.",
-                ListErrors = { new Errors { Field = nameof(request.CustomerId), Detail = "Khách hàng không tồn tại hoặc đã bị khóa." } }
             };
         }
 
@@ -53,7 +52,6 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Tên site đã tồn tại cho khách hàng này.",
-                ListErrors = { new Errors { Field = nameof(request.Name), Detail = "Tên site đã tồn tại cho khách hàng này." } }
             };
         }
 
@@ -65,7 +63,6 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
             Address = request.Address?.Trim(),
             Latitude = request.Latitude,
             Longitude = request.Longitude,
-            CapacityKw = request.CapacityKw,
             InstallDate = ToUtc(request.InstallDate),
             Status = request.Status,
             ContactPersonName = request.ContactPersonName?.Trim(),

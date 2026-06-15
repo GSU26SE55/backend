@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using FileStorageService.Application.DTOs;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 
@@ -7,6 +9,8 @@ namespace FileStorageService.Application.CQRS.Query;
 
 public class GetFileMetadataQuery : IRequest<CommonResponse<FileMetadataResponse>>, IValidatable<CommonResponse<FileMetadataResponse>>
 {
+    [JsonIgnore]
+    [BindNever]
     public Guid Id { get; set; }
 
     public Task<CommonResponse<FileMetadataResponse>> ValidateAsync()

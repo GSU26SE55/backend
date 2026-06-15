@@ -3,6 +3,7 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using TicketService.Application.DependencyInjection;
+using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
@@ -12,18 +13,28 @@ EnvFileLoader.LoadIfExists();
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    // Include XML comments from all relevant projects
+    var projects = new[] { "TicketService.Api", "TicketService.Application", "TicketService.Domain", "SharedContracts" };
+    foreach (var project in projects)
+    {
+        var xmlFile = $"{project}.xml";
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+        if (File.Exists(xmlPath))
+            options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
 });
 
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
+builder.Services.AddHostedService<AutoCloseBackgroundService>();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TicketDbContext>("TicketDb");
@@ -56,11 +67,17 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[TicketService] No pending migrations.");
     }
 
-    if (!app.Environment.IsProduction())
+    // Skip seeder khi SkipSeeder=true (integration test với SQLite — xmin column Postgres-only).
+    var skipSeeder = app.Configuration.GetValue("SkipSeeder", false);
+    if (!app.Environment.IsProduction() && !skipSeeder)
     {
         var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
         await seeder.SeedAsync();
         Console.WriteLine("[TicketService] Seed data checked for non-production environment.");
+    }
+    else if (skipSeeder)
+    {
+        Console.WriteLine("[TicketService] Skipping seed (SkipSeeder=true).");
     }
 }
 

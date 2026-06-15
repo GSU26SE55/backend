@@ -66,6 +66,31 @@ public class ThresholdConfigConfiguration : IEntityTypeConfiguration<ThresholdCo
             .HasColumnName("soh_critical_threshold")
             .HasPrecision(5, 2);
 
+        // Sprint 5B #101 — Tier 2 thresholds.
+        builder.Property(config => config.InternalResistanceMaxMilliohm)
+            .HasColumnName("internal_resistance_max_milliohm")
+            .HasPrecision(10, 3);
+
+        builder.Property(config => config.CellVoltageDeltaMaxMv)
+            .HasColumnName("cell_voltage_delta_max_mv")
+            .HasPrecision(10, 3);
+
+        // Sprint 5B B1 (#152) — Noise suppression (NOT NULL với default, §1.3.3).
+        builder.Property(config => config.NoiseSuppressionCount)
+            .HasColumnName("noise_suppression_count")
+            .HasDefaultValue(5)
+            .IsRequired();
+
+        builder.Property(config => config.NoiseSuppressionWindowHours)
+            .HasColumnName("noise_suppression_window_hours")
+            .HasDefaultValue(24)
+            .IsRequired();
+
+        builder.Property(config => config.NoiseSuppressionEnabled)
+            .HasColumnName("noise_suppression_enabled")
+            .HasDefaultValue(true)
+            .IsRequired();
+
         builder.Property(config => config.EffectiveFromUtc)
             .HasColumnName("effective_from_utc")
             .IsRequired();

@@ -62,4 +62,8 @@ public static class PermissionCodes
 
     // Audit (audit.*)
     public const string AuditView = "audit.view";
+
+    // Alert–Ticket Saga ops (ticket.saga.*) — Sprint 5B #241
+    public const string TicketSagaView = "ticket.saga.view";
+    public const string TicketSagaReprocess = "ticket.saga.reprocess";
 }

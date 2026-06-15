@@ -45,7 +45,7 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách Alert có phân trang + filter.
+    /// Liệt kê Alert có phân trang + filter (severity/status/anomalyType/assetId/site/time range) — sort theo DetectedAt DESC. Manager/Staff dashboard dùng query này.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -84,7 +84,7 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết một Alert theo Id.
+    /// Lấy chi tiết 1 Alert theo Id — bao gồm BatteryAsset, EnvironmentalIncident link nếu có, AcknowledgedBy/ResolvedBy user info, full activity timeline.
     /// </summary>
     /// <remarks>
     /// Trả về <see cref="AlertDto"/> đầy đủ: thông tin anomaly (type, severity, threshold/actual value, unit, detected time),
@@ -112,7 +112,7 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Xác nhận đã nhìn thấy/tiếp nhận một Alert.
+    /// Xác nhận đã nhìn thấy/tiếp nhận 1 Alert — set Status=Acknowledged + AcknowledgedAt + AcknowledgedByUserId. SLA timer chuyển sang phase next.
     /// </summary>
     /// <remarks>
     /// Endpoint chuyển trạng thái: <c>Open → Acknowledged</c>.
@@ -153,7 +153,7 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Đóng một Alert (đã xử lý xong).
+    /// Đóng 1 Alert (đã xử lý xong) — set Status=Resolved + ResolvedAt. Customer được notify; KHÔNG tạo Ticket nếu chưa có (Saga đã handle ở giai đoạn Detected).
     /// </summary>
     /// <remarks>
     /// Endpoint chuyển trạng thái: <c>Open</c> hoặc <c>Acknowledged → Resolved</c>.

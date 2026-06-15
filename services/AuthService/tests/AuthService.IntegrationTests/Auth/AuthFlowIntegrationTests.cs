@@ -171,8 +171,8 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         {
             var resp = await _client.PostAsJsonAsync("/api/auth/login",
                 new { Email = "lock@example.com", Password = "WrongPass" });
-            // last attempt should be 423; previous 401
-            (i < 4 ? HttpStatusCode.Unauthorized : HttpStatusCode.Locked)
+            // last attempt should be 423; previous 400
+            (i < 4 ? HttpStatusCode.BadRequest : HttpStatusCode.Locked)
                 .Should().Be(resp.StatusCode);
         }
 
@@ -194,14 +194,14 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         var resp = await _client.PostAsJsonAsync("/api/auth/refresh-token", new { RefreshToken = oldRefresh });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<LoginResponse>();
-        body!.Data!.RefreshToken.Should().NotBe(oldRefresh);
-        body.Data.AccessToken.Should().NotBeNullOrEmpty();
+        body!.Data!.Tokens!.RefreshToken.Should().NotBe(oldRefresh);
+        body.Data.Tokens!.AccessToken.Should().NotBeNullOrEmpty();
 
         using var db2 = _factory.CreateDbContext();
         var oldRt = await db2.RefreshTokens.FirstAsync(r => r.Token == oldRefresh);
         oldRt.Status.Should().Be(RefreshTokenStatus.Used);
         oldRt.UsedAt.Should().NotBeNull();
-        oldRt.ReplacedByToken.Should().Be(body.Data.RefreshToken);
+        oldRt.ReplacedByToken.Should().Be(body.Data.Tokens!.RefreshToken);
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Command.Admin;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Domain.Enums;
 
@@ -356,11 +358,19 @@ public class TwoFactorCommandValidationTests
 
     [Fact]
     public async Task Disable_Valid_Passes() =>
-        (await new Disable2FACommand { AccountId = Guid.NewGuid() }.ValidateAsync()).IsSuccess.Should().BeTrue();
+        (await new Disable2FACommand { AccountId = Guid.NewGuid(), Password = "anything", TotpCode = "123456" }.ValidateAsync()).IsSuccess.Should().BeTrue();
 
     [Fact]
     public async Task Disable_Empty_Fails() =>
-        (await new Disable2FACommand { AccountId = Guid.Empty }.ValidateAsync()).IsSuccess.Should().BeFalse();
+        (await new Disable2FACommand { AccountId = Guid.Empty, Password = "x", TotpCode = "123456" }.ValidateAsync()).IsSuccess.Should().BeFalse();
+
+    [Fact]
+    public async Task Disable_MissingPassword_Fails() =>
+        (await new Disable2FACommand { AccountId = Guid.NewGuid(), Password = "", TotpCode = "123456" }.ValidateAsync()).IsSuccess.Should().BeFalse();
+
+    [Fact]
+    public async Task Disable_BadTotp_Fails() =>
+        (await new Disable2FACommand { AccountId = Guid.NewGuid(), Password = "x", TotpCode = "abc" }.ValidateAsync()).IsSuccess.Should().BeFalse();
 }
 
 public class LinkUnlinkGoogleCommandValidationTests
@@ -384,4 +394,118 @@ public class LinkUnlinkGoogleCommandValidationTests
     [Fact]
     public async Task Unlink_Empty_Fails() =>
         (await new UnlinkGoogleCommand { AccountId = Guid.Empty }.ValidateAsync()).IsSuccess.Should().BeFalse();
+}
+
+// --- GH-295: 5 new 2FA commands ---
+
+public class Init2FACommandValidationTests
+{
+    [Fact]
+    public async Task Init_ValidAccountId_Passes() =>
+        (await new Init2FACommand { AccountId = Guid.NewGuid() }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Init_EmptyAccountId_Fails_With401()
+    {
+        var resp = await new Init2FACommand { AccountId = Guid.Empty }.ValidateAsync();
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(401);
+        resp.ListErrors.Should().BeEmpty(); // AccountId là JWT field, không vào ListErrors
+    }
+}
+
+public class Confirm2FACommandValidationTests
+{
+    [Fact]
+    public async Task Confirm_Valid_Passes() =>
+        (await new Confirm2FACommand { AccountId = Guid.NewGuid(), PendingToken = "ptok", Code = "123456" }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Confirm_EmptyAccountId_401_NoListErrors()
+    {
+        var resp = await new Confirm2FACommand { AccountId = Guid.Empty, PendingToken = "ptok", Code = "123456" }.ValidateAsync();
+        resp.StatusCode.Should().Be(401);
+        resp.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Confirm_MissingPendingToken_400_WithListErrors()
+    {
+        var resp = await new Confirm2FACommand { AccountId = Guid.NewGuid(), PendingToken = "", Code = "123456" }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "PendingToken");
+    }
+
+    [Fact]
+    public async Task Confirm_BadCodeFormat_400_WithListErrors()
+    {
+        var resp = await new Confirm2FACommand { AccountId = Guid.NewGuid(), PendingToken = "ptok", Code = "abc" }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "Code");
+    }
+}
+
+public class Verify2FALoginCommandValidationTests
+{
+    [Fact]
+    public async Task Verify_ValidTotp_Passes() =>
+        (await new Verify2FALoginCommand { ChallengeToken = "tok", Code = "123456", IsBackupCode = false }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Verify_ValidBackupCode_PassesWithoutFormatCheck() =>
+        (await new Verify2FALoginCommand { ChallengeToken = "tok", Code = "abcd-1234", IsBackupCode = true }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Verify_MissingChallenge_400_WithListErrors()
+    {
+        var resp = await new Verify2FALoginCommand { ChallengeToken = "", Code = "123456" }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "ChallengeToken");
+    }
+
+    [Fact]
+    public async Task Verify_TotpNot6Digits_400()
+    {
+        var resp = await new Verify2FALoginCommand { ChallengeToken = "tok", Code = "12345", IsBackupCode = false }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "Code");
+    }
+}
+
+public class RegenerateBackupCodesCommandValidationTests
+{
+    [Fact]
+    public async Task Regen_Valid_Passes() =>
+        (await new RegenerateBackupCodesCommand { AccountId = Guid.NewGuid(), TotpCode = "123456" }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Regen_EmptyAccountId_401_NoListErrors()
+    {
+        var resp = await new RegenerateBackupCodesCommand { AccountId = Guid.Empty, TotpCode = "123456" }.ValidateAsync();
+        resp.StatusCode.Should().Be(401);
+        resp.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Regen_BadTotp_400_WithListErrors()
+    {
+        var resp = await new RegenerateBackupCodesCommand { AccountId = Guid.NewGuid(), TotpCode = "abc" }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "TotpCode");
+    }
+}
+
+public class AdminReset2FACommandValidationTests
+{
+    [Fact]
+    public async Task Reset_ValidTargetId_Passes() =>
+        (await new AdminReset2FACommand { TargetAccountId = Guid.NewGuid() }.ValidateAsync()).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Reset_EmptyTargetId_400_NoListErrors()
+    {
+        var resp = await new AdminReset2FACommand { TargetAccountId = Guid.Empty }.ValidateAsync();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().BeEmpty(); // TargetAccountId là route field, không vào ListErrors
+    }
 }

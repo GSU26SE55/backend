@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -37,7 +39,8 @@ public class TicketCommentConfiguration : IEntityTypeConfiguration<TicketComment
 
         builder.Property(e => e.AttachmentFileIds)
             .HasColumnName("attachment_file_ids")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion(new JsonValueConverter<List<Guid>>());
 
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");

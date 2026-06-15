@@ -57,7 +57,7 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.HasIndex(e => e.FileId);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany()
+            .WithMany(e => e.Attachments)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
     }

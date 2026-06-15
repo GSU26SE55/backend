@@ -1,3 +1,4 @@
+using AuthService.Domain.Enums;
 using SharedKernels.Domain;
 
 namespace AuthService.Domain.Entities;
@@ -13,6 +14,8 @@ public class StaffProfile : AuditableEntity
     public int MaxConcurrentTickets { get; set; } = 3;
 
     public bool IsAvailable { get; set; } = true;
+
+    public StaffSkillTierEnum SkillTier { get; set; } = StaffSkillTierEnum.Generalist;
 
     public string? Notes { get; set; }
 

@@ -9,7 +9,12 @@ namespace BatteryService.Application.Services;
 
 public class AlertEscalationService : IAlertEscalationService
 {
-    private const string EscalationEventType = "BatteryAnomalyEscalatedEvent";
+    /// <summary>
+    /// Sprint 5B #238 — đổi event type sang <see cref="BatteryAlertEscalationRequestedEvent"/>
+    /// (tách khỏi <see cref="BatteryAnomalyDetectedEvent"/> để KHÔNG re-trigger Saga
+    /// khi escalation timer fire). Subscriber duy nhất: NotificationService.
+    /// </summary>
+    private const string EscalationEventType = nameof(BatteryAlertEscalationRequestedEvent);
 
     private readonly IBatteryUnitOfWork _unitOfWork;
 
@@ -54,17 +59,22 @@ public class AlertEscalationService : IAlertEscalationService
                 continue;
             }
 
-            var evt = new BatteryAnomalyDetectedEvent(
+            var minutesSince = (int)Math.Round((now - alert.DetectedAt).TotalMinutes);
+
+            // Sprint 5B #238 — publish event riêng cho NotificationService,
+            // KHÔNG dùng BatteryAnomalyDetectedEvent (đó là Saga-start event).
+            var evt = new BatteryAlertEscalationRequestedEvent(
                 AlertId: alert.Id,
-                BatteryAssetId: alert.BatteryAssetId,
+                BatteryAssetId: alert.BatteryAssetId ?? Guid.Empty,
                 CustomerId: alert.BatteryAsset?.CustomerId ?? Guid.Empty,
                 AssetSerialNumber: alert.BatteryAsset?.SerialNumber ?? string.Empty,
                 AnomalyType: (int)alert.AnomalyType,
                 Severity: (int)alert.Severity,
-                ThresholdValue: alert.ThresholdValue,
                 ActualValue: alert.ActualValue,
                 Unit: alert.Unit,
-                DetectedAt: alert.DetectedAt);
+                DetectedAt: alert.DetectedAt,
+                EscalationRequestedAt: now,
+                MinutesSinceDetection: minutesSince);
 
             await _unitOfWork.OutboxMessages.AddAsync(new OutboxEntity
             {

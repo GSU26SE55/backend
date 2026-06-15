@@ -55,7 +55,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
 
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value < DateTime.UtcNow)
-            return Fail(410, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
+            return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
             return Fail(409, "Tài khoản đã được kích hoạt trước đó.");
@@ -116,19 +116,21 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             IsSuccess = true,
             StatusCode = 200,
             Message = "Đã kích hoạt tài khoản và đăng nhập.",
-            Data = new TokenDTO
+            Data = new LoginResultDto
             {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
+                Tokens = new TokenDTO
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshTokenValue
+                }
             }
         };
     }
 
-    private static LoginResponse Fail(int statusCode, string message, string field = "InvitationToken") => new()
+    private static LoginResponse Fail(int statusCode, string message) => new()
     {
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = new List<Errors> { new Errors { Field = field, Detail = message } }
     };
 }

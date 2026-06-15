@@ -1,12 +1,12 @@
-using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 
@@ -17,19 +17,31 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
     {
+        // Validate Customer
+        var customer = (await _uow.CustomerAccounts.GetAllAsync().Where(c => c.AccountId == request.CustomerId).ToListAsync(ct)).FirstOrDefault();
+
+        if (customer == null)
+            return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.");
+
+        if (customer.Status != AccountStatusEnum.Active)
+            return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.");
+
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new TicketEntity
@@ -41,7 +53,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Category = request.Category,
             CustomerId = request.CustomerId,
             BatteryAssetId = request.BatteryAssetId ?? Guid.Empty,
-            Status = TicketStatusEnum.New,
+            Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
             IsIncident = false
@@ -50,17 +62,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         await _uow.Tickets.AddAsync(ticket);
 
         // Outbox: Ticket Created
-        var integrationEvent = new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code);
-        var outboxMessage = new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketCreatedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(integrationEvent),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        };
-        await _uow.OutboxMessages.AddAsync(outboxMessage);
+        await _producer.PublishAsync(new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code), ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,
@@ -85,17 +87,13 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message)
     {
         return new TicketActionResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }

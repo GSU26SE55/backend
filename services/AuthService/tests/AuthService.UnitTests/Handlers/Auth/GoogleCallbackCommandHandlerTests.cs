@@ -31,14 +31,14 @@ public class GoogleCallbackCommandHandlerTests
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Data = new TokenDTO { AccessToken = "acc", RefreshToken = "ref" }
+                Data = new LoginResultDto { Tokens = new TokenDTO { AccessToken = "acc", RefreshToken = "ref" } }
             });
 
         var handler = new GoogleCallbackCommandHandler(_mediator.Object, _google.Object, _configuration);
         var resp = await handler.Handle(new GoogleCallbackCommand { Code = "auth-code", RedirectUri = "https://api/cb" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Data!.AccessToken.Should().Be("acc");
+        resp.Data!.Tokens!.AccessToken.Should().Be("acc");
         _google.Verify(g => g.ExchangeCodeForIdTokenAsync("auth-code", "https://api/cb", It.IsAny<CancellationToken>()), Times.Once);
         _mediator.Verify(m => m.Send(It.IsAny<GoogleAuthCommand>(), It.IsAny<CancellationToken>()), Times.Once);
     }

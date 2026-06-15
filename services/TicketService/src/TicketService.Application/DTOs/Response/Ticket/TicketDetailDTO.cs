@@ -22,4 +22,5 @@ public class TicketDetailDTO : TicketDTO
     public List<TicketActivityDTO> Activities { get; set; } = new();
     public List<TicketCommentDTO> Comments { get; set; } = new();
     public List<MaintenanceLogDTO> MaintenanceLogs { get; set; } = new();
+    public List<string> AttachmentFileIds { get; set; } = new();
 }

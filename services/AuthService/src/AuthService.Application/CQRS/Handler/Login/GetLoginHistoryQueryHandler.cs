@@ -34,7 +34,7 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
             return new LoginAttemptListResponse
             {
                 IsSuccess = false,
-                StatusCode = 400,
+                StatusCode = 422,
                 Message = "FromUtc phải nhỏ hơn ToUtc."
             };
         }

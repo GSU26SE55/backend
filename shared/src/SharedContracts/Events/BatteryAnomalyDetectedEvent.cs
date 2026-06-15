@@ -24,8 +24,8 @@ public record BatteryAnomalyDetectedEvent(
     string AssetSerialNumber,
     int AnomalyType,           // AnomalyTypeEnum value
     int Severity,              // AlertSeverityEnum value
-    decimal ThresholdValue,
-    decimal ActualValue,
-    string Unit,
+    decimal? ThresholdValue,   // §1.3.5 — nullable cho incident-based alert
+    decimal? ActualValue,      // §1.3.5 — nullable cho incident-based alert
+    string? Unit,              // §1.3.5 — nullable cho incident-based alert
     DateTime DetectedAt
 ) : IntegrationEvent;

@@ -2,6 +2,7 @@ using AuthService.Application.Authorization;
 using AuthService.Application.Configuration;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Infrastructure.BackgroundJobs;
 using AuthService.Infrastructure.Implements.Helpers;
 using AuthService.Infrastructure.Implements.Repositories;
@@ -77,5 +78,13 @@ public static class ManageDependencyInjection
         service.AddSingleton<IPasswordHasher, PasswordHasher>();
         service.AddScoped<AuthDataSeeder>();
         service.AddHttpContextAccessor();
+
+        // 2FA Hardening (GH-295)
+        service.AddSingleton<ITotpService, TotpService>();
+        service.AddSingleton<ITwoFactorSecretProtector, TwoFactorSecretProtector>();
+        service.AddSingleton<ITwoFactorChallengeStore, TwoFactorChallengeStore>();
+        service.AddSingleton<ITwoFactorPendingStore, TwoFactorPendingStore>();
+        service.AddSingleton<IBackupCodeGenerator, BackupCodeGenerator>();
+        service.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
     }
 }

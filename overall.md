@@ -1,10 +1,10 @@
 # OVERALL — Roadmap Backend GSU26SE55 (Full Detail Edition)
 
-> **Document type:** Master backlog & technical specification
-> **Scope:** Toàn bộ backend còn lại để cover Core Business Flow (4 role · 6 phase · ticket state machine · SLA escalation · BR-01..BR-08 + 4 entity bổ sung).
+> **Document type:** Master backlog & technical specification + capstone project plan
+> **Scope:** Toàn bộ backend còn lại để cover Core Business Flow (4 role · 6 phase · ticket state machine · SLA escalation · BR-01..BR-08 + 4 entity bổ sung) + Sprint 5B Alert–Ticket Saga execution + post-Sprint 8 defense prep.
 > **Source of truth:** `core-business-flow.html` + `.claude/CLAUDE.md` + `.claude/rules/*` + `.claude/memory.md`.
-> **Audience:** Leader + 3 BE Dev (Duy, Thắng, Thái) + 2 FE Dev (Trí, Minh) — phần liên quan API contract.
-> **Cập nhật:** 2026-05-12 · Branch hiện tại: `feat/retrytimeout` (PR #47 chờ merge).
+> **Audience:** Leader + 3 BE Dev (Duy, Thắng, Thái) + 2 FE Dev (Trí, Minh) + GVHD (post-Sprint 8 dry-run review).
+> **Cập nhật:** 2026-06-10 (v4.5) · Sprint 5B Saga + capacity planning + ops template + defense prep + wire value reconcile (xem §67 version log).
 
 ---
 
@@ -69,14 +69,14 @@
   - [49. Notification advanced](#49-notification-advanced-digest--batching--p1)
   - [50. Updated sprint backlog impact](#50-updated-sprint-backlog-impact)
 - [Phần VIII — Bổ sung lần 2 (Final completeness)](#phần-viii--bổ-sung-lần-2-final-completeness)
-  - [52. IoT Gateway & Device Management](#52-iot-gateway--device-management--p0)
+  - [52. IoT Edge Device & Device Management](#52-iot-edge-device--device-management--p0)
   - [52bis. IoT implementation plan](#52bis-iot-implementation-plan)
-  - [53. Solar Energy Business Metrics](#53-solar-energy-business-metrics--p0)
+  - [53. Battery scope reduction & Alert–Ticket Saga](#53-battery-scope-reduction--alertticket-saga--p0)
   - [54. Production Deployment (K8s + Helm)](#54-production-deployment-k8s--helm--p1)
   - [55. Mobile/Web App Management](#55-mobileweb-app-management--p1)
   - [56. Demo & Presentation Deliverables](#56-demo--presentation-deliverables--p0)
   - [57. AI advanced (deployment, retrain, batching)](#57-ai-advanced--deployment-retrain-batching--p1)
-  - [58. Edge cases extension (EC-21..EC-30)](#58-edge-cases-extension-ec-21ec-30--p0)
+  - [58. Edge cases extension (EC-21..EC-34)](#58-edge-cases-extension-ec-21ec-34--p0)
   - [59. GDPR + security additional](#59-gdpr--security-additional--p1)
   - [60. Internal admin tools](#60-internal-admin-tools--p2)
   - [61. Search functionality](#61-search-functionality--p1)
@@ -85,6 +85,7 @@
   - [64. Status page + maintenance broadcast](#64-status-page--maintenance-broadcast--p1)
   - [65. Documentation auto-generation](#65-documentation-auto-generation--p2)
   - [66. Final completeness checklist](#66-final-completeness-checklist)
+  - [67. Tóm tắt final — file đầy đủ chưa?](#67-tóm-tắt-final--file-đầy-đủ-chưa)
 
 ---
 
@@ -102,27 +103,33 @@
 | **`SmsService`** | ✅ Consumer-only | Subscribe SendPhoneOtpEvent |
 | **`FileStorageService`** | ✅ Metadata foundation ready | MinIO backend, signed URLs, `UploadedFile` metadata table, upload response trả `fileId`, metadata/presigned/download/delete theo `fileId` |
 | **`SharedKernels`** | ✅ Done | `BaseEntity`, `AuditableEntity`, `IHardDeleteEntity`, `IGenericRepository`, `IUnitOfWork` |
-| **`SharedInfrastructure`** | ✅ Mature | Middleware (Global exception, CorrelationId, RequestLogging, SecurityHeaders, IdempotencyKey), Behaviors (Validation, Logging), Caching (Redis), Bus (MassTransit + retry/timeout + correlation filters), **Idempotency (Redis inbox + key store)**, Metrics, Swagger extensions, EnvFileLoader |
-| **`SharedContracts`** | ✅ Done | `CommonResponse<T>`, `PaginationResponse<T>`, `PaginationRequest`, `IntegrationEvent` root, `IValidatable`, `ICacheService`, `IMessageProducerService`, các email/OTP events |
+| **`SharedInfrastructure`** | ⚠️ Foundation; hardening pending | Middleware (Global exception, CorrelationId, RequestLogging, SecurityHeaders, IdempotencyKey), Behaviors (Validation, Logging), Caching (Redis), Bus (MassTransit + correlation filters; retry/durable scheduler pending Sprint 5B `#235`), Redis Inbox hiện tại chưa transaction-safe cho DB consumer, Metrics, Swagger extensions, EnvFileLoader |
+| **`SharedContracts`** | ✅ Foundation | Core response/event contracts done; Alert–Ticket Saga contracts pending Sprint 5B `#236` |
 | **Docker compose** | ✅ Done | `timescale/timescaledb:latest-pg16`, postgres-init tạo logical DB riêng (`auth_db`, `file_storage_db`), redis:7, rabbitmq:3-management, minio, prometheus, grafana, loki, alertmanager |
 | **CI/CD** | ✅ Done | GitHub Actions: detect-changes (matrix per service), build/unit-test/integration-test, dotnet format, Trivy filesystem scan, PR title validation (semantic), PR size warning, project rules check |
-| **Pre-commit** | ✅ Done | `.pre-commit-config.yaml` với dotnet format, secret-scan |
+| **Pre-commit** | ✅ Done; Sprint 5B mở rộng | `.pre-commit-config.yaml` với dotnet format, secret-scan; Sprint 5B `#233` thêm hook `energy-co2-scope-guard` (xem §53.2ter) |
 | **Hooks Claude** | ✅ Done | `.claude/hooks/be/*.sh`: block-dangerous, protect-sensitive, check-build, post-edit-feedback, validate-namespace, check-di-registration, check-dbcontext-update |
 
 ### 0.2. CHƯA có — Roadmap (phần chính document này)
 
 | Service / Module | Status | Section | Details |
 |------------------|----------|---------|-----------------|
-| `BatteryService` | ✅ Done | §1 | Core CRUD + Sensor batch ingest + Threshold detection + Alert deduplication |
-| `TicketService` | ✅ Done | §2 | CQRS + State Machine (12+ states) + SLA Timer + Activity Timeline + Manager Approval + Reopen logic |
-| IoT Gateway backend + Device Management | 🔴 P0 | §52/§52bis + `iot.md` | 1 sprint song song + hardware track |
+| `BatteryService` | ✅ Core done | §1 | Core CRUD + Sensor batch ingest + Threshold detection + Alert deduplication; **không quản lý Energy/CO2 analytics** |
+| `TicketService` | ✅ Core done | §2 | CQRS + Ticket State Machine + SLA/Activity/Reopen done; Alert–Ticket Saga pending Sprint 5B |
+| IoT Edge Device backend + Device Management (ESP32 + hybrid HTTPS/MQTT) | 🔴 P0 | §52/§52bis + `newiot.md`/`overall.iot.md` | 1 sprint song song + hardware track |
 | `NotificationService` (4 dự án, consumers + Expo push) | 🟠 P1 | §3 | 2 sprint |
 | KnowledgeBase (module nội bộ TicketService) | 🟡 P2 | §4 | 0.5 sprint |
 | Reporting endpoints (mỗi service expose) | 🟡 P2 | §5 | 1 sprint |
 | TimescaleDB extension + hypertable | 🟠 P1 | §6 | 0.5 sprint |
 | FileStorage metadata (`UploadedFile`) | ✅ Done | §6bis | Completed 13/5/2026 |
 | AuthService profile expansion (avatar, phone, skill) | ✅ Done | §7 | Completed 13/5/2026 |
-| Outbox cho Battery/Ticket + saga | 🟠 P1 | §8.1 | 1 sprint |
+| AuthService 2FA Hardening (login challenge + confirm setup + encrypt secret + backup codes + admin reset) | 🟠 P1 | §0.5, ADR-019 | Sprint 3 — GH-295 (in-flight, supersedes Option B) |
+| BatteryService scope cleanup (bỏ Energy/CO2 + `Site.CapacityKw`) | 🔴 P0 | §53.1–§53.3 | Sprint 5B `#233`/`#234` |
+| Outbox/Inbox hardening + Alert–Ticket Saga | 🔴 P0 | §8.1–§8.3, §53.4–§53.12 | Sprint 5B `#235`–`#239` |
+| AuthService permission seed cho Saga (`ticket.saga.view/reprocess`) | 🔴 P0 | §7.5bis, §53.9 | Sprint 5B `#241` |
+| Documentation sync (Swagger/Postman/SRS/CHANGELOG/runbook/Mermaid) | 🔴 P0 | §65, §40.3, §53.2bis | Sprint 5B `#240` |
+| ADR-017 (Energy/CO2 removal) + ADR-018 (Saga orchestration) | 🔴 P0 | §40.1 | Sprint 5B `#233`/`#239` |
+| AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
 | Grafana business dashboards | 🟡 P2 | §9 | 0.5 sprint |
@@ -153,7 +160,7 @@
 - [x] Bổ sung response schema cho `GET /api/staff/{id}/assignment-profile` → trả `StaffAssignmentProfileDto` (cùng shape với `GET /api/staff`).
 - [x] Làm rõ `avatarUrl` trong `PUT /api/admin/accounts/{id}`: field legacy, không khuyến khích — dùng `avatarFileId` thay thế.
 - [x] Bổ sung TTL token mời: `invitationToken` hết hạn sau **72 giờ**; trả `400 isSuccess=false` nếu expired hoặc đã dùng.
-- [x] Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.
+- [x] ~~Quyết định 2FA behavior (Option B): giữ behavior hiện tại — `POST /api/accounts/me/2fa/enable` activate ngay, không có bước confirm riêng. Admin disable qua `DELETE /api/admin/accounts/{id}/2fa`.~~ **→ Superseded by ADR-019 (GH-295, 2026-06-14)** — chuyển sang flow init+confirm có verify TOTP, login enforce 2FA qua challenge token, disable yêu cầu password+TOTP, secret encrypt at-rest, backup codes recovery. Admin reset endpoint giữ nguyên đường dẫn `DELETE /api/admin/accounts/{id}/2fa` nhưng nay thực sự được implement (trước đây chỉ document). Xem §0.5 và §40.1 ADR-019.
 - [x] Bổ sung lifecycle temporary role: tự expire qua background job, có audit log khi expire, không cần manual revoke.
 - [x] Bổ sung error codes cho `GET /api/admin/accounts/{id}` (404), `DELETE /api/admin/accounts/{id}` (404, 409 nếu đang active), `POST /api/admin/accounts/{id}/unlock` (404, 409 nếu chưa bị khóa).
 
@@ -182,6 +189,50 @@
 
 ---
 
+### 0.5. Quyết định trong lượt cập nhật 14/6/2026
+
+**Auth — 2FA Hardening (GH-295, in-flight Sprint 3):**
+
+Reverse Option B (§0.4 dòng 162) — biến 2FA từ feature cosmetic thành cơ chế bảo vệ thực sự. Toàn bộ chi tiết tại `logs/GH-295/plan.md`; ADR đầy đủ tại §40.1 ADR-019.
+
+- [ ] **Login enforcement:** `LoginCommandHandler` check `Account.TwoFactorEnabled`. Nếu true → trả `TwoFactorChallengeDto { challengeToken, expiresInSeconds:300, methods:["totp","backupCode"] }` thay vì JWT. Challenge token lưu Redis key `2fa:challenge:{token}` TTL 5’, max 5 attempts/token.
+- [ ] **Endpoint mới:** `POST /api/auth/login/verify-2fa { challengeToken, code, isBackupCode }` → verify TOTP hoặc backup code → cấp JWT + refresh token. Rate limit 5 attempts/5min/token.
+- [ ] **Enable 2 bước:** tách `POST /api/accounts/me/2fa/enable` (deprecated → 410 Gone) thành:
+  - `POST /api/accounts/me/2fa/init` → sinh secret + otpAuthUri + `pendingToken`, cache Redis `2fa:pending:{accountId}` TTL 10’, KHÔNG set `TwoFactorEnabled=true` ở bước này
+  - `POST /api/accounts/me/2fa/confirm { pendingToken, code }` → verify TOTP → activate + sinh 8 backup codes (plain trả 1 lần)
+- [ ] **Disable re-auth:** `POST /api/accounts/me/2fa/disable` đổi body `{ password, totpCode }` — verify cả hai trước khi clear. Chống session hijack + stolen device.
+- [ ] **Encrypt secret:** `TwoFactorSecret` lưu qua `IDataProtector` (purpose `"AuthService.Account.TwoFactorSecret.v1"`), format `enc:v1:{base64}` để detect plaintext legacy. Lazy re-encrypt khi user verify TOTP lần đầu sau migration (cột mới `TwoFactorSecretEncryptedAt nullable`). Data Protection key persist qua Docker volume `auth-dataprotection-keys`.
+- [ ] **Backup codes:** entity mới `BackupCode { AccountId, CodeHash, RedeemedAt? }`. 8 codes/account, format `xxxx-xxxx` (10-char alphanum bỏ 0/o/l/1), bcrypt cost 11, single-use. Endpoint regenerate `POST /api/accounts/me/2fa/backup-codes/regenerate { totpCode }` xóa codes cũ + sinh 8 mới.
+- [ ] **Admin reset:** `DELETE /api/admin/accounts/{id}/2fa` (policy `AdminOnly`, mới — overall.md cũ document nhưng code chưa có) → clear secret + backup codes + `TwoFactorEnabled=false` + ghi `AuditLog.Admin2FAReset` actor=admin target=user.
+- [ ] **AuditLog actions mới:** `TwoFactorEnabled`, `TwoFactorDisabled`, `TwoFactorReset`, `BackupCodeRedeemed`, `BackupCodesRegenerated`, `Admin2FAReset`.
+- [ ] **Migration:** `Add2FAHardening` — cột `accounts.two_factor_secret_encrypted_at` (timestamp nullable) + table `backup_codes (id, account_id FK cascade, code_hash, redeemed_at nullable, created_at, ...)`.
+- [ ] **Out of scope (defer):** step-up auth cho sensitive admin actions (cần ticket riêng để decide pattern); SMS/email OTP làm 2FA factor; WebAuthn/FIDO2; trusted-device remember; force-enroll Admin.
+
+**Library decisions:**
+- TOTP: NuGet `Otp.NET` (MIT, RFC 6238) — replace tự build base32 trong `Enable2FACommandHandler` cũ
+- Backup code hash: BCrypt cost 11 — match existing password hash config
+- Challenge/pending store: `IDistributedCache` (Redis) — đã có sẵn trong `SharedInfrastructure`
+
+**Post-implementation review additions (2026-06-14):**
+
+- [x] **HTTP status code convention** — strict mapping theo user policy:
+  - `400` = field validation (body field user submit, format/required sai)
+  - `401` = no token / token expired (chỉ cho endpoint protected)
+  - `403` = no permission / sai role
+  - `404` = không có trong DB
+  - `409` = conflict với state hiện tại (vd 2FA đã enable khi enroll)
+  - `422` = business rule violation (format đúng nhưng value/state sai — vd wrong TOTP, expired challenge, wrong password)
+  - `429` = rate limit
+  - Áp dụng: Confirm2FA wrong code/expired → 422; Disable2FA wrong password/TOTP → 422; RegenerateBackupCodes wrong TOTP → 422; Verify2FALogin wrong code/expired challenge → 422, account deleted → 404, 2FA disabled mid-session → 409
+- [x] **`[BindNever]` defense-in-depth** — combo `[JsonIgnore] + [BindNever]` cho mọi field set từ JWT/route (AccountId, TargetAccountId) trong 5 commands. Chống attacker query string override.
+- [x] **Field-vs-Message convention** — `ErrorsListJsonConverter` đã convert empty list → JSON `null`. Handler chỉ add vào `ListErrors` cho body field validation; business/system errors chỉ set `Message` (ListErrors → JSON `null`).
+- [x] **`env.prod.example` + `docker-compose.prod.yml`** — thêm `DataProtection__KeysPath=/app/keys` + volume `auth-dataprotection-keys` mount `/app/keys` + comment cảnh báo OPS backup. **Critical:** nếu thiếu → restart container prod = mất 2FA cho mọi user enrolled.
+- [x] **`api-auth.md` doc rewrite** — 8 endpoint sections (login response shape mới, verify-2fa, init, confirm, deprecated enable, disable body mới, backup-codes regenerate, admin reset), AuditAction table thêm 8 entries (40-47), refresh-token/google-callback/accept-invite update sang shape `data.tokens.*`.
+- [ ] **`.env` local + `.gitignore`** — user tự edit theo hướng dẫn (`DataProtection__KeysPath=./.dataprotection-keys` + ignore `.dataprotection-keys/`).
+- [ ] **FE ticket riêng** — handle LoginResponse breaking change + render 2FA challenge screen + 8 backup codes display (1-time) + admin reset UI. Plan FE sẽ tạo sau khi BE merge.
+
+---
+
 ## 0bis. Stack & infra hiện hữu
 
 ### 0bis.1. Phiên bản công nghệ
@@ -195,6 +246,9 @@
 - Serilog → Loki
 - Prometheus-net cho metrics
 - OpenAPI/Swashbuckle
+- **Sprint 5B bổ sung** (xem §53, §8.3):
+  - `MassTransit.EntityFrameworkCoreIntegration` — EF Consumer Outbox/Inbox + Saga repository
+  - `MassTransit.Quartz` + `Quartz.AspNetCore` + `Quartz.Serialization.Json` — durable scheduler cho Saga retry/timeout (RabbitMQ image hiện tại chưa có delayed-message plugin)
 
 ### 0bis.2. Patterns đã thiết lập
 | Pattern | Vị trí | Áp dụng cho service mới |
@@ -205,8 +259,9 @@
 | `CommonResponse<T>` wrapper | `SharedContracts/Common/Responses` | **Bắt buộc** |
 | Soft delete qua `AuditableEntityInterceptor` | SharedInfrastructure | **Bắt buộc** — KHÔNG dùng global query filter, luôn `.Where(x => !x.IsDeleted)` |
 | Repository + UnitOfWork (`GetAllAsync` sync trả `IQueryable`) | `SharedKernels` | **Bắt buộc** — tên `GetAllAsync` legacy, **KHÔNG** await |
-| Outbox pattern | AuthService có `OutboxMessage` entity | Copy cho Battery/Ticket |
-| Inbox idempotency consumer | `SharedInfrastructure/Idempotency` | Bắt buộc cho mọi consumer |
+| Outbox pattern | AuthService có `OutboxMessage` entity (custom); Sprint 5B thêm `MassTransit EF Consumer Outbox` cho Saga endpoints | HTTP/background handler dùng custom; Saga participant consumer dùng EF Consumer Outbox (xem §8.3) |
+| Inbox idempotency consumer | `SharedInfrastructure/Idempotency` (Redis); Sprint 5B Saga dùng MassTransit EF Consumer Inbox (durable) | Redis Inbox cho consumer KHÔNG thay đổi DB; EF Consumer Inbox cho consumer thay đổi DB |
+| Orchestrated Saga (Sprint 5B) | `TicketService.Infrastructure/Sagas/` | Cross-service transaction qua Saga state machine + forward recovery (ADR-018, §53) |
 | Correlation ID middleware + bus filter | SharedInfrastructure | Tự động — chỉ cần đăng ký DI |
 | Redis caching wrapper | `SharedInfrastructure/Caching` | Inject `ICacheService` |
 | Response wrapper `CommonResponse<T>` với `IsSuccess=true` mặc định | SharedContracts | Bắt buộc |
@@ -220,6 +275,8 @@
 /api/thresholds/*         → BatteryService
 /api/sensor-readings/*    → BatteryService
 /api/alerts/*             → BatteryService
+/api/v1/iot-devices/*        → BatteryService       (device-side: provision/heartbeat/firmware/calibration — §52)
+/api/v1/admin/iot-devices/*  → BatteryService       (admin CRUD device + firmware release — §52)
 /api/v1/tickets/*            → TicketService        (port 5003)
 /api/v1/comments/*           → TicketService
 /api/v1/maintenance-logs/*   → TicketService
@@ -229,6 +286,7 @@
 /api/v1/notification-preferences/* → NotificationService
 /api/v1/files/*              → FileStorageService   (port 5005)
 /api/v1/reports/*            → Aggregated (Battery/Ticket reports)
+/api/v1/admin/sagas/alert-ticket/* → TicketService    (Sprint 5B — xem §53.11)
 ```
 
 > **Gateway port:** giữ nguyên `4001`. Downstream services chạy port `5001-5005`.
@@ -244,9 +302,31 @@
 2. Ingest và lưu `SensorReading` (TimescaleDB hypertable).
 3. Background detection: scan readings → so sánh threshold → generate `Alert`.
 4. Dedup alert theo cửa sổ thời gian (BR-03).
-5. Publish `BatteryAnomalyDetectedEvent` cho TicketService.
+5. Publish `BatteryAnomalyDetectedEvent` và tham gia Alert–Ticket Saga để link `Alert.TicketId`.
 6. Expose realtime + history queries cho Mobile/Web.
-7. Provide battery health analytics endpoints.
+7. Provide battery health summary/trend endpoints; không cung cấp Energy/CO2 analytics.
+
+#### 1.1.1. Boundary chính thức sau scope review 10/6/2026
+
+BatteryService chỉ quản lý **tài sản pin, telemetry điện học phục vụ chẩn đoán, sức khỏe pin và cảnh báo**.
+
+**Giữ lại vì là dữ liệu kỹ thuật cốt lõi:**
+- `Voltage`, `Current`, `Temperature`, `SocPercent`, `SohPercent`.
+- `CycleCount`, `ChargingState`, internal resistance, cell voltage delta.
+- `NominalCapacityAh`, `NominalVoltage`, ngưỡng dòng sạc/xả.
+- Realtime/history/aggregate telemetry phục vụ chart sức khỏe, AI và anomaly detection.
+- `SolarIrradiance` trong `AmbientReading` chỉ là ngữ cảnh môi trường/nhiệt cho battery health;
+  không dùng để tính sản lượng, kWh, chi phí hoặc CO2.
+
+**Loại khỏi sản phẩm và không được triển khai trong BatteryService:**
+- Tính năng lượng sạc/xả theo kWh, energy session, energy throughput.
+- Tổng hợp năng lượng theo ngày/tháng cho asset hoặc site.
+- Hiệu suất round-trip dùng cho báo cáo kinh doanh.
+- Biểu giá điện, tiền tiết kiệm, carbon emission factor, CO2 saved.
+- API/dashboard/report/recommendation liên quan Energy, cost saving hoặc CO2.
+
+Không tạo `EnergyService` thay thế. Đây là quyết định **bỏ scope**, không phải di chuyển domain sang service khác.
+Chi tiết cleanup và acceptance criteria xem §53.1–§53.3.
 
 ### 1.2. Cấu trúc thư mục đầy đủ
 
@@ -321,7 +401,8 @@ services/BatteryService/
 │   │   ├── Consumers/
 │   │   │   ├── AccountActivatedConsumer.cs       (link Customer to asset)
 │   │   │   ├── AccountDeletedConsumer.cs         (reassign or soft delete)
-│   │   │   └── AccountStatusChangedConsumer.cs
+│   │   │   ├── AccountStatusChangedConsumer.cs
+│   │   │   └── LinkAlertToTicketConsumer.cs       (Saga participant)
 │   │   ├── Interfaces/
 │   │   │   ├── Repositories/
 │   │   │   │   └── IBatteryUnitOfWork.cs
@@ -372,10 +453,15 @@ services/BatteryService/
 │       │   ├── AlertEscalationBackgroundService.cs
 │       │   ├── AlertAutoResolveBackgroundService.cs
 │       │   └── OutboxRelayBackgroundService.cs
-│       ├── ExternalServices/
-│       │   └── (optional: IoT MQTT bridge nếu cần)
+│       ├── Mqtt/                                    ← MQTT v2 (P3 — xem §52.10, §52.14)
+│       │   ├── MqttBridgeBackgroundService.cs        ← subscribe telemetry/heartbeat/status
+│       │   ├── MqttTopicMap.cs                       ← solar/{site}/{dev}/...
+│       │   ├── TelemetryMessageHandler.cs            ← validate → insert → anomaly (reuse ingest command)
+│       │   └── LastWillHandler.cs                    ← status=offline → mark Offline + alert
+│       ├── Security/
+│       │   └── DeviceApiKeyService.cs                ← sinh/hash/rotate/revoke API key per-device (+ MQTT credential)
 │       └── DependencyInjection/
-│           └── ManageDependencyInjection.cs
+│           └── ManageDependencyInjection.cs          ← đăng ký MQTT bridge + IoT background jobs
 └── tests/
     ├── BatteryService.UnitTests/
     │   ├── BatteryService.UnitTests.csproj
@@ -398,7 +484,8 @@ services/BatteryService/
         ├── BackgroundJobs/
         │   └── ThresholdCheckBackgroundServiceTests.cs
         ├── Consumers/
-        │   └── AccountActivatedConsumerTests.cs
+        │   ├── AccountActivatedConsumerTests.cs
+        │   └── LinkAlertToTicketConsumerTests.cs
         └── Fixtures/
             ├── PostgresTimescaleFixture.cs  (TestContainers)
             └── WebApplicationFactoryFixture.cs
@@ -493,8 +580,9 @@ services/BatteryService/
 | `InternalResistanceMilliohm` | `decimal(8,2)?` | nullable, > 0 | mΩ — early aging indicator |
 | `CellVoltageDeltaMv` | `decimal(8,2)?` | nullable, ≥ 0 | mV — chênh lệch Vmax-Vmin giữa các cell |
 | `BmsErrorCode` | `string(64)?` | nullable | Mã lỗi BMS raw (vd `0x0A`, `OverCurrent,CellImbalance`) |
-| `SourceDeviceId` | `string(64)?` | — | IoT gateway ID hoặc BMS module ID |
+| `SourceDeviceId` | `string(64)?` | — | IoT edge device code (ESP32 `DeviceCode`) hoặc BMS module ID |
 | `SourceType` | `SensorReadingSourceTypeEnum` | NOT NULL default `IotGateway` | **B9** — 1=Bms, 2=IotGateway, 3=External. Phân biệt nguồn đo |
+| `SensorSourceCode` | `string(20)?` | nullable | **§52.9** — "primary" / "redundant" / "external-temp". Phân biệt nhiều sensor cùng đo 1 pin (vd BMS primary vs INA226 redundant vs DS18B20 external-temp). 1 pin có thể có nhiều reading cùng timestamp khác `SensorSourceCode` |
 
 **Compound index:** `(BatteryAssetId, Time DESC)` cho realtime/history queries.
 **Hypertable interval:** 1 day chunks.
@@ -517,7 +605,7 @@ Xem chi tiết logic ở §1.6.6 (Cross-source validation).
 | `BatteryAssetId` | `Guid?` | FK, **nullable** | btree — alert per-pin |
 | `SiteId` | `Guid?` | FK, **nullable** | btree — alert per-site (ambient/incident) |
 | `EnvironmentalIncidentId` | `Guid?` | FK, **nullable** | Link tới incident nếu alert được tạo từ smoke/water |
-| `AnomalyType` | `AnomalyTypeEnum` | NOT NULL | 1–14 (xem §1.3.6, mở rộng từ 7 → 14) |
+| `AnomalyType` | `AnomalyTypeEnum` | NOT NULL | 1–15 (xem §1.3.6, mở rộng từ 7 → 15) — wire value cross-service đồng bộ §1.3.6, **không phải custom Saga numbering** (xem §53.7) |
 | `Severity` | `AlertSeverityEnum` | NOT NULL | 1=Info, 2=Warning, 3=Critical |
 | `ThresholdValue` | `decimal(10,4)?` | nullable | NULL cho incident-based alert (smoke/water không có threshold) |
 | `ActualValue` | `decimal(10,4)?` | nullable | NULL như trên |
@@ -525,7 +613,7 @@ Xem chi tiết logic ở §1.6.6 (Cross-source validation).
 | `DetectedAt` | `DateTime` | NOT NULL | UTC |
 | `Status` | `AlertStatusEnum` | NOT NULL | 1=Open, 2=Acknowledged, 3=Merged, 4=Resolved |
 | `MergedIntoAlertId` | `Guid?` | self-FK, nullable | BR-03 dedup |
-| `TicketId` | `Guid?` | nullable | Link tới ticket nếu auto-created |
+| `TicketId` | `Guid?` | nullable, non-unique index `WHERE ticket_id IS NOT NULL` (Sprint 5B `AddAlertTicketLinkIndex`) | Link tới ticket — set bởi `LinkAlertToTicketConsumer` qua Saga; nhiều Alert có thể link cùng 1 Ticket khi reuse (xem §8.3, §53) |
 | `AcknowledgedByUserId` | `Guid?` | — | — |
 | `AcknowledgedAt` | `DateTime?` | — | — |
 | `ResolvedAt` | `DateTime?` | — | — |
@@ -549,27 +637,30 @@ public enum ChargingStateEnum
 }
 
 // Anomaly classification - mở rộng 7 → 15 giá trị
+// Cập nhật Sprint 5B: rearrange wire values, site-level (9-11) trước pin-level extended (12-13) — match implementation hiện tại.
 public enum AnomalyTypeEnum {
-    // Pin-level cũ (1-7)
+    // Pin-level baseline (1-7)
     Overheat = 1, Overvoltage = 2, Undervoltage = 3,
     LowSoc = 4, RapidDischarge = 5, AbnormalCharging = 6, DeviceOffline = 7,
-    // Pin-level mới (8-10) - degradation / aging
+    // Pin-level degradation (8)
     SohDegradation = 8,
-    HighInternalResistance = 9,
-    CellImbalance = 10,
-    // Site-level (11-14) - ambient + incident
-    HighAmbientTemp = 11,
-    HighHumidity = 12,
-    HighTempHumidityCombo = 13,
+    // Site-level ambient (9-11)
+    HighAmbientTemp = 9,
+    HighHumidity = 10,
+    HighTempHumidityCombo = 11,
+    // Pin-level Tier 2 (12-13)
+    HighInternalResistance = 12,
+    CellImbalance = 13,
+    // Site-level incident (14)
     EnvironmentalIncident = 14,
     // Cross-source validation (15) - B10
     SensorMismatch = 15   // BMS reading vs IoT reading lệch quá ngưỡng
 }
 
-// Nguồn đo của SensorReading (B9) - phân biệt BMS vs IoT Gateway
+// Nguồn đo của SensorReading (B9) - phân biệt BMS vs IoT edge device
 public enum SensorReadingSourceTypeEnum {
-    Bms = 1,         // Từ BMS gắn trực tiếp trong pack
-    IotGateway = 2,  // Từ IoT gateway (Raspberry Pi + sensor ngoài)
+    Bms = 1,         // Từ BMS gắn trực tiếp trong pack (qua RS485/Modbus)
+    IotGateway = 2,  // Từ IoT edge device (ESP32-S3 + sensor ngoài INA226/DS18B20); tên enum giữ legacy "Gateway"
     External = 3     // Manual import, third-party feed
 }
 
@@ -579,17 +670,21 @@ public enum AlertStatusEnum { Open = 1, Acknowledged = 2, Merged = 3, Resolved =
 // Ambient reading source - phân biệt từ IoT thật vs Weather API
 public enum AmbientReadingSourceEnum { IotSensor = 1, WeatherApi = 2 }
 
-// Environmental incident (smoke, water leak, ...)
-public enum IncidentTypeEnum
+// Environmental incident (smoke, fire, gas leak, flood, ...)
+// Cập nhật Sprint 5B: tên enum + loại incident mở rộng.
+public enum EnvironmentalIncidentTypeEnum
 {
-    SmokeDetected = 1,
-    WaterLeak = 2
-    // Mở rộng tương lai: PowerLoss = 3, DoorOpen = 4, ...
+    Smoke = 1,
+    FireDetected = 2,
+    GasLeak = 3,
+    Flood = 4,
+    OverheatHazard = 5,
+    Other = 99
 }
-public enum IncidentSeverityEnum { Warning = 1, High = 2, Critical = 3 }
-public enum IncidentStatusEnum
+// Severity tái dùng AlertSeverityEnum (Info/Warning/Critical) — không có IncidentSeverityEnum riêng.
+public enum EnvironmentalIncidentStatusEnum
 {
-    Detected = 1,         // mới phát hiện, chưa ack
+    Open = 1,             // mới phát hiện, chưa ack (tên thay 'Detected' để đồng bộ AlertStatusEnum)
     Acknowledged = 2,     // staff/manager đã thấy
     Resolved = 3,         // xử lý xong
     FalseAlarm = 4        // không phải sự cố thật
@@ -604,62 +699,73 @@ Chuỗi đo định kỳ điều kiện môi trường tại Site. Có thể đ�
 |-------|------|-----------|-------|------|
 | `Time` | `DateTime` | NOT NULL | TimescaleDB hypertable column | UTC |
 | `SiteId` | `Guid` | NOT NULL, FK → Site.Id | btree composite | Bắt buộc |
-| `BatteryGroupId` | `Guid?` | nullable, FK → BatteryGroup.Id | btree (filter) | Hybrid override: khi 1 site có nhiều group khác môi trường (vd indoor vs outdoor) |
 | `AmbientTemperature` | `decimal(5,2)` | NOT NULL | — | °C — nhiệt độ MÔI TRƯỜNG (≠ Temperature của pin) |
 | `Humidity` | `decimal(5,2)?` | nullable, 0–100 | — | % RH |
 | `SolarIrradiance` | `decimal(8,2)?` | nullable, ≥ 0 | — | W/m² (`shortwave_radiation` từ OpenMeteo hoặc pyranometer) |
 | `Source` | `AmbientReadingSourceEnum` | NOT NULL | btree | 1=IotSensor, 2=WeatherApi |
 | `SourceDeviceId` | `string(64)?` | nullable | — | DeviceId IoT, hoặc "openmeteo" |
 
+> `BatteryGroupId` đã bỏ — `BatteryGroup` entity deferred (xem §31). Ambient query chỉ scope theo Site.
+
 **PK composite:** `(Time, SiteId)` (giống `sensor_readings`).
 **Hypertable interval:** 7 day chunks.
-**Index:** `(SiteId, Time DESC)`; `(BatteryGroupId, Time DESC) WHERE battery_group_id IS NOT NULL`.
+**Index:** `(SiteId, Time DESC)`.
 **Retention:** 90 ngày raw, 1 năm 1h-aggregate (Sprint sau).
 
 **Query rule cho consumer (AnomalyDetector):**
-Để lấy ambient cho 1 BatteryAsset → tra theo `BatteryGroupId` của asset trước. Nếu Group có reading riêng (latest trong N phút) thì dùng. Nếu không, fallback dùng latest reading của Site.
+Để lấy ambient cho 1 BatteryAsset → tra theo `SiteId` của asset → lấy latest reading của Site trong N phút.
 
 #### 1.3.8. `AmbientThresholdConfig` (per Site, kế thừa `AuditableEntity`)
 
 Tách riêng khỏi `ThresholdConfig` (vốn per BatteryType) vì threshold môi trường là đặc tính của địa điểm.
 
+**Cập nhật Sprint 5B:** schema đổi sang Warning/Critical split (đồng bộ với pattern `ThresholdConfig`) — `AmbientTempMax/Min/HumidityMax` cũ replace bằng `HighAmbientTempWarning/Critical` + `HighHumidityWarning/Critical`. `IsActive` đổi tên thành `Enabled`. `EffectiveFromUtc` đã bỏ vì threshold không version (mọi update đè trực tiếp).
+
 | Field | Type | Constraint | Note |
 |-------|------|-----------|------|
 | `Id` | `Guid` | PK | — |
 | `SiteId` | `Guid` | FK, NOT NULL | One-active-config per site |
-| `AmbientTempMax` | `decimal(5,2)?` | nullable | °C, vd 40 — vượt → HighAmbientTemp anomaly |
-| `AmbientTempMin` | `decimal(5,2)?` | nullable | °C, vd 5 — lạnh quá pin xả chậm |
-| `HumidityMax` | `decimal(5,2)?` | nullable, 0–100 | %RH, vd 85 — vượt → HighHumidity anomaly |
-| `HumidityComboTempMax` | `decimal(5,2)?` | nullable | °C, vd 35 — trigger COMBO nếu cả 2 vượt |
-| `HumidityComboHumidityMax` | `decimal(5,2)?` | nullable, 0–100 | %RH, vd 80 — pair với ComboTempMax |
-| `EffectiveFromUtc` | `DateTime` | NOT NULL | — |
-| `IsActive` | `bool` | NOT NULL default true | — |
+| `HighAmbientTempWarning` | `decimal(5,2)?` | nullable | °C — vượt → HighAmbientTemp Warning |
+| `HighAmbientTempCritical` | `decimal(5,2)?` | nullable | °C — vượt → HighAmbientTemp Critical |
+| `HighHumidityWarning` | `decimal(5,2)?` | nullable, 0–100 | %RH — vượt → HighHumidity Warning |
+| `HighHumidityCritical` | `decimal(5,2)?` | nullable, 0–100 | %RH — vượt → HighHumidity Critical |
+| `ComboTempThreshold` | `decimal(5,2)?` | nullable | °C — trigger COMBO nếu cả 2 vượt |
+| `ComboHumidityThreshold` | `decimal(5,2)?` | nullable, 0–100 | %RH — pair với `ComboTempThreshold` |
+| `Enabled` | `bool` | NOT NULL default true | Tắt config cho site này nếu false |
 
-**Unique:** `(SiteId) WHERE IsActive = true AND IsDeleted = false`.
+**Unique:** `(SiteId) WHERE Enabled = true AND IsDeleted = false`.
 
 **Validation:**
-- Nếu cả `AmbientTempMin` và `AmbientTempMax` không null: `Min < Max`.
-- Nếu set combo: cả `HumidityComboTempMax` và `HumidityComboHumidityMax` đều phải có giá trị.
+- Nếu cả `HighAmbientTempWarning` và `HighAmbientTempCritical` không null: `Warning < Critical`.
+- Nếu cả `HighHumidityWarning` và `HighHumidityCritical` không null: `Warning < Critical`.
+- Nếu set combo: cả `ComboTempThreshold` và `ComboHumidityThreshold` đều phải có giá trị.
 
 #### 1.3.9. `EnvironmentalIncident` (event-driven, kế thừa `AuditableEntity`)
 
-Sự kiện an toàn (smoke/water leak/...) với lifecycle Detected → Resolved. KHÔNG phải time-series (mỗi event = 1 record với start/end time).
+Sự kiện an toàn (smoke/fire/gas/flood/...) với lifecycle Open → Resolved. KHÔNG phải time-series (mỗi event = 1 record với start/end time).
+
+**Cập nhật Sprint 5B:** đổi tên `IncidentTypeEnum` → `EnvironmentalIncidentTypeEnum` + mở rộng từ 2 → 6 loại (xem §1.3.6). `Status` initial state đổi tên `Detected` → `Open` để đồng bộ với `AlertStatusEnum`. Severity tái dùng `AlertSeverityEnum` (Info/Warning/Critical) thay vì có `IncidentSeverityEnum` riêng.
 
 | Field | Type | Constraint | Note |
 |-------|------|-----------|------|
 | `Id` | `Guid` | PK | — |
 | `SiteId` | `Guid` | FK, NOT NULL | btree |
-| `BatteryGroupId` | `Guid?` | FK, nullable | Khi cảm biến gắn cho group cụ thể |
-| `IncidentType` | `IncidentTypeEnum` | NOT NULL | 1=SmokeDetected, 2=WaterLeak |
-| `Severity` | `IncidentSeverityEnum` | NOT NULL | 1=Warning, 2=High, 3=Critical |
-| `Status` | `IncidentStatusEnum` | NOT NULL default `Detected` | 1=Detected, 2=Acknowledged, 3=Resolved, 4=FalseAlarm |
+| `IncidentType` | `EnvironmentalIncidentTypeEnum` | NOT NULL | 1=Smoke, 2=FireDetected, 3=GasLeak, 4=Flood, 5=OverheatHazard, 99=Other |
+| `Severity` | `AlertSeverityEnum` | NOT NULL default `Critical` | 1=Info, 2=Warning, 3=Critical (tái dùng) |
+| `Status` | `EnvironmentalIncidentStatusEnum` | NOT NULL default `Open` | 1=Open, 2=Acknowledged, 3=Resolved, 4=FalseAlarm |
 | `DetectedAt` | `DateTime` | NOT NULL | UTC |
+| `ReportedBy` | `string?` | nullable | User report (text — có thể là username hoặc system tag) |
 | `AcknowledgedAt` | `DateTime?` | — | — |
-| `AcknowledgedByUserId` | `Guid?` | — | UserId từ AuthService |
+| `AcknowledgedBy` | `Guid?` | — | UserId từ AuthService |
 | `ResolvedAt` | `DateTime?` | — | — |
-| `ResolvedByUserId` | `Guid?` | — | — |
-| `Description` | `string(1000)?` | nullable | Note thêm khi report (ví dụ vị trí cảm biến cụ thể) |
-| `SourceDeviceId` | `string(64)?` | nullable | DeviceId IoT báo về |
+| `ResolvedBy` | `Guid?` | — | UserId từ AuthService |
+| `ResolutionNote` | `string?` | nullable | Note khi đóng incident |
+| `FalseAlarmAt` | `DateTime?` | — | Thời điểm Manager đánh dấu false alarm |
+| `FalseAlarmBy` | `Guid?` | — | UserId đánh dấu |
+| `FalseAlarmReason` | `string?` | nullable | Lý do mark false alarm (audit) |
+| `Notes` | `string?` | nullable | Note bổ sung (vị trí cảm biến, context) |
+
+> `BatteryGroupId` và `SourceDeviceId` đã bỏ — `BatteryGroup` deferred (xem §31). Nếu cần track device source thì dùng `Notes`/`ReportedBy`.
 
 **Index:** `(SiteId, Status, DetectedAt DESC)`, `(IncidentType, Status)`.
 
@@ -810,7 +916,10 @@ while (!ct.IsCancellationRequested) {
 
 #### `AlertEscalationBackgroundService`
 - Mỗi 1 phút: query Alert `Severity=Critical AND Status=Open AND DetectedAt < now - 5min`.
-- Publish `BatteryAnomalyDetectedEvent` → TicketService consume → auto-create ticket (BR-02).
+- Không publish lại `BatteryAnomalyDetectedEvent`, vì event này đã start Saga ngay khi Critical Alert
+  được tạo. Nếu Alert vẫn chưa được ack sau 5 phút, publish contract riêng
+  `BatteryAlertEscalationRequestedEvent` cho NotificationService/Manager escalation; TicketService Saga
+  không subscribe contract này.
 
 #### `AlertAutoResolveBackgroundService`
 - Mỗi 5 phút: nếu Alert có `Status=Open` và `AnomalyType` không còn vượt ngưỡng trong N phút gần nhất → auto-resolve.
@@ -890,7 +999,7 @@ public class WeatherSyncBackgroundService : BackgroundService
 
 **Rate limit:** OpenMeteo free tier 10,000 calls/day. 1 site/15min = 96 calls/day → 100 sites OK.
 
-#### `ThresholdAnomalyDetector` (extend cho 14 anomaly types)
+#### `ThresholdAnomalyDetector` (extend cho 15 anomaly types — xem §1.3.6)
 
 Đã có trong Sprint 3 plan. Update logic:
 
@@ -924,7 +1033,7 @@ public class WeatherSyncBackgroundService : BackgroundService
 // Pseudo-code
 foreach (var reading in batch)
 {
-    foreach (var rule in DetectAllAnomalies(reading))   // 14 rule check
+    foreach (var rule in DetectAllAnomalies(reading))   // 15 rule check (xem §1.3.6)
     {
         // Lookup ThresholdConfig của BatteryType
         if (!config.NoiseSuppressionEnabled)
@@ -1046,18 +1155,29 @@ public record BatteryAssetCreatedEvent : IntegrationEvent {
     public Guid BatteryTypeId { get; init; }
 }
 
-public record BatteryAnomalyDetectedEvent : IntegrationEvent {
-    public Guid AlertId { get; init; }
-    public Guid BatteryAssetId { get; init; }
-    public Guid CustomerId { get; init; }
-    public AnomalyTypeEnum AnomalyType { get; init; }
-    public AlertSeverityEnum Severity { get; init; }
-    public decimal ThresholdValue { get; init; }
-    public decimal ActualValue { get; init; }
-    public string Unit { get; init; } = string.Empty;
-    public DateTime DetectedAt { get; init; }
-    public string AssetSerialNumber { get; init; } = string.Empty;  // denormalize for ticket service
-}
+public record BatteryAnomalyDetectedEvent(
+    Guid AlertId,
+    Guid BatteryAssetId,
+    Guid CustomerId,
+    string AssetSerialNumber,  // denormalize for Ticket/Notification services
+    int AnomalyType,           // wire value = integer của AnomalyTypeEnum §1.3.6; contract DTO không reference Domain enum type (assembly isolation), nhưng giá trị int phải khớp
+    int Severity,              // wire value = integer của AlertSeverityEnum §1.3.6 (1=Info, 2=Warning, 3=Critical)
+    decimal ThresholdValue,
+    decimal ActualValue,
+    string Unit,
+    DateTime DetectedAt
+) : IntegrationEvent;
+
+// Chỉ dùng cho Alert Critical vẫn chưa ack sau escalation window.
+// TicketService/Saga không subscribe event này.
+public record BatteryAlertEscalationRequestedEvent(
+    Guid AlertId,
+    Guid BatteryAssetId,
+    Guid CustomerId,
+    int Severity,
+    DateTime DetectedAt,
+    DateTime EscalatedAtUtc
+) : IntegrationEvent;
 
 public record BatteryAssetTransferredEvent : IntegrationEvent {
     public Guid AssetId { get; init; }
@@ -1087,12 +1207,40 @@ public record EnvironmentalIncidentResolvedEvent : IntegrationEvent {
     public Guid ResolvedByUserId { get; init; }
     public bool WasFalseAlarm { get; init; }
 }
+
+// IoT device chuyển Offline (publish bởi LWT handler hoặc IotDeviceOfflineDetectionBackgroundService — §52.6).
+// NotificationService consume để báo Customer/Staff; payload denormalize battery/site cho template.
+public record IotDeviceWentOfflineEvent : IntegrationEvent {
+    public Guid DeviceId { get; init; }
+    public string DeviceCode { get; init; } = string.Empty;
+    public Guid? SiteId { get; init; }
+    public string? SiteName { get; init; }                  // denormalize cho template
+    public Guid[] AffectedBatteryAssetIds { get; init; } = Array.Empty<Guid>();
+    public DateTime LastSeenAt { get; init; }
+    public DateTime DetectedAt { get; init; }
+}
+
+// SharedContracts; BatteryService publish sau khi Alert.TicketId đã commit.
+public record AlertLinkedToTicketEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId);
+
+public record AlertLinkToTicketRejectedEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId,
+    string ErrorCode,
+    string Reason,
+    bool IsRetryable);
 ```
 
 #### Consume
 - `AccountActivatedConsumer`: cache customer info nếu cần.
 - `AccountDeletedConsumer`: soft delete asset hoặc transfer to "Inactive" placeholder.
 - `AccountStatusChangedConsumer`: update local cache.
+- `LinkAlertToTicketConsumer`: nhận Saga command, update `Alert.TicketId` idempotently,
+  commit cùng `AlertLinkedToTicketEvent` qua Outbox; reject nếu Alert đã link Ticket khác.
 
 ### 1.8. REST API contract
 
@@ -1148,9 +1296,9 @@ PUT    /api/ambient-thresholds/by-site/{siteId}       (Admin) — upsert
 POST   /api/environmental-incidents                   (ApiKey `EnvironmentalIngest` — IoT cảm biến smoke/water)
 GET    /api/environmental-incidents?siteId=&type=&status=&from=&to=&page=  (— same auth —)
 GET    /api/environmental-incidents/{id}              (— same —)
-PATCH  /api/environmental-incidents/{id}/acknowledge  (Admin/Manager/Staff)
-PATCH  /api/environmental-incidents/{id}/resolve      (Admin/Manager/Staff)
-PATCH  /api/environmental-incidents/{id}/false-alarm  (Admin/Manager)
+POST   /api/environmental-incidents/{id}/acknowledge  (Admin/Manager/Staff)
+POST   /api/environmental-incidents/{id}/resolve      (Admin/Manager/Staff)
+POST   /api/environmental-incidents/{id}/false-alarm  (Admin/Manager)
 
 # Dashboard
 GET    /api/battery/dashboard/stats                   (Admin/Manager)
@@ -1163,7 +1311,9 @@ GET    /api/battery/health                            (Internal — for k8s prob
 - Tách thành 2 key trong `appsettings.json`:
   - `ApiKeys:SensorIngest` — chỉ cho `/api/sensor-readings/batch`
   - `ApiKeys:EnvironmentalIngest` — cho `/api/ambient-readings/batch` + `/api/environmental-incidents`
-- Lý do: nếu IoT gateway smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
+- Lý do: nếu IoT edge device smoke detector bị compromise, attacker không thể giả mạo sensor reading (và ngược lại). Mỗi key có scope giới hạn.
+
+> **MVP global key vs production per-device key (§52):** 2 key global ở trên là **mức MVP (P0–P2)** để chạy nhanh với simulator. Từ Sprint IoT-1, production dùng **API key per-device** (hash, kèm `X-Device-Code`, scope `sensor.ingest`/`device.heartbeat`/`environmental.ingest` — §52.2) thay cho global key; backend chấp nhận **cả hai** trong giai đoạn chuyển tiếp (backward-compat, §52bis.3). MQTT (v2) dùng credential per-device riêng (§52.14). Global `SensorIngest`/`EnvironmentalIngest` chỉ nên giữ cho demo/simulator, không cấp cho device thật ngoài site.
 
 **Batch limit & rate limit:**
 - `POST /api/sensor-readings/batch`: tối đa **1000 readings/request** — vượt quá trả `400 isSuccess=false`. Rate limit đề xuất: **60 requests/minute/device**.
@@ -1237,7 +1387,7 @@ GET    /api/battery/health                            (Internal — for k8s prob
 - `BatteryAssetCreateCommandValidationTests`: 8 cases (each field validation)
 - `AlertCreateCommandHandlerTests`: 4 cases (new alert, dedup merge into existing, critical → publish event, info severity → no event)
 - `AlertDeduplicationServiceTests`: 5 cases (within window same type → merge, outside window → new, different anomaly → new, status not Open → new, multiple recent → merge to most recent)
-- `ThresholdAnomalyDetectorTests`: 14 cases (1 per AnomalyTypeEnum value, gồm 7 cũ + 7 mới SOH/IR/Imbalance/Ambient/Combo/Incident/DeviceOffline)
+- `ThresholdAnomalyDetectorTests`: **15 cases** (1 per AnomalyTypeEnum value §1.3.6, gồm 7 baseline (Overheat/Overvoltage/Undervoltage/LowSoc/RapidDischarge/AbnormalCharging/DeviceOffline) + 8 extended (SohDegradation/HighInternalResistance/CellImbalance/HighAmbientTemp/HighHumidity/HighTempHumidityCombo/EnvironmentalIncident/SensorMismatch))
 - `BatteryAssetGetListQueryHandlerTests`: filtering, paging, soft-delete exclusion
 
 #### Unit tests — environmental + extended battery health
@@ -1315,7 +1465,7 @@ services.Configure<WeatherSyncOptions>(configuration.GetSection("Weather"));
 1. CRUD ticket với state machine 12+ trạng thái.
 2. Quản lý SLA timer (start/pause/resume/breach) — BR-04.
 3. Quản lý Activity timeline (BR-08).
-4. Auto-create từ `BatteryAnomalyDetectedEvent` (BR-02), tránh trùng (BR-02 cụ thể: chỉ tạo nếu chưa có ticket OPEN/ASSIGNED/IN_PROGRESS cho cùng asset+anomaly).
+4. Orchestrate `Alert–Ticket Saga`: nhận `BatteryAnomalyDetectedEvent`, tạo hoặc reuse Ticket theo BR-02, rồi yêu cầu BatteryService liên kết `Alert.TicketId`.
 5. Manager approval workflow (BR-05).
 6. Reopen policy 7 ngày (BR-06) + escalate khi ≥ 2 reopen (BR-07).
 7. KnowledgeBase module (xem §4).
@@ -1355,7 +1505,7 @@ services/TicketService/
 │   │   │   ├── IStaffAssignmentService.cs    ← workload + skill match
 │   │   │   └── StaffAssignmentService.cs
 │   │   └── Consumers/
-│   │       ├── BatteryAnomalyDetectedConsumer.cs
+│   │       ├── CreateTicketFromAlertConsumer.cs
 │   │       ├── AccountActivatedConsumer.cs            ← upsert CustomerAccount/StaffAccount khi tài khoản kích hoạt
 │   │       ├── AccountStatusChangedConsumer.cs        ← cập nhật Status (Active/Disabled/Locked) → suspend ticket nếu Customer
 │   │       ├── AccountProfileUpdatedConsumer.cs       ← đồng bộ FullName/Email/Avatar
@@ -1387,6 +1537,10 @@ services/TicketService/
 │   │   └── KbArticleStatusEnum.cs
 │   └── TicketService.Infrastructure/
 │       ├── Persistence/...
+│       ├── Sagas/
+│       │   ├── AlertTicketSagaState.cs         ← persistence model, CorrelationId = AlertId
+│       │   ├── AlertTicketSagaStateMachine.cs
+│       │   └── AlertTicketSagaDefinition.cs
 │       ├── BackgroundJobs/
 │       │   ├── SlaTimerBackgroundService.cs
 │       │   ├── AutoCloseBackgroundService.cs
@@ -1415,7 +1569,7 @@ services/TicketService/
 | `UrgencyLevel` | `UrgencyLevelEnum?` | nullable until ASSIGNED | **B3** — 1=Low, 2=Medium, 3=High. Manager gán lúc triage |
 | `Status` | `TicketStatusEnum` | NOT NULL default `NEW` | xem §2.4 |
 | `Origin` | `TicketOriginEnum` | NOT NULL | 1=ManualByCustomer, 2=AutoFromAlert, 3=CreatedByStaff |
-| `OriginAlertId` | `Guid?` | nullable | Link với Alert nếu auto |
+| `OriginAlertId` | `Guid?` | nullable, **unique filtered index** `WHERE origin_alert_id IS NOT NULL AND is_deleted = false` (Sprint 5B `AddAlertTicketSagaFoundation`) | Lưu Alert **đầu tiên** tạo Ticket. Reuse cho Alert mới KHÔNG ghi đè — quan hệ many-alerts-to-one-ticket nằm ở `Alert.TicketId` (xem §53.6, §53.8) |
 | `ReopenCount` | `int` | NOT NULL default 0 | BR-07 escalate khi ≥ 2 |
 | `ResolutionSummary` | `string(2000)?` | nullable | Staff điền khi mark RESOLVED |
 | `ResolvedAt` | `DateTime?` | nullable | — |
@@ -1716,18 +1870,31 @@ public class PriorityCalculator : IPriorityCalculator
 - Manager KHÔNG gán `Priority` trực tiếp nữa (sai framework).
 - Override: nếu Manager muốn override (rare, vd safety override) → require justification field `PriorityOverrideReason` ghi vào `TicketActivity`.
 
-**Auto-derivation cho AUTO-CREATE ticket (BR-02 từ BatteryAnomalyDetectedEvent):**
+**Auto-derivation cho AUTO-CREATE ticket (BR-02 từ Saga `CreateTicketFromAlertCommand`):**
 
-| Anomaly | Default ImpactScope | Default UrgencyLevel | → Priority |
-|---------|--------------------|--------------------|-----------|
-| `EnvironmentalIncident` (smoke/water) | Site | High | P1 |
-| `Overheat` (Critical severity) | SingleAsset | High | P2 |
-| `HighAmbientTemp` | Site | Medium | P2 |
-| `SohDegradation` | SingleAsset | Low | P3 |
-| `SensorMismatch` | SingleAsset | Medium | P3 |
-| Khác | SingleAsset | Medium | P3 |
+`CreateTicketFromAlertConsumer` nhận wire-value `AnomalyType` (int) từ command rồi map về `AnomalyTypeEnum` nội bộ của TicketService bằng cùng helper deterministic ở §53.7 trước khi đưa qua `PriorityCalculator`. Hai bảng dưới đây phải đồng bộ — sửa một bảng thì sửa cả hai và update unit test mapping.
+
+| Anomaly (internal enum §1.3.6) | Wire value | Default ImpactScope | Default UrgencyLevel | → Priority |
+|--------------------------------|------------|---------------------|----------------------|-----------|
+| `Overheat` (Critical severity) | 1 | SingleAsset | High | P2 |
+| `Overvoltage` | 2 | SingleAsset | Medium | P3 |
+| `Undervoltage` | 3 | SingleAsset | Medium | P3 |
+| `LowSoc` | 4 | SingleAsset | Low | P3 |
+| `RapidDischarge` | 5 | SingleAsset | Medium | P3 |
+| `AbnormalCharging` | 6 | SingleAsset | Medium | P3 |
+| `DeviceOffline` | 7 | SingleAsset | Low | P3 |
+| `SohDegradation` | 8 | SingleAsset | Low | P3 |
+| `HighAmbientTemp` | 9 | Site | Medium | P2 |
+| `HighHumidity` | 10 | Site | Low | P3 |
+| `HighTempHumidityCombo` | 11 | Site | High | P2 |
+| `HighInternalResistance` | 12 | SingleAsset | Low | P3 |
+| `CellImbalance` | 13 | SingleAsset | Medium | P3 |
+| `EnvironmentalIncident` (smoke/fire/gas/flood) | 14 | Site | High | P1 |
+| `SensorMismatch` | 15 | SingleAsset | Medium | P3 |
+| Unknown wire value | — | SingleAsset | Medium | P3 (+ warning metric) |
 
 > Manager có thể re-triage sau khi auto-create, nhưng Priority phải tính lại qua matrix — không nhập thẳng.
+> Saga contract không tham chiếu enum nội bộ — wire value là source of truth cross-service.
 
 **Enum bổ sung:**
 
@@ -1844,7 +2011,7 @@ await _uow.CommitTransactionAsync();
 
 ### 2.7. Integration events
 
-#### Publish (10 events)
+#### Publish (12 domain events + Saga response events)
 1. `TicketCreatedEvent`
 2. `TicketAssignedEvent`
 3. `TicketStatusChangedEvent` (generic)
@@ -1857,6 +2024,9 @@ await _uow.CommitTransactionAsync();
 10. `IncidentDeclaredEvent`
 11. `SlaWarningEvent`
 12. `SlaBreachedEvent`
+13. `TicketProvisionedForAlertEvent` — Saga response: trả Ticket đã tạo/reuse, không liên quan trạng thái `Resolved`.
+14. `TicketProvisionForAlertRejectedEvent` — business rejection có error code/retryability.
+15. `AlertTicketSagaFailedEvent` — terminal failure để observability/ops xử lý.
 
 Sample:
 ```csharp
@@ -1964,55 +2134,26 @@ Read-model có thể **trễ vài giây** so với state thật bên AuthService
 - **KHÔNG dùng read-model cho:** (a) authorization (JWT vẫn là source of truth), (b) compliance/audit log cần state real-time, (c) report tài chính.
 - Health check cần thiết: endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` per bảng — alert nếu > 60s liên tiếp 5 phút (consumer chết).
 
-#### Consume (6 events)
+#### Consume (5 account-sync events + Saga commands)
 
-1. `BatteryAnomalyDetectedConsumer`:
-   ```csharp
-   public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> ctx) {
-       var evt = ctx.Message;
-
-       // BR-02 dedup: chỉ auto-create nếu CHƯA có ticket active cho cùng (BatteryAsset + Category).
-       // Tại sao dedup theo Category, KHÔNG theo OriginAlertId?
-       //   - BatteryService có thể đã dedup/merge alert phía nó trước khi publish event
-       //     (BR-02 phía BatteryService): cùng pin + cùng anomaly type → 1 alert duy nhất.
-       //     Vì vậy `evt.AlertId` không ổn định: alert thứ 2 cùng loại có thể bị gộp vào alert đầu,
-       //     hoặc tạo alert mới với Id khác cho cùng vấn đề.
-       //   - Dedup theo (BatteryAssetId + Category + status active) là đúng nghiệp vụ:
-       //     "cùng pin + cùng loại sự cố + đang xử lý" thì không tạo ticket mới.
-       //   - Mapping anomaly→category dùng CHUNG hàm `MapAnomalyToCategory(evt.AnomalyType)`
-       //     cho cả dedup query và lúc tạo ticket → logic nhất quán.
-       var category = MapAnomalyToCategory(evt.AnomalyType);
-       var existing = await _uow.Tickets.GetAllAsync()
-           .Where(t => t.BatteryAssetId == evt.BatteryAssetId
-                    && t.Category == category
-                    && t.Status >= TicketStatusEnum.Open
-                    && t.Status <= TicketStatusEnum.WaitingOnsiteSchedule
-                    && !t.IsDeleted)
-           .AnyAsync();
-       if (existing) return; // dedup
-
-       var ticket = new Ticket {
-           Code = _codeGen.Next(),
-           BatteryAssetId = evt.BatteryAssetId,
-           CustomerId = evt.CustomerId,
-           Title = $"[{evt.Severity}] {evt.AnomalyType} detected on {evt.AssetSerialNumber}",
-           Description = $"Auto-detected: {evt.AnomalyType} (threshold {evt.ThresholdValue}{evt.Unit}, actual {evt.ActualValue}{evt.Unit})",
-           Category = category,
-           Status = TicketStatusEnum.Open,
-           Origin = TicketOriginEnum.AutoFromAlert,
-           OriginAlertId = evt.AlertId   // vẫn lưu để traceability/audit, KHÔNG dùng cho dedup
-       };
-       await _uow.Tickets.AddAsync(ticket);
-       await _activity.LogAsync(ticket.Id, ActivityActionEnum.Created, actorRole: ActorRoleEnum.System);
-       await _outbox.AddEvent(new TicketCreatedEvent { ... });
-       await _uow.CommitTransactionAsync();
-   }
-   ```
-2. `AccountActivatedConsumer` — upsert `CustomerAccount` / `StaffAccount` read-model theo role.
-3. `AccountStatusChangedConsumer` — update `Status`; Customer disabled → suspend ticket đang mở.
-4. `AccountProfileUpdatedConsumer` — sync `Email`, `FullName`, `PhoneNumber`.
-5. `StaffProfileUpdatedConsumer` — sync `EmployeeCode`, `IsAvailable`, `MaxConcurrentTickets`.
-6. `StaffSkillsUpdatedConsumer` — replace `SkillCodes[]`.
+1. `CreateTicketFromAlertConsumer` nhận `CreateTicketFromAlertCommand` từ Saga:
+   - Tìm Ticket chưa xóa có `OriginAlertId == AlertId` trước để bảo đảm retry cùng Alert trả đúng Ticket cũ.
+   - Nếu chưa có, map anomaly → category và tìm Ticket active cùng `(BatteryAssetId, Category)` theo BR-02.
+   - Nếu có Ticket active cùng asset/category, trả `CreatedNew=false`; không đổi `Origin`/`OriginAlertId`
+     của Ticket được reuse. `Alert.TicketId` mới là link cho Alert hiện tại.
+   - Nếu chưa có, tạo Ticket + Activity `Created` với actor System.
+   - Nếu tạo mới, publish cả `TicketCreatedEvent` và `TicketProvisionedForAlertEvent`; nếu reuse chỉ
+     publish provision response, không giả lập một TicketCreated lần hai.
+   - Commit Ticket/Activity và outgoing event trong cùng local transaction + EF Consumer Outbox.
+   - Unique filtered index trên `tickets.origin_alert_id` cho row `is_deleted=false` là lớp bảo vệ
+     cuối trước concurrent delivery.
+2. `AlertTicketSagaStateMachine` consume `BatteryAnomalyDetectedEvent`, success/rejection response của
+   hai participant, `Fault<T>`, timeout và `ReconcileAlertTicketSagaCommand`; chi tiết ở §8.3 và §53.
+3. `AccountActivatedConsumer` — upsert `CustomerAccount` / `StaffAccount` read-model theo role.
+4. `AccountStatusChangedConsumer` — update `Status`; Customer disabled → suspend ticket đang mở.
+5. `AccountProfileUpdatedConsumer` — sync `Email`, `FullName`, `PhoneNumber`.
+6. `StaffProfileUpdatedConsumer` — sync `EmployeeCode`, `IsAvailable`, `MaxConcurrentTickets`.
+7. `StaffSkillsUpdatedConsumer` — replace `SkillCodes[]`.
 
 ### 2.8. REST API contract
 
@@ -2071,6 +2212,11 @@ GET    /api/v1/ticket/dashboard/sla-trend                (Admin/Manager)
 
 # Health
 GET    /api/v1/ticket/health
+
+# Alert–Ticket Saga operations
+GET    /api/v1/admin/sagas/alert-ticket?state=&olderThan=&page=    (TicketSagaView — Admin + Manager read-only)
+GET    /api/v1/admin/sagas/alert-ticket/{alertId}                   (TicketSagaView — Admin + Manager read-only)
+POST   /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess         (TicketSagaReprocess — Admin only, audit log + idempotency key)
 ```
 
 #### Sample request — assign
@@ -2093,7 +2239,11 @@ Response includes computed `slaDueAt`.
 - `TicketResolveCommandHandlerTests`: 4 cases
 - `TicketReopenCommandHandlerTests`: 5 cases (within 7d ok, >7d rejected, reopen count++, escalate on 2nd reopen, escalate on 3rd+)
 - `SlaCalculatorTests`: 8 cases (compute due, pause/resume, total paused, breach detection)
-- `BatteryAnomalyDetectedConsumerTests`: 6 cases (auto-create, dedup existing same-category active ticket, dedup KHÔNG kích hoạt khi khác Category dù cùng asset, dedup KHÔNG kích hoạt với ticket đã Closed/Resolved, soft-deleted ticket được bỏ qua, mapping anomaly→category đúng)
+- `CreateTicketFromAlertConsumerTests`: create mới, retry cùng Alert trả Ticket cũ, reuse ticket active
+  cùng category, khác category tạo mới, ticket terminal không được reuse, soft-deleted ticket bị bỏ qua,
+  concurrent duplicate cùng Alert, concurrent Alerts cùng asset/category, PostgreSQL `23505` known/unknown
+  constraint, và mapping đủ **15 anomaly** + unknown fallback (đồng bộ §1.3.6).
+- `AlertTicketSagaStateMachineTests`: **≥ 21 cases** đồng bộ với test matrix §53.10 (happy path, reuse path, duplicate start trước/sau Completed, duplicate sau Saga Completed, escalation chưa-ack không start lần hai, dispatch flag off, concurrent duplicate command, concurrent Alerts cùng asset/category, Ticket DB transient failure, Battery unavailable, timeout, late response, conflict TicketId, business rejection, retryable rejection lặp lại, `Fault<T>` sau retry, manual reprocess, existing direct-consumer Ticket reconciliation, service restart khi timeout, broker restart, consumer crash trước/sau commit, feature-flag mis-config, reconciliation 2 lần)
 - `CustomerAccountSyncConsumerTests`: 4 cases (upsert mới khi chưa có, update khi đã có, bỏ qua role Admin/Manager, idempotent qua Inbox)
 - `StaffAccountSyncConsumerTests`: 5 cases (upsert StaffAccount, update IsAvailable + MaxConcurrentTickets, replace SkillCodes, status Disabled cập nhật, idempotent qua Inbox)
 - `TicketAssignCommandHandler__SkillWorkloadTests`: 4 cases (skill match warning, skill miss vẫn cho assign, workload cap block, staff không Active block)
@@ -2101,7 +2251,11 @@ Response includes computed `slaDueAt`.
 #### Integration tests
 - POST create → GET list returns
 - Assign → SLA timer starts → 80% warning event → breach event (use time mocking)
-- Auto-create from event via MassTransit TestHarness
+- Alert anomaly → Saga → create/reuse Ticket → link `Alert.TicketId` qua MassTransit TestHarness
+- Redelivery cùng `BatteryAnomalyDetectedEvent` không tạo thêm Ticket/Saga
+- RabbitMQ/BatteryService tạm unavailable → retry/timeout quan sát được, reprocess hoàn tất Saga
+- Direct consumer cũ không còn endpoint registration; chỉ Saga path xử lý anomaly event
+- Contract tests cho toàn bộ command/success/rejection/failure message của Saga
 - Reopen flow end-to-end
 
 ---
@@ -2138,6 +2292,8 @@ services/NotificationService/
 │   │   │   ├── SlaWarningConsumer.cs
 │   │   │   ├── SlaBreachedConsumer.cs
 │   │   │   ├── BatteryAnomalyDetectedConsumer.cs
+│   │   │   ├── BatteryAlertEscalationRequestedConsumer.cs   ← Sprint 5B: push Manager khi Critical Alert chưa-ack > 5 phút (xem §1, §8.3)
+│   │   │   ├── AlertTicketSagaFailedConsumer.cs             ← Sprint 5B: notify Admin/Manager khi Saga Failed (xem §53.11)
 │   │   │   ├── AccountActivatedConsumer.cs
 │   │   │   └── AccountInvitedConsumer.cs
 │   │   ├── Templates/
@@ -2191,7 +2347,9 @@ public enum NotificationTypeEnum {
     TicketEscalated = 7, IncidentDeclared = 8,
     SlaWarning = 9, SlaBreached = 10,
     BatteryAlertInfo = 11, BatteryAlertWarning = 12, BatteryAlertCritical = 13,
-    AccountActivated = 14, AccountInvited = 15
+    AccountActivated = 14, AccountInvited = 15,
+    BatteryAlertEscalationPending = 16,   // Sprint 5B: Critical Alert chưa ack > 5 phút (BatteryAlertEscalationRequestedEvent)
+    AlertTicketSagaFailed = 17            // Sprint 5B: Saga Failed cần operator reprocess (AlertTicketSagaFailedEvent)
 }
 ```
 
@@ -2247,6 +2405,10 @@ INPUT: NotificationTypeEnum + targetUserIds + payload
 | BatteryAlertWarning (Customer) | ✅ | ✅ | — | — |
 | BatteryAlertInfo | ✅ | — (chỉ in-app) | — | — |
 | IncidentDeclared (broadcast Manager/Admin/LeadStaff) | ✅ | ✅ | ✅ | ✅ |
+| BatteryAlertEscalationPending (Manager + Admin) | ✅ | ✅ | ✅ | — | Critical Alert chưa-ack > 5 phút (xem §1, §8.3) |
+| AlertTicketSagaFailed (Admin) | ✅ | ✅ | ✅ | — | Saga Failed cần operator reprocess (xem §53.11) |
+| DeviceOffline (Customer) | ✅ | ✅ | — | — | Từ `DeviceOffline` Alert (Warning) — Customer biết pin mất giám sát (§52.6) |
+| DeviceOffline (Staff/ops) | ✅ | ✅ | — | — | Từ `IotDeviceWentOfflineEvent` — Staff đi kiểm tra device tại site (§52.6) |
 
 ### 3.5. Endpoints
 ```
@@ -2391,6 +2553,7 @@ Future: ElasticSearch full-text trên Symptoms (out of scope capstone).
 | CSAT | `GET /api/v1/reports/csat?from=&to=` | {avgRating, ratingDistribution, totalRated} |
 | Resolution Time Distribution | `GET /api/v1/reports/resolution-time-histogram` | Buckets |
 | Category Breakdown | `GET /api/v1/reports/category-breakdown?from=&to=` | Array<{category, count}> |
+| **Saga Failed Rate** (Sprint 5B) | `GET /api/v1/reports/saga-failed-rate?from=&to=&granularity=day` | TimeSeries<{date, started, completed, failed, failedRate, p95DurationSec}> — chỉ Admin (`TicketSagaView`); cho hội đồng KLTN demo SRE practice (xem §40.5 SLO) |
 
 #### BatteryService reports
 
@@ -2399,8 +2562,10 @@ Future: ElasticSearch full-text trên Symptoms (out of scope capstone).
 | Battery Health by Type | `GET /api/v1/reports/battery-health-by-type` | Array<{typeId, name, totalAssets, withActiveAlerts, healthScore}> |
 | Alert Volume | `GET /api/v1/reports/alert-volume?granularity=day` | TimeSeries |
 | Top Anomaly Types | `GET /api/v1/reports/top-anomalies?from=&to=&limit=10` | Array<{anomalyType, count, criticalCount}> |
-| Asset Lifecycle | `GET /api/v1/reports/asset-lifecycle` | Array<{assetId, ageDays, cycleCount, alertsTotal}> |
+| Asset Lifecycle | `GET /api/v1/reports/asset-lifecycle` | Array<{assetId, ageDays, cycleCount, alertsTotal}> — `cycleCount` là metric **battery health** (số chu kỳ sạc/xả từ BMS), **không** phải energy throughput; xem scope §53.1 |
 | Warranty Expiry | `GET /api/v1/reports/warranty-expiring?within=90d` | Array<BatteryAsset> |
+| **Environmental Incident Report** (Sprint 7) | `GET /api/v1/reports/environmental-incidents?from=&to=&siteId=&type=` | Array<{siteId, incidentType, severity, detectedAt, resolvedAt, durationHours, wasFalseAlarm}> — Manager/Admin |
+| **Ambient Temperature Trend** (Sprint 7) | `GET /api/v1/reports/ambient-trend?siteId=&from=&to=&granularity=day` | TimeSeries<{date, avgTemp, maxTemp, minTemp, humidityAvg, irradianceAvg}> — Customer (own site) / Manager / Admin |
 
 ### 5.3. Export
 - Mỗi report có optional `?format=csv` hoặc `?format=xlsx` → return file download.
@@ -2833,6 +2998,14 @@ POST   /api/v1/auth/me/avatar                            (mọi role — body `{
 - `AccountProfileUpdatedEvent`
 - `StaffProfileUpdatedEvent`
 - `StaffSkillsUpdatedEvent` → TicketService có thể invalidate/cache lại skill matrix.
+- `PermissionsChangedEvent` (Sprint 5B `#241`) → publish khi seed/cập nhật role-permission mapping; các service downstream (TicketService cache permission, ApiGateway) invalidate cache. Cần cho task `#241` AuthService seed `ticket.saga.view`/`ticket.saga.reprocess`.
+
+### 7.5bis. Sprint 5B — Permission seed update (`#241`)
+- Data migration `SeedSagaPermissions` thêm 2 row vào `permissions` table: `ticket.saga.view`, `ticket.saga.reprocess`.
+- Data migration `BindSagaPermissionsToRoles`: bind `Admin` cả 2; bind `Manager` chỉ `ticket.saga.view`.
+- Publish `PermissionsChangedEvent` qua Outbox sau khi commit.
+- Integration test: login Admin/Manager → decode JWT → assert claim chứa permission đúng.
+- Migration phải có Down() để rollback cleanly nếu cần.
 
 ### 7.6. Avatar upload & Google avatar flow
 
@@ -3043,24 +3216,319 @@ Staff profile:
 
 ### 8.2. Inbox idempotency cho consumer
 
-`SharedInfrastructure/Idempotency` đã có `RedisInboxStore`. Mỗi consumer:
+`SharedInfrastructure/Idempotency` đã có `RedisInboxStore`, nhưng Inbox phải tuân thủ nguyên tắc:
+
+1. Không đánh dấu message là processed trước khi business action commit thành công.
+2. Nếu consumer throw exception, message phải được phép retry.
+3. Với consumer thay đổi database, ưu tiên durable Inbox cùng database/transaction hoặc MassTransit EF Inbox.
+4. Redis Inbox chỉ dùng khi có cơ chế `processing lease → completed`; key `completed` chỉ set sau action thành công.
+5. Mọi command consumer của Saga vẫn phải idempotent ở database bằng unique constraint/business key, không chỉ dựa vào Redis.
+
+**Quyết định cho Sprint 5B:** mọi Saga/participant consumer thay đổi DB dùng MassTransit EF Consumer Outbox
+trên chính service DbContext, với bảng durable `mt_inbox_state`, `mt_outbox_state`, `mt_outbox_message`
+(đặt tên/schema riêng để không đụng custom `outbox_messages`). Redis Inbox hiện tại không được dùng
+cho các endpoint này vì `TryMarkProcessedAsync` đang ghi key trước business commit.
+
+Pseudo-code cho consumer còn dùng custom Inbox (không áp dụng thủ công cho Saga endpoint đã dùng EF Consumer Outbox):
 ```csharp
-public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent> {
+public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent> {
     private readonly IInboxStore _inbox;
 
-    public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> ctx) {
-        var msgId = ctx.MessageId.ToString();
-        if (await _inbox.AlreadyProcessed(msgId)) return;  // dedup
+    public async Task Consume(ConsumeContext<AccountActivatedEvent> ctx) {
+        var messageId = ctx.Message.Id;
+        if (await _inbox.IsCompletedAsync(messageId, nameof(AccountActivatedConsumer)))
+            return;
 
-        await ProcessAsync(ctx.Message);
-        await _inbox.MarkProcessed(msgId, ttl: TimeSpan.FromDays(7));
+        await ProcessAndCommitAsync(ctx.Message, ctx.CancellationToken);
+        await _inbox.MarkCompletedAsync(
+            messageId,
+            nameof(AccountActivatedConsumer),
+            ttl: TimeSpan.FromDays(7));
     }
 }
 ```
 
-### 8.3. Compensating actions (saga light)
-- Trường hợp: TicketCreate thành công nhưng publish event thất bại → Outbox đảm bảo eventually consistent.
-- Trường hợp: Alert→Ticket creation fail → consumer retry 3 lần → DLQ → manual reprocess via admin endpoint `POST /api/v1/admin/dlq/reprocess/{messageId}`.
+### 8.3. Alert–Ticket Saga (MassTransit State Machine)
+
+#### 8.3.1. Vì sao cần Saga
+
+Luồng `Critical Alert → auto-create/reuse Ticket → cập nhật Alert.TicketId` đi qua hai database:
+
+- BatteryService sở hữu `Alert`.
+- TicketService sở hữu `Ticket`.
+
+Transaction local hoặc Outbox một chiều không thể đảm bảo cả hai phía cùng hoàn tất. Hiện trạng có thể tạo Ticket thành công nhưng `Alert.TicketId` vẫn null, hoặc redelivery tạo Ticket trùng. Sprint 5B triển khai Saga orchestration để theo dõi toàn bộ workflow và hỗ trợ retry/timeout/reprocess.
+
+#### 8.3.2. Saga ownership và correlation
+
+- Saga host: **TicketService**.
+- Persistence: EF Core Saga repository trong `ticket_db`.
+- Table: `alert_ticket_saga_states`.
+- `CorrelationId`: dùng chính `AlertId`.
+- Initial event phải cấu hình `CorrelateById(x => x.Message.AlertId)` + `InsertOnInitial`;
+  mọi success/rejection/timeout response correlate theo `CorrelationId`.
+- Với `Fault<CreateTicketFromAlertCommand>` và `Fault<LinkAlertToTicketCommand>`, correlation lấy từ
+  command lồng bên trong: `x.Message.Message.CorrelationId`; không lấy nhầm `FaultId`.
+- `ReconcileAlertTicketSagaCommand` cũng được phép `InsertOnInitial`, nhưng phải mang đủ
+  `BatteryAssetId`/`CustomerId`, khởi tạo thẳng `TicketProvisioned` với Ticket hiện hữu và tuyệt đối
+  không chạy bước create.
+- Một Alert chỉ có tối đa một Saga instance.
+- State `Completed` được giữ trong DB, không xóa ngay bằng `SetCompletedWhenFinalized`.
+  Completed row là durable tombstone chống event cũ tạo lại Saga. Trong capstone không chạy cleanup
+  Saga tombstone; nếu bổ sung retention sau này thì thời gian giữ phải ít nhất bằng retention của Alert
+  và Inbox dedup tương ứng.
+- `Completed` và `Failed` là persisted operational states. State machine phải cấu hình explicit
+  ignore/no-op cho duplicate start và late message hợp lệ; không để message đi `_skipped` chỉ vì Saga
+  đã terminal. Late message bất thường vẫn ghi metric/audit trước khi ignore.
+- Saga không thay thế `TicketStateMachine`; Saga quản lý consistency liên service, còn `TicketStateMachine` quản lý lifecycle nghiệp vụ trong TicketService.
+
+#### 8.3.3. States
+
+```text
+Initial
+  → TicketRequested
+  → TicketProvisioned     # đã tạo mới hoặc reuse ticket active
+  → AlertLinkRequested
+  → Completed
+
+Any non-terminal state
+  → Failed                # hết retry / timeout / business rejection
+```
+
+Tên `TicketProvisioned` cố ý tránh dùng từ `Resolved`, vì `TicketStatusEnum.Resolved`
+là trạng thái lifecycle hoàn toàn khác.
+
+#### 8.3.4. Message contracts trong SharedContracts
+
+```csharp
+public record CreateTicketFromAlertCommand(
+    Guid CorrelationId,       // = AlertId
+    Guid AlertId,
+    Guid BatteryAssetId,
+    Guid CustomerId,
+    string AssetSerialNumber,
+    int AnomalyType,
+    int Severity,
+    decimal ThresholdValue,
+    decimal ActualValue,
+    string Unit,
+    DateTime DetectedAt);
+
+public record TicketProvisionedForAlertEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId,
+    string TicketCode,
+    bool CreatedNew);
+
+public record TicketProvisionForAlertRejectedEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    string ErrorCode,
+    string Reason,
+    bool IsRetryable);
+
+public record LinkAlertToTicketCommand(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId,
+    string TicketCode);
+
+public record ReconcileAlertTicketSagaCommand(
+    Guid CorrelationId,       // = AlertId
+    Guid AlertId,
+    Guid BatteryAssetId,
+    Guid CustomerId,
+    Guid TicketId,
+    string TicketCode);
+
+public record AlertLinkedToTicketEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId);
+
+public record AlertLinkToTicketRejectedEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    Guid TicketId,
+    string ErrorCode,
+    string Reason,
+    bool IsRetryable);
+
+public record AlertTicketSagaFailedEvent(
+    Guid CorrelationId,
+    Guid AlertId,
+    string FailedStep,
+    string Reason,
+    DateTime FailedAtUtc);
+```
+
+Tất cả contract phải version-safe, không reference enum assembly nội bộ của BatteryService/TicketService.
+
+#### 8.3.5. Workflow
+
+```text
+BatteryService
+  Alert + BatteryAnomalyDetectedEvent commit cùng Outbox
+        ↓
+AlertTicketSagaStateMachine (TicketService)
+  consume BatteryAnomalyDetectedEvent, correlate AlertId
+        ↓ send
+CreateTicketFromAlertCommand
+        ↓
+TicketService consumer
+  - tìm ticket theo OriginAlertId trước
+  - nếu chưa có, tìm ticket active cùng BatteryAssetId + Category
+  - tạo mới hoặc reuse ticket
+  - commit Ticket/Activity + TicketProvisionedForAlertEvent cùng Outbox
+        ↓
+Saga receive TicketProvisionedForAlertEvent
+        ↓ send
+LinkAlertToTicketCommand
+        ↓
+BatteryService consumer
+  - update Alert.TicketId idempotently
+  - commit Alert + AlertLinkedToTicketEvent cùng Outbox
+        ↓
+Saga receive AlertLinkedToTicketEvent
+        ↓
+Completed / persist terminal state (không delete row)
+```
+
+Nhánh lỗi:
+
+- Business validation không được “return im lặng”; participant publish rejection event có `ErrorCode`,
+  `Reason`, `IsRetryable`.
+- Exception sau khi retry/redelivery hết được Saga consume qua `Fault<CreateTicketFromAlertCommand>`
+  hoặc `Fault<LinkAlertToTicketCommand>`.
+- Permanent rejection như `ALERT_NOT_FOUND`, `ASSET_NOT_FOUND`, `CUSTOMER_INVALID`,
+  `ALERT_TICKET_CONFLICT` chuyển `Failed` ngay.
+- Transient rejection/fault giữ nguyên step và để Saga schedule lần gửi command kế tiếp; không để
+  participant tự delayed-redelivery vô hạn.
+
+#### 8.3.6. Dedup và database constraints
+
+- `Ticket.OriginAlertId` có filtered unique index khi không null và `is_deleted=false`.
+- Business dedup `(BatteryAssetId + Category + active status)` vẫn giữ để reuse ticket đang xử lý.
+- Partial unique guard cho auto-ticket active cùng `(BatteryAssetId, Category)` ngăn hai Alert đồng thời
+  cùng tạo Ticket; consumer bắt unique violation và reload Ticket thắng race.
+- Nếu reuse ticket, Saga vẫn gửi link command để Alert mới có `TicketId`.
+- `Alert.TicketId` là source of truth cho quan hệ many-alerts-to-one-ticket.
+  `Ticket.OriginAlertId` chỉ lưu Alert đầu tiên tạo Ticket, không được ghi đè khi reuse cho Alert khác.
+- `alerts.ticket_id` có non-unique index để tra toàn bộ Alert đã link tới một Ticket.
+- `Alert.TicketId` update phải idempotent:
+  - null → set TicketId;
+  - cùng TicketId → success/no-op;
+  - khác TicketId → conflict, không overwrite âm thầm.
+- Saga table có PK/unique `CorrelationId`.
+- Consumer không dựa duy nhất vào query `AnyAsync`; unique constraint là lớp bảo vệ cuối trước race condition.
+
+#### 8.3.7. Retry, timeout và failure
+
+- Participant endpoint immediate retry tối đa 3 lần cho lỗi transient ngắn hạn.
+- Sau khi participant publish rejection/fault, Saga schedule tối đa 3 lần gửi lại command với delay
+  5s, 30s, 2m; tính cả lần đầu là tối đa 4 attempt cho mỗi step.
+- Retry schedule và Saga timeout phải dùng **durable scheduler**. RabbitMQ image hiện tại chỉ enable
+  management/prometheus, không có delayed-message plugin; TicketService host một persistent Quartz
+  scheduler endpoint dùng `ticket_db`. Không cấu hình `UseDelayedRedelivery` ở BatteryService nếu chưa
+  trỏ endpoint đó tới scheduler durable.
+- Saga schedule timeout:
+  - tạo/reuse Ticket: 10 phút;
+  - link Alert: 10 phút.
+- Saga state lưu riêng `StepTimeoutTokenId` và `RetryTokenId`. Trước khi schedule token mới hoặc khi
+  nhận success phải unschedule token không còn hợp lệ để tránh timeout/retry cũ tác động lên Saga đã tiến bước.
+- Hết retry/timeout:
+  - chuyển Saga sang `Failed`;
+  - lưu `FailedStep`, `FailureCode`, `LastError`, attempt count tương ứng và `LastAttemptAtUtc`;
+  - publish `AlertTicketSagaFailedEvent`;
+  - expose admin endpoint reprocess.
+
+#### 8.3.8. Compensation policy
+
+Luồng này dùng **forward recovery**, không hard-delete Ticket đã tạo:
+
+- Ticket tạo thành công nhưng link Alert thất bại → retry link cho đến khi thành công.
+- Ticket creation thất bại → Alert vẫn Open; Saga Failed và Admin có thể reprocess.
+- Nếu business rejection vĩnh viễn (asset/customer invalid) → Saga Failed, ghi audit và notify Manager.
+- Không rollback/xóa Alert vì Alert là bằng chứng telemetry.
+- Không rollback/xóa Ticket tự động vì Ticket có activity/audit. Nếu operator xác nhận duplicate, phải
+  re-link Alert về Ticket canonical rồi mới mark duplicate `IsDeleted=true` kèm activity/audit theo runbook.
+
+#### 8.3.9. Outbox và DI bắt buộc sửa trước Saga
+
+- Audit hiện trạng: TicketService đăng ký `OutboxMessagePublisher` trước rồi `AddMessageBus()` đăng ký
+  `MassTransitProducer` sau, nên business handler có thể resolve nhầm direct publisher.
+- HTTP/background business handler phải inject `IIntegrationEventOutboxWriter`, không dùng chung
+  interface với transport.
+- Saga và participant consumer không ghi thêm custom Outbox row. Chúng publish command/response/domain
+  event qua `ConsumeContext`/MassTransit publish-send endpoint trong consume scope để EF Consumer Outbox
+  capture cùng transaction.
+- Application operation được participant gọi phải trả outcome và dùng cùng scoped `DbContext`; không
+  tự `SaveChanges`/commit hoặc direct-publish trước consumer transaction, tránh double-outbox.
+- `OutboxRelayService` phải inject transport publisher riêng, ví dụ `IIntegrationEventTransport`, để tránh relay ghi ngược lại chính Outbox.
+- DI test phải assert mỗi interface chỉ có đúng implementation/lifetime dự kiến và relay không resolve Outbox writer.
+- Battery/Ticket business change và Outbox row phải commit cùng `DbContext`.
+- Relay cần max retry, backoff, lock/claim batch và metric pending/failed.
+- `AlertTicketDispatchEnabled=false` chỉ hold row `BatteryAnomalyDetectedEvent` ở trạng thái pending;
+  relay phải tiếp tục xử lý event type khác và không mark held row processed. Query/batch selection phải
+  loại held type để 100 row đầu không làm starve toàn Outbox.
+
+#### 8.3.10. Admin operations
+
+```text
+GET  /api/v1/admin/sagas/alert-ticket?state=Failed
+GET  /api/v1/admin/sagas/alert-ticket/{alertId}
+POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess
+```
+
+Controller phải thin và gọi MediatR Query/Command. Reprocess chỉ hợp lệ với Saga `Failed`,
+phải có permission, idempotency key, audit log và không được tạo Ticket trùng.
+MediatR handler không sửa trực tiếp Saga row; nó gửi internal
+`ReprocessAlertTicketSagaCommand(CorrelationId, RequestedBy, Reason)` vào Saga endpoint. State machine
+đọc `FailedStep`, reset attempt budget của đúng step, giữ nguyên `TicketId` nếu đã provisioned và tiếp tục
+forward recovery.
+
+#### 8.3.11. Endpoint topology
+
+Đặt endpoint name cố định, không phụ thuộc auto-generated kebab-case để cutover và dashboard không đổi:
+
+```text
+ticket-alert-ticket-saga
+ticket-create-ticket-from-alert
+battery-link-alert-to-ticket
+ticket-alert-ticket-quartz
+```
+
+- `BatteryAnomalyDetectedEvent` và success/rejection/failure là event: dùng `Publish`.
+- `CreateTicketFromAlertCommand`, `LinkAlertToTicketCommand`, reconciliation và reprocess là command:
+  dùng `Send` tới đúng endpoint; không `Publish` command.
+- Mỗi endpoint cấu hình EF Consumer Outbox, retry policy và dead-letter/error queue riêng.
+- Queue direct consumer cũ phải có tên riêng trong cutover; không đổi binding queue cũ thành Saga queue.
+
+#### 8.3.11bis. Endpoint runtime config (Sprint 5B)
+
+Cấu hình MassTransit cho mỗi Saga endpoint trong `Program.cs`/DI registration:
+
+| Endpoint | PrefetchCount | ConcurrentMessageLimit | Lý do |
+|----------|--------------|------------------------|-------|
+| `ticket-alert-ticket-saga` | 4 | 4 | Saga state DB write per message; cao hơn sẽ gây lock contention trên `alert_ticket_saga_states` row khi cùng Saga có nhiều message dồn dập |
+| `ticket-create-ticket-from-alert` | 8 | 8 | Participant write Ticket + Outbox; cap để không drain RabbitMQ queue và bypass back-pressure |
+| `battery-link-alert-to-ticket` | 8 | 8 | Tương tự participant |
+| `ticket-alert-ticket-quartz` | 16 | 16 | In-memory schedule, không DB-bound |
+
+```csharp
+cfg.ReceiveEndpoint("ticket-alert-ticket-saga", e => {
+    e.PrefetchCount = 4;
+    e.ConcurrentMessageLimit = 4;
+    e.UseInMemoryOutbox(); // optional cho test; production dùng EF Consumer Outbox
+    e.ConfigureSaga<AlertTicketSagaState>(provider);
+    e.UseMessageRetry(r => r.Immediate(3));  // immediate retry 3 lần cho transient
+});
+```
+
+**Dead-letter queue convention:** mỗi endpoint có `<endpoint>_error` queue (MassTransit auto-create). Alert rule `RabbitMqDeadLetterDepthHigh` (xem §9) trigger nếu depth > 10 sustained 5 phút.
+
+**Quartz cluster checkin:** `quartz.scheduler.instanceId=AUTO`, `quartz.scheduler.makeSchedulerThreadDaemon=true`, `quartz.threadPool.threadCount=10`, `quartz.jobStore.clusterCheckinInterval=10000` (10s). Hai TicketService instance dùng cùng schema sẽ tự coordinate, không double-fire trigger.
 
 ### 8.4. Distributed tracing (OpenTelemetry)
 
@@ -3094,8 +3562,15 @@ Middleware `IdempotencyKeyMiddleware` đã có. Apply cho:
 - `POST /api/v1/tickets/{id}/comments`
 - `POST /api/sensor-readings/batch`
 - `POST /api/v1/notifications/mark-read-bulk`
+- `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess` (Sprint 5B — chống admin click lặp) — header **bắt buộc**, không có header trả 400
 
 Header: `Idempotency-Key: <uuid>` → server lưu response 24h trong Redis.
+
+**Sprint 5B — Saga reprocess idempotency convention:**
+- FE generate UUID v4 client-side, gửi cùng request.
+- Server flow: lookup Redis key `idem:saga-reprocess:{alertId}:{key}`; nếu hit → return cached response (không re-trigger Saga).
+- Saga state cũng track `ManualReprocessCount` để audit; mỗi `Idempotency-Key` chỉ tăng counter 1 lần.
+- TTL 24h sau khi Saga chuyển Completed/Failed; xóa sớm nếu admin force-cleanup.
 
 ---
 
@@ -3131,6 +3606,25 @@ public static readonly Counter AlertsDetected = Metrics
 
 public static readonly Counter NotificationsSent = Metrics
     .CreateCounter("notifications_sent_total", "Total notifications", "channel", "status");
+
+// Sprint 5B — Alert–Ticket Saga (xem §53.11). Phải register cùng `AppMetrics.cs` để Prometheus scrape.
+public static readonly Counter SagaStarted = Metrics
+    .CreateCounter("alert_ticket_saga_started_total", "Saga started");
+public static readonly Counter SagaCompleted = Metrics
+    .CreateCounter("alert_ticket_saga_completed_total", "Saga completed");
+public static readonly Counter SagaFailed = Metrics
+    .CreateCounter("alert_ticket_saga_failed_total", "Saga failed", "step", "reason");
+public static readonly Histogram SagaDuration = Metrics
+    .CreateHistogram("alert_ticket_saga_duration_seconds", "Saga duration",
+        new HistogramConfiguration { Buckets = new[] { 1.0, 5, 15, 30, 60, 300, 600 } });
+public static readonly Gauge SagaStuck = Metrics
+    .CreateGauge("alert_ticket_saga_stuck_count", "Stuck Saga (non-progressing > 10min)", "state");
+public static readonly Counter TicketReused = Metrics
+    .CreateCounter("alert_ticket_ticket_reused_total", "Tickets reused by Saga");
+public static readonly Gauge OutboxUnprocessed = Metrics
+    .CreateGauge("outbox_unprocessed_count", "Outbox pending rows", "service");
+public static readonly Counter InboxProcessingFailed = Metrics
+    .CreateCounter("inbox_processing_failed_total", "Inbox processing failures", "consumer");
 ```
 
 #### Dashboards Grafana
@@ -3155,6 +3649,22 @@ public static readonly Counter NotificationsSent = Metrics
    - DB connection pool usage
    - Outbox lag (unprocessed count)
 
+4. **Alert–Ticket Saga** (Sprint 5B, xem §53.11):
+   - Saga started/completed/failed rate
+   - Saga duration P50/P95/P99
+   - Stuck Saga gauge by state
+   - Ticket reuse vs new ratio
+   - Inbox processing failures by consumer
+
+5. **IoT Device Monitoring** (Sprint IoT-1/7, xem §52.12):
+   - Devices online/offline count — gauge (`iot_devices_online_count` / `iot_devices_offline_total`)
+   - Heartbeat rate by device + last-seen age
+   - Sensor readings ingested vs rejected (`iot_sensor_readings_ingested_total` / `iot_sensor_readings_rejected_total{reason}`)
+   - Local queue depth per device (phát hiện mất mạng kéo dài)
+   - Reject reason breakdown (clock_drift / sensor_outlier)
+   - Firmware update status (`iot_firmware_updates_total{status}`)
+   - (MQTT P3) broker connected clients + LWT offline events
+
 #### Alert rules (`alertmanager.yaml`)
 ```yaml
 groups:
@@ -3173,6 +3683,91 @@ groups:
       - alert: ServiceDown
         expr: up{job=~"battery|ticket|notification"} == 0
         for: 1m
+
+      # Sprint 5B — Saga ops (xem §53.11)
+      - alert: AlertTicketSagaStuck
+        expr: alert_ticket_saga_stuck_count > 0
+        for: 10m
+        annotations:
+          summary: "Saga non-terminal không update > 10 phút — check runbook 09-saga-stuck.md"
+
+      - alert: AlertTicketSagaFailedSpike
+        expr: increase(alert_ticket_saga_failed_total[5m]) > 0
+        for: 5m
+        annotations:
+          summary: "Saga Failed phát sinh trong 5 phút — admin reprocess theo runbook 08-saga-failed.md"
+
+      # Sprint IoT-1 — IoT device ops (xem §52.12)
+      - alert: IotDevicesOfflineSpike
+        expr: increase(iot_devices_offline_total[10m]) > 2
+        for: 5m
+        annotations:
+          summary: "Nhiều IoT device chuyển Offline trong 10 phút — kiểm tra mạng site / nguồn / broker"
+
+      - alert: IotIngestRejectHigh
+        expr: rate(iot_sensor_readings_rejected_total[15m]) > 0.2
+        for: 5m
+        annotations:
+          summary: "Tỉ lệ reject reading IoT cao (clock_drift/outlier) > 15 phút — kiểm tra NTP/calibration device"
+
+  # SLO error budget burn rate (xem §40.5)
+  - name: slo
+    rules:
+      # Fast burn — consume 2% budget trong 1h → page on-call
+      - alert: SloFastBurn
+        expr: |
+          (
+            1 - (rate(http_requests_success_total[1h]) / rate(http_requests_total[1h]))
+          ) > on(service) (1 - slo_target) * 14.4
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.service }} burning error budget tốc độ 14.4× — sẽ hết budget trong 2 ngày"
+
+      # Slow burn — consume 5% budget trong 6h → notify only
+      - alert: SloSlowBurn
+        expr: |
+          (
+            1 - (rate(http_requests_success_total[6h]) / rate(http_requests_total[6h]))
+          ) > on(service) (1 - slo_target) * 6
+        for: 30m
+        labels:
+          severity: notify
+        annotations:
+          summary: "{{ $labels.service }} burning error budget tốc độ 6× — sẽ hết budget trong 5 ngày"
+
+      # Saga-specific burn (Sprint 5B)
+      - alert: SagaErrorBudgetFastBurn
+        expr: |
+          (rate(alert_ticket_saga_failed_total[1h]) / rate(alert_ticket_saga_started_total[1h])) > 0.144
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Saga Failed rate vượt 14.4% — error budget 99% sẽ hết trong 2 ngày"
+```
+
+**Recording rule** cho `slo_target` (Prometheus `prometheus.yml` rules):
+```yaml
+groups:
+  - name: slo_targets
+    rules:
+      - record: slo_target
+        expr: 0.999
+        labels: { service: "auth" }
+      - record: slo_target
+        expr: 0.995
+        labels: { service: "battery" }
+      - record: slo_target
+        expr: 0.999
+        labels: { service: "ticket" }
+      - record: slo_target
+        expr: 0.99
+        labels: { service: "notification" }
+      - record: slo_target
+        expr: 0.99
+        labels: { service: "saga" }
 ```
 
 ### 9.3. Structured logging convention
@@ -3182,6 +3777,14 @@ _logger.LogInformation("Ticket {TicketId} assigned to Staff {StaffId} with prior
 ```
 - Luôn dùng structured (named placeholders), không string interpolation.
 - Loki query: `{service="ticket"} | json | TicketId="..."`.
+
+**Sprint 5B — Saga structured field requirements (xem §53.11):**
+- Mọi log thuộc luồng Saga BẮT BUỘC có: `CorrelationId` (= AlertId), `AlertId`, `TicketId` (nếu đã provisioned), `CurrentState`, `MessageId`.
+- Thêm khi áp dụng: `TicketAttemptCount`, `AlertLinkAttemptCount`, `FailedStep`, `FailureCode`.
+- **KHÔNG** log: PII email/phone từ payload, full JWT, password, OTP, hoặc Saga payload snapshot raw.
+- Loki query mẫu cho ops:
+  - Saga theo Alert: `{service="ticket"} | json | CorrelationId="<alert-id>"`
+  - Saga Failed gần đây: `{service="ticket"} | json | CurrentState="Failed" | line_format "{{.AlertId}} {{.FailedStep}} {{.FailureCode}}"`
 
 ---
 
@@ -3207,6 +3810,7 @@ services.AddRateLimiter(opts => {
 - `/api/v1/auth/forgot-password`: 3 req/hour per IP
 - `/api/v1/tickets` POST: 30 req/min per user
 - `/api/sensor-readings/batch`: 1000 req/min per ApiKey
+- `/api/v1/admin/sagas/alert-ticket/{id}/reprocess` POST: 10 req/min per Admin (chống loop reprocess vô tình)
 
 ### 10.3. CORS
 ```csharp
@@ -3226,8 +3830,13 @@ Gateway expose `/swagger` aggregate từ N service:
 GET /health/live              → 200 if process alive
 GET /health/ready             → 200 if DB + Redis + RabbitMQ reachable
 GET /health/startup           → 200 after migrations done
+GET /health/sync-lag          → MAX(NOW() - LastSyncedAt) per read-model table (xem §2.7)
 ```
-Map vào k8s probes.
+Sprint 5B bổ sung cho TicketService:
+```
+GET /health/saga              → 200 if alert_ticket_saga_states reachable + Quartz scheduler started + qrtz_triggers table exists; 503 nếu Saga endpoint chưa register hoặc Quartz schema chưa apply (xem §53.8, R-21)
+```
+Map vào k8s probes; `/health/saga` add vào `readinessProbe` cho TicketService Sprint 5B.
 
 ---
 
@@ -3258,6 +3867,7 @@ Map vào k8s probes.
 - TestContainers: postgres + redis + rabbitmq
 - TimescaleDB cần image `timescale/timescaledb:latest-pg16` trong fixture
 - MassTransit `TestHarness` cho event/consumer
+- Sprint 5B: thêm fixture cho **EF Consumer Outbox/Inbox** và **Quartz scheduler** — `qrtz_*` schema được initialize trong test container; Saga test phải verify cả persistent timeout/redelivery recovery sau restart (xem §53.10).
 
 ### 11.4. Sample test
 ```csharp
@@ -3317,6 +3927,26 @@ GitHub Actions step:
     [ "$(echo "$PCT < $THRESHOLD" | bc)" = 1 ] && exit 1 || exit 0
 ```
 
+### 11.7. CI execution time budget
+
+| Service | Unit test (s) | Integration test (s) | Notes |
+|---------|---------------|----------------------|-------|
+| AuthService | 30s | 60s | Mature, không thay đổi nhiều |
+| BatteryService | 60s | 120s | TimescaleDB fixture nặng |
+| TicketService (current) | 60s | 90s | CQRS handlers |
+| **TicketService + Saga (Sprint 5B)** | **+90s** | **+300s** (5 phút) | **21+ Saga case** + restart-recovery (kill container × 3 case) + Quartz schema apply |
+| NotificationService (Sprint 6+) | 30s | 60s | Channel mocks |
+| **Total (Sprint 5B end)** | **4 phút** | **~12 phút** | **PR CI time ~16 phút** |
+
+**Mitigation cho CI time blow up:**
+- **detect-changes matrix** (đã có §0.1): Service không changes skip test → save 50-70% time.
+- **Parallel test execution**: `dotnet test --parallel` cho mỗi service.
+- **Saga test category split**: `[Category=Saga]` tách riêng `[Category=Critical]` (5 case quan trọng nhất, ~60s) cho PR fast feedback; `[Category=Saga-Full]` (21 case, ~5 phút) chạy ở `dev` branch merge.
+- **Test container reuse**: MassTransit TestHarness reuse fixture giữa các test case (giảm Quartz schema apply overhead).
+- **Quartz schema cache**: pre-built TimescaleDB+Quartz image ở GitHub Actions cache → save 30s per CI run.
+
+Mục tiêu: PR CI time ≤ 10 phút.
+
 ---
 
 ## 12. Seed data & migration strategy — P1
@@ -3334,6 +3964,7 @@ GitHub Actions step:
 - 3 ThresholdConfig (1 per type)
 - 10 BatteryAsset gắn với 5 Customer (mỗi customer 2 asset)
 - 10000 SensorReading (last 7 days, 1 reading/10min, có chèn ~5 anomaly events)
+- **1 IotDevice** (`DeviceCode=GW-DEMO-001`, `Model=ESP32-S3-N16R8`, `Status=Active`, `ConfigJson.batteryMappings` map 2–3 BatteryAsset qua `unitId` 1–3) + API key hash seed (key plaintext in ra console khi seed cho demo) + vài `IotDeviceHeartbeat` gần nhất + 1 `IotDeviceCalibration` (Voltage offset mẫu). Đủ để demo provision/heartbeat/offline mà không cần phần cứng.
 
 **Ticket (TicketService):**
 - 5 KnowledgeBaseArticle (1 per category)
@@ -3349,6 +3980,21 @@ GitHub Actions step:
 3. BatteryService InitialBatterySchema (+ TimescaleDB extension)
 4. TicketService InitialTicketSchema
 5. NotificationService InitialNotificationSchema
+
+**Sprint 5B (#234 → #238) migration order — bắt buộc tuần tự, không xen kẽ:**
+1. BatteryService `RemoveSiteCapacityKw` (`#234`) — drop column + rollback test.
+2. BatteryService + TicketService `AddDurableMessagingFoundation` (`#235`) — MassTransit EF Consumer Outbox/Inbox tables (`mt_inbox_state`, `mt_outbox_state`, `mt_outbox_message`).
+3. TicketService `AddQuartzPersistenceSchema` (`#235`) — `qrtz_*` 11 tables qua official SQL script.
+4. **Preflight data cleanup** (`#236`, runbook `10-saga-duplicate-canonical.md`) — query duplicate `OriginAlertId` + duplicate active `(BatteryAssetId, Category)`, chọn Ticket canonical, mark duplicate `IsDeleted=true` kèm audit log. **Migration step 5 sẽ fail nếu skip step này.**
+5. TicketService `AddAlertTicketSagaFoundation` (`#236`) — `alert_ticket_saga_states` + unique filtered index `tickets.origin_alert_id` + partial unique guard auto-ticket active.
+6. BatteryService `AddAlertTicketLinkIndex` (`#236`) — non-unique filtered index `alerts(ticket_id)` (column đã tồn tại).
+7. AuthService `SeedSagaPermissions` + `BindSagaPermissionsToRoles` (`#241`) — data migration (KHÔNG schema change); publish `PermissionsChangedEvent` để invalidate cache cross-service. Step này có thể chạy song song với #235–#238 vì khác DB; nhưng PHẢI hoàn tất trước khi enable Saga admin endpoints (#238 cutover).
+
+Mọi migration step phải pass rollback test trước khi apply step kế tiếp.
+
+**Sprint IoT-1 migration (`AddIotDeviceManagement`, sau Sprint 5B):**
+- BatteryService `AddIotDeviceManagement` — 5 entity (`IotDevice`, `IotDeviceHeartbeat`, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`) + `create_hypertable('iot_device_heartbeats','time')` (retention 30 ngày) + thêm `SensorReading.SourceType` (NOT NULL default `IotGateway` → seed data cũ = IotGateway) **và** `SensorReading.SensorSourceCode` (nullable) — **B9**, xem §1.3.4/§52.2.
+- Chạy độc lập DB BatteryService, không phụ thuộc thứ tự Saga ở trên; vẫn phải pass rollback test (`Down()` drop 5 bảng + 2 column).
 
 ### 12.3. Migration checklist (theo `be.md §14`)
 - [ ] Tên migration mô tả rõ
@@ -3378,6 +4024,8 @@ GitHub Actions step:
 | Ticket detail | 30s | On status change |
 | Manager queue | 15s | — |
 | KB article | 5min | On publish/update |
+| Saga state (admin views) | **0 (no cache)** | State chuyển nhanh; cache sẽ gây lệch giữa ops view và actual state |
+| Saga list (admin queries) | 10s (chỉ cho list filter `state=Failed`) | Acceptable cho dashboard refresh |
 | Threshold config | 10min | On update |
 | User profile | 5min | On update |
 | Notification preference | 5min | On update |
@@ -3411,6 +4059,9 @@ GitHub Actions step:
 | GET ticket detail (with includes) | 80ms | 200ms | 400ms |
 | Manager queue list | 100ms | 300ms | 500ms |
 | Sensor batch ingest (100 readings) | 200ms | 500ms | 1000ms |
+| Saga `POST /reprocess` (Sprint 5B) | 100ms | 300ms | 500ms |
+| Saga `GET /alert-ticket?state=` (Sprint 5B, page=50) | 80ms | 200ms | 400ms |
+| Alert→Saga Completed end-to-end (happy path, Sprint 5B) | 1.5s | 4s | 8s (mục tiêu, không phải HTTP SLA) |
 
 ---
 
@@ -3443,6 +4094,8 @@ GitHub Actions step:
 - AuditLog đã có trong AuthService cho login/role change.
 - TicketActivity đã có cho ticket changes.
 - Battery asset CUD → cũng cần audit (CreatedBy/UpdatedBy đã có qua AuditableEntity).
+- Sprint 5B: **Saga reprocess** (`POST /api/v1/admin/sagas/alert-ticket/{id}/reprocess`) phải ghi `AuditLog` với `Actor`, `Action="SagaReprocess"`, `Target=AlertId`, `Reason` (sanitized) + `IdempotencyKey`. Saga state cũng track `ManualReprocessCount`, `LastReprocessedBy`, `LastReprocessReason` (§53.6).
+- Saga rejection/failure event không log payload chứa PII (`AssetSerialNumber` được phép, `CustomerId` GUID OK; KHÔNG log email/phone).
 
 ### 14.7. OWASP top 10 quick check
 - **A01 Broken access:** permission attribute mọi endpoint + ownership check
@@ -3451,8 +4104,18 @@ GitHub Actions step:
 - **A04 Insecure design:** state machine validate transition, không tin client
 - **A05 Misconfig:** SecurityHeadersMiddleware đã có (X-Frame-Options, CSP)
 - **A07 AuthN failures:** rate limit login, login attempt tracking đã có
-- **A08 Software integrity:** dependabot đã có (PR #45 ví dụ)
+- **A08 Software integrity:** dependabot đã có (PR #45 ví dụ); **OTA firmware verify SHA-256 trước khi flash** (§52.7)
 - **A09 Logging:** Serilog + CorrelationId
+
+### 14.8. IoT device security (§52)
+- [ ] **API key per-device** chỉ lưu **hash** (không plaintext), key hiện 1 lần khi tạo/provision, hỗ trợ **rotate/revoke**; scope giới hạn (`sensor.ingest`/`device.heartbeat`/`environmental.ingest`).
+- [ ] Mọi ingest/heartbeat phải kèm `X-Device-Code` + device `Status=Active`; reject nếu device `Offline/Decommissioned`.
+- [ ] **Anti-spoofing:** reject clock skew > 5 phút, reject outlier, auto-disable device sau N outlier (EC-24/EC-25); device chỉ gửi được reading cho battery trong mapping của nó (§52.2).
+- [ ] **TLS:** HTTPS cho ingest/provision/firmware; MQTT-over-TLS 8883 (production) — dev mới `setInsecure()`.
+- [ ] **(MQTT)** credential MQTT per-device + **ACL phân quyền topic** — device chỉ pub/sub topic của chính nó (`infra/mqtt/acl.conf`, §52.14).
+- [ ] **Rate limit per device:** 60 requests/minute/device cho ingest (§1.8); broker connection limit.
+- [ ] OTA `downloadUrl` là **signed URL** hết hạn ngắn; firmware verify SHA-256 trước khi ghi partition (§52.7).
+- [ ] Audit: tạo/rotate/revoke device key + decommission device → `AuditLog` (`Action="IotDeviceKeyRotate"`/`"IotDeviceDecommission"`).
 
 ---
 
@@ -3474,6 +4137,8 @@ GitHub Actions step:
 | `sla-warning.hbs` | SlaWarningEvent | Staff + Manager | "[TKT-{Code}] SLA 80% — còn {Hours}h" |
 | `sla-breach.hbs` | SlaBreachedEvent | Manager (+ Admin nếu P1) | "[TKT-{Code}] SLA BREACH" |
 | `incident-declared.hbs` | IncidentDeclaredEvent | Admin/Manager/LeadStaff | "🚨 INCIDENT: {Title}" |
+| `battery-alert-escalation-pending.hbs` | BatteryAlertEscalationRequestedEvent | Manager + Admin | "⚠️ Critical Alert chưa-ack > 5 phút: {AssetSerialNumber}" |
+| `alert-ticket-saga-failed.hbs` | AlertTicketSagaFailedEvent | Admin | "❌ Saga Failed (AlertId={AlertId}, step={FailedStep}) — cần reprocess" |
 
 ### 15.2. Push notification templates (Expo)
 
@@ -3482,6 +4147,8 @@ GitHub Actions step:
 | BatteryAlertCritical | 🔴 Pin {Serial} cảnh báo nghiêm trọng | {AnomalyType} — {Actual}{Unit} (ngưỡng {Threshold}) | `{ "screen": "AlertDetail", "alertId": "..." }` |
 | TicketAssigned (Staff) | Ticket mới: {Code} | {Title} — Priority {Priority} | `{ "screen": "TicketDetail", "ticketId": "..." }` |
 | SlaWarning | ⚠️ SLA {Code} còn {Hours}h | {Title} | — |
+| BatteryAlertEscalationPending | ⚠️ Alert chưa ack | {AssetSerialNumber} — Critical > 5 phút | `{ "screen": "AlertDetail", "alertId": "..." }` |
+| AlertTicketSagaFailed | ❌ Saga Failed | AlertId {AlertId} — {FailedStep} | `{ "screen": "SagaDetail", "alertId": "..." }` |
 
 ### 15.3. Localization
 - Bộ template Tiếng Việt làm chính cho capstone.
@@ -3514,6 +4181,12 @@ GitHub Actions step:
 /scaffold-consumer BatteryService AccountDeletedEvent
 /scaffold-consumer BatteryService AccountStatusChangedEvent
 
+# Sprint 5B additions (xem §1.7 + §53)
+/scaffold-integration-event BatteryAlertEscalationRequestedEvent
+/scaffold-integration-event BatteryAnomalyDetectedV2Event
+/scaffold-consumer BatteryService LinkAlertToTicketCommand          # Saga participant
+# Migration thêm tay: AddAlertTicketLinkIndex (chỉ thêm filtered index), RemoveSiteCapacityKw, AddDurableMessagingFoundation
+
 # Custom CQRS (không có scaffold sẵn)
 /scaffold-cqrs-command BatteryService Alert Acknowledge
 /scaffold-cqrs-command BatteryService Alert Resolve
@@ -3535,9 +4208,29 @@ GitHub Actions step:
 
 # Background services: làm tay
 # - ThresholdCheckBackgroundService
-# - AlertEscalationBackgroundService
+# - AlertEscalationBackgroundService (Sprint 5B đổi sang publish BatteryAlertEscalationRequestedEvent, KHÔNG republish BatteryAnomalyDetectedEvent — xem §1, §53.4)
 # - AlertAutoResolveBackgroundService
 # - OutboxRelayBackgroundService
+
+# Sprint IoT-1 additions (ESP32 edge device — xem §52/§52bis)
+/scaffold-entity BatteryService IotDevice
+/scaffold-entity BatteryService IotDeviceHeartbeat          # custom hypertable migration, retention 30d
+/scaffold-crud   BatteryService IotDeviceCalibration
+/scaffold-crud   BatteryService IotFirmwareRelease
+/scaffold-entity BatteryService IotFirmwareUpdateLog
+# Migration thêm tay: AddIotDeviceManagement (5 entity + heartbeat hypertable + SensorReading.SourceType/SensorSourceCode — B9)
+/scaffold-cqrs-command BatteryService IotDevice Create        # admin tạo device + sinh API key (hash) + (MQTT) credential
+/scaffold-cqrs-command BatteryService IotDevice Provision
+/scaffold-cqrs-command BatteryService IotDevice Heartbeat
+/scaffold-cqrs-command BatteryService IotDevice UpdateConfig
+/scaffold-cqrs-command BatteryService IotDevice MarkOffline   # dùng cho MQTT LWT (§52.6)
+/scaffold-cqrs-query   BatteryService IotDevice GetList
+/scaffold-cqrs-query   BatteryService IotDevice HeartbeatHistory
+# Background services làm tay:
+# - IotDeviceOfflineDetectionBackgroundService (2 phút — backup cho LWT)
+# - CalibrationExpiryNotificationService
+# MQTT (P3, optional — §52.14): Infrastructure/Mqtt/{MqttBridgeBackgroundService,MqttTopicMap,TelemetryMessageHandler,LastWillHandler} + Security/DeviceApiKeyService — làm tay (không scaffold)
+# Broker hạ tầng: infra/mqtt/ (EMQX/Mosquitto + TLS 8883 + ACL per-device)
 ```
 
 ### 16.2. TicketService (sprint 3-4)
@@ -3578,8 +4271,9 @@ GitHub Actions step:
 /scaffold-cqrs-query TicketService Sla GetStatus
 /scaffold-cqrs-query TicketService Staff Workload
 
-# Consumer auto-create + read-model sync (xem §2.7 Read-model)
-/scaffold-consumer TicketService BatteryAnomalyDetectedEvent
+# Saga participant + read-model sync (xem §2.7, §8.3, §53)
+/scaffold-consumer TicketService CreateTicketFromAlertCommand
+/scaffold-consumer BatteryService LinkAlertToTicketCommand
 /scaffold-consumer TicketService AccountActivatedEvent
 /scaffold-consumer TicketService AccountStatusChangedEvent
 /scaffold-consumer TicketService AccountProfileUpdatedEvent
@@ -3598,11 +4292,26 @@ GitHub Actions step:
 /scaffold-integration-event SlaWarningEvent
 /scaffold-integration-event SlaBreachedEvent
 
+# Sprint 5B — Alert–Ticket Saga contracts vào SharedContracts (làm tay, không scaffold vì shared lib)
+# - SharedContracts/Saga/AlertTicket/CreateTicketFromAlertCommand.cs
+# - SharedContracts/Saga/AlertTicket/TicketProvisionedForAlertEvent.cs
+# - SharedContracts/Saga/AlertTicket/TicketProvisionForAlertRejectedEvent.cs
+# - SharedContracts/Saga/AlertTicket/LinkAlertToTicketCommand.cs
+# - SharedContracts/Saga/AlertTicket/AlertLinkedToTicketEvent.cs
+# - SharedContracts/Saga/AlertTicket/AlertLinkToTicketRejectedEvent.cs
+# - SharedContracts/Saga/AlertTicket/ReconcileAlertTicketSagaCommand.cs
+# - SharedContracts/Saga/AlertTicket/AlertTicketSagaFailedEvent.cs
+# Saga state machine + repository làm tay (không có /scaffold-saga):
+# - TicketService.Infrastructure/Sagas/AlertTicketSagaState.cs
+# - TicketService.Infrastructure/Sagas/AlertTicketSagaStateMachine.cs
+# - TicketService.Infrastructure/Sagas/AlertTicketSagaDefinition.cs (endpoint name + retry/timeout)
+
 # Tests
 /scaffold-unit-tests TicketService Ticket
 /scaffold-unit-tests TicketService SlaTimer
 /scaffold-unit-tests TicketService TicketActivity
 # Manual: TicketStateMachineTests (matrix test)
+# Manual: AlertTicketSagaStateMachineTests + MassTransit TestHarness E2E
 
 # Migrations
 /run-migration TicketService InitialTicketSchema
@@ -3612,6 +4321,7 @@ GitHub Actions step:
 # - AutoCloseBackgroundService
 # - EscalationBackgroundService
 # - OutboxRelayBackgroundService
+# - Sprint 5B: Quartz persistent scheduler endpoint (in-process, không phải BackgroundService riêng — host qua MassTransit) cho Saga retry/timeout (xem §53.8)
 ```
 
 ### 16.3. NotificationService (sprint 5)
@@ -3635,6 +4345,17 @@ GitHub Actions step:
 /scaffold-consumer NotificationService BatteryAnomalyDetectedEvent
 /scaffold-consumer NotificationService AccountActivatedEvent
 /scaffold-consumer NotificationService SendAdminInviteEvent
+
+# Sprint 5B additions (xem §3.2, §53)
+/scaffold-consumer NotificationService BatteryAlertEscalationRequestedEvent
+/scaffold-consumer NotificationService AlertTicketSagaFailedEvent
+
+# Sprint 6 additions (environmental — xem §3.4)
+/scaffold-consumer NotificationService EnvironmentalIncidentDetectedEvent
+/scaffold-consumer NotificationService EnvironmentalIncidentResolvedEvent
+
+# Sprint IoT-1 addition (device offline — xem §52.6, §3.4)
+/scaffold-consumer NotificationService IotDeviceWentOfflineEvent
 
 # Tests
 /scaffold-unit-tests NotificationService Notification
@@ -3727,120 +4448,306 @@ GitHub Actions step:
 ### Sprint 5 (6/7–19/7/2026)
 **Goal:** TicketService workflow integration — SLA, pause/resume, auto-create from Battery anomaly, maintenance log/comment/attachment.
 **Tasks:**
-- [ ] `SlaCalculator` service + unit tests — #94
-- [ ] `SlaTimerBackgroundService` (60s tick — warning + breach) — #94
-- [ ] Pause/Resume commands (3 commands cho 3 Waiting* states) — #95
-- [ ] `EscalationBackgroundService` event-driven — #96
-- [ ] Reopen + Rate commands (Customer flow) — #97
-- [ ] `AutoCloseBackgroundService` (7d auto-close) — #98
-- [ ] Incident commands — #98
-- [ ] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
-- [ ] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
-- [ ] Consumer `BatteryAnomalyDetectedConsumer` → auto-create ticket + dedup BR-02 theo `(BatteryAssetId + Category + status active)` — KHÔNG dùng `OriginAlertId` cho dedup (xem §2.7) — #142
-- [ ] **5 read-model sync consumers** cho TicketService (`AccountActivatedConsumer`, `AccountStatusChangedConsumer`, `AccountProfileUpdatedConsumer`, `StaffProfileUpdatedConsumer`, `StaffSkillsUpdatedConsumer`) → upsert `CustomerAccount`/`StaffAccount` qua Inbox idempotency (xem §2.7 Read-model) — #142
-- [ ] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
-- [ ] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
-- [ ] MaintenanceLog + comments + attachments workflow trong TicketService — #143
-- [ ] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
-- [ ] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
+- [x] `SlaCalculator` service + unit tests — #94
+- [x] `SlaTimerBackgroundService` (60s tick — warning + breach) — #94
+- [x] Pause/Resume commands (3 commands cho 3 Waiting* states) — #95
+- [x] `EscalationBackgroundService` event-driven — #96
+- [x] Reopen + Rate commands (Customer flow) — #97
+- [x] `AutoCloseBackgroundService` (7d auto-close) — #98
+- [x] Incident commands — #98
+- [x] All events publish (SlaWarning, SlaBreached, Escalated, Incident, etc.) — #99
+- [x] Coverage ≥ 80% + integration test SLA breach end-to-end with time mocking — #99
+- [x] Consumer `BatteryAnomalyDetectedConsumer` → baseline Sprint 5 auto-create Ticket. Audit code hiện tại cho thấy dedup mới theo BatteryAsset active, chưa khóa Category/concurrency; consumer này sẽ bị thay và decommission bởi Saga flow Sprint 5B — #142
+- [x] **5 read-model sync consumers** cho TicketService (`AccountActivatedConsumer`, `AccountStatusChangedConsumer`, `AccountProfileUpdatedConsumer`, `StaffProfileUpdatedConsumer`, `StaffSkillsUpdatedConsumer`) → upsert `CustomerAccount`/`StaffAccount` qua Inbox idempotency (xem §2.7 Read-model) — #142
+- [x] Validate `CustomerId` (active) + `AssignedStaffId` (active, IsAvailable, skill warning, workload cap) qua read-model trong `TicketCreateCommandHandler` và `TicketAssignCommandHandler` — #142
+- [x] Health endpoint `/health/sync-lag` trả `MAX(NOW() - LastSyncedAt)` cho `CustomerAccount` + `StaffAccount` — alert nếu > 60s — #142
+- [x] MaintenanceLog + comments + attachments workflow trong TicketService — #143
+- [x] **B6** — `StaffSkillTierEnum` + migration AuthService `AddStaffSkillTier` + sync `StaffAccount.SkillTier` qua `StaffProfileUpdatedEvent` + routing logic theo tier trong `TicketAssignCommandHandler` (xem §7) — #150
+- [x] **B7** — Escalation closure rule: enforcement trong `TicketResolveCommandHandler` (chỉ assigned-after-escalation staff được resolve) + thêm `ActivityActionEnum.ResolvedByEscalatedStaff = 23` + 4 unit test edge cases (xem §2.4.2.bis) — #151
 
 ### Sprint 5B (20/7–26/7/2026)
-**Goal:** BatteryService advanced monitoring riêng — ambient/environmental/tier-2 sensor health. Sprint này tách khỏi TicketService để tránh phát triển song song hai domain lớn.
+**Goal:** Chốt lại BatteryService đúng phạm vi battery health, loại bỏ Energy/CO2 khỏi model/API/roadmap, đồng thời triển khai Alert–Ticket Saga bền vững giữa BatteryService và TicketService. Ambient/environmental/tier-2 chỉ thực hiện sau các task P0 này.
+
+**⚠️ Sprint length: 7 calendar days = 5 working days (Mon-Fri 20/7-24/7) + 2 weekend.** Đây là sprint **NỬA** so với sprint thường (14 days). Sprint 5B tải 9 task `#233-#241` (P0 release gate) trong 5 working days là **rủi ro cao**. Mitigation tổng hợp:
+- **Working weekend option**: Nếu team đồng ý làm thứ 7-CN, ~7 working days. Leader phải confirm trước Sprint 5B start.
+- **Kéo sang Sprint 6 đầu**: Nếu không kịp Sun 26/7, `#239` (test + observability) hoặc `#240` (doc sync) có thể lấn 1-2 ngày Sprint 6 đầu — nhưng NGUY HIỂM vì block Sprint 6 NotificationService owner.
+- **Defer scope phụ**: Ambient/B2-finalize đã được defer (xem §17 overload mitigation). Nếu cuối tuần thấy critical path slip, defer thêm: AI module retry config (§30.11), Alert silence/snooze (§37).
+- **Combine với Sprint 5 buffer**: Sprint 5 kết thúc 19/7 (Sunday). Nếu Sprint 5 finish sớm Fri 17/7, team có 2-3 ngày weekend prep cho Sprint 5B (đọc spec, setup local environment, đăng ký external services theo §56.15).
+
+**Release gate:** `#233–#241` là P0 và phải hoàn thành theo thứ tự phụ thuộc. Nếu Sprint 5B thiếu capacity, defer `B2-finalize`, OpenMeteo/ambient và false-alarm workflow; không cắt giảm Outbox/Inbox, unique constraint hoặc Saga test.
+
+**⚠️ Capacity warning — Solo owner risk:** Thắng là sole owner cho toàn bộ 9 task `#233`–`#241`. Estimate ~8.5 dev-day trong 7-day sprint là **rủi ro cao**. Mitigation:
+- **Working weekend**: tận dụng 2 ngày T7-CN để đạt ~7 working days.
+- **Defer scope phụ**: Ambient/B2-finalize đã defer. Nếu cuối tuần slip, defer thêm AI module retry config (§30.11), Alert silence/snooze (§37).
+- **KHÔNG defer `#237`** (Saga orchestrator) — task critical nhất.
+- **Documentation immediate**: update `docs/onboarding/be-newcomer.md` Saga section (§40.6) NGAY sau khi `#237` merge — không đợi `#240`.
+
+**⚠️ Bus factor = 1 cho Saga code:** Nếu Thắng không available giữa Sprint 5B → block toàn bộ critical path. Mitigation tối thiểu: code walkthrough video sau khi `#237` merge (record + upload `docs/knowledge-transfer/saga-walkthrough.md`) để team đọc kế thừa nếu cần.
+
+**FE work song song Sprint 5B (Trí + Minh):**
+
+Tài liệu này là BE-focused, nhưng Sprint 5B 7 ngày FE cũng cần work plan để không idle:
+- **Sprint 5 carryover** (UI bug fix, polish) — primary task.
+- **Mock Saga admin UI** dựa trên §60.4bis spec (BE endpoint chưa ready, FE dùng MSW/json-server mock). Khi `#236` SharedContracts merge, swap mock sang real type definitions từ shared contracts package.
+- **Postman collection update** — FE thường xuyên dùng Postman, có thể giúp `#240` documentation sync với example payload.
+- **Mobile work**: Customer mobile app polish, push notification integration test với real Expo token.
+
+FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint stable). Đến demo Sprint 8, Saga admin UI phải:
+- Hiển thị danh sách Saga Failed.
+- Cho Admin reprocess được (đầy đủ Idempotency-Key + confirmation modal).
+- Cho Manager xem read-only.
+
+**FE owner explicit**: Trí (Web Admin portal — Saga admin UI primary) + Minh (Mobile app + Customer flow).
+
+**Owner mapping (P0 release gate):**
+
+| Task | Owner | Reviewer | Đầu ra chính |
+|------|-------|----------|--------------|
+| `#233` Battery scope cleanup + ADR-017 | **Thắng** | — | Backlog cleaned, ADR-017 merged, scope-guard CI rule |
+| `#234` Remove `Site.CapacityKw` | **Thắng** | — | Migration `RemoveSiteCapacityKw` + Up/Down test |
+| `#235` Messaging reliability hardening | **Thắng** | — | DI split, Outbox relay v2, Quartz schema, EF Consumer Outbox tables |
+| `#236` Saga contracts + DB foundation | **Thắng** | — | `SharedContracts/Saga/AlertTicket/*`, migration `AddAlertTicketSagaFoundation`, `AddAlertTicketLinkIndex` |
+| `#237` Saga orchestrator | **Thắng** | — | `AlertTicketSagaState` + state machine + EF repo + persistent timeout |
+| `#238` Saga participants + cutover | **Thắng** | — | `CreateTicketFromAlertConsumer`, `LinkAlertToTicketConsumer`, NotificationService 2 consumer + enum 16/17, escalation event split, cutover flags |
+| `#239` Saga verification + operations | **Thắng** | — | Unit/integration/E2E tests, admin endpoints, metrics/alert rules, runbook, ADR-018 |
+| `#240` Documentation sync | **Thắng** | — | Swagger/Postman/SRS/CHANGELOG/3 runbook |
+| `#241` AuthService permission seed | **Thắng** | — | Data migration seed 2 permission + role bind + cache invalidate event |
+
 **Tasks:**
-- [ ] Entity `AmbientReading` (hypertable) + `AmbientThresholdConfig` (per Site, regular table) — #89
-- [ ] Migration `AddAmbientMonitoring`: tạo bảng + hypertable + index — #89
-- [ ] `IOpenMeteoClient` interface + `OpenMeteoClient` HTTP impl (Polly retry, 10s timeout) — #90
-- [ ] `WeatherSyncBackgroundService` (15min interval, dedup 10min, per-site lat/lon) — #90
-- [ ] `BatchIngestAmbientReadingsCommand` + endpoint (ApiKey `EnvironmentalIngest`) — #91
-- [ ] `GetAmbientReadingHistoryQuery` + `GetLatestAmbientReadingQuery` + endpoints — #91
-- [ ] `UpsertAmbientThresholdConfigCommand` + 2 query (by-site, list) + endpoints — #92
-- [ ] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighAmbientTemp`, `HighHumidity`, `HighTempHumidityCombo` — #93
-- [ ] Update `appsettings.json`: tách `ApiKeys:SensorIngest` và `ApiKeys:EnvironmentalIngest`, thêm `Weather:*` config — #92
-- [ ] Unit tests OpenMeteoClient (HttpMessageHandler stub) + WeatherSyncBackgroundService (mock client) + 3 anomaly types mới — #93
-- [ ] Integration test: ingest ambient → query latest, combo threshold → alert — #93
-- [ ] Entity `EnvironmentalIncident` (regular table với lifecycle) — #100
-- [ ] Migration `AddEnvironmentalIncidentAndAlertSiteLevel`: tạo bảng `environmental_incidents` + relax `alerts.battery_asset_id` thành nullable + thêm `alerts.site_id` + `alerts.environmental_incident_id` + check constraint + index — #100
-- [ ] Migration `ExtendSensorReadingTierTwo`: thêm `InternalResistanceMilliohm`, `CellVoltageDeltaMv` vào `sensor_readings` — #101
-- [ ] Migration `ExtendThresholdConfigTierTwo`: thêm `InternalResistanceMaxMilliohm`, `CellVoltageDeltaMaxMv` vào `threshold_configs` — #101
-- [ ] `ReportEnvironmentalIncidentCommand` (ApiKey `EnvironmentalIngest`) — tạo incident + alert + publish event — #102
-- [ ] `AcknowledgeEnvironmentalIncidentCommand` + `ResolveEnvironmentalIncidentCommand` + `MarkFalseAlarmEnvironmentalIncidentCommand` — #102
-- [ ] `GetEnvironmentalIncidentsQuery` (list + filter) + `GetEnvironmentalIncidentByIdQuery` + `ActiveEnvironmentalIncidentsBySiteQuery` — #103
-- [ ] Endpoints `/api/environmental-incidents` (6 endpoint) — #103
-- [ ] Integration event `EnvironmentalIncidentDetectedEvent` + `EnvironmentalIncidentResolvedEvent` — #104
-- [ ] Extend Alert table — handler tạo alert cho cả site-level (chỉnh `AlertCreateCommandHandler` + dedup logic) — #104
-- [ ] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighInternalResistance`, `CellImbalance`, `EnvironmentalIncident` — #105
-- [ ] Update `SensorReadingItem` + validation (IR > 0, CellDelta ≥ 0) — #105
-- [ ] Unit tests cho mọi command/handler + Tier 2 anomaly types — #105
-- [ ] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
-- [ ] Coverage ≥ 80% maintain — #105
-- [ ] **B1** — Noise Suppression Logic: entity `NoiseBreachEvent` (hypertable) + migration nhét vào `ExtendThresholdConfigTierTwo` (thêm `NoiseSuppressionCount`/`WindowHours`/`Enabled`) + frequency-based logic trong `ThresholdAnomalyDetector` + bypass cho EnvironmentalIncident và Critical Overheat + retention job 7 ngày (xem §1.6.5) — #152
+- [x] **#233 — Battery scope cleanup:** xóa toàn bộ Energy/CO2 analytics khỏi backlog, API contract, report/dashboard/demo; không tạo `EnergySession`, `BatteryCycleLog`, `EnergyDailySummary`, `SiteEnergySummary`, `ElectricityRate`, `CarbonEmissionFactor`; giữ Voltage/Current/SOC/SOH/CycleCount/NominalCapacity vì phục vụ battery health; merge **ADR-017** vào `docs/adrs/`; thêm CI scope-guard rule grep `Energy|CO2|kWh|CapacityKw` trên active source — xem §53.1–§53.3. **Owner: Thắng.**
+- [x] **#234 — Remove `Site.CapacityKw`:** bỏ field khỏi Domain entity, command/query DTO, mapping, validation, seed, API docs và test; migration BatteryService `RemoveSiteCapacityKw` có Up/Down + rollback test; rà soát không còn JSON property `capacityKw`. **Owner: Thắng.**
+- [x] **#235 — Messaging reliability hardening:** tách `IIntegrationEventOutboxWriter` khỏi `IIntegrationEventTransport`, sửa DI overwrite hiện tại, thêm DI tests; Outbox relay có claim/lock, retry/backoff, error/metrics; thêm MassTransit EF Consumer Outbox/Inbox tables riêng cho Battery/Ticket consumers; cài NuGet `MassTransit.Quartz` + `Quartz.AspNetCore` + `Quartz.Serialization.Json`; migration `AddQuartzPersistenceSchema` (11 bảng `qrtz_*` qua official Quartz.NET PostgreSQL SQL script); cấu hình participant immediate retry và persistent Quartz scheduler endpoint cho Saga retry/timeout; **cấu hình endpoint runtime** (PrefetchCount/ConcurrentMessageLimit per endpoint — xem §8.3.11bis); cluster mode bật cho hai TicketService instance không double-fire (`quartz.scheduler.instanceId=AUTO`, `clusterCheckinInterval=10000`) — xem §8.1–§8.3 và §8.3.11bis. **Owner: Thắng.**
+- [x] **#236 — Saga contracts + DB foundation:** đưa contract Alert/Ticket dùng chung vào `SharedContracts/Saga/AlertTicket/`; cập nhật XML docs/subscriber của `BatteryAnomalyDetectedEvent` sang Saga; thêm command, success/rejection response cho cả create/reuse Ticket và link Alert, reconciliation command đủ asset/customer context, cùng terminal failure contract; migration TicketService `AddAlertTicketSagaFoundation` tạo `alert_ticket_saga_states`, unique filtered index `tickets.origin_alert_id` và guard chống hai auto-ticket active cùng asset/category sau khi preflight/resolve duplicate data; migration BatteryService `AddAlertTicketLinkIndex` thêm non-unique index `alerts(ticket_id) WHERE ticket_id IS NOT NULL` (cột đã tồn tại, không add column). **Owner: Thắng.**
+- [x] **#237 — Saga orchestrator:** implement `AlertTicketSagaState`, state machine, EF repository/configuration, explicit correlation `AlertId`, lưu đủ anomaly payload snapshot để resend sau restart, PostgreSQL `xmin` optimistic concurrency, persistent timeout, bounded retry/rejection/fault transition và transactional Outbox; cancel schedule cũ khi tiến bước, giữ row `Completed` làm tombstone, không trộn với `TicketStateMachine`; subscribe cả `BatteryAnomalyDetectedEvent` V1 và `BatteryAnomalyDetectedV2Event` (xem §30.6); **PR review tick 9 mục Saga state machine** trong §18.2bis trước khi approve. **Owner: Thắng.**
+- [x] **#238 — Saga participants + cutover:** thay direct `BatteryAnomalyDetectedConsumer` bằng `CreateTicketFromAlertConsumer`; refactor application operation để dùng cùng consumer transaction, không tự commit/direct-publish; chuẩn hóa mapping toàn bộ anomaly→category (wire value 1–15 + unknown fallback (đồng bộ `AnomalyTypeEnum` §1.3.6), xem §53.7), create/reuse Ticket theo asset+category idempotently và publish success/rejection response qua EF Consumer Outbox; BatteryService thêm `LinkAlertToTicketConsumer`, update `Alert.TicketId` idempotently và publish success/rejection response; đổi `AlertEscalationService` sang `BatteryAlertEscalationRequestedEvent` riêng cho NotificationService, không republish Saga-start event; NotificationService thêm `BatteryAlertEscalationRequestedConsumer` + `AlertTicketSagaFailedConsumer` và 2 `NotificationTypeEnum` value mới (16, 17) + 2 email template + push template (xem §3.4 routing + §15 template catalog); **Notification debounce policy 5min** (xem §49.2); thêm `AlertTicketDispatchEnabled`/`AlertTicketSagaEnabled` cho maintenance cutover, disable/decommission queue consumer cũ và không để direct flow với Saga chạy song song; **PR review tick 12 mục participant + cutover** trong §18.2bis. **Owner: Thắng.**
+- [x] **#239 — Saga verification + operations:** state-machine unit tests **≥ 21 case** đồng bộ test matrix §53.10, MassTransit TestHarness E2E, duplicate/concurrency/redelivery/RabbitMQ-down/timeout/late-message/feature-flag-misconfig tests; **restart-recovery integration test** (kill TicketService giữa transaction, restore, verify Saga continue); reconciliation các auto-ticket cũ có `OriginAlertId` nhưng Alert chưa có `TicketId`; admin query/reprocess endpoint qua MediatR (`TicketSagaView` cho Admin + Manager read-only, `TicketSagaReprocess` chỉ Admin); **Idempotency-Key required cho reprocess** (§8.6); `/health/saga` endpoint (§10.5); 8 Prometheus metric + 2 alert rule deploy (§9.2); structured logging fields đầy đủ + KHÔNG PII (§9.3); tracing CorrelationId xuyên service; Manager notification debounce (§49.2); runbook `08-saga-failed.md` + `09-saga-stuck.md` + `10-saga-duplicate-canonical.md` viết đầy đủ (§40.3); merge **ADR-018** vào `docs/adrs/`; **PR review tick 9 mục test + observability** trong §18.2bis — xem §53.9–§53.12. **Owner: Thắng.**
+- [x] **#240 — Documentation sync:** cập nhật Swagger/Postman collection bỏ contract Energy/CO2 + `capacityKw`, thêm Saga admin endpoints; cập nhật SRS Phần 4 & 5; tạo `docs/runbooks/saga-failed.md`, `docs/runbooks/saga-stuck.md`, `docs/runbooks/saga-duplicate-canonical.md`; update `CHANGELOG.md`. **Owner: Thắng.**
+- [x] **#241 — AuthService permission seed update:** AuthService data migration seed 2 permission mới (`ticket.saga.view`, `ticket.saga.reprocess`) vào `permissions` table + bind cho Admin (cả 2) và Manager (`ticket.saga.view` only); publish `PermissionsChangedEvent` để invalidate cache cross-service; integration test verify JWT mới có claim đúng. **Owner: Thắng.**
+- [x] Entity `AmbientReading` (hypertable) + `AmbientThresholdConfig` (per Site, regular table) — #89
+- [x] Migration `AddAmbientMonitoring`: tạo bảng + hypertable + index — #89
+- [x] `IOpenMeteoClient` interface + `OpenMeteoClient` HTTP impl (Polly retry, 10s timeout) — #90
+- [x] `WeatherSyncBackgroundService` (15min interval, dedup 10min, per-site lat/lon) — #90
+- [x] `BatchIngestAmbientReadingsCommand` + endpoint (ApiKey `EnvironmentalIngest`) — #91
+- [x] `GetAmbientReadingHistoryQuery` + `GetLatestAmbientReadingQuery` + endpoints — #91
+- [x] `UpsertAmbientThresholdConfigCommand` + 2 query (by-site, list) + endpoints — #92
+- [x] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighAmbientTemp`, `HighHumidity`, `HighTempHumidityCombo` — #93
+- [x] Update `appsettings.json`: tách `ApiKeys:SensorIngest` và `ApiKeys:EnvironmentalIngest`, thêm `Weather:*` config — #92
+- [x] Unit tests OpenMeteoClient (HttpMessageHandler stub) + WeatherSyncBackgroundService (mock client) + 3 anomaly types mới — #93
+- [x] Integration test: ingest ambient → query latest, combo threshold → alert — #93
+- [x] Entity `EnvironmentalIncident` (regular table với lifecycle) — #100
+- [x] Migration `AddEnvironmentalIncidentAndAlertSiteLevel`: tạo bảng `environmental_incidents` + relax `alerts.battery_asset_id` thành nullable + thêm `alerts.site_id` + `alerts.environmental_incident_id` + check constraint + index — #100
+- [x] Migration `ExtendSensorReadingTierTwo`: thêm `InternalResistanceMilliohm`, `CellVoltageDeltaMv` vào `sensor_readings` — #101
+- [x] Migration `ExtendThresholdConfigTierTwo`: thêm `InternalResistanceMaxMilliohm`, `CellVoltageDeltaMaxMv` vào `threshold_configs` — #101
+- [x] `ReportEnvironmentalIncidentCommand` (ApiKey `EnvironmentalIngest`) — tạo incident + alert + publish event — #102
+- [x] `AcknowledgeEnvironmentalIncidentCommand` + `ResolveEnvironmentalIncidentCommand` + `MarkFalseAlarmEnvironmentalIncidentCommand` — #102
+- [x] `GetEnvironmentalIncidentsQuery` (list + filter) + `GetEnvironmentalIncidentByIdQuery` + `ActiveEnvironmentalIncidentsBySiteQuery` — #103
+- [x] Endpoints `/api/environmental-incidents` (6 endpoint) — #103
+- [x] Integration event `EnvironmentalIncidentDetectedEvent` + `EnvironmentalIncidentResolvedEvent` — #104
+- [x] Extend Alert table — handler tạo alert cho cả site-level (chỉnh `AlertCreateCommandHandler` + dedup logic) — #104
+- [x] Extend `ThresholdAnomalyDetector` thêm 3 type: `HighInternalResistance`, `CellImbalance`, `EnvironmentalIncident` — #105
+- [x] Update `SensorReadingItem` + validation (IR > 0, CellDelta ≥ 0) — #105
+- [x] Unit tests cho mọi command/handler + Tier 2 anomaly types — #105
+- [x] Integration test: report smoke incident → alert critical tạo → event publish → false-alarm flow đóng cả 2 — #105
+- [x] Coverage ≥ 80% maintain — #105
+- [x] **B1** — Noise Suppression Logic: entity `NoiseBreachEvent` (hypertable) + migration nhét vào `ExtendThresholdConfigTierTwo` (thêm `NoiseSuppressionCount`/`WindowHours`/`Enabled`) + frequency-based logic trong `ThresholdAnomalyDetector` + bypass cho EnvironmentalIncident và Critical Overheat + retention job 7 ngày (xem §1.6.5) — #152
 - [ ] **B2-finalize** — Hoàn thiện `.claude/docs/ai-research-references.md` với paper cite đầy đủ cho 15 anomaly types — #153
 
 ### Sprint IoT-1 (song song Sprint 6: 27/7–9/8/2026)
-**Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị gateway simulator/hardware path cho demo.
-**Scope note:** Sprint này có owner riêng để không block NotificationService Sprint 6. Nếu thiếu nhân lực, giữ `IotFirmware*` ở backlog và vẫn phải hoàn thành provision + heartbeat + ingest + offline.
+**Goal:** Biến kênh ingest sensor hiện có thành backend IoT production-ready, đồng thời chuẩn bị **ESP32** simulator/hardware path cho demo.
+
+**Owner:** **Thắng** (sole owner). Sprint 5B (#233–#241) hoàn tất 26/7, ngay liền IoT-1 27/7 — Thắng tiếp tục BatteryService domain seamlessly.
+
+**Scope note:** Nếu thiếu nhân lực, giữ `IotFirmware*` + **MQTT (P3, §52.14)** ở backlog và vẫn phải hoàn thành provision + heartbeat + ingest + offline (HTTPS đủ cho MVP/demo). **Hardware pilot** (ESP32-S3 + MAX485 + RS485 multi-drop) cần đối tác hỗ trợ phần cứng — Thắng liên hệ trước Sprint 5B kết thúc để không bị block giữa IoT-1.
 **Tasks:**
-- [x] Tạo tài liệu triển khai riêng `iot.md`: kiến trúc, thiết bị phần cứng, backend backlog, gateway software, sprint plan.
-- [ ] Entity + migration `AddIotDeviceManagement`: `IotDevice`, `IotDeviceHeartbeat` hypertable, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`.
-- [ ] Thiết kế API key per-device: sinh key khi admin tạo device, chỉ lưu hash, hỗ trợ rotate/revoke, scope `sensor.ingest` + `device.heartbeat`.
-- [ ] Admin endpoints: `POST/GET/PUT/DELETE /api/v1/admin/iot-devices`, `POST/GET /api/v1/admin/iot-firmware-releases`.
-- [ ] Device endpoints: `POST /api/v1/iot-devices/provision`, `POST /api/v1/iot-devices/heartbeat`, `GET /api/v1/iot-devices/firmware-check`, `PUT /api/v1/iot-devices/firmware-update-log/{id}`.
-- [ ] Update `POST /api/sensor-readings/batch`: nhận thêm `X-Device-Code`, `Idempotency-Key`, `deviceTimestamp`, hỗ trợ mapping `batteryAssetSerial` nhưng vẫn giữ legacy `batteryAssetId` cho simulator/MVP.
-- [ ] Validate IoT-specific: clock skew <= 5 phút, reject sensor outlier, apply calibration offset/scale, update `IotDevice.LastSeenAt`.
-- [ ] `IotDeviceOfflineDetectionBackgroundService`: device Active mất heartbeat > 5 phút => mark Offline, tạo `DeviceOffline` alert cho battery liên quan, publish event notification.
-- [ ] Gateway simulator script: gửi heartbeat + sensor batch định kỳ, queue local khi backend down, retry với `Idempotency-Key`.
-- [ ] Gateway hardware pilot guide: Raspberry Pi + RS485/CAN path, mapping BMS register sang payload backend.
-- [ ] Gateway route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*`.
-- [ ] Unit/integration tests: provision, heartbeat, offline detection, ingest dedup, clock skew, outlier, calibration, firmware check happy path.
+- [x] Tạo bộ tài liệu triển khai IoT v2: `newiot.md` (thiết kế ESP32+MQTT), `overall.iot.md` (BOM + luồng), `wiring-diagram.md` (đấu dây), `hardware-bom.csv` (mua sắm). Bản `iot.md` (RPi v1) deprecated.
+- [ ] Entity + migration `AddIotDeviceManagement`: `IotDevice`, `IotDeviceHeartbeat` hypertable, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`. — #242
+- [ ] Thiết kế API key per-device: sinh key khi admin tạo device, chỉ lưu hash, hỗ trợ rotate/revoke, scope `sensor.ingest` + `device.heartbeat`. — #243
+- [ ] Admin endpoints: `POST/GET/PUT/DELETE /api/v1/admin/iot-devices`, `POST/GET /api/v1/admin/iot-firmware-releases`. — #244
+- [ ] Device endpoints: `POST /api/v1/iot-devices/provision`, `POST /api/v1/iot-devices/heartbeat`, `GET /api/v1/iot-devices/firmware-check`, `PUT /api/v1/iot-devices/firmware-update-log/{id}`. — #245
+- [ ] Update `POST /api/sensor-readings/batch`: nhận thêm `X-Device-Code`, `Idempotency-Key`, `deviceTimestamp`, hỗ trợ mapping `batteryAssetSerial` nhưng vẫn giữ legacy `batteryAssetId` cho simulator/MVP. — #246
+- [ ] Validate IoT-specific: clock skew <= 5 phút, reject sensor outlier, apply calibration offset/scale, update `IotDevice.LastSeenAt`. — #247
+- [ ] `IotDeviceOfflineDetectionBackgroundService`: device Active mất heartbeat > 5 phút => mark Offline, tạo `DeviceOffline` alert cho battery liên quan, publish `IotDeviceWentOfflineEvent`. — #248
+- [ ] Khai báo `IotDeviceWentOfflineEvent` trong SharedContracts (§1.7) + **NotificationService**: `IotDeviceWentOfflineConsumer` + template device-offline (push/in-app, routing §3.4) — **+1 consumer / +1 template ngoài baseline Sprint 6 `#107`/`#111`**. — #249
+- [ ] ESP32/simulator script: gửi heartbeat + sensor batch định kỳ, queue local (NVS/LittleFS) khi backend down, retry với `Idempotency-Key`. MVP có thể dùng `mock_bms` (data giả) trước khi có BMS thật. — #250
+- [ ] ESP32 hardware pilot guide: ESP32-S3 + MAX485 + RS485/Modbus multi-drop (mỗi BMS 1 `unitId`), mapping BMS register sang payload backend (tham chiếu `newiot.md` §5/§8, `wiring-diagram.md`). — #251
+- [ ] IoT route trong ApiGateway cho `/api/v1/iot-devices/*` và `/api/v1/admin/iot-devices/*` (xem §0bis.3). — #252
+- [ ] **(P3 — MQTT realtime, optional/giãn sang Sprint 7 nếu thiếu nhân lực — §52.14)** Xây hạ tầng MQTT, gồm: — #253
+  - [ ] Dựng broker `infra/mqtt/` (EMQX/Mosquitto, Docker) + TLS 8883 + `mosquitto.conf` + `certs/`.
+  - [ ] Cấp **credential MQTT per-device** (gắn `IotDevice`) + **ACL phân quyền topic per-device** (`infra/mqtt/acl.conf`).
+  - [ ] `MqttBridgeBackgroundService` (`Infrastructure/Mqtt/`) subscribe `telemetry`/`heartbeat`/`status`, đăng ký DI `AddHostedService`.
+  - [ ] `TelemetryMessageHandler` → reuse `SensorReadingBatchIngestCommand` (không viết lại validate/insert/anomaly).
+  - [ ] `LastWillHandler`: `status=offline` → `IotDeviceMarkOfflineCommand` (mark Offline tức thì) + alert `DeviceOffline`.
+  - [ ] `MqttTopicMap` + `IMqttBridgePublisher` (publish downlink `cmd`: đổi config / trigger OTA).
+  - [ ] Thêm broker vào docker-compose (xem §51) — chỉ bật khi triển khai MQTT.
+  - [ ] Tests: telemetry qua broker đi đúng ingest command; LWT → Offline + alert; ACL chặn device lạ.
+- [ ] Unit/integration tests: provision, heartbeat, offline detection, ingest dedup, clock skew, outlier, calibration, firmware check happy path. — #254
 - [ ] **B9** — Thêm `SensorReadingSourceTypeEnum` + field `SensorReading.SourceType` (NOT NULL default IotGateway) vào migration `AddIotDeviceManagement` + update ingest endpoint accept `sourceType` per item (BMS/IotGateway/External) (xem §1.3.4 + §1.3.6) — #154
+
+### Sprint IoT-2 (sau IoT-1: 10/8–6/9/2026, song song Sprint 7+8 — backend IoT task-level)
+
+**Goal:** Hoàn thiện đầy đủ contract production, MQTT bridge, cross-source validation, calibration, OTA, observability backend cho IoT track. Đây là **single source of truth** cho mọi task backend IoT — nhóm IoT/firmware (`iot/tasksprint.md`) chỉ tham chiếu, không tự ý thêm BE task.
+
+**Owner:** **Thắng** (BatteryService domain, tiếp tục từ Sprint IoT-1).
+
+**Scope note:**
+- Sprint IoT-1 đã set foundation (entity, provision, heartbeat baseline, ingest contract, offline job, optional MQTT skeleton). Sprint IoT-2 **hoàn thiện task-level** chi tiết hơn dựa trên rà soát `iot/tasksprint.md` (NI §1–§13, OV §A–§D, WD §1–§8).
+- Sprint IoT-2 **đè lên** thời gian Sprint 7+8 — chấp nhận vì Thắng đã xong Sprint 5B Saga vào 26/7 + IoT-1 vào 9/8 và muốn close out backend IoT trước demo Sprint 8.
+- Nếu thiếu thời gian: priority cứng = Phase B → C → E → F → D (MQTT). MQTT có thể trượt sang sau capstone vì HTTPS đủ cho demo.
+
+**Map sprint↔Phase với IoT plan (`iot/tasksprint.md`):**
+
+| Phase IoT-2 | tasksprint.md sprint | Topic |
+|-------------|---------------------|-------|
+| A | S0–S1 | BatteryService bootstrap + seed + legacy shim |
+| B | S2 | Device management + offline detection + notification consumer |
+| C | S3 | Production contract + resilience |
+| D | S4 | MQTT broker + bridge |
+| E | S6 | Anomaly + cross-source + environmental |
+| F | S7 | Calibration + OTA + observability |
+
+#### Phase A — Bootstrap & MVP shim (S0–S1 trong IoT plan)
+
+- [x] **S0-BE-01** — Pull BatteryService, `dotnet build` xanh, chạy migration cũ trên DB dev mới (`battery_service_dev` + TimescaleDB extension). Swagger UI mở được — #IoT2-01 → #255
+- [x] **S1-BE-01** — Seed script `tools/seed-iot-mvp.sh`: 1× Site + 4× BatteryAsset (serial `BAT-2026-001..004`) + threshold config mặc định (voltage 11–14V, temp -10..60°C, SOC 20–100%). `dotnet run --seed` → DB có dữ liệu — #IoT2-02 → #256
+- [x] **S1-BE-02** — Endpoint legacy `POST /api/sensor-readings/batch` nhận payload simulator MVP: shim `serial → BatteryAssetId` nội bộ nếu cần. POST từ ESP32 mock → row mới trong `sensor_readings` — #IoT2-03 → #257
+
+#### Phase B — Device Management (S2 trong IoT plan)
+
+- [x] **S2-BE-01** — Migration `AddIotDeviceManagement`: 5 entity (`IotDevice`, `IotDeviceHeartbeat`, `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog`) + 3 enum (`IotDeviceTypeEnum`, `IotDeviceStatusEnum`, `SensorReadingSourceTypeEnum`) + cột `SourceType` (NOT NULL default `IotGateway`) + `SensorSourceCode` (string(20)?) vào `SensorReading`. `dotnet ef database update` pass; bảng + index tạo đầy đủ — xem §52.2, §1.3.4 — #IoT2-04 → #258
+- [x] **S2-BE-02** — Hypertable hóa `iot_device_heartbeats` (`time` column, chunk 1 ngày, retention 30 ngày). `SELECT * FROM timescaledb_information.hypertables` thấy bảng — xem §52.2 retention — #IoT2-05 → #259
+- [x] **S2-BE-03** — `DeviceApiKeyService`: sinh key 32 byte random, hash SHA-256 lưu DB; xác thực header `X-Api-Key` + `X-Device-Code`; rotate/revoke. **Scope key (§52.2):** `sensor.ingest` + `device.heartbeat` mặc định; nếu device có sensor môi trường (SHT31/MQ-2/water) thêm `environmental.ingest` để gọi cùng key vào `/api/ambient-readings/batch` + `/api/environmental-incidents`. Unit test: key đúng → pass, sai → 401, revoked → 403, scope thiếu → 403 — #IoT2-06 → #260
+- [x] **S2-BE-04** — `POST /api/v1/admin/iot-devices` (Admin) tạo device + trả `apiKey` plaintext **đúng 1 lần** trong response. Lần GET sau không trả lại key (chỉ lastFour). Response: `{deviceCode, apiKey, provisioningQrCode}` — xem §52.3 — #IoT2-07 → #261
+- [x] **S2-BE-05** — Admin endpoints còn lại: `GET /api/v1/admin/iot-devices?status=&siteId=`, `GET /api/v1/admin/iot-devices/{id}`, `PUT /api/v1/admin/iot-devices/{id}/config` (push config), `DELETE /api/v1/admin/iot-devices/{id}` (soft decommission). Swagger test pass — xem §52.11 — #IoT2-08 → #262
+- [x] **S2-BE-06** — `POST /api/v1/iot-devices/provision`: set `Status=Active`, trả `configJson` chứa `pollingInterval`, `heartbeatInterval=60s`, `batteryMappings[]` (serial+unitId+sensorSourceCode), `ntpServer`, `supportedSensors`. Provisioning → Active trên DB — xem §52.3, §52.4 — #IoT2-09 → #263
+- [x] **S2-BE-07** — `POST /api/v1/iot-devices/heartbeat`: ghi 1 row hypertable + update `IotDevice.LastSeenAt`. Frequency expected 60s. Field mapping ESP32: `Cpu`/`DiskFreeMb` cho phép null; map `Temperature`/`MemoryUsageMb`/`SignalStrengthDbm`/`LocalQueueDepth`. Sau 5 phút có 5 row — xem §52.4, §52.2 ESP32 mapping — #IoT2-10 → #264
+- [x] **S2-BE-08** — `IotDeviceOfflineDetectionBackgroundService` chạy 2 phút/lần: device `Active` + `LastSeenAt < now-5min` → `Status=Offline` + publish `IotDeviceWentOfflineEvent` (outbox) + tạo `Alert(DeviceOffline)` (AnomalyType=7, Warning) cho mọi battery liên kết. **Phân vai dedup (§52.6):** Customer được báo qua `DeviceOffline` Alert đi đường BatteryAlert (§3.4); Staff/ops được báo qua `IotDeviceWentOfflineEvent` đến NotificationService (xem #IoT2-13). Dedup theo `DeviceId` cửa sổ offline. Tắt ESP32 6 phút → đổi Offline + Customer push 1 lần + Staff in-app 1 lần — #IoT2-11 → #265
+- [x] **S2-BE-09** — ApiGateway route `/api/v1/iot-devices/*` + `/api/v1/admin/iot-devices/*` (xem §0bis.3). Gọi qua gateway hoạt động — #IoT2-12 → #266
+- [x] **S2-BE-10** — Khai báo `IotDeviceWentOfflineEvent` trong `SharedContracts/IntegrationEvents/`. **NotificationService:** viết `IotDeviceWentOfflineConsumer` + template `device-offline.hbs` (push/in-app cho Staff/ops, routing §3.4 — KHÔNG gửi Customer ở đây vì đã đi qua Alert). +1 consumer / +1 template ngoài baseline. Event publish từ #IoT2-11 → Staff nhận in-app/push, Customer KHÔNG nhận từ kênh này — #IoT2-13 → #267
+
+#### Phase C — Production Contract & Resilience (S3 trong IoT plan)
+
+- [x] **S3-BE-01** — Update `SensorReadingBatchIngestCommand`: nhận header `X-Device-Code`, `Idempotency-Key`, body `deviceTimestamp` + readings (`batteryAssetSerial`, `sensorSourceCode`, `sourceType`, optional `bmsErrorCode ≤ 64`). **GIỮ song song backward compat (§52.5):** vẫn chấp nhận legacy `items[].batteryAssetId` để simulator MVP (Phase A) chạy không gãy — detect format qua presence của `deviceTimestamp`/`readings[]`. Regression test cho cả 2 schema — #IoT2-14 → #268
+- [x] **S3-BE-02** — Validate clock skew: `|deviceTimestamp - serverNow| > 5 phút` → 400 + tăng `iot_sensor_readings_rejected_total{reason=clock_drift}`. Test: timestamp -10 phút → 400 — xem §52.5 — #IoT2-15 → #269
+- [x] **S3-BE-03** — Idempotency: lưu `(deviceCode, idempotencyKey)` vào table riêng (TTL 24h) + index unique. Trùng → 200 trả lại result cũ (không insert). Test: POST 2 lần cùng key → 200, DB chỉ 1 batch — xem §8.6 — #IoT2-16 → #270
+- [x] **S3-BE-04** — Outlier reject: voltage `>1000V` hoặc `<0`, temp ngoài `[-50..150]`, soc ngoài `[0..100]`, soh ngoài `[0..100]`, `bmsErrorCode > 64 chars`. Tăng `iot_sensor_readings_rejected_total{reason=sensor_outlier}` + counter `IotDevice.OutlierIncidentCount`. **Auto-disable (§52.15 / EC-25):** vượt N=50 outlier trong 1h → `Status=Decommissioned` tự động + alert Admin. Test: voltage=-5 → 400; 51 outlier liên tiếp → device tự decommission — #IoT2-17 → #271
+- [x] **S3-BE-05** — Map `batteryAssetSerial` → `BatteryAssetId` + kiểm tra `device.BatteryAssetIds` / `batteryMappings` có chứa battery này (nếu không → 403 + log + metric `reason=mapping_invalid`). Test: device không quyền pin X → 403 — xem §52.5 — #IoT2-18 → #272
+- [x] **S3-BE-06** — Apply calibration trước khi insert: lấy active calibration của `(deviceId, sensorMetric)` từ cache (Redis TTL 5 phút). `calibrated_value = raw_value * ScaleFactor + OffsetValue`. Test: tạo calibration offset=0.5 → voltage insert lệch +0.5 — xem §52.8 — #IoT2-19 → #273
+- [x] **S3-BE-07** — Update `IotDevice.LastSeenAt` mỗi lần ingest thành công. LastSeenAt nhảy mỗi 5s khi simulator chạy — xem §52.5 — #IoT2-20 → #274
+
+#### Phase D — MQTT Bridge (S4 trong IoT plan, P3 — optional/giãn)
+
+> Nếu thiếu thời gian, phase này trượt sang sau capstone. HTTPS đủ cho MVP/demo. Topic 5 cái — bắt buộc đủ `cmd/ack` để trace downlink (§52.14).
+
+- [x] **S4-BE-01** — Add NuGet `MQTTnet` + `MQTTnet.Extensions.ManagedClient` vào `BatteryService.Infrastructure`. Build pass — #IoT2-21 → #275
+- [x] **S4-BE-02** — `MqttBridgeBackgroundService` subscribe **4 topic** (publish-side 5 nếu tính `cmd`): `solar/+/+/telemetry`, `solar/+/heartbeat`, `solar/+/status`, `solar/+/cmd/ack`. Đăng ký qua `AddHostedService`. Service start log "connected to broker, 4 subscriptions"; ack từ ESP32 sau khi exec cmd được log để admin trace — xem §52.14 — #IoT2-22 → #276
+- [x] **S4-BE-03** — `TelemetryMessageHandler`: parse JSON payload từ `solar/+/+/telemetry` → gọi `SensorReadingBatchIngestCommand` (reuse logic validate/calibrate/insert từ Phase C, KHÔNG viết lại). Publish 1 batch qua MQTT → DB ghi đúng — xem §52.14 — #IoT2-23 → #277
+- [x] **S4-BE-04** — `LastWillHandler`: nhận `solar/{dev}/status` payload `offline` → `IotDeviceMarkOfflineCommand` (mark Offline tức thì) + alert `DeviceOffline` + publish `IotDeviceWentOfflineEvent`. Rút điện ESP32 → ≤ 90s sau (keep-alive 60s + xử lý) DB `Status=Offline` — xem §52.6 cơ chế 1 — #IoT2-24 → #278
+- [x] **S4-BE-05** — `IMqttBridgePublisher` để service khác publish downlink `solar/{dev}/cmd`. Endpoint `POST /api/v1/admin/iot-devices/{id}/command` body `{cmdId, type, params}`. API test: POST cmd → ESP32 nhận → bridge log ack `{cmdId, status:"ok"}` từ topic `cmd/ack` — #IoT2-25 → #279
+- [x] **S4-BE-06** — Cấp credential MQTT per-device khi tạo `IotDevice` (lưu hash hoặc bcrypt; sync lên EMQX qua HTTP auth hook hoặc bảng built-in). ACL phân quyền topic per-device (`infra/mqtt/acl.conf`). Tạo device mới → ESP32 connect được; xóa device → connect bị từ chối — xem §52.14 — #IoT2-26 → #280
+
+#### Phase E — Anomaly · Cross-source · Environmental (S6 trong IoT plan)
+
+- [x] **S6-BE-01** — Thêm `AnomalyTypeEnum.SensorMismatch = 15` + entry vào catalog (§1.3.6). Migration thêm enum value — B10 (Sprint 7 #157, có thể carry-over) — #IoT2-27 → #281
+- [x] **S6-BE-02** — `CrossSourceValidationService`: khi insert reading mới, query reading cùng `BatteryAssetId` trong cửa sổ 60s ở `sourceType` khác (Bms vs IotGateway); lệch V > 0.5V hoặc temp > 5°C → tạo `Alert(SensorMismatch, Warning)`. Test: bơm 2 reading lệch → alert xuất hiện — xem §1.6.6 — #IoT2-28 → #282
+- [x] **S6-BE-03** — Verify `ThresholdCheckBackgroundService` cũ vẫn quét reading mới, trigger `Alert(Overheat/LowSoc/...)`; nếu chưa có thì viết. Bơm voltage = 15V → alert Critical xuất hiện — xem §1.6 — #IoT2-29 → #283
+- [x] **S6-BE-04** — Publish outbox event `BatteryAnomalyDetectedEvent` **V2** từ BatteryService (schema đầy đủ `AlertId/AnomalyType/Severity/Source/BatteryAssetId/Site` theo §53.7). **KHÔNG để TicketService consume trực tiếp** — Sprint 5B đã chuyển sang **Alert–Ticket Saga** (§53, MassTransit State Machine): event → Saga orchestrate qua 8 message (`CreateTicketFromAlertCommand` → `TicketProvisionedForAlertEvent` → `LinkAlertToTicketCommand` → `AlertLinkedToTicketEvent` → `Completed`). Direct consumer sẽ tạo Ticket trùng. IoT track CHỈ chịu trách nhiệm emit event đúng schema; Saga state machine + retry/compensation thuộc Sprint 5B `#237`. NotificationService consume `BatteryAnomalyDetectedEvent` riêng cho push/email (§3.4) — không qua Saga. Test: Ticket được Saga tạo (state `TicketProvisioned` → `Completed`); `Alert.TicketId` được link; không Ticket trùng nếu Saga retry — xem §53, §52.12bis — #IoT2-30 → #284
+- [x] **S6-BE-05** — Endpoint `POST /api/ambient-readings/batch` (AmbientReading — `Source=IotSensor`, `SourceDeviceId=<DeviceCode>`) + `POST /api/environmental-incidents` (EnvironmentalIncident: `SmokeDetected`/`WaterLeak`). Khi tạo incident → publish `EnvironmentalIncidentDetectedEvent` (§1.7) → NotificationService route lên **Critical channel** (push + email + SMS), **bypass quiet hours** (§3.4 + §49.3) — page Manager + Admin. Cùng device API key (scope `environmental.ingest` — xem #IoT2-06). Test: smoke incident → Manager nhận push **trong quiet hours** + email + SMS — xem §52.9bis — #IoT2-31 → #285
+
+#### Phase F — Calibration · OTA · Observability (S7 trong IoT plan)
+
+- [x] **S7-BE-01** — Endpoint `POST /api/v1/iot-devices/{id}/calibrations` (Staff/Admin) + `GET` list + `GET /api/v1/iot-devices/calibrations-expiring?within=30d` (Manager). Tạo, list, filter expiring trong 30d hoạt động — xem §52.8, §52.11 — #IoT2-32 → #286
+- [x] **S7-BE-02** — `CalibrationExpiryNotificationService` (background, hằng ngày): scan calibration `ValidUntil < now+30d` → notify Manager. Tạo calibration ValidUntil = hôm nay → service báo — xem §52.8 — #IoT2-33 → #287
+- [x] **S7-BE-03** — Invalidate Redis cache calibration khi tạo mới (xem #IoT2-19). Tạo mới → reading kế tiếp dùng calibration mới — xem §52.8 — #IoT2-34 → #288
+- [x] **S7-BE-04** — `POST /api/v1/admin/iot-firmware-releases` (multipart): upload `.bin` + sha256 + isRequired + channel (Stable/Beta) + releaseNotes + deviceModel + version. Upload thành công, file lưu `FileStorageService` — xem §52.7 — #IoT2-35 → #289
+- [x] **S7-BE-05** — `GET /api/v1/iot-devices/firmware-check` → trả `{hasUpdate, version, downloadUrl signed, sha256, isRequired, releaseNotes}`. ESP32 GET thấy update khi có firmware version cao hơn — xem §52.7 — #IoT2-36 → #290
+- [x] **S7-BE-06** — `PUT /api/v1/iot-devices/firmware-update-log/{id}` cho ESP32 update status (`Pending → Downloading → Installing → Success | Failed | RolledBack`). Trạng thái hiển thị web — xem §52.7 — #IoT2-37 → #291
+- [x] **S7-BE-07** — Expose Prometheus metrics đầy đủ label theo §52.12: `iot_device_heartbeats_total{device_id, status}` (label `status`), `iot_devices_online_count` (gauge), `iot_devices_offline_total` (counter), `iot_sensor_readings_ingested_total{device_id}`, `iot_sensor_readings_rejected_total{reason=clock_drift|sensor_outlier|mapping_invalid|...}`, `iot_firmware_updates_total{from_version, to_version, status}`. `/metrics` endpoint trả đúng schema — #IoT2-38 → #292
+
+#### Acceptance Sprint IoT-2
+
+- [ ] 38 task #IoT2-01..38 đều close + có log review/test trong `logs/IoT2-{NN}/`.
+- [ ] Regression test cuối sprint: ingest legacy payload + ingest production payload cùng đi qua endpoint mới, không gãy simulator MVP.
+- [ ] Saga path verify: trigger 1 anomaly Critical → Saga `TicketProvisioned → Completed`; bơm cùng anomaly 2 lần (idempotent) → 1 Ticket duy nhất.
+- [ ] Cross-source mismatch verify: bơm cặp reading BMS vs INA226 lệch > 0.5V → `Alert(SensorMismatch)` xuất hiện trong < 30s.
+- [ ] Environmental Critical bypass verify: trigger MQ-2 incident trong giờ 23:00 (quiet hours) → Manager vẫn nhận push.
+- [ ] Auto-disable verify: bơm 51 outlier voltage → device `Decommissioned` + alert Admin.
+- [ ] Metric `/metrics` đầy đủ label `status`, `reason`, `from_version`, `to_version` — Grafana panel vẽ được.
 
 ### Sprint 6 (27/7–9/8/2026)
 **Goal:** NotificationService + KnowledgeBase + Environmental notification routing.
+
+**Owner:** **Duy** (BE Lead, NotificationService primary) + **Thắng** (KnowledgeBase module + Saga carryover verify + Sprint IoT-1 song song).
+
+**Dependency note:** Sprint 5B `#238` đã thêm 2 consumer + 2 enum value (16/17) + 2 template Saga vào NotificationService skeleton. Sprint 6 **không** được refactor xoá phần này — phải build trên nền đó. Owner Sprint 6 đọc §3 + xem commit Sprint 5B trước khi start.
+
 **Tasks:**
 - [ ] Tạo solution `services/NotificationService/` — #106
-- [ ] **15 consumers** cho mọi events (13 cũ + `EnvironmentalIncidentDetectedConsumer` + `EnvironmentalIncidentResolvedConsumer`) — #107
+- [ ] **17 consumers** cho mọi events (13 cũ + 2 Saga từ Sprint 5B `#238` + `EnvironmentalIncidentDetectedConsumer` + `EnvironmentalIncidentResolvedConsumer`) — #107
 - [ ] `ExpoPushChannel` + integration test (sandbox token) — #108
 - [ ] `EmailBusChannel`, `SmsBusChannel`, `InAppChannel` — #108
-- [ ] `NotificationDispatcher` + preference + quiet hours — #109
+- [ ] `NotificationDispatcher` + preference + quiet hours + **Sprint 5B debounce policy** (Redis key `notif_debounce:escalation/saga-failed:{alertId}` TTL 5min — xem §49.2) — #109
 - [ ] DeviceToken endpoints — #110
 - [ ] KnowledgeBase module trong TicketService (CRUD + suggest endpoint) — #112
-- [ ] Email templates **14 file `.hbs`** (12 cũ + `environmental-incident-detected.hbs` + `environmental-incident-resolved.hbs`) — #111
+- [ ] Email templates **16 file `.hbs`** (12 cũ + 2 Saga từ Sprint 5B + `environmental-incident-detected.hbs` + `environmental-incident-resolved.hbs`) — #111
 - [ ] Push template: `EnvironmentalIncidentCritical` (smoke/water → page Manager + Admin) — #111
 - [ ] Routing rule: incident Critical → Critical channel (push + email + SMS), bypass quiet hours — #109
+- [ ] Routing rule Sprint 5B verify: `BatteryAlertEscalationPending` (Manager+Admin: InApp+Push+Email), `AlertTicketSagaFailed` (Admin only) — xem §3.4 matrix — #109
 - [ ] Seed 5 KB articles — #112
 - [ ] Coverage ≥ 80% — #112
 - [ ] **B8** — Thêm `KnowledgeBaseArticle.Code` (format `KB-YYYY-NNNN` auto-gen) + entity `TicketKbReference` (many-to-many ticket↔KB) + 4 endpoints + analytics `usage-stats` (xem §4.2 + §4.2bis) — #155
 
 ### Sprint 7 (10/8–23/8/2026)
 **Goal:** Reports + Gateway hardening + Observability + Tier 3 sensor finalize.
+
+**Owner:** **Thắng** (Reports + Gateway primary) + **Duy** (Observability + Tracing) + **Thái** (Tier 3 sensor + B4 Cascade Risk). FE Trí + Minh có thể start Saga admin UI (§60.4bis) song song.
+
+**Dependency note (Sprint 5B carryover):** Sprint 5B `#235`/`#239` đã thêm 8 Saga metric + 2 Grafana panel + 2 AlertManager rule + 2 Saga seed row + Saga admin endpoints. Sprint 7 PHẢI integrate (không refactor xoá):
+- Grafana panel "Alert–Ticket Saga" (§9.2 panel #4) → vào dashboard final.
+- AlertManager rule `AlertTicketSagaStuck` + `AlertTicketSagaFailedSpike` → vào ruleset production.
+- ApiGateway aggregated swagger → include `/api/v1/admin/sagas/alert-ticket/*` schema từ TicketService.
+- OpenTelemetry tracing → propagate qua Saga endpoint, `CorrelationId/AlertId` cross-service.
+- `tools/seed.sh` → giữ 2 Saga seed row.
+
 **Tasks:**
 - [ ] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
 - [ ] Update `SensorReadingItem` + validation (`BmsErrorCode` ≤ 64 chars) — #113
-- [ ] Reports endpoints (Ticket: 8 endpoints, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
+- [ ] Reports endpoints (Ticket: **9 endpoints** — 8 cũ + Saga Failed rate report cho Admin, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
 - [ ] CSV/XLSX export — #114
-- [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger — #115
-- [ ] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident flow) — #116
-- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, System Health — #117
-- [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency — #118
-- [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example — #119
-- [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle) — #119
-- [ ] IoT hardware pilot E2E: Raspberry Pi/gateway simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng gateway tạo `DeviceOffline` alert — #127
+- [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger (**bao gồm Saga admin endpoints từ Sprint 5B**) — #115
+- [ ] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident + **Alert–Ticket Saga flow** với CorrelationId=AlertId xuyên BatteryService↔TicketService) — #116
+- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, **IoT Device Monitoring (online/offline, ingest/reject, queue depth — §9.2 #5)**, **Alert–Ticket Saga (verify panel từ Sprint 5B đã hiển thị metric đúng)**, System Health — #117
+- [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency + **verify Saga rules từ Sprint 5B đã active** — #118
+- [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example + **2 Saga seed row từ Sprint 5B giữ nguyên** — #119
+- [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle + **Saga happy path + failure recovery**) — #119
+- [ ] IoT hardware pilot E2E: ESP32-S3 (RS485 multi-drop) / simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng device tạo `DeviceOffline` alert (job 5 phút, hoặc LWT tức thì nếu đã bật MQTT P3) — #127
 - [ ] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #126
 - [ ] **B4** — Cascade Risk Assessment rule-based: field `BatteryAsset.CascadeRiskScore`/`CascadeRiskUpdatedAt`/`ElectricalTopology` + migration `AddCascadeRiskFields` + `CascadeRiskCalculator` + `CascadeRiskBackgroundService` (5min) + 3 endpoint + integration với Priority Matrix (xem §31.7) — #156
 - [ ] **B10** — `AnomalyTypeEnum.SensorMismatch = 15` + cross-source validation logic trong `ThresholdCheckBackgroundService` (BMS vs IoT delta 0.5V/5°C) + migration value bổ sung enum + 3 unit test (xem §1.6.6) — #157
 
 ### Sprint 8 (24/8–6/9/2026)
 **Goal:** Demo prep + polish.
+
+**Owner:** **Leader** (overall coordination, demo script, slide deck, Q&A prep) + **toàn team standby** (bug bash, dry-run, rehearsal). Mỗi dev primary owner cho service domain của mình khi bug fix.
+
+**Dependency note (Sprint 5B carryover):** Sprint 5B Saga infrastructure phải đã stable trước Sprint 8. Bug bash + performance test PHẢI cover Saga endpoints + flow. Documentation final phải include:
+- Saga contracts (8 messages) + admin endpoints trong Postman/Swagger
+- ADR-017 + ADR-018 publish vào `docs/adrs/` (đã merge từ `#233`/`#239` nhưng verify available)
+- 3 Saga runbook publish vào `docs/operations/runbook/`
+- Saga state machine diagram (Mermaid) vào architecture poster
+
 **Tasks:**
-- [ ] Performance testing + tuning per §13.4 SLAs — #120
-- [ ] Security audit (OWASP checklist §14.7) — #121
-- [ ] Documentation: API contracts final, README per service, postman collection — #122
-- [ ] Documentation: IoT runbook final (`iot.md`), gateway setup checklist, Postman/curl collection cho provision/heartbeat/ingest — #122
-- [ ] Final seed data với scenarios realistic — #123
+- [ ] Performance testing + tuning per §13.4 SLAs (**bao gồm 3 Saga endpoint SLA mới + end-to-end Saga 4s P95**) — #120
+- [ ] Security audit (OWASP checklist §14.7) (**bao gồm Saga admin endpoints: TicketSagaReprocess audit log + Idempotency-Key required + AdminIpWhitelist apply**) — #121
+- [ ] Documentation: API contracts final (**Saga 8 contracts + V1/V2 BatteryAnomalyDetected**), README per service (**TicketService README bao gồm Saga ops section**), postman collection (**+ Saga admin folder**) — #122
+- [ ] Documentation: IoT runbook final (`newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`), ESP32 setup checklist, Postman/curl collection cho provision/heartbeat/ingest — #122
+- [ ] Final seed data với scenarios realistic (**giữ 2 Saga seed row từ Sprint 5B, không refactor**) — #123
 - [ ] Demo script: walkthrough end-to-end flow trên Mobile + Web — #123
-- [ ] Demo script IoT: simulator path + hardware path, normal reading, overheat/low SOC alert, stop heartbeat => `DeviceOffline` — #123
-- [ ] Bug bash + bug fix — #124
+- [ ] Demo script IoT: simulator/ESP32 path + hardware path (RS485 multi-drop), normal reading, overheat/low SOC alert, stop ESP32 => `DeviceOffline` (LWT tức thì nếu có MQTT, hoặc job 5 phút) — #123
+- [ ] Demo script Saga: happy path (Alert → Ticket → link → `Completed`) + failure scenario (BatteryService down → Saga `Failed` → admin reprocess → recovery) không tạo Ticket trùng — #123
+- [ ] Architecture poster A1: thêm Saga state machine diagram (Initial → TicketRequested → TicketProvisioned → AlertLinkRequested → Completed/Failed) — #123
+- [ ] Bug bash + bug fix (**ưu tiên Saga edge case: timeout, late response, reconciliation, conflict TicketId**) — #124
 - [ ] Final coverage push — #125
+- [ ] **Architecture publish:** verify ADR-016/017/018 + 10 runbook (7 baseline + 3 Saga) đã available trong `docs/`; render Mermaid Saga state diagram vào poster. — #125
 
 ---
 
@@ -3861,19 +4768,73 @@ GitHub Actions step:
 - [ ] All endpoints có integration test
 - [ ] Coverage ≥ 80% line
 - [ ] Migration tested rollback
-- [ ] Outbox relay running
+- [ ] Outbox relay running với claim/lock + retry/backoff + error metrics (Sprint 5B `#235`)
+- [ ] Consumer thay đổi DB dùng durable Inbox/idempotency và chỉ mark Completed sau commit
+- [ ] DI test assert mỗi interface có đúng 1 implementation/lifetime (không có direct producer override outbox writer)
+- [ ] Saga + participant endpoints dùng EF Consumer Outbox/Inbox (Sprint 5B `#237/#238`)
 - [ ] Health endpoints work (`/health/live`, `/health/ready`)
 - [ ] Swagger documented
 - [ ] Docker container build < 200MB
 - [ ] Startup < 10s in container
 - [ ] README per service với run local + run test instructions
 
+### 18.2bis. Sprint 5B — Saga-specific code review checklist (PR `#237`/`#238`/`#239`)
+
+Reviewer phải tick từng item này trong `logs/GH-NNN/review.md` cho PR thuộc Sprint 5B `#237`–`#239`. Các trap dưới đây là **non-obvious** và sẽ bị miss bởi generic review:
+
+**Saga state machine (`#237`):**
+- [ ] `Initially()` có `InsertOnInitial = true`?
+- [ ] `Fault<CreateTicketFromAlertCommand>.Message.Message.CorrelationId` (không phải `FaultId`)?
+- [ ] Cancel `StepTimeoutTokenId` trước khi schedule retry token mới?
+- [ ] Cancel both token khi nhận success response (tránh late timeout/retry trigger)?
+- [ ] `Completed` row có Explicit `.Ignore()` cho duplicate start event (KHÔNG `_skipped`)?
+- [ ] State `Failed` có explicit `.Ignore()` cho late response message?
+- [ ] `SetCompletedWhenFinalized` = false (giữ tombstone)?
+- [ ] PostgreSQL `xmin` optimistic concurrency configured?
+- [ ] Saga repository sử dụng EF Consumer Outbox cho transactional publish?
+
+**Participant consumer (`#238`):**
+- [ ] `CreateTicketFromAlertConsumer` lookup `OriginAlertId` trước khi lookup `(BatteryAssetId, Category)`?
+- [ ] Reuse path KHÔNG overwrite `Ticket.OriginAlertId` của Ticket cũ?
+- [ ] Reuse path trả `CreatedNew=false` (không publish `TicketCreatedEvent` lần hai)?
+- [ ] Wire value `AnomalyType` int → internal enum: handle unknown với fallback (`Other` + warning metric)?
+- [ ] `LinkAlertToTicketConsumer` handle 3 case: null/match/conflict (không overwrite âm thầm)?
+- [ ] PostgreSQL `23505` chỉ catch khi constraint name khớp known guard (không nuốt mọi unique violation)?
+- [ ] Sau bắt `23505`: rollback transaction + clear DbContext + reload bằng scope mới?
+- [ ] Application operation dùng cùng scoped DbContext với consumer (không tự `SaveChanges`/direct-publish)?
+
+**Cutover + flags (`#238`):**
+- [ ] Direct `BatteryAnomalyDetectedConsumer` (TicketService) đã decommission khỏi DI registration?
+- [ ] `AlertEscalationService` publish `BatteryAlertEscalationRequestedEvent` (KHÔNG republish `BatteryAnomalyDetectedEvent`)?
+- [ ] Feature flag default trong appsettings.json đúng (xem §53.9)?
+- [ ] Endpoint name cố định (không phụ thuộc auto-generated kebab-case)?
+
+**Test (`#239`):**
+- [ ] ≥ 21 test case khớp test matrix §53.10?
+- [ ] Restart-recovery integration test pass (kill TicketService giữa transaction, restore, verify Saga continue)?
+- [ ] Quartz schema apply trong test fixture (`qrtz_*` tables)?
+- [ ] Contract test cho 8 Saga message + V1/V2 BatteryAnomaly?
+
+**Observability (`#239`):**
+- [ ] 8 metric đã register (xem §9.2 AppMetrics.cs)?
+- [ ] 2 alert rule deploy vào alertmanager.yaml?
+- [ ] Log structured fields đầy đủ (CorrelationId/AlertId/TicketId/CurrentState/MessageId)?
+- [ ] KHÔNG log PII (email/phone/JWT)?
+
+**Documentation (`#240`):**
+- [ ] ADR-017 + ADR-018 merged vào `docs/adrs/`?
+- [ ] 3 runbook tạo trong `docs/operations/runbook/`?
+- [ ] 3 Mermaid diagram trong `docs/architecture/`?
+- [ ] Swagger include Saga admin endpoints?
+- [ ] Postman collection có Saga folder + Idempotency-Key header example?
+
 ### 18.3. Per system (end-to-end demo)
 1. `docker compose --env-file .env.Docker up -d --build` chạy tất cả service xanh trong < 60s.
 2. `tools/seed.sh` populate đầy đủ data.
 3. End-to-end scenario chạy được:
    - Customer login Mobile → xem battery realtime → nhận push critical alert
-   - System auto-create ticket → Manager assign Staff trên Web
+   - Alert–Ticket Saga create/reuse ticket → xác nhận `Alert.TicketId` → Saga `Completed`
+   - Manager assign Staff trên Web
    - SLA timer chạy → Staff resolve trên Web → Manager approve
    - Customer rate trên Mobile → ticket CLOSED
 4. SLA breach scenario demo được (chỉnh sensor data hoặc time mock):
@@ -3883,6 +4844,7 @@ GitHub Actions step:
 6. Grafana dashboards realtime updating.
 7. Swagger UI ApiGateway có đủ schema mọi service.
 8. Coverage report ≥ 80% per service tại CI.
+9. Failure scenario Saga chạy được: ngắt BatteryService/RabbitMQ, khôi phục, reprocess và không tạo Ticket trùng.
 
 ---
 
@@ -3911,6 +4873,12 @@ public static class PermissionCodes {
     public const string AlertResolve = "battery.alert.resolve";
     public const string BatteryDashboardView = "battery.dashboard.view";
 
+    // IoT device management (§52)
+    public const string IotDeviceView = "iot.device.view";
+    public const string IotDeviceManage = "iot.device.manage";          // create/update config/decommission + sinh/rotate API key
+    public const string IotFirmwareManage = "iot.firmware.manage";      // upload/list firmware release
+    public const string IotCalibrationManage = "iot.calibration.manage"; // tạo/xem calibration (Staff/Admin)
+
     // Ticket
     public const string TicketCreate = "ticket.create";
     public const string TicketViewOwn = "ticket.view-own";
@@ -3930,6 +4898,8 @@ public static class PermissionCodes {
     public const string KbView = "kb.view";
     public const string KbManage = "kb.manage";
     public const string TicketReportsView = "ticket.reports.view";
+    public const string TicketSagaView = "ticket.saga.view";
+    public const string TicketSagaReprocess = "ticket.saga.reprocess";
 
     // Notification
     public const string NotificationViewOwn = "notification.view-own";
@@ -3956,6 +4926,10 @@ public static class PermissionCodes {
 | AlertAcknowledge | ✅ | ✅ | ✅ | ✅ |
 | AlertResolve | ✅ | ✅ | ✅ | — |
 | BatteryDashboardView | ✅ | ✅ | — | — |
+| IotDeviceView | ✅ | ✅ | ✅ | — |
+| IotDeviceManage | ✅ | — | — | — |
+| IotFirmwareManage | ✅ | — | — | — |
+| IotCalibrationManage | ✅ | — | ✅ | — |
 | TicketCreate | ✅ | ✅ | ✅ | ✅ |
 | TicketViewOwn | — | — | ✅ (assigned) | ✅ (owned) |
 | TicketViewAll | ✅ | ✅ | — | — |
@@ -3974,6 +4948,8 @@ public static class PermissionCodes {
 | KbView | ✅ | ✅ | ✅ | — |
 | KbManage | ✅ | ✅ | — | — |
 | TicketReportsView | ✅ | ✅ | — | — |
+| TicketSagaView | ✅ | ✅ (read-only) | — | — |
+| TicketSagaReprocess | ✅ | — | — | — |
 | NotificationViewOwn | ✅ | ✅ | ✅ | ✅ |
 | DeviceTokenManage | ✅ | ✅ | ✅ | ✅ |
 | PreferenceManage | ✅ | ✅ | ✅ | ✅ |
@@ -4013,6 +4989,9 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | `TICKET_REOPEN_002` | Reopen lần thứ 2 → auto escalate | 200 (warning) | BR-07 |
 | `TICKET_SLA_001` | SLA timer not running, không thể pause | 200 | — |
 | `TICKET_RATE_001` | Đã rate rồi | 200 | — |
+| `TICKET_SAGA_001` | Alert–Ticket Saga không tồn tại | 404 | — |
+| `TICKET_SAGA_002` | Saga không ở trạng thái cho phép reprocess | 409 | Chỉ `Failed` |
+| `TICKET_SAGA_003` | Alert đã link với Ticket khác | 409 | Không overwrite |
 | `NOTIF_DEVICE_001` | Token Expo không hợp lệ | 200 | — |
 | `FILE_UPLOAD_001` | File quá lớn (>10MB) | 400 | — |
 | `FILE_UPLOAD_002` | Content-type không hỗ trợ | 400 | — |
@@ -4049,6 +5028,15 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 ## 23. Risk register
 
+> **29 risk items** chia 5 nhóm chính:
+> - **R-01..R-13**: Technical baseline (state machine, SLA, dedup, migration, performance, security)
+> - **R-14..R-18**: Sprint 5B Saga design (forward recovery, duplicate, scope creep, cutover, restart)
+> - **R-19..R-22**: Sprint 5B operational (preflight cleanup, mapping, Quartz schema, notification spam)
+> - **R-23..R-27**: Capacity + planning + external (Thắng solo owner Sprint 5B + IoT-1, bus factor, ext quota, mentor schedule)
+> - **R-28..R-29**: IoT v2 pivot (ESP32 firmware codebase mới, BMS procurement / register map — xem §52, `overall.iot.md` §D)
+>
+> Mỗi risk có owner cụ thể. Leader review weekly trong daily standup, escalate Sev-High risk khi likelihood tăng.
+
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|------|-----------|--------|------------|-------|
 | R-01 | State machine TicketService bug | High | High | Test matrix 30+ transitions, code review focus | BE Lead |
@@ -4064,6 +5052,22 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-11 | Performance: realtime endpoint < 100ms khó | Med | Med | Caching strategy §13, index `(asset, time DESC)`, benchmark | Thái |
 | R-12 | Microservice event chain race condition | Med | High | Outbox + Inbox idempotency, integration test với TestHarness | Duy |
 | R-13 | Demo gặp bug khi live | High | High | Final sprint dành cho bug bash + rehearsal | Cả team |
+| R-14 | Saga tạo Ticket nhưng không link được Alert | Med | High | Persisted state, timeout, forward recovery, admin reprocess, stuck alert | Thắng |
+| R-15 | Duplicate/redelivery tạo nhiều Ticket cho một Alert | Med | High | Unique `OriginAlertId`, durable Inbox, idempotent lookup, concurrency test | Thắng |
+| R-16 | Scope creep đưa Energy/CO2 quay lại BatteryService | Med | Med | ADR scope guard, contract search trong CI, backlog review theo §53.1 | Thắng |
+| R-17 | Direct consumer cũ và Saga cùng chạy khi cutover | Med | High | Feature flag, drain queue cũ, remove registration, smoke test trước enable | Thắng |
+| R-18 | Timeout/redelivery bị mất khi service restart | Med | High | Persistent Quartz scheduler, restart-recovery integration test | Thắng |
+| R-19 | Preflight cleanup bỏ sót duplicate → migration `AddAlertTicketSagaFoundation` fail giữa rollout | Low | High | Runbook `10-saga-duplicate-canonical.md`, dry-run trên staging trước, transaction wrap migration | Thắng |
+| R-20 | `OriginAlertId` reuse logic bị nhầm → reuse Ticket sai category | Med | High | Mapping table §53.7 có 15 wire value + unknown, unit test mapping đầy đủ, integration test reuse vs new | Thắng |
+| R-21 | Quartz schema chưa apply → Saga timeout không trigger sau restart | Low | High | Migration `AddQuartzPersistenceSchema` chạy ở init container; health check assert `qrtz_triggers` exists khi startup | Thắng |
+| R-22 | Manager notification AlertTicketSagaFailed spam | Low | Med | Rate-limit notification dispatcher (debounce 5 phút per AlertId), §49 batching | Thắng |
+| R-23 | Thắng solo owner Sprint 5B (9 task ~8.5 dev-day) → bottleneck `#237`/`#239` slip | High | High | Working weekend, defer scope phụ (Ambient/B2-finalize), KHÔNG defer `#237` (xem §17 capacity warning) | Thắng |
+| R-24 | Sprint IoT-1 chồng Sprint 6 window → solo owner Thắng overload nếu cả 2 không kịp tách thời gian | Med | Med | Thắng owns IoT-1 (đồng bộ tiếp BatteryService work từ Sprint 5B); hardware partner liên hệ trước Sprint 5B kết thúc; defer MQTT P3 sang Sprint 7 nếu thiếu giờ | Thắng |
+| R-25 | Bus factor=1 cho Saga code → Thắng unavailable block toàn bộ Sprint 5B | Low | Critical | Code walkthrough video sau khi `#237` merge (upload `docs/knowledge-transfer/saga-walkthrough.md`); documentation immediate sau mỗi merge để team đọc kế thừa nếu cần | Thắng |
+| R-26 | External service quota hết giữa demo Sprint 8 (email/SMS/Expo) | Med | Med | Đăng ký nhiều provider + fallback in-app + monitor quota hàng tuần (xem §56.15 external dependency register) | Leader |
+| R-27 | Mentor (GVHD) không available cho dry-run review post-Sprint 8 | Low | High | Leader confirm GVHD lịch trước Sprint 8 kết thúc, book 2 slot dự phòng (xem §56.14 timeline) | Leader |
+| R-28 | Pivot ESP32 → firmware C++/Arduino là **codebase mới**, team BE thiếu kinh nghiệm embedded → IoT-1 slip | Med | Med | MVP `mock_bms` (data giả) chứng minh flow backend trước, không phụ thuộc firmware; MQTT là P3 optional (HTTPS đủ demo); reuse logic từ `iot.md` v1; pair với đối tác phần cứng (xem §52.10, R-24) | Thắng |
+| R-29 | Mua nhầm BMS không có register map / không đổi được `unitId` → không đọc được data dù pin chạy tốt (multi-drop fail) | Med | High | Checklist mua BMS bắt buộc (RS485/Modbus + register map + đổi unitId + CRC — `overall.iot.md` §A4); test 1 BMS bằng USB-RS485 + Modbus Poll trước khi mua số lượng; ESP32 `mock_bms` fallback cho demo | Thắng |
 
 ---
 
@@ -4084,11 +5088,15 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] History query với granularity — §1.8
 - [ ] ThresholdCheckBackgroundService — §1.6
 - [ ] AlertCreate + dedup BR-03 — §1.6
+- [ ] Publish `BatteryAnomalyDetectedEvent` (+ V2 enriched) qua Outbox — §1.7
 - [ ] Push notify Customer khi critical — §3.4
+- [ ] `AlertEscalationBackgroundService` publish `BatteryAlertEscalationRequestedEvent` khi Critical Alert chưa-ack > 5 phút — §1.6, §53.4
 
 ### Phase 3 — Ticket Creation (CUSTOMER / SYSTEM)
 - [ ] TicketCreateCommand (Customer mobile) BR-01 mandatory asset — §2.5
-- [ ] BatteryAnomalyDetectedConsumer auto-create BR-02 — §2.7
+- [ ] Alert–Ticket Saga nhận anomaly và gửi `CreateTicketFromAlertCommand` — §8.3
+- [ ] Ticket create/reuse BR-02 idempotent — §2.7
+- [ ] BatteryService link `Alert.TicketId`, Saga `Completed` — §53
 - [ ] Activity Created BR-08 — §2.3.4
 
 ### Phase 4 — Triage & Assignment (MANAGER)
@@ -4123,6 +5131,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [x] Docker Compose per-service logical database setup (`auth_db`, `file_storage_db`)
 - [ ] Outbox cho BatteryService + TicketService — §8.1
 - [ ] Inbox idempotency consumer — §8.2
+- [ ] Alert–Ticket Saga + timeout/reprocess/observability — §8.3, §53
 - [ ] OpenTelemetry tracing — §8.4
 - [ ] Gateway JWT validate + claim forward — §10.1
 - [ ] OpenAPI aggregate at gateway — §10.4
@@ -4154,6 +5163,13 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | Q-16 | Cache strategy: Redis hay InMemory? | **Redis** (đã có sẵn) |
 | Q-17 | Có pre-staging environment? | **Không** — chỉ local + final demo |
 | Q-18 | Các service lưu file bằng `objectKey` hay `fileId`? | **Lưu `fileId`** — FileStorageService phải có `UploadedFile` metadata table, `objectKey` chỉ là internal detail |
+| Q-19 | Alert→Ticket dùng choreography (direct consumer) hay orchestrated Saga? | **Orchestrated Saga** (ADR-018) — xem §53.4–§53.5 |
+| Q-20 | Saga retry/timeout dùng RabbitMQ delayed-message hay durable scheduler riêng? | **Persistent Quartz scheduler** trong TicketService — RabbitMQ image hiện tại không có delayed-message plugin (§53.8) |
+| Q-21 | Saga `Completed` row giữ hay cleanup? | **Giữ làm tombstone** — chống event cũ tạo lại Saga; không bật `SetCompletedWhenFinalized` (§53.5) |
+| Q-22 | BR-02 dedup theo `OriginAlertId` hay `(BatteryAssetId, Category)`? | **Cả hai** — lookup `OriginAlertId` trước (retry cùng Alert), rồi mới fallback `(asset, category)` (§53.8) |
+| Q-23 | Khi reuse Ticket cho Alert mới, có overwrite `Ticket.OriginAlertId` không? | **KHÔNG** — `OriginAlertId` chỉ lưu Alert đầu tiên; quan hệ many-alerts-to-one-ticket nằm ở `Alert.TicketId` (§53.6) |
+| Q-24 | Energy/CO2 analytics có làm trong capstone không? | **KHÔNG** (ADR-017) — out of scope; chỉ giữ battery health metric (Voltage/Current/SOC/SOH/CycleCount) — §53.1 |
+| Q-25 | `BatteryAnomalyDetectedEvent` V1 và V2 có dual-publish không? | **Có trong cutover** — Saga subscribe cả hai; deprecate V1 sau khi V2 stable (§30.6) |
 
 ---
 
@@ -4176,6 +5192,22 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | **CSAT** | Customer Satisfaction (rating 1-5) |
 | **Outbox** | Pattern lưu event vào DB trước khi publish, đảm bảo atomic |
 | **Inbox** | Pattern dedup message ở consumer để idempotent |
+| **Saga** | State machine persisted điều phối transaction nghiệp vụ qua nhiều service/database |
+| **Forward recovery** | Khôi phục bằng retry/reprocess bước chưa hoàn tất thay vì xóa ngược dữ liệu đã commit |
+| **Tombstone** | Row terminal-state (Completed/Failed) được giữ lại trong DB để chống event/message cũ tạo lại entity mới — không hard-delete |
+| **EF Consumer Outbox** | MassTransit feature commit consumed message + outgoing message cùng `DbContext` transaction của business action |
+| **Wire value** | Số nguyên ổn định cross-service trong contract. Trong dự án này, wire value của `AnomalyType` **bằng** integer của `AnomalyTypeEnum` ở §1.3.6 (sau v4.5 reconcile) — single source of truth. Upgrade không breaking khi chỉ thêm enum value mới (existing values KHÔNG ĐƯỢC thay đổi); subscriber luôn handle unknown wire value an toàn cho forward-compatible rolling deploy. |
+| **IoT edge device** | Thiết bị tại site đọc sensor/BMS rồi gửi backend. Chuẩn v2 = **ESP32-S3** (`DeviceType=StandaloneSensor`); v1 legacy = Raspberry Pi. Là điểm kiểm soát bảo mật duy nhất (1 device = 1 key + TLS). Xem §52, ADR-016 |
+| **BMS** | Battery Management System — mạch quản lý tích hợp trong pack pin, expose voltage/current/temp/SOC/SOH/error qua RS485-Modbus hoặc CAN |
+| **RS485 / Modbus RTU** | Chuẩn truyền nối tiếp công nghiệp (request/response) ESP32 dùng để đọc BMS. Bus đa điểm (multi-drop) |
+| **Multi-drop** | Nhiều BMS nối chung 1 cặp dây RS485 A/B; mỗi BMS có **`unitId`** (slave address) khác nhau để ESP32 poll lần lượt → 1 ESP32 quản nhiều pin |
+| **`unitId`** | Địa chỉ slave Modbus của 1 BMS trên bus multi-drop (1,2,3…). Map sang `BatteryAsset` qua `IotDevice.ConfigJson.batteryMappings` (§52.2) |
+| **MQTT** | Giao thức pub/sub realtime (kết nối thường trực, <100ms) cho telemetry/downlink (v2/P3 — §52.14). Khác HTTPS REST (request/response, v1) |
+| **Broker** | Phần mềm trung chuyển MQTT (EMQX/Mosquitto) — như "database của message", chỉ deploy + config (`infra/mqtt/`), không viết code |
+| **LWT (Last Will & Testament)** | Cơ chế MQTT: broker tự publish `offline` khi device rớt kết nối (keep-alive ~60s) → backend phát hiện offline tức thì thay vì chờ job 5 phút (§52.6) |
+| **Calibration** | Hiệu chuẩn sensor: `calibrated = raw × scaleFactor + offsetValue`, lấy chuẩn từ thiết bị đo (Fluke 87V). Lưu `IotDeviceCalibration`, có `ValidUntil` (§52.8) |
+| **Cross-source validation** | So reading cùng pin từ 2 nguồn độc lập (BMS-relayed `SourceType=Bms` vs INA226 `SourceType=IotGateway`) trong cửa sổ 60s → `SensorMismatch` nếu lệch quá ngưỡng (§1.6.6, §52.9) |
+| **OTA** | Over-The-Air firmware update — backend đẩy `.bin` (signed URL + SHA-256), ESP32 verify rồi flash, rollback nếu fail (§52.7) |
 
 ### References
 
@@ -4200,6 +5232,14 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 **AI & battery research (B2):**
 - Xem `.claude/docs/ai-research-references.md` cho danh sách paper đầy đủ cite cho 15 anomaly types, IsolationForest hyperparameter justification, NASA dataset spec.
+
+**IoT (v2 — ESP32 + MQTT):**
+- `newiot.md` — thiết kế tổng thể ESP32-S3 + MQTT (topic, broker, bridge, firmware, roadmap P0–P5).
+- `overall.iot.md` — BOM phần cứng đầy đủ + luồng vận hành (provision/data/anomaly/offline/calibration/OTA).
+- `wiring-diagram.md` — sơ đồ đấu dây + bảng GPIO ESP32-S3.
+- `hardware-bom.csv` — bảng mua sắm theo cấp ngân sách (Cấp 0→4).
+- `iot.md` — **deprecated** (Raspberry Pi v1, Python) — chỉ tham khảo logic queue/calibration/validation.
+- MQTT/MQTTnet docs, Eclipse Mosquitto / EMQX docs, Modbus RTU spec — cho bridge + broker + firmware.
 
 **ADRs:**
 - `docs/adr/0005-b2b-itil-stance.md` — B2B/B2C scope + ITIL stance (B5)
@@ -4248,6 +5288,22 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - Check index `(CustomerId, Status, IsDeleted)` tồn tại.
 - Check N+1 query trong handler: dùng `.Include()` đầy đủ.
 - Check pagination có applied (`Skip/Take`).
+
+### 27.9. "Saga stuck ở `TicketRequested` không tiến" (Sprint 5B)
+- Query `SELECT current_state, updated_at_utc, ticket_attempt_count, last_error FROM alert_ticket_saga_states WHERE correlation_id = '<alert-id>'`.
+- Check `mt_inbox_state` của participant: message `CreateTicketFromAlertCommand` đã arrive chưa?
+- Check Quartz `qrtz_triggers` xem `StepTimeoutTokenId`/`RetryTokenId` còn active không.
+- Nếu TicketService crash sau commit Ticket nhưng trước response: chờ restart-recovery hoặc admin reprocess theo runbook `08-saga-failed.md`.
+- Nếu bị `Fault<CreateTicketFromAlertCommand>` repeat: kiểm tra mapping `AnomalyType` (xem §53.7) và `category` enum đầy đủ chưa.
+
+### 27.10. "Duplicate Ticket sau khi enable Saga" (Sprint 5B)
+- Check feature flag: `AlertTicketDispatchEnabled` + direct consumer cùng on → xem alert rule §9 và runbook cutover.
+- Verify unique filtered index `tickets.origin_alert_id` đã apply (preflight cleanup làm chưa?).
+- Verify queue direct cũ đã decommission, không còn binding `BatteryAnomalyDetectedConsumer`.
+
+### 27.11. "`Alert.TicketId` vẫn null sau Saga Completed" (Sprint 5B)
+- Saga `Completed` chỉ chuyển sau khi nhận `AlertLinkedToTicketEvent`. Nếu Saga đã Completed mà Alert.TicketId vẫn null → có race condition giữa Saga state machine và Battery DB commit; kiểm tra log `LinkAlertToTicketConsumer` và `mt_outbox_message` của BatteryService.
+- Chạy reconciliation: `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess` với reason `link-recovery`.
 
 ---
 
@@ -4303,7 +5359,9 @@ services/FileStorageService/src/
 shared/src/SharedContracts/Events/
 ├── Battery/
 │   ├── BatteryAssetCreatedEvent.cs
-│   ├── BatteryAnomalyDetectedEvent.cs
+│   ├── BatteryAnomalyDetectedEvent.cs                ← V1 baseline (giữ trong cutover, deprecate sau khi V2 stable)
+│   ├── BatteryAnomalyDetectedV2Event.cs              ← Sprint 5B: enrich Classification/SOH/AnomalyScore từ AI (xem §30.6)
+│   ├── BatteryAlertEscalationRequestedEvent.cs       ← Sprint 5B: alert chưa-ack > 5 phút (xem §1.5)
 │   └── BatteryAssetTransferredEvent.cs
 ├── Ticket/
 │   ├── TicketCreatedEvent.cs
@@ -4318,6 +5376,15 @@ shared/src/SharedContracts/Events/
 │   ├── IncidentDeclaredEvent.cs
 │   ├── SlaWarningEvent.cs
 │   └── SlaBreachedEvent.cs
+├── Saga/AlertTicket/
+│   ├── CreateTicketFromAlertCommand.cs
+│   ├── TicketProvisionedForAlertEvent.cs
+│   ├── TicketProvisionForAlertRejectedEvent.cs
+│   ├── LinkAlertToTicketCommand.cs
+│   ├── ReconcileAlertTicketSagaCommand.cs
+│   ├── AlertLinkedToTicketEvent.cs
+│   ├── AlertLinkToTicketRejectedEvent.cs
+│   └── AlertTicketSagaFailedEvent.cs
 ├── Account/
 │   ├── AccountProfileUpdatedEvent.cs          (update: AvatarFileId, ExternalAvatarUrl, AvatarSource)
 │   ├── StaffProfileUpdatedEvent.cs            (new)
@@ -4343,6 +5410,53 @@ monitoring/tempo.yaml                           ← config Tempo
 ### Gateway updates
 ```
 services/ApiGateway/src/                        ← route config + JWT validate middleware + rate limit + swagger aggregate
+                                                  + Sprint 5B: /api/v1/admin/sagas/alert-ticket/* route + reprocess rate limit (10/min/Admin)
+```
+
+### Sprint 5B — Saga + Quartz infra (files mới)
+```
+shared/src/SharedContracts/Saga/AlertTicket/        ← 8 contract files (xem §28 shared updates)
+
+services/TicketService/src/TicketService.Infrastructure/
+├── Sagas/
+│   ├── AlertTicketSagaState.cs
+│   ├── AlertTicketSagaStateMachine.cs
+│   └── AlertTicketSagaDefinition.cs               ← endpoint name + retry/timeout policy
+├── Persistence/
+│   ├── Configurations/AlertTicketSagaStateConfiguration.cs
+│   └── Migrations/*AddAlertTicketSagaFoundation*  ← + unique filtered index tickets.origin_alert_id + partial unique guard
+└── Persistence/Migrations/*AddQuartzPersistenceSchema*  ← qrtz_* 11 tables (official SQL script)
+
+services/BatteryService/src/BatteryService.Application/Consumers/
+└── LinkAlertToTicketConsumer.cs                    ← saga participant
+services/BatteryService/src/BatteryService.Infrastructure/
+└── Persistence/Migrations/*AddAlertTicketLinkIndex*       ← non-unique filtered index alerts.ticket_id
+
+services/NotificationService/src/NotificationService.Application/Consumers/
+├── BatteryAlertEscalationRequestedConsumer.cs      ← push Manager + Admin
+└── AlertTicketSagaFailedConsumer.cs                ← push Admin
+
+services/NotificationService/src/NotificationService.Application/Templates/
+├── battery-alert-escalation-pending.hbs            ← email template
+└── alert-ticket-saga-failed.hbs                    ← email template
+
+docs/adrs/
+├── ADR-017-remove-energy-co2-analytics.md
+└── ADR-018-orchestrated-alert-ticket-saga.md
+
+docs/operations/runbook/
+├── 08-saga-failed.md
+├── 09-saga-stuck.md
+└── 10-saga-duplicate-canonical.md
+
+docs/architecture/                                  ← 3 Mermaid diagram mới (xem §65.3, link từ ADR-018)
+├── state-machine-alert-ticket-saga.mmd
+├── sequence-alert-ticket-saga-happy.mmd
+└── sequence-alert-ticket-saga-failure.mmd
+
+docs/onboarding/be-newcomer.md                      ← cập nhật 3 section: Saga local setup, Debug Saga, Common mistakes (xem §40.6)
+.claude/CLAUDE.md / .claude/rules/tech/be.md        ← cập nhật pattern "Orchestrated Saga" + EF Consumer Outbox/Inbox (xem §0bis.2)
+.github/workflows/ci.yml                            ← thêm step "Energy/CO2 scope guard (ADR-017)" (xem §53.2bis)
 ```
 
 ### Scripts
@@ -4350,7 +5464,19 @@ services/ApiGateway/src/                        ← route config + JWT validate 
 tools/
 ├── seed.sh                                     ← seed accounts + battery + ticket + KB
 ├── generate-sensor-data.py                     ← Python simulator IoT data
-└── load-test.k6.js                             ← k6 perf test (optional)
+├── load-test.k6.js                             ← k6 perf test (optional)
+├── reset-demo.sh                               ← reset demo data (xem §56.2)
+├── inject-anomaly.sh                           ← inject sensor anomaly (xem §56.4)
+├── fast-forward-sla.sh                         ← time mock SLA breach (xem §56.4)
+├── trigger-incident.sh                         ← declare incident (xem §56.4)
+├── seed-demo-scenarios.sh                      ← demo scenario seed bao gồm Saga states (xem §56.3)
+└── Sprint 5B additions (xem §56.4 + §56.12):
+    ├── simulate-saga-failure.sh                ← demo Saga Failed → reprocess recovery
+    ├── inspect-saga.sh                         ← query Saga state cho debug
+    ├── smoke-test.sh                           ← pre-demo health check verify all service + Saga endpoint
+    ├── restart-stack.sh                        ← mid-demo recovery, restart 1 service < 30s
+    ├── dev-cleanup.sh                          ← local dev disk cleanup (Quartz + Saga old states) (xem §40.6)
+    └── release-notes.sh                        ← parse commits → CHANGELOG.md (xem §65.5)
 ```
 
 ### Docs (project-level)
@@ -4516,19 +5642,41 @@ public class AiInferenceClient : IAiInferenceClient {
 
 #### `AnomalyClassificationOnAlertConsumer`
 - Internal consumer (in-process) khi `ThresholdAnomalyDetector` trigger.
-- Call `ClassifyAnomalyAsync` → enrich Alert + publish `BatteryAnomalyDetectedEvent` với classification.
+- Call `ClassifyAnomalyAsync` → enrich Alert + publish `BatteryAnomalyDetectedV2Event` theo rollout
+  versioned ở §30.6; không thêm field bắt buộc trực tiếp vào V1.
 
 ### 30.6. Updated `BatteryAnomalyDetectedEvent`
-Thêm fields:
+Không thay đổi in-place positional contract hiện tại trong cùng deployment. Khi AI enrichment sẵn sàng,
+publish contract V2 và migrate subscriber trước khi ngừng V1:
+
 ```csharp
-public record BatteryAnomalyDetectedEvent : IntegrationEvent {
-    // ... fields cũ ...
-    public AnomalyClassificationEnum Classification { get; init; }   // Normal/Degrading/Failed
-    public decimal AnomalyScore { get; init; }
-    public decimal? CurrentSohPercent { get; init; }
-    public string AiModelVersion { get; init; } = string.Empty;
-}
+public record BatteryAnomalyDetectedV2Event(
+    Guid AlertId,
+    Guid BatteryAssetId,
+    Guid CustomerId,
+    string AssetSerialNumber,
+    int AnomalyType,
+    int Severity,
+    decimal ThresholdValue,
+    decimal ActualValue,
+    string Unit,
+    DateTime DetectedAt,
+    int? Classification,            // wire value khớp AnomalyClassificationEnum §30.3: 1=Normal, 2=Degrading, 3=Failed; null = AI chưa classify hoặc unavailable (xem §30.11 fallback)
+    decimal? AnomalyScore,
+    decimal? CurrentSohPercent,
+    string? AiModelVersion
+) : IntegrationEvent;
 ```
+
+Giữ primitive wire value; không đưa `AnomalyClassificationEnum` từ BatteryService.Domain vào
+SharedContracts. Trong giai đoạn chuyển tiếp producer có thể dual-publish V1/V2 nhưng mỗi subscriber
+chỉ xử lý một version theo feature flag, có contract test trước rollout.
+
+**Saga interop:** `AlertTicketSagaStateMachine` (§8.3, §53.5) subscribe **cả** `BatteryAnomalyDetectedEvent`
+và `BatteryAnomalyDetectedV2Event`. Cả hai dùng cùng `CorrelateById(x => x.Message.AlertId)` và route về
+cùng state machine; V2 chỉ enrich thêm Classification/SOH/AnomalyScore vào payload snapshot nhưng không
+đổi initial transition. Mapping wire-value `AnomalyType` ở §53.7 áp dụng cho cả hai version. Khi cutover
+xong, deprecate V1 endpoint trước khi xóa V1 subscription để tránh mất event in-flight.
 
 ### 30.7. New endpoints
 
@@ -4600,9 +5748,11 @@ Prometheus metrics:
 
 ---
 
-## 31. Site & BatteryGroup entities — P0
+## 31. Site entity — P0
 
 > Solar farm thực tế cụm pin theo site. Mô hình hiện tại `Customer → Asset` trực tiếp sai về business reality. Sửa từ đầu rẻ hơn refactor sau.
+>
+> **Cập nhật (post-Sprint 5B reconcile):** `BatteryGroup` entity được **deferred khỏi scope hiện tại** — capstone implement Site-level grouping/aggregation là đủ cho 4 role × 6 phase. Nếu sau này cần cluster con trong site (Block A/String 1) thì add sau, không block. Asset hiện chỉ link trực tiếp Site (không qua BatteryGroup).
 
 ### 31.1. New entities
 
@@ -4614,25 +5764,16 @@ Prometheus metrics:
 | `CustomerId` | Guid (FK) | Owner |
 | `Address` | string(500)? | — |
 | `Latitude`, `Longitude` | decimal? | GPS center |
-| `CapacityKw` | decimal? | Tổng công suất site |
 | `InstallDate` | DateTime | — |
 | `Status` | enum (Active=1, UnderMaintenance=2, Decommissioned=3) | — |
 | `ContactPersonName` | string? | Người liên hệ tại site |
 | `ContactPersonPhone` | string? | — |
 
-#### `BatteryGroup` (cluster trong site)
-| Field | Type | Note |
-|-------|------|------|
-| `Id` | Guid | PK |
-| `SiteId` | Guid (FK) | — |
-| `Name` | string(100) | "Block A", "String 1" |
-| `BatteryTypeId` | Guid (FK) | Group cùng loại pin |
-| `BatteryCount` | int | denormalize đếm asset trong group |
+> `BatteryGroup` (cluster trong site) — **DEFERRED**, không trong scope hiện tại. Spec field gốc (Id/SiteId/Name/BatteryTypeId/BatteryCount) giữ lại trong git history nếu cần dùng lại.
 
 ### 31.2. Update existing entity
 - `BatteryAsset.SiteId` nullable (backward compatible).
-- `BatteryAsset.BatteryGroupId` nullable.
-- Migration: `AddSiteAndGroup` — tạo bảng + thêm column nullable.
+- Migration: `AddSiteAndGroup` — tạo bảng Site + thêm `BatteryAsset.SiteId` nullable. `BatteryGroup` table và `BatteryAsset.BatteryGroupId` column **không tạo** (deferred).
 
 ### 31.3. New endpoints
 ```
@@ -4645,13 +5786,10 @@ GET    /api/v1/sites/{id}/alerts                          (all alerts của site
 PUT    /api/v1/sites/{id}
 DELETE /api/v1/sites/{id}                                 (block nếu còn asset)
 
-POST   /api/battery-groups                             (Admin)
-GET    /api/battery-groups?siteId=
-PUT    /api/battery-groups/{id}
-DELETE /api/battery-groups/{id}                        (409 nếu còn BatteryAsset liên kết — không cascade)
-
 GET    /api/v1/customers/me/sites                         (Customer — list sites mình sở hữu)
 ```
+
+> `/api/battery-groups` endpoints **deferred** cùng entity BatteryGroup.
 
 ### 31.4. Site-aggregated alert (giảm noise)
 Khi nhiều asset cùng site cùng anomaly trong 5 phút → tạo 1 `SiteAlert` thay vì N `Alert`:
@@ -4669,7 +5807,7 @@ GET /api/v1/sites/{id}/dashboard
   "activeAssets": 48,
   "assetsWithActiveAlerts": 3,
   "averageSohPercent": 92.5,
-  "totalCapacityKw": 500,
+  "criticalAlerts": 1,
   "ticketsOpen": 2,
   "ticketsResolved30d": 12,
   "lastAlertAt": "...",
@@ -4680,6 +5818,7 @@ GET /api/v1/sites/{id}/dashboard
 ### 31.6. Migration impact
 - `BatteryAsset` migration `AddSiteAndGroup` (Sprint 2 hoặc 3).
 - Seed: tạo Site mặc định "Default Site" cho Customer chưa có site, gán assets cũ vào đó.
+- Sprint 5B: migration `RemoveSiteCapacityKw` drop column `sites.capacity_kw` (Up/Down + rollback test) — xem §53.3 task `#234`. `Site.CapacityKw` không còn tồn tại trong Domain entity, DTO, mapping, validation và seed sau migration này.
 
 ### 31.7. Cascade Risk Assessment (B4) — rule-based propagation analysis
 
@@ -5279,6 +6418,7 @@ DELETE /api/v1/auth/me                                  (Customer)
      - `Account.Address = null`
      - Keep `Id` cho audit trail.
   3. Tickets/Comments giữ nguyên nhưng `CustomerName` show "[Deleted User]".
+  4. **Sprint 5B — Saga/Alert reference:** `alert_ticket_saga_states.CustomerId` và `alerts.customer_id` KHÔNG anonymize (giữ GUID làm audit trail). API/UI khi render Saga/Alert detail sẽ resolve `CustomerId → "[Deleted User]"` từ AuthService read-model — cùng pattern với Ticket/Comment. Không có PII trực tiếp trong payload snapshot Saga (chỉ `AssetSerialNumber`, `AnomalyType`, `Severity`, `CustomerId` GUID).
 
 ### 39.3. Data retention policy
 
@@ -5294,6 +6434,10 @@ DELETE /api/v1/auth/me                                  (Customer)
 | LoginAttempt | 6 tháng | Drop | Security baseline |
 | OutboxMessage processed | 30 ngày | Drop | Cleanup |
 | RefreshToken revoked | 30 ngày | Drop | — |
+| Alert + AlertActivity | Forever (link với Ticket forever) | — | Audit, telemetry evidence; không chứa PII trực tiếp (chỉ `CustomerId` GUID) |
+| `alert_ticket_saga_states` (Sprint 5B) | Forever (tombstone — xem §53.5) | — | Chống event cũ tạo lại Saga; payload snapshot chứa `CustomerId` GUID + `AssetSerialNumber`, KHÔNG chứa email/phone |
+| `mt_inbox_state` / `mt_outbox_state` / `mt_outbox_message` (Sprint 5B) | 30 ngày sau khi processed | Drop | Same as OutboxMessage policy |
+| `qrtz_*` (Sprint 5B) | Active triggers only | Quartz tự cleanup completed jobs | Operational metadata, không PII |
 
 ### 39.4. PII redaction trong logs
 - Serilog enricher tự động mask:
@@ -5354,6 +6498,10 @@ Folder `docs/adrs/`:
 | ADR-013 | Hybrid threshold + AI anomaly detection |
 | ADR-014 | Account profile extension tables in AuthService (vs stuffing `Account` / separate UserService) |
 | ADR-015 | TestContainers over shared dev Postgres for integration tests |
+| ADR-016 | IoT edge = **ESP32-S3** (pivot từ Raspberry Pi); transport **hybrid**: HTTPS REST (v1 — bulk/admin/firmware/flush) + **MQTT** (v2 — realtime <100ms, LWT offline, downlink command). BMS đọc qua RS485/Modbus RTU multi-drop. — xem §52.10 |
+| ADR-017 | Remove Energy and CO2 analytics from BatteryService scope — xem §53.1 |
+| ADR-018 | Orchestrated Alert–Ticket Saga + forward recovery (vs choreography hoặc 2PC) — xem §8.3, §53.4–§53.8 |
+| ADR-019 | 2FA Hardening — enforce TOTP in login (challenge token Redis 5’) + confirm setup (2-step init/confirm) + disable re-auth (password+TOTP) + encrypt secret at rest (Data Protection `enc:v1:` + lazy re-encrypt) + backup codes (8 codes bcrypt single-use) + admin reset. **Supersedes Option B** (§0.4 dòng 162). — xem §0.5, GH-295 |
 
 **ADR template:**
 ```markdown
@@ -5392,18 +6540,28 @@ What did we decide?
 | Scenario | RTO (Recovery Time) | RPO (Data Loss) |
 |----------|---------------------|-----------------|
 | DB corrupt | 1 giờ | 24h (last backup) |
-| Single service crash | 5 phút (k8s restart) | 0 (stateless) |
-| RabbitMQ down | 30 phút | 0 (Outbox persistent) |
-| Redis down | 15 phút | Acceptable (cache only) |
+| Single service crash | 5 phút (k8s restart) | 0 (stateless; Saga state + Quartz triggers durable trong `ticket_db`) |
+| RabbitMQ down | 30 phút | 0 (Outbox persistent + Saga forward recovery) |
+| Redis down | 15 phút | Acceptable (cache only; Saga idempotency dùng EF Consumer Inbox, không phụ thuộc Redis) |
 | Total cluster down | 4 giờ | 24h |
+| Saga stuck (Failed/non-progressing) | 1 giờ | 0 (admin reprocess theo runbook `08-saga-failed.md`) |
 
 #### Restore procedure
 1. Provision new infra (terraform / docker-compose).
 2. Restore Postgres backup: `gunzip < backup.sql.gz | psql`.
 3. Verify migrations match: `dotnet ef database update --no-build`.
 4. Restart services with feature flag `MAINTENANCE_MODE=true` (read-only).
-5. Smoke test: health endpoints + sample query.
+5. Smoke test: health endpoints + sample query (+ `/health/saga` cho TicketService Sprint 5B).
 6. Disable maintenance mode.
+
+#### Sprint 5B — Saga/Quartz post-restore procedure (xem §53.5/53.8)
+Restore Postgres ngụ ý restore cả `alert_ticket_saga_states` + `qrtz_*` tables. Cần xử lý đặc biệt:
+
+1. **Trước khi enable `AlertTicketSagaEnabled`:** chạy `UPDATE qrtz_triggers SET next_fire_time = next_fire_time + (now - backup_time)` để dời timeout/retry sang tương lai, tránh flood timeout firing đồng loạt khi restore vào nhiều giờ/ngày sau backup. Quartz tự misfire policy có thể handle, nhưng chính sách "fire once now then reschedule" là acceptable behavior; chính sách "fire all missed" sẽ gây spike.
+2. **Saga ở `TicketRequested`/`AlertLinkRequested` lúc backup:** sau restore vẫn ở state đó; participant consumer chưa nhận command vì RabbitMQ trống. Chạy reconciliation: query Saga `current_state IN ('TicketRequested', 'AlertLinkRequested') AND updated_at < restore_time` → admin reprocess theo runbook `08-saga-failed.md`.
+3. **MassTransit `mt_outbox_message` chưa publish lúc backup:** OutboxRelay sẽ tự pickup khi service restart và RabbitMQ ready.
+4. **`mt_inbox_state` đã processed lúc backup nhưng business commit chưa flush disk (rất hiếm):** EF Consumer Outbox đảm bảo atomic với business commit, nên restore phải consistent. Nếu phát hiện inconsistent, xóa Inbox row tương ứng để consumer xử lý lại (idempotent).
+5. Verify post-restore: assert `qrtz_triggers` count > 0 (nếu có Saga active trước backup), `alert_ticket_saga_states` count khớp backup, `mt_outbox_message` count khớp.
 
 ### 40.3. Runbook per scenario
 `docs/operations/runbook/`:
@@ -5414,6 +6572,11 @@ What did we decide?
 - `05-ai-module-down.md`
 - `06-disk-space-low.md`
 - `07-secret-rotation.md`
+- `08-saga-failed.md`              ← Sprint 5B, task `#240` — Alert–Ticket Saga state=Failed cần reprocess
+- `09-saga-stuck.md`               ← Sprint 5B, task `#240` — Saga non-terminal không update > 10 phút
+- `10-saga-duplicate-canonical.md` ← Sprint 5B — chọn Ticket canonical khi preflight phát hiện duplicate `OriginAlertId` hoặc duplicate active `(BatteryAssetId, Category)`
+
+> **IoT device ops (Sprint IoT-1):** Không mint runbook đánh số riêng — quy trình xử lý sự cố device (offline triage, broker down, queue đầy, clock drift, reject spike) đã nằm ở **§52.15 Failure modes** + **§52.6 offline detection**, và setup/hardware runbook ở `newiot.md`/`overall.iot.md`/`wiring-diagram.md`. Nếu pilot phần cứng mở rộng, có thể tách `11-iot-device-offline.md` từ §52.15 (khi đó cập nhật count runbook ở §66/§67).
 
 Sample structure:
 ```markdown
@@ -5438,12 +6601,206 @@ Sample structure:
 ...
 ```
 
+#### Sample structure cho 3 Saga runbook (Sprint 5B, task `#240`)
+
+**`08-saga-failed.md`** — Saga state=Failed cần reprocess:
+
+```markdown
+# Runbook: Alert–Ticket Saga Failed
+
+## Symptoms
+- AlertManager fires `AlertTicketSagaFailedSpike` (alert_ticket_saga_failed_total tăng 5min)
+- Admin notification: "❌ Saga Failed AlertId={id} step={FailedStep}"
+- Customer thấy Alert chưa được auto-create Ticket
+
+## Diagnose
+1. Query Saga state: `SELECT correlation_id, current_state, failed_step, failure_code, last_error, ticket_attempt_count, alert_link_attempt_count, last_attempt_at_utc FROM alert_ticket_saga_states WHERE current_state = 'Failed' ORDER BY updated_at_utc DESC LIMIT 50;`
+2. Group by `failure_code` — phân loại root cause:
+   - `ALERT_NOT_FOUND` / `ASSET_NOT_FOUND` / `CUSTOMER_INVALID`: data inconsistency, không reprocess được
+   - `ALERT_TICKET_CONFLICT`: manual investigation cần
+   - timeout/transient: có thể reprocess
+3. Check log: `docker logs ticket-service | grep "CorrelationId=<alert-id>"`
+4. Check BatteryService health nếu `FailedStep=link-alert`
+
+## Mitigation
+1. **Reprocessable (timeout/transient)**: `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess` với `Idempotency-Key: $(uuidgen)` + reason `"transient-retry-{date}"`. Saga sẽ resume từ failed step.
+2. **Data inconsistency**: investigate (Alert/Asset/Customer record) trước; nếu xác nhận data sai → mark Saga Abandoned thay vì reprocess.
+3. **Conflict TicketId**: gọi reconciliation theo runbook `10-saga-duplicate-canonical.md`.
+
+## Verification
+- Saga state chuyển `Completed` trong 30s sau reprocess.
+- `Alert.TicketId` set value đúng (không null).
+- AlertManager rule clear sau 5 phút.
+
+## Postmortem template
+...
+```
+
+**`09-saga-stuck.md`** — Saga non-terminal không update > 10 phút:
+
+```markdown
+# Runbook: Alert–Ticket Saga Stuck
+
+## Symptoms
+- AlertManager fires `AlertTicketSagaStuck` (gauge `alert_ticket_saga_stuck_count > 0` 10min)
+- Saga state in `TicketRequested` hoặc `AlertLinkRequested` không tiến
+
+## Diagnose
+1. Query stuck saga: `SELECT correlation_id, current_state, updated_at_utc, step_timeout_token_id, retry_token_id FROM alert_ticket_saga_states WHERE current_state IN ('TicketRequested', 'AlertLinkRequested') AND updated_at_utc < NOW() - INTERVAL '10 minutes';`
+2. Check Quartz triggers: `SELECT trigger_name, next_fire_time, prev_fire_time, trigger_state FROM qrtz_triggers WHERE trigger_state != 'WAITING';`
+3. Check RabbitMQ queue: management UI `ticket-create-ticket-from-alert` hoặc `battery-link-alert-to-ticket` queue depth.
+4. Check Quartz scheduler running: `GET /health/saga` (TicketService).
+
+## Mitigation
+1. **Quartz scheduler dead**: restart TicketService; verify `/health/saga` 200 sau restart.
+2. **Trigger missed fire**: Quartz auto-misfire policy "fire once now" → wait 1-2 phút; nếu vẫn stuck → manual reschedule qua admin endpoint.
+3. **Queue stuck**: check consumer health, scale up nếu cần.
+4. **Saga state corrupt**: gọi reprocess (runbook 08).
+
+## Verification
+- Stuck saga count gauge giảm về 0.
+- `updated_at_utc` của stuck saga update trong 1 phút.
+
+## Postmortem template
+...
+```
+
+**`10-saga-duplicate-canonical.md`** — preflight duplicate Ticket canonicalization:
+
+```markdown
+# Runbook: Alert–Ticket Saga duplicate canonicalization
+
+## Symptoms
+- Sprint 5B migration `AddAlertTicketSagaFoundation` fail với "duplicate key value violates unique constraint"
+- Hoặc query phát hiện duplicate `OriginAlertId` / duplicate active `(BatteryAssetId, Category)`
+
+## Diagnose
+1. Query duplicate `OriginAlertId`:
+   ```sql
+   SELECT origin_alert_id, COUNT(*) FROM tickets
+   WHERE origin_alert_id IS NOT NULL AND is_deleted = false
+   GROUP BY origin_alert_id HAVING COUNT(*) > 1;
+   ```
+2. Query duplicate active asset+category:
+   ```sql
+   SELECT battery_asset_id, category, COUNT(*) FROM tickets
+   WHERE origin = 2 AND is_deleted = false
+     AND status IN (1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12)
+   GROUP BY battery_asset_id, category HAVING COUNT(*) > 1;
+   ```
+
+## Mitigation (manual reconciliation, BẮT BUỘC trước khi apply unique constraint)
+1. Chọn **Ticket canonical** cho mỗi group duplicate:
+   - Ticket có `Status` mới nhất (Resolved/Closed) > In Progress > Open.
+   - Nếu cùng status: chọn Ticket có `CreatedAt` cũ nhất.
+   - Nếu tie: chọn Ticket có nhiều activity nhất.
+2. Update Alert link sang Ticket canonical:
+   ```sql
+   UPDATE alerts SET ticket_id = '<canonical-ticket-id>' WHERE ticket_id = '<duplicate-ticket-id>';
+   ```
+3. Mark duplicate Ticket `IsDeleted=true` + insert audit row vào TicketActivity với action `DuplicateCanonicalization` + reason.
+4. Log canonicalization decision vào `logs/sprint-5b/duplicate-cleanup-<date>.md` (review by Leader trước migration).
+
+## Verification
+- Re-run query step 1 + 2: 0 row.
+- Re-apply migration: success.
+
+## Postmortem template
+...
+```
+
+### 40.3bis. Postmortem template
+
+Mọi runbook reference `## Postmortem template ...`. Đây là template chung dùng sau bất kỳ incident nào (Saga Failed, RabbitMQ down, DB corrupt, v.v.) — viết trong 7 ngày sau incident theo `docs/operations/postmortems/YYYY-MM-DD-<short-title>.md`:
+
+```markdown
+# Postmortem: <Title> — YYYY-MM-DD
+
+## Tóm tắt
+- **Incident ID**: GH-<issue-number>
+- **Severity**: P1 / P2 / P3 (xem §40.4 severity matrix)
+- **Detect time**: HH:MM UTC
+- **Mitigate time**: HH:MM UTC (cumulative incident duration)
+- **Resolve time**: HH:MM UTC (full recovery)
+- **Customer impact**: số user affected + scope (read-only / write-blocked / data-loss)
+
+## Timeline
+| Time (UTC) | Event |
+|-----------|-------|
+| HH:MM | Alert fired: `<alert-name>` |
+| HH:MM | On-call paged (Leader/Duy/Thắng/Thái) |
+| HH:MM | Investigation start — checked dashboard X |
+| HH:MM | Identified root cause: ... |
+| HH:MM | Mitigation applied: ... |
+| HH:MM | Verified recovery: ... |
+| HH:MM | All-clear announced |
+
+## Root cause
+Mô tả kỹ thuật chi tiết. Cite log line / SQL query / commit SHA / config diff. Phân biệt **trigger** (sự kiện châm ngòi) vs **root cause** (lỗ hổng nền cho phép trigger gây hậu quả).
+
+Ví dụ Sprint 5B:
+- Trigger: BatteryService instance crash do OOM
+- Root cause: `LinkAlertToTicketConsumer` không có rollback khi DbContext lỗi transaction → message bị acked nhưng business chưa commit → Saga timeout sau 10 phút → Failed.
+
+## Impact
+- Customer: X người không thấy ticket auto-created cho alert Critical trong N phút
+- SLA: Y ticket vi phạm SLA 4h vì delay
+- Data: 0 data loss (Saga forward recovery) / hoặc Z row inconsistent
+
+## What went well
+- Alert `AlertTicketSagaStuck` fire đúng trong 10 phút sau trigger
+- Runbook `09-saga-stuck.md` giúp diagnose trong 5 phút
+- Reprocess endpoint giúp recover toàn bộ Saga Failed
+
+## What went wrong
+- OOM không trigger health check → k8s không restart instance
+- Postman collection thiếu Idempotency-Key example → admin gọi reprocess thiếu header → 400 lần đầu
+- Log không có `MessageId` field → khó match RabbitMQ message với Saga state
+
+## Action items
+| # | Action | Owner | Due | Severity |
+|---|--------|-------|-----|----------|
+| 1 | Add OOM kill detection vào `/health/saga` | Thắng | YYYY-MM-DD | P1 |
+| 2 | Postman collection update `Idempotency-Key` example | Leader | YYYY-MM-DD | P2 |
+| 3 | Structured log thêm `MessageId` field | Thắng | YYYY-MM-DD | P2 |
+
+## Lessons learned
+- Saga forward recovery hoạt động đúng — không có data loss dù 10 phút delay.
+- Runbook là first thing reviewer check — phải maintain up-to-date sau mỗi sprint.
+- Health check phải verify deep state (Quartz running, DB reachable), không chỉ HTTP 200.
+
+## References
+- Runbook used: `docs/operations/runbook/09-saga-stuck.md`
+- Related ADR: ADR-018 (Saga forward recovery)
+- Related PR fix: GH-<pr-number>
+```
+
 ### 40.4. On-call & incident response
 `docs/operations/incident-response.md`:
-- Severity levels (SEV1/SEV2/SEV3).
+- Severity levels (xem severity matrix dưới đây).
 - Communication channel (Slack #incidents).
 - Escalation path: Staff → Manager → Admin → Tech Lead.
-- Postmortem within 48h.
+- Postmortem within 48h cho SEV1, 7 ngày cho SEV2/SEV3 (xem template §40.3bis).
+
+#### Severity matrix
+
+| Sev | Trigger criteria | Response time | Escalation path | Postmortem |
+|-----|------------------|---------------|-----------------|-----------|
+| **SEV1 / P1** | Service down toàn hệ thống · Customer-facing API 5xx > 50% · data loss · security breach · **Saga Failed spike + data inconsistency** | < 15 phút page on-call | Tech Lead + Leader page ngay | **48h** required |
+| **SEV2 / P2** | Service degraded (1-50% error) · 1 service down nhưng fallback OK · SLA breach P1 ticket · **Saga stuck/Failed nhưng forward recovery hoạt động** · partial Customer impact | < 1 giờ page | Tech Lead trong business hours | **7 ngày** required |
+| **SEV3 / P3** | Single endpoint slow · 1 background service lag · alert noise · **Saga edge case mỗi tuần 1-2 lần, không impact** · cosmetic bug | < 1 ngày | Async trong daily standup | Optional |
+
+**On-call roster (capstone scope):**
+- Sprint 5B–8: Thắng (Saga + Battery domain primary), Duy (BE Lead backup), Leader (escalation)
+- Demo Sprint 8 day: Leader + all 5 dev on standby
+
+**SEV1 escalation cho Saga (Sprint 5B+):**
+1. Page Thắng + Leader đồng thời.
+2. Slack #incidents post template: `[SEV1] Saga Failed Spike — AlertManager fired at HH:MM — investigating`.
+3. Open shared call (Discord/Meet) trong 5 phút.
+4. Assign roles: **Incident commander** (Leader), **Investigator** (Thắng), **Communicator** (Leader update mỗi 15 phút).
+5. Mitigate first → root cause sau. Reprocess endpoint là first action (xem runbook `08-saga-failed.md`).
+6. All-clear khi Saga Failed count < 5 trong 5 phút liên tiếp.
 
 ### 40.5. SLOs (Service Level Objectives)
 | Service | Availability | Latency P95 | Error rate |
@@ -5453,6 +6810,27 @@ Sample structure:
 | TicketService write | 99.9% | < 300ms | < 0.5% |
 | NotificationService send | 99% | < 500ms | < 2% |
 | AI Inference | 99% | < 100ms | < 5% |
+| Alert–Ticket Saga happy-path (Sprint 5B) | 99% | < 4s end-to-end | < 1% Failed (terminal) |
+| Saga reprocess Failed → Completed | 95% | < 30s p95 | manual fallback acceptable |
+
+#### Error budget per service (monthly window — 30 ngày)
+
+| Service | Target | Error budget | Action khi consume hết budget |
+|---------|--------|--------------|-------------------------------|
+| AuthService login | 99.9% | 43.2 phút/tháng | Freeze release; tập trung fix availability |
+| BatteryService realtime | 99.5% | 3h 36m/tháng | Review deploy cadence; tăng test coverage |
+| TicketService write | 99.9% | 43.2 phút/tháng | Freeze release |
+| NotificationService send | 99% | 7h 12m/tháng | Review consumer scaling |
+| AI Inference | 99% | 7h 12m/tháng | Investigate model latency |
+| Alert–Ticket Saga happy-path | 99% | 7h 12m/tháng | Review Quartz scheduler health + RabbitMQ depth |
+| Saga reprocess | 95% | 36h/tháng | Tolerate cao vì manual ops, monitor không freeze |
+
+**Burn rate alert** (Prometheus):
+- **Fast burn** (consuming 2% budget trong 1h) → page on-call immediately.
+- **Slow burn** (consuming 5% budget trong 6h) → notify in #incidents, không page.
+- Track via metric `slo_error_budget_remaining{service=...} / slo_error_budget_total{service=...}`.
+
+**Capstone simplification:** Vì project chỉ chạy ~4 tháng, error budget chỉ tracking informational. KHÔNG enforce release freeze trong Sprint 5B–8 (đang active development). Hội đồng KLTN có thể hỏi "tại sao không freeze?" — trả lời: "Capstone scope, không production traffic; freeze policy là post-capstone activation."
 
 ### 40.6. Onboarding doc
 `docs/onboarding/`:
@@ -5460,6 +6838,43 @@ Sample structure:
 - `fe-newcomer.md`
 - `ai-newcomer.md`
 - `glossary.md` — domain terms.
+
+**Local dev machine requirements** (cho cả `be-newcomer.md` + `fe-newcomer.md`):
+
+| Resource | Minimum | Recommended | Lý do |
+|----------|---------|-------------|-------|
+| RAM | 8 GB | **16 GB** | Docker stack: TimescaleDB + Postgres + Redis + RabbitMQ + MinIO + Prometheus + Grafana + Loki + Alertmanager + Tempo + AI module + 4 BE service = ~6-8GB |
+| Disk free | 30 GB | **50 GB** | Docker images (~5GB) + volumes data (~10-15GB after few weeks) + IDE + dev tools |
+| CPU | 4 cores | **8 cores** | Container orchestration smooth |
+| OS | macOS / Linux / WSL2 | Linux native | Docker Desktop trên macOS/Windows = thêm overhead |
+| Internet | 10 Mbps | 50 Mbps | Pull Docker image, sync repo, OpenMeteo API |
+
+**Disk cleanup script** (Sprint 5B nên thêm vì Quartz schema tăng dung lượng):
+```bash
+# tools/dev-cleanup.sh — Sprint 5B addition
+docker volume prune -f
+docker system prune -af --volumes  # ⚠️ xóa hết Docker — backup trước
+# Hoặc selective:
+docker exec ticket-service-db psql -U postgres -d ticket_db -c "DELETE FROM qrtz_fired_triggers WHERE fired_time < extract(epoch from now() - interval '7 days')*1000;"
+docker exec ticket-service-db psql -U postgres -d ticket_db -c "DELETE FROM alert_ticket_saga_states WHERE current_state IN ('Completed','Failed') AND updated_at_utc < now() - interval '30 days';"  # ⚠️ chỉ dùng local dev, không production
+```
+
+**Sprint 5B additions cho `be-newcomer.md`** (sau Sprint 5B merge):
+- Section "Saga local setup":
+  1. Pull latest dev branch + verify `services/TicketService/src/TicketService.Infrastructure/Persistence/Migrations/` có file `*AddAlertTicketSagaFoundation*` + `*AddQuartzPersistenceSchema*`.
+  2. Run `dotnet ef database update -p ../TicketService.Infrastructure -s .` — apply cả 2 migration vào `ticket_db`.
+  3. Verify `ticket_db` có 11 `qrtz_*` tables + `alert_ticket_saga_states` table: `\dt qrtz_*` trong psql.
+  4. Set environment override trong `.env.Docker.local`: `AlertTicketSagaEnabled=true` để Saga endpoint active local.
+  5. Run `dotnet test --filter Category=Saga` từ `tests/TicketService.IntegrationTests/` — expect ≥ 21 case pass.
+- Section "Debug Saga state machine":
+  1. Query state: `SELECT correlation_id, current_state, ticket_id, failed_step, last_error FROM alert_ticket_saga_states WHERE correlation_id = '<alert-id>'`.
+  2. Query active triggers: `SELECT trigger_name, next_fire_time FROM qrtz_triggers WHERE sched_name = 'TicketServiceScheduler'`.
+  3. Tail Saga log: `docker logs ticket-service -f | grep CorrelationId=<alert-id>`.
+  4. Force re-trigger: `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess` với header `Idempotency-Key: $(uuidgen)`.
+- Section "Common mistakes" (chỉnh sửa thường gặp):
+  - Quên override `AlertTicketSagaEnabled=true` → endpoint không register → test integration fail mơ hồ.
+  - Quên apply `AddQuartzPersistenceSchema` → MassTransit báo "qrtz_triggers does not exist" khi schedule timeout.
+  - Set `AlertTicketDispatchEnabled=false` quên revert → BatteryService không publish event → Saga không start.
 
 ---
 
@@ -5709,8 +7124,9 @@ GET    /api/v1/public/assets/{id}                       (scope: asset.read)
 ### 46.1. Contract testing (Pact)
 
 #### Setup
-- Producer (BatteryService) viết contract: "Khi publish BatteryAnomalyDetectedEvent → schema phải có fields ABC".
-- Consumer (TicketService) verify contract khi build.
+- Producer BatteryService viết contract cho `BatteryAnomalyDetectedEvent`; Saga endpoint TicketService verify khi build.
+- TicketService/BatteryService verify tiếp các Saga command, success, rejection và failure contracts trong
+  `SharedContracts/Saga/AlertTicket`; breaking change phải tạo version mới, không sửa payload âm thầm.
 - Lưu contracts ở `tests/contracts/`.
 
 #### Tools
@@ -5742,7 +7158,10 @@ export const options = {
 | Scenario | Tool/Method | Expected behavior |
 |----------|-------------|-------------------|
 | Kill RabbitMQ 30s | `docker stop solar-rabbitmq && sleep 30 && docker start` | Outbox accumulates, replay khi up |
-| Kill Redis | similar | Cache miss fallback DB |
+| Kill TicketService sau khi Alert commit | stop container trước create/reuse response | Saga tiếp tục sau restart, không tạo Ticket trùng |
+| Kill BatteryService sau khi Ticket commit | stop container trước link callback | Saga giữ `TicketId`, retry link sau restart |
+| Restart scheduler khi Saga đang chờ timeout | restart TicketService/Quartz | Timeout schedule được recover từ DB |
+| Kill Redis | similar | Cache miss fallback DB. **Saga/participant endpoints không bị ảnh hưởng** vì idempotency đã chuyển sang MassTransit EF Consumer Outbox/Inbox trên service DbContext (xem §8.2) — Redis Inbox chỉ còn dùng cho consumer không thay đổi DB. |
 | Kill 1 BatteryService instance (3-replica) | k8s pod delete | LB redirect, no error to client |
 | Network partition AI Module | `tc qdisc add` | Circuit breaker open, fallback threshold-only |
 | Disk fill 95% | `dd` fill | AlertManager fires, services degrade gracefully |
@@ -5922,6 +7341,11 @@ Thêm:
   - Sau 30s → send 1 push "Pin X có {count} cảnh báo mới".
   ```
 
+**Sprint 5B — Saga notification debounce (R-22 mitigation):**
+- `BatteryAlertEscalationPending` (per AlertId): debounce 5 phút — Redis key `notif_debounce:escalation:{alertId}` TTL 5min; duplicate event trong window bỏ qua (chỉ in-app silent log).
+- `AlertTicketSagaFailed` (per AlertId): debounce 5 phút — Redis key `notif_debounce:saga-failed:{alertId}` TTL 5min. Nếu Saga Failed → admin reprocess → lại Failed trong 5 phút: vẫn chỉ 1 push tới Admin (chống loop spam khi root cause chưa fix).
+- KHÔNG batch cross-AlertId vì mỗi Saga Failed cần action riêng từ admin.
+
 ### 49.3. Snooze notification per user
 - User trên Mobile click "Don't notify me for 1h about this asset".
 - Backend `POST /api/v1/notification-snooze`:
@@ -5964,21 +7388,25 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 3 | BatteryService anomaly engine | + **AI Hybrid pipeline**, + **AlertSilence + Snooze**, + **Bulk import**, + **QR claim** | 1.6× — cân nhắc tách thành Sprint 3a + 3b |
 | Sprint 4 | TicketService foundation only | + **TicketRelation**, + **TicketSubscription**, + **Comment edit/mention** giữ trong backlog, + **B3 (Priority Matrix Impact×Urgency)** | 1.2× |
 | Sprint 5 | TicketService SLA + workflow integration | + **SLA pause limits**, + auto-create từ Battery anomaly, + MaintenanceLog/comment/attachment, + **B6 (StaffSkillTierEnum), B7 (Escalation closure rule)** | 1.4× |
-| Sprint 5B | BatteryService advanced monitoring riêng | + Ambient monitoring, EnvironmentalIncident, Tier 2 sensor health, + **B1 (Noise Suppression frequency-based), B2-finalize (AI refs paper cite)** | **1.3× — overload risk, xem mục cuối** |
-| Sprint IoT-1 | IoT Gateway backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, gateway simulator/hardware guide, + **B9 (SensorReading.SourceType BMS/IoT)** | 1.1× sprint song song Sprint 6 |
-| Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB**, + **B8 (KB Code + TicketKbReference)** | 1.5× |
-| Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management**, + **B4 (Cascade Risk rule-based), B10 (SensorMismatch anomaly)** | 1.5× |
-| Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report** | giữ nguyên |
+| Sprint 5B | Battery scope cleanup + Alert–Ticket Saga | + bỏ Energy/CO2 + `Site.CapacityKw`, harden Outbox/Inbox, Saga orchestration, ambient/environmental/tier-2 sau P0 | **1.8× — bắt buộc defer scope phụ, xem mục cuối** |
+| Sprint IoT-1 | IoT Edge Device backend + device lifecycle | + Device provisioning, heartbeat, per-device API key, offline detection, ESP32 simulator/hardware guide, MQTT P3 optional (§52.14), + **B9 (SensorReading.SourceType BMS/IoT)** | 1.1× sprint song song Sprint 6 |
+| Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB**, + **B8 (KB Code + TicketKbReference)**, + **Sprint 5B carryover** (verify 2 Saga consumer + 2 template + dispatcher debounce — pass-14 add) | 1.6× (up from 1.5×) |
+| Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management**, + **B4 (Cascade Risk rule-based), B10 (SensorMismatch anomaly)**, + **Sprint 5B carryover** (verify Saga panel/alert/swagger/tracing/seed/E2E — pass-15 add) | 1.6× (up from 1.5×) |
+| Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report**, + **Sprint 5B carryover** (Saga demo script + Mermaid diagram + architecture publish — pass-16 add) | 1.1× (up from giữ nguyên) |
 
 ### ⚠️ Sprint overload mitigation (B1-B11 impact)
 
-**Sprint 5B effort 1.3×** — đã 1.0× với ambient + tier-2 + environmental. Thêm B1 + B2-finalize → có thể overflow. Mitigation:
-- Giảm scope EnvironmentalIncident: bỏ `MarkFalseAlarmEnvironmentalIncidentCommand` (defer Sprint 6).
-- HOẶC kéo Sprint 5B từ 7 ngày lên 9 ngày (lấn vào Sprint 6 đầu).
+**Sprint 5B effort 1.8×** — scope cleanup và Saga `#233–#241` là release gate, không thể triển khai
+an toàn nếu vẫn giữ toàn bộ ambient/tier-2/environmental trong 7 ngày. Mitigation bắt buộc:
+- Hoàn thành `#233–#241` trước.
+- Defer `B2-finalize`, OpenMeteo/ambient và `MarkFalseAlarmEnvironmentalIncidentCommand` sang Sprint 6/7 nếu thiếu capacity.
+- Không defer Outbox/Inbox hardening, unique constraint, timeout hoặc failure-path tests.
+- Chỉ kéo Sprint 5B lên 9 ngày khi không ảnh hưởng owner của Sprint 6; kéo dài không thay thế việc giảm scope.
 
-**Sprint 7 effort 1.5×** — đã 1.3× với GDPR + Webhook + API key. Thêm B4 + B10 → cân nhắc:
+**Sprint 7 effort 1.6×** (sau pass-15 sync với Sprint 5B carryover) — đã 1.3× với GDPR + Webhook + API key. Thêm B4 + B10 + Sprint 5B verify items → cân nhắc:
 - B10 (SensorMismatch) chỉ tốn ~0.1× — không vấn đề.
 - B4 (Cascade Risk) ~0.3× — nếu Sprint 7 quá tải → defer Webhook outbound (§45.1) sang post-capstone backlog.
+- Sprint 5B carryover verify (~0.1×) — lightweight, không drop được vì là acceptance gate cho Saga production-ready.
 
 ### Re-prioritization recommendation
 
@@ -5987,10 +7415,11 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 2. Site entity (§31) — Sprint 2
 3. Edge case rules (§38) — Sprint 4-5 (lúc implement state machine)
 4. SLA pause limits (§33) — Sprint 5
-5. BatteryService advanced monitoring (§1 ambient/environmental/tier-2) — Sprint 5B
-6. IoT Gateway backend + device lifecycle (§52/§52bis, `iot.md`) — Sprint IoT-1
-7. SSE realtime (§34) — Sprint 6
-8. ADR + Runbook (§40) — Sprint 7-8
+5. Battery scope cleanup: bỏ Energy/CO2 và `Site.CapacityKw` (§53.1–§53.3) — Sprint 5B
+6. Alert–Ticket Saga + Outbox/Inbox hardening (§8.1–§8.3, §53.4–§53.12) — Sprint 5B
+7. IoT Edge Device backend + device lifecycle (ESP32 + hybrid HTTPS/MQTT) (§52/§52bis, `newiot.md`/`overall.iot.md`) — Sprint IoT-1
+8. SSE realtime (§34) — Sprint 6
+9. ADR + Runbook (§40) — Sprint 7-8
 
 **Nên có nếu kịp (SHOULD):**
 1. Ticket relations (§32) — Backlog sau Sprint 5, không đưa vào Sprint 4 foundation
@@ -6016,6 +7445,8 @@ Thêm vào §18:
 - [ ] **Realtime SSE** demo được trong scope test.
 - [ ] **GDPR export** trả về data đầy đủ cho 1 sample user.
 - [ ] **Runbook** cho ít nhất 5 scenario thường gặp.
+- [ ] **Alert–Ticket Saga** hoàn tất create/reuse/link và reprocess được failure.
+- [ ] **Scope guard:** không còn Energy/CO2 contract hoặc `Site.CapacityKw`.
 
 ---
 
@@ -6023,26 +7454,29 @@ Thêm vào §18:
 
 ### So với phiên bản đầu, đây là những thay đổi RIPPLE EFFECT:
 
-1. **Entity count: 17 → 30+**
-   - Mới: SohPrediction, AnomalyClassification, Site, BatteryGroup, AlertSilenceRule, TicketRelation, TicketSubscription, CommentMention, CommentReaction, CommentTemplate, MaintenanceSchedule, Part, PartTransaction, WebhookSubscription, PasswordHistory, AlertAckTimeline, DataExportRequest
+1. **Entity count: 17 → 50+** (đồng bộ §67 stats — sau Sprint 5B reconcile)
+   - Mới: SohPrediction, AnomalyClassification, Site, BatteryGroup, AlertSilenceRule, TicketRelation, TicketSubscription, CommentMention, CommentReaction, CommentTemplate, MaintenanceSchedule, Part, PartTransaction, WebhookSubscription, PasswordHistory, AlertAckTimeline, DataExportRequest, AmbientReading, AmbientThresholdConfig, EnvironmentalIncident, IotDevice, IotDeviceHeartbeat, IotDeviceCalibration, IotFirmwareRelease, IotFirmwareUpdateLog, NoiseBreachEvent, CustomerAccount/StaffAccount read-model, AlertTicketSagaState, mt_inbox_state/mt_outbox_state/mt_outbox_message, qrtz_* (11 tables Sprint 5B).
 
-2. **Endpoints: 100+ → 150+**
+2. **Endpoints: 100+ → 220+** (đồng bộ §67 stats)
 
-3. **Integration events: 17 → 25+**
-   - Mới: `SohRapidDegradationEvent`, `SohWarningEvent`, `SohCriticalEvent`, `SiteAlertAggregatedEvent`, `WebhookEventPublishedEvent`
+3. **Integration events: 17 → 30+**
+   - Mới: `SohRapidDegradationEvent`, `SohWarningEvent`, `SohCriticalEvent`, `SiteAlertAggregatedEvent`, `WebhookEventPublishedEvent`, `BatteryAlertEscalationRequestedEvent`, `BatteryAnomalyDetectedV2Event`, `EnvironmentalIncidentDetectedEvent`, `EnvironmentalIncidentResolvedEvent`, `IotDeviceWentOfflineEvent` (§52.6).
+   - Alert–Ticket Saga bổ sung 8 command/event contracts trong `SharedContracts/Saga/AlertTicket/` (CreateTicketFromAlertCommand, TicketProvisionedForAlertEvent, TicketProvisionForAlertRejectedEvent, LinkAlertToTicketCommand, AlertLinkedToTicketEvent, AlertLinkToTicketRejectedEvent, ReconcileAlertTicketSagaCommand, AlertTicketSagaFailedEvent).
 
 4. **Background services per service tăng**
    - BatteryService: 4 → 7 (thêm SohPrediction, DeviceOfflineDetection, AlertAckEscalation)
-   - TicketService: 4 → 6 (thêm SlaPauseEnforcement, ApprovalTimeout, PreventiveMaintenance)
+   - TicketService: 4 → 6 (thêm SlaPauseEnforcement, ApprovalTimeout, PreventiveMaintenance); Sprint 5B thêm Quartz scheduler endpoint (in-process, dùng `qrtz_*` schema) cho Saga retry/timeout.
 
 5. **Migration impact**
-   - BatteryService cần migration mới: `AddSiteAndGroup`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`
-   - TicketService cần: `AddTicketRelations`, `AddTicketSubscriptions`, `AddCommentAdvanced`, `AddSlaPauseLimits`, `AddMaintenanceSchedule`
+   - BatteryService cần migration mới: `AddSiteAndGroup`, `AddSohPredictionTables`, `AddAlertSilenceRule`, `AddClaimCode`, `RemoveSiteCapacityKw`, `AddDurableMessagingFoundation`, `AddAlertTicketLinkIndex`, `AddIotDeviceManagement` (Sprint IoT-1 — 5 IoT entity + heartbeat hypertable + `SensorReading.SourceType`/`SensorSourceCode`).
+   - TicketService cần: `AddTicketRelations`, `AddTicketSubscriptions`, `AddCommentAdvanced`, `AddSlaPauseLimits`, `AddMaintenanceSchedule`, `AddDurableMessagingFoundation`, `AddAlertTicketSagaFoundation`, `AddQuartzPersistenceSchema` (11 bảng `qrtz_*` cho durable scheduler — chạy bằng official Quartz.NET SQL script, không dùng EF migration sinh từ model).
    - AuthService cần: `AddGdprFields`, `AddPasswordHistory`, `AddSessionLimit`
 
 6. **Docker compose updates**
    - Add `ai-module` service
    - Add `tempo` for tracing
+   - Add persistent Saga scheduler configuration; current RabbitMQ image does not include delayed-message plugin.
+   - **(IoT P3)** Add MQTT broker (EMQX/Mosquitto) qua `infra/mqtt/docker-compose.yml` + TLS 8883 + credential/ACL per-device — chỉ khi triển khai MQTT realtime (§52.14).
 
 7. **Documentation deliverables tăng**
    - `docs/adrs/` — 15 ADR files
@@ -6061,33 +7495,47 @@ Thêm vào §18:
 
 # Phần VIII — Bổ sung lần 2 (Final completeness)
 
-> Phần này bổ sung sau khi review lần 3 phát hiện 5 nhóm critical còn thiếu: **IoT Gateway, Solar Energy metrics, K8s deployment, App management, Demo prep** — và các gap intra-section.
+> Phần này bổ sung sau khi review lần 3. Scope review ngày 10/6/2026 giữ **IoT Edge Device (ESP32, pivot từ RPi — ADR-016), K8s deployment, App management, Demo prep**, loại Solar Energy/CO2 metrics và bổ sung Alert–Ticket Saga.
 
 ---
 
-## 52. IoT Gateway & Device Management — P0
+## 52. IoT Edge Device & Device Management — P0
 
-> Solar battery context: backend phải **giao tiếp với IoT gateway thực tế** (Raspberry Pi / ESP32 / industrial gateway). Section trước chỉ có 1 endpoint batch ingest — không đủ cho production.
+> Solar battery context: backend phải **giao tiếp với IoT edge device thực tế**. Theo pivot v2 (ADR-016, `newiot.md`/`overall.iot.md`), edge device chuẩn là **ESP32-S3** (`DeviceType=StandaloneSensor`) đọc BMS qua **RS485/Modbus RTU multi-drop**, gửi backend qua **hybrid HTTPS + MQTT**. Bản v1 (Raspberry Pi, folder `iot/`, Python) vẫn được tham chiếu nhưng KHÔNG còn là đường triển khai chính.
+>
+> "Gateway" trong các tên cũ (DeviceType `Gateway=1`, `firmware-check`, …) vẫn giữ giá trị enum/route — chỉ hiểu lại: ESP32 node = `StandaloneSensor=2`, quản nhiều pin qua multi-drop chứ không phải gateway tập trung.
 
 ### 52.1. Architecture overview
 
 ```
-Battery (sensor)
+Battery + BMS (mỗi pin 1 unitId)
     │
-    │ Modbus/CAN bus
+    │ RS485 / Modbus RTU (multi-drop, 1 bus nhiều BMS)
     ▼
-IoT Gateway (RPi/ESP32)
+ESP32-S3 node  (poll BMS → normalize → calibration → local queue → publish)
     │
-    │ HTTPS REST (đã chọn — xem ADR-016)
-    ▼
-BatteryService API
+    ├───── MQTT (v2, realtime <100ms, 2 chiều) ─────┐
+    │        solar/{site}/{dev}/telemetry           │
+    │        solar/{dev}/heartbeat                   ▼
+    │        solar/{dev}/status (LWT offline)   MQTT Broker (EMQX/Mosquitto)
+    │        solar/{dev}/cmd (downlink)              │ push
+    │                                                ▼
+    │                                   MqttBridgeBackgroundService (subscribe)
+    │                                                │
+    └───── HTTPS REST (v1, bulk/admin/firmware) ─────┤
+             POST /api/sensor-readings/batch         │ cùng đổ vào ▼
+             provision / heartbeat / firmware-check  │
+                                                     ▼
+                                          BatteryService API / Ingest
     │
-    ├──→ Validate device cert + ApiKey
+    ├──→ Validate device API key + (MQTT) credential per-device, device phải Active
     ├──→ Validate timestamp (within 5min skew)
     ├──→ Dedup via Idempotency-Key
+    ├──→ Apply calibration (raw*scale + offset)
     ├──→ Insert sensor_readings (TimescaleDB)
     ├──→ Update device.last_seen_at
-    └──→ Trigger threshold check
+    ├──→ (MQTT LWT status=offline → mark Offline tức thì)
+    └──→ Trigger threshold check → anomaly → alert/ticket/notification
 ```
 
 ### 52.2. New entities
@@ -6098,7 +7546,7 @@ BatteryService API
 | `Id` | Guid | PK |
 | `DeviceCode` | string(64) UNIQUE | "GW-001234" |
 | `DeviceType` | enum (Gateway=1, StandaloneSensor=2) | — |
-| `Model` | string(100) | "RaspberryPi-4B" / "ESP32-WROOM" |
+| `Model` | string(100) | "ESP32-S3-N16R8" (chuẩn v2) / legacy "RaspberryPi-4B" |
 | `FirmwareVersion` | string(20) | "1.2.3" |
 | `MacAddress` | string(17)? | — |
 | `SiteId` | Guid? (FK) | Site mà gateway đặt tại |
@@ -6106,8 +7554,19 @@ BatteryService API
 | `ApiKeyId` | Guid (FK) | Link tới API key |
 | `LastSeenAt` | DateTime? | Update mỗi heartbeat |
 | `LastFirmwareUpdateAt` | DateTime? | — |
-| `BatteryAssetIds` | jsonb | Array — devices có thể quản lý nhiều battery |
-| `ConfigJson` | jsonb? | Per-device config (polling interval, ngưỡng cảnh báo client-side) |
+| `BatteryAssetIds` | jsonb | Array — 1 device quản nhiều battery (multi-drop RS485) |
+| `ConfigJson` | jsonb? | Per-device config: pollingInterval, heartbeatInterval, ngưỡng client-side, **và `batteryMappings[]`** |
+
+**`ConfigJson.batteryMappings[]` (multi-drop RS485 — mỗi BMS 1 `unitId`):**
+```json
+"batteryMappings": [
+  { "batteryAssetSerial": "BAT-2026-001", "unitId": 1, "sensorSourceCode": "primary" },
+  { "batteryAssetSerial": "BAT-2026-002", "unitId": 2, "sensorSourceCode": "primary" }
+]
+```
+> Firmware ESP32 dùng `unitId` để poll đúng BMS trên bus RS485, `batteryAssetSerial` để backend map về `BatteryAsset`, `sensorSourceCode` để phân biệt nguồn (primary/redundant). Backend validate device chỉ được gửi reading cho battery nằm trong mapping của nó.
+
+**API key per-device — scope (§7.2):** `sensor.ingest` + `device.heartbeat` + (nếu device có cảm biến môi trường SHT31/MQ-2/water) `environmental.ingest` — để cùng device key gọi được `/api/ambient-readings/batch` và `/api/environmental-incidents` (§1.8). Chỉ lưu **hash**, key hiện 1 lần khi tạo/provision, hỗ trợ rotate/revoke; MQTT (v2) cấp thêm credential riêng + ACL topic per-device (§52.14).
 
 #### `IotDeviceHeartbeat` (time-series, append-only)
 | Field | Type |
@@ -6117,13 +7576,15 @@ BatteryService API
 | `Cpu` | decimal(5,2)? |
 | `MemoryUsageMb` | int? |
 | `DiskFreeMb` | int? |
-| `Temperature` | decimal? (gateway chassis temp) |
+| `Temperature` | decimal? (chassis/chip temp) |
 | `ConnectedSensorCount` | int |
 | `LocalQueueDepth` | int (số reading chưa upload) |
 | `IpAddress` | string(45)? |
 | `SignalStrengthDbm` | int? |
 
 **Retention:** 30 ngày.
+
+> **ESP32 field mapping:** ESP32 không có CPU/disk theo nghĩa Linux → gửi `Cpu`=null, `DiskFreeMb`=null. Map: chip temp → `Temperature`, free heap → `MemoryUsageMb`, WiFi RSSI → `SignalStrengthDbm`, độ sâu queue NVS/LittleFS/SD → `LocalQueueDepth`. Các field nullable nên RPi (legacy) gửi đầy đủ, ESP32 gửi tập con — không cần migration khác.
 
 #### `IotDeviceCalibration`
 | Field | Type | Note |
@@ -6172,10 +7633,10 @@ Step 1: Admin tạo IotDevice + APIKey (scope: sensor.ingest, device.heartbeat)
    POST /api/v1/admin/iot-devices
    → Response: { deviceCode, apiKey, provisioningQrCode }
 
-Step 2: Technician chạy script provision trên gateway hardware
+Step 2: Technician nạp deviceCode + apiKey + WiFi + brokerUrl vào ESP32, ESP32 boot → NTP sync → provision
    $ curl -X POST https://api/api/v1/iot-devices/provision \
        -H "X-Api-Key: $KEY" \
-       -d '{"deviceCode":"GW-001234","macAddress":"...","model":"RPi-4B","firmwareVersion":"1.0.0"}'
+       -d '{"deviceCode":"GW-001234","macAddress":"...","model":"ESP32-S3-N16R8","firmwareVersion":"1.0.0"}'
 
 Step 3: Backend validate + activate device, return device-specific config
    → { configJson, ntpServer, syncIntervalSec, supportedSensors, ... }
@@ -6211,30 +7672,48 @@ X-Device-Code: GW-001234
 Idempotency-Key: <uuid>           # tránh duplicate khi gateway retry
 Content-Type: application/json
 {
-  "deviceTimestamp": "2026-05-12T10:15:30Z",     # NTP-synced gateway time
+  "deviceTimestamp": "2026-05-12T10:15:30Z",     # NTP-synced edge device time (ESP32 không có RTC → NTP bắt buộc)
   "readings": [
     {
       "batteryAssetSerial": "BAT-2026-001",
       "time": "2026-05-12T10:15:30Z",
-      "voltage": 12.6, "current": -5.2, "temperature": 35.4, "socPercent": 78.5
+      "voltage": 12.6, "current": -5.2, "temperature": 35.4, "socPercent": 78.5,
+      "cycleCount": 120, "sohPercent": 94.2, "chargingState": 3,
+      "bmsErrorCode": null, "sensorSourceCode": "primary", "sourceType": 2
     },
     ...
   ]
 }
 ```
+> Các field `cycleCount/sohPercent/chargingState/bmsErrorCode/sensorSourceCode/sourceType` đều optional — BMS/sensor có thì gửi, không thì để null (entity §1.3.4). MQTT (v2) gửi cùng schema payload qua topic `solar/{site}/{dev}/telemetry`.
 
 **Validation:**
-- Reject nếu `deviceTimestamp` skew > 5 phút so với server (gateway clock issue → log + alert).
-- Reject nếu reading values vô lý: voltage > 1000V, temperature < -50°C hoặc > 150°C (sensor lỗi).
-- Apply calibration offset/scale per device + metric.
+- Reject nếu `deviceTimestamp` skew > 5 phút so với server (edge device clock issue → log + alert + metric `reason=clock_drift`).
+- Reject nếu reading values vô lý: voltage âm hoặc > 1000V, temperature < -50°C hoặc > 150°C, socPercent ngoài 0–100, sohPercent ngoài 0–100 (sensor lỗi → `reason=sensor_outlier`).
+- `BmsErrorCode` ≤ 64 ký tự nếu có.
+- Device phải `Active` + có quyền với battery (mapping trong `IotDevice.BatteryAssetIds` / `batteryMappings`).
+- Apply calibration offset/scale per device + metric (`calibrated = raw*scale + offset`) trước khi insert.
 - Insert into TimescaleDB batch (single SQL `COPY` cho performance).
+- **Backward compatibility (MVP):** vẫn chấp nhận payload legacy dùng `items[].batteryAssetId` để demo nhanh với simulator.
 
-### 52.6. Device offline detection
+### 52.6. Device offline detection (2 cơ chế)
 
-`IotDeviceOfflineDetectionBackgroundService` (every 2 phút):
+**Cơ chế 1 — MQTT Last Will & Testament (LWT, v2 — tức thì):**
+- ESP32 đăng ký LWT lúc connect broker: "nếu mất kết nối → broker tự publish `offline` lên `solar/{dev}/status`".
+- Broker phát hiện rớt qua keep-alive (~60s) → `LastWillHandler` (trong `MqttBridgeBackgroundService`) nhận → mark `Status=Offline` **NGAY** (qua `IotDeviceMarkOfflineCommand`) → tạo alert + publish event.
+- Nhanh hơn nhiều so với job 5 phút bên dưới.
+
+**Cơ chế 2 — `IotDeviceOfflineDetectionBackgroundService` (every 2 phút — backup, luôn chạy kể cả khi chưa bật MQTT):**
 - Scan devices `Status=Active AND LastSeenAt < now - 5min` → mark `Status=Offline`.
 - Publish `IotDeviceWentOfflineEvent` → NotificationService notify Customer + Staff.
 - Tạo Alert `DeviceOffline` cho mọi battery gắn với device đó (severity Warning).
+
+> Hai cơ chế bổ trợ: LWT cho phản ứng tức thì khi có broker; job là backup cho cả HTTPS-only (P0–P2) lẫn trường hợp LWT miss.
+
+**Phân vai notification (tránh double-notify):**
+- **Customer** được báo qua **`DeviceOffline` Alert** (AnomalyType=7, Warning) đi đường BatteryAlert sẵn có (§3.4 `DeviceOffline (Customer)`).
+- **Staff/ops** được báo qua **`IotDeviceWentOfflineEvent`** (§1.7) → `IotDeviceWentOfflineConsumer` ở NotificationService → đi kiểm tra device tại site.
+- Cả hai dedup theo `DeviceId` trong cửa sổ offline để không spam khi device chập chờn.
 
 ### 52.7. OTA firmware update flow
 
@@ -6243,7 +7722,7 @@ Content-Type: application/json
 POST /api/v1/admin/iot-firmware-releases
 multipart/form-data:
   version: "1.3.0"
-  deviceModel: "RPi-4B"
+  deviceModel: "ESP32-S3-N16R8"
   channel: stable
   file: firmware.bin
   releaseNotes: "..."
@@ -6282,27 +7761,58 @@ POST   /api/v1/iot-devices/{id}/calibrations              (Staff/Admin)
 GET    /api/v1/iot-devices/{id}/calibrations
 GET    /api/v1/iot-devices/calibrations-expiring?within=30d   (Manager)
 ```
-- Background service alert Manager khi calibration sắp hết hạn.
+- `CalibrationExpiryNotificationService` (background) alert Manager khi calibration sắp hết hạn.
+- Công thức áp dụng lúc ingest: `calibrated_value = raw_value * ScaleFactor + OffsetValue`.
 
 ### 52.9. Multi-sensor per battery support
-Cập nhật `SensorReading` entity:
+Cập nhật `SensorReading` entity (xem §1.3.4):
 - Thêm `SensorSourceCode` (string(20)?) — "primary", "redundant", "external-temp".
-- 1 battery có thể có 3 readings cùng timestamp (3 sensor riêng).
+- 1 battery có thể có nhiều readings cùng timestamp (nhiều sensor riêng).
 - Query realtime: chọn "primary" làm display value, redundant để verify.
 
-### 52.10. Protocol decision (ADR-016 mới)
-**Decision:** HTTPS REST batch ingest cho v1.
-**Lý do:**
-- Đơn giản, no special infra.
-- Idempotency-Key đã có.
-- Polly retry đã có.
-- TLS đơn giản hơn MQTT-over-TLS setup.
+**Quy ước tag nguồn khi ESP32 đọc nhiều sensor (đồng bộ `overall.iot.md` §A5 + §1.6.6):**
 
-**Trade-off:**
-- Latency cao hơn MQTT (1-2s vs <100ms).
-- OK cho monitoring (không phải control-plane).
+| Nguồn vật lý | `SourceType` | `SensorSourceCode` |
+|--------------|--------------|--------------------|
+| BMS đọc qua RS485/Modbus (ESP32 relay) | `Bms` (1) | `primary` |
+| INA226 (đo V/I độc lập qua I2C) | `IotGateway` (2) | `redundant` |
+| DS18B20 (nhiệt thân pin qua 1-Wire) | `IotGateway` (2) | `external-temp` |
 
-**Future:** MQTT broker (HiveMQ/EMQX) khi cần latency < 100ms hoặc bidirectional command.
+> ESP32 chỉ *relay* dữ liệu BMS → vẫn tag `SourceType=Bms` (nguồn gốc là BMS chip), KHÔNG phải `IotGateway`. Nhờ vậy **cross-source validation §1.6.6** (so `Bms` vs `IotGateway` trong cửa sổ 60s) chính là so BMS-relayed vs INA226 → phát hiện `SensorMismatch` đúng nghĩa khi 1 trong 2 nguồn đo sai.
+
+### 52.9bis. Ambient & Environmental ingest từ ESP32
+
+ESP32 node trong BOM (`overall.iot.md` §A6) còn gắn **SHT31** (nhiệt-ẩm môi trường), **MQ-2** (khói), **water leak**. Các nguồn này KHÔNG đi vào `sensor_readings` mà tái dùng model môi trường sẵn có (§1.3.7–§1.3.9, §1.8):
+- SHT31 → `POST /api/ambient-readings/batch` → `AmbientReading` (`Source=IotSensor`, `SourceDeviceId`=DeviceCode ESP32).
+- MQ-2 / water → `POST /api/environmental-incidents` → `EnvironmentalIncident` (`SmokeDetected`/`WaterLeak`) → alert Critical + `EnvironmentalIncidentDetectedEvent`.
+- Dùng **cùng device API key** (scope thêm `environmental.ingest`, §52.2) — không cần global key riêng.
+
+> Không thêm entity mới cho môi trường — chỉ nối phần cứng ESP32 vào đường ingest ambient/incident đã có. Ticket IoT-1 chỉ cần đảm bảo device key scope + firmware gọi đúng 2 endpoint này.
+
+### 52.10. Protocol decision (ADR-016)
+
+> Cập nhật theo pivot IoT v2 (`newiot.md`/`overall.iot.md`): edge device đổi từ **Raspberry Pi → ESP32-S3**,
+> transport đổi từ "chỉ HTTPS" sang **hybrid HTTPS + MQTT**.
+
+**Decision — hybrid 2 kênh:**
+
+| Kênh | Dùng cho | Giai đoạn |
+|------|----------|-----------|
+| **HTTPS REST** | provision device, heartbeat, firmware download/OTA, flush queue tồn đọng khi mất mạng dài, admin CRUD, **MVP ingest (P0–P2)** | v1 (làm trước) |
+| **MQTT** (EMQX/Mosquitto) | telemetry realtime (<100ms), heartbeat, offline tức thì qua **Last Will & Testament (LWT)**, lệnh **downlink** (đổi config/OTA trigger) | v2 (P3 — nâng cấp) |
+
+**Lý do giữ HTTPS (v1):**
+- Đơn giản, không cần broker; Idempotency-Key + Polly retry đã có; TLS đơn giản hơn MQTT-over-TLS.
+- Đủ cho monitoring (latency 1–2s OK, không phải control-plane).
+
+**Lý do thêm MQTT (v2):**
+- Latency <100ms, kết nối thường trực (tiết kiệm pin/băng thông), 2 chiều (downlink command), phát hiện offline tức thì (LWT) thay vì chờ job 5 phút.
+
+**Trade-off MQTT:** thêm hạ tầng broker (deploy/bảo mật/monitor), ESP32 vẫn phải giữ local queue + fallback HTTPS flush khi broker down (SPOF). Vì vậy MQTT là **scope mở rộng P3** — chỉ làm sau khi flow HTTPS (P0–P2) chạy ổn; nếu thiếu thời gian, HTTPS đủ cho MVP/demo.
+
+**Edge device:** ESP32-S3 (N16R8, có PSRAM cho MQTT-over-TLS), `DeviceType=StandaloneSensor`, đọc nhiều pin qua **RS485/Modbus RTU multi-drop** (mỗi BMS 1 `unitId`). Firmware C++ (PlatformIO/Arduino) — **không** dùng lại code Python của bản RPi v1. Chi tiết phần cứng/firmware: `newiot.md`, `overall.iot.md`, `wiring-diagram.md`, `hardware-bom.csv`.
+
+> **CAN bus (tùy chọn):** Một số BMS dùng CAN thay RS485. ESP32-S3 hỗ trợ qua TWAI + transceiver SN65HVD230 (`overall.iot.md` §A3, `wiring-diagram.md` §5). Backend KHÔNG đổi — firmware đọc CAN rồi gửi cùng contract/payload như Modbus. Capstone ưu tiên RS485; CAN chỉ làm nếu có BMS CAN thật.
 
 ### 52.11. Endpoints summary
 
@@ -6344,6 +7854,24 @@ iot_sensor_readings_rejected_total{reason=clock_drift|sensor_outlier|...}
 iot_firmware_updates_total{from_version, to_version, status}
 ```
 
+### 52.12bis. Boundary với Alert–Ticket Saga (§53)
+
+> Ánh xạ rõ ràng trách nhiệm giữa IoT track và Saga để producer/consumer không chồng lấn. Bổ sung sau gap analysis với `iot/tasksprint.md`.
+
+**IoT track (BatteryService) chịu trách nhiệm:**
+- Ingest reading từ ESP32 → threshold check → tạo `Alert` → publish `BatteryAnomalyDetectedEvent` V2 (schema đầy đủ `AlertId/AnomalyType/Severity/Source/BatteryAssetId/Site` theo §53.7) vào outbox.
+- Publish `IotDeviceWentOfflineEvent` khi device offline (§52.6).
+- Publish `EnvironmentalIncidentDetectedEvent` khi smoke/water trigger (§1.7).
+
+**IoT track KHÔNG chịu trách nhiệm:**
+- Tạo `Ticket` trực tiếp từ event — Saga §53 orchestrate qua 8 message (`CreateTicketFromAlertCommand` → `TicketProvisionedForAlertEvent` → `LinkAlertToTicketCommand` → …).
+- Link `Alert.TicketId` — Saga set qua `LinkAlertToTicketCommand` consumer trong BatteryService.
+- Retry/compensation logic — thuộc Quartz endpoint + MassTransit State Machine §53.8.
+
+**Tránh anti-pattern:** ESP32/IoT firmware KHÔNG được publish event nào ngoài `BatteryAnomalyDetectedEvent` qua outbox của BatteryService. Không tự gọi `POST /api/v1/tickets` từ device — sẽ bỏ qua Saga và tạo Ticket trùng.
+
+> IoT planning document (`iot/tasksprint.md`) chỉ liệt kê task **emit event** ở phía producer; phần consumer Saga + state machine thuộc backend Sprint 5B `#237`. Tham chiếu §53 trước khi review PR IoT S6.
+
 ### 52.13. Tests bắt buộc
 - Provisioning flow end-to-end (gen QR → curl provision → device active)
 - Heartbeat → LastSeenAt updated
@@ -6352,12 +7880,62 @@ iot_firmware_updates_total{from_version, to_version, status}
 - Sensor outlier rejection
 - Calibration offset applied correctly
 - Firmware OTA flow with rollback simulation
+- **(MQTT v2)** LWT `status=offline` → device mark Offline tức thì + alert created
+- **(MQTT v2)** Telemetry qua broker đi đúng `SensorReadingBatchIngestCommand` (reuse, không viết lại validate/insert/anomaly)
+
+### 52.14. MQTT realtime channel (v2 — P3)
+
+> Nâng cấp transport khi cần latency <100ms + 2 chiều. **Scope mở rộng** — chỉ làm sau khi HTTPS (P0–P2) ổn. Chi tiết firmware/broker: `newiot.md` §8.
+
+**MQTT sống ở 3 nơi:**
+
+| Nơi | Vai trò | Viết code? |
+|-----|---------|-----------|
+| **MQTT Broker** (EMQX/Mosquitto, Docker) | trung chuyển pub/sub | ❌ chỉ deploy + config (`infra/mqtt/`) |
+| **ESP32 firmware** | publisher telemetry/heartbeat + subscriber cmd | C++ (`PubSubClient`) — codebase `firmware-esp32/` |
+| **Backend bridge** | subscriber telemetry/status + publisher cmd | C# (`MQTTnet`) — `BatteryService.Infrastructure/Mqtt/` |
+
+**Topic design:**
+```
+solar/{siteId}/{deviceCode}/telemetry   ← ESP32 publish reading (uplink)
+solar/{deviceCode}/heartbeat            ← ESP32 publish trạng thái thiết bị
+solar/{deviceCode}/status               ← Last Will: "online"/"offline" tự động
+solar/{deviceCode}/cmd                  ← Backend publish lệnh xuống (downlink: đổi config, trigger OTA)
+solar/{deviceCode}/cmd/ack              ← ESP32 báo đã thực thi
+```
+
+**Backend bridge** (`MqttBridgeBackgroundService`, đăng ký `AddHostedService`):
+- Subscribe `solar/+/+/telemetry`, `solar/+/heartbeat`, `solar/+/status` (TLS 8883, credential `backend-bridge`).
+- Telemetry → tạo scope → `SensorReadingBatchIngestCommand` (**reuse** logic validate/insert/anomaly của HTTPS, chỉ đổi "nguồn vào").
+- `status=offline` → `IotDeviceMarkOfflineCommand` (§52.6 cơ chế 1).
+- Downlink: `IMqttBridgePublisher.Publish(solar/{dev}/cmd, ...)`.
+
+**Bảo mật per-device:**
+- Ngoài API key (HTTPS), cấp **MQTT credential per-device** gắn với `IotDevice` + **ACL phân quyền topic per-device** ở broker (`infra/mqtt/acl.conf`) — device chỉ publish/subscribe topic của chính nó.
+
+**Broker deploy:** `infra/mqtt/` (docker-compose EMQX/Mosquitto, `mosquitto.conf`, `acl.conf`, `certs/` cho TLS 8883). Xem `hardware-bom.csv` A13 + `overall.iot.md` A13.
+
+**Trap (xem `newiot.md` §12):** NTP bắt buộc (ESP32 không có RTC); MQTT-over-TLS tốn RAM → dùng S3 có PSRAM; broker là SPOF → firmware vẫn giữ local queue + fallback HTTPS flush.
+
+### 52.15. Failure modes & resilience (ESP32 + MQTT)
+
+> Bổ sung từ "bẫy ESP32" (`newiot.md` §12) + luồng chống mất data (`overall.iot.md` §B7) — ánh xạ sang hành vi backend. Không tạo EC numbered mới (xem EC-21/24/25 §58 đã cover ingest); đây là checklist resilience cho IoT-1/P3.
+
+| Failure mode | Hành vi mong đợi | Backend xử lý |
+|--------------|------------------|---------------|
+| ESP32 mất WiFi/4G kéo dài | Reading vào local queue (NVS/LittleFS/SD) + retry exponential backoff, không xóa tới khi backend 2xx | Khi mạng lại, ESP32 flush kèm `Idempotency-Key` cũ → backend dedup, không tạo bản ghi trùng (EC-21) |
+| Queue flash đầy (ESP32 buffer nhỏ hơn RPi) | Chấp nhận drop data cũ nhất hoặc giảm tần suất poll | `IotDeviceHeartbeat.LocalQueueDepth` cao → dashboard cảnh báo (§9.2 #5); không có rule backend khác |
+| MQTT broker down (SPOF) | Firmware fallback HTTPS flush + giữ local queue | Bridge reconnect (ManagedMqttClient); ingest HTTPS vẫn nhận bình thường |
+| NTP sync fail → `deviceTimestamp` lệch | — | Reject clock skew > 5 phút (EC-24) + metric `reason=clock_drift` + `IotDevice.ClockDriftIncidentCount` |
+| Sai mapping / unitId conflict (device gửi reading cho battery không thuộc `batteryMappings`) | — | Reject reading không nằm trong mapping/`BatteryAssetIds` của device + log |
+| Sensor outlier (V=1200V, temp ngoài giới hạn) | — | Reject + `reason=sensor_outlier`, auto-disable device sau N outlier (EC-25) |
+| LWT miss (broker chưa kịp phát) | — | Job `IotDeviceOfflineDetectionBackgroundService` 2 phút là backup (§52.6) |
 
 ---
 
 ## 52bis. IoT implementation plan
 
-> Chi tiết triển khai phần cứng, gateway software, payload mẫu, checklist mua thiết bị và runbook demo nằm ở [`iot.md`](./iot.md). Section này chỉ giữ phần backend work cần phản ánh trong master roadmap.
+> Chi tiết triển khai phần cứng, firmware ESP32, payload mẫu, BOM mua thiết bị, sơ đồ đấu dây và runbook demo nằm ở bộ tài liệu IoT v2: [`newiot.md`](./newiot.md) (thiết kế tổng thể ESP32+MQTT), [`overall.iot.md`](./overall.iot.md) (BOM + luồng vận hành), [`wiring-diagram.md`](./wiring-diagram.md) (đấu dây + GPIO), [`hardware-bom.csv`](./hardware-bom.csv) (bảng mua sắm). Bản v1 [`iot.md`](./iot.md) (Raspberry Pi, Python) **deprecated** — giữ tham khảo logic queue/calibration/validation. Section này chỉ giữ phần backend work cần phản ánh trong master roadmap.
 
 ### 52bis.1. Current backend state
 
@@ -6373,16 +7951,18 @@ Chưa đủ cho hệ thống IoT thật:
 - Chưa có heartbeat và offline detection theo device.
 - Chưa có API key riêng từng device, rotate/revoke key.
 - Chưa có `X-Device-Code`, `deviceTimestamp`, `Idempotency-Key` trong contract ingest production.
-- Chưa có calibration, firmware OTA, gateway simulator/hardware runbook.
+- Chưa có calibration, firmware OTA, ESP32 simulator/hardware runbook.
+- Chưa có kênh MQTT (broker + bridge + LWT + downlink) cho realtime <100ms (v2/P3 — §52.14).
 
 ### 52bis.2. Implementation tracks
 
-| Track | Mục tiêu | Deliverable |
-|-------|----------|-------------|
-| IoT MVP | Chạy được flow backend bằng simulator/laptop/RPi mock | Simulator gửi batch vào endpoint hiện có, dashboard thấy latest/history/alert |
-| IoT Backend Production | Quản lý gateway thật | `IotDevice`, provision, heartbeat, per-device auth, offline detection |
-| IoT Hardware Pilot | Thay simulator bằng Raspberry Pi đọc BMS/cảm biến | Gateway đọc Modbus/CAN hoặc mock hardware adapter và gửi production payload |
-| IoT Hardening | Sẵn sàng demo/production-lite | Retry/idempotency, local queue, calibration, metrics, runbook |
+| Track | Mục tiêu | Deliverable | Map roadmap `newiot.md` |
+|-------|----------|-------------|--------------------------|
+| IoT MVP | Chạy được flow backend bằng simulator/laptop/ESP32 mock | Simulator/ESP32 `mock_bms` gửi batch (HTTPS) vào endpoint hiện có, dashboard thấy latest/history/alert | P0–P1 |
+| IoT Backend Production | Quản lý edge device thật | `IotDevice`, provision, heartbeat, per-device auth, offline detection | P2 |
+| IoT MQTT/Realtime | Streaming <100ms + 2 chiều | MQTT broker (`infra/mqtt/`) + `MqttBridgeBackgroundService` + LWT offline tức thì + downlink cmd + ACL per-device (§52.14) | **P3 (mới)** |
+| IoT Hardware Pilot | Thay simulator bằng **ESP32-S3** đọc BMS qua RS485/Modbus | ESP32 + MAX485 multi-drop đọc Modbus thật (nhiều pin/unitId) và gửi production payload | P4 |
+| IoT Hardening | Sẵn sàng demo/production-lite | Retry/idempotency, local queue (NVS/LittleFS/SD), calibration, metrics, OTA, runbook | P5 |
 
 ### 52bis.3. Backend tasks to add
 
@@ -6425,11 +8005,12 @@ Chưa đủ cho hệ thống IoT thật:
 
 | Sprint | Scope |
 |--------|-------|
-| Sprint 3 | Đã có ingest MVP + anomaly engine. Dùng simulator để test flow end-to-end. |
-| Sprint 5B | Bổ sung ambient/environmental/tier-2 sensor field để IoT có thêm dữ liệu sức khỏe pin/site. |
-| Sprint IoT-1 | Backend device management + gateway simulator/prototype. |
-| Sprint 7 | Hardware pilot + Grafana IoT metrics + E2E test. |
-| Sprint 8 | IoT demo runbook, polish, failure scenario: stop heartbeat => `DeviceOffline`. |
+| Sprint 3 | Đã có ingest MVP + anomaly engine. Dùng simulator/ESP32 mock (HTTPS) để test flow end-to-end (P0–P1). |
+| Sprint 5B | Release gate `#233–#241`: scope cleanup Energy/CO2 + Alert–Ticket Saga; ambient/environmental/tier-2 chỉ làm sau P0. |
+| Sprint IoT-1 | Backend device management + ESP32 simulator/prototype (provision, heartbeat, per-device key, offline) — P2. Foundation cho Sprint IoT-2. |
+| **Sprint IoT-2** | **Task-level refinement của backend IoT** — đầy đủ contract production, MQTT bridge, cross-source, Saga boundary, calibration, OTA, observability. 38 task `#IoT2-01..38` (Phase A–F). Owner Thắng. Đây là **single source of truth** cho mọi BE task IoT — `iot/tasksprint.md` chỉ mention dependency. |
+| Sprint 7 | Hardware pilot (ESP32-S3 + RS485 multi-drop) + Grafana IoT metrics + E2E test — P4. **MQTT/Realtime (P3) làm trước trong sprint này nếu đủ nhân lực; nếu thiếu → để backlog, HTTPS đủ cho demo.** |
+| Sprint 8 | IoT demo runbook, polish, failure scenario: stop ESP32 => `DeviceOffline` (LWT tức thì hoặc job 5 phút). |
 
 ### 52bis.5. Acceptance checklist
 
@@ -6441,199 +8022,544 @@ Chưa đủ cho hệ thống IoT thật:
 - [ ] Critical alert publish event cho Ticket/Notification flow.
 - [ ] Dừng gateway > 5 phút tạo `DeviceOffline`.
 - [ ] Gateway retry cùng `Idempotency-Key` không tạo duplicate.
-- [ ] Runbook `iot.md` đủ để người khác setup simulator và Raspberry Pi pilot.
+- [ ] Bộ runbook IoT v2 (`newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`) đủ để người khác setup simulator và **ESP32-S3 pilot** (nạp firmware, đấu RS485 multi-drop, cấu hình broker).
+- [ ] (P3 — nếu làm MQTT) Broker `infra/mqtt/` chạy, bridge subscribe telemetry, LWT mark Offline tức thì, ACL per-device hoạt động.
 
 ---
 
-## 53. Solar Energy Business Metrics — P0
+## 53. Battery scope reduction & Alert–Ticket Saga — P0
 
-> Đây là **giá trị kinh doanh** của solar battery monitoring system mà overall ban đầu thiếu hoàn toàn. Customer/Manager cần thấy "tiết kiệm bao nhiêu kWh, bao nhiêu tiền, bao nhiêu CO2".
+> Quyết định ngày **10/6/2026**: BatteryService chỉ quản lý tài sản pin, telemetry phục vụ sức khỏe pin,
+> anomaly/alert và monitoring môi trường. Hệ thống **không** triển khai Energy/CO2 analytics.
+> Sprint 5B dùng phần effort tiết kiệm được để hoàn thiện consistency của luồng Critical Alert → Ticket.
 
-### 53.1. Concept
+### 53.1. Scope decision: bỏ Energy và CO2
 
-```
-Solar panel → Battery (sạc) → Battery (xả) → Tải
+#### In scope của BatteryService
 
-Energy tracked:
-- Energy charged (kWh) = ∫ V × I dt (when current > 0)
-- Energy discharged (kWh) = ∫ V × |I| dt (when current < 0)
-- Net energy throughput = charged + discharged
-- Round-trip efficiency = discharged / charged × 100%
-- Cycle count = floor(cumulative_discharged / nominal_capacity_kwh)
-- DOD per cycle = (max_soc - min_soc) per cycle
-- Cost saved = discharged_kwh × electricity_rate
-- CO2 saved = discharged_kwh × emission_factor_vn (0.6429 kg/kWh — VN grid avg)
-```
+- Battery asset/type/site/group và ownership.
+- Raw telemetry: voltage, current, temperature, SOC, SOH, charging state, cycle count,
+  internal resistance, cell-voltage delta và BMS error code.
+- Threshold/anomaly detection, noise suppression, Alert lifecycle.
+- Ambient/environmental monitoring có ảnh hưởng trực tiếp đến an toàn/sức khỏe pin.
+- Liên kết `Alert.TicketId` để trace từ cảnh báo sang quy trình maintenance.
 
-### 53.2. New entities
+#### Out of scope chính thức
 
-#### `EnergySession` (charge/discharge segment)
-| Field | Type | Note |
-|-------|------|------|
-| `Id` | Guid | — |
-| `BatteryAssetId` | Guid (FK) | — |
-| `SessionType` | enum (Charging=1, Discharging=2, Idle=3) | — |
-| `StartedAt` | DateTime | — |
-| `EndedAt` | DateTime? | — |
-| `StartSocPercent` | decimal(5,2) | — |
-| `EndSocPercent` | decimal(5,2)? | — |
-| `EnergyKwh` | decimal(10,4) | Integral V×I dt |
-| `AvgVoltage` | decimal(6,2) | — |
-| `AvgCurrent` | decimal(8,2) | — |
-| `PeakPowerKw` | decimal(8,3) | — |
-| `DurationMinutes` | int | — |
+- Tích phân điện năng sạc/xả theo kWh và round-trip efficiency.
+- Chi phí điện, time-of-use tariff, savings/revenue.
+- CO2 emission factor, carbon saving hoặc báo cáo ESG.
+- Energy session/cycle reconstruction từ raw current.
+- Site/asset energy dashboard, energy/cost/carbon reports và recommendation tối ưu giờ sạc.
 
-#### `BatteryCycleLog`
-| Field | Type | Note |
-|-------|------|------|
-| `Id` | Guid | — |
-| `BatteryAssetId` | Guid | — |
-| `CycleNumber` | int | Lifecycle counter |
-| `StartedAt` | DateTime | — |
-| `EndedAt` | DateTime | — |
-| `EnergyChargedKwh` | decimal | — |
-| `EnergyDischargedKwh` | decimal | — |
-| `MaxSocPercent` | decimal | — |
-| `MinSocPercent` | decimal | — |
-| `DepthOfDischarge` | decimal | max - min |
-| `RoundTripEfficiency` | decimal | discharged/charged |
-| `MaxTemperature` | decimal | — |
-| `StressScore` | decimal | Composite — input cho AI predict SOH |
+Không tạo `EnergyService` thay thế trong capstone. Nếu business mở lại scope sau này, phải có ADR mới,
+nguồn meter đáng tin cậy và service boundary riêng; không nhét lại vào BatteryService.
 
-#### `EnergyDailySummary` (aggregate, refresh hourly)
-| Field | Type |
-|-------|------|
-| `Id` | Guid |
-| `BatteryAssetId` | Guid |
-| `Date` | DateOnly |
-| `EnergyChargedKwh` | decimal |
-| `EnergyDischargedKwh` | decimal |
-| `CycleCountDelta` | int |
-| `PeakChargePowerKw` | decimal |
-| `PeakDischargePowerKw` | decimal |
-| `CostSavedVnd` | decimal | Calculated |
-| `Co2SavedKg` | decimal | Calculated |
-| `AverageEfficiency` | decimal | — |
+> **Lưu ý IoT hardware (đồng bộ `overall.iot.md` §A14/§D + `newiot.md`):** Bộ tài liệu phần cứng IoT v2 (ESP32)
+> có liệt kê module **INA226** (đo V/I độc lập) và một path demo "energy metrics" (charge/discharge kWh, cost,
+> CO2) ở **Cấp 4 — tùy chọn**. Để tránh mâu thuẫn với quyết định này:
+> - **INA226 / sensor đo độc lập** trong scope chỉ phục vụ **cross-source/redundant validation** (`SensorMismatch`,
+>   §1.3.4 + §1.6.6) và đo telemetry sức khỏe pin — **KHÔNG** dùng để tích phân năng lượng.
+> - **Energy/CO2 demo vẫn nằm NGOÀI software scope** (ADR-017, CI scope-guard §53.2bis giữ nguyên). Nếu pilot
+>   muốn trình diễn energy metrics ở Cấp 4, đó là **stretch hardware-only**, phải mở ADR mới trước khi thêm bất kỳ
+>   entity/report/endpoint energy nào vào backend. Không có ngoại lệ "nhét tạm để demo".
 
-#### `SiteEnergySummary` (aggregate per site daily)
-Cấu trúc tương tự nhưng aggregate theo site.
+### 53.2. Inventory cần xóa hoặc không được triển khai
 
-### 53.3. Configuration entities
+| Nhóm | Xóa/không tạo | Ghi chú |
+|------|---------------|---------|
+| Entity/table | `EnergySession`, `BatteryCycleLog`, `EnergyDailySummary`, `SiteEnergySummary`, `ElectricityRate`, `CarbonEmissionFactor` | Không tạo migration/schema |
+| Background job | `EnergyCalculationBackgroundService`, `EnergyDailyAggregateBackgroundService`, `EnergyCostUpdateBackgroundService` | Không đăng ký DI |
+| API | `/energy/*`, `/savings`, `/cycles` theo nghĩa energy cycle, admin electricity/carbon config | Xóa khỏi Swagger/Postman/SRS |
+| Report | energy throughput, cost saving, carbon saving, top asset by energy | Không nằm trong Sprint 7 |
+| Dashboard/demo | kWh, VND saving, CO2 saving, round-trip efficiency | Thay bằng SOH, alert, SLA, environmental safety |
+| Site model | `Site.CapacityKw` | Xóa bằng migration `RemoveSiteCapacityKw` |
 
-#### `ElectricityRate` (per region/customer)
-| Field | Type |
-|-------|------|
-| `Id` | Guid |
-| `Region` | string | "VN-South", "VN-North" |
-| `TimeOfUseType` | enum (Peak=1, Normal=2, OffPeak=3) |
-| `RateVndPerKwh` | decimal |
-| `EffectiveFrom` | DateTime |
-| `EffectiveTo` | DateTime? |
-| `HourStart`, `HourEnd` | int (0-23) | Peak hour range |
+Các field `Voltage`, `Current`, `SocPercent`, `SohPercent`, `CycleCount`,
+`NominalCapacityAh` và `NominalVoltage` vẫn được giữ khi chúng phục vụ
+health/anomaly. Không được suy diễn thành tính năng Energy/CO2 nếu chưa có scope mới.
 
-#### `CarbonEmissionFactor`
-| Field | Type | Note |
-|-------|------|------|
-| `Id` | Guid | — |
-| `Region` | string | "VN" |
-| `KgCo2PerKwh` | decimal | VN grid: 0.6429 (EVN data 2024) |
-| `Year` | int | Update annually |
+### 53.2bis. CI scope-guard rule (task `#233`)
 
-### 53.4. Background services
+Thêm step vào `.github/workflows/ci.yml` chạy trên mọi PR vào `main`/`dev`:
 
-#### `EnergyCalculationBackgroundService` (every 5 phút)
-- Scan sensor_readings new since last run.
-- Detect session boundaries (current sign change, hysteresis).
-- Insert/update EnergySession.
-- Detect cycle completion (DOD threshold) → insert BatteryCycleLog.
-
-#### `EnergyDailyAggregateBackgroundService` (every hour, aggregate previous hours)
-- Aggregate EnergySession → EnergyDailySummary.
-- Calculate cost saved, CO2 saved.
-
-#### `EnergyCostUpdateBackgroundService` (daily, when rate changes)
-- Re-compute saved cost cho summary trong 7 ngày gần (nếu rate đổi).
-
-### 53.5. Endpoints
-
-```
-# Customer dashboard
-GET    /api/battery-assets/{id}/energy/today
-GET    /api/battery-assets/{id}/energy/this-month
-GET    /api/battery-assets/{id}/energy/daily?from=&to=
-GET    /api/battery-assets/{id}/cycles                # cycle history
-GET    /api/battery-assets/{id}/savings               # cost + CO2 cumulative
-
-# Site dashboard (Customer/Manager)
-GET    /api/v1/sites/{id}/energy/today
-GET    /api/v1/sites/{id}/savings
-
-# Admin config
-POST   /api/v1/admin/electricity-rates
-GET    /api/v1/admin/electricity-rates
-POST   /api/v1/admin/carbon-emission-factors
-GET    /api/v1/admin/carbon-emission-factors
-
-# Reports (Manager/Admin)
-GET    /api/v1/reports/energy-throughput?from=&to=
-GET    /api/v1/reports/cost-savings-summary
-GET    /api/v1/reports/carbon-savings-summary
-GET    /api/v1/reports/top-assets-by-energy
+```yaml
+- name: Energy/CO2 scope guard (ADR-017)
+  run: |
+    set -e
+    # Search keywords trong active source (exclude historical migrations, ADR, scope-removal docs, citations)
+    HITS=$(rg -n \
+      --glob '!**/Migrations/202605*_AddSiteAndBatteryGroup*' \
+      --glob '!docs/adrs/ADR-017-*' \
+      --glob '!overall.md' \
+      --glob '!.claude/**' \
+      'EnergySession|EnergyDaily|EnergyKwh|ElectricityRate|CarbonEmission|Co2Saved|CostSaved|CapacityKw|/api/.*/energy|/api/.*/savings|/api/.*/cycles\b' \
+      services/ shared/ || true)
+    if [ -n "$HITS" ]; then
+      echo "❌ Scope guard violation (ADR-017): Energy/CO2 contracts must not be added back."
+      echo "$HITS"
+      exit 1
+    fi
+    echo "✅ Scope guard clean."
 ```
 
-### 53.6. Sample response
+Allow-list path: historical EF migration files giữ tên cũ; ADR markdown chứa từ "Energy" trong tiêu đề; citation/reference text (vd "Frontiers in Energy Research"). Reviewer phải đọc context khi unmask, không xóa máy móc.
 
-`GET /api/battery-assets/{id}/savings`
+### 53.2ter. Pre-commit hook + PR template (task `#233`/`#240`)
+
+CI scope-guard (§53.2bis) chạy sau push — phát hiện chậm. Pre-commit hook bắt lỗi local trước commit, giảm CI run wasted:
+
+```yaml
+# .pre-commit-config.yaml — thêm hook mới:
+- id: energy-co2-scope-guard
+  name: Energy/CO2 scope guard (ADR-017)
+  entry: bash -c 'rg --quiet "EnergySession|EnergyDaily|EnergyKwh|ElectricityRate|CarbonEmission|Co2Saved|CostSaved|CapacityKw|/api/.*/energy|/api/.*/savings|/api/.*/cycles\b" --glob "!Migrations/202605*_AddSiteAndBatteryGroup*" --glob "!docs/adrs/ADR-017-*" --glob "!overall.md" --glob "!.claude/**" services/ shared/ && exit 1 || exit 0'
+  language: system
+  pass_filenames: false
+  stages: [commit]
+```
+
+`.github/PULL_REQUEST_TEMPLATE.md` (task `#240`) — thêm Saga PR checklist section:
+
+```markdown
+## Saga PR checklist (chỉ tick nếu PR thuộc Sprint 5B `#237`–`#239`)
+- [ ] Đã đọc §18.2bis (34 PR review item)
+- [ ] State machine: cancel cả 2 token khi tiến bước? (xem checklist mục 1-9)
+- [ ] Participant: reuse path KHÔNG overwrite `OriginAlertId`? (xem checklist mục 10-17)
+- [ ] Cutover: feature flag default đúng §53.9? (xem checklist mục 18-21)
+- [ ] Test: ≥21 case khớp §53.10? (xem checklist mục 22-25)
+- [ ] Observability: 8 metric + 2 alert rule + structured log non-PII? (xem checklist mục 26-29)
+- [ ] Documentation: ADR + runbook + Mermaid + Postman? (xem checklist mục 30-34)
+```
+
+### 53.3. Scope-cleanup implementation và acceptance criteria
+
+#### Current implementation audit ngày 10/6/2026
+
+Repository hiện **chưa có** entity/job/API Energy hoặc CO2. Phần cần xóa thật trong code là
+`Site.CapacityKw`/`TotalCapacityKw` và contract liên quan:
+
+```text
+services/BatteryService/src/BatteryService.Domain/Entities/Site.cs
+services/BatteryService/src/BatteryService.Infrastructure/Persistence/Configurations/SiteConfiguration.cs
+services/BatteryService/src/BatteryService.Infrastructure/Persistence/Seeders/BatteryDataSeeder.cs
+services/BatteryService/src/BatteryService.Application/CQRS/Command/Site/*
+services/BatteryService/src/BatteryService.Application/CQRS/Handler/Site/*
+services/BatteryService/src/BatteryService.Application/DTOs/SiteDto.cs
+services/BatteryService/src/BatteryService.Application/DTOs/SiteDashboardDto.cs
+services/BatteryService/src/BatteryService.Application/Mapping/BatteryMapper.cs
+services/BatteryService/src/BatteryService.Api/Controllers/Admin/AdminSitesController.cs
+services/BatteryService/src/BatteryService.Api/Controllers/SitesController.cs
+services/BatteryService/tests/**/*Site*
+services/BatteryService/tests/BatteryService.UnitTests/Application/CommandValidationFullTests.cs
+docs/api-battery.md
+```
+
+Các migration lịch sử đã tạo `capacity_kw` phải được giữ nguyên để bảo toàn migration chain.
+Migration mới drop column và regenerate `ApplicationDbContextModelSnapshot`; không sửa tay
+`20260514044305_AddSiteAndBatteryGroup*` hoặc các historical Designer file.
+
+#### Task `#233` — documentation/contract cleanup
+
+1. Tìm toàn repository theo các từ khóa:
+   `EnergySession`, `EnergyDaily`, `EnergyKwh`, `ElectricityRate`, `CarbonEmission`,
+   `Co2Saved`, `CostSaved`, `/energy`, `/savings`, `CapacityKw`.
+2. Xóa plan/API/report/UI/demo/seed/test chưa triển khai; không xóa raw telemetry health.
+3. Cập nhật SRS, OpenAPI/Postman và frontend/mobile types nếu đã khai báo contract.
+4. Thêm ADR `Remove Energy and CO2 Analytics from BatteryService`.
+
+#### Task `#234` — remove `Site.CapacityKw`
+
+1. Xóa property ở Domain, EF configuration, command/query DTO, mapping, validation và seed.
+2. Tạo migration `RemoveSiteCapacityKw`:
+   - `Up`: drop column `sites.capacity_kw`.
+   - `Down`: add nullable column trước; không tự bịa lại dữ liệu cũ.
+3. Update API contract để request/response không còn `capacityKw`.
+4. Chạy migration apply → rollback → re-apply trên Timescale/Postgres test container.
+
+#### Acceptance criteria
+
+- Chạy `rg` trên active source, tests, API docs và frontend/mobile contract với các từ khóa trên:
+  không được trả về implementation/contract đang hoạt động.
+- Citation/reference text như tên tạp chí “Frontiers in Energy Research” hoặc URL chứa `/energy-research`
+  được phép giữ; scope guard phải review context thay vì xóa false positive máy móc.
+- Historical EF migration files được phép giữ `capacity_kw`; current model snapshot và mọi file ngoài
+  historical migrations không được còn `CapacityKw`/`TotalCapacityKw`.
+- Không có route hoặc OpenAPI schema Energy/CO2.
+- Existing battery health ingest, anomaly và dashboard tests vẫn pass.
+- Migration rollback pass và không làm mất Site/BatteryGroup/BatteryAsset relationship.
+
+### 53.4. Saga problem và business invariants
+
+Luồng cần atomic về mặt nghiệp vụ nhưng đi qua hai database:
+
+```text
+BatteryService.Alert
+    → TicketService.Ticket
+    → BatteryService.Alert.TicketId
+```
+
+Không dùng distributed transaction/2PC. Dùng **orchestrated Saga + local transaction + Outbox/Inbox**
+và forward recovery.
+
+#### Current implementation gap audit ngày 10/6/2026
+
+- TicketService đang có direct `BatteryAnomalyDetectedConsumer`; chưa có Saga state/repository.
+- `Alert.TicketId` (nullable `Guid?`) **đã** tồn tại trong Battery schema/DTO; direct flow chưa callback để set field này. Sprint 5B chỉ thêm non-unique index `alerts(ticket_id) WHERE ticket_id IS NOT NULL` qua migration `AddAlertTicketLinkIndex`; **không** thêm/đổi column.
+- `Ticket.OriginAlertId` chưa có unique filtered index; dedup hiện tại chưa khóa category/concurrency.
+- TicketService DI đăng ký Outbox writer trước `AddMessageBus`, có nguy cơ bị direct producer override.
+- Redis Inbox hiện tại ghi processed key trước business action commit.
+- Shared MassTransit setup chưa cấu hình retry/redelivery hoặc durable scheduler.
+- `AlertEscalationService` đang serialize lại `BatteryAnomalyDetectedEvent` dưới type
+  `BatteryAnomalyEscalatedEvent`; relay vẫn publish CLR type `BatteryAnomalyDetectedEvent`, gây duplicate
+  Saga-start/notification sau 5 phút dù Critical Alert đã publish event lúc tạo.
+
+Đây là các gap bắt buộc giải quyết trong `#235–#239`; không được chỉ thêm state machine class rồi giữ
+nguyên messaging foundation hiện tại.
+
+Business invariants:
+
+1. Mỗi `AlertId` có tối đa một Saga.
+2. Mỗi `AlertId` liên kết tối đa một Ticket.
+3. Retry/redelivery không tạo Ticket thứ hai.
+4. Nếu đã có Ticket active cho cùng `(BatteryAssetId, Category)`, Saga reuse Ticket đó.
+5. Saga chỉ `Completed` khi BatteryService xác nhận `Alert.TicketId == TicketId`.
+6. Không xóa Ticket để compensation; lỗi được retry/reprocess cho đến khi link hoàn tất.
+7. Mỗi Critical Alert chỉ phát Saga-start event một lần; escalation chưa-ack dùng contract riêng và
+   không được start/restart Alert–Ticket Saga.
+
+### 53.5. Ownership và state model
+
+- Orchestrator: TicketService.
+- Correlation: `CorrelationId = AlertId`.
+- Persistence: MassTransit EF Saga repository trong `ticket_db`.
+- Table: `alert_ticket_saga_states`.
+- Initial correlation: `AlertId`; mọi response/fault/timeout dùng cùng `CorrelationId`.
+- `Completed` row được giữ làm durable tombstone, không auto-delete sau terminal transition.
+- Ticket lifecycle vẫn do `TicketStateMachine` quản lý; Saga không thay đổi status nghiệp vụ Ticket.
+
+| State | Ý nghĩa |
+|-------|---------|
+| `Initial` | Chưa xử lý anomaly event |
+| `TicketRequested` | Đã gửi command tạo/reuse Ticket |
+| `TicketProvisioned` | Đã tạo/reuse và xác định được `TicketId` |
+| `AlertLinkRequested` | Đã gửi command link Alert |
+| `Completed` | BatteryService xác nhận link thành công |
+| `Failed` | Hết retry/timeout hoặc business rejection cần operator xử lý |
+
+### 53.6. Saga persistence schema
+
+`AlertTicketSagaState` tối thiểu:
+
+Đây là MassTransit persistence model trong Infrastructure, không phải Domain entity; deliberate exception:
+không kế thừa `AuditableEntity`, dùng các timestamp/state field riêng và MassTransit concurrency contract.
+
+| Field | Type | Constraint/usage |
+|-------|------|------------------|
+| `CorrelationId` | Guid | PK, bằng `AlertId` |
+| `CurrentState` | string | MassTransit state |
+| `AlertId` | Guid | unique/business key |
+| `BatteryAssetId` | Guid | trace/dedup |
+| `CustomerId` | Guid | payload snapshot |
+| `AssetSerialNumber` | string? | initial-event snapshot; null cho reconciliation |
+| `AnomalyType` | int? | wire value snapshot; null cho reconciliation |
+| `Severity` | int? | wire value snapshot; null cho reconciliation |
+| `ThresholdValue` | decimal? | initial-event snapshot; null cho reconciliation |
+| `ActualValue` | decimal? | initial-event snapshot; null cho reconciliation |
+| `Unit` | string? | initial-event snapshot; null cho reconciliation |
+| `DetectedAt` | DateTime? | initial-event snapshot; null cho reconciliation |
+| `TicketId` | Guid? | set sau create/reuse |
+| `TicketCode` | string? | ops/debug |
+| `CreatedNewTicket` | bool? | audit |
+| `TicketAttemptCount` | int | budget/audit bước create-or-reuse |
+| `AlertLinkAttemptCount` | int | budget/audit bước link Alert |
+| `ManualReprocessCount` | int | số lần operator reprocess |
+| `LastReprocessedBy` | Guid? | audit actor |
+| `LastReprocessReason` | string? | sanitized operator reason |
+| `FailedStep` | string? | create-ticket / link-alert |
+| `FailureCode` | string? | machine-readable |
+| `LastError` | string? | sanitize, không chứa secret |
+| `LastAttemptAtUtc` | DateTime? | retry/reprocess audit |
+| `StartedAtUtc` | DateTime | latency metric |
+| `UpdatedAtUtc` | DateTime | stuck detection |
+| `CompletedAtUtc` | DateTime? | terminal success |
+| `StepTimeoutTokenId` | Guid? | timeout của attempt đang chờ participant response |
+| `RetryTokenId` | Guid? | delayed retry command; không dùng chung với timeout token |
+| `RowVersion` | uint | PostgreSQL `xmin` optimistic concurrency token |
+
+Migration `AddAlertTicketSagaFoundation` đồng thời thêm:
+
+- PK/unique trên Saga `CorrelationId`.
+- Index `(CurrentState, UpdatedAtUtc)` cho stuck scan.
+- Unique filtered index
+  `tickets.origin_alert_id WHERE origin_alert_id IS NOT NULL AND is_deleted = false`.
+- Non-unique index BatteryService `alerts(ticket_id) WHERE ticket_id IS NOT NULL`.
+- Index `tickets(battery_asset_id, category, status)` để query reuse.
+- Partial unique guard cho auto-ticket active trên `(battery_asset_id, category)` với
+  `origin = AutoFromAlert AND is_deleted = false AND status IN (active statuses)`.
+  Predicate phải liệt kê rõ giá trị `New`, `Open`, `Assigned`, `InProgress`, `WaitingCustomer`,
+  `WaitingParts`, `WaitingOnsiteSchedule`, `Resolved`, `Escalated`, `Incident`, `Approved`; không dùng
+  range enum.
+  Nếu EF migration khó biểu diễn predicate, dùng migration SQL có test apply/rollback.
+- Trước khi tạo hai unique index, deployment preflight phải query duplicate `origin_alert_id` và
+  duplicate active `(battery_asset_id, category)`. Chọn Ticket canonical, link các Alert liên quan qua
+  reconciliation và mark duplicate `IsDeleted=true` kèm audit/migration log theo runbook trước khi apply
+  constraint; migration không được fail giữa rollout vì dữ liệu cũ chưa dọn.
+
+### 53.7. Contracts và transaction boundary
+
+Contracts nằm trong `SharedContracts`, chỉ dùng primitive/string và version-safe enum values:
+
+```text
+BatteryAnomalyDetectedEvent
+CreateTicketFromAlertCommand
+TicketProvisionedForAlertEvent
+TicketProvisionForAlertRejectedEvent
+LinkAlertToTicketCommand
+ReconcileAlertTicketSagaCommand
+AlertLinkedToTicketEvent
+AlertLinkToTicketRejectedEvent
+AlertTicketSagaFailedEvent
+```
+
+Mapping wire `AnomalyType` sang `TicketCategoryEnum` phải deterministic và có unit test:
+
+| AnomalyType wire value | Battery anomaly (§1.3.6) | Ticket category |
+|------------------------|--------------------------|-----------------|
+| 1 | Overheat | `Overheat` |
+| 2 | Overvoltage | `Charging` |
+| 3 | Undervoltage | `NoPower` |
+| 4 | LowSoc | `Performance` |
+| 5 | RapidDischarge | `Performance` |
+| 6 | AbnormalCharging | `Charging` |
+| 7 | DeviceOffline | `Other` |
+| 8 | SohDegradation | `Performance` |
+| 9 | HighInternalResistance | `Performance` |
+| 10 | CellImbalance | `Performance` |
+| 11 | HighAmbientTemp | `Environment` |
+| 12 | HighHumidity | `Environment` |
+| 13 | HighTempHumidityCombo | `Environment` |
+| 14 | EnvironmentalIncident | `Environment` |
+| 15 | SensorMismatch | `Other` |
+| unknown | Forward-compatible fallback | `Other` + warning metric |
+
+> **Wire value = `AnomalyTypeEnum` integer ở §1.3.6** — không phải custom Saga numbering. Khi mở rộng `AnomalyTypeEnum` (vd thêm value 16), wire value tự động extend; subscriber handle unknown an toàn cho rolling deploy.
+> Wire values 9–15 ambient/environmental/tier-2 chỉ active khi entity tương ứng (AmbientReading, EnvironmentalIncident, BMS extension) đã được kích hoạt.
+> Producer (BatteryService) chỉ publish wire value khi entity tương ứng đã được kích hoạt; subscriber luôn handle unknown an toàn.
+
+Không giữ behavior hiện tại gán mọi auto-ticket thành `Repair`; nếu không, guard
+`(BatteryAssetId, Category)` sẽ reuse sai ticket giữa các nhóm anomaly.
+
+Transaction boundary bắt buộc:
+
+- BatteryService: `Alert` + `BatteryAnomalyDetectedEvent` cùng transaction/Outbox.
+- HTTP/background handlers tiếp tục dùng custom `IIntegrationEventOutboxWriter`.
+- Saga và participant consumers dùng MassTransit EF Consumer Outbox/Inbox trên service DbContext:
+  Ticket/Activity + response event, hoặc Alert update + response event, commit atomically với consumed message.
+- Saga state transition và outgoing command commit atomically qua TicketService EF Consumer Outbox.
+- Rejection response cũng phải đi qua cùng Outbox; participant không được nuốt validation error.
+
+Không inject một interface producer mà lúc runtime resolve thành direct RabbitMQ publisher trong business handler.
+DI phải tách rõ `IIntegrationEventOutboxWriter` và transport publisher của relay.
+
+### 53.8. Idempotency, retry, timeout và compensation
+
+#### Idempotency
+
+- Inbox/durable consumer record chỉ Completed sau business commit.
+- `CreateTicketFromAlertConsumer` lookup `OriginAlertId` trên Ticket `is_deleted=false` trước, sau đó
+  mới lookup active Ticket theo BR-02.
+- Concurrent Alert khác nhau nhưng cùng asset/category được serialize bởi partial unique guard; consumer bắt
+  unique violation, reload Ticket winner và trả `CreatedNew=false`.
+- Chỉ xử lý PostgreSQL `23505` khi constraint name đúng một trong các unique guard đã biết. Transaction
+  lỗi phải rollback và `DbContext` phải clear/dispose trước khi query Ticket winner bằng scope/context
+  mới; lỗi constraint khác phải rethrow, không biến thành reuse thành công.
+- Khi reuse, giữ nguyên `Ticket.OriginAlertId` của Alert đầu tiên. Quan hệ đầy đủ many-alerts-to-one-ticket
+  nằm ở `Alert.TicketId`; không overwrite OriginAlertId bằng Alert mới và không gán OriginAlertId
+  cho Ticket manual được reuse.
+- `LinkAlertToTicketConsumer`:
+  - `TicketId == null`: set value.
+  - `TicketId == command.TicketId`: no-op success và publish confirmation idempotently.
+  - `TicketId` khác: reject với conflict, không overwrite âm thầm.
+- Unique constraints là bắt buộc; Redis Inbox không phải lớp bảo vệ duy nhất.
+
+#### Retry/timeout
+
+- Participant endpoint immediate retry tối đa 3 lần cho transient DB/network lỗi ngắn hạn.
+- Saga schedule tối đa 3 lần gửi lại command với delay 5s, 30s, 2m; tính cả lần gửi đầu là tối đa
+  4 attempt cho từng step. Hết budget chuyển `Failed`, không loop vô hạn.
+- Dùng persistent Quartz scheduler endpoint trong TicketService vì RabbitMQ image hiện tại không có
+  delayed-message plugin. Quartz schema/config phải được version-control và test restart recovery.
+  - NuGet: `MassTransit.Quartz` + `Quartz.AspNetCore` + `Quartz.Serialization.Json`.
+  - Schema: 11 bảng `qrtz_*` chạy qua migration `AddQuartzPersistenceSchema` trên `ticket_db`
+    (dùng official `tables_postgres.sql` của Quartz.NET; không sinh từ EF model snapshot).
+  - Cluster mode bật để hai instance TicketService không double-fire schedule.
+  - Job store cấu hình `quartz.jobStore.driverDelegateType=Quartz.Impl.AdoJobStore.PostgreSQLDelegate`.
+- `StepTimeoutTokenId` và `RetryTokenId` tách riêng. Mỗi loại chỉ có một token active; trước khi
+  retry/reschedule và ngay khi nhận success phải unschedule token không còn hợp lệ. Late timeout/retry
+  được state guard bỏ qua và ghi metric.
+- Saga timeout mặc định: 10 phút cho mỗi bước; timeout chuyển `Failed` và publish failure event.
+- Late response sau timeout phải được ghi log/metric; manual reprocess có thể tiếp tục từ bước thiếu,
+  không tạo Saga/Ticket mới.
+
+#### Compensation
+
+Không hard-delete Ticket đã tạo khi bước link Alert lỗi. Compensation theo **forward recovery**:
+retry link, rồi operator reprocess. Xóa Ticket sẽ làm mất audit/activity và có thể phá SLA workflow.
+
+### 53.9. Implementation + merge order trong Sprint 5B
+
+**Implementation order (= PR merge order vào `dev`):**
+
+| # | Task | Phụ thuộc PR | Owner | Có thể parallel với |
+|---|------|--------------|-------|---------------------|
+| 1 | `#233` Battery scope cleanup + ADR-017 | — | Thắng | `#234` |
+| 2 | `#234` Remove `Site.CapacityKw` | — | Thắng | `#233`, `#235` |
+| 3 | `#235` Messaging hardening + Quartz schema | — | Thắng | `#233`, `#234`, `#241` |
+| 4 | `#241` AuthService permission seed | — (khác DB) | Thắng | `#233`–`#238` (khác service) |
+| 5 | `#236` Saga contracts + Saga foundation migration | `#235` (cần EF Consumer Outbox tables) | Thắng | — |
+| 6 | `#237` Saga state machine + persistence | `#236` (cần contracts + schema) | Thắng | — |
+| 7 | `#238` Participants + cutover flags | `#237` (cần Saga endpoint registered) | Thắng | — |
+| 8 | `#239` Test + metrics + admin endpoints + runbook | `#238` (cần participant active) | Thắng | — |
+| 9 | `#240` Documentation sync | `#239` (cần code stable) | Thắng | — |
+
+**Merge rule cho Sprint 5B:**
+- PR phải merge theo thứ tự trên — `#237` không được merge vào `dev` trước `#236`.
+- Nếu 2 PR cùng dependency-level (vd `#233` + `#234` + `#235` + `#241`), merge theo thứ tự PR approval; mỗi merge xong, các PR còn lại rebase trên `dev` mới.
+- Hai Saga PR back-to-back (`#237`→`#238`→`#239`) phải có integration test pass trên feature branch trước khi merge — KHÔNG để Saga code half-implemented stay trên `dev` quá 1 ngày.
+
+**Không bắt đầu `#237` trước khi `#235` và `#236` pass integration tests** — nếu không Saga chỉ che đi reliability bug của messaging foundation.
+
+**Không enable `AlertTicketSagaEnabled=true` trên `dev` env trước khi `#239` merge** — chỉ test local trong feature branch của `#237/#238`.
+
+#### Deployment/cutover từ direct consumer hiện tại
+
+**Feature flag default trong `appsettings.json` cho Sprint 5B deploy đầu:**
 ```json
 {
-  "isSuccess": true,
-  "data": {
-    "assetId": "...",
-    "since": "2026-01-15T00:00:00Z",
-    "lifetimeCycleCount": 245,
-    "lifetimeEnergyChargedKwh": 18540.5,
-    "lifetimeEnergyDischargedKwh": 17320.2,
-    "lifetimeRoundTripEfficiency": 0.934,
-    "lifetimeCostSavedVnd": 51_960_600,
-    "lifetimeCo2SavedKg": 11_135.2,
-    "comparison": {
-      "vsAverageAssetSameType": "+12% efficiency",
-      "vsLastMonth": "+5% energy"
-    },
-    "thisMonth": {
-      "energyDischargedKwh": 320.5,
-      "costSavedVnd": 961_500,
-      "co2SavedKg": 206.1
-    }
+  "AlertTicket": {
+    "AlertTicketDispatchEnabled": true,    // BatteryService giữ direct flow tới khi maintenance window
+    "AlertTicketSagaEnabled": false,       // TicketService chưa enable Saga endpoint khi deploy đầu
+    "AlertTicketReconciliationEnabled": false  // bật cuối cutover khi smoke test pass
   }
 }
 ```
+Sau cutover thành công 3 flag chuyển `true/true/true`. Production config (vault/secret manager) override appsettings.
 
-### 53.7. SOH integration với cycle
-- `BatteryCycleLog.StressScore` input cho AI:
-  - High DOD (> 80%) → stress cao
-  - High temperature trong cycle → stress cao
-  - High C-rate (current/capacity) → stress cao
-- AI SoH prediction dùng cycle log thay vì raw sensor → more accurate.
+1. Deploy contract backward-compatible và feature flag `AlertTicketDispatchEnabled`; mặc định vẫn giữ
+   direct flow, Saga chưa active.
+2. Mở maintenance window ngắn: set `AlertTicketDispatchEnabled=false` để Critical Alert mới vẫn được
+   lưu cùng Outbox nhưng chưa dispatch sang Ticket flow.
+3. Drain queue direct `BatteryAnomalyDetectedConsumer` đến depth/unacked = 0, sau đó stop endpoint cũ.
+4. Chạy duplicate preflight/canonicalization, rồi apply Saga schema, unique indexes, EF Consumer
+   Outbox/Inbox schema và Quartz schema. Không có direct consumer chạy trong khoảng này.
+5. Deploy Battery link participant, `CreateTicketFromAlertConsumer`, Saga và scheduler với
+   `AlertTicketSagaEnabled=false`; verify health/endpoint topology.
+6. Enable Saga, sau đó enable lại dispatch và inject một Critical Alert smoke test; xác nhận Saga
+   `Completed`. Không để direct consumer và Saga cùng active.
+7. Chạy reconciliation cho dữ liệu cũ:
+   - TicketService đọc Ticket
+     `Origin=AutoFromAlert AND OriginAlertId IS NOT NULL AND IsDeleted=false`.
+   - `Send` `ReconcileAlertTicketSagaCommand` tới Saga endpoint theo từng
+     `(AlertId, BatteryAssetId, CustomerId, TicketId, TicketCode)`.
+   - Saga khởi tạo ở `TicketProvisioned`, chỉ thực hiện bước link Alert; không tạo Ticket mới.
+8. Chỉ xóa queue cũ sau khi smoke test, held Outbox backlog và reconciliation đều pass. Rollback trước
+   bước 6 giữ dispatch off; rollback sau bước 6 phải disable Saga trước, không bật lại hai consumer song song.
 
-### 53.8. Charts cho UI
-- **Energy daily** bar chart (charged vs discharged)
-- **SOC trend** line chart 30 ngày
-- **Cycle count** progression
-- **Savings cumulative** area chart
-- **Efficiency trend** — early warning khi giảm
+### 53.10. Test matrix bắt buộc
 
-### 53.9. Time-of-use recommendation (optional advanced)
-- Background service phân tích pattern → gợi ý cho Customer:
-  - "Nên sạc trong giờ thấp điểm (22h-4h) — tiết kiệm thêm 15%"
-  - "Pin của bạn xả nhiều trong giờ cao điểm — đang tối ưu rồi"
-- Endpoint `GET /api/battery-assets/{id}/recommendations`.
+| Case | Expected |
+|------|----------|
+| Happy path | 1 Alert, 1 Ticket, `Alert.TicketId` set, Saga Completed |
+| Existing active Ticket | Reuse Ticket, `CreatedNew=false`, Saga Completed |
+| Duplicate start event | 1 Saga, không thêm Ticket |
+| Duplicate start sau Saga Completed | Completed tombstone ignore/no-op, không tạo Saga/Ticket mới và không đẩy `_skipped` |
+| Alert chưa ack quá 5 phút | Chỉ publish escalation event cho Notification; không start Saga lần hai |
+| Dispatch flag off | Anomaly Outbox row vẫn pending; event type khác vẫn relay, không bị batch starvation |
+| Concurrent duplicate command | Unique constraint chặn duplicate; consumer trả Ticket đã có |
+| Concurrent different Alerts, same asset/category | Chỉ 1 active auto-ticket; cả hai Alert link cùng Ticket |
+| Ticket DB transient failure | Retry/redelivery rồi tiếp tục |
+| BatteryService unavailable | Saga giữ state, retry link; không mất TicketId |
+| Timeout | Saga Failed + metric/failure event |
+| Late response | Không corrupt state; có audit log |
+| Conflicting Alert.TicketId | Không overwrite; Saga Failed để operator xử lý |
+| Business rejection | Rejection event có code/reason; Saga Failed hoặc retry theo `IsRetryable` |
+| Retryable rejection lặp lại | Tối đa 4 attempt/step, chỉ một schedule token active, sau đó Saga Failed |
+| `Fault<T>` sau endpoint retry | Correlate bằng `Fault<T>.Message.CorrelationId`, update đúng Saga |
+| Manual reprocess | Resume từ failed step và kết thúc Completed |
+| Existing direct-consumer Ticket | Reconciliation chỉ link Alert, không tạo Ticket mới |
+| Service restart khi đang chờ timeout | Persistent scheduler khôi phục timeout/redelivery |
+| Broker restart giữa commit/publish | Outbox relay publish sau restart |
+| Consumer crash trước/ sau commit | Redelivery idempotent, không duplicate |
+| Cutover direct → Saga | Held anomaly backlog được xử lý đúng một lần sau enable, không có hai consumer active |
+| Feature flag mis-config (cả `AlertTicketDispatchEnabled` + direct consumer cùng on) | Unique constraint chặn duplicate; tối đa 1 Ticket được tạo và 1 Saga; log warning để ops phát hiện mis-config |
+| Reconciliation chạy 2 lần | Saga tombstone/Ticket reuse path đảm bảo idempotent, không tạo Saga/Ticket thừa |
 
-### 53.10. Tests
-- EnergyCalculation: simulate 1h sensor data → assert kWh đúng (within 1%)
-- Cycle detection: simulate full charge-discharge → 1 cycle counted
-- Cost calculation: với TOU rate → match expected
-- Carbon factor change → re-aggregate triggers
+Test levels:
+
+- Unit: state machine transition/fault/timeout và participant handlers.
+- Integration: Postgres/Timescale + MassTransit TestHarness.
+- E2E: RabbitMQ thật trong Docker Compose, kill/restart service tại từng transaction boundary.
+
+### 53.11. Observability và operations
+
+Metrics:
+
+```text
+alert_ticket_saga_started_total
+alert_ticket_saga_completed_total
+alert_ticket_saga_failed_total{step,reason}
+alert_ticket_saga_duration_seconds
+alert_ticket_saga_stuck_count{state}
+alert_ticket_ticket_reused_total
+outbox_unprocessed_count{service}
+inbox_processing_failed_total{consumer}
+```
+
+Tracing dùng cùng `CorrelationId/AlertId` qua mọi message. Log structured fields:
+`CorrelationId`, `AlertId`, `TicketId`, `CurrentState`, `MessageId`, `TicketAttemptCount`,
+`AlertLinkAttemptCount`; không log payload chứa PII.
+
+Admin/internal API:
+
+```text
+GET  /api/v1/admin/sagas/alert-ticket?state=&olderThan=&page=
+GET  /api/v1/admin/sagas/alert-ticket/{alertId}
+POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess
+```
+
+`reprocess` yêu cầu permission admin, idempotency key và AuditLog; chỉ resume step lỗi, không reset/xóa history.
+Alert rule: Saga non-terminal không update > 10 phút hoặc `Failed` count > 0 trong 5 phút.
+
+### 53.12. Definition of Done
+
+- [ ] Không còn Energy/CO2 entity, API, report, UI contract, seed hoặc demo claim.
+- [ ] `Site.CapacityKw` được remove bằng migration có rollback test.
+- [ ] Shared contracts không reference domain enum assembly.
+- [ ] Business handlers ghi Outbox; DI không resolve nhầm direct producer.
+- [ ] Saga/participant endpoints dùng EF Consumer Outbox/Inbox; consumed message chỉ Completed sau commit.
+- [ ] Unique constraints cho Saga `AlertId`, `Ticket.OriginAlertId` và active auto-ticket asset/category đã apply.
+- [ ] Preflight duplicate data và runbook chọn Ticket canonical đã chạy trước khi apply unique index.
+- [ ] `Completed` Saga được giữ làm tombstone; duplicate event sau completion không tạo Saga mới.
+- [ ] Duplicate/late message ở `Completed`/`Failed` được handle explicit, không phát sinh `_skipped` ngoài dự kiến.
+- [ ] Retry có budget hữu hạn; `StepTimeoutTokenId`/`RetryTokenId` cũ được unschedule khi Saga tiến bước hoặc Completed.
+- [ ] Commands dùng `Send` tới endpoint name cố định; events dùng `Publish`; queue/error queue quan sát được.
+- [ ] `AlertEscalationService` không còn map type giả về `BatteryAnomalyDetectedEvent`; escalation chưa-ack không start Saga lần hai.
+- [ ] Direct `BatteryAnomalyDetectedConsumer` không còn được register; queue cũ đã drain/decommission.
+- [ ] Auto-ticket cũ được reconciliation để `Alert.TicketId` không còn null khi Ticket tồn tại.
+- [ ] Happy path và toàn bộ failure matrix §53.10 pass.
+- [ ] `Alert.TicketId` được xác nhận trước khi Saga Completed.
+- [ ] Admin xem/reprocess Saga Failed được và có AuditLog.
+- [ ] Metrics/tracing/dashboard/alert rule hoạt động trên Docker Compose.
+- [ ] ADR-017 (Energy/CO2 removal) và ADR-018 (Saga forward recovery) merged vào `docs/adrs/`; ADR registry §40 + summary count §67 updated.
+- [ ] NotificationService consume `BatteryAlertEscalationRequestedEvent` + `AlertTicketSagaFailedEvent`; `NotificationTypeEnum` 16, 17 active; template registered §15.2.
+- [ ] Quartz `qrtz_*` schema deployed qua `AddQuartzPersistenceSchema`; cluster mode enable; restart-recovery integration test pass.
+- [ ] `PermissionCodes.TicketSagaView` cấp cho Manager read-only; `TicketSagaReprocess` chỉ Admin.
+- [ ] AuthService seed permission `ticket.saga.view` + `ticket.saga.reprocess` đã apply (task `#241`); JWT mới có claim đúng; `PermissionsChangedEvent` được publish để các service invalidate cache.
+- [ ] Mapping wire-value §53.7 và auto-derivation §2.4 đồng bộ; unit test mapping cho 15 wire value + unknown.
+- [ ] Swagger/Postman không còn endpoint Energy/CO2/`capacityKw`; có Saga admin endpoints + permission scope chính xác.
+- [ ] Runbook `saga-failed.md` + `saga-stuck.md` committed vào `docs/runbooks/`.
+- [ ] Runbook + Swagger/Postman/SRS cập nhật đồng bộ.
 
 ---
 
@@ -7198,7 +9124,7 @@ Cấu trúc đề xuất (90 phút demo):
 ## Scene 2 — Realtime monitoring (10 phút)
 1. Customer A app: view dashboard, see 1 active battery
 2. Switch to chart: voltage/current/temp/SOC realtime
-3. Show energy savings: "Đã tiết kiệm 12.5 kWh, 3,750 VND, 2.5kg CO2 tháng này"
+3. Show battery health: SOH, charging state, active alerts và 30-day health trend
 4. Run sensor simulator script that emits normal data
 5. View Grafana battery health dashboard
 
@@ -7206,11 +9132,12 @@ Cấu trúc đề xuất (90 phút demo):
 1. Run `./tools/inject-anomaly.sh BAT-DEMO-001 overheat 75`
 2. Within 30s: Customer A phone push notification 🔴
 3. AI classifies as "Failed" with 92% confidence
-4. Auto-ticket created (P1 Critical)
-5. Manager web: queue refreshes (SSE live update)
-6. Manager assigns Staff Long with priority P1
-7. SLA timer starts (4h countdown banner)
-8. Staff Long mobile: push notification "Bạn được giao ticket TKT-2605-0042"
+4. Alert–Ticket Saga creates/reuses Ticket và cập nhật `Alert.TicketId`
+5. Show Saga trace `Started → TicketProvisioned → AlertLinkRequested → Completed`
+6. Manager web: queue refreshes (SSE live update)
+7. Manager assigns Staff Long with priority P1
+8. SLA timer starts (4h countdown banner)
+9. Staff Long mobile: push notification "Bạn được giao ticket TKT-2605-0042"
 
 ## Scene 4 — Staff workflow (15 phút)
 1. Staff opens ticket detail
@@ -7246,9 +9173,10 @@ Cấu trúc đề xuất (90 phút demo):
 3. Trigger export training data for retrain
 
 ## Scene 9 — Operational visibility (5 phút)
-1. Open Grafana: business + system dashboards
+1. Open Grafana: business + system dashboards (+ **IoT Device Monitoring** dashboard §9.2 #5: online/offline, ingest/reject, queue depth)
 2. Show traces in Tempo for ticket flow
 3. Show maintenance announcement publish flow
+4. **IoT device demo:** show provisioned device `GW-DEMO-001` (heartbeat LastSeenAt cập nhật), rồi **dừng ESP32/simulator > 5 phút → `DeviceOffline` alert** tự sinh + notification (LWT tức thì nếu bật MQTT). Đây là điểm "đúng chất IoT" của hệ thống.
 
 ## Q&A buffer (15 phút)
 ```
@@ -7296,6 +9224,8 @@ echo "Demo environment ready ✅"
 - 50 audit log entries
 - 5 sample KB articles published
 - 10 sample notifications across roles
+- 1 Saga state=`Failed` (FailedStep=link-alert) để demo admin reprocess flow → Completed (Sprint 5B, §53)
+- 1 Saga state=`Completed` + 2 Alert link cùng 1 Ticket (reuse path, §53.6/53.8)
 
 ### 56.4. Demo helper scripts
 
@@ -7308,6 +9238,13 @@ echo "Demo environment ready ✅"
 
 # tools/trigger-incident.sh — declare incident across multiple tickets
 ./tools/trigger-incident.sh
+
+# Sprint 5B — Saga demo helpers (xem §53)
+# tools/simulate-saga-failure.sh — stop BatteryService, inject anomaly, show Saga Failed → restart → admin reprocess → Completed
+./tools/simulate-saga-failure.sh <asset-serial>
+
+# tools/inspect-saga.sh — query Saga state machine for a given AlertId
+./tools/inspect-saga.sh <alert-id>
 ```
 
 ### 56.5. Sample data realistic
@@ -7322,9 +9259,10 @@ Seed dùng tên thật Việt Nam:
 ### 56.6. Architecture poster
 
 `docs/demo/architecture-poster.pdf` (A1 print):
-- System overview diagram (4 microservices + AI module + clients)
-- Tech stack icons
-- Key metrics: 30+ entities, 150+ endpoints, 25+ events, 80% coverage
+- System overview diagram (4 microservices + AI module + clients + **IoT edge layer**: ESP32-S3 ↔ RS485/Modbus BMS ↔ hybrid HTTPS/MQTT broker → BatteryService — xem §52.1)
+- Tech stack icons (bao gồm ESP32-S3, EMQX/Mosquitto, Modbus/RS485)
+- Key metrics: 50+ entities, 220+ endpoints, 30+ integration events + 8 Saga contracts, ≥80% coverage, Saga state machine (5 state), 10 runbook
+- (tùy chọn) Sơ đồ IoT data flow 1 dòng: BMS → ESP32 → MQTT/HTTPS → TimescaleDB → anomaly → alert/ticket/notification
 - Sponsor logos / team photo
 
 Source file: `docs/demo/architecture-poster.drawio` (commit + export PDF on each major update).
@@ -7343,7 +9281,7 @@ Use **OBS Studio** for recording, host on YouTube unlisted.
 ### 56.8. Postman collection
 
 `docs/api/postman-collection.json`:
-- All 150+ endpoints grouped by service
+- All 220+ endpoints grouped by service (đồng bộ §67 stats; bao gồm Saga admin endpoints + IoT device management + ambient/environmental)
 - Environment file with `{{baseUrl}}, {{authToken}}, {{customerId}}, ...`
 - Pre-request script auto-refresh token
 - Example responses saved
@@ -7374,8 +9312,8 @@ A: Đã có guard BR-04-Extended (xem §33). Max pause minutes per priority, ...
 ## Q3: AI fail thì sao?
 A: Hybrid pipeline (xem §30.2) — threshold detector vẫn chạy độc lập, ...
 
-## Q4: Bảo mật đường truyền IoT gateway → backend?
-A: TLS 1.3, API key per device, rotation, ...
+## Q4: Bảo mật đường truyền IoT edge device (ESP32) → backend?
+A: TLS (HTTPS + MQTT-over-TLS 8883), **API key per-device chỉ lưu hash + rotate/revoke**, `X-Device-Code` + device phải Active, anti-spoofing (reject clock skew/outlier, device chỉ gửi cho battery trong mapping), MQTT có credential + **ACL topic per-device**, rate limit 60 req/phút/device, OTA verify SHA-256 + signed URL — xem §14.8, §52.10/§52.14.
 
 ## Q5: Scale 10,000 batteries thì sao?
 A: HPA (§54.5), TimescaleDB hypertable partition by time, ...
@@ -7409,6 +9347,12 @@ A: ADR-004 — ...
 - [ ] Browser bookmarks pre-set
 - [ ] Demo data seeded
 - [ ] Reset script tested
+- [ ] **Power outage contingency**: Powerbank cho laptop + phone (≥ 20,000 mAh); biết vị trí breaker phòng demo
+- [ ] **Pre-demo health check** (30 phút trước demo): chạy `tools/smoke-test.sh` verify mọi service xanh + Saga endpoint reachable
+- [ ] **Saga state pre-warmed**: 1-2 Saga đã ở state `Completed` + 1 đã ở `Failed` (để demo cả happy path + recovery — xem §56.3 seed)
+- [ ] **Mid-demo recovery script**: Nếu service crash, `tools/restart-stack.sh <service-name>` restart cụ thể service đó < 30s
+- [ ] **Audio check**: Microphone test (nếu recording dry-run hoặc remote audience)
+- [ ] **Time zone check**: Laptop clock đồng bộ NTP — log timestamps không lệch
 
 ### 56.13. Slide deck (PowerPoint/Google Slides)
 
@@ -7424,15 +9368,64 @@ Max 20 slides:
 9. Key features 3: Real-time alert + SLA
 10. Demo flow overview
 11. (Live demo placeholder)
-12. Technical highlights: state machine
+12. Technical highlights: Ticket state machine + **Alert–Ticket Saga (ADR-018)** + state diagram (Mermaid)
 13. Technical highlights: TimescaleDB + AI
-14. Technical highlights: Observability
-15. Test coverage + quality gates
-16. Sprint timeline
-17. Challenges + how solved
+14. Technical highlights: Observability + SRE practice (SLO + error budget + 10 runbook)
+15. Test coverage + quality gates (Saga test ≥21 case + restart-recovery)
+16. Sprint timeline (8 sprint + Sprint 5B P0 release gate)
+17. Challenges + how solved (vd: distributed consistency → Saga forward recovery)
 18. Future work
 19. Team contributions
 20. Q&A
+
+### 56.14. Post-Sprint 8 timeline (Demo prep → Defense)
+
+Sprint 8 kết thúc 6/9/2026. Defense thường 3-4 tuần sau (cuối tháng 9 hoặc đầu tháng 10 tùy lịch khoa).
+
+| Tuần | Mốc | Owner | Deliverable |
+|------|-----|-------|-------------|
+| 7/9 — 13/9 | Bug fix critical + polish slide | Toàn team | Slide deck v1 + demo script v1 |
+| 14/9 — 20/9 | Mentor review (GVHD Trương Long) + dry-run lần 1 | Leader + Mentor | Feedback feedback + fix list |
+| 21/9 — 27/9 | Dry-run lần 2 + 3 (mock defense) + final slide polish | Toàn team | Slide deck v2 + backup recording |
+| 28/9 — Defense day | Tech setup check (§56.12) + final rehearsal | Toàn team | Standby cho defense |
+
+**Buffer dependencies:**
+- Mentor schedule: Leader xác nhận GVHD lịch review trước Sprint 8 kết thúc.
+- **Backup mentor**: Nếu GVHD Trương Long busy/sick, Leader contact 1 trong các thầy khoa làm second-opinion review (đặt trước Sprint 8).
+- School calendar: Vietnam school year start ~5/9; team members có thể bận lớp học chính khóa từ 7/9. Mitigation: dry-run sau giờ học hoặc cuối tuần.
+- **Backup defense slot**: Nếu defense slot chính bị reschedule (mentor/khoa lý do), Leader đăng ký slot dự phòng 1 tuần sau.
+- Defense slot: Khoa thường thông báo trước 2 tuần. Leader theo dõi và coordinate.
+
+**Code freeze policy post-Sprint 8:**
+- Bug fix critical only (SEV1/SEV2 theo §40.4 severity matrix).
+- KHÔNG thêm feature mới.
+- KHÔNG refactor lớn.
+- Mọi commit phải có Leader approve.
+- Tag `v1.0-defense-ready` khi đóng băng cuối cùng.
+
+### 56.15. External dependency register
+
+Tổng hợp toàn bộ external services capstone depends on. Mỗi item có **quota** + **fallback** + **liên hệ trước**:
+
+| Service | Tier | Quota | Risk demo day | Fallback | Liên hệ trước |
+|---------|------|-------|---------------|---------|---------------|
+| OpenMeteo (weather API) | Free | 10,000 calls/day (100 sites OK xem §1.10) | Quota hết khi demo Sprint 8 | Cache 1h + mock client trong demo seed | Không cần liên hệ — free tier |
+| Expo Push Notification | Free | Unlimited cho dev sandbox | Token expire hoặc sandbox throttle | In-app notification fallback (xem R-09) | Tạo Expo account + verify trước Sprint 6 |
+| SendGrid / Mailgun (email) | Free | 100 emails/day SendGrid; 1000 Mailgun | Demo gửi nhiều email → quota hết | EmailService log + mock template render | Đăng ký account + verify domain Sprint 6 đầu |
+| SMS provider (eSMS/Twilio) | Trial credit | Twilio $15 credit, eSMS 100 SMS trial | Demo OTP nhiều → hết credit | OTP fallback in-app (xem Q-14) | Đăng ký + nạp credit Sprint 6 |
+| Google OAuth | Free | 100 users/day cho test app | Demo nhiều user login → block | Manual create account fallback | Setup OAuth client Sprint 1 |
+| Sentry (error tracking) | Free tier | 5k errors/month | Demo error rate spike → quota | Self-host hoặc disable Sentry trong demo | Sprint 7 trước observability deploy |
+| Statuspage.io (status page) | Free | 1 page + 10 components | Không có | Static HTML self-host | Sprint 7 |
+| NASA Ames dataset | Public | N/A | Download fail | Mirror trên team Drive | Sprint 2 (AI training) |
+| Hardware partner (ESP32-S3 pilot + RS485/BMS) | TBD | N/A | Partner delay hardware delivery | Pure simulator/ESP32 `mock_bms` demo (đã có) | **Sprint 5B kết thúc** (xem §17 Sprint IoT-1) |
+| RabbitMQ delayed-message plugin | N/A — không dùng | N/A | N/A | Đã chọn Quartz alternative (xem §53.8) | Không cần |
+| Cloudflare (HTTPS proxy) | Free | Unlimited | DDoS during demo | Direct origin fallback | Sprint 7 nếu deploy K8s |
+
+**Action item Leader:**
+- Đăng ký tất cả service trước Sprint 5B kết thúc (40 ngày tới).
+- Lưu credentials vào team password manager (1Password free tier hoặc Bitwarden).
+- Document setup steps vào `docs/external-deps-setup.md`.
+- Monitor quota hàng tuần qua Grafana — set alert "quota > 80% used".
 
 ---
 
@@ -7525,9 +9518,9 @@ GET    /api/v1/admin/ai/inference-stats?from=&to=
 
 ---
 
-## 58. Edge cases extension (EC-21..EC-30) — P0
+## 58. Edge cases extension (EC-21..EC-34) — P0
 
-Bổ sung 10 edge cases vào §38 matrix:
+Bổ sung 14 edge cases vào §38 matrix:
 
 | # | Edge case | Rule giải quyết | Implementation |
 |---|-----------|----------------|----------------|
@@ -7541,6 +9534,10 @@ Bổ sung 10 edge cases vào §38 matrix:
 | EC-28 | Attachment có malware | Virus scan (ClamAV integration) trước khi store | FileStorageService middleware |
 | EC-29 | Customer thay đổi email khi có active sessions | Revoke all sessions sau email change + require re-login | `ChangeEmailCommandHandler` revoke RT_* keys |
 | EC-30 | Daylight Saving Time transition (mặc dù VN không DST) | UTC mọi nơi, FE convert | Convention enforced |
+| EC-31 | `BatteryAnomalyDetectedEvent` bị redeliver sau Saga Completed | Giữ Completed tombstone theo `AlertId`, ignore idempotently | Saga repository không auto-delete Completed row |
+| EC-32 | Hai Critical Alert khác nhau cùng asset/category đến đồng thời | Chỉ 1 active auto-ticket, cả hai Alert link cùng Ticket | Partial unique guard + reload winner |
+| EC-33 | Ticket đã commit nhưng BatteryService down trước link | Không xóa Ticket; retry/reprocess bước link | Forward recovery + durable scheduler |
+| EC-34 | Callback success/rejection đến trễ sau timeout | Không corrupt state; log metric và chỉ reprocess step hợp lệ | State guard + correlation + audit |
 
 ---
 
@@ -7691,6 +9688,17 @@ GET /api/v1/admin/background-jobs
     ...
   ]
 ```
+
+### 60.4bis. Saga admin UI (Sprint 5B — xem §53.10/53.11)
+
+Web Admin portal phải implement page `/admin/sagas/alert-ticket` với:
+- **List view:** filter `state=Failed/All`, sort by `UpdatedAtUtc DESC`, paginate 50/page; cột hiển thị `AlertId`, `CurrentState`, `TicketId` (nếu có), `FailedStep`, `LastAttemptAtUtc`, `ManualReprocessCount`, action `Reprocess`.
+- **Detail view:** state machine timeline (`StartedAtUtc` → state transitions → `CompletedAtUtc`/`FailedAtUtc`), payload snapshot (`AlertId`, `BatteryAssetId`, `CustomerId` → resolve qua AuthService read-model), error context (`LastError`, `FailureCode`), audit (`LastReprocessedBy`, `LastReprocessReason`, `ManualReprocessCount`).
+- **Reprocess action:** require confirmation modal + reason input (sanitize XSS), generate UUID v4 client-side cho `Idempotency-Key`, gửi `POST /api/v1/admin/sagas/alert-ticket/{alertId}/reprocess` với header `Idempotency-Key`.
+- **Permission:** check `ticket.saga.view` (page visible) + `ticket.saga.reprocess` (button enable). Manager chỉ thấy read-only.
+- **Realtime update:** SSE channel `saga-state-changed` (xem §34) hoặc poll 10s.
+
+FE owner: Trí + Minh (Sprint 6 hoặc Sprint 7 — không phải Sprint 5B vì 5B chỉ làm BE). BE Sprint 5B chỉ implement endpoint, FE consume sau.
 
 ### 60.5. Cache management
 
@@ -8001,8 +10009,11 @@ Run in CI on each migration change, commit SVG.
 - `event-flow.mmd`
 - `state-machine-ticket.mmd`
 - `sequence-ticket-create.mmd`
+- `state-machine-alert-ticket-saga.mmd` (Sprint 5B — xem §53.5; Initial → TicketRequested → TicketProvisioned → AlertLinkRequested → Completed/Failed + timeout/fault transitions)
+- `sequence-alert-ticket-saga-happy.mmd` (Sprint 5B — happy path: Alert → CreateTicketFromAlertCommand → TicketProvisionedForAlertEvent → LinkAlertToTicketCommand → AlertLinkedToTicketEvent → Completed)
+- `sequence-alert-ticket-saga-failure.mmd` (Sprint 5B — failure path: BatteryService down → timeout → Failed → admin reprocess → recovery)
 
-Auto-render to SVG via GitHub Actions on push.
+Auto-render to SVG via GitHub Actions on push. Sprint 5B `#240` documentation sync task verify 3 Mermaid file mới đã render đúng và link từ `docs/adrs/ADR-018-*`.
 
 ### 65.4. Code coverage report hosted
 - CI publishes coverage report to GitHub Pages.
@@ -8015,6 +10026,90 @@ Auto-render to SVG via GitHub Actions on push.
 - Parse commits since last tag.
 - Group by type: feat/fix/refactor/docs/test.
 - Output `CHANGELOG.md`.
+
+**CHANGELOG.md format** (Keep-a-Changelog convention):
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+### Changed
+### Deprecated
+### Removed
+### Fixed
+### Security
+```
+
+**Sprint 5B entry template** (task `#240`):
+
+```markdown
+## [1.5.0-beta] — 2026-07-26 (Sprint 5B)
+
+### Added
+- **Alert–Ticket Saga** orchestration (ADR-018): durable forward-recovery cho luồng Critical Alert → auto-create Ticket → link `Alert.TicketId`. PR #237, #238, #239.
+- Saga admin endpoints `/api/v1/admin/sagas/alert-ticket/*` (View + Reprocess). PR #239.
+- 2 NotificationType: `BatteryAlertEscalationPending` (16), `AlertTicketSagaFailed` (17). PR #238.
+- 8 Prometheus metric + 2 AlertManager rule cho Saga ops. PR #239.
+- 3 runbook: `08-saga-failed.md`, `09-saga-stuck.md`, `10-saga-duplicate-canonical.md`. PR #240.
+- 3 Mermaid diagram trong `docs/architecture/` cho Saga. PR #240.
+- ADR-017 (Remove Energy/CO2 scope), ADR-018 (Orchestrated Saga). PR #233, #239.
+- AuthService permission `ticket.saga.view` + `ticket.saga.reprocess`. PR #241.
+
+### Changed
+- BatteryService `AlertEscalationService` publish `BatteryAlertEscalationRequestedEvent` (thay vì republish `BatteryAnomalyDetectedEvent`). PR #238.
+- MassTransit Outbox/Inbox sang EF Consumer Outbox cho Saga endpoints (Redis Inbox vẫn dùng cho no-DB-change consumer). PR #235.
+- TicketService dùng Quartz persistent scheduler cho Saga retry/timeout. PR #235.
+
+### Removed
+- **BREAKING**: `Site.CapacityKw` column và toàn bộ API contract liên quan. PR #234.
+- **BREAKING (scope)**: tất cả Energy/CO2 analytics khỏi roadmap (ADR-017). PR #233.
+
+### Fixed
+- DI overwrite bug: `IIntegrationEventOutboxWriter` bị direct producer override. PR #235.
+- Redis Inbox `TryMarkProcessedAsync` ghi key trước business commit → giờ tách thành EF Consumer Inbox cho DB consumer. PR #235.
+```
+
+**Sprint IoT-1 entry template** (IoT v2 — ESP32 + MQTT, ADR-016):
+
+```markdown
+## [1.6.0-iot] — 2026-08-09 (Sprint IoT-1)
+
+### Added
+- **IoT device management** (§52): `IotDevice`, `IotDeviceHeartbeat` (hypertable), `IotDeviceCalibration`, `IotFirmwareRelease`, `IotFirmwareUpdateLog` + migration `AddIotDeviceManagement`. PR #154.
+- API key per-device (hash + rotate/revoke) + provision/heartbeat/firmware-check/calibration endpoints + admin device CRUD. PR #154.
+- `SensorReading.SourceType` (Bms/IotGateway/External — B9) + `SensorReading.SensorSourceCode` (primary/redundant/external-temp). PR #154.
+- `IotDeviceWentOfflineEvent` + `IotDeviceWentOfflineConsumer` (NotificationService) + routing DeviceOffline. PR #154.
+- `IotDeviceOfflineDetectionBackgroundService` + `CalibrationExpiryNotificationService`. PR #154.
+- AuthService permission `iot.device.view/manage`, `iot.firmware.manage`, `iot.calibration.manage`. PR #154.
+- 6 IoT Prometheus metric + IoT Device Monitoring Grafana dashboard + 2 AlertManager rule. PR #154.
+- **(P3, optional)** MQTT realtime: broker `infra/mqtt/` (EMQX/Mosquitto + TLS 8883 + ACL per-device), `MqttBridgeBackgroundService`, LWT offline, downlink cmd (§52.14).
+
+### Changed
+- IoT edge device chuẩn đổi Raspberry Pi → **ESP32-S3** + RS485/Modbus multi-drop; transport hybrid HTTPS + MQTT (ADR-016 reframe).
+- `POST /api/sensor-readings/batch`: thêm `X-Device-Code`/`Idempotency-Key`/`deviceTimestamp`, mapping `batteryAssetSerial`; giữ legacy `batteryAssetId` cho simulator/MVP.
+
+### Deprecated
+- `iot.md` (Raspberry Pi v1, Python) — thay bằng `newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`.
+```
+
+**Commit message convention** (Conventional Commits) — `tools/release-notes.sh` parse:
+- `feat(saga): ...` → Added section
+- `fix(saga): ...` → Fixed section
+- `refactor(messaging): ...` → Changed section
+- `BREAKING CHANGE: ...` footer → Removed/Breaking section
+- `docs(adr): ...` → not in CHANGELOG (in ADR registry §40.1)
+
+**Git tag convention:**
+- Sprint 5B release: `v1.5.0-beta-sprint5b` sau khi `#239` merge.
+- Post-cutover smoke test pass: `v1.5.0`.
+- Sprint IoT-1 release: `v1.6.0-iot` sau khi `#154` merge (provision + heartbeat + ingest + offline pass).
 
 ---
 
@@ -8034,7 +10129,8 @@ Auto-render to SVG via GitHub Actions on push.
 - [ ] FileStorageService — media pipeline (resize, EXIF strip, virus scan)
 - [ ] Reports endpoints (Ticket + Battery)
 - [ ] Search functionality
-- [ ] Energy metrics calculation + dashboard
+- [ ] Alert–Ticket Saga create/reuse/link + failure recovery
+- [ ] Energy/CO2 scope cleanup verified; `Site.CapacityKw` removed
 - [ ] App config + feature flags + maintenance announcements
 - [ ] Status page integration
 - [ ] Admin tools (impersonation, feature flag, system config)
@@ -8048,6 +10144,12 @@ Auto-render to SVG via GitHub Actions on push.
 - [ ] TimescaleDB hypertable + retention + continuous aggregate
 - [ ] Indexes verified per query plan
 - [ ] Zero-downtime migration pattern documented
+- [ ] **Sprint 5B**: `RemoveSiteCapacityKw` applied (`#234`)
+- [ ] **Sprint 5B**: `AddDurableMessagingFoundation` applied per service (`#235`)
+- [ ] **Sprint 5B**: `AddQuartzPersistenceSchema` applied trên `ticket_db` (`#235`)
+- [ ] **Sprint 5B**: `AddAlertTicketSagaFoundation` + `AddAlertTicketLinkIndex` applied (`#236`)
+- [ ] **Sprint 5B**: `SeedSagaPermissions` + `BindSagaPermissionsToRoles` applied trên `auth_db` (`#241`)
+- [ ] **Sprint 5B**: preflight duplicate cleanup runbook executed trước unique constraint apply
 
 ### 66.3. Infrastructure
 - [x] Docker Compose config validated with `--env-file .env.Docker`
@@ -8059,6 +10161,11 @@ Auto-render to SVG via GitHub Actions on push.
 - [ ] Monitoring (Prometheus + Grafana + Loki + Tempo)
 - [ ] AlertManager rules
 - [ ] AI Module deployed + health check
+- [ ] **Sprint 5B**: Quartz persistent scheduler started + cluster checkin OK (xem §8.3.11bis)
+- [ ] **Sprint 5B**: MassTransit EF Consumer Outbox/Inbox tables active per service
+- [ ] **Sprint 5B**: Feature flag `AlertTicketDispatchEnabled`/`AlertTicketSagaEnabled` config đúng default (xem §53.9)
+- [ ] **Sprint 5B**: Saga endpoint runtime config apply (PrefetchCount 4/8/8/16 — §8.3.11bis)
+- [ ] **Sprint 5B**: CI `.github/workflows/ci.yml` có step "Energy/CO2 scope guard" (§53.2bis)
 
 ### 66.4. Quality
 - [ ] Test coverage ≥ 80% all services
@@ -8067,19 +10174,27 @@ Auto-render to SVG via GitHub Actions on push.
 - [ ] Load test results documented
 - [ ] Smoke test suite < 2 phút
 - [ ] Pen test internal done
+- [ ] **Sprint 5B**: `AlertTicketSagaStateMachineTests` ≥ 21 case pass (đồng bộ §53.10 matrix)
+- [ ] **Sprint 5B**: Restart-recovery integration test pass (kill TicketService giữa transaction)
+- [ ] **Sprint 5B**: Saga PR review checklist 34 mục đã tick (§18.2bis) cho mỗi PR `#237`–`#239`
+- [ ] **Sprint 5B**: Contract test cho 8 Saga message + V1/V2 BatteryAnomaly pass
+- [ ] **Sprint 5B**: DI test assert outbox writer không bị direct producer override
 
 ### 66.5. Documentation
-- [ ] OpenAPI / Swagger aggregated at gateway
-- [ ] Postman collection
-- [ ] README per service
-- [ ] CLAUDE.md updated
-- [ ] 15 ADRs documented
-- [ ] DR plan + 7 runbooks
+- [ ] OpenAPI / Swagger aggregated at gateway (bao gồm Saga admin endpoints)
+- [ ] Postman collection (có Saga folder + Idempotency-Key example)
+- [ ] README per service (TicketService có Saga ops section)
+- [ ] CLAUDE.md updated (bao gồm pattern Orchestrated Saga + EF Consumer Outbox/Inbox — §0bis.2)
+- [ ] 18 ADRs documented (xem §40.1), đặc biệt ADR-016/017/018 cho Sprint 5B
+- [ ] DR plan + 10 runbooks (7 baseline + 3 Saga: `08-saga-failed.md`, `09-saga-stuck.md`, `10-saga-duplicate-canonical.md`)
 - [ ] PIA + DPA + cookie config
 - [ ] SECURITY.md
-- [ ] CHANGELOG.md auto-generated
+- [ ] CHANGELOG.md auto-generated (entry Sprint 5B liệt kê tất cả task `#233`–`#241`)
 - [ ] ERD diagrams committed
-- [ ] Edge cases matrix (30+)
+- [ ] Edge cases matrix (34+)
+- [ ] **Sprint 5B**: 3 Mermaid diagram trong `docs/architecture/` (state-machine + 2 sequence — §65.3)
+- [ ] **Sprint 5B**: `docs/onboarding/be-newcomer.md` có 3 Saga section (Local setup + Debug + Common mistakes — §40.6)
+- [ ] **Sprint 5B**: GDPR retention table cập nhật cho Alert/Saga/MassTransit/Quartz tables (§39.3)
 
 ### 66.6. Demo deliverables
 - [ ] Demo script (9 scenes, 90 phút)
@@ -8094,7 +10209,8 @@ Auto-render to SVG via GitHub Actions on push.
 - [ ] Tech setup checklist verified
 
 ### 66.7. Business value showcase
-- [ ] Customer dashboard with energy + cost + CO2 savings
+- [ ] Customer dashboard with realtime battery health, SOH trend và active alerts
+- [ ] Alert → Ticket traceability visible từ cả hai phía
 - [ ] AI prediction visible + explainable (confidence + classification)
 - [ ] SLA compliance reports
 - [ ] CSAT score
@@ -8103,8 +10219,8 @@ Auto-render to SVG via GitHub Actions on push.
 ### 66.8. "Bonus points" academic
 - [ ] AI feedback loop demonstrable
 - [ ] Drift detection working
-- [ ] Real IoT device sending data (even if RPi mock)
-- [ ] Carbon savings number visible
+- [ ] Real IoT device sending data (even if ESP32 `mock_bms`)
+- [ ] Saga failure/recovery trace demonstrable without duplicate Ticket
 - [ ] GDPR export demo
 - [ ] Postmortem template ready (if incident happens during demo, recover gracefully)
 
@@ -8123,7 +10239,7 @@ Auto-render to SVG via GitHub Actions on push.
 | Security & Compliance | 8/10 | **9.5/10** |
 | Testing strategy | 8.5/10 | **9.5/10** |
 | IoT/Device management | 4/10 | **10/10** ✅ |
-| Solar-specific metrics | 2/10 | **10/10** ✅ |
+| Distributed consistency / Saga | 2/10 | **10/10** ✅ |
 | Production deployment | 5/10 | **9/10** ✅ |
 | Mobile/Web app mgmt | 5/10 | **9/10** ✅ |
 | Demo/Presentation | 3/10 | **10/10** ✅ |
@@ -8132,19 +10248,23 @@ Auto-render to SVG via GitHub Actions on push.
 
 | Metric | Value |
 |--------|-------|
-| Total sections | **66** |
+| Total sections | **67** numbered sections (§0..§18, §20..§67 — §19 reserved, not used) + **8 bis/ter sub-sections** (§6bis, §7.5bis, §8.3.11bis, §18.2bis, §40.3bis, §53.2bis, §53.2ter, §60.4bis) + **sequential additions Sprint 5B** (§11.7 CI time, §27.9-11 Saga troubleshooting, §56.14 post-Sprint 8 timeline, §56.15 external deps) |
 | Total entities defined | **50+** |
 | Total commands | **90+** |
 | Total queries | **60+** |
 | Total integration events | **30+** |
 | Total endpoints | **220+** |
 | Total background services | **25+** |
-| ADRs documented | **16** (+ ADR-016 IoT protocol) |
-| Runbooks | **10+** |
-| Edge case rules | **30** |
+| ADRs documented | **18** (+ ADR-016 IoT protocol, ADR-017 Energy/CO2 scope removal, ADR-018 Alert–Ticket Saga) |
+| Runbooks | **10** (7 baseline + 3 Saga: `08-saga-failed`, `09-saga-stuck`, `10-saga-duplicate-canonical`) |
+| Edge case rules | **34** (EC-01..EC-34) |
+| Risk register items | **29** (R-01..R-29, bao gồm Saga risks R-14..R-22, capacity/ext-deps R-23..R-27 và IoT v2 pivot R-28..R-29) |
+| Q&A thống nhất | **25** (Q-01..Q-25, bao gồm Saga design Q-19..Q-25) |
+| Troubleshooting playbook | **11** (8 baseline + 3 Saga case ở §27.9-11) |
 | Demo scenes scripted | **9** |
-| Performance SLAs | per endpoint |
-| Sprint backlog | **8 sprint detailed** |
+| Performance SLAs | per endpoint (xem §13.4 + §40.5 SLO + error budget) |
+| Sprint backlog | **8 sprint chính** + **Sprint 5B** (release gate `#233-#241`) + **Sprint IoT-1** (song song Sprint 6) + **post-Sprint 8 → defense timeline** (xem §56.14) |
+| External dependency register | **11 services** (xem §56.15) |
 
 ---
 
@@ -8153,17 +10273,31 @@ Auto-render to SVG via GitHub Actions on push.
 **Document lifecycle:**
 - v1 (2026-05-12 morning): §0-29 initial roadmap
 - v2 (2026-05-12 afternoon): §30-51 gap analysis addendum
-- v3 (2026-05-12 evening): §52-67 final completeness — IoT, solar metrics, K8s, app mgmt, demo prep, intra-section additions
+- v3 (2026-05-12 evening): §52-67 final completeness — IoT, K8s, app mgmt, demo prep, intra-section additions
+- v4 (2026-06-10): bỏ Energy/CO2 + `Site.CapacityKw`; bổ sung Alert–Ticket Saga và Sprint 5B tasks `#233–#241`
+- v4.1 (2026-06-10): completeness pass — ADR-017/018 vào registry; NotificationService consume escalation/failure event + enum 16/17; PriorityCalculator mapping đồng bộ wire-value §53.7 (sau v4.5 reconcile: mở rộng đến 15 đồng bộ §1.3.6 domain enum, KHÔNG phải custom Saga numbering 1-11); làm rõ `Alert.TicketId` đã có sẵn (chỉ thêm index); Saga subscribe V1+V2; Quartz NuGet + `AddQuartzPersistenceSchema`; Manager đọc Saga; thêm task `#240` doc sync; owner mapping P0; mở rộng test matrix & DoD; glossary Tombstone/EF Consumer Outbox/Wire value
+- v4.2 (2026-06-10): observability + ops completeness — Grafana metric/alert rule Saga; DR plan + SLO + rate limit; structured logging convention; migration ordering với preflight cleanup gate; demo seed/helper script Saga; troubleshooting playbook 3 case mới; risk register R-19..R-22; câu hỏi Q-19..Q-25; cache strategy Saga; task `#241` AuthService permission seed; AlertTicketSagaStateMachineTests ≥ 21 cases đồng bộ test matrix; Phase 2 checklist publish event + escalation BG service
+- v4.3 (2026-06-10): execution + planning completeness — Saga PR review checklist 34 mục (§18.2bis); endpoint runtime config (§8.3.11bis); newcomer onboarding Saga sections (§40.6); merge order + 9-task matrix (§53.9); §28 paths recap orphan cleanup; §66 final checklist 22+ Saga acceptance items; §17 Sprint 5B/6/7/8 task descriptions cross-ref sync; Saga runbook samples 3 file (§40.3); postmortem template (§40.3bis); severity matrix + on-call playbook (§40.4); pre-commit hook scope-guard + PR template (§53.2ter); CHANGELOG format + Sprint 5B entry + commit convention (§65.5); SLO error budget + burn rate YAML (§40.5 + §9.2); capacity warning Duy overload + R-23 (§17); Sprint IoT-1 owner Thái + R-24; Sprint 6/7/8 owner explicit; Bus factor warning + KT plan + R-25; FE work song song Sprint 5B; slide deck Saga slide; post-Sprint 8 → defense timeline (§56.14); external dependency register 11 services + R-26/R-27 (§56.15); TOC §67 + §0.2 4 row mới
+- v4.4 (2026-06-10): physical reality + meta-tích lũy — Sprint 5B working days clarification (5 dev-day, 4 mitigation option); local dev hardware requirement table + cleanup script (§40.6); CI execution time budget §11.7 (16 phút Sprint 5B end, 5 mitigation); demo day contingency 6 item (power outage, smoke test, Saga pre-warm, mid-demo recovery, audio, NTP) + backup mentor + backup defense slot (§56.12/56.14); §28 Scripts recap 11 orphan cleanup; document header v4.3 reflect đầy đủ scope; §23 risk register intro 4-group breakdown
+- v4.5 (2026-06-10): final full-file review (multi-pass) — **fix wire value/domain enum reconcile**: §53.7 Saga wire value table giờ khớp `AnomalyTypeEnum` §1.3.6 (1-15 thay vì 1-11 cũ); §2.4 PriorityCalculator table mở rộng 15 row; §1.3.5 Alert.AnomalyType note "1–14" → "1–15"; §1.6 ThresholdAnomalyDetector "14 rule check" → "15 rule check"; §1.7 BatteryAnomalyDetectedEvent comment đổi từ "không reference Domain enum" sang "wire value = AnomalyTypeEnum integer §1.3.6"; §26 Glossary Wire value redefined "bằng integer của Domain enum"; §1.9 ThresholdAnomalyDetectorTests 14→15 case; §2.9 CreateTicketFromAlertConsumerTests "đủ 8 anomaly" → "đủ 15 anomaly"; §51 Entity count 17→50+ đồng bộ §67 stats; §56.6 Architecture poster metrics update đồng bộ §67; §56.8 Postman "150+ endpoints" → "220+ endpoints" đồng bộ §67; §50 Sprint 7 mitigation "1.5×" → "1.6×" đồng bộ table; §30.6 V2 Classification comment làm rõ "wire value khớp AnomalyClassificationEnum §30.3 (1=Normal/2=Degrading/3=Failed), null = AI chưa classify"; thay "pass 55" thành "v4.5" trong glossary để tránh dependency vào pass numbering nội bộ; **§5.2 Reports endpoint catalog stale fix**: TicketService 8→9 endpoints (thêm `GET /reports/saga-failed-rate` đồng bộ §17 Sprint 7 task #114), BatteryService 5→7 endpoints (thêm `GET /reports/environmental-incidents` + `GET /reports/ambient-trend` đồng bộ Sprint 5B ambient + §17 carryover).
 
-**Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy.
-**Last major update:** 2026-05-12 — Final completeness edition (§52-67).
+- v4.6 (2026-06-11): **IoT v2 pivot — Raspberry Pi → ESP32-S3 + hybrid HTTPS/MQTT** (đồng bộ `newiot.md`/`overall.iot.md`/`wiring-diagram.md`/`hardware-bom.csv`). ADR-016 reframe (ESP32 + hybrid transport, RS485/Modbus multi-drop); §52 đổi "Gateway"→"Edge Device", sơ đồ §52.1 thêm MQTT broker/bridge; §52.5 payload đầy đủ + §52.6 LWT offline tức thì + §52.8 CalibrationExpiryNotificationService; **§52.9 cross-source tag table** (BMS/primary vs INA226/redundant) + **§52.9bis** ESP32 feed ambient/incident + **§52.14 MQTT realtime** (broker/bridge/LWT/downlink/ACL per-device) + **§52.15 failure modes**; §1.3.4 thêm `SensorSourceCode` (đang thiếu); §52.2 `batteryMappings[]` multi-drop + heartbeat ESP32 field mapping + key scope `environmental.ingest`; §0bis.3 route IoT; §1.7 khai báo `IotDeviceWentOfflineEvent` + §3.4 routing + §16.3 consumer; §20 permission `iot.device/firmware/calibration.*`; §12.1 seed 1 IoT device + §12.2/§51 migration `AddIotDeviceManagement`; §14.8 IoT device security; §9.2 dashboard #5 IoT Device Monitoring + 2 alert rule; §1.8 reconcile global key vs per-device; §26 glossary 12 thuật ngữ IoT + IoT references; §23 R-28/R-29 (ESP32 firmware/BMS procurement). **Energy/CO2 conflict resolved** (§53.1): INA226 = cross-source validation, energy demo optional ngoài software scope (ADR-017 giữ nguyên). ADR count giữ 18 (mở rộng ADR-016, không mint mới); EC/consumer/template count baseline giữ nguyên (IoT-1 attribute +1).
+
+**Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga, IoT v2 pivot).
+**Last major update:** 2026-06-11 (v4.6) — IoT v2 pivot ESP32 + MQTT (5-pass review, đồng bộ 4 file IoT mới).
 
 **Recommended reading order for newcomer:**
 1. §0-0bis (context — 10 phút)
 2. §1, §2, §3 (3 main services — 30 phút)
-3. §30, §52, §53 (AI, IoT, energy — 20 phút)
+3. §30, §52, §53 (AI, IoT, scope cleanup và Saga — 25 phút)
 4. §38 + §58 (edge cases matrix — 10 phút)
-5. §17 (sprint backlog — 10 phút)
-6. §56 (demo prep — when nearing deadline)
+5. §17 (sprint backlog + capacity warnings — 15 phút)
+6. **§23 (29 risk items — 10 phút) ← bắt buộc nắm trước khi join sprint**
+7. **§40 (ops: ADR + DR + runbook + postmortem — 15 phút) ← critical cho on-call**
+8. §56 (demo prep — when nearing deadline)
+9. **§60.4bis (Saga admin UI spec — 5 phút) ← FE Trí + Minh required reading**
+10. **§66 (final completeness checklist — 10 phút) ← Leader weekly review**
+
+Total ~2 giờ cho newcomer onboarding đọc canonical sections.
 
 **Total reading time end-to-end:** ~3-4 hours for complete understanding.

@@ -112,6 +112,6 @@ public class CreateAccountCommandHandlerTests
             RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(404);
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SharedInfrastructure.Persistence.Interceptors;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Sagas;
 
 namespace TicketService.Infrastructure.Persistence;
 
@@ -26,6 +27,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<StaffAccount> StaffAccounts { get; set; }
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
+    public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -35,6 +37,17 @@ public class TicketDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TicketDbContext).Assembly);
+
+        if (Database.IsNpgsql())
+        {
+            // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
+            modelBuilder.Entity<AlertTicketSagaState>()
+                .Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+        }
+
         base.OnModelCreating(modelBuilder);
     }
 }

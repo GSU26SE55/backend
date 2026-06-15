@@ -67,7 +67,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
   ingress:
   - from:
     - podSelector:
@@ -89,7 +89,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, postgres-database-init, postgres-backup] }
+        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, ticketservice, notificationservice, postgres-database-init, postgres-backup] }
     ports:
     - { protocol: TCP, port: 5432 }
 ---
@@ -106,7 +106,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
     ports:
     - { protocol: TCP, port: 6379 }
 ---
@@ -123,7 +123,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
     ports:
     - { protocol: TCP, port: 5672 }
     - { protocol: TCP, port: 15672 }
@@ -156,7 +156,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, cadvisor] }
+    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, cadvisor] }
   ingress:
   # Prometheus pod (kube-prometheus-stack)
   - from:

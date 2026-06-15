@@ -37,7 +37,7 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (!string.Equals(account.Email, googleUser.Email, StringComparison.OrdinalIgnoreCase))
-            return Fail(400, "Email Google không khớp với email tài khoản hiện tại.");
+            return Fail(422, "Email Google không khớp với email tài khoản hiện tại.");
 
         var googleAlreadyLinked = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -68,7 +68,6 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Google", Detail = message } }
     };
 
     private async Task UpsertGoogleAvatarProfileAsync(Domain.Entities.Account account, string? pictureUrl)

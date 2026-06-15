@@ -34,7 +34,7 @@ public class SiteFullHandlerTests
     public async Task Create_Happy_Returns201()
     {
         var b = new MockUnitOfWorkBuilder().WithCustomerAccounts(Customer());
-        var r = await new CreateSiteCommandHandler(b.Build()).Handle(new CreateSiteCommand { Name = "HN", CustomerId = Cust, InstallDate = DateTime.UtcNow, Address = "Hanoi", Latitude = 10, Longitude = 20, CapacityKw = 100, ContactPersonName = "A", ContactPersonPhone = "0901" }, default);
+        var r = await new CreateSiteCommandHandler(b.Build()).Handle(new CreateSiteCommand { Name = "HN", CustomerId = Cust, InstallDate = DateTime.UtcNow, Address = "Hanoi", Latitude = 10, Longitude = 20, ContactPersonName = "A", ContactPersonPhone = "0901" }, default);
         r.StatusCode.Should().Be(201);
         b.Sites.Verify(s => s.AddAsync(It.IsAny<Site>()), Times.Once);
     }
@@ -168,12 +168,14 @@ public class SiteFullHandlerTests
     }
 
     [Fact]
-    public async Task GetMySites_Unauthenticated_Returns401()
+    public async Task GetMySites_InvalidUserIdClaim_Returns500()
     {
+        // [Authorize] middleware đã pass nhưng claim UserId không parse được sang Guid →
+        // đây là server-side data integrity issue (JWT bị malformed/thiếu claim), không phải client auth fail.
         var c = new Mock<ICurrentUserService>();
         c.SetupGet(x => x.UserId).Returns((string?)null);
         var r = await new GetMySitesQueryHandler(new MockUnitOfWorkBuilder().Build(), c.Object).Handle(new GetMySitesQuery(), default);
-        r.StatusCode.Should().Be(401);
+        r.StatusCode.Should().Be(500);
     }
 
     [Fact]

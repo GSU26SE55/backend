@@ -80,7 +80,9 @@ public class AuthDataSeederTests : IDisposable
         await NewSeeder().SeedAsync();
 
         (await _ctx.Roles.CountAsync()).Should().Be(4);
-        (await _ctx.Users.CountAsync()).Should().Be(1);
+        // Seeder tạo 1 admin + 5 sample accounts (1 Manager + 3 Staff tier 1/2/3 + 1 Customer).
+        // Idempotent — lần 2 không tạo thêm.
+        (await _ctx.Users.CountAsync()).Should().Be(6);
     }
 
     [Fact]

@@ -44,7 +44,7 @@ public class AuthControllerTests
     public async Task Login_DelegatesToMediator()
     {
         _mediator.Setup(m => m.Send(It.IsAny<LoginCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new TokenDTO { AccessToken = "a", RefreshToken = "r" } });
+            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new LoginResultDto { Tokens = new TokenDTO { AccessToken = "a", RefreshToken = "r" } } });
 
         var result = await NewCtrl().Login(new LoginCommand { Email = "u@e.com", Password = "p" }, CancellationToken.None) as ObjectResult;
 
@@ -99,7 +99,7 @@ public class AuthControllerTests
     public async Task RefreshToken_DelegatesToMediator()
     {
         _mediator.Setup(m => m.Send(It.IsAny<RefreshTokenCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new TokenDTO() });
+            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new LoginResultDto { Tokens = new TokenDTO() } });
 
         var result = await NewCtrl().RefreshToken(new RefreshTokenCommand { RefreshToken = "x" }, CancellationToken.None) as ObjectResult;
 
@@ -266,7 +266,7 @@ public class AuthControllerTests
         ctx.Request.Headers["Cookie"] = "g_oauth_state=match-state";
 
         _mediator.Setup(m => m.Send(It.IsAny<GoogleCallbackCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new TokenDTO { AccessToken = "a", RefreshToken = "r" } });
+            .ReturnsAsync(new LoginResponse { IsSuccess = true, StatusCode = 200, Data = new LoginResultDto { Tokens = new TokenDTO { AccessToken = "a", RefreshToken = "r" } } });
 
         var ctrl = NewCtrl(ctx);
         var result = await ctrl.GoogleCallback("code-y", "match-state", null, CancellationToken.None) as ObjectResult;

@@ -15,5 +15,9 @@ public class MaintenanceLogDTO
     public string? ResolutionNote { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public List<string> AttachmentFileIds { get; set; } = new();
+    public List<string> BeforePhotosFileIds { get; set; } = new();
+    public List<string> AfterPhotosFileIds { get; set; } = new();
+    public List<string> RelatedKbArticleIds { get; set; } = new();
     public DateTime CreatedAt { get; set; }
 }

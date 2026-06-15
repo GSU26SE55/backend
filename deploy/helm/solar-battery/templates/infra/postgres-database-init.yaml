@@ -40,6 +40,10 @@ spec:
           value: {{ .Values.postgres.fileStorageDatabase | quote }}
         - name: BATTERY_DB_NAME
           value: {{ .Values.postgres.batteryDatabase | quote }}
+        - name: TICKET_DB_NAME
+          value: {{ .Values.postgres.ticketDatabase | quote }}
+        - name: NOTIFICATION_DB_NAME
+          value: {{ .Values.postgres.notificationDatabase | quote }}
         command:
         - sh
         - -c
@@ -72,4 +76,6 @@ spec:
           create_database "$AUTH_DB_NAME"
           create_database "$FILE_STORAGE_DB_NAME"
           create_database "$BATTERY_DB_NAME"
+          create_database "$TICKET_DB_NAME"
+          create_database "$NOTIFICATION_DB_NAME"
 {{- end }}

@@ -7,11 +7,11 @@ namespace BatteryService.Infrastructure.Persistence.Seeders;
 
 public class BatteryDataSeeder
 {
-    private static readonly Guid SampleCustomerId = Guid.Parse("44444444-4444-4444-4444-000000000001");
-    private static readonly Guid LiFePo4TypeId = Guid.Parse("10000000-0000-0000-0000-000000000001");
-    private static readonly Guid NmcTypeId = Guid.Parse("10000000-0000-0000-0000-000000000002");
-    private static readonly Guid NcaTypeId = Guid.Parse("10000000-0000-0000-0000-000000000003");
-    private static readonly Guid DefaultSiteId = Guid.Parse("20000000-0000-0000-0000-000000000001");
+    private const string SampleCustomerEmail = "sample.customer@solarbattery.local";
+    private const string LiFePo4TypeName = "LiFePO4 12V 100Ah";
+    private const string NmcTypeName = "NMC 48V 200Ah";
+    private const string NcaTypeName = "NCA 24V 150Ah";
+    private const string DefaultSiteName = "Solar Farm Long An";
 
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<BatteryDataSeeder> _logger;
@@ -24,47 +24,50 @@ public class BatteryDataSeeder
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
-        await SeedCustomerAccountsAsync(cancellationToken);
-        await SeedBatteryTypesAsync(cancellationToken);
-        await SeedSiteAsync(cancellationToken);
-        await SeedAssetsAsync(cancellationToken);
-        await SeedThresholdsAsync(cancellationToken);
+        var customerId = await SeedCustomerAccountsAsync(cancellationToken);
+        var (liFePo4TypeId, nmcTypeId, ncaTypeId) = await SeedBatteryTypesAsync(cancellationToken);
+        var siteId = await SeedSiteAsync(customerId, cancellationToken);
+        await SeedAssetsAsync(siteId, customerId, liFePo4TypeId, nmcTypeId, cancellationToken);
+        await SeedThresholdsAsync(liFePo4TypeId, nmcTypeId, ncaTypeId, cancellationToken);
         await SeedAnomalyScenarioReadingsAsync(cancellationToken);
     }
 
-    private async Task SeedCustomerAccountsAsync(CancellationToken cancellationToken)
+    private async Task<Guid> SeedCustomerAccountsAsync(CancellationToken cancellationToken)
     {
-        var exists = await _dbContext.CustomerAccounts.AnyAsync(account => account.Id == SampleCustomerId, cancellationToken);
-        if (exists)
-            return;
+        var existing = await _dbContext.CustomerAccounts
+            .FirstOrDefaultAsync(a => a.Email == SampleCustomerEmail, cancellationToken);
+        if (existing != null)
+            return existing.Id;
 
-        _dbContext.CustomerAccounts.Add(new CustomerAccount
+        var entity = new CustomerAccount
         {
-            Id = SampleCustomerId,
-            Email = "sample.customer@solarbattery.local",
+            Id = Guid.NewGuid(),
+            Email = SampleCustomerEmail,
             FullName = "Sample Battery Customer",
             PhoneNumber = "0900000001",
             Role = "Customer",
             IsActive = true,
             LastSyncedAtUtc = SeedTime(),
             CreatedAt = SeedTime()
-        });
-
+        };
+        _dbContext.CustomerAccounts.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.Id;
     }
 
-    private async Task SeedBatteryTypesAsync(CancellationToken cancellationToken)
+    private async Task<(Guid LiFePo4, Guid Nmc, Guid Nca)> SeedBatteryTypesAsync(CancellationToken cancellationToken)
     {
-        var existingIds = await _dbContext.BatteryTypes
-            .Select(type => type.Id)
-            .ToListAsync(cancellationToken);
+        var existing = await _dbContext.BatteryTypes
+            .Where(t => t.Name == LiFePo4TypeName || t.Name == NmcTypeName || t.Name == NcaTypeName)
+            .ToDictionaryAsync(t => t.Name, t => t.Id, cancellationToken);
 
-        var seedTypes = new[]
-        {
-            new BatteryType
+        var seedTypes = new List<BatteryType>();
+
+        if (!existing.ContainsKey(LiFePo4TypeName))
+            seedTypes.Add(new BatteryType
             {
-                Id = LiFePo4TypeId,
-                Name = "LiFePO4 12V 100Ah",
+                Id = Guid.NewGuid(),
+                Name = LiFePo4TypeName,
                 Manufacturer = "SolarCo",
                 NominalCapacityAh = 100,
                 NominalVoltage = 12,
@@ -72,11 +75,13 @@ public class BatteryDataSeeder
                 MaxCycleCount = 3000,
                 Description = "Pin lithium iron phosphate dùng cho hệ solar dân dụng.",
                 CreatedAt = SeedTime()
-            },
-            new BatteryType
+            });
+
+        if (!existing.ContainsKey(NmcTypeName))
+            seedTypes.Add(new BatteryType
             {
-                Id = NmcTypeId,
-                Name = "NMC 48V 200Ah",
+                Id = Guid.NewGuid(),
+                Name = NmcTypeName,
                 Manufacturer = "SunGrid",
                 NominalCapacityAh = 200,
                 NominalVoltage = 48,
@@ -84,11 +89,13 @@ public class BatteryDataSeeder
                 MaxCycleCount = 2500,
                 Description = "Pin NMC công suất lớn cho solar farm.",
                 CreatedAt = SeedTime()
-            },
-            new BatteryType
+            });
+
+        if (!existing.ContainsKey(NcaTypeName))
+            seedTypes.Add(new BatteryType
             {
-                Id = NcaTypeId,
-                Name = "NCA 24V 150Ah",
+                Id = Guid.NewGuid(),
+                Name = NcaTypeName,
                 Manufacturer = "VoltMax",
                 NominalCapacityAh = 150,
                 NominalVoltage = 24,
@@ -96,41 +103,51 @@ public class BatteryDataSeeder
                 MaxCycleCount = 2200,
                 Description = "Pin NCA dùng cho cụm lưu trữ trung bình.",
                 CreatedAt = SeedTime()
-            }
-        };
-
-        foreach (var seed in seedTypes.Where(seed => !existingIds.Contains(seed.Id)))
-            _dbContext.BatteryTypes.Add(seed);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task SeedSiteAsync(CancellationToken cancellationToken)
-    {
-        var siteExists = await _dbContext.Sites.AnyAsync(site => site.Id == DefaultSiteId, cancellationToken);
-        if (!siteExists)
-        {
-            _dbContext.Sites.Add(new Site
-            {
-                Id = DefaultSiteId,
-                Name = "Solar Farm Long An",
-                CustomerId = SampleCustomerId,
-                Address = "Long An, Vietnam",
-                Latitude = 10.695m,
-                Longitude = 106.243m,
-                CapacityKw = 500,
-                InstallDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
-                Status = SiteStatusEnum.Active,
-                ContactPersonName = "Nguyen Van A",
-                ContactPersonPhone = "0900000001",
-                CreatedAt = SeedTime()
             });
+
+        if (seedTypes.Count > 0)
+        {
+            _dbContext.BatteryTypes.AddRange(seedTypes);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            foreach (var t in seedTypes)
+                existing[t.Name] = t.Id;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (existing[LiFePo4TypeName], existing[NmcTypeName], existing[NcaTypeName]);
     }
 
-    private async Task SeedAssetsAsync(CancellationToken cancellationToken)
+    private async Task<Guid> SeedSiteAsync(Guid customerId, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.Sites
+            .FirstOrDefaultAsync(s => s.Name == DefaultSiteName && s.CustomerId == customerId, cancellationToken);
+        if (existing != null)
+            return existing.Id;
+
+        var entity = new Site
+        {
+            Id = Guid.NewGuid(),
+            Name = DefaultSiteName,
+            CustomerId = customerId,
+            Address = "Long An, Vietnam",
+            Latitude = 10.695m,
+            Longitude = 106.243m,
+            InstallDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
+            Status = SiteStatusEnum.Active,
+            ContactPersonName = "Nguyen Van A",
+            ContactPersonPhone = "0900000001",
+            CreatedAt = SeedTime()
+        };
+        _dbContext.Sites.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.Id;
+    }
+
+    private async Task SeedAssetsAsync(
+        Guid siteId,
+        Guid customerId,
+        Guid liFePo4TypeId,
+        Guid nmcTypeId,
+        CancellationToken cancellationToken)
     {
         var existingSerials = await _dbContext.BatteryAssets
             .Select(asset => asset.SerialNumber)
@@ -140,11 +157,11 @@ public class BatteryDataSeeder
         {
             new BatteryAsset
             {
-                Id = Guid.Parse("40000000-0000-0000-0000-000000000001"),
+                Id = Guid.NewGuid(),
                 SerialNumber = "BAT-2026-001",
-                BatteryTypeId = LiFePo4TypeId,
-                SiteId = DefaultSiteId,
-                CustomerId = SampleCustomerId,
+                BatteryTypeId = liFePo4TypeId,
+                SiteId = siteId,
+                CustomerId = customerId,
                 InstallDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 1, 15, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyStatus = WarrantyStatusEnum.Active,
@@ -156,11 +173,11 @@ public class BatteryDataSeeder
             },
             new BatteryAsset
             {
-                Id = Guid.Parse("40000000-0000-0000-0000-000000000002"),
+                Id = Guid.NewGuid(),
                 SerialNumber = "BAT-2026-002",
-                BatteryTypeId = LiFePo4TypeId,
-                SiteId = DefaultSiteId,
-                CustomerId = SampleCustomerId,
+                BatteryTypeId = liFePo4TypeId,
+                SiteId = siteId,
+                CustomerId = customerId,
                 InstallDate = new DateTime(2026, 1, 20, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 1, 20, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyStatus = WarrantyStatusEnum.Active,
@@ -172,17 +189,33 @@ public class BatteryDataSeeder
             },
             new BatteryAsset
             {
-                Id = Guid.Parse("40000000-0000-0000-0000-000000000003"),
+                Id = Guid.NewGuid(),
                 SerialNumber = "BAT-2026-003",
-                BatteryTypeId = NmcTypeId,
-                SiteId = DefaultSiteId,
-                CustomerId = SampleCustomerId,
+                BatteryTypeId = nmcTypeId,
+                SiteId = siteId,
+                CustomerId = customerId,
                 InstallDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyEndDate = new DateTime(2031, 2, 1, 0, 0, 0, DateTimeKind.Utc),
                 WarrantyStatus = WarrantyStatusEnum.Active,
                 Location = "Block B - Rack 01",
                 Latitude = 10.697m,
                 Longitude = 106.245m,
+                Status = BatteryStatusEnum.Active,
+                CreatedAt = SeedTime()
+            },
+            new BatteryAsset
+            {
+                Id = Guid.NewGuid(),
+                SerialNumber = "BAT-2026-004",
+                BatteryTypeId = nmcTypeId,
+                SiteId = siteId,
+                CustomerId = customerId,
+                InstallDate = new DateTime(2026, 2, 5, 0, 0, 0, DateTimeKind.Utc),
+                WarrantyEndDate = new DateTime(2031, 2, 5, 0, 0, 0, DateTimeKind.Utc),
+                WarrantyStatus = WarrantyStatusEnum.Active,
+                Location = "Block B - Rack 02",
+                Latitude = 10.698m,
+                Longitude = 106.246m,
                 Status = BatteryStatusEnum.Active,
                 CreatedAt = SeedTime()
             }
@@ -194,7 +227,11 @@ public class BatteryDataSeeder
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task SeedThresholdsAsync(CancellationToken cancellationToken)
+    private async Task SeedThresholdsAsync(
+        Guid liFePo4TypeId,
+        Guid nmcTypeId,
+        Guid ncaTypeId,
+        CancellationToken cancellationToken)
     {
         var hasThresholds = await _dbContext.ThresholdConfigs.AnyAsync(cancellationToken);
         if (hasThresholds)
@@ -203,9 +240,9 @@ public class BatteryDataSeeder
         var now = SeedTime();
         // 3 BatteryType — kèm SOH threshold (Tier 1 Sprint 3): EOL khi SOH ≤ 75% (Critical), warning từ 85%
         _dbContext.ThresholdConfigs.AddRange(
-            CreateThreshold(LiFePo4TypeId, 10.5m, 14.6m, -10, 60, 20, 10, sohWarning: 85m, sohCritical: 75m, now),
-            CreateThreshold(NmcTypeId, 42m, 54.6m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now),
-            CreateThreshold(NcaTypeId, 21m, 29.2m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now));
+            CreateThreshold(liFePo4TypeId, 10.5m, 14.6m, -10, 60, 20, 10, sohWarning: 85m, sohCritical: 75m, now),
+            CreateThreshold(nmcTypeId, 42m, 54.6m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now),
+            CreateThreshold(ncaTypeId, 21m, 29.2m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

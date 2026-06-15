@@ -61,7 +61,7 @@ public class AlertEscalationServiceTests
 
         result.Escalated.Should().Be(1);
         b.OutboxMessages.Verify(r => r.AddAsync(It.Is<OutboxMessage>(m =>
-            m.Type == "BatteryAnomalyEscalatedEvent"
+            m.Type == "BatteryAlertEscalationRequestedEvent"
             && m.AggregateId == stale.Id)), Times.Once);
     }
 
@@ -110,7 +110,7 @@ public class AlertEscalationServiceTests
         {
             Id = Guid.NewGuid(),
             AggregateId = stale.Id,
-            Type = "BatteryAnomalyEscalatedEvent",
+            Type = "BatteryAlertEscalationRequestedEvent",
             Payload = "{}",
             OccurredAtUtc = DateTime.UtcNow.AddMinutes(-3)
         };

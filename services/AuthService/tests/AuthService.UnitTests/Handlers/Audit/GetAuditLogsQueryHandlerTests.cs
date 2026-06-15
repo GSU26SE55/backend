@@ -133,7 +133,7 @@ public class GetAuditLogsQueryHandlerTests
             ToUtc = DateTime.UtcNow.AddDays(-1)
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 
     [Fact]

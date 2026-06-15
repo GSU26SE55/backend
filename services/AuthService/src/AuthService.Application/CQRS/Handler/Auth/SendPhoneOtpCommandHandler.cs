@@ -39,10 +39,10 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
             return Fail(404, "Không tìm thấy tài khoản.");
 
         if (string.IsNullOrWhiteSpace(account.PhoneNumber))
-            return Fail(400, "Tài khoản chưa có số điện thoại. Vui lòng cập nhật profile trước.");
+            return Fail(422, "Tài khoản chưa có số điện thoại. Vui lòng cập nhật profile trước.");
 
         if (account.PhoneConfirmed)
-            return Fail(400, "Số điện thoại đã được xác thực.");
+            return Fail(409, "Số điện thoại đã được xác thực.");
 
         if (account.OtpPurpose == OtpPurposeEnum.PhoneVerify && account.OtpExpiredAt.HasValue)
         {
@@ -80,6 +80,5 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
         IsSuccess = false,
         StatusCode = statusCode,
         Message = message,
-        ListErrors = { new Errors { Field = "Phone", Detail = message } }
     };
 }

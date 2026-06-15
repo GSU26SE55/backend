@@ -110,6 +110,6 @@ public class InviteAccountCommandHandlerTests
             RoleId = inactiveRole.Id
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(404);
     }
 }

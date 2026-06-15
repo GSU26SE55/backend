@@ -1,10 +1,10 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
@@ -18,15 +18,18 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketStartCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketStartCommand request, CancellationToken ct)
@@ -48,6 +51,29 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
             ActorDisplayName = request.StaffName ?? "Staff"
         }, ct);
 
+        // TỰ ĐỘNG TẠO MAINTENANCE LOG KHI START WORK
+        // Kiểm tra xem đã có log nào chưa xong không (đề phòng)
+        var activeLogExists = await _uow.MaintenanceLogs.GetAllAsync()
+            .AnyAsync(m => m.TicketId == ticket.Id && m.CompletedAt == null && !m.IsDeleted, ct);
+
+        if (!activeLogExists)
+        {
+            var log = new MaintenanceLog
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                Ticket = ticket,
+                StaffId = request.StaffId,
+                LogType = request.LogType ?? MaintenanceLogTypeEnum.OnSite,
+                Summary = "Đang thực hiện...",
+                StartedAt = DateTime.UtcNow,
+                // CheckInLatitude = request.Latitude,
+                // CheckInLongitude = request.Longitude,
+                CheckInAt = DateTime.UtcNow
+            };
+            await _uow.MaintenanceLogs.AddAsync(log);
+        }
+
         await _activityLogger.LogAsync(
             ticket.Id,
             request.StaffId,
@@ -58,17 +84,7 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
             newValue: "InProgress");
 
         // Outbox: Status Changed
-        var statusEvent = new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Assigned, TicketStatusEnum.InProgress);
-        var outboxMessage = new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketStatusChangedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(statusEvent),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        };
-        await _uow.OutboxMessages.AddAsync(outboxMessage);
+        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Assigned, TicketStatusEnum.InProgress), ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -86,17 +102,13 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message)
     {
         return new TicketActionResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }

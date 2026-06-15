@@ -1,14 +1,13 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -18,15 +17,18 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMessageProducerService _producer;
 
     public TicketApproveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger)
+        IActivityLogger activityLogger,
+        IMessageProducerService producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
+        _producer = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketApproveCommand request, CancellationToken ct)
@@ -51,16 +53,7 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
 
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Approved, reason: request.ManagerComment);
 
-        var @event = new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId);
-        await _uow.OutboxMessages.AddAsync(new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            AggregateId = ticket.Id,
-            Type = nameof(TicketApprovedIntegrationEvent),
-            Payload = JsonSerializer.Serialize(@event),
-            OccurredAtUtc = DateTime.UtcNow,
-            RetryCount = 0
-        });
+        await _producer.PublishAsync(new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId), ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -78,17 +71,13 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message, string field = "Ticket")
+    private static TicketActionResponse Fail(int statusCode, string message)
     {
         return new TicketActionResponse
         {
             IsSuccess = false,
             StatusCode = statusCode,
             Message = message,
-            ListErrors = new List<Errors>
-            {
-                new Errors { Field = field, Detail = message }
-            }
         };
     }
 }

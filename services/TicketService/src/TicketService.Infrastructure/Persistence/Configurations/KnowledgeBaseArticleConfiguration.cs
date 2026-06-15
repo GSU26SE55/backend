@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -42,11 +43,13 @@ public class KnowledgeBaseArticleConfiguration : IEntityTypeConfiguration<Knowle
 
         builder.Property(e => e.RecommendedParts)
             .HasColumnName("recommended_parts")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion(new JsonValueConverter<string?>());
 
         builder.Property(e => e.Tags)
             .HasColumnName("tags")
-            .HasColumnType("jsonb");
+            .HasColumnType("jsonb")
+            .HasConversion(new JsonValueConverter<List<string>>());
 
         builder.Property(e => e.Status)
             .HasColumnName("status")

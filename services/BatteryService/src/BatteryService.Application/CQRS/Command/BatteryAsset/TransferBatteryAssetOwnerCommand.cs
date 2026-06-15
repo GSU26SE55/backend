@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -6,11 +7,19 @@ namespace BatteryService.Application.CQRS.Command.BatteryAsset;
 
 public class TransferBatteryAssetOwnerCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    /// <summary>Định danh resource.</summary>
+    [JsonIgnore]
     public Guid Id { get; set; }
 
+    /// <summary>ID customer nhận chuyển nhượng.</summary>
     public Guid NewCustomerId { get; set; }
 
+    /// <summary>Lý do/ghi chú.</summary>
     public string? Reason { get; set; }
+
+    /// <summary>Sprint 5B B11 — user thực hiện transfer (set bởi controller từ JWT).</summary>
+    [JsonIgnore]
+    public Guid PerformedByUserId { get; set; }
 
     public Task<CommonResponse<object>> ValidateAsync()
     {

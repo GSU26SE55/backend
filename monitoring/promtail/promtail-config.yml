@@ -51,8 +51,10 @@ scrape_configs:
       # 5. KEEP filter — chỉ scrape container app + infra cần xem log.
       #    Skip monitoring stack tự thân (grafana, loki, promtail, prometheus, alertmanager,
       #    cadvisor, *-exporter, minio-init) để tránh log lặp/noise.
+      #    `mosquitto` giữ trong regex để debug khi user opt-in chạy broker side-car từ iot repo
+      #    join cùng docker network (broker chính KHÔNG thuộc backend repo — xem docker-compose.yml).
       - source_labels: ["__meta_docker_container_name"]
-        regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|batteryservice|apigateway|postgres|redis|rabbitmq|minio)"
+        regex: "/solar-(authservice|emailservice|smsservice|filestorageservice|batteryservice|notificationservice|ticketservice|apigateway|postgres|redis|rabbitmq|minio|mosquitto)"
         action: keep
 
     pipeline_stages:

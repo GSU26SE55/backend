@@ -1,14 +1,18 @@
 using BatteryService.Application.Anomaly;
+using BatteryService.Application.Common.Models;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
 using BatteryService.Infrastructure.BackgroundServices;
 using BatteryService.Infrastructure.Consumers;
 using BatteryService.Infrastructure.Implements.Repositories;
+using BatteryService.Infrastructure.Implements.Services;
 using BatteryService.Infrastructure.Persistence;
 using BatteryService.Infrastructure.Persistence.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
+using Polly.Extensions.Http;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
@@ -22,6 +26,7 @@ public static class ManageDependencyInjection
         services.AddDatabase(configuration);
         services.AddScoped<IBatteryUnitOfWork, UnitOfWork>();
         services.AddScoped<BatteryDataSeeder>();
+        services.AddScoped<EnvironmentDataSeeder>();
         services.AddSharedInfrastructure(configuration, "BatteryService.Application", "Battery Service API");
         services.AddMessageBus(configuration, typeof(AccountActivatedConsumer).Assembly);
         services.AddInboxIdempotency(configuration);
@@ -33,11 +38,59 @@ public static class ManageDependencyInjection
         // Background worker chỉ làm cron trigger, logic ở service này.
         services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
         services.AddScoped<IAlertEscalationService, AlertEscalationService>();
+        services.AddScoped<IAlertAutoResolveService, AlertAutoResolveService>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddScoped<SharedContracts.Interfaces.IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
+
+        // Sprint IoT-1 (#243) — per-device API key.
+        services.AddScoped<IIotApiKeyService, IotApiKeyService>();
+
+        // Sprint IoT-2 #IoT2-38 — Prometheus IoT metrics recorder.
+        services.AddSingleton<IIotMetricsRecorder, BatteryService.Infrastructure.Observability.IotMetricsRecorder>();
+
+        // Sprint IoT-2 #IoT2-28 — Cross-source validation (Bms vs IoT mismatch).
+        services.AddScoped<BatteryService.Application.Services.ICrossSourceValidationService, BatteryService.Application.Services.CrossSourceValidationService>();
+        services.AddHostedService<CrossSourceValidationBackgroundService>();
+
+        // Sprint IoT-2 #IoT2-34 — Redis cache invalidation cho calibration.
+        services.AddScoped<BatteryService.Application.Services.IIotCalibrationCache, BatteryService.Infrastructure.Implements.Services.IotCalibrationCache>();
+
+        // Sprint IoT-2 #IoT2-33 — Calibration expiry notification (daily).
+        services.AddHostedService<CalibrationExpiryNotificationBackgroundService>();
+
+        // Sprint IoT-2 #IoT2-38 — Devices online gauge refresher.
+        services.AddHostedService<DevicesOnlineGaugeBackgroundService>();
+
+        // Sprint IoT-1 (#248) — offline detection.
+        services.AddScoped<IIotDeviceOfflineDetectionService, IotDeviceOfflineDetectionService>();
+        services.AddHostedService<IotDeviceOfflineDetectionBackgroundService>();
+
+        // Sprint IoT-1 (#253) — MQTT bridge (P3, optional).
+        services.Configure<BatteryService.Infrastructure.Mqtt.MqttOptions>(configuration.GetSection(BatteryService.Infrastructure.Mqtt.MqttOptions.SectionName));
+        services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>();
+        services.AddSingleton<BatteryService.Application.Services.IMqttBridgePublisher>(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
+        services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
 
         services.AddHostedService<ThresholdCheckBackgroundService>();
         services.AddHostedService<AlertEscalationBackgroundService>();
+        services.AddHostedService<AlertAutoResolveBackgroundService>();
         services.AddHostedService<OutboxRelayBackgroundService>();
+
+        // Sprint 5B #90/#92 — Open-Meteo client + WeatherSync.
+        services.Configure<WeatherSyncOptions>(configuration.GetSection(WeatherSyncOptions.SectionName));
+        services.AddHttpClient<IOpenMeteoClient, OpenMeteoClient>((sp, http) =>
+            {
+                var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<WeatherSyncOptions>>().Value;
+                http.BaseAddress = new Uri(opt.BaseUrl);
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(1, opt.HttpTimeoutSeconds));
+            })
+            .AddPolicyHandler(HttpPolicyExtensions.HandleTransientHttpError()
+                .OrResult(r => (int)r.StatusCode == 429)
+                .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(200 * Math.Pow(2, attempt))));
+        services.AddHostedService<WeatherSyncBackgroundService>();
+
+        // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.
+        services.AddHostedService<NoiseBreachRetentionBackgroundService>();
 
         return services;
     }

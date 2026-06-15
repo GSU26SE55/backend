@@ -19,6 +19,8 @@ public class UpdateStaffProfileCommand : IRequest<AccountActionResponse>, IValid
 
     public bool IsAvailable { get; set; } = true;
 
+    public int SkillTier { get; set; } = 1;
+
     public string? Notes { get; set; }
 
     public Task<AccountActionResponse> ValidateAsync()
@@ -27,6 +29,9 @@ public class UpdateStaffProfileCommand : IRequest<AccountActionResponse>, IValid
 
         if (AccountId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "AccountId không hợp lệ." });
+
+        if (SkillTier is < 1 or > 3)
+            response.ListErrors.Add(new Errors { Field = nameof(SkillTier), Detail = "SkillTier không hợp lệ (1-3)." });
 
         if (!string.IsNullOrWhiteSpace(EmployeeCode) && EmployeeCode.Trim().Length > 50)
             response.ListErrors.Add(new Errors { Field = nameof(EmployeeCode), Detail = "EmployeeCode tối đa 50 ký tự." });

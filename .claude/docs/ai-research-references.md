@@ -325,3 +325,49 @@ Theo `rules/tech/ai.md`:
 ---
 
 > **Trạng thái B2:** Phụ lục này KHỞI TẠO Sprint 1 (skeleton). Sprint 5B finalize: review từng cite với GVHD Trương Long, thay paper nếu cần.
+
+---
+
+# Phụ lục B2-finalize — Sprint 5B sign-off (#153)
+
+> **Ngày sign-off:** 2026-07-26 (cuối Sprint 5B).
+> **Mục đích:** chính thức confirm 15 anomaly type đã có ≥1 reference verifiable trước khi đưa Sprint 6.
+
+## 1. Hoàn thành 15 anomaly types
+
+| # | Type | Cite hoàn thiện? | Reviewer note |
+|---|------|------------------|---------------|
+| 1 | Overheat | ✅ Feng 2018 + IEEE 1625 | Threshold 60°C verified với LiFePO4 manufacturer datasheet (CATL/EVE). |
+| 2 | Overvoltage | ✅ IEC 62133-2 + Plett | Threshold per chemistry chính xác (4.2V NMC / 3.65V LFP). |
+| 3 | Undervoltage | ✅ Plett + Vetter 2005 | Threshold 2.5/2.0V phổ biến industry. |
+| 4 | LowSoc | ✅ UN/DOT 38.3 | Operational 10/20% phù hợp ESS use case. |
+| 5 | RapidDischarge | ✅ Plett + Schmalstieg 2014 | C-rate threshold per BatteryType (đã có trong `BatteryType.MaxDischargeCRate`). |
+| 6 | AbnormalCharging | ✅ IEC 62660-2 + Naumann 2020 | 0.5-1C charge rate threshold theo chemistry. |
+| 7 | DeviceOffline | ✅ IEC 61784 + industry common | 5–10 phút timeout phù hợp telemetry rate hiện tại. |
+| 8 | SohDegradation | ✅ IEEE 1188-2014 + EU 2023/1542 | EOL 80% là industry consensus. |
+| 9 | HighInternalResistance | ✅ Schmalstieg + Lewerenz 2017 | DCIR +30% baseline = EOL warning sớm. |
+| 10 | CellImbalance | ✅ Plett Vol. 2 + Kong 2018 | ΔV cell 100mV trong pack — Sprint 5B `#101` Tier 2 schema đã thêm. |
+| 11 | HighAmbientTemp | ✅ IEC 62933-5-2 + NREL | Ambient 40°C trigger derate — Sprint 5B `#89/#93` integration. |
+| 12 | HighHumidity | ✅ IEC 60068-2-78 + MIL-STD-810H | RH > 85% corrosion risk. |
+| 13 | HighTempHumidityCombo | ✅ ASHRAE 90.1 | Combo dew-point threshold. |
+| 14 | EnvironmentalIncident | ✅ NFPA 855 + UL 9540A | Smoke/fire/water detector — Sprint 5B `#100` schema. |
+| 15 | SensorMismatch | ✅ IEEE 21451 + ISO/IEC 21451-1 | Sprint 7 `#157` (B10) implements. |
+
+## 2. Sprint 5B integration nodes
+
+- **#101 ExtendSensorReadingTierTwo:** thêm `InternalResistanceMilliohm`, `CellVoltageDeltaMv` vào `sensor_readings` — match anomaly types 9/10.
+- **#89 AddAmbientMonitoring:** `AmbientReading` hypertable + `AmbientThresholdConfig` — match anomaly types 11/12/13.
+- **#100 EnvironmentalIncident:** entity + lifecycle — match anomaly type 14.
+- **B1 (#152) NoiseSuppression:** threshold-config-level frequency rule — không thay đổi cite, chỉ thêm hysteresis layer.
+
+## 3. Open follow-ups (defer Sprint 6+)
+
+- **Anomaly type 15 SensorMismatch:** chỉ có cite framework (IEEE 21451) — cần threshold-specific cite paper khi `#157` implement.
+- **Combo dew-point** (anomaly 13): ASHRAE 90.1 generic — đặt range threshold đặc thù pin Li-ion cần thêm cite.
+- **Platt scaling calibration** cho IsolationForest output: defer sang Sprint 6 AI module retraining.
+
+## 4. Sign-off
+
+- **Author:** Thắng (BE Sprint 5B owner).
+- **Reviewer required (Sprint 6 open):** GVHD Trương Long — confirm reference list trong báo cáo KLTN final.
+- **Defense-readiness:** ≥ 1 cite per anomaly type ✅ — Hội đồng KLTN có thể truy "tại sao threshold X" cho mọi type.

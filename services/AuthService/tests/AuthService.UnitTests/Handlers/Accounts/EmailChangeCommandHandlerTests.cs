@@ -62,7 +62,7 @@ public class ChangeEmailCommandHandlerTests
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "new@example.com", CurrentPassword = "wrong" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(401);
         account.PendingEmail.Should().BeNull();
     }
 
@@ -83,7 +83,7 @@ public class ChangeEmailCommandHandlerTests
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "U@Example.com", CurrentPassword = "p" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(422);
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public class ConfirmEmailChangeCommandHandlerTests
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(409);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class ConfirmEmailChangeCommandHandlerTests
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(400);
+        resp.StatusCode.Should().Be(401);
     }
 
     [Fact]

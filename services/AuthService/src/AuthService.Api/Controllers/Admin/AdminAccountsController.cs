@@ -7,6 +7,7 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Responses;
 
 namespace AuthService.Api.Controllers.Admin;
 
@@ -29,7 +30,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Danh sách tài khoản có phân trang và lọc nâng cao.
+    /// Admin liệt kê tất cả account với phân trang + filter nâng cao (role/status/email/createdAt range) — sort theo CreatedAt DESC. Dùng cho admin dashboard quản lý người dùng.
     /// </summary>
     /// <remarks>
     /// Endpoint này dành cho màn hình quản trị danh sách user/account.
@@ -66,6 +67,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin hoặc Manager.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(AccountListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll(
@@ -92,7 +95,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết 1 tài khoản theo Id.
+    /// Admin lấy chi tiết 1 account theo Id — trả full profile bao gồm role assignments, 2FA status, ProviderLinks, audit trail counts.
     /// </summary>
     /// <remarks>
     /// Endpoint này trả thông tin chi tiết của một account bất kỳ cho admin/manager.
@@ -118,6 +121,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin hoặc Manager.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status404NotFound)]
@@ -128,7 +133,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới 1 tài khoản bởi Admin.
+    /// Admin tạo mới 1 account thủ công (bỏ qua flow self-register) — hệ thống gửi email kèm reset-password token để user set password lần đầu.
     /// </summary>
     /// <remarks>
     /// Endpoint này cho phép admin tạo account trực tiếp, không đi qua luồng đăng ký tự phục vụ.
@@ -163,6 +168,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="409">Email, số điện thoại hoặc dữ liệu unique đã tồn tại.</response>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
@@ -196,6 +203,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="409">Email hoặc số điện thoại đã được sử dụng.</response>
     [HttpPost("invite")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
@@ -207,7 +216,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin cập nhật profile của 1 tài khoản.
+    /// Admin cập nhật profile bất kỳ account nào (override quyền owner) — chỉ update field cho phép (FullName/Phone/Avatar); KHÔNG đổi Email/Password qua endpoint này.
     /// </summary>
     /// <remarks>
     /// Endpoint này cho phép admin cập nhật thông tin profile của account bất kỳ.
@@ -244,6 +253,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="404">Không tìm thấy tài khoản.</response>
     /// <response code="409">Dữ liệu cập nhật bị trùng theo rule nghiệp vụ.</response>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
@@ -257,7 +268,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin đổi trạng thái tài khoản.
+    /// Admin đổi trạng thái account (Active/Deactivated/Suspended/Locked) — Suspended/Locked force logout ngay; Deactivated cho user tự reactivate bằng email link.
     /// </summary>
     /// <remarks>
     /// Endpoint này dùng để khóa, mở, vô hiệu hóa hoặc thay đổi trạng thái vận hành của account.
@@ -290,6 +301,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpPatch("{id:guid}/status")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
@@ -301,7 +314,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin xóa mềm tài khoản.
+    /// Admin xóa mềm account của user khác — set IsDeleted=true + revoke session. Khác DeactivateMe ở chỗ user KHÔNG tự reactivate được, phải Admin restore.
     /// </summary>
     /// <remarks>
     /// Endpoint này đánh dấu account là đã xóa thay vì xóa vật lý khỏi database.
@@ -328,6 +341,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
@@ -338,7 +353,28 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Đổi role của 1 tài khoản sang role mới.
+    /// Admin reset 2FA cho user khác (cho case user mất hoàn toàn device + hết backup codes).
+    /// Clear <c>TwoFactorSecret</c> + flag + xóa hết backup codes. User phải enroll lại nếu muốn dùng 2FA.
+    /// </summary>
+    /// <remarks>
+    /// Quyền: chỉ <c>Admin</c>.
+    /// Idempotent — gọi trên account chưa bật 2FA cũng trả 200.
+    /// Audit log <c>Admin2FAReset</c>: actor=admin (resolve từ JWT), target=user.
+    /// </remarks>
+    [HttpDelete("{id:guid}/2fa")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reset2FA(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AuthService.Application.CQRS.Command.Admin.AdminReset2FACommand { TargetAccountId = id }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin đổi role assignment cho account (Customer → Staff → Manager → Admin) — refresh permissions cache; user nhận role mới ở lần issue JWT tiếp theo.
     /// </summary>
     /// <remarks>
     /// Quan hệ Role ↔ Account là 1-N — mỗi account chỉ có duy nhất 1 role tại bất kỳ thời điểm nào.
@@ -374,6 +410,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy account.</response>
     [HttpPut("{id:guid}/role")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
@@ -415,6 +453,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpPost("{id:guid}/unlock")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
@@ -450,6 +490,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin hoặc Manager.</response>
     [HttpGet("{id:guid}/sessions")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(global::AuthService.Application.DTOs.Response.RefreshToken.SessionListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSessions(Guid id, [FromQuery] bool activeOnly = true, CancellationToken cancellationToken = default)
@@ -496,6 +538,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpPost("{id:guid}/sessions/revoke-all")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(global::AuthService.Application.DTOs.Response.RefreshToken.SessionActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(global::AuthService.Application.DTOs.Response.RefreshToken.SessionActionResponse), StatusCodes.Status404NotFound)]
@@ -507,7 +551,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin xem login history của 1 account bất kỳ.
+    /// Admin xem login history của 1 account bất kỳ — dùng cho forensic khi điều tra account bị compromise, hiển thị IP + User-Agent + device + lý do fail.
     /// </summary>
     /// <remarks>
     /// Dùng để điều tra incident: ai đã login khi nào, từ IP nào, device nào, fail bao nhiêu lần.
@@ -517,6 +561,8 @@ public class AdminAccountsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin hoặc Manager.</response>
     [HttpGet("{id:guid}/login-history")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(LoginAttemptListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLoginHistory(

@@ -1,0 +1,112 @@
+using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
+using AuthService.Application.DTOs.Response.Auth;
+using AuthService.Application.Interfaces.Repositories;
+using AuthService.Application.Interfaces.Services;
+using AuthService.Domain.Entities;
+using AuthService.Domain.Enums;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Responses;
+
+namespace AuthService.Application.CQRS.Handler.Auth;
+
+public class Confirm2FACommandHandler : IRequestHandler<Confirm2FACommand, CommonResponse<TwoFactorConfirmDto>>
+{
+    private const int BackupCodeCount = 8;
+
+    private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly ITotpService _totp;
+    private readonly ITwoFactorPendingStore _pending;
+    private readonly ITwoFactorSecretProtector _protector;
+    private readonly IBackupCodeGenerator _backupCodes;
+    private readonly IPublisher _publisher;
+
+    public Confirm2FACommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        ITotpService totp,
+        ITwoFactorPendingStore pending,
+        ITwoFactorSecretProtector protector,
+        IBackupCodeGenerator backupCodes,
+        IPublisher publisher)
+    {
+        _unitOfWork = unitOfWork;
+        _totp = totp;
+        _pending = pending;
+        _protector = protector;
+        _backupCodes = backupCodes;
+        _publisher = publisher;
+    }
+
+    public async Task<CommonResponse<TwoFactorConfirmDto>> Handle(Confirm2FACommand request, CancellationToken cancellationToken)
+    {
+        var account = await _unitOfWork.Accounts.GetAllAsync()
+            .Where(a => !a.IsDeleted)
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
+
+        if (account == null)
+            return Fail(404, "Không tìm thấy tài khoản.");
+
+        if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
+            return Fail(409, "2FA đã được bật.");
+
+        var pending = await _pending.GetAsync(account.Id, cancellationToken);
+        if (pending == null)
+            return Fail(422, "Phiên setup đã hết hạn hoặc chưa init. Hãy gọi /2fa/init lại.");
+
+        if (!string.Equals(pending.PendingToken, request.PendingToken, StringComparison.Ordinal))
+            return Fail(422, "PendingToken không khớp.");
+
+        if (!_totp.VerifyCode(pending.Secret, request.Code))
+            return Fail(422, "Mã xác thực không đúng. Hãy kiểm tra thời gian thiết bị + thử lại.");
+
+        // Encrypt secret trước khi lưu DB
+        account.TwoFactorSecret = _protector.Protect(pending.Secret);
+        account.TwoFactorSecretEncryptedAt = DateTime.UtcNow;
+        account.TwoFactorEnabled = true;
+        _unitOfWork.Accounts.UpdateAsync(account);
+
+        // Sinh 8 backup codes (plain trả về user 1 lần, hash lưu DB)
+        var plainCodes = _backupCodes.Generate(BackupCodeCount);
+        foreach (var plain in plainCodes)
+        {
+            await _unitOfWork.BackupCodes.AddAsync(new BackupCode
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                CodeHash = _backupCodes.Hash(plain),
+                RedeemedAt = null,
+            });
+        }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            Action: AuditActionEnum.TwoFactorEnabled,
+            TargetAccountId: account.Id,
+            IsSuccess: true,
+            Reason: "Confirmed via TOTP",
+            Metadata: new Dictionary<string, object?> { ["backupCodesIssued"] = BackupCodeCount }
+        ), cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _pending.RemoveAsync(account.Id, cancellationToken);
+
+        return new CommonResponse<TwoFactorConfirmDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Bật 2FA thành công. LƯU LẠI 8 backup codes — chúng chỉ hiển thị 1 lần.",
+            Data = new TwoFactorConfirmDto
+            {
+                Enabled = true,
+                BackupCodes = plainCodes.ToList(),
+            }
+        };
+    }
+
+    private static CommonResponse<TwoFactorConfirmDto> Fail(int statusCode, string message) => new()
+    {
+        IsSuccess = false,
+        StatusCode = statusCode,
+        Message = message,
+    };
+}

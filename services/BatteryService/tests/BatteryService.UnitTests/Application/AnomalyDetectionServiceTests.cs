@@ -39,6 +39,8 @@ public class AnomalyDetectionServiceTests
         SocCriticalThreshold = 10,
         SohWarningThreshold = 85,
         SohCriticalThreshold = 75,
+        // Tắt noise suppression cho các test cũ (chúng kiểm tra hành vi detect, không phải suppression).
+        NoiseSuppressionEnabled = false,
         IsActive = true,
         EffectiveFromUtc = DateTime.UtcNow
     };

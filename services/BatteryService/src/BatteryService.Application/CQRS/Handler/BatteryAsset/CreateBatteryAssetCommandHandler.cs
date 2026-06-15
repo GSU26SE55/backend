@@ -6,6 +6,8 @@ using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using BatteryAssetEntity = BatteryService.Domain.Entities.BatteryAsset;
 using SiteEntity = BatteryService.Domain.Entities.Site;
 
@@ -14,10 +16,12 @@ namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
 public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAssetCommand, CommonResponse<BatteryAssetDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IIntegrationEventOutboxWriter _outbox;
 
-    public CreateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork)
+    public CreateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, IIntegrationEventOutboxWriter outbox)
     {
         _unitOfWork = unitOfWork;
+        _outbox = outbox;
     }
 
     public async Task<CommonResponse<BatteryAssetDto>> Handle(CreateBatteryAssetCommand request, CancellationToken cancellationToken)
@@ -36,7 +40,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Không tìm thấy khách hàng đang hoạt động.",
-                ListErrors = { new Errors { Field = nameof(request.CustomerId), Detail = "Khách hàng không tồn tại hoặc đã bị khóa." } }
             };
         }
 
@@ -52,7 +55,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
                 IsSuccess = false,
                 StatusCode = 409,
                 Message = "Serial pin đã tồn tại.",
-                ListErrors = { new Errors { Field = nameof(request.SerialNumber), Detail = "Serial pin đã tồn tại." } }
             };
         }
 
@@ -112,6 +114,15 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
         };
 
         await _unitOfWork.BatteryAssets.AddAsync(entity);
+
+        await _outbox.WriteAsync(new BatteryAssetCreatedEvent(
+            BatteryAssetId: entity.Id,
+            CustomerId: entity.CustomerId,
+            SiteId: entity.SiteId,
+            BatteryTypeId: entity.BatteryTypeId,
+            SerialNumber: entity.SerialNumber,
+            CreatedAt: DateTime.UtcNow), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<BatteryAssetDto>

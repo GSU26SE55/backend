@@ -29,6 +29,10 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  # Sprint IoT-2 #IoT2-35 — firmware .bin upload persistence.
+  firmware-storage:
+  # GH-295 — ASP.NET Data Protection keys cho 2FA TwoFactorSecret encryption.
+  auth-dataprotection-keys:
 
 services:
   # ---------- Infrastructure ----------
@@ -73,6 +77,7 @@ services:
       FILE_STORAGE_DB_NAME: ${FILE_STORAGE_DB_NAME:-file_storage_db}
       BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
       TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
+      NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -174,8 +179,12 @@ services:
       ASPNETCORE_URLS: http://+:8080
       # AuthService chỉ dùng database riêng của Auth.
       ConnectionStrings__AuthDb: "Host=postgres;Port=5432;Database=${AUTH_DB_NAME:-auth_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      # Data Protection keys cho 2FA secret encryption (GH-295). Volume bên dưới mount /app/keys persist cross-restart.
+      DataProtection__KeysPath: "/app/keys"
     ports:
       - "4002:8080"
+    volumes:
+      - auth-dataprotection-keys:/app/keys
     depends_on:
       postgres:
         condition: service_healthy
@@ -281,8 +290,39 @@ services:
       AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
       AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
       AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
+      # Sprint 5B #91/#102 — Environmental ingest API key (smoke/fire/water IoT)
+      ApiKeys__EnvironmentalIngest: ${BATTERY_ENVIRONMENTAL_INGEST_API_KEY:-dev-battery-environmental-key}
+      # Sprint 5B #90/#92 — OpenMeteo + WeatherSyncBackgroundService
+      Weather__BaseUrl: ${BATTERY_WEATHER_BASE_URL:-https://api.open-meteo.com/}
+      Weather__IntervalMinutes: ${BATTERY_WEATHER_INTERVAL_MINUTES:-15}
+      Weather__DedupWindowMinutes: ${BATTERY_WEATHER_DEDUP_WINDOW_MINUTES:-10}
+      Weather__HttpTimeoutSeconds: ${BATTERY_WEATHER_HTTP_TIMEOUT_SECONDS:-10}
+      Weather__Enabled: ${BATTERY_WEATHER_ENABLED:-true}
+      # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
+      # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
+      Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
+      Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
+      Iot__OfflineBatchSize: ${Iot__OfflineBatchSize:-100}
+      # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. DEV: listener 1883 plaintext.
+      # Bật: Mqtt__Enabled=true sau khi mosquitto container up + đã sinh passwd cho user backend-bridge.
+      Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      Mqtt__Host: ${Mqtt__Host:-mosquitto}
+      Mqtt__Port: ${Mqtt__Port:-1883}
+      Mqtt__UseTls: ${Mqtt__UseTls:-false}
+      Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-true}
+      Mqtt__Username: ${Mqtt__Username:-backend-bridge}
+      Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
+      Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
+      Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage (multipart upload).
+      Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
+      Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
     ports:
       - "4006:8080"
+    volumes:
+      - firmware-storage:/data/firmware-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -294,6 +334,19 @@ services:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
+
+  # ---------- MQTT broker — KHÔNG nằm trong backend repo ----------
+  # Per tasksprint.md S0-INF-02 + architectural decision: broker thuộc IoT monorepo (capstone/iot/),
+  # backend chỉ chạy MQTT CLIENT (MqttBridgeBackgroundService) connect tới broker đó.
+  #
+  # Để test MQTT path từ backend dev:
+  #   1. Clone capstone/iot, chạy: docker compose -f iot/infra/docker-compose.dev.yml up -d mosquitto
+  #   2. Backend connect qua hostname:
+  #        - Nếu iot compose join cùng `solar-net`: Mqtt__Host=mosquitto
+  #        - Nếu iot compose mạng riêng: Mqtt__Host=host.docker.internal, Mqtt__Port=1883
+  #   3. Set Mqtt__Enabled=true trong .env.Docker
+  #
+  # Production: docker-compose.prod.yml HOST mosquitto service (single-VPS deploy).
 
   ticketservice:
     container_name: solar-ticketservice
@@ -310,8 +363,43 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      # Sprint 5B #235 — MassTransit endpoint runtime
+      MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-16}
+      MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-8}
+      # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
+      AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
+      AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
     ports:
       - "4007:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  notificationservice:
+    container_name: solar-notificationservice
+    build:
+      context: .
+      dockerfile: services/NotificationService/src/NotificationService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__NotificationDb: "Host=postgres;Port=5432;Database=${NOTIFICATION_DB_NAME:-notification_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "4008:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -342,6 +430,7 @@ services:
       - filestorageservice
       - batteryservice
       - ticketservice
+      - notificationservice
     networks: [solar-net]
     restart: unless-stopped
 
