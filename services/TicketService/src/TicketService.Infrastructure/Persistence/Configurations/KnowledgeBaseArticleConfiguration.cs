@@ -44,7 +44,7 @@ public class KnowledgeBaseArticleConfiguration : IEntityTypeConfiguration<Knowle
         builder.Property(e => e.RecommendedParts)
             .HasColumnName("recommended_parts")
             .HasColumnType("jsonb")
-            .HasConversion(new JsonValueConverter<string?>());
+            .HasConversion(new JsonValueConverter<List<string>?>());
 
         builder.Property(e => e.Tags)
             .HasColumnName("tags")
@@ -67,6 +67,16 @@ public class KnowledgeBaseArticleConfiguration : IEntityTypeConfiguration<Knowle
         builder.Property(e => e.CreatedByUserId)
             .HasColumnName("created_by_user_id");
 
+        builder.Property(e => e.PendingReviewBy)
+            .HasColumnName("pending_review_by");
+
+        builder.Property(e => e.ReviewRequired)
+            .HasColumnName("review_required")
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.ManagerRejectReason)
+            .HasColumnName("manager_reject_reason");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -85,5 +95,10 @@ public class KnowledgeBaseArticleConfiguration : IEntityTypeConfiguration<Knowle
         builder.HasIndex(e => e.Code).IsUnique();
         builder.HasIndex(e => e.Category);
         builder.HasIndex(e => e.Status);
+
+        builder.HasMany(e => e.Versions)
+            .WithOne(e => e.Article)
+            .HasForeignKey(e => e.ArticleId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

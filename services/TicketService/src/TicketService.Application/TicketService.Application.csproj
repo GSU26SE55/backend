@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Folder Include="CQRS\Command\" />
+    <Folder Include="Mapping\" />
     <Folder Include="StateMachine\" />
   </ItemGroup>
 

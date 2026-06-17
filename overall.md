@@ -1114,14 +1114,16 @@ Khi 1 `BatteryAsset` có cả BMS và IoT Gateway cùng đẩy reading:
 foreach (var asset in assetsWithMultipleSources)
 {
     var latestBms = await _unitOfWork.SensorReadings.GetAllAsync()
-        .Where(x => x.BatteryAssetId == asset.Id
+        .Where(x => !x.IsDeleted
+            && x.BatteryAssetId == asset.Id
             && x.SourceType == SensorReadingSourceTypeEnum.Bms
             && x.Time >= DateTime.UtcNow.AddSeconds(-60))
         .OrderByDescending(x => x.Time)
         .FirstOrDefaultAsync();
 
     var latestIot = await _unitOfWork.SensorReadings.GetAllAsync()
-        .Where(x => x.BatteryAssetId == asset.Id
+        .Where(x => !x.IsDeleted
+            && x.BatteryAssetId == asset.Id
             && x.SourceType == SensorReadingSourceTypeEnum.IotGateway
             && x.Time >= DateTime.UtcNow.AddSeconds(-60))
         .OrderByDescending(x => x.Time)
@@ -1466,15 +1468,17 @@ services.Configure<WeatherSyncOptions>(configuration.GetSection("Weather"));
 ## 2. TicketService — P0
 
 ### 2.1. Trách nhiệm
-1. CRUD ticket với state machine 12+ trạng thái.
+1. CRUD ticket với state machine 14 trạng thái.
 2. Quản lý SLA timer (start/pause/resume/breach) — BR-04.
 3. Quản lý Activity timeline (BR-08).
 4. Orchestrate `Alert–Ticket Saga`: nhận `BatteryAnomalyDetectedEvent`, tạo hoặc reuse Ticket theo BR-02, rồi yêu cầu BatteryService liên kết `Alert.TicketId`.
 5. Manager approval workflow (BR-05).
 6. Reopen policy 7 ngày (BR-06) + escalate khi ≥ 2 reopen (BR-07).
-7. KnowledgeBase module (xem §4).
+7. KnowledgeBase module (xem §4) — quy trình mềm (BR-11), không enforce cứng việc tạo Wiki mới sau mỗi ticket.
 8. Maintenance log + attachment.
 9. Comment với Internal/External visibility.
+10. Phân tầng xử lý SLA & assign Staff (BR-10): P1→Tier 1, P2→Tier 2, P3→Tier 3.
+11. Quy tắc đóng ticket theo tầng (BR-12): Tầng nào nhận ticket thì tầng đó đóng. Hệ thống tự động ESCALATED tại 2/3 SLA nếu chưa RESOLVED. Staff cũ bị block hoàn toàn sau khi escalate.
 
 ### 2.2. Cấu trúc thư mục
 (tương tự BatteryService, tham khảo §1.2)
@@ -1729,7 +1733,7 @@ public enum TicketStatusEnum {
 |-----------|---------------|-----------------|--------------|
 | `*` → `New` | System (initial) | — | Activity Created |
 | `New` → `Open` | Manager / System | — | Activity StatusChanged |
-| `Open` → `Approved` | Manager | `Priority`, `Impact`, `Urgency` | **Triage Success**: Phê duyệt tính hợp lệ, chưa gán Staff |
+| `Open` → `Approved` | Manager | `Priority`, `ImpactScope`, `UrgencyLevel` | **Triage Success**: Phê duyệt tính hợp lệ, tính priority tự động, chưa gán Staff |
 | `Open` → `ClosedRejected` | Manager | `RejectionReason` | **Triage Fail**: Từ chối trực tiếp ticket không hợp lệ |
 | `Approved` → `Assigned` | Manager | `AssignedStaffId` | **Assignment**: Gán Staff, Start SlaTimer, publish TicketAssignedEvent |
 | `Assigned` → `InProgress` | AssignedStaff | — | Activity StatusChanged |
@@ -1969,7 +1973,7 @@ Plus comment/log/attachment commands:
 #### `SlaTimerBackgroundService` (frequency: 60s)
 ```csharp
 foreach (var timer in await _uow.SlaTimers.GetAllAsync()
-    .Where(t => t.Status == SlaTimerStatusEnum.Running)
+    .Where(t => t.Status == SlaTimerStatusEnum.Running && !t.IsDeleted)
     .ToListAsync()) {
 
     var now = DateTime.UtcNow;
@@ -2511,29 +2515,89 @@ GET    /api/v1/tickets/{id}/kb-references                (mọi role internal)
 GET    /api/v1/knowledge-base/{id}/usage-stats           (Manager/Admin — count + recent tickets)
 ```
 
-### 4.3. Endpoints
-```
-GET    /api/v1/knowledge-base?category=&q=&tag=&page=    (Staff/Manager/Admin)
-GET    /api/v1/knowledge-base/{id}                       (mọi role internal)
-POST   /api/v1/knowledge-base                            (Manager/Admin) — Status=Draft
-PUT    /api/v1/knowledge-base/{id}
-PUT    /api/v1/knowledge-base/{id}/publish               (Manager/Admin)
-PUT    /api/v1/knowledge-base/{id}/archive
-DELETE /api/v1/knowledge-base/{id}                       (Admin)
-POST   /api/v1/knowledge-base/{id}/helpful               (Staff vote)
-GET    /api/v1/knowledge-base/suggest?ticketId={id}      (Staff — gợi ý theo ticket category + symptom match)
+### 4.3. Luồng Nghiệp Vụ Xét Duyệt & Xuất Bản (Lifecycle Flow)
+
+Vòng đời của một bài viết Knowledge Base (KB Article) được thiết kế chặt chẽ qua các vai trò (Staff, Manager, Admin) và được lưu vết phiên bản đầy đủ:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingReview : Staff Tạo mới (HttpPost /api/internal/knowledge-base)\n[Version = 0, Status = PendingReview]
+    [*] --> Draft : Manager/Admin Tạo nháp\n[Status = Draft]
+
+    PendingReview --> Published : Manager/Admin Duyệt (HttpPost .../approve-review)\n[Version = 1, Status = Published]
+    PendingReview --> Draft : Manager/Admin Từ chối (HttpPost .../reject-review)\n[Quay về nháp kèm RejectReason]
+
+    Draft --> Published : Manager/Admin Xuất bản trực tiếp (HttpPost .../publish)
+
+    Published --> PendingReview : Staff cập nhật nội dung (HttpPut /api/internal/knowledge-base/{id})\n[Lưu bản cũ vào History, chuyển PendingReview]
+    Published --> Published : Manager/Admin/Tác giả cập nhật trực tiếp\n[Lưu bản cũ, tăng Version, giữ Published]
+
+    Published --> Archived : Manager/Admin Lưu trữ (HttpPost .../archive)
+    Archived --> Published : Manager/Admin Khôi phục/Publish lại
+
+    Published --> Published : Manager/Admin Rollback về bản cũ (HttpPost .../rollback)\n[Tăng version mới với nội dung cũ]
+
+    Draft --> [*] : Admin Xóa mềm (HttpDelete /api/admin/knowledge-base/{id})
+    Published --> [*] : Admin Xóa mềm
 ```
 
-### 4.4. Suggest logic
-```sql
-SELECT id, title, helpful_count
-FROM kb_articles
-WHERE status = 2  -- Published
-  AND category = :ticketCategory
-ORDER BY helpful_count DESC, view_count DESC
-LIMIT 5;
+1. **Soạn thảo và Gửi duyệt (Draft -> PendingReview):**
+   - Mọi nhân viên nội bộ (Staff/Manager/Admin) có thể tạo mới bài viết.
+   - Khi Staff tạo mới (qua `/api/internal/knowledge-base`), bài viết tự động lưu với `Status = PendingReview` (Chờ duyệt) và `Version = 0` nhằm đảm bảo chất lượng nội dung trước khi công khai.
+2. **Quy trình Phê duyệt (Review):**
+   - **Approve (Phê duyệt):** Manager/Admin gọi `/api/admin/knowledge-base/{id}/approve-review` để duyệt bài viết. Trạng thái chuyển sang `Published` và `Version` được đặt thành 1. Bài viết lúc này hiển thị công khai và được đưa vào thuật toán gợi ý (Suggest).
+   - **Reject (Từ chối):** Manager/Admin gọi `/api/admin/knowledge-base/{id}/reject-review` truyền lý do từ chối. Trạng thái bài viết chuyển về `Draft` (Nháp) để Staff chỉnh sửa và gửi duyệt lại.
+3. **Cập nhật và Quản lý phiên bản (Update & Versioning):**
+   - Khi cập nhật qua `/api/internal/knowledge-base/{id}`, hệ thống tự động lưu trữ phiên bản hiện tại vào bảng lịch sử `KbArticleVersion`.
+   - Nếu bài viết đã `Published` và được cập nhật bởi một **Staff khác** (không phải người tạo ban đầu), bài viết sẽ tự động chuyển về trạng thái `PendingReview` để chờ kiểm duyệt lại.
+   - Nếu cập nhật bởi chính **chủ sở hữu (tác giả)** hoặc **Manager/Admin**, bài viết được cập nhật trực tiếp, giữ nguyên trạng thái `Published` và số phiên bản (`Version`) được tăng thêm 1.
+4. **Khôi phục lịch sử (Rollback):**
+   - Manager/Admin có quyền khôi phục bài viết về một phiên bản cũ trong lịch sử thông qua `/api/admin/knowledge-base/{id}/rollback`. Nội dung phiên bản cũ được ghi đè lên phiên bản hiện tại và `Version` được tăng thêm 1.
+
+### 4.4. Các Endpoints Thực Tế (Khớp với Code)
+
+#### API Công khai & Tra cứu (Mọi Role đã đăng nhập)
+- `GET    /api/knowledge-base` : Lấy danh sách bài viết (hỗ trợ lọc theo `Category`, `Status`, `Tag`, và tìm kiếm từ khóa `Q`).
+- `GET    /api/knowledge-base/{id}` : Xem chi tiết bài viết (tự động tăng `ViewCount`).
+- `GET    /api/knowledge-base/suggest?ticketId={id}` : Gợi ý tối đa 5 bài viết public phù hợp với phân loại lỗi của Ticket.
+- `POST   /api/knowledge-base/{id}/helpful` : Staff đánh dấu bài viết hữu ích (tăng `HelpfulCount`).
+
+#### API Soạn thảo & Xem lịch sử (Internal: Staff, Manager, Admin)
+- `POST   /api/internal/knowledge-base` : Tạo mới bài viết (Staff tạo -> `PendingReview`, Manager/Admin tạo -> `Draft`).
+- `PUT    /api/internal/knowledge-base/{id}` : Cập nhật nội dung bài viết (có lưu lịch sử và kiểm tra quyền tác giả).
+- `GET    /api/internal/knowledge-base/{id}/versions` : Lấy danh sách lịch sử các phiên bản cũ của bài viết.
+- `GET    /api/internal/knowledge-base/{id}/versions/{versionId}` : Xem chi tiết một phiên bản lịch sử.
+- `GET    /api/internal/knowledge-base/{id}/compare?fromVersion=&toVersion=` : So sánh khác biệt (Diff) giữa hai phiên bản.
+- `GET    /api/internal/knowledge-base/{id}/copy-template` : Sao chép bài viết mẫu (mã lỗi mẫu) để bắt đầu viết.
+
+#### API Quản trị vòng đời (Admin & Manager)
+- `POST   /api/admin/knowledge-base/{id}/publish` : Xuất bản bài viết đang ở trạng thái `Draft` hoặc `PendingReview`.
+- `POST   /api/admin/knowledge-base/{id}/archive` : Lưu trữ bài viết đã xuất bản (không hiển thị công khai).
+- `POST   /api/admin/knowledge-base/{id}/approve-review` : Manager phê duyệt bài viết do Staff gửi lên.
+- `POST   /api/admin/knowledge-base/{id}/reject-review` : Manager từ chối bài viết kèm lý do (`ManagerRejectReason`).
+- `POST   /api/admin/knowledge-base/{id}/rollback` : Hoàn tác bài viết về phiên bản cũ.
+- `DELETE /api/admin/knowledge-base/{id}` : Xóa mềm bài viết (Chỉ Admin).
+
+#### API Liên kết Ticket & KB (v1 namespace)
+- `POST   /api/v1/tickets/{id}/kb-references` : Liên kết Ticket với KB Article (`ReferenceType` = 1: ConsultedDuringResolve, 2: ProvidedToCustomer, 3: GeneratedAfterResolve).
+- `DELETE /api/v1/tickets/{id}/kb-references/{refId}` : Xóa liên kết.
+- `GET    /api/v1/tickets/{id}/kb-references` : Lấy danh sách bài viết KB đã liên kết với Ticket này.
+
+### 4.5. Suggest logic thực tế trong Code
+
+Truy vấn gợi ý bài viết phù hợp dựa trên Category của Ticket, sắp xếp theo độ hữu ích (`HelpfulCount`) giảm dần, tiếp theo là lượt xem (`ViewCount`) giảm dần, giới hạn tối đa 5 kết quả và loại trừ các bài viết nội bộ (`IsInternalOnly == false`):
+
+```csharp
+var suggestions = await _uow.KnowledgeBaseArticles.GetAllAsync()
+    .Where(a => !a.IsDeleted
+             && a.Status == KbArticleStatusEnum.Published
+             && !a.IsInternalOnly
+             && a.Category == ticket.Category)
+    .OrderByDescending(a => a.HelpfulCount)
+    .ThenByDescending(a => a.ViewCount)
+    .Take(5)
+    .ToListAsync(ct);
 ```
-Future: ElasticSearch full-text trên Symptoms (out of scope capstone).
 
 ---
 
@@ -6132,7 +6196,7 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
                     && a.DetectedAt >= DateTime.UtcNow.AddHours(-1)
                     && a.BatteryAssetId != assetId
                     && _unitOfWork.BatteryAssets.GetAllAsync()
-                        .Any(b => b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
+                        .Any(b => !b.IsDeleted && b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
                 .CountAsync();
 
             if (siblingAnomalies >= 1) score += 0.2m;
@@ -6141,7 +6205,8 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
 
         // Rule 3: Thermal proximity — overheat lây lan
         var hasThermalRunaway = await _unitOfWork.Alerts.GetAllAsync()
-            .Where(a => a.BatteryAssetId == assetId
+            .Where(a => !a.IsDeleted
+                && a.BatteryAssetId == assetId
                 && a.AnomalyType == AnomalyTypeEnum.Overheat
                 && a.Severity == AlertSeverityEnum.Critical
                 && a.Status == AlertStatusEnum.Open)

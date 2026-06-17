@@ -11,11 +11,20 @@ public class KnowledgeBaseArticle : AuditableEntity
     public string Symptoms { get; set; } = string.Empty;
     public string DiagnosisSteps { get; set; } = string.Empty;
     public string SolutionSteps { get; set; } = string.Empty;
-    public string? RecommendedParts { get; set; } // JSON
+    public List<string>? RecommendedParts { get; set; }
     public List<string> Tags { get; set; } = new();
     public KbArticleStatusEnum Status { get; set; } = KbArticleStatusEnum.Draft;
+    public bool IsInternalOnly { get; set; } = false;
     public int Version { get; set; } = 1;
     public int ViewCount { get; set; }
     public int HelpfulCount { get; set; }
     public Guid CreatedByUserId { get; set; }
+
+    // New fields for approval workflow
+    public Guid? PendingReviewBy { get; set; }
+    public bool ReviewRequired { get; set; }
+    public string? ManagerRejectReason { get; set; }
+
+    // Navigation
+    public ICollection<KbArticleVersion> Versions { get; set; } = new List<KbArticleVersion>();
 }
