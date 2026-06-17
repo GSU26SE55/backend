@@ -10,6 +10,7 @@ public class FileAuthorizationService : IFileAuthorizationService
 {
     private const string AdminRole = "Admin";
     private const string ManagerRole = "Manager";
+    private const string StaffRole = "Staff";
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -56,6 +57,8 @@ public class FileAuthorizationService : IFileAuthorizationService
             FilePurposeEnum.Avatar => true,
             FilePurposeEnum.KbImage => true,
             FilePurposeEnum.Firmware => false,
+            FilePurposeEnum.TicketAttachment or FilePurposeEnum.MaintenancePhoto
+                => HasAnyRole(ManagerRole, StaffRole) || file.CreatedBy == CurrentUserId,
             _ => file.CreatedBy == CurrentUserId
         };
     }

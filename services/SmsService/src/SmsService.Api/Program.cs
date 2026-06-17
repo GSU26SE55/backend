@@ -1,34 +1,165 @@
+using System.Threading.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Prometheus;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
-using SharedInfrastructure.Middleware;
-using SmsService.Infrastructure.Consumers;
+using SmsService.Api.Swagger;
+using SmsService.Application.Interfaces.Repositories;
+using SmsService.Application.Interfaces.Services;
+using SmsService.Infrastructure.BackgroundJobs;
+using SmsService.Infrastructure.Implements.Repositories;
+using SmsService.Infrastructure.Implements.Services;
 using SmsService.Infrastructure.Options;
-using SmsService.Infrastructure.Services;
+using SmsService.Infrastructure.Persistence;
+using SmsService.Infrastructure.Realtime;
+using SmsService.Infrastructure.Security;
+using AppDI = SmsService.Application.DependencyInjection.ManageDependencyInjection;
 
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── 1. Config ─────────────────────────────────────────────────────────────
 builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection(SmsOptions.SectionName));
-builder.Services.AddSingleton<ISmsSender, FakeSmsSender>();
-builder.Services.AddMessageBus(builder.Configuration, typeof(SendPhoneOtpConsumer).Assembly);
+builder.Services.Configure<OutboxOptions>(builder.Configuration.GetSection(OutboxOptions.SectionName));
 
-// Inbox Pattern (chống consume duplicate)
+// ── 2. DbContext + UoW ────────────────────────────────────────────────────
+var connectionString = builder.Configuration.GetConnectionString("SmsDb")
+                       ?? builder.Configuration["SmsDb"]
+                       ?? builder.Configuration["Sms_Db"]
+                       ?? builder.Configuration["SMS_DB"]
+                       ?? throw new InvalidOperationException(
+                           "Missing SMS database connection string. Expected ConnectionStrings__SmsDb / SmsDb / Sms_Db / SMS_DB.");
+
+builder.Services.AddDbContext<SmsDbContext>(opt => opt.UseNpgsql(connectionString));
+builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<SmsDbContext>());
+builder.Services.AddScoped<ISmsUnitOfWork, SmsUnitOfWork>();
+
+// ── 3. SharedInfrastructure ───────────────────────────────────────────────
+// CRITICAL: assemblyName là "SmsService.Application" — KHÔNG phải Api.
+// `AddMediatRInfrastructure` dùng Assembly.Load(assemblyName) để scan handlers; sai tên → runtime crash.
+builder.Services.AddSharedInfrastructure(
+    builder.Configuration,
+    assemblyName: "SmsService.Application",
+    apiTitle: "SMS Service API");
+
+// Sprint SMS — SmsService có 2 auth scheme:
+//   - JWT Bearer (default từ AddSharedSwaggerGen) cho admin endpoints
+//   - GatewayApiKey (BCrypt key + X-Device-Code header) cho Flutter gateway endpoints
+// SmsGatewaySwaggerExtensions add scheme thứ 2 + operation filter map đúng từng endpoint.
+builder.Services.AddSmsGatewaySwagger();
+
+// ── 4. Inbox (Redis) ──────────────────────────────────────────────────────
 builder.Services.AddInboxIdempotency(builder.Configuration);
 
+// ── 5. MassTransit consumers ──────────────────────────────────────────────
+// Consumer assembly: SmsService.Application chứa SendSmsCommandConsumer + SendPhoneOtpConsumer (Phase 5).
+// AddMessageBus đăng ký IMessageProducerService = MassTransitProducer — step 6 OVERRIDE bằng OutboxMessagePublisher.
+builder.Services.AddMessageBus(
+    builder.Configuration,
+    configure: null,
+    AppDI.ApplicationAssembly);
+
+// ── 6. Outbox publisher (PHẢI đăng ký SAU AddMessageBus để override) ──────
+// Last-registration-wins: handler resolve IMessageProducerService → OutboxMessagePublisher.
+// OutboxRelayBackgroundService poll DB → IPublishEndpoint của MassTransit publish thật.
+builder.Services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
+builder.Services.AddHostedService<OutboxRelayBackgroundService>();
+
+// ── 7. SignalR + Notifier ─────────────────────────────────────────────────
+builder.Services.AddSignalR(o =>
+{
+    o.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    o.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    o.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddSingleton<ISmsGatewayNotifier, SignalRSmsGatewayNotifier>();
+
+// ── 8. Security — GatewayApiKey scheme (Flutter) ──────────────────────────
+builder.Services.AddSingleton<IGatewayApiKeyHasher, BcryptGatewayApiKeyHasher>();
+builder.Services
+    .AddAuthentication() // JwtBearer đã add bởi AddSharedInfrastructure
+    .AddScheme<GatewayAuthOptions, GatewayApiKeyAuthenticationHandler>(GatewayAuthOptions.SchemeName, _ => { });
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("GatewayDevice", p => p
+        .AddAuthenticationSchemes(GatewayAuthOptions.SchemeName)
+        .RequireAuthenticatedUser()
+        .RequireClaim("device_code"));
+
+// ── 9. Rate limiter (60 req/phút/device) ──────────────────────────────────
+builder.Services.AddRateLimiter(o =>
+{
+    o.AddPolicy("gateway", httpContext =>
+    {
+        var deviceCode = httpContext.Request.Headers["X-Device-Code"].ToString();
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: string.IsNullOrEmpty(deviceCode) ? "anon" : deviceCode,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+    });
+    o.RejectionStatusCode = 429;
+});
+
+// ── 10. Background workers (StaleReaper + Redactor) ───────────────────────
+builder.Services.AddHostedService<StaleSmsReaperBackgroundService>();
+builder.Services.AddHostedService<SmsMessageRedactorBackgroundService>();
+
+// ── 11. Controllers + Swagger ─────────────────────────────────────────────
+builder.Services.AddControllers();
+
+// ── 12. Build & pipeline ──────────────────────────────────────────────────
 var app = builder.Build();
 
-// SecurityHeaders + CorrelationId + RequestLogging + GlobalException
-app.UseSharedInfrastructure();
+// Auto-migrate khi startup — pattern khớp AuthService.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+    var pending = db.Database.GetPendingMigrations().ToList();
+    if (pending.Count > 0)
+    {
+        Console.WriteLine($"[SmsService] Running {pending.Count} pending migration(s)...");
+        db.Database.Migrate();
+        Console.WriteLine("[SmsService] Migration completed.");
+    }
+}
 
+// SecurityHeaders + CorrelationId + RequestLogging + GlobalException + CommonResponseStatusCodes
+app.UseSharedInfrastructure();
 app.UseHttpMetrics();
 
-app.MapGet("/", () => "SMS Service is Running...");
+if (!app.Environment.IsProduction())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "SMS Service API");
+    });
+}
 
+if (!app.Environment.IsEnvironment("Docker")
+    && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseCors("AllowAll");
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// ── 13. Endpoints ─────────────────────────────────────────────────────────
+app.MapGet("/", () => "SMS Gateway Service is Running...");
 app.MapMetrics();
+app.MapControllers();
+app.MapHub<SmsGatewayHub>("/hubs/sms-gateway");
 
 app.Run();
 

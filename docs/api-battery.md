@@ -147,6 +147,16 @@ Open ──→ Acknowledged ──→ Resolved
 | `IotSensor` | 1 | Cảm biến IoT thật tại site (vd DHT22, BME280) |
 | `WeatherApi` | 2 | Dữ liệu sync từ OpenMeteo HTTP API qua `WeatherSyncBackgroundService` |
 
+### `SensorReadingSourceTypeEnum`
+
+> Phân loại nguồn của một sensor reading — phục vụ cross-source mismatch check (Sprint 7, anomaly `SensorMismatch`).
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Bms` | 1 | Reading từ BMS gắn trực tiếp trong pack (qua RS485/Modbus) |
+| `IotGateway` | 2 | Reading từ IoT edge device (ESP32-S3 + sensor ngoài). Tên giữ legacy "Gateway" — **giá trị mặc định** của `POST /batch` |
+| `External` | 3 | Manual import / third-party feed |
+
 ### `ChargingStateEnum`
 
 | Giá trị | Int | Ý nghĩa | Current convention |
@@ -164,6 +174,50 @@ Open ──→ Acknowledged ──→ Resolved
 | `Active` | 1 | Site đang hoạt động bình thường |
 | `UnderMaintenance` | 2 | Site đang trong thời gian bảo trì |
 | `Decommissioned` | 3 | Site đã ngừng hoạt động |
+
+### `IotDeviceStatusEnum`
+
+> Trạng thái vòng đời của một IoT edge device (xem Nhóm 11).
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Pending` | 1 | Đã tạo nhưng chưa provision (chưa bind firmware/credential) |
+| `Active` | 2 | Đã provision và còn heartbeat trong threshold |
+| `Offline` | 3 | Mất heartbeat quá threshold — đánh dấu bởi background job |
+| `Disabled` | 4 | Bị admin vô hiệu hóa (API key revoked, không nhận ingest) |
+| `Decommissioned` | 5 | Đã ngừng sử dụng vĩnh viễn |
+
+### `IotApiKeyScopeEnum`
+
+> Bitmask `[Flags]` — một API key per-device có thể mang nhiều scope đồng thời.
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `None` | 0 | Không có scope |
+| `SensorIngest` | 1 | Cho phép `POST /api/sensor-readings/batch` |
+| `DeviceHeartbeat` | 2 | Cho phép `provision` + `heartbeat` |
+| `EnvironmentalIngest` | 4 | Cho phép ingest ambient + report environmental incident |
+| `FirmwareCheck` | 8 | Cho phép `firmware-check` + báo cáo update log |
+| `EdgeDeviceDefault` | 11 | Bundle mặc định = `SensorIngest \| DeviceHeartbeat \| FirmwareCheck` (1+2+8) |
+
+### `IotFirmwareUpdateStatusEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Pending` | 1 | Đã ra lệnh, device chưa báo kết quả |
+| `Downloading` | 2 | Device đang download artifact |
+| `Installing` | 3 | Device đang flash |
+| `Success` | 4 | Update thành công, đã reboot |
+| `Failed` | 5 | Update fail (CRC/checksum/rollback) |
+| `Skipped` | 6 | Device không đủ điều kiện (vd battery thấp) → bỏ qua round này |
+| `RolledBack` | 7 | Flash xong nhưng fail boot → rollback về bản trước |
+
+### `IotFirmwareChannelEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Stable` | 1 | Kênh phát hành ổn định |
+| `Beta` | 2 | Kênh thử nghiệm |
 
 ---
 
@@ -191,7 +245,7 @@ Base route: `/api/alerts`
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
 | `pageSize` | `int` | Không (mặc định 10) | Số item mỗi trang |
 | `batteryAssetId` | `string?` | Không | Lọc alert của một asset cụ thể (UUID string) |
-| `severity` | `AlertSeverityEnum?` | Không | Lọc theo mức độ nghiêm trọng |
+| `severity` | `AlertSeverityEnum?` | Không | Lọc theo mức độ nghiêm trọng (`Info`/`Warning`/`Critical`) |
 | `status` | `AlertStatusEnum?` | Không | Lọc theo trạng thái; nếu truyền thì `excludeMerged` bị bỏ qua |
 | `excludeMerged` | `bool` | Không (mặc định `true`) | Loại trừ alert có `status = Merged` — mặc định `true` nên FE chỉ thấy alert gốc. Truyền `false` để xem tất cả kể cả Merged (dành cho debug/admin) |
 | `from` | `DateTime?` | Không | Lọc từ thời điểm phát sinh (UTC) |
@@ -208,9 +262,9 @@ Base route: `/api/alerts`
 | `batterySerialNumber` | `string` | Không | Serial number của pin (để hiển thị) |
 | `anomalyType` | `AnomalyTypeEnum` | Không | Loại bất thường (xem enum) |
 | `severity` | `AlertSeverityEnum` | Không | Mức độ nghiêm trọng (xem enum) |
-| `thresholdValue` | `decimal` | Không | Giá trị ngưỡng đã cấu hình |
-| `actualValue` | `decimal` | Không | Giá trị thực tế tại thời điểm phát sinh |
-| `unit` | `string` | Không | Đơn vị đo (e.g., `V`, `°C`, `%`) |
+| `thresholdValue` | `decimal?` | Null nếu anomaly không gắn ngưỡng cụ thể | Giá trị ngưỡng đã cấu hình |
+| `actualValue` | `decimal?` | Null nếu anomaly không gắn giá trị đo | Giá trị thực tế tại thời điểm phát sinh |
+| `unit` | `string?` | Null nếu không áp dụng đơn vị | Đơn vị đo (e.g., `V`, `°C`, `%`) |
 | `detectedAt` | `DateTime` | Không | Thời điểm phát hiện bất thường (UTC) |
 | `status` | `AlertStatusEnum` | Không | Trạng thái hiện tại (xem enum) |
 | `ticketId` | `string?` | Null nếu chưa có ticket | ID ticket liên kết (nếu đã auto-tạo hoặc link thủ công) |
@@ -256,7 +310,6 @@ Base route: `/api/alerts`
 **Response thành công `200`:** `isSuccess = true`
 
 **Lỗi thường gặp:**
-- `400` — `id` là empty GUID
 - `404` — Alert không tìm thấy
 - `409 isSuccess=false` — Alert đang ở trạng thái `Resolved` hoặc `Merged`; không thể acknowledge
 
@@ -277,7 +330,6 @@ Base route: `/api/alerts`
 **State transition:** `Open → Resolved` hợp lệ, không bắt buộc phải qua `Acknowledged`. `Acknowledged → Resolved` cũng hợp lệ.
 
 **Lỗi thường gặp:**
-- `400` — `id` là empty GUID
 - `404` — Alert không tìm thấy hoặc đã bị soft-delete
 - `409 isSuccess=false` — Alert đang ở trạng thái `Merged`; phải resolve alert gốc thay vì alert đã merge
 
@@ -417,25 +469,30 @@ Base route: `/api/battery-assets`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `serialNumber` | `string` | **Bắt buộc** | 5–64 ký tự, chỉ `A-Z`, `0-9`, `-` (chữ in hoa) | Serial number duy nhất |
-| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Loại pin |
-| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
-| `siteId` | `string?` | Không | UUID hợp lệ nếu truyền | Site lắp đặt |
-| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
-| `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền | Ngày hết bảo hành |
+| `serialNumber` | `string` | **Bắt buộc** | 5–64 ký tự, regex `^[A-Z0-9-]+$`. Hệ thống tự `Trim().ToUpperInvariant()` trước khi check trùng | Serial number duy nhất |
+| `batteryTypeId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB (BatteryType chưa xóa) | Loại pin |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong `CustomerAccount` (read-model sync từ AuthService) và `IsActive = true` | Khách hàng sở hữu |
+| `siteId` | `string?` | Không | UUID hợp lệ nếu truyền. Nếu có, Site phải tồn tại, chưa xóa và thuộc cùng `customerId` | Site lắp đặt |
+| `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai và không cũ hơn 5 năm | Ngày lắp đặt |
+| `warrantyEndDate` | `DateTime?` | Không | Phải sau `installDate` nếu truyền. Nếu đã qua hiện tại → `warrantyStatus` tự set `Expired`, ngược lại `Active` | Ngày hết bảo hành |
 | `location` | `string?` | Không | Max 255 ký tự | Mô tả vị trí |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
 | `notes` | `string?` | Không | Max 1000 ký tự | Ghi chú |
 
-**Response thành công `200`:** `CommonResponse<BatteryAssetDto>`
+**Cách hoạt động:**
+- Validate đầu vào (gom toàn bộ lỗi → `400`).
+- Check customer active → check trùng serial → check BatteryType → check Site → validate relation.
+- Tạo asset với `Status = Active` (muốn đổi sang Inactive/Decommissioned phải dùng PUT). Lưu xuống DB.
+
+**Response thành công `201`:** `CommonResponse<BatteryAssetDto>`
 
 **Lỗi thường gặp:**
-- `400` — Validation field lỗi (xem `listErrors`)
+- `400` — Validation field-level lỗi (xem `listErrors`)
+- `422` — Lỗi cross-field business rule, ví dụ `warrantyEndDate` không sau `installDate`
+- `404` — Không tìm thấy Customer / BatteryType / Site được tham chiếu
 - `409` — Serial number đã tồn tại trong hệ thống
-- `409` — `siteId` không thuộc `customerId` đã truyền
-
-> **Lưu ý:** Error responses có thể trả HTTP `400`/`404`/`409`; `statusCode` trong body khớp với HTTP status thật. FE nên kiểm tra `isSuccess` để xác định thành công.
+- `409` — Vi phạm ràng buộc Site/BatteryType (ví dụ `siteId` không thuộc `customerId` đã truyền)
 
 ---
 
@@ -515,7 +572,7 @@ Base route: `/api/battery-types`
 |---|---|---|
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
-| `keyword` | `string?` | Tìm theo tên loại pin |
+| `keyword` | `string?` | Tìm theo tên loại pin **hoặc nhà sản xuất** (`Name` + `Manufacturer`, case-insensitive) |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
 
 **Response thành công `200`:** `PaginationResponse<BatteryTypeDto>`
@@ -552,21 +609,28 @@ Base route: `/api/battery-types`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `name` | `string` | **Bắt buộc** | Max 100 ký tự | Tên model |
+| `name` | `string` | **Bắt buộc** | Max 100 ký tự, duy nhất (case-insensitive, đã trim) trong các BatteryType chưa xóa | Tên model |
 | `manufacturer` | `string?` | Không | Max 100 ký tự | Nhà sản xuất |
 | `nominalCapacityAh` | `decimal` | **Bắt buộc** | > 0 | Dung lượng danh định (Ah) |
 | `nominalVoltage` | `decimal` | **Bắt buộc** | > 0 | Điện áp danh định (V) |
-| `chemistry` | `BatteryChemistryEnum` | Không (mặc định `LiFePO4`) | — | Loại hóa học |
-| `maxCycleCount` | `int` | Không (mặc định 2000) | > 0 | Số chu kỳ tối đa |
+| `chemistry` | `BatteryChemistryEnum` | Không (mặc định `LiFePO4`) | enum hợp lệ | Loại hóa học |
+| `maxCycleCount` | `int` | Không (mặc định `2000`) | > 0 | Số chu kỳ sạc/xả tối đa. Là `int` có default 2000 — không gửi sẽ dùng 2000 (không bắt buộc client truyền) |
 | `description` | `string?` | Không | Max 500 ký tự | Mô tả |
 
-**Response thành công `200`:** `CommonResponse<BatteryTypeDto>`
+**Cách hoạt động:**
+- Validate tất cả field qua `ValidateAsync`; mọi lỗi gom vào `ListErrors` rồi trả `400`.
+- Kiểm tra trùng tên (case-insensitive, đã trim) trong các BatteryType chưa xóa; nếu trùng trả `409`.
+- Sinh `Id = Guid.NewGuid()` và persist. `CreatedAt`/`CreatedBy` được `AuditableEntityInterceptor` tự set.
+
+> **Lưu ý:** Sau khi tạo BatteryType, Admin nên gọi tiếp `PUT /api/admin/thresholds/by-type/{id}` để cấu hình ngưỡng cảnh báo cho loại pin này.
+
+**Response thành công `201`:** `CommonResponse<BatteryTypeDto>`
 
 **Lỗi thường gặp:**
 - `400` — Validation field lỗi (xem `listErrors`)
 - `409` — Tên loại pin đã tồn tại trong hệ thống
 
-> **Lưu ý:** Controller dùng `Ok()` → HTTP `200`. `CommonResponse.statusCode` trong body cũng là `200`. FE nên kiểm tra `isSuccess` để xác định thành công.
+> **Lưu ý:** Endpoint create trả HTTP `201 Created`; `CommonResponse.statusCode` trong body khớp HTTP status thật. FE nên kiểm tra `isSuccess` để xác định thành công.
 
 ---
 
@@ -683,6 +747,8 @@ Base route: `/api/sensor-readings`
 | `limit` | `int` | Không (mặc định 100) | Số record mỗi trang, range `1–1000` |
 | `cursor` | `DateTime?` | Không | Timestamp của record cuối trang trước; BE lấy record có `time < cursor` |
 
+> **Lưu ý:** Swagger còn liệt kê một query param `BatteryAssetId` (trùng tên với path param) do model-binding của BE. FE **bỏ qua** query param này — chỉ truyền `batteryAssetId` qua path.
+
 **Response thành công `200`:**
 ```json
 {
@@ -716,7 +782,8 @@ Base route: `/api/sensor-readings`
 | `hasMore` | `bool` | Không | `true` nếu còn dữ liệu sau trang hiện tại |
 
 **Lỗi thường gặp:**
-- `400` — `batteryAssetId` empty, `limit` ngoài `1–1000`, hoặc `from > to`
+- `400` — `batteryAssetId` empty hoặc `limit` ngoài `1–1000`
+- `422` — `from > to` (cross-field business rule)
 
 **Lưu ý hiệu suất:** TimescaleDB có thể chứa hàng triệu rows. Luôn truyền `from`/`to` để giới hạn scan range. Endpoint này không trả `totalItems`. FE dùng `hasMore`/`nextCursor` để infinite scroll; không render pagination kiểu page number.
 
@@ -736,6 +803,8 @@ Base route: `/api/sensor-readings`
 | `to` | `DateTime?` | Không | Đến thời điểm (UTC) — lọc `Time <= To` |
 | `interval` | `string` | Không (mặc định `1h`) | Bucket: `1m`, `5m`, `15m`, `1h`, `1d` |
 
+> **Lưu ý:** Swagger còn liệt kê query param `BatteryAssetId` trùng tên path param (model-binding artifact) — FE bỏ qua, chỉ dùng `batteryAssetId` qua path.
+
 **Response thành công `200`:** `CommonResponse<SensorReadingAggregateDto[]>` — danh sách bucket sắp xếp tăng dần theo thời gian.
 
 ```json
@@ -743,13 +812,12 @@ Base route: `/api/sensor-readings`
   "isSuccess": true,
   "data": [
     {
-      "bucket": "2026-06-12T07:00:00Z",
+      "time": "2026-06-12T07:00:00Z",
       "avgVoltage": 52.34,
       "avgCurrent": -1.82,
       "avgTemperature": 28.5,
       "avgSocPercent": 76.4,
-      "avgSohPercent": 91.2,
-      "sampleCount": 60
+      "avgSohPercent": 91.2
     }
   ]
 }
@@ -759,13 +827,14 @@ Base route: `/api/sensor-readings`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `bucket` | `DateTime` | Không | Thời điểm bắt đầu bucket (UTC) |
+| `time` | `DateTime` | Không | Thời điểm bắt đầu bucket (UTC) — field tên là `time` (không phải `bucket`) |
 | `avgVoltage` | `decimal` | Không | AVG điện áp (V) trong bucket |
 | `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket |
 | `avgTemperature` | `decimal` | Không | AVG nhiệt độ (°C) |
 | `avgSocPercent` | `decimal` | Không | AVG SOC (%) |
 | `avgSohPercent` | `decimal?` | Null nếu bucket không có reading nào có SohPercent | AVG SOH (%) |
-| `sampleCount` | `int` | Không | Số reading trong bucket |
+
+> **Lưu ý:** `SensorReadingAggregateDto` **không có** field `sampleCount` (số reading trong bucket) — không trả về trong response.
 
 **Lỗi thường gặp:**
 - `400` — `BatteryAssetId` rỗng hoặc `interval` không thuộc `{1m, 5m, 15m, 1h, 1d}`
@@ -797,13 +866,22 @@ Base route: `/api/sensor-readings`
   "items": [
     {
       "batteryAssetId": "guid",
+      "batteryAssetSerial": null,
       "time": "2026-05-16T08:00:00Z",
+      "deviceTimestamp": "2026-05-16T08:00:01Z",
       "voltage": 52.3,
       "current": -2.5,
       "temperature": 28.4,
       "socPercent": 78.5,
       "cycleCount": 234,
-      "sourceDeviceId": "DEVICE-001"
+      "sohPercent": 91.2,
+      "chargingState": 3,
+      "sourceDeviceId": "DEVICE-001",
+      "internalResistanceMilliohm": 12.5,
+      "cellVoltageDeltaMv": 30.0,
+      "sourceType": 2,
+      "bmsErrorCode": null,
+      "sensorSourceCode": null
     }
   ]
 }
@@ -813,19 +891,27 @@ Base route: `/api/sensor-readings`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `batteryAssetId` | `string` | Bắt buộc | UUID hợp lệ, phải tồn tại và Active | ID pin |
-| `time` | `DateTime` | Bắt buộc | Không ở tương lai (cho phép lệch tối đa +5 phút) | Timestamp (UTC) |
+| `batteryAssetId` | `string?` | Bắt buộc 1 trong 2 | Cần `batteryAssetId` **hoặc** `batteryAssetSerial` | ID pin (UUID). Item không match asset hợp lệ → bị `skipped` |
+| `batteryAssetSerial` | `string?` | Bắt buộc 1 trong 2 | Max 64 ký tự | Serial pin — thay thế cho `batteryAssetId` khi device chỉ biết serial |
+| `time` | `DateTime` | Bắt buộc | Không ở tương lai (cho phép lệch tối đa +5 phút) | Timestamp đo (UTC) |
+| `deviceTimestamp` | `DateTime?` | Không | Lệch tối đa ±5 phút so với server (nếu truyền) | Timestamp tại device — phục vụ kiểm tra clock skew |
 | `voltage` | `decimal` | Bắt buộc | >= 0 | Điện áp (V) |
 | `current` | `decimal` | Bắt buộc | — | Dòng điện (A) — âm = đang xả |
-| `temperature` | `decimal` | Bắt buộc | -50 đến 120 (°C) | Nhiệt độ (°C) |
-| `socPercent` | `decimal` | Bắt buộc | 0–100 | State of Charge (%) |
+| `temperature` | `decimal` | Bắt buộc | — (range không validate ở field-level; giá trị ngoài dải chỉ bị đánh dấu outlier khi xử lý calibration ở handler) | Nhiệt độ (°C) |
+| `socPercent` | `decimal` | Bắt buộc | — (không validate range 0–100 ở field-level) | State of Charge (%) |
 | `cycleCount` | `int?` | Không | >= 0 | Số chu kỳ |
-| `sohPercent` | `decimal?` | Không | 0–100 nếu truyền | SOH từ AI module |
-| `chargingState` | `ChargingStateEnum?` | Không | — | Trạng thái nạp/xả |
+| `sohPercent` | `decimal?` | Không | — (không validate range ở field-level) | SOH từ AI module |
+| `chargingState` | `ChargingStateEnum?` | Không | enum hợp lệ nếu truyền | Trạng thái nạp/xả |
 | `sourceDeviceId` | `string?` | Không | Max 64 ký tự | Device ID |
+| `internalResistanceMilliohm` | `decimal?` | Không | > 0 nếu truyền | Điện trở trong (mΩ) — Tier-2 battery health, dùng phát hiện `HighInternalResistance` |
+| `cellVoltageDeltaMv` | `decimal?` | Không | >= 0 nếu truyền | Chênh lệch điện áp giữa các cell (mV) — dùng phát hiện `CellImbalance` |
+| `sourceType` | `SensorReadingSourceTypeEnum` | Không (mặc định `2` = `IotGateway`) | enum hợp lệ | Nguồn dữ liệu reading (xem enum) — phục vụ cross-source mismatch check (Sprint 7) |
+| `bmsErrorCode` | `string?` | Không | Max 64 ký tự | Mã lỗi raw từ BMS (nếu device gửi) |
+| `sensorSourceCode` | `string?` | Không | Max 20 ký tự | Mã nguồn/định danh kênh cảm biến (nếu device gửi) |
+
+> **Lưu ý:** Endpoint thực tế **không** validate range cho `temperature`, `socPercent`, `sohPercent` ở tầng validation (không trả `400` cho các giá trị này). FE/gateway nên tự đảm bảo dữ liệu hợp lý trước khi gửi.
 
 **Response thành công `201 Created`:** Tạo resource mới (sensor readings trong TimescaleDB hypertable).
-
 ```json
 {
   "isSuccess": true,
@@ -842,15 +928,11 @@ Base route: `/api/sensor-readings`
 |---|---|---|
 | `totalReceived` | `int` | Tổng số reading nhận được trong batch |
 | `inserted` | `int` | Số reading đã insert thành công vào TimescaleDB |
-| `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc bị outlier |
+| `skipped` | `int` | Số reading bị bỏ qua vì `batteryAssetId` không tồn tại hoặc đã xóa |
 
-**Error responses:**
-
-| Status | Trường hợp |
-|---|---|
-| `400` | `items` rỗng, vượt giới hạn 1000 readings, hoặc có item không hợp lệ (trả `listErrors` chi tiết từng item) |
-| `401` | Thiếu/sai `X-Api-Key` header hoặc scope `SensorIngest` không match |
-| `500` | Duplicate `(BatteryAssetId, Time)` raise unique constraint từ TimescaleDB |
+**Lỗi thường gặp:**
+- `401` — Thiếu hoặc sai `X-Api-Key` header
+- `400` — `items` rỗng, vượt giới hạn 1000 readings, hoặc có item không hợp lệ (trả `listErrors` chi tiết từng item)
 
 > **Lưu ý hiệu suất:** Không gửi quá nhiều batch nhỏ liên tiếp. Gateway nên gom readings trong 1 batch mỗi 30–60 giây. Không có rate limit cứng trong Sprint 3, nhưng sẽ thêm khi scale lên.
 
@@ -892,7 +974,6 @@ Base route: `/api/sites`
 | `address` | `string?` | Null nếu chưa cung cấp | Địa chỉ |
 | `latitude` | `decimal?` | Null nếu không có tọa độ | Vĩ độ (-90 đến 90) |
 | `longitude` | `decimal?` | Null nếu không có tọa độ | Kinh độ (-180 đến 180) |
-| `capacityKw` | `decimal?` | Null nếu chưa cung cấp | Công suất hệ thống (kW) |
 | `installDate` | `DateTime` | Không | Ngày lắp đặt hệ thống (UTC) |
 | `status` | `SiteStatusEnum` | Không | Trạng thái site (xem enum) |
 | `contactPersonName` | `string?` | Null nếu chưa cung cấp | Tên người liên hệ tại site |
@@ -910,16 +991,6 @@ Base route: `/api/sites`
 **Auth:** Bắt buộc (Customer)
 
 **Query params:** `pageNumber`, `pageSize`
-
-**Response thành công `200`:** `CommonResponse<PaginationResponse<SiteDto>>` — danh sách site (có thể rỗng nếu Customer chưa có site nào).
-
-**Error responses:**
-
-| Status | Trường hợp |
-|---|---|
-| `401` | Token thiếu/invalid (middleware `[Authorize]` trả) |
-| `403` | Không có role Customer |
-| `500` | `UserId` claim trong JWT không parse được sang Guid — server-side data integrity issue (JWT do AuthService cấp sai/missing claim). Client không thể fix; cần alert dev team. |
 
 ---
 
@@ -950,7 +1021,6 @@ Base route: `/api/sites`
     "totalAssets": 48,
     "activeAssets": 46,
     "assetsWithActiveAlerts": 2,
-    "totalCapacityKw": 500.0,
     "lastAlertAt": "2026-05-16T06:30:00Z",
     "healthScore": 87
   }
@@ -967,7 +1037,6 @@ Base route: `/api/sites`
 | `totalAssets` | `int` | Không | Tổng số pin (bao gồm cả Inactive, Decommissioned) |
 | `activeAssets` | `int` | Không | Số pin đang Active |
 | `assetsWithActiveAlerts` | `int` | Không | Số pin có ít nhất 1 alert Open/Acknowledged |
-| `totalCapacityKw` | `decimal?` | Null nếu site chưa có `capacityKw` | Tổng công suất (kW) |
 | `lastAlertAt` | `DateTime?` | Null nếu chưa có alert nào | Thời điểm alert gần nhất (UTC) |
 | `healthScore` | `int` | Không | Điểm sức khỏe hệ thống 0–100, tính theo công thức bên dưới |
 
@@ -1000,6 +1069,8 @@ Nếu site không có asset nào, healthScore = 100.
 
 **Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
 
+> **Lưu ý route param:** Swagger đăng ký route này là `/api/sites/{id}/assets` (path param tên `id`, không phải `siteId`). Đường dẫn thực tế giống nhau — chỉ khác tên biến trong spec.
+
 **Query params:**
 
 | Param | Type | Mô tả |
@@ -1022,24 +1093,51 @@ Nếu site không có asset nào, healthScore = 100.
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `name` | `string` | **Bắt buộc** | Max 200 ký tự | Tên site |
-| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, phải tồn tại trong DB | Khách hàng sở hữu |
-| `address` | `string?` | Không | — | Địa chỉ |
+| `name` | `string` | **Bắt buộc** | Max 200 ký tự, unique trong phạm vi 1 Customer (case-insensitive) | Tên site |
+| `customerId` | `string` | **Bắt buộc** | UUID hợp lệ, Customer phải tồn tại và active trong read-model | Khách hàng sở hữu |
+| `address` | `string?` | Không | Max 500 ký tự | Địa chỉ |
 | `latitude` | `decimal?` | Không | -90 đến 90 | Vĩ độ |
 | `longitude` | `decimal?` | Không | -180 đến 180 | Kinh độ |
-| `capacityKw` | `decimal?` | Không | > 0 nếu truyền | Công suất (kW) |
 | `installDate` | `DateTime` | **Bắt buộc** | Không ở tương lai | Ngày lắp đặt |
 | `status` | `SiteStatusEnum` | Không (mặc định `Active`) | — | Trạng thái ban đầu |
-| `contactPersonName` | `string?` | Không | — | Tên người liên hệ |
-| `contactPersonPhone` | `string?` | Không | — | SĐT người liên hệ |
+| `contactPersonName` | `string?` | Không | Max 150 ký tự | Tên người liên hệ |
+| `contactPersonPhone` | `string?` | Không | Max 30 ký tự | SĐT người liên hệ |
+
+> **Lưu ý:** `CreateSiteCommand` **không có** field `capacityKw`. Tương ứng, `SiteDto` và `SiteDashboardDto` **không có** field `capacityKw` / `totalCapacityKw` — các field này không tồn tại trong response.
+
+**Cách hoạt động:**
+- Validate đầy đủ.
+- Check Customer tồn tại + active (`404` nếu không).
+- Check trùng tên trong phạm vi customer (`409` nếu trùng).
+- Lưu site với `Id = Guid.NewGuid()`.
+
+**Response thành công `201`:** `CommonResponse<SiteDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi (xem `listErrors`)
+- `404` — `customerId` không tồn tại hoặc không active
+- `409` — Tên site đã tồn tại trong phạm vi customer
 
 ---
 
 ### `PUT /api/admin/sites/{id}`
 
-Cập nhật thông tin site. Giống POST thêm `id` từ route.
+Cập nhật thông tin site. Body giống POST (các field trong `UpdateSiteCommand` — **không có** `capacityKw`), thêm `id` từ route.
 
 **Auth:** Bắt buộc (Admin)
+
+**Cách hoạt động:**
+- Tìm site (include Assets); `404` nếu không có.
+- Nếu `customerId` trong body khác customer hiện tại (và khác `Guid.Empty`) → trả `409` — không cho phép đổi chủ sở hữu qua Update (dùng `transfer-owner`).
+- Check trùng tên (loại trừ chính nó); trùng trả `409`.
+- Update toàn bộ field còn lại; **KHÔNG** đụng đến `customerId`.
+
+**Response thành công `200`:** `CommonResponse<SiteDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field lỗi
+- `404` — Site không tìm thấy
+- `409` — Trùng tên trong phạm vi customer, hoặc cố đổi `customerId` qua Update
 
 ---
 
@@ -1141,10 +1239,14 @@ Base route: `/api/thresholds`
 | `currentMaxCharge` | `decimal?` | Không | > 0 nếu truyền | Dòng nạp tối đa (A) |
 | `currentMaxDischarge` | `decimal?` | Không | > 0 nếu truyền | Dòng xả tối đa (A) |
 | `sohWarningThreshold` | `decimal?` | Không | 0–100 nếu truyền | SOH Warning (%) |
-| `sohCriticalThreshold` | `decimal?` | Không | < `sohWarningThreshold` nếu cả hai truyền | SOH Critical (%) |
+| `sohCriticalThreshold` | `decimal?` | Không | 0–100 nếu truyền, và < `sohWarningThreshold` nếu cả hai truyền | SOH Critical (%) |
 | `effectiveFromUtc` | `DateTime` | Không (mặc định `UtcNow`) | — | Thời điểm có hiệu lực |
 
+> **Mã lỗi:** Lỗi field-level (vd `voltageMin <= 0`, `socWarning` ngoài 0–100) trả `400`. Lỗi cross-field (`voltageMax <= voltageMin`, `temperatureMax <= temperatureMin`, `socCritical >= socWarning`, `sohCritical >= sohWarning`) trả `422`.
+
 **Path param:** `batteryTypeId` — Guid của loại pin cần cấu hình.
+
+> **Lưu ý:** Body của `UpsertThresholdConfigCommand` cũng chứa field `batteryTypeId`, nhưng giá trị từ **path param** mới là nguồn quyết định. FE không cần set `batteryTypeId` trong body (BE gán từ route).
 
 **Cách hoạt động:**
 - Nếu chưa có config cho `batteryTypeId` → tạo mới với `isActive = true`
@@ -1228,21 +1330,21 @@ Base route: `/api/battery/dashboard`
 |---|---|---|---|
 | `totalAssets` | `int` | Không | Tổng asset (bao gồm mọi status, không tính `IsDeleted`) |
 | `activeAssets` | `int` | Không | Số asset `Active` |
-| `offlineAssets` | `int` | Không | Số asset không nhận sensor reading trong 15 phút gần nhất |
-| `openAlerts` | `int` | Không | Tổng alert đang `Open` hoặc `Acknowledged` |
-| `openAlertsCritical` | `int` | Không | Alert severity `Critical` đang mở |
-| `openAlertsWarning` | `int` | Không | Alert severity `Warning` đang mở |
-| `openEnvironmentalIncidents` | `int` | Không | Số `EnvironmentalIncident` đang `Open` hoặc `Acknowledged` |
+| `offlineAssets` | `int` | Không | Số asset không nhận sensor reading trong `OfflineThresholdMinutes` (mặc định **10** phút) gần nhất |
+| `openAlerts` | `int` | Không | Tổng alert đang ở trạng thái `Open` (chỉ `Open`, **không** tính `Acknowledged`) |
+| `openAlertsCritical` | `int` | Không | Alert `Open` severity `Critical` |
+| `openAlertsWarning` | `int` | Không | Alert `Open` severity `Warning` |
+| `openEnvironmentalIncidents` | `int` | Không | Số `EnvironmentalIncident` đang ở trạng thái `Open` (chỉ `Open`, **không** tính `Acknowledged`) |
 | `sites` | `int` | Không | Tổng số site (theo filter) |
 | `assetStatusDistribution` | `AssetStatusBucketDto[]` | Không | Donut chart: mỗi bucket gồm `status` (enum int), `statusName`, `count` |
 | `sohDistribution` | `SohBucketDto` | Không | Donut SOH: `healthy` (≥90%), `normal` (80–89%), `warning` (75–79%), `eol` (<75%), `unknown` (chưa có reading SOH) |
-| `alertSeverityBreakdown` | `AlertSeverityBreakdownDto` | Không | Donut alert by severity toàn thời gian: `critical`, `warning`, `info` |
+| `alertSeverityBreakdown` | `AlertSeverityBreakdownDto` | Không | Donut alert by severity — chỉ tính trên alert đang `Open`: `critical`, `warning`, `info` |
 | `openAlertsByType` | `AlertByTypeDto[]` | Không | Bar chart: alert đang mở phân theo `AnomalyTypeEnum` |
 | `alertTrend7Days` | `DailyTrendPointDto[]` | Không | Line chart 7 ngày — mỗi điểm: `date` (DateOnly), `critical`, `warning`, `info`, `total` |
 | `ambientTrend24Hours` | `AmbientTrendPointDto[]` | Không | Line chart 24h gần nhất — mỗi điểm: `hourUtc`, `avgTemperature?`, `avgHumidity?`, `avgSolarIrradiance?` (có thể null nếu giờ đó không có data) |
 | `sensorAggregate24Hours` | `SensorAggregateDto` | Không | Aggregated sensor metrics 24h: `avgVoltage?`, `avgCurrent?`, `avgTemperature?`, `avgSoc?`, `avgSoh?`, `readingsCount` (decimal fields nullable nếu không có data) |
 | `topAlertingAssets` | `TopAlertingAssetDto[]` | Không | Top 5 asset có nhiều alert nhất 30 ngày qua |
-| `environmentalIncidentsByType` | `EnvironmentalIncidentByTypeDto[]` | Không | Donut incident `Open`+`Acknowledged` theo type |
+| `environmentalIncidentsByType` | `EnvironmentalIncidentByTypeDto[]` | Không | Donut incident theo type — tính trên incident đang `Open` **hoặc** `Acknowledged` (khác `openEnvironmentalIncidents` ở trên chỉ tính `Open`) |
 | `chemistryDistribution` | `ChemistryBucketDto[]` | Không | Donut phân phối asset theo `BatteryChemistryEnum` |
 
 **Lỗi thường gặp:**
@@ -1296,27 +1398,22 @@ Base route: `/api/ambient`
 | `source` | `AmbientReadingSourceEnum` | ❌ (mặc định `IotSensor` = 1) | enum hợp lệ | Nguồn dữ liệu — xem enum |
 | `sourceDeviceId` | `string?` | ❌ | — | ID gateway / device gửi data |
 
-**Response thành công `201 Created`:** Tạo resource mới (ambient readings trong TimescaleDB). `CommonResponse<int>` — `data` là số reading đã insert.
+**Response thành công `201 Created`:** `CommonResponse<int>` — `data` là số reading đã insert.
 
 ```json
 {
   "isSuccess": true,
   "statusCode": 201,
-  "message": null,
-  "data": 100,
-  "listErrors": []
+  "data": 100
 }
 ```
 
-> Handler không set `message` (chỉ trả `isSuccess`, `statusCode`, `data`). `data` = `request.Items.Count` (số reading client gửi lên — handler chưa filter duplicate ở application layer, dedup phụ thuộc DB constraint / TimescaleDB hypertable).
+> Handler không set `message`. `data` = `request.Items.Count` (số reading client gửi lên — dedup phụ thuộc DB constraint / TimescaleDB hypertable, không filter ở application layer).
 
-**Error responses:**
-
-| Status | Trường hợp |
-|---|---|
-| `400` | `items` rỗng, vượt 100 record, hoặc item không hợp lệ (xem `listErrors` chi tiết từng item: `Items[0].SiteId`, `Items[0].Humidity`, …) |
-| `401` | Thiếu `X-Api-Key` |
-| `403` | ApiKey không có scope `EnvironmentalIngest` |
+**Lỗi thường gặp:**
+- `400` — `items` rỗng, vượt 100 record, hoặc item không hợp lệ (xem `listErrors` chi tiết từng item: `Items[0].SiteId`, `Items[0].Humidity`, …)
+- `401` — Thiếu `X-Api-Key`
+- `403` — ApiKey không có scope `EnvironmentalIngest`
 
 ---
 
@@ -1551,25 +1648,14 @@ Base route: `/api/environmental-incidents`
 | Status | Path | Mô tả |
 |---|---|---|
 | `201 Created` | **Create** (normal path) | Incident mới được tạo. Status set `Open`, `acknowledgedAt`/`resolvedAt`/`falseAlarmAt` đều `null`. Hệ thống phát `EnvironmentalIncidentDetectedEvent` để Notification + Ticket service consume (auto tạo Alert site-level + ticket P1). |
-| `200 OK` | **Dedup** (idempotency) | Đã tồn tại incident active đang `Open`/`Acknowledged` cho cùng `SiteId` (+ cùng `IncidentType`) → trả lại incident cũ thay vì tạo mới. KHÔNG phát event lần nữa. Idempotency-friendly cho IoT gateway spam cùng sự cố. |
+| `200 OK` | **Dedup** (idempotency) | Đã tồn tại incident active đang `Open`/`Acknowledged` cho cùng `SiteId` + cùng `IncidentType` → trả lại incident cũ thay vì tạo mới. KHÔNG phát event lần nữa. Idempotency-friendly cho IoT gateway spam cùng sự cố. |
 
 Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload đầy đủ incident (shape giống `GET /{id}` bên dưới).
 
-```json
-{
-  "isSuccess": true,
-  "statusCode": 201,
-  "data": { "id": "…", "siteId": "…", "status": 1, "incidentType": 2, "severity": 3, "detectedAt": "…", "acknowledgedAt": null, "resolvedAt": null, "falseAlarmAt": null }
-}
-```
-
-**Error responses:**
-
-| Status | Trường hợp |
-|---|---|
-| `400` | `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ, `DetectedAt` rỗng/vượt quá hiện tại 5' |
-| `401` | Thiếu/sai `X-Api-Key` |
-| `403` | ApiKey không có scope `EnvironmentalIngest` |
+**Lỗi thường gặp:**
+- `400` — `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ, `DetectedAt` rỗng/vượt quá hiện tại 5'
+- `401` — Thiếu `X-Api-Key`
+- `403` — ApiKey không có scope `EnvironmentalIngest`
 
 ---
 
@@ -1655,7 +1741,7 @@ Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload 
 - `401` — Chưa đăng nhập
 - `403` — Role không nằm trong Admin/Manager
 - `404` — Incident không tồn tại
-- `409` — State đang là `Resolved`
+- `409` — State đã ở terminal (`Resolved` hoặc `FalseAlarm`)
 
 ---
 
@@ -1779,6 +1865,550 @@ Base route: `/api/battery/health`
 
 ---
 
+## Nhóm 11 — IoT Device Management (Quản lý thiết bị IoT)
+
+> Quản lý vòng đời IoT edge device (ESP32-S3), API key per-device, calibration cảm biến, và OTA firmware. Có **2 kênh auth khác nhau**:
+> - **ApiKey per-device** (`X-Api-Key: iotk_...`, scheme `ApiKey`): các endpoint device tự gọi (`api/iot-devices/provision|heartbeat|firmware-check|firmware-update-log`). Mỗi endpoint yêu cầu một `IotApiKeyScopeEnum` cụ thể. `DeviceId`/`DeviceCode` lấy từ claim của key — client **không** gửi qua body.
+> - **JWT Bearer** (role-based): calibration (`api/iot-devices/...`) và toàn bộ admin (`api/admin/iot-devices`, `api/admin/iot-firmware-releases`).
+>
+> **Lưu ý chung:** 3 command device-facing (`provision`, `heartbeat`, `firmware-update-log`) **không có** validation layer riêng — các giới hạn mô tả là ý định, được enforce ở handler (404/403/409/422). 401/403 do middleware ApiKey/JWT trả.
+
+---
+
+### 11A. Device self-service (auth: ApiKey per-device)
+
+Base route: `/api/iot-devices`
+
+#### `POST /api/iot-devices/provision`
+
+**Mục đích:** Device báo đã boot xong — provision lần đầu hoặc sau khi flash firmware. Gọi 1 lần sau mỗi boot/reset.
+
+**Auth:** ApiKey, scope `DeviceHeartbeat`.
+
+**Header tùy chọn:** `X-Device-Code` — cross-check với DeviceCode của key; mismatch → `403`.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `firmwareVersion` | `string` | Có | Version firmware đang chạy (e.g., `1.2.3`) |
+| `hardwareRevision` | `string?` | Không | Nếu khác giá trị đăng ký → overwrite |
+| `deviceTimestamp` | `DateTime` | Có | Timestamp tại device (UTC) — backend kiểm tra clock skew |
+
+> `deviceId`/`deviceCode` server tự gán từ claim của API key.
+
+**Response thành công `200`:** `CommonResponse<IotDeviceProvisionResultDto>`
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `deviceId` | `string` | ID device |
+| `deviceCode` | `string` | Mã device |
+| `siteId` | `string` | ID site |
+| `heartbeatIntervalSeconds` | `int` | Tần suất heartbeat khuyến nghị |
+| `apiKeyScopes` | `IotApiKeyScopeEnum` | Bitmask scopes của key |
+| `targetFirmwareVersion` | `string?` | Version target OTA (nếu có) |
+| `pollingIntervalSeconds` | `int` | Tần suất poll sensor (mặc định 10) |
+| `ntpServer` | `string` | NTP server để sync clock (mặc định `time.google.com`) |
+| `batteryMappings` | `BatteryMappingEntry[]` | Mapping `batteryAssetSerial` → `unitId` (Modbus) + `sensorSourceCode` |
+| `supportedSensors` | `string[]` | Loại sensor được phép push |
+
+**Lỗi thường gặp:**
+- `401` — Thiếu/sai key hoặc thiếu scope `DeviceHeartbeat`
+- `403` — `X-Device-Code` / DeviceCode không khớp key
+- `404` — Device không tồn tại
+- `409` — Device đang `Disabled`/`Decommissioned`
+- `422` — Clock skew vượt 300 giây (5 phút)
+
+---
+
+#### `POST /api/iot-devices/heartbeat`
+
+**Mục đích:** Telemetry health định kỳ (khuyến nghị 60s). Backend phát hiện offline + hint OTA available. **Không** reject khi skew vượt ngưỡng — chỉ raise warning.
+
+**Auth:** ApiKey, scope `DeviceHeartbeat`.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `firmwareVersion` | `string?` | Không | Nếu có → cập nhật `CurrentFirmwareVersion` |
+| `rssiDbm` | `int?` | Không | WiFi RSSI (dBm). Alias: `signalStrengthDbm` |
+| `freeMemoryPercent` | `decimal?` | Không | % RAM free [0..100] |
+| `uptimeSeconds` | `long?` | Không | Uptime từ lần boot cuối |
+| `queuedReadingCount` | `int?` | Không | Số reading queue local chưa upload. Alias: `localQueueDepth` |
+| `deviceTimestamp` | `DateTime` | Có | Backend tính skew |
+| `cpu` | `decimal?` | Không | CPU usage 0..100 (ESP32 gửi null) |
+| `diskFreeMb` | `long?` | Không | Free disk (MB) |
+| `temperature` | `decimal?` | Không | Nhiệt độ MCU (°C) |
+| `memoryUsageMb` | `long?` | Không | Memory usage (MB) |
+
+> **Alias field:** `signalStrengthDbm` ↔ `rssiDbm`, `localQueueDepth` ↔ `queuedReadingCount` cùng trỏ về một giá trị — khi serialize JSON cả hai tên đều xuất hiện.
+
+**Response thành công `200`:** `CommonResponse<IotHeartbeatAckDto>`
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `serverTime` | `DateTime` | Thời gian server |
+| `clockSkewSeconds` | `double` | Skew hiện tại |
+| `clockSkewWarning` | `bool` | `true` nếu skew > 5 phút |
+| `nextHeartbeatInSeconds` | `int` | Tần suất khuyến nghị lần kế |
+| `firmwareUpdateAvailable` | `bool` | `true` nếu target khác current (hint — vẫn phải gọi `firmware-check`) |
+
+**Lỗi thường gặp:**
+- `401` — Thiếu/sai key hoặc thiếu scope
+- `404` — Device không tồn tại
+- `409` — Device `Disabled`/`Decommissioned` hoặc key đã revoke
+
+---
+
+#### `GET /api/iot-devices/firmware-check`
+
+**Mục đích:** Device poll (mỗi ~1h) check firmware mới. Nếu có update → tạo `IotFirmwareUpdateLog` mới `Pending` để track.
+
+**Auth:** ApiKey, scope `FirmwareCheck`.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `currentVersion` | `string` | Có (null → coi như rỗng) | Version đang chạy |
+
+> Trả `updateAvailable=false` nếu: không có target, target chưa publish / đã archive, hoặc target version == currentVersion.
+
+**Response thành công `200`:** `CommonResponse<IotFirmwareCheckDto>`
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `updateAvailable` | `bool` | Có update hay không. Alias: `hasUpdate` |
+| `targetVersion` | `string?` | Version target |
+| `artifactUrl` | `string?` | URL `.bin`. Alias: `downloadUrl` |
+| `sha256Checksum` | `string?` | SHA-256 hex (64 ký tự) |
+| `artifactSizeBytes` | `long?` | Kích thước artifact |
+| `updateLogId` | `string?` | Id log để device PUT progress |
+| `releaseNotes` | `string?` | Changelog markdown |
+| `isRequired` | `bool` | Force update flag |
+| `channel` | `IotFirmwareChannelEnum` | `Stable`/`Beta` |
+
+**Lỗi thường gặp:**
+- `401` — Thiếu/sai key hoặc thiếu scope
+- `404` — Device không tồn tại
+
+---
+
+#### `PUT /api/iot-devices/firmware-update-log/{id}`
+
+**Mục đích:** Device báo cáo progress OTA flash. Gửi nhiều lần (`Pending → Downloading → Installing → Success`).
+
+**Auth:** ApiKey, scope `FirmwareCheck`.
+
+**Path param:** `id` — Guid của `IotFirmwareUpdateLog` (nhận từ `firmware-check`).
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `status` | `IotFirmwareUpdateStatusEnum` | Có | Trạng thái OTA (xem enum) |
+| `bytesDownloaded` | `long?` | Không | Progress bar |
+| `failureReason` | `string?` | Không | Lý do lỗi khi `Failed` |
+
+> Khi `Success` → cập nhật `IotDevice.CurrentFirmwareVersion` = version của release.
+
+**Response thành công `200`:** `CommonResponse<object>` (message)
+
+**Lỗi thường gặp:**
+- `401` — Thiếu/sai key hoặc thiếu scope
+- `404` — Log không tồn tại hoặc không thuộc device đang gọi
+
+---
+
+### 11B. Device calibration (auth: JWT)
+
+Base route: `/api/iot-devices` (cùng prefix với 11A nhưng auth bằng JWT role)
+
+> POST/DELETE tự invalidate Redis cache `iot:calibration:{deviceId}`.
+
+**`IotDeviceCalibrationDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID calibration |
+| `iotDeviceId` | `string` | Không | ID device |
+| `channel` | `string` | Không | Channel sensor (`voltage`/`current`/`temperature`/`soc`) |
+| `batteryAssetId` | `string?` | Có | Gắn cho 1 pin cụ thể; null = device-level |
+| `scale` | `decimal` | Không | Hệ số nhân |
+| `offset` | `decimal` | Không | Hệ số cộng |
+| `unit` | `string` | Không | Đơn vị (`V`/`A`/`°C`/`%`) |
+| `calibratedAt` | `DateTime` | Không | Ngày calibration thực tế (UTC) |
+| `expiresAt` | `DateTime?` | Có | Ngày hết hạn |
+| `notes` | `string?` | Có | Ghi chú technician |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo (UTC) |
+
+#### `GET /api/iot-devices/{deviceId}/calibrations`
+
+**Auth:** Bắt buộc (Admin/Manager/Staff)
+
+**Query params:** `channel` (`string?`, filter case-insensitive), `includeExpired` (`bool`, mặc định `false`).
+
+> Flat list, **không** phân trang, sort `calibratedAt DESC`. `deviceId` sai → trả mảng rỗng (không 404).
+
+**Response thành công `200`:** `CommonResponse<IotDeviceCalibrationDto[]>`
+
+---
+
+#### `POST /api/iot-devices/{deviceId}/calibrations`
+
+**Auth:** Bắt buộc (Admin/Staff)
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `channel` | `string` | Có | Max 32 ký tự | Channel sensor (lowercase) |
+| `batteryAssetId` | `Guid?` | Không | — | null = calibration cấp device |
+| `scale` | `decimal` | Có (mặc định 1) | **khác 0** | Hệ số nhân |
+| `offset` | `decimal` | Có (mặc định 0) | — | Hệ số cộng |
+| `unit` | `string` | Có | Max 16 ký tự | Đơn vị |
+| `calibratedAt` | `DateTime` | Có | `!= default` | Ngày calibration (UTC) |
+| `expiresAt` | `DateTime?` | Không | > `calibratedAt` nếu truyền | Ngày hết hạn |
+| `notes` | `string?` | Không | Max 500 ký tự | Ghi chú |
+
+**Response thành công `201`:** `CommonResponse<IotDeviceCalibrationDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation lỗi (xem `listErrors`)
+- `404` — Device không tồn tại hoặc đã xóa
+
+---
+
+#### `DELETE /api/iot-devices/{deviceId}/calibrations/{calibrationId}`
+
+**Auth:** Bắt buộc (Admin/Staff)
+
+**Response thành công `200`:** `CommonResponse<object>` (message)
+
+**Lỗi thường gặp:**
+- `404` — Calibration không tồn tại, đã xóa, hoặc không thuộc `deviceId`
+
+---
+
+#### `GET /api/iot-devices/calibrations-expiring`
+
+**Mục đích:** List calibration sắp hết hạn trong N ngày tới (cross-device, Manager dashboard).
+
+**Auth:** Bắt buộc (Admin/Manager)
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `within` | `int?` | Không (mặc định 30, clamp `[1..365]`) | Số ngày tới |
+
+> Flat list, **không** phân trang, sort `expiresAt ASC`. Chỉ trả calibration có `expiresAt` trong khoảng `(now, now + within]` — đã hết hạn hoặc không set `expiresAt` không hiển thị.
+
+**Response thành công `200`:** `CommonResponse<IotDeviceCalibrationDto[]>`
+
+---
+
+### 11C. Admin — IoT Devices (auth: JWT Admin)
+
+Base route: `/api/admin/iot-devices` — toàn bộ yêu cầu role `Admin`.
+
+**`IotDeviceDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID device |
+| `deviceCode` | `string` | Không | Mã device duy nhất |
+| `displayName` | `string` | Không | Tên hiển thị |
+| `siteId` | `string` | Không | ID site |
+| `siteName` | `string?` | Có | Tên site |
+| `hardwareRevision` | `string?` | Có | Phiên bản phần cứng |
+| `status` | `IotDeviceStatusEnum` | Không | Trạng thái (xem enum) |
+| `currentFirmwareVersion` | `string?` | Có | Version đang chạy |
+| `targetFirmwareReleaseId` | `string?` | Có | ID release target OTA |
+| `targetFirmwareVersion` | `string?` | Có | Version target |
+| `apiKeyScopes` | `IotApiKeyScopeEnum` | Không | Bitmask scopes |
+| `apiKeyLastFour` | `string` | Không | 4 ký tự cuối key (UI hint) |
+| `apiKeyIssuedAt` | `DateTime` | Không | Thời điểm cấp key |
+| `apiKeyRevokedAt` | `DateTime?` | Có | null nếu key còn hiệu lực |
+| `lastSeenAt` | `DateTime?` | Có | Heartbeat gần nhất |
+| `lastProvisionedAt` | `DateTime?` | Có | Provision gần nhất |
+| `lastOfflineAt` | `DateTime?` | Có | Lần cuối chuyển Offline |
+| `heartbeatIntervalSeconds` | `int` | Không | Tần suất heartbeat |
+| `lastClockSkewSeconds` | `double?` | Có | Skew device vs server |
+| `notes` | `string?` | Có | Ghi chú |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo (UTC) |
+
+> **`IotDeviceCreatedDto`** (trả khi tạo mới + rotate-key) = `IotDeviceDto` + các field bí mật **chỉ trả 1 lần**: `rawApiKey`, `provisioningQrCode` (`iot://provision?dc={deviceCode}&key={rawApiKey}`), `mqttUsername`, `mqttPassword`, `mqttBrokerHost`, `mqttBrokerPort`.
+
+#### `GET /api/admin/iot-devices`
+
+**Auth:** Admin
+
+**Query params:** `siteId` (`Guid?`), `status` (`IotDeviceStatusEnum?`), `keyword` (`string?` — tìm trong `deviceCode` + `displayName`), `page` (mặc định 1), `pageSize` (mặc định 20, clamp `[1,100]`), `isDescending` (mặc định `true`, sort theo `createdAt`).
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<IotDeviceDto>>`
+
+---
+
+#### `GET /api/admin/iot-devices/{id}`
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<IotDeviceDto>` (không trả raw API key)
+
+**Lỗi:** `404` — không tìm thấy / đã soft-delete
+
+---
+
+#### `POST /api/admin/iot-devices`
+
+**Mục đích:** Tạo device mới + sinh API key per-device + MQTT credential. Raw key + raw MQTT password trả **đúng 1 lần**. Device khởi tạo `Status = Pending`.
+
+**Auth:** Admin
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `deviceCode` | `string` | Có | 3–64 ký tự, regex `^[A-Z0-9-]+$`, unique (case-insensitive) | Mã device |
+| `displayName` | `string` | Có | Max 200 ký tự | Tên hiển thị |
+| `siteId` | `Guid` | Có | `!= Guid.Empty`, Site phải tồn tại & chưa xóa | Site |
+| `hardwareRevision` | `string?` | Không | Max 64 ký tự | e.g., `v1.0-S3-MAX485` |
+| `apiKeyScopes` | `IotApiKeyScopeEnum` | Không (mặc định `EdgeDeviceDefault` = 11) | `!= None` | Bitmask scopes |
+| `heartbeatIntervalSeconds` | `int` | Không (mặc định 60) | `[10, 3600]` | Tần suất heartbeat |
+| `notes` | `string?` | Không | Max 1000 ký tự | Ghi chú |
+
+**Response thành công `201`:** `CommonResponse<IotDeviceCreatedDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation lỗi
+- `404` — Site không tồn tại
+- `409` — `deviceCode` đã tồn tại
+
+---
+
+#### `PUT /api/admin/iot-devices/{id}`
+
+**Mục đích:** Cập nhật metadata + status + scopes + target firmware. **Không** đổi API key.
+
+**Auth:** Admin
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `displayName` | `string` | Có | Max 200 ký tự | — |
+| `siteId` | `Guid` | Có | `!= Guid.Empty`, tồn tại & chưa xóa | Đổi site |
+| `hardwareRevision` | `string?` | Không | Max 64 ký tự | — |
+| `status` | `IotDeviceStatusEnum` | Có | enum hợp lệ | Cho phép set thủ công `Disabled`/`Decommissioned` |
+| `apiKeyScopes` | `IotApiKeyScopeEnum` | Không (mặc định `EdgeDeviceDefault`) | `!= None` | Bitmask |
+| `heartbeatIntervalSeconds` | `int` | Không (mặc định 60) | `[10, 3600]` | — |
+| `targetFirmwareReleaseId` | `Guid?` | Không | Phải tồn tại, đã publish, chưa archive | Set target OTA |
+| `notes` | `string?` | Không | Max 1000 ký tự | — |
+
+**Response thành công `200`:** `CommonResponse<IotDeviceDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation lỗi
+- `404` — Device / Site / Firmware release không tồn tại
+- `409` — Target firmware chưa publish hoặc đã archive
+
+---
+
+#### `DELETE /api/admin/iot-devices/{id}`
+
+**Mục đích:** Decommission — soft-delete + set `Status=Decommissioned` + revoke key. Calibration cascade soft-delete; heartbeat history giữ nguyên.
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<object>`
+
+---
+
+#### `POST /api/admin/iot-devices/{id}/rotate-key`
+
+**Mục đích:** Sinh API key 256-bit mới (prefix `iotk_`), thay hash, reset issuedAt, bỏ revoke. **Không** đổi `Status`. Raw key mới trả 1 lần.
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<IotDeviceCreatedDto>` — lưu ý success code là **200** (không phải 201) dù sinh key mới.
+
+---
+
+#### `POST /api/admin/iot-devices/{id}/revoke-key`
+
+**Mục đích:** Block device khỏi mọi request — set `apiKeyRevokedAt = UtcNow` + `Status = Disabled`. Device vẫn còn trong list.
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<object>`
+
+---
+
+#### `POST /api/admin/iot-devices/{id}/command`
+
+**Mục đích:** Push downlink command tới device qua MQTT topic `solar/{deviceCode}/cmd`; device ack qua `.../cmd/ack`. Backend chỉ relay JSON, không validate sâu.
+
+**Auth:** Admin
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `cmdId` | `string?` | Không | Idempotency key; backend sinh GUID nếu null/blank |
+| `type` | `string` | **Có** | Loại command: `reboot`/`ota`/`calibrate`/`sample-now`/`set-config`/... |
+| `params` | `object?` | Không | Param JSON tự do |
+
+**Response thành công `202 Accepted`:** `CommonResponse<IotDeviceCommandAcceptedDto>`
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `cmdId` | `string` | Id command |
+| `deviceCode` | `string` | Mã device |
+| `topic` | `string` | `solar/{deviceCode}/cmd` |
+
+**Lỗi thường gặp:**
+- `400` — `type` rỗng
+- `404` — Device không tồn tại / đã xóa
+- `503` — MQTT bridge không khả dụng
+
+---
+
+### 11D. Admin — IoT Firmware Releases (auth: JWT Admin)
+
+Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `Admin`.
+
+**`IotFirmwareReleaseDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID release |
+| `version` | `string` | Không | SemVer (`X.Y.Z`) |
+| `hardwareRevision` | `string` | Không | Phải khớp `IotDevice.HardwareRevision` |
+| `artifactUrl` | `string` | Không | URL `.bin` |
+| `sha256Checksum` | `string` | Không | SHA-256 hex (64 ký tự) |
+| `artifactSizeBytes` | `long` | Không | Kích thước artifact |
+| `releaseNotes` | `string?` | Có | Changelog markdown |
+| `isPublished` | `bool` | Không | Đã publish chưa |
+| `publishedAt` | `DateTime?` | Có | Thời điểm publish |
+| `isArchived` | `bool` | Không | Đã archive (rollback/EOL) chưa |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo (UTC) |
+| `isRequired` | `bool` | Không | Force update |
+| `channel` | `IotFirmwareChannelEnum` | Không | `Stable`/`Beta` |
+| `deviceModel` | `string?` | Có | e.g., `ESP32-S3-WROOM-1` |
+
+#### `GET /api/admin/iot-firmware-releases`
+
+**Auth:** Admin
+
+**Query params:** `hardwareRevision` (`string?`), `publishedOnly` (`bool?` — `true` chỉ lấy đã publish & chưa archive), `page` (mặc định 1), `pageSize` (mặc định 20, clamp `[1,100]`).
+
+> Sort `createdAt DESC`. Filter `!IsDeleted` luôn áp dụng.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>`
+
+---
+
+#### `POST /api/admin/iot-firmware-releases`
+
+**Mục đích:** Tạo firmware release (metadata sau khi đã upload artifact). Không verify checksum file thực sự.
+
+**Auth:** Admin
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `version` | `string` | Có | regex SemVer `^\d+\.\d+\.\d+$` | e.g., `1.2.3` |
+| `hardwareRevision` | `string` | Có | required | Phải khớp `IotDevice.HardwareRevision` |
+| `artifactUrl` | `string` | Có | URL tuyệt đối hợp lệ | URL `.bin` |
+| `sha256Checksum` | `string` | Có | đúng 64 ký tự | SHA-256 hex |
+| `artifactSizeBytes` | `long` | Có | `> 0 && <= 50_000_000` (50MB) | Kích thước artifact |
+| `releaseNotes` | `string?` | Không | — | Changelog markdown |
+| `publishImmediately` | `bool` | Không (mặc định `false`) | — | `true` = publish ngay |
+| `isRequired` | `bool` | Không (mặc định `false`) | — | Force update |
+| `channel` | `IotFirmwareChannelEnum` | Không (mặc định `Stable`) | — | `Stable`/`Beta` |
+| `deviceModel` | `string?` | Không | — | e.g., `ESP32-S3-WROOM-1` |
+
+**Response thành công `201`:** `CommonResponse<IotFirmwareReleaseDto>`
+
+**Lỗi thường gặp:**
+- `400` — Validation lỗi
+- `409` — Cặp (`version`, `hardwareRevision`) đã tồn tại (unique index)
+
+---
+
+#### `POST /api/admin/iot-firmware-releases/{id}/publish`
+
+**Mục đích:** Publish release để cho phép đặt làm target OTA. Set `isPublished=true`.
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<IotFirmwareReleaseDto>`
+
+**Lỗi thường gặp:**
+- `404` — Release không tồn tại
+- `409` — Release đã archive → không publish lại được
+
+---
+
+#### `POST /api/admin/iot-firmware-releases/{id}/archive`
+
+**Mục đích:** Đánh dấu rollback/EOL — set `isArchived=true` (giữ nguyên `isPublished`). Không cho đặt làm target nữa.
+
+**Auth:** Admin
+
+**Response thành công `200`:** `CommonResponse<object>`
+
+**Lỗi thường gặp:**
+- `404` — Release không tồn tại
+
+---
+
+#### `POST /api/admin/iot-firmware-releases/upload-binary`
+
+**Mục đích:** Upload file firmware `.bin` qua multipart. Backend stream vào storage, tự tính SHA-256, sanitize filename.
+
+**Auth:** Admin
+
+**Content-Type:** `multipart/form-data` — giới hạn request **60MB**.
+
+**Form fields:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `file` | `IFormFile` | **Có** | File `.bin` (extension phải `.bin`) |
+| `version` | `string` | Có | SemVer `X.Y.Z` |
+| `hardwareRevision` | `string` | Có | e.g., `v1.0-S3-MAX485` |
+| `isRequired` | `bool` | Không (mặc định `false`) | Force update |
+| `channel` | `IotFirmwareChannelEnum` | Không (mặc định `Stable`) | `Stable`/`Beta` |
+| `releaseNotes` | `string?` | Không | Changelog markdown |
+| `deviceModel` | `string?` | Không | e.g., `ESP32-S3-WROOM-1` |
+
+**Response thành công `201`:** `CommonResponse<FirmwareBinaryUploadDto>`
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `artifactUrl` | `string` | URL `.bin` (public hoặc tương đối) |
+| `sha256Checksum` | `string` | SHA-256 hex (backend tính) |
+| `artifactSizeBytes` | `long` | Kích thước thực |
+| `fileName` | `string` | Tên file đã sanitize |
+| `version` | `string` | echo từ form |
+| `hardwareRevision` | `string` | echo từ form |
+| `isRequired` | `bool` | echo |
+| `channel` | `IotFirmwareChannelEnum` | echo |
+| `releaseNotes` | `string?` | echo |
+| `deviceModel` | `string?` | echo |
+
+> Sau khi upload, dùng `artifactUrl` + `sha256Checksum` + `artifactSizeBytes` để gọi `POST /api/admin/iot-firmware-releases` tạo release metadata.
+
+**Lỗi thường gặp:**
+- `400` — Thiếu file hoặc extension không phải `.bin`
+- `413` — File vượt 60MB
+
+---
+
 ## Bảng tổng hợp Endpoints
 
 | Method | Path | Mục đích | Auth |
@@ -1833,3 +2463,24 @@ Base route: `/api/battery/health`
 | GET | `/api/environmental-incidents/{id}` | Chi tiết incident | Mọi role |
 | GET | `/api/environmental-incidents/by-site/{siteId}/active` | Incident active theo site | Mọi role |
 | GET | `/api/battery/health` | Health check | Public |
+| POST | `/api/iot-devices/provision` | Device provision sau boot | API Key (scope DeviceHeartbeat) |
+| POST | `/api/iot-devices/heartbeat` | Heartbeat health định kỳ | API Key (scope DeviceHeartbeat) |
+| GET | `/api/iot-devices/firmware-check` | Device poll firmware mới | API Key (scope FirmwareCheck) |
+| PUT | `/api/iot-devices/firmware-update-log/{id}` | Device báo cáo progress OTA | API Key (scope FirmwareCheck) |
+| GET | `/api/iot-devices/{deviceId}/calibrations` | List calibration của device | Admin/Manager/Staff |
+| POST | `/api/iot-devices/{deviceId}/calibrations` | Tạo calibration | Admin/Staff |
+| DELETE | `/api/iot-devices/{deviceId}/calibrations/{calibrationId}` | Xóa calibration | Admin/Staff |
+| GET | `/api/iot-devices/calibrations-expiring` | Calibration sắp hết hạn | Admin/Manager |
+| GET | `/api/admin/iot-devices` | List IoT device | Admin |
+| GET | `/api/admin/iot-devices/{id}` | Chi tiết IoT device | Admin |
+| POST | `/api/admin/iot-devices` | Tạo device + sinh API key | Admin |
+| PUT | `/api/admin/iot-devices/{id}` | Cập nhật device | Admin |
+| DELETE | `/api/admin/iot-devices/{id}` | Decommission device | Admin |
+| POST | `/api/admin/iot-devices/{id}/rotate-key` | Rotate API key | Admin |
+| POST | `/api/admin/iot-devices/{id}/revoke-key` | Revoke API key | Admin |
+| POST | `/api/admin/iot-devices/{id}/command` | Push downlink command (MQTT) | Admin |
+| GET | `/api/admin/iot-firmware-releases` | List firmware release | Admin |
+| POST | `/api/admin/iot-firmware-releases` | Tạo firmware release | Admin |
+| POST | `/api/admin/iot-firmware-releases/{id}/publish` | Publish release | Admin |
+| POST | `/api/admin/iot-firmware-releases/{id}/archive` | Archive release | Admin |
+| POST | `/api/admin/iot-firmware-releases/upload-binary` | Upload file `.bin` firmware | Admin |

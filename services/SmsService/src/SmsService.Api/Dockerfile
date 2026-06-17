@@ -1,9 +1,16 @@
-# Multi-stage build cho SmsService (consumer-only).
+# Multi-stage build cho SmsService — SMS Gateway Hub (Sprint SMS).
+# Build context PHẢI là repo root để truy cập shared/ projects.
+# Lệnh build: docker build -f services/SmsService/src/SmsService.Api/Dockerfile -t sms-service .
+# Hoặc: docker compose build smsservice (đã set context: . trong docker-compose.yml)
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+# Copy csproj trước để tận dụng Docker layer cache cho dotnet restore.
+# 4 SmsService projects (Domain → Application → Infrastructure → Api) + 3 shared.
 COPY ["services/SmsService/src/SmsService.Api/SmsService.Api.csproj", "services/SmsService/src/SmsService.Api/"]
+COPY ["services/SmsService/src/SmsService.Application/SmsService.Application.csproj", "services/SmsService/src/SmsService.Application/"]
+COPY ["services/SmsService/src/SmsService.Domain/SmsService.Domain.csproj", "services/SmsService/src/SmsService.Domain/"]
 COPY ["services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj", "services/SmsService/src/SmsService.Infrastructure/"]
 COPY ["shared/src/SharedContracts/SharedContracts.csproj", "shared/src/SharedContracts/"]
 COPY ["shared/src/SharedInfrastructure/SharedInfrastructure.csproj", "shared/src/SharedInfrastructure/"]

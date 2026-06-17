@@ -386,11 +386,11 @@ POST /api/auth/login
 | `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai, năm >= 1900 | Ngày sinh (ISO 8601) |
 | `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
 
-**Response thành công `200`:**
+**Response thành công `201`:**
 ```json
 {
   "isSuccess": true,
-  "statusCode": 200,
+  "statusCode": 201,
   "data": {
     "email": "user@example.com",
     "otpExpiresInSeconds": 300
@@ -403,7 +403,7 @@ POST /api/auth/login
 | `data.email` | `string` | Không | Email vừa đăng ký |
 | `data.otpExpiresInSeconds` | `int` | Không | Thời gian hết hạn OTP tính bằng giây (thường 300 = 5 phút) |
 
-**Lưu ý:** Sau khi đăng ký, account ở trạng thái `PendingVerification`. Cần gọi `POST /api/auth/verify-otp` để kích hoạt.
+**Lưu ý:** Register trả `201 Created` (không phải 200). Sau khi đăng ký, account ở trạng thái `PendingVerification`. Cần gọi `POST /api/auth/verify-otp` để kích hoạt.
 
 ---
 
@@ -506,7 +506,7 @@ POST /api/auth/login
   "isSuccess": true,
   "data": {
     "resetToken": "a1b2c3...",
-    "expiresInSeconds": 600
+    "expiresInSeconds": 900
   }
 }
 ```
@@ -657,10 +657,12 @@ POST /api/auth/login
 **Response thành công `200`:** Dùng cùng shape `LoginResultDto` như `POST /api/auth/login` Case A (Accept invite hoàn tất = login luôn, bypass 2FA cho lần đầu — user enroll 2FA sau nếu muốn). `data.tokens.accessToken` + `data.tokens.refreshToken`, `data.challenge = null`.
 
 **Lỗi thường gặp:**
-- `400` — Body không hợp lệ (password rỗng, confirmPassword không khớp, invitationToken rỗng)
-- `401` — `invitationToken` không tồn tại hoặc đã bị vô hiệu hoá
-- `410` — `invitationToken` đã hết hạn (token có TTL **72 giờ** kể từ lúc Admin gửi invite)
+- `400` — Field validation đơn (password rỗng, invitationToken rỗng)
+- `422` — `confirmPassword` không khớp `password` (cross-field validation, không phải 400)
+- `401` — `invitationToken` không tồn tại / đã bị vô hiệu hoá / **đã hết hạn** (cùng status 401 cho cả 3 case)
 - `409` — Token đã được dùng rồi (account đã active, không thể accept lại)
+
+**Lưu ý status:** Token hết hạn trả **`401`** (không phải 410 — backend không có nhánh 410 cho endpoint này). `confirmPassword` mismatch trả **`422`** (cross-field), còn field rỗng trả `400`.
 
 **Lưu ý TTL:** `invitationToken` hết hạn sau **72 giờ**. Nếu hết hạn, Admin cần gửi lại invite qua `POST /api/admin/accounts/invite` với cùng email.
 
@@ -672,8 +674,10 @@ Base route: `/api/accounts`
 Header: `Authorization: Bearer {accessToken}`
 
 > **Phân biệt Nhóm 2 vs Nhóm 3:**
-> - **Nhóm 2** (`/api/accounts`) — AccountsController: quản lý account cốt lõi (password, email change, phone verify, 2FA, Google link, deactivate/delete, login history). **Không có endpoint đọc/cập nhật profile ở nhóm này.**
-> - **Nhóm 3** (`/api/auth`) — AuthProfilesController: **canonical route cho profile operations** (đọc profile, cập nhật fullName/address/birthDate/timezone, avatar). FE dùng `GET /api/auth/me` và `PUT /api/auth/me/profile` cho mọi thao tác profile.
+> - **Nhóm 2** (`/api/accounts`) — AccountsController: quản lý account cốt lõi (password, email change, phone verify, 2FA, Google link, deactivate/delete, login history). **Có thêm 3 endpoint profile** (`GET /me/profile`, `PUT /me/profile`, `PUT /{id}`) — xem cuối nhóm này.
+> - **Nhóm 3** (`/api/auth`) — AuthProfilesController: **canonical route cho profile operations** (đọc profile, cập nhật fullName/address/birthDate/timezone, avatar). FE **nên dùng** `GET /api/auth/me` và `PUT /api/auth/me/profile` cho mọi thao tác profile.
+>
+> **Lưu ý route trùng:** 3 endpoint profile ở Nhóm 2 (`/api/accounts/me/profile`, `/api/accounts/{id}`) tồn tại trong code và hoạt động, nhưng **trùng chức năng** với Nhóm 3. Canonical vẫn là Nhóm 3 (`/api/auth/me`); FE mới nên dùng Nhóm 3, các route Nhóm 2 giữ để tương thích.
 
 **Lỗi thường gặp cho nhóm này:**
 - `401` — Token không hợp lệ, hết hạn hoặc JWT thiếu account id
@@ -731,7 +735,14 @@ Header: `Authorization: Bearer {accessToken}`
 | `newEmail` | `string` | Bắt buộc | Đúng định dạng email, max 256 ký tự | Email mới cần chuyển sang |
 | `currentPassword` | `string` | Bắt buộc | Không rỗng | Mật khẩu hiện tại để xác nhận danh tính |
 
-**Response thành công `200`:** `isSuccess = true`, OTP đã gửi về email mới.
+**Response thành công `200`:** `isSuccess = true`, `data` là accountId (Guid). OTP đã gửi về email mới (purpose `EmailChange`, TTL 10 phút).
+
+**Lỗi thường gặp:**
+- `400` — Field validation (email sai định dạng, password rỗng)
+- `401` — Chưa đăng nhập HOẶC `currentPassword` không chính xác
+- `404` — Không tìm thấy tài khoản
+- `409` — Email mới đã được tài khoản khác sử dụng
+- `422` — Email mới trùng email hiện tại
 
 ---
 
@@ -749,7 +760,14 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Lưu ý — email mới lấy từ đâu:** FE không cần gửi lại email mới trong request này. Khi gọi `POST /api/accounts/me/change-email`, server lưu email mới vào field `PendingEmail` của account trong DB. Handler `confirm-email-change` đọc `PendingEmail` từ DB, verify OTP, rồi copy sang `Email` chính thức. Không có race condition khi mở nhiều tab vì `PendingEmail` là per-account.
 
-**Response thành công `200`:** `isSuccess = true`, email đã cập nhật.
+**Response thành công `200`:** `isSuccess = true`, `data` là accountId (Guid). Email đã cập nhật.
+
+**Lỗi thường gặp:**
+- `400` — OTP sai định dạng (phải đủ 6 chữ số)
+- `401` — Chưa đăng nhập HOẶC OTP sai/hết hạn
+- `404` — Không tìm thấy tài khoản
+- `409` — Không có yêu cầu đổi email đang chờ verify, hoặc email mới bị tài khoản khác chiếm trong lúc chờ
+- `423` — Tài khoản bị khóa tạm thời do sai OTP nhiều lần
 
 **Lưu ý sau confirm:** Tất cả refresh token của account bị revoke. FE phải clear token và redirect về login ngay sau khi nhận response thành công.
 
@@ -1085,7 +1103,7 @@ Header: `Authorization: Bearer {accessToken}`
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
-| `pageSize` | `int` | Không (mặc định 10) | Số item mỗi trang |
+| `pageSize` | `int` | Không (mặc định 20) | Số item mỗi trang |
 | `result` | `LoginAttemptResult?` | Không | Lọc theo kết quả |
 | `onlyFailed` | `bool?` | Không | Chỉ lấy lần thất bại |
 | `fromUtc` | `DateTime?` | Không | Từ thời điểm (UTC) |
@@ -1111,12 +1129,17 @@ Header: `Authorization: Bearer {accessToken}`
         "createdAt": "2026-05-16T08:00:00Z"
       }
     ],
-    "totalCount": 42,
+    "totalItems": 42,
     "pageNumber": 1,
-    "pageSize": 10
+    "pageSize": 10,
+    "totalPages": 5,
+    "hasNextPage": true,
+    "hasPreviousPage": false
   }
 }
 ```
+
+> **Pagination shape (`PaginationResponse<T>`):** `items`, `totalItems` (KHÔNG phải `totalCount`), `pageNumber`, `pageSize`, `totalPages` (computed = ceil(totalItems/pageSize)), `hasNextPage`, `hasPreviousPage`. Áp dụng cho mọi endpoint trả `PaginationResponse<T>` (login-history, accounts list, roles list, audit-logs...).
 
 **Chi tiết `LoginAttemptDto`:**
 
@@ -1133,6 +1156,58 @@ Header: `Authorization: Bearer {accessToken}`
 | `deviceId` | `string?` | Null nếu không gửi | Device ID từ client |
 | `note` | `string?` | Null nếu không có | Ghi chú bổ sung |
 | `createdAt` | `DateTime` | Không | Thời điểm xảy ra (UTC) |
+
+---
+
+### `GET /api/accounts/me/profile`
+
+> **Route trùng (tương thích):** Trả về cùng dữ liệu với canonical `GET /api/auth/me` (Nhóm 3). FE mới nên dùng `/api/auth/me`.
+
+**Mục đích:** Đọc profile tổng hợp của user hiện tại.
+
+**Auth:** Bắt buộc (mọi role)
+
+**Response thành công `200`:** `data` là `AccountDto` (giống `GET /api/auth/me`).
+
+**Lỗi thường gặp:** `401` (chưa đăng nhập), `404` (account không tồn tại).
+
+---
+
+### `PUT /api/accounts/me/profile`
+
+> **Route trùng (tương thích):** Cập nhật profile của chính user — alias của `PUT /api/accounts/{id}` nhưng không cần truyền id (AccountId resolve từ JWT). Canonical là `PUT /api/auth/me/profile` (Nhóm 3).
+
+**Auth:** Bắt buộc (mọi role)
+
+**Request body** (`UpdateAccountCommand`):
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `fullName` | `string` | Bắt buộc | Không rỗng, max 150 ký tự | Họ và tên |
+| `phoneNumber` | `string?` | Tùy chọn | Max 20 ký tự | Số điện thoại |
+| `avatarUrl` | `string?` | Tùy chọn | Max 500 ký tự | URL avatar direct (legacy — ưu tiên `POST /api/auth/me/avatar`) |
+| `dateOfBirth` | `DateTime?` | Tùy chọn | Không ở tương lai | Ngày sinh |
+| `address` | `string?` | Tùy chọn | Max 500 ký tự | Địa chỉ |
+
+**Response thành công `200`:** `data` là accountId (Guid).
+
+**Lưu ý:** Endpoint này KHÔNG đổi email/role/status. `timeZone` không có trong body này — nếu cần set timezone dùng `PUT /api/auth/me/profile` (Nhóm 3).
+
+---
+
+### `PUT /api/accounts/{id}`
+
+> **Route trùng (tương thích) — owner-only:** Giống `PUT /api/accounts/me/profile` nhưng truyền `id` qua route. Backend bắt buộc `id` == userId trong JWT, nếu khác trả **`403`** (user A KHÔNG update được account B qua đây — admin override dùng `PUT /api/admin/accounts/{id}`).
+
+**Auth:** Bắt buộc (mọi role, chỉ chính chủ)
+
+**Path param:** `id` — phải khớp accountId trong JWT.
+
+**Request body:** Giống `PUT /api/accounts/me/profile`.
+
+**Response thành công `200`:** `data` là accountId (Guid).
+
+**Lỗi thường gặp:** `400` (validation), `401` (chưa đăng nhập), `403` (id ≠ JWT userId), `404` (account không tồn tại).
 
 ---
 
@@ -1434,6 +1509,11 @@ Base route: `/api/admin/accounts`
 
 **Lưu ý:** FE invalidate `KEY.admin.accounts` sau khi tạo thành công để list tự refetch; không cần re-fetch `AccountDto` từ response này.
 
+**Lỗi thường gặp:**
+- `400` — Field validation (email/password/fullName sai, `roleId = Guid.Empty`)
+- `404` — `roleId` không tồn tại hoặc role đang bị disable (không phải 400)
+- `409` — Email đã tồn tại
+
 ---
 
 ### `POST /api/admin/accounts/invite`
@@ -1451,7 +1531,24 @@ Base route: `/api/admin/accounts`
 | `phoneNumber` | `string?` | Không | Số điện thoại |
 | `roleId` | `Guid` | Bắt buộc | Role gán cho user khi accept invite (1 role/account — quan hệ 1-N) |
 
+**Response thành công `201`:** `AccountActionResponse` (= `CommonResponse<Guid>`) — `data` là Guid của account vừa tạo (trạng thái `PendingVerification`).
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "message": "Đã gửi email invite. User cần accept để kích hoạt tài khoản.",
+  "data": "ab67cb7c-e960-4d2d-ac45-bc1393581ca6",
+  "listErrors": []
+}
+```
+
 **Luồng:** Sau khi invite, user nhận email chứa link với `invitationToken`. User truy cập link và gọi `POST /api/auth/accept-invite` để đặt mật khẩu và kích hoạt.
+
+**Lỗi thường gặp:**
+- `400` — Field validation (email/fullName sai, `roleId = Guid.Empty`)
+- `404` — `roleId` không tồn tại hoặc role đang bị disable (không phải 400)
+- `409` — Email đã tồn tại
 
 **Luồng gửi email:**
 - AuthService tạo account `PendingVerification`, sinh `invitationToken` TTL **72 giờ**, ghi `SendAdminInviteEvent` vào outbox và commit cùng account.
@@ -1470,7 +1567,7 @@ Base route: `/api/admin/accounts`
 
 **Mục đích:** Admin cập nhật thông tin tài khoản.
 
-**Auth:** Admin hoặc Manager
+**Auth:** Admin (chỉ Admin — không phải Manager)
 
 **Request body:**
 
@@ -1628,7 +1725,7 @@ Base route: `/api/admin/accounts`
 
 **Mục đích:** Admin xem tất cả session của một tài khoản.
 
-**Auth:** Admin
+**Auth:** Admin hoặc Manager
 
 **Query params:** `activeOnly` (bool, mặc định true)
 
@@ -1677,11 +1774,12 @@ Base route: `/api/admin/staff`
 
 | Field | Type | Mô tả |
 |---|---|---|
-| `employeeCode` | `string?` | Mã nhân viên |
-| `department` | `string?` | Phòng ban |
-| `maxConcurrentTickets` | `int` | Số ticket tối đa đồng thời, 1–50 |
-| `isAvailable` | `bool` | Trạng thái sẵn sàng |
-| `notes` | `string?` | Ghi chú |
+| `employeeCode` | `string?` | Mã nhân viên (max 50 ký tự) |
+| `department` | `string?` | Phòng ban (max 100 ký tự) |
+| `maxConcurrentTickets` | `int` | Số ticket tối đa đồng thời, 1–50 (mặc định 3) |
+| `isAvailable` | `bool` | Trạng thái sẵn sàng (mặc định true) |
+| `skillTier` | `int` | Tier kỹ năng staff, 1–3 (mặc định 1) — `StaffSkillTierEnum` |
+| `notes` | `string?` | Ghi chú (max 1000 ký tự) |
 
 ---
 
@@ -1872,7 +1970,7 @@ Base route: `/api/admin/permissions`
 ## Nhóm 9 — Admin: Audit Logs
 
 Base route: `/api/admin/audit-logs`
-**Auth:** Admin hoặc Manager
+**Auth:** Admin (chỉ Admin — không phải Manager)
 
 ---
 
@@ -1913,3 +2011,24 @@ Base route: `/api/admin/audit-logs`
 | `deviceId` | `string?` | Null nếu không gửi | Device ID |
 | `correlationId` | `string?` | Null nếu không có | Correlation ID để link với request log |
 | `createdAt` | `DateTime` | Không | Thời điểm ghi log (UTC) |
+
+---
+
+### `GET /api/admin/audit-logs/by-account/{accountId}`
+
+**Mục đích:** Xem toàn bộ audit log mà account này là **target** (tiện hơn so với base endpoint + filter `targetAccountId`).
+
+**Auth:** Admin (chỉ Admin)
+
+**Path param:** `accountId` — Guid của account mục tiêu (map vào `targetAccountId`).
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `pageNumber` | `int` | Trang, mặc định 1 |
+| `pageSize` | `int` | Số item/trang, mặc định 20 |
+| `action` | `AuditActionEnum?` | Lọc theo loại hành động |
+| `isSuccess` | `bool?` | Lọc theo kết quả thành công/thất bại |
+
+**Response:** `PaginationResponse<AuditLogDto>` — cùng shape với `GET /api/admin/audit-logs`.
