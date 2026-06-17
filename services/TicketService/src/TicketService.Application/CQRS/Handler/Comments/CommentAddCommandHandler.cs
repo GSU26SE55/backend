@@ -96,7 +96,7 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
         {
             IsSuccess = false,
             StatusCode = statusCode,
-            Message = message,
+            Message = message
         };
     }
 }

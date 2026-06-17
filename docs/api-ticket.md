@@ -1340,3 +1340,265 @@ Base path: `/api/ticket/health`
 | `403` | `Ticket` | Quá hạn 7 ngày để mở lại ticket |
 | `403` | `Ticket` | Không đủ thẩm quyền xử lý ticket đã Escalated |
 | `404` | `Ticket` | Không tìm thấy ticket yêu cầu |
+
+---
+
+## Nhóm 8 — Knowledge Base (Customer / Public)
+
+Base path: /api/knowledge-base
+**Auth:** Không yêu cầu (Anonymous) hoặc Customer role.
+
+---
+
+### GET /api/knowledge-base
+
+**Mục đích:** Tìm kiếm và liệt kê các bài viết Wiki đã xuất bản (Published) và không đánh dấu nội bộ (IsInternalOnly = false).
+
+**Auth:** Không yêu cầu.
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| Keyword | string? | Tìm theo tiêu đề hoặc triệu chứng |
+| Category | TicketCategoryEnum? | Lọc theo danh mục lỗi |
+| Tags | string[]? | Tìm theo thẻ (Tag) |
+| PageNumber | int | Trang (mặc định 1) |
+| PageSize | int | Số item/trang |
+
+**Response thành công 200:** CommonResponse<PaginationResponse<KbArticleListItemDto>>
+
+---
+
+### GET /api/knowledge-base/{id}
+
+**Mục đích:** Lấy thông tin chi tiết một bài viết Wiki để đọc. Không tự động tăng lượt xem.
+
+**Auth:** Không yêu cầu.
+
+**Path param:** id — UUID của bài viết.
+
+**Response thành công 200:** CommonResponse<KbArticleDto>
+
+**Lỗi thường gặp:**
+- 404 — Không tìm thấy bài viết, bài viết chưa được Published, hoặc là bài viết nội bộ.
+
+---
+
+### GET /api/knowledge-base/suggest
+
+**Mục đích:** Gợi ý các bài viết liên quan dựa trên text đầu vào (thường dùng khi khách hàng đang nhập nội dung ticket mới).
+
+**Auth:** Không yêu cầu.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| query | string | ✅ | Đoạn text khách hàng đang nhập |
+
+**Response thành công 200:** CommonResponse<KbArticleSuggestDto[]>
+
+---
+
+### POST /api/knowledge-base/{id}/helpful
+
+**Mục đích:** Người dùng đánh giá bài viết là hữu ích (Tăng HelpfulCount).
+
+**Auth:** Tùy chọn (Nếu có Token sẽ ghi nhận UserId để chống spam).
+
+**Path param:** id — UUID của bài viết.
+
+**Response thành công 200:** CommonResponse<object>
+
+---
+
+## Nhóm 9 — Knowledge Base (Internal - Staff/Manager/Admin)
+
+Base path: /api/internal/knowledge-base
+**Auth:** Bắt buộc — Staff, Manager hoặc Admin
+
+---
+
+### POST /api/internal/knowledge-base
+
+**Mục đích:** Tạo mới một bài viết Knowledge Base.
+Bài viết sẽ được khởi tạo với Version 0 và trạng thái Chờ phê duyệt (PendingReview). Đồng thời tạo một bản KbArticleVersion (V1.0) ở trạng thái Pending. Cần Manager duyệt để xuất bản.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin)
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| category | TicketCategoryEnum | Bắt buộc | Danh mục lỗi |
+| 	itle | string | Bắt buộc | Tiêu đề bài viết |
+| symptoms | string | Bắt buộc | Mô tả triệu chứng / nguyên nhân |
+| diagnosisSteps | string | Bắt buộc | Các bước chẩn đoán |
+| solutionSteps | string | Bắt buộc | Các bước xử lý / giải pháp |
+| ecommendedParts | string[]? | Không | Danh sách linh kiện khuyến nghị thay thế |
+| 	ags | string[]? | Không | Danh sách từ khóa (tối đa 10) |
+| isInternalOnly | ool | Không (mặc định alse) | 	rue = Ẩn với khách hàng |
+
+**Response thành công 201:** CommonResponse<KbArticleActionDto> (Trả về id, code, status)
+
+---
+
+### PUT /api/internal/knowledge-base/{id}
+
+**Mục đích:** Cập nhật nội dung bài viết hiện có.
+Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thái bài viết sẽ chuyển về PendingReview để chờ Manager duyệt (trừ khi người cập nhật là Manager/Admin hoặc chủ sở hữu bài viết).
+
+**Auth:** Bắt buộc (Staff, Manager, Admin)
+
+**Path param:** id — UUID của bài viết.
+
+**Request body:** Tương tự như Create, thêm field changeDescription (string, required).
+
+**Response thành công 200:** CommonResponse<KbArticleDto>
+
+---
+
+### GET /api/internal/knowledge-base/{id}/versions
+
+**Mục đích:** Xem danh sách lịch sử các phiên bản của bài viết.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin)
+
+**Response thành công 200:** CommonResponse<KbArticleVersionDto[]>
+
+---
+
+### GET /api/internal/knowledge-base/{id}/compare
+
+**Mục đích:** So sánh sự khác biệt giữa hai phiên bản của bài viết.
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| romVersion | int | Phiên bản gốc |
+| 	oVersion | int | Phiên bản đích (Nếu = 0, so sánh với bản hiện tại) |
+
+**Response thành công 200:** CommonResponse<KbArticleDiffDto> (Chứa OldValue, NewValue, IsChanged cho từng trường).
+
+---
+
+### GET /api/internal/knowledge-base/{id}/copy-template
+
+**Mục đích:** Sao chép cấu trúc bài viết mẫu để tạo bài mới. Chỉ áp dụng cho các bài viết có gắn tag "template" hoặc "example".
+
+**Response thành công 200:** CommonResponse<KbArticleTemplateDto>
+
+---
+
+## Nhóm 10 — Knowledge Base (Admin/Manager Workflow)
+
+Base path: /api/admin/knowledge-base
+**Auth:** Bắt buộc — Manager hoặc Admin
+
+Quản lý vòng đời bài viết: Phê duyệt thay đổi, Xuất bản, Lưu trữ và Hoàn tác.
+
+---
+
+### POST /api/admin/knowledge-base/{id}/approve-review
+
+**Mục đích:** Chấp nhận các thay đổi của Staff. Trạng thái bài viết chuyển từ PendingReview sang Published. Nội dung từ bản nháp sẽ được đắp lên bài viết chính.
+
+**Response thành công 200:** CommonResponse<KbArticleActionDto>
+
+---
+
+### POST /api/admin/knowledge-base/{id}/reject-review
+
+**Mục đích:** Từ chối thay đổi của Staff.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| eason | string | Bắt buộc | Lý do từ chối |
+
+**Response thành công 200:** CommonResponse<KbArticleActionDto>
+
+---
+
+### POST /api/admin/knowledge-base/{id}/publish
+
+**Mục đích:** Xuất bản bài viết đang ở trạng thái Nháp.
+
+**Response thành công 200:** CommonResponse<KbArticleActionDto>
+
+---
+
+### POST /api/admin/knowledge-base/{id}/archive
+
+**Mục đích:** Lưu trữ bài viết (ngừng hiển thị với Customer).
+
+**Response thành công 200:** CommonResponse<KbArticleActionDto>
+
+---
+
+### POST /api/admin/knowledge-base/{id}/rollback
+
+**Mục đích:** Hoàn tác nội dung bài viết về một phiên bản cũ trong lịch sử. Lấy nội dung từ phiên bản cũ đè lên bản hiện tại và tăng Version.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| 	oVersionId | Guid | Bắt buộc | ID của phiên bản (KbArticleVersion) cần khôi phục |
+
+**Response thành công 200:** CommonResponse<KbArticleActionDto>
+
+---
+
+## Knowledge Base DTOs & Enums
+
+### KbArticleDto
+
+| Field | Type | Mô tả |
+|---|---|---|
+| id | string | ID bài viết |
+| code | string | Mã bài viết (KB-YYYY-NNNN) |
+| category | TicketCategoryEnum | Enum dạng chuỗi (e.g., "Charging") |
+| 	itle | string | Tiêu đề |
+| symptoms | string | Triệu chứng |
+| diagnosisSteps | string | Các bước chẩn đoán |
+| solutionSteps | string | Các bước xử lý |
+| ecommendedParts | string[]? | Danh sách linh kiện |
+| 	ags | string[] | Danh sách thẻ |
+| status | KbArticleStatusEnum | Enum dạng chuỗi (e.g., "Published") |
+| isInternalOnly | ool | Bài nội bộ |
+| ersion | int | Số phiên bản chính (Major Version) |
+| iewCount | int | Lượt xem |
+| helpfulCount | int | Lượt hữu ích |
+
+### KbArticleActionDto
+
+Payload nhẹ dùng cho các hành động chuyển trạng thái.
+
+| Field | Type | Mô tả |
+|---|---|---|
+| id | string | ID bài viết |
+| code | string | Mã bài viết |
+| status | KbArticleStatusEnum | Trạng thái hiện tại sau thao tác |
+
+### KbArticleStatusEnum
+- Draft (1): Nháp
+- PendingReview (2): Chờ phê duyệt
+- Published (3): Đã xuất bản (Customer thấy được)
+- Archived (4): Đã lưu trữ (Ẩn)
+
+### KbVersionStatusEnum
+Dành cho bảng lịch sử KbArticleVersion.
+- Pending (1): Chờ duyệt
+- Approved (2): Đã duyệt
+- Rejected (3): Bị từ chối
+- Archived (4): Bản sao lưu (Snapshot)
+
+### KbReferenceTypeEnum
+Dùng khi link Ticket với Article.
+- ConsultedDuringResolve (1): Tham khảo khi xử lý
+- ProvidedToCustomer (2): Cung cấp cho khách hàng
+- GeneratedAfterResolve (3): Tạo ra sau khi xử lý xong

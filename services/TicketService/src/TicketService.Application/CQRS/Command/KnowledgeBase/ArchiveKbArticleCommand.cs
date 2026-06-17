@@ -1,0 +1,28 @@
+using MediatR;
+using SharedContracts.Common.Responses;
+using SharedContracts.Interfaces;
+using TicketService.Application.DTOs.Response.KnowledgeBase;
+
+namespace TicketService.Application.CQRS.Command.KnowledgeBase;
+
+public class ArchiveKbArticleCommand : IRequest<CommonResponse<KbArticleActionDto>>, IValidatable<CommonResponse<KbArticleActionDto>>
+{
+    public Guid ArticleId { get; set; }
+
+    public Task<CommonResponse<KbArticleActionDto>> ValidateAsync()
+    {
+        var response = new CommonResponse<KbArticleActionDto>();
+
+        if (ArticleId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "ID bài viết không hợp lệ." });
+
+        if (response.ListErrors.Count > 0)
+        {
+            response.IsSuccess = false;
+            response.StatusCode = 400;
+            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+        }
+
+        return Task.FromResult(response);
+    }
+}
