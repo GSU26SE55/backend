@@ -88,6 +88,8 @@
   - [67. Tóm tắt final — file đầy đủ chưa?](#67-tóm-tắt-final--file-đầy-đủ-chưa)
 - [Phần IX — SmsService SMS Forwarder Gateway](#phần-ix--smsservice-sms-forwarder-gateway)
   - [68. SmsService — SMS Forwarder Gateway](#68-smsservice--sms-forwarder-gateway--p1) — xem **Sprint SMS** ở §17 (42 task `#SMS-01..42` / `#293..#334`)
+- [Phần X — AuthService Security Audit](#phần-x--authservice-security-audit)
+  - [69. AuthService Security Audit (88 issues)](#69-authservice-security-audit-88-issues--p0p3) — xem **Sprint additional-auth** ở §17 (90 task `#AUTH-01..90` / `#349..#438`)
 
 ---
 
@@ -1112,14 +1114,16 @@ Khi 1 `BatteryAsset` có cả BMS và IoT Gateway cùng đẩy reading:
 foreach (var asset in assetsWithMultipleSources)
 {
     var latestBms = await _unitOfWork.SensorReadings.GetAllAsync()
-        .Where(x => x.BatteryAssetId == asset.Id
+        .Where(x => !x.IsDeleted
+            && x.BatteryAssetId == asset.Id
             && x.SourceType == SensorReadingSourceTypeEnum.Bms
             && x.Time >= DateTime.UtcNow.AddSeconds(-60))
         .OrderByDescending(x => x.Time)
         .FirstOrDefaultAsync();
 
     var latestIot = await _unitOfWork.SensorReadings.GetAllAsync()
-        .Where(x => x.BatteryAssetId == asset.Id
+        .Where(x => !x.IsDeleted
+            && x.BatteryAssetId == asset.Id
             && x.SourceType == SensorReadingSourceTypeEnum.IotGateway
             && x.Time >= DateTime.UtcNow.AddSeconds(-60))
         .OrderByDescending(x => x.Time)
@@ -1464,15 +1468,17 @@ services.Configure<WeatherSyncOptions>(configuration.GetSection("Weather"));
 ## 2. TicketService — P0
 
 ### 2.1. Trách nhiệm
-1. CRUD ticket với state machine 12+ trạng thái.
+1. CRUD ticket với state machine 14 trạng thái.
 2. Quản lý SLA timer (start/pause/resume/breach) — BR-04.
 3. Quản lý Activity timeline (BR-08).
 4. Orchestrate `Alert–Ticket Saga`: nhận `BatteryAnomalyDetectedEvent`, tạo hoặc reuse Ticket theo BR-02, rồi yêu cầu BatteryService liên kết `Alert.TicketId`.
 5. Manager approval workflow (BR-05).
 6. Reopen policy 7 ngày (BR-06) + escalate khi ≥ 2 reopen (BR-07).
-7. KnowledgeBase module (xem §4).
+7. KnowledgeBase module (xem §4) — quy trình mềm (BR-11), không enforce cứng việc tạo Wiki mới sau mỗi ticket.
 8. Maintenance log + attachment.
 9. Comment với Internal/External visibility.
+10. Phân tầng xử lý SLA & assign Staff (BR-10): P1→Tier 1, P2→Tier 2, P3→Tier 3.
+11. Quy tắc đóng ticket theo tầng (BR-12): Tầng nào nhận ticket thì tầng đó đóng. Hệ thống tự động ESCALATED tại 2/3 SLA nếu chưa RESOLVED. Staff cũ bị block hoàn toàn sau khi escalate.
 
 ### 2.2. Cấu trúc thư mục
 (tương tự BatteryService, tham khảo §1.2)
@@ -1727,7 +1733,7 @@ public enum TicketStatusEnum {
 |-----------|---------------|-----------------|--------------|
 | `*` → `New` | System (initial) | — | Activity Created |
 | `New` → `Open` | Manager / System | — | Activity StatusChanged |
-| `Open` → `Approved` | Manager | `Priority`, `Impact`, `Urgency` | **Triage Success**: Phê duyệt tính hợp lệ, chưa gán Staff |
+| `Open` → `Approved` | Manager | `Priority`, `ImpactScope`, `UrgencyLevel` | **Triage Success**: Phê duyệt tính hợp lệ, tính priority tự động, chưa gán Staff |
 | `Open` → `ClosedRejected` | Manager | `RejectionReason` | **Triage Fail**: Từ chối trực tiếp ticket không hợp lệ |
 | `Approved` → `Assigned` | Manager | `AssignedStaffId` | **Assignment**: Gán Staff, Start SlaTimer, publish TicketAssignedEvent |
 | `Assigned` → `InProgress` | AssignedStaff | — | Activity StatusChanged |
@@ -1967,7 +1973,7 @@ Plus comment/log/attachment commands:
 #### `SlaTimerBackgroundService` (frequency: 60s)
 ```csharp
 foreach (var timer in await _uow.SlaTimers.GetAllAsync()
-    .Where(t => t.Status == SlaTimerStatusEnum.Running)
+    .Where(t => t.Status == SlaTimerStatusEnum.Running && !t.IsDeleted)
     .ToListAsync()) {
 
     var now = DateTime.UtcNow;
@@ -2509,29 +2515,89 @@ GET    /api/v1/tickets/{id}/kb-references                (mọi role internal)
 GET    /api/v1/knowledge-base/{id}/usage-stats           (Manager/Admin — count + recent tickets)
 ```
 
-### 4.3. Endpoints
-```
-GET    /api/v1/knowledge-base?category=&q=&tag=&page=    (Staff/Manager/Admin)
-GET    /api/v1/knowledge-base/{id}                       (mọi role internal)
-POST   /api/v1/knowledge-base                            (Manager/Admin) — Status=Draft
-PUT    /api/v1/knowledge-base/{id}
-PUT    /api/v1/knowledge-base/{id}/publish               (Manager/Admin)
-PUT    /api/v1/knowledge-base/{id}/archive
-DELETE /api/v1/knowledge-base/{id}                       (Admin)
-POST   /api/v1/knowledge-base/{id}/helpful               (Staff vote)
-GET    /api/v1/knowledge-base/suggest?ticketId={id}      (Staff — gợi ý theo ticket category + symptom match)
+### 4.3. Luồng Nghiệp Vụ Xét Duyệt & Xuất Bản (Lifecycle Flow)
+
+Vòng đời của một bài viết Knowledge Base (KB Article) được thiết kế chặt chẽ qua các vai trò (Staff, Manager, Admin) và được lưu vết phiên bản đầy đủ:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingReview : Staff Tạo mới (HttpPost /api/internal/knowledge-base)\n[Version = 0, Status = PendingReview]
+    [*] --> Draft : Manager/Admin Tạo nháp\n[Status = Draft]
+
+    PendingReview --> Published : Manager/Admin Duyệt (HttpPost .../approve-review)\n[Version = 1, Status = Published]
+    PendingReview --> Draft : Manager/Admin Từ chối (HttpPost .../reject-review)\n[Quay về nháp kèm RejectReason]
+
+    Draft --> Published : Manager/Admin Xuất bản trực tiếp (HttpPost .../publish)
+
+    Published --> PendingReview : Staff cập nhật nội dung (HttpPut /api/internal/knowledge-base/{id})\n[Lưu bản cũ vào History, chuyển PendingReview]
+    Published --> Published : Manager/Admin/Tác giả cập nhật trực tiếp\n[Lưu bản cũ, tăng Version, giữ Published]
+
+    Published --> Archived : Manager/Admin Lưu trữ (HttpPost .../archive)
+    Archived --> Published : Manager/Admin Khôi phục/Publish lại
+
+    Published --> Published : Manager/Admin Rollback về bản cũ (HttpPost .../rollback)\n[Tăng version mới với nội dung cũ]
+
+    Draft --> [*] : Admin Xóa mềm (HttpDelete /api/admin/knowledge-base/{id})
+    Published --> [*] : Admin Xóa mềm
 ```
 
-### 4.4. Suggest logic
-```sql
-SELECT id, title, helpful_count
-FROM kb_articles
-WHERE status = 2  -- Published
-  AND category = :ticketCategory
-ORDER BY helpful_count DESC, view_count DESC
-LIMIT 5;
+1. **Soạn thảo và Gửi duyệt (Draft -> PendingReview):**
+   - Mọi nhân viên nội bộ (Staff/Manager/Admin) có thể tạo mới bài viết.
+   - Khi Staff tạo mới (qua `/api/internal/knowledge-base`), bài viết tự động lưu với `Status = PendingReview` (Chờ duyệt) và `Version = 0` nhằm đảm bảo chất lượng nội dung trước khi công khai.
+2. **Quy trình Phê duyệt (Review):**
+   - **Approve (Phê duyệt):** Manager/Admin gọi `/api/admin/knowledge-base/{id}/approve-review` để duyệt bài viết. Trạng thái chuyển sang `Published` và `Version` được đặt thành 1. Bài viết lúc này hiển thị công khai và được đưa vào thuật toán gợi ý (Suggest).
+   - **Reject (Từ chối):** Manager/Admin gọi `/api/admin/knowledge-base/{id}/reject-review` truyền lý do từ chối. Trạng thái bài viết chuyển về `Draft` (Nháp) để Staff chỉnh sửa và gửi duyệt lại.
+3. **Cập nhật và Quản lý phiên bản (Update & Versioning):**
+   - Khi cập nhật qua `/api/internal/knowledge-base/{id}`, hệ thống tự động lưu trữ phiên bản hiện tại vào bảng lịch sử `KbArticleVersion`.
+   - Nếu bài viết đã `Published` và được cập nhật bởi một **Staff khác** (không phải người tạo ban đầu), bài viết sẽ tự động chuyển về trạng thái `PendingReview` để chờ kiểm duyệt lại.
+   - Nếu cập nhật bởi chính **chủ sở hữu (tác giả)** hoặc **Manager/Admin**, bài viết được cập nhật trực tiếp, giữ nguyên trạng thái `Published` và số phiên bản (`Version`) được tăng thêm 1.
+4. **Khôi phục lịch sử (Rollback):**
+   - Manager/Admin có quyền khôi phục bài viết về một phiên bản cũ trong lịch sử thông qua `/api/admin/knowledge-base/{id}/rollback`. Nội dung phiên bản cũ được ghi đè lên phiên bản hiện tại và `Version` được tăng thêm 1.
+
+### 4.4. Các Endpoints Thực Tế (Khớp với Code)
+
+#### API Công khai & Tra cứu (Mọi Role đã đăng nhập)
+- `GET    /api/knowledge-base` : Lấy danh sách bài viết (hỗ trợ lọc theo `Category`, `Status`, `Tag`, và tìm kiếm từ khóa `Q`).
+- `GET    /api/knowledge-base/{id}` : Xem chi tiết bài viết (tự động tăng `ViewCount`).
+- `GET    /api/knowledge-base/suggest?ticketId={id}` : Gợi ý tối đa 5 bài viết public phù hợp với phân loại lỗi của Ticket.
+- `POST   /api/knowledge-base/{id}/helpful` : Staff đánh dấu bài viết hữu ích (tăng `HelpfulCount`).
+
+#### API Soạn thảo & Xem lịch sử (Internal: Staff, Manager, Admin)
+- `POST   /api/internal/knowledge-base` : Tạo mới bài viết (Staff tạo -> `PendingReview`, Manager/Admin tạo -> `Draft`).
+- `PUT    /api/internal/knowledge-base/{id}` : Cập nhật nội dung bài viết (có lưu lịch sử và kiểm tra quyền tác giả).
+- `GET    /api/internal/knowledge-base/{id}/versions` : Lấy danh sách lịch sử các phiên bản cũ của bài viết.
+- `GET    /api/internal/knowledge-base/{id}/versions/{versionId}` : Xem chi tiết một phiên bản lịch sử.
+- `GET    /api/internal/knowledge-base/{id}/compare?fromVersion=&toVersion=` : So sánh khác biệt (Diff) giữa hai phiên bản.
+- `GET    /api/internal/knowledge-base/{id}/copy-template` : Sao chép bài viết mẫu (mã lỗi mẫu) để bắt đầu viết.
+
+#### API Quản trị vòng đời (Admin & Manager)
+- `POST   /api/admin/knowledge-base/{id}/publish` : Xuất bản bài viết đang ở trạng thái `Draft` hoặc `PendingReview`.
+- `POST   /api/admin/knowledge-base/{id}/archive` : Lưu trữ bài viết đã xuất bản (không hiển thị công khai).
+- `POST   /api/admin/knowledge-base/{id}/approve-review` : Manager phê duyệt bài viết do Staff gửi lên.
+- `POST   /api/admin/knowledge-base/{id}/reject-review` : Manager từ chối bài viết kèm lý do (`ManagerRejectReason`).
+- `POST   /api/admin/knowledge-base/{id}/rollback` : Hoàn tác bài viết về phiên bản cũ.
+- `DELETE /api/admin/knowledge-base/{id}` : Xóa mềm bài viết (Chỉ Admin).
+
+#### API Liên kết Ticket & KB (v1 namespace)
+- `POST   /api/v1/tickets/{id}/kb-references` : Liên kết Ticket với KB Article (`ReferenceType` = 1: ConsultedDuringResolve, 2: ProvidedToCustomer, 3: GeneratedAfterResolve).
+- `DELETE /api/v1/tickets/{id}/kb-references/{refId}` : Xóa liên kết.
+- `GET    /api/v1/tickets/{id}/kb-references` : Lấy danh sách bài viết KB đã liên kết với Ticket này.
+
+### 4.5. Suggest logic thực tế trong Code
+
+Truy vấn gợi ý bài viết phù hợp dựa trên Category của Ticket, sắp xếp theo độ hữu ích (`HelpfulCount`) giảm dần, tiếp theo là lượt xem (`ViewCount`) giảm dần, giới hạn tối đa 5 kết quả và loại trừ các bài viết nội bộ (`IsInternalOnly == false`):
+
+```csharp
+var suggestions = await _uow.KnowledgeBaseArticles.GetAllAsync()
+    .Where(a => !a.IsDeleted
+             && a.Status == KbArticleStatusEnum.Published
+             && !a.IsInternalOnly
+             && a.Category == ticket.Category)
+    .OrderByDescending(a => a.HelpfulCount)
+    .ThenByDescending(a => a.ViewCount)
+    .Take(5)
+    .ToListAsync(ct);
 ```
-Future: ElasticSearch full-text trên Symptoms (out of scope capstone).
 
 ---
 
@@ -4862,6 +4928,160 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 
 ---
 
+### Sprint additional-auth (AuthService Security Hardening — chưa chốt timeline)
+
+**Goal:** Khắc phục toàn bộ **88 vấn đề** phát hiện qua 4 pass audit sâu của AuthService (17 bảo mật + 22 logic/edge case + 26 tính năng thiếu + 16 code quality + 7 test gap). Đây là sprint **base đầu tiên** xử lý technical debt AuthService — phải làm trước khi mở rộng tính năng auth/permission cho Saga + multi-tenant.
+
+**Tham chiếu kỹ thuật:** Toàn bộ chi tiết 88 issue + file path + mức độ + cách fix ở **§69** (Phần X). Đọc §69 trước khi start sprint. Source gốc: `issue-authservice.md` ở repo root.
+
+**Owner:** Chưa assign — Leader chốt khi `/kltn-sprint` chạy. Khuyến nghị: BE dev senior có kinh nghiệm với security/JWT/OAuth/Outbox (vì sprint touch nhiều layer Domain/Application/Infrastructure/Api + SharedInfrastructure CORS).
+
+**Timeline ước tính:** ~22 dev-day tổng (1 dev). Có thể chia 2 sprint song song:
+- **Sprint additional-auth-A** (P0/P1 critical security + hot logic + test gap) — ~10 dev-day, MVP để release-gate.
+- **Sprint additional-auth-B** (P2/P3 feature gap + code quality + ops hardening) — ~12 dev-day, có thể defer.
+
+**Dependency:**
+- AuthService stable (Sprint 5B `#241` permission seed đã merge).
+- Redis up cho Token Revocation List (TRL) + permission cache.
+- SharedInfrastructure cho CorrelationId + Outbox pattern (đã có sẵn từ Sprint 5B `#235`).
+- Quyết định CORS whitelist origins từ Leader (cần list domain FE/Mobile production).
+
+**Owner mapping (per phase, tham chiếu):**
+
+| Phase | Subject | Tasks | Ước tính |
+|-------|---------|-------|----------|
+| Phase A | Critical Security P0 (top 10 ưu tiên fix ngay) | `#AUTH-01..10` | 4 ngày |
+| Phase B | High Security P1 (operational hardening) | `#AUTH-11..17` | 2 ngày |
+| Phase C | Logic / Edge case fix (pass 1-4) | `#AUTH-18..39` | 4 ngày |
+| Phase D | Missing features P1 (token blacklist, health, GDPR, SMS fallback) | `#AUTH-40..67` | 6 ngày |
+| Phase E | Code quality / Inconsistency | `#AUTH-68..83` | 3 ngày |
+| Phase F | Test gap (missing handlers + behavior verification) | `#AUTH-84..90` | 3 ngày |
+
+**Tasks:**
+
+#### Phase A — Critical Security P0 (4 ngày — Top 10 ưu tiên fix ngay)
+
+- [ ] **#AUTH-01** — Fix `#9` Hash refresh token trong DB: thay `nvarchar(512)` plaintext bằng SHA-256 hash. Migration `HashRefreshTokens` + `Up()` backfill hash cho row hiện có (hoặc revoke all → user re-login) + sửa `AuthTokenIssuer`/`RefreshTokenCommandHandler` so sánh bằng hash. File: `RefreshToken.cs:14`, migration `20260427194313`. **Mức: P0**. — #349
+- [ ] **#AUTH-02** — Fix `#2` 2FA Disable require verify TOTP/password: thêm field `TotpCode` hoặc `CurrentPassword` vào `Disable2FACommand`, handler verify trước khi disable. File: `AccountsController.cs:365`. **Mức: P0**. — #350
+- [ ] **#AUTH-03** — Fix `#4` OAuth `state` CSRF validation: `GoogleCallbackCommandHandler` nhận thêm `state` param, validate với value sinh lúc redirect (Redis key TTL 10 phút). File: `GoogleCallbackCommandHandler.cs:35`. **Mức: P0**. — #351
+- [ ] **#AUTH-04** — Fix `#5` JWT `ValidateToken` bật issuer/audience/lifetime: set `ValidateIssuer = true`, `ValidateAudience = true`, `ValidateLifetime = true`. File: `JwtHelper.cs:110-146`. Kết hợp fix `#80` ClockSkew unify (xem `#AUTH-80`). **Mức: P0**. — #352
+- [ ] **#AUTH-05** — Fix `#6` CORS thay AllowAll bằng whitelist: bỏ `SetIsOriginAllowed(origin => true)`, thêm `WithOrigins(...)` từ config `AllowedOrigins:[]`. File: `AddCORS.cs:11-15`. Whitelist từ Leader chốt trước khi merge. **Mức: P0**. — #353
+- [ ] **#AUTH-06** — Fix `#10` Reset token single-use: thêm bảng `password_reset_tokens` (Id, AccountId, TokenHash, ExpiresAt, UsedAt) hoặc Redis key `pwd_reset:{tokenHash}` với SET-NX. `ValidateResetToken` mark used → reject lần thứ 2. File: `JwtHelper.cs:148-208`. **Mức: P0**. — #354
+- [ ] **#AUTH-07** — Fix `#15` Email unique index filter `is_deleted = false`: migration `FixEmailUniqueIndexFilter` drop + recreate index với `HasFilter("\"is_deleted\" = false")`. File: `AccountConfiguration.cs:147`. **Mức: P0**. — #355
+- [ ] **#AUTH-08** — Fix `#13` Logout invalidate pending 2FA challenge token: `LogoutCommandHandler` call `_challengeStore.InvalidateAsync(accountId)` TRƯỚC khi revoke refresh token. File: `LogoutCommandHandler.cs:19-61`. **Mức: P0**. — #356
+- [ ] **#AUTH-09** — Fix `#7` OTP/Reset/2FA constant-time compare: thay `string.Equals(..., Ordinal)` bằng `CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b))` trong 4 handler: `VerifyOtpCommandHandler:57`, `Verify2FALoginCommandHandler:111`, `VerifyResetOtpCommandHandler`, `VerifyPhoneOtpCommandHandler`. **Mức: P0**. — #357
+- [ ] **#AUTH-10** — Fix `#16` `FullName`/`PendingEmail` HTML sanitize trong email template: dùng `HtmlEncoder.Default.Encode(...)` ở email template layer (`AccountRegisteredEmailTemplate`, `InviteEmailTemplate`, `ChangeEmailOtpTemplate`). 3 file: `RegisterCommandHandler`, `AcceptInviteCommandHandler`, `ChangeEmailCommandHandler` (chỉnh template, KHÔNG escape ở handler để tránh double-encode). **Mức: P0**. — #358
+#### Phase B — High Security P1 (2 ngày — Operational hardening)
+
+- [ ] **#AUTH-11** — Fix `#1` Implement `IJwtHelper.IsTokenValid()`: thay throw `NotImplementedException` bằng `_handler.ValidateToken(...)` + check blacklist (kết hợp #54 TRL — xem `#AUTH-54`). File: `JwtHelper.cs:101`. **Mức: P1**. — #359
+- [ ] **#AUTH-12** — Fix `#8` RefreshToken cross-check IP/UA: lưu `IssuedIp`/`IssuedUa` lúc cấp, so sánh lúc refresh, reject nếu mismatch (configurable `EnforceDeviceBinding=true`). File: `RefreshTokenCommandHandler.cs:82`. **Mức: P1**. — #360
+- [ ] **#AUTH-13** — Fix `#11` ForgotPassword brute-force qua nhiều IP: thêm per-email rate limit (Redis key `otp_attempts:{emailHash}` TTL 1h, max 10). Không thay `PolicyAnonOtp` IP-based, bổ sung tầng email-based. File: `RateLimitingExtensions.cs:29-38`. **Mức: P1**. — #361
+- [ ] **#AUTH-14** — Fix `#12` OTP entropy: tăng 6 → 8 số HOẶC giảm TTL 10 → 5 phút HOẶC thêm exponential backoff sau N fail per-account. Chốt 1 trong 3 với Leader. File: `OtpHelper.cs:10`. **Mức: P1**. — #362
+- [ ] **#AUTH-15** — Fix `#14` JWT permission claims revoke realtime: subscribe `PermissionsChangedEvent` (đã có từ Sprint 5B `#241`), invalidate per-account JWT bằng `jti` blacklist Redis. Kết hợp với `#AUTH-54` TRL. File: `JwtHelper.cs:33-75`. **Mức: P1**. — #363
+- [ ] **#AUTH-16** — Fix `#17` `PermissionResolver` cache: thêm `IMemoryCache` hoặc Redis cache per-role với invalidation khi `PermissionsChangedEvent` arrive. File: `PermissionResolver.cs:19-40`. **Mức: P1**. — #364
+- [ ] **#AUTH-17** — Fix `#3` Enumeration attack: log audit dùng cùng action code cho "email không tồn tại" và "sai mật khẩu" (vd `LoginFailedInvalidCredentials`), KHÔNG phân biệt trong log. Đo timing → thêm artificial delay bằng `await Task.Delay(jitter(100, 200))` khi miss. File: `LoginCommandHandler.cs:46-67`. **Mức: P0** (xếp vào Phase B vì cần thiết kế cẩn thận audit log mới). — #365
+#### Phase C — Logic / Edge case (4 ngày)
+
+- [ ] **#AUTH-18** — Fix `#18` Account Status Logic Inconsistency: define rõ semantics `Locked` (temp lockout từ failed login, auto-unlock) vs `Inactive` (admin deactivate, không auto). Thêm scheduled job clear lockout (xem `#AUTH-43`). File: `LoginCommandHandler.cs:113-128`. — #366
+- [ ] **#AUTH-19** — Fix `#19` Failed Login OTP Counting: define rule reset `FailedLoginAttempts` riêng cho OTP path vs password path. File: `VerifyOtpCommandHandler`. — #367
+- [ ] **#AUTH-20** — Fix `#20` Google OAuth Email Mismatch Policy: define policy khi user A đã link Google email X, user B cố link cùng email X từ Google account khác → reject với message rõ ràng. File: `GoogleAuthCommandHandler`. — #368
+- [ ] **#AUTH-21** — Fix `#21` Google Token Exchange timeout/retry: thêm Polly policy (timeout 10s, retry 2x exponential). File: `GoogleCallbackCommandHandler.cs:35`. — #369
+- [ ] **#AUTH-22** — Fix `#22` 2FA Lazy Re-Encrypt Status: define behavior nếu crash giữa encryption migration — handler check `TwoFactorSecretEncryptedAt`, retry encrypt nếu null. File: `Account.cs:47-48`. — #370
+- [ ] **#AUTH-23** — Fix `#23` `ChangePassword` không check OldPassword != NewPassword: thêm validate `request.NewPassword != request.OldPassword`, return error nếu trùng. File: `ChangePasswordCommandHandler.cs:59`. — #371
+- [ ] **#AUTH-24** — Fix `#24` `ChangeEmail` không lock email mới: thêm Redis distributed lock `email_reserve:{newEmail}` TTL 10 phút trong khi user verify OTP. File: `ChangeEmailCommandHandler.cs:52-57`. — #372
+- [ ] **#AUTH-25** — Fix `#25` `Register` race condition: thêm Redis distributed lock `register:{emailHash}` HOẶC catch `DbUpdateException` + parse PG error code 23505 (unique violation) + extract column → trả message phân biệt email/phone. File: `RegisterCommandHandler.cs:43-45, 66-95, 125`. — #373
+- [ ] **#AUTH-26** — Fix `#26` `AcceptInvite` không validate `InvitationExpiredAt != null`: thêm check `InvitationExpiredAt == null || InvitationExpiredAt < DateTime.UtcNow` → reject. File: `AcceptInviteCommandHandler.cs:57`. — #374
+- [ ] **#AUTH-27** — Fix `#27` `VerifyOtp` dùng `<` thay `<=`: đổi `expiry < now` thành `expiry <= now`. File: `VerifyOtpCommandHandler.cs:51`. — #375
+- [ ] **#AUTH-28** — Fix `#28` RefreshToken rotation TTL inconsistency: lưu `OriginalIssuedAt` khi rotate, TTL tính từ original không từ now. File: `RefreshTokenCommandHandler.cs:96`. — #376
+- [ ] **#AUTH-29** — Fix `#29` AuditLog append-only enforce ở DB: migration `AuditLogAppendOnlyTrigger` tạo PG trigger `BEFORE UPDATE/DELETE ON auth_audit_logs FOR EACH ROW RAISE EXCEPTION`. Manual test DELETE bị reject. File: `AuditLogConfiguration.cs:7-98`. Liên kết với Phụ lục A Phase 1 `auth_audit_logs` refactor. — #377
+- [ ] **#AUTH-30** — Fix `#30` `DeleteAccount` cascade + anonymize PII: handler thêm anonymize email/phone/fullName thành `deleted-{id}@anonymized.local`, soft-delete backup codes + OTP records + refresh token. GDPR right-to-be-forgotten. File: `DeleteAccountCommandHandler.cs:51-56`. — #378
+- [ ] **#AUTH-31** — Fix `#31` `PendingEmail` cleanup: thêm background job `PendingEmailCleanupBackgroundService` (daily 02:00 UTC) clear `PendingEmail = null` nếu `PendingEmailRequestedAt < now - 24h`. File: `Account.cs:39`. — #379
+- [ ] **#AUTH-32** — Fix `#32` `RefreshTokenExpirationDays = 7` hardcode: đọc từ `JwtSettings.RefreshTokenExpirationDays` (config). File: `AuthTokenIssuer.cs:15`. — #380
+- [ ] **#AUTH-33** — Fix `#33` `LastLoginIp` semantic: chốt với Leader — chỉ update sau pass 2FA (KHÔNG update mỗi refresh). Sửa `RefreshTokenCommandHandler:109-110` bỏ update. — #381
+- [ ] **#AUTH-34** — Fix `#34` `GenericRepository.UpdateAsync()` `_dbSet.Update(entity)` đánh dấu all column Modified: thay bằng `_context.Entry(entity).State = EntityState.Modified` không khác, nhưng thêm `RowVersion` (xmin) cho Account + retry on `DbUpdateConcurrencyException`. Hoặc handler chỉ set field cần update. File: `GenericRepository.cs:36-39`. — #382
+- [ ] **#AUTH-35** — Fix `#35` `GenericRepository.GetAllAsync()` default `AsNoTracking()`: thêm overload `GetAllAsync(bool tracking = false)`. Handler phải opt-in tracking. — #383
+- [ ] **#AUTH-36** — Fix `#36` ValidationBehavior chạy SAU handler query DB: chuyển sang MediatR `IPipelineBehavior<TRequest, TResponse>` chạy TRƯỚC handler. File: `LoginCommandHandler.cs:48-51`. — #384
+- [ ] **#AUTH-37** — Fix `#37` `OutboxRelayBackgroundService` honor `CancellationToken`: audit loop `while(!stoppingToken.IsCancellationRequested)` + pass `stoppingToken` vào mọi async call + flush remaining batch trước shutdown. File: `Program.cs:37`. — #385
+- [ ] **#AUTH-38** — Fix `#38` Inject `TimeProvider`/`IClock`: tạo `ISystemClock` interface + `SystemClock` impl, inject vào handler thay `DateTime.UtcNow` trực tiếp. Mockable for tests. File: `RefreshTokenCommandHandler.cs:95-96` + áp dụng toàn AuthService. — #386
+- [ ] **#AUTH-39** — Fix `#39` Email/PhoneNumber normalize: thêm `EmailNormalizer.Normalize(email) = email.Trim().ToLowerInvariant()` và `PhoneNormalizer.Normalize(phone)` (E.164). Áp dụng ở TẤT CẢ `Register/Login/ChangeEmail/ForgotPassword` handler + lúc query DB. File: `RegisterCommandHandler` + helpers mới. — #387
+#### Phase D — Missing features P1/P2 (6 ngày)
+
+- [ ] **#AUTH-40** — `#40` Token introspection / blacklist endpoint (P1): `POST /api/auth/introspect` (RFC 7662) trả `{active, exp, sub, scope}`. Resource server gọi để verify + check blacklist. Kết hợp với `#AUTH-54` TRL. — #388
+- [ ] **#AUTH-41** — `#41` Concurrent session limit (P2): config `MaxConcurrentSessionsPerAccount = 5`, khi vượt thì revoke session cũ nhất. Verify `SessionCreatedNotification` impl. — #389
+- [ ] **#AUTH-42** — `#42` Account cleanup job hard-delete sau 90 ngày (P2): `BackgroundService` daily 03:00 UTC, `DELETE FROM accounts WHERE is_deleted = true AND deleted_at < now - 90 days` + cascade. File: `AccountsController.cs:499` doc nhắc. — #390
+- [ ] **#AUTH-43** — `#43` Lockout auto-unlock scheduled job (P2): `LockoutReconcileBackgroundService` mỗi 5 phút, set `Status = Active` nếu `LockedUntil < now`. — #391
+- [ ] **#AUTH-44** — `#44` Session Device ID Tracking (P2): implement hash User-Agent → derive DeviceId stable. Query "show sessions from device X" + "revoke all except current". — #392
+- [ ] **#AUTH-45** — `#45` Backup Code Recovery Attempt Limit (P2): thêm rate limit per-account 5 attempts/15min cho `Verify2FABackupCodeCommand`. — #393
+- [ ] **#AUTH-46** — `#46` Email Change Rate Limiting (P2): áp dụng `PolicyAuthOtp` 3 req/min cho `/api/accounts/me/change-email`. — #394
+- [ ] **#AUTH-47** — `#47` Account Merge/Consolidation (P3): admin endpoint `POST /api/admin/accounts/{id}/merge` consolidate Google + local account. — #395
+- [ ] **#AUTH-48** — `#48` IP/UA Whitelist / Trusted device (P3): `TrustedDevices` table, skip 2FA nếu DeviceId + IP /24 match recent successful login. — #396
+- [ ] **#AUTH-49** — `#49` Expired OTP Auto-Clean Job (P2): `OtpCleanupBackgroundService` daily, clear `OtpCode = null` nếu `OtpExpiredAt < now - 24h`. — #397
+- [ ] **#AUTH-50** — `#50` Account Reactivation After Soft-Delete (P2): endpoint `POST /api/auth/reactivate` cho user restore trong 90 ngày window (yêu cầu verify email OTP). — #398
+- [ ] **#AUTH-51** — `#51` Cross-Device 2FA Confirmation (P3): setup device A → confirm via email link device B. — #399
+- [ ] **#AUTH-52** — `#52` Suspicious Login Alert (P2): khi LoginAttempt từ IP/UA chưa từng thấy → publish `SuspiciousLoginDetectedEvent` → email alert. — #400
+- [ ] **#AUTH-53** — `#53` Password Strength Policy Configurable (P2): chuyển hardcode regex sang `PasswordPolicy:{MinLength, RequireUppercase, ...}` config. — #401
+- [ ] **#AUTH-54** — `#54` Token Revocation List (TRL) (P1): `POST /api/auth/revoke` + Redis `revoked_jti:{jti}` TTL = remaining token life. JWT middleware check blacklist. — #402
+- [ ] **#AUTH-55** — `#55` Admin Forced Logout Single User (P2): verify endpoint `POST /api/admin/accounts/{id}/revoke-sessions` expose từ `AdminRevokeAccountSessionsCommand`. — #403
+- [ ] **#AUTH-56** — `#56` Account Notification Preferences (P3): `account_notification_preferences` table + endpoint CRUD. — #404
+- [ ] **#AUTH-57** — `#57` Admin Account Unlock (P2): verify endpoint `POST /api/admin/accounts/{id}/unlock` expose từ `UnlockAccountCommand`. — #405
+- [ ] **#AUTH-58** — `#58` SMS OTP fallback cho 2FA (P1): thêm `Verify2FASmsCommand` + integration với SmsService (`SendSmsCommand`). — #406
+- [ ] **#AUTH-59** — `#59` JWT `kid` header + key rotation (P2): thêm `kid` claim vào JWT header, support multi-key validation (current + previous). File: `JwtHelper.cs:33-75`. — #407
+- [ ] **#AUTH-60** — `#60` Health checks chuẩn k8s (P1): `app.MapHealthChecks("/health")` + `/ready` + `/live` với DB + Redis + RabbitMQ check. File: `Program.cs`. — #408
+- [ ] **#AUTH-61** — `#61` API versioning (P2): refactor `/api/...` → `/api/v1/...` + `Asp.Versioning.Mvc` package. — #409
+- [ ] **#AUTH-62** — `#62` Endpoint export account data — GDPR portability (P1): `GET /api/accounts/me/export` trả JSON full account data (profile, sessions, audit logs). — #410
+- [ ] **#AUTH-63** — `#63` Multi-tenancy / OrgId / TenantId (P2): thêm `OrgId` vào Account entity + middleware tenant isolation. Cần thiết kế lớn — chốt scope với Leader trước. — #411
+- [ ] **#AUTH-64** — `#64` Recovery khi mất cả phone + backup codes (P1): self-serve identity-verification flow (KYC document upload + admin approval workflow). — #412
+- [ ] **#AUTH-65** — `#65` Optimistic concurrency cho Account update (P2): thêm `RowVersion` (xmin shadow property) trong `AccountConfiguration` + retry on conflict. — #413
+- [ ] **#AUTH-66** — `#66` `IValidateOptions<JwtSettings>` ValidateOnStart (P1): `services.AddOptions<JwtSettings>().ValidateDataAnnotations().ValidateOnStart()`. Thêm `[Required]` annotation cho field critical. File: `JwtHelper.cs:30`. — #414
+- [ ] **#AUTH-67** — `#67` Idempotency middleware verify thực sự dedupe: review `SharedInfrastructure/Idempotency/*` impl, viết integration test 2 request cùng `Idempotency-Key` → response giống nhau (cached). File: `Program.cs:34`. — #415
+#### Phase E — Code quality / Inconsistency (3 ngày)
+
+- [ ] **#AUTH-68** — `#68` `LoginCommandHandler` set `LastLoginIp`/`LastLoginAt`: thêm update sau pass 2FA. File: `LoginCommandHandler.cs`. — #416
+- [ ] **#AUTH-69** — `#69` `Account.RoleId` nullable: đổi `Guid RoleId` → `Guid? RoleId`, handler check `null` thay `Guid.Empty`. Migration `MakeAccountRoleIdNullable`. File: `Account.cs:74`. — #417
+- [ ] **#AUTH-70** — `#70` `PasswordHasher` đổi Singleton → Scoped: tránh cache config cũ nếu future work-factor từ DB. File: `ManageDependencyInjection.cs:78`. — #418
+- [ ] **#AUTH-71** — `#71` HTTPS redirect trong Docker: review tradeoff với Leader — nếu giữ skip thì document rõ requirement deploy phải có reverse-proxy TLS termination (Nginx/Caddy). File: `Program.cs:121-125`. — #419
+- [ ] **#AUTH-72** — `#72` Xóa dead method `IJwtHelper.IsTokenValid()` SAU khi `#AUTH-11` đã implement (hoặc xóa hẳn nếu KHÔNG cần). File: `JwtHelper.cs:99-102`. — #420
+- [ ] **#AUTH-73** — `#73` Error code chuẩn: thêm `ErrorCode` enum (`AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`, ...) vào `CommonResponse`. FE parse theo code, không theo message. Liên kết với §21 Error code catalog. — #421
+- [ ] **#AUTH-74** — `#74` `OtpHelper.GenerateOtp` dùng `RandomNumberGenerator`: verify file `OtpHelper.cs:10` đang dùng `Random` (seeded) thì đổi sang `RandomNumberGenerator.GetInt32(0, 999999)`. — #422
+- [ ] **#AUTH-75** — `#75` Composite index `(Email, IsDeleted)`: migration `AddAccountEmailIsDeletedIndex` thêm `CREATE INDEX ON accounts (email, is_deleted)`. — #423
+- [ ] **#AUTH-76** — `#76` `GlobalExceptionMiddleware` mask stacktrace: trong Production env, log stacktrace nhưng `Response.WriteAsync` chỉ trả error code + correlationId. PII redactor cho log message. File: `GlobalExceptionMiddleware.cs:60-62`. — #424
+- [ ] **#AUTH-77** — `#77` Correlation ID xuyên suốt: implement `CorrelationIdMiddleware` (xem §B.4.1 issue-authservice.md). Propagate qua MassTransit header. Liên kết với Phụ lục A audit aggregator. — #425
+- [ ] **#AUTH-78** — `#78` Custom metric cho auth domain: thêm Prometheus counter `auth_login_total{result}`, `auth_2fa_challenge_total{result}`, `auth_otp_usage_total`. Liên kết §9.2 dashboard. — #426
+- [ ] **#AUTH-79** — `#79` Refresh token reuse detection event: khi family bị revoke do reuse, publish `RefreshTokenReuseDetectedEvent` → security team alert. — #427
+- [ ] **#AUTH-80** — `#80` ClockSkew unify middleware vs helper: set cả 2 chỗ `ClockSkew = TimeSpan.Zero`. File: `AddJWTAuthenticationAuthorization.cs:32` + `JwtHelper.cs:117-122`. — #428
+- [ ] **#AUTH-81** — `#81` Audit async/await patterns: grep `.Result`, `.Wait()`, `throw ex`, `async void` toàn AuthService → fix tất cả. Thêm Roslyn analyzer rule cấm. — #429
+- [ ] **#AUTH-82** — `#82` Lockout reconcile race: kết hợp với `#AUTH-43` background job — define grace period 1s khi lockout boundary. — #430
+- [ ] **#AUTH-83** — `#83` `PasswordHasher` Scoped + future config risk: kết hợp với `#AUTH-70`, đảm bảo KHÔNG cache state giữa request. — #431
+#### Phase F — Test gap (3 ngày)
+
+- [ ] **#AUTH-84** — `#84` Tạo `ChangeEmailCommandHandlerTests.cs`: cover happy path + OTP fail + race condition. Coverage ≥ 80% handler. — #432
+- [ ] **#AUTH-85** — `#85` Tạo `AcceptInviteCommandHandlerTests.cs`: cover happy path + expired invite + invalid token. — #433
+- [ ] **#AUTH-86** — `#86` Tạo `GoogleCallbackCommandHandlerTests.cs`: cover happy path + state mismatch (CSRF) + email mismatch + Google API timeout. — #434
+- [ ] **#AUTH-87** — `#87` Test `ChangePassword` verify `RevokeAllSessionsCommand` được gọi: `Mock<IMediator>.Verify(x => x.Send(It.IsAny<RevokeAllSessionsCommand>(), ...), Times.Once)`. — #435
+- [ ] **#AUTH-88** — `#88` Integration test cho Outbox event publish loop: TestContainers spin Postgres + RabbitMQ, publish event, verify queue có message + `processed_at` set. — #436
+- [ ] **#AUTH-89** — `#89` Perf test cho `PermissionResolver`: benchmark 1000 concurrent call, assert p99 < 50ms (sau khi `#AUTH-16` cache merge). — #437
+- [ ] **#AUTH-90** — `#90` Dedicated test cho `ChangePasswordCommandHandler`: verify old password check + revoke sessions logic + audit log row insert. — #438
+**Definition of Done — Sprint additional-auth:**
+- [ ] Tất cả 90 task `#AUTH-01..90` close + log review/test trong `logs/AUTH-{NN}/`.
+- [ ] `dotnet build` toàn solution PASS.
+- [ ] Coverage ≥ 80% trên `AuthService.Application` + `AuthService.Infrastructure` (exclude Migrations/Factory/DI).
+- [ ] 17 issue bảo mật fix xong, security scan (vd OWASP ZAP) PASS.
+- [ ] Migration `HashRefreshTokens`/`FixEmailUniqueIndexFilter`/`AuditLogAppendOnlyTrigger`/`MakeAccountRoleIdNullable`/`AddAccountEmailIsDeletedIndex` rollback test PASS.
+- [ ] CORS whitelist origins được Leader chốt + document trong `CHANGELOG.md`.
+- [ ] All 4 background service mới (`PendingEmailCleanupBackgroundService`, `LockoutReconcileBackgroundService`, `OtpCleanupBackgroundService`, `AccountHardDeleteBackgroundService`) honor `CancellationToken` graceful shutdown.
+- [ ] Update `MEMORY.md` ghi quyết định non-obvious phát sinh (vd CORS whitelist final list, password policy values, lockout grace period).
+- [ ] Update §69 mark từng issue thành `[x]` khi merge.
+
+**Lưu ý ưu tiên (cho team khi không kịp full sprint):**
+
+Top 10 ưu tiên fix ngay (theo §69, không được skip): `#AUTH-01`, `#AUTH-02`, `#AUTH-03`, `#AUTH-04`, `#AUTH-05`, `#AUTH-06`, `#AUTH-07`, `#AUTH-08`, `#AUTH-09`, `#AUTH-10`. Nếu thiếu time, defer Phase D/E/F nhưng KHÔNG defer Phase A.
+
+P1 sprint kế tiếp (nếu split): `#AUTH-11..17` + `#AUTH-37`, `#AUTH-42`, `#AUTH-43`, `#AUTH-49`, `#AUTH-60`, `#AUTH-66`, `#AUTH-80`.
+
+P2/P3 có thể defer sang Sprint additional-auth-B: `#AUTH-40`, `#AUTH-41`, `#AUTH-44`, `#AUTH-47`, `#AUTH-48`, `#AUTH-51`, `#AUTH-55`, `#AUTH-56`, `#AUTH-57`, `#AUTH-61`, `#AUTH-63`.
+
+---
+
 ## 18. Definition of Done
 
 ### 18.1. Per ticket (theo `workflow.md`)
@@ -5976,7 +6196,7 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
                     && a.DetectedAt >= DateTime.UtcNow.AddHours(-1)
                     && a.BatteryAssetId != assetId
                     && _unitOfWork.BatteryAssets.GetAllAsync()
-                        .Any(b => b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
+                        .Any(b => !b.IsDeleted && b.Id == a.BatteryAssetId && b.BatteryGroupId == asset.BatteryGroupId))
                 .CountAsync();
 
             if (siblingAnomalies >= 1) score += 0.2m;
@@ -5985,7 +6205,8 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
 
         // Rule 3: Thermal proximity — overheat lây lan
         var hasThermalRunaway = await _unitOfWork.Alerts.GetAllAsync()
-            .Where(a => a.BatteryAssetId == assetId
+            .Where(a => !a.IsDeleted
+                && a.BatteryAssetId == assetId
                 && a.AnomalyType == AnomalyTypeEnum.Overheat
                 && a.Severity == AlertSeverityEnum.Critical
                 && a.Status == AlertStatusEnum.Open)
@@ -13856,6 +14077,211 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 ---
 
+# Phần X — AuthService Security Audit
+
+## 69. AuthService Security Audit (88 issues) — P0/P3
+
+> **Nguồn:** Tổng hợp từ `issue-authservice.md` ở repo root — 4 pass audit sâu của AuthService (`services/AuthService/`).
+> **Tổng:** 88 vấn đề = 17 bảo mật + 22 logic/edge case + 26 tính năng thiếu + 16 code quality + 7 test gap (raw count, ~50-60 ticket độc lập khi gom).
+> **Sprint thực thi:** **Sprint additional-auth** ở §17 (90 task `#AUTH-01..90` / `#349..#438`).
+> **Scope audit:** `services/AuthService/{src,tests}` + shared infrastructure liên quan auth.
+> **Trạng thái:** Tất cả `[ ]` — chưa fix. Đánh dấu `[x]` khi merge PR tương ứng.
+
+### 69.1. 🔴 Bảo mật (17)
+
+**Critical — fix ngay trong Sprint additional-auth Phase A:**
+
+- [ ] **#1** `IJwtHelper.IsTokenValid()` → `NotImplementedException` — `JwtHelper.cs:101`. Method interface throw, không có endpoint introspect/validate token cho resource server. Resource server phải tự verify JWT manually, không có way kiểm tra token bị revoke. **Mức: P1**. Task: `#AUTH-11`.
+- [ ] **#2** 2FA Disable KHÔNG yêu cầu verify TOTP/password — `AccountsController.cs:365`. Endpoint `POST /api/accounts/me/2fa/disable` chấp nhận command nhưng handler không yêu cầu verify TOTP hoặc password. Tấn công: attacker chiếm session → bypass 2FA. Fix: require TOTP code hoặc password trong `Disable2FACommand`. **Mức: 🔴 P0**. Task: `#AUTH-02`.
+- [ ] **#3** Enumeration attack tại `LoginCommandHandler` — `LoginCommandHandler.cs:46-67`. Audit log ghi rõ "Email không tồn tại" vs "Sai mật khẩu" (response client là chung). Attacker đọc audit hoặc đo response timing → enumerate được email tồn tại. **Mức: 🔴 P0**. Task: `#AUTH-17`.
+- [ ] **#4** `GoogleCallbackCommandHandler` KHÔNG validate `state` parameter — `GoogleCallbackCommandHandler.cs:35`. Handler nhận `request.Code` và `request.RedirectUri` nhưng không validate CSRF state parameter (vi phạm OAuth2 spec). Tấn công: attacker craft callback URL → CSRF qua OAuth. **Mức: 🔴 P0**. Task: `#AUTH-03`.
+- [ ] **#5** `JwtHelper.ValidateToken()` tắt validate quan trọng — `JwtHelper.cs:110-146`. Set `ValidateIssuer = false`, `ValidateAudience = false`, `ValidateLifetime = false`. Tấn công: token confusion attack giữa các service share signing key. Expired token vẫn validate dương tính. **Mức: 🔴 P0**. Task: `#AUTH-04`.
+- [ ] **#6** CORS `AllowAll` + `AllowCredentials()` — `AddCORS.cs:11-15`. `SetIsOriginAllowed(origin => true)` + `AllowCredentials()` → bất kỳ origin nào cũng gửi request kèm cookie/auth header. Tấn công: CSRF/XSS từ attacker site call `/api/auth/logout`, `/api/accounts/me`. Fix: whitelist origins cụ thể. **Mức: 🔴 P0**. Task: `#AUTH-05`.
+- [ ] **#7** OTP/Reset/2FA so sánh string KHÔNG constant-time — 4 file: `VerifyOtpCommandHandler.cs:57`, `Verify2FALoginCommandHandler.cs:111`, `VerifyResetOtpCommandHandler`, `VerifyPhoneOtpCommandHandler`. `string.Equals(..., StringComparison.Ordinal)` có timing leak — attacker đo timing để xác định từng ký tự OTP. Fix: dùng `CryptographicOperations.FixedTimeEquals()`. **Mức: 🟡 P1**. Task: `#AUTH-09`.
+- [ ] **#8** `RefreshTokenCommandHandler` không cross-check IP/UA giữa issue & refresh — `RefreshTokenCommandHandler.cs:82`. Refresh token bị steal từ network khác vẫn dùng được — không có "device binding". **Mức: 🟡 P1**. Task: `#AUTH-12`.
+- [ ] **#9** Refresh Token lưu PLAINTEXT trong DB — `RefreshToken.cs:14` + migration `20260427194313`. Column `token nvarchar(512)` lưu raw Guid string, không hash. DB leak = mọi refresh token còn hạn 7 ngày dùng được ngay. Fix: SHA-256 hash trước khi lưu, so sánh bằng hash. **Mức: 🔴 P0**. Task: `#AUTH-01`.
+- [ ] **#10** Password Reset Token KHÔNG single-use — `JwtHelper.cs:148-208`. `GenerateResetToken` chỉ là JWT signed, `ValidateResetToken` không track "đã dùng". User có thể reuse cùng 1 reset link nhiều lần trong window TTL. Tấn công: phishing/share link → attacker reset lại. **Mức: 🔴 P0**. Task: `#AUTH-06`.
+- [ ] **#11** ForgotPassword brute-force qua nhiều IP — `RateLimitingExtensions.cs:29-38`. `PolicyAnonOtp` chỉ 5 req/phút/**IP**, không per-email global limit. Attacker xoay IP → flood OTP cho 1 email. **Mức: 🟡 P1**. Task: `#AUTH-13`.
+- [ ] **#12** OTP entropy 6 số trong TTL 10 phút — `OtpHelper.cs:10`. 6 số = 10⁶ combination, với rate limit theo IP không theo account → botnet brute-force trong TTL. Fix: tăng entropy 8+ số, hoặc per-account rate limit, hoặc exponential backoff. **Mức: 🟡 P1**. Task: `#AUTH-14`.
+- [ ] **#13** Logout KHÔNG invalidate pending 2FA challenge token — `LogoutCommandHandler.cs:19-61`. Flow: login password OK → cấp 2FA challenge (TTL 5 phút) → user logout → challenge token vẫn dùng được → attacker brute-force trong 5 phút. Fix: logout phải call `_challengeStore.InvalidateAsync()` trước khi revoke refresh token. **Mức: 🟡 P1**. Task: `#AUTH-08`.
+- [ ] **#14** JWT permission claims không revoke realtime — `JwtHelper.cs:33-75`. Permission embed thẳng vào JWT. Admin revoke role → user vẫn dùng quyền cũ tới hết TTL (60 phút). **Mức: 🟡 P1**. Task: `#AUTH-15`.
+- [ ] **#15** Unique index `Email` THIẾU filter `is_deleted = false` — `AccountConfiguration.cs:147`. `PhoneNumber` (`:148`) và `GoogleId` (`:149`) đều có `HasFilter("is_deleted = false")`, riêng Email không. Soft-delete account A → user không thể đăng ký lại bằng email cũ. Fix: `.HasIndex(a => a.Email).IsUnique().HasFilter("\"is_deleted\" = false");`. **Mức: 🔴 P0**. Task: `#AUTH-07`.
+- [ ] **#16** `FullName` / `PendingEmail` không sanitize HTML — `RegisterCommandHandler`, `AcceptInviteCommandHandler`, `ChangeEmailCommandHandler`. Raw `request.FullName` ghi vào DB rồi inject vào email body. Nếu email render HTML → XSS reflected. Fix: `HtmlEncode` ở email template layer. **Mức: 🔴 P0**. Task: `#AUTH-10`.
+- [ ] **#17** `PermissionResolver.GetPermissionCodesAsync()` query 4-bảng-join MỖI lần cấp token — `PermissionResolver.cs:19-40`. Gọi ở cả `LoginCommandHandler` lẫn `RefreshTokenCommandHandler:86`. Không cache. Concurrent refresh từ nhiều device → DB stress. Fix: cache per-role với invalidation khi admin sửa role/permission. **Mức: 🟡 P1**. Task: `#AUTH-16`.
+
+### 69.2. 🟡 Logic / Edge case (22)
+
+**Pass 1:**
+
+- [ ] **#18** Account Status Enum Logic Inconsistency — `LoginCommandHandler.cs:113-128`. `Locked` (temp lockout) vs `Inactive` (admin deactivate) xử lý không rõ ràng. Không có scheduled job clear lockout. Task: `#AUTH-18`.
+- [ ] **#19** Failed Login OTP Increment Counting — `VerifyOtpCommandHandler`. Auto-lock sau 5 lần fail OTP. Logic reset `FailedLoginAttempts` không rõ giữa OTP vs password path. Task: `#AUTH-19`.
+- [ ] **#20** Google OAuth Email Mismatch Policy Unclear — `GoogleAuthCommandHandler`. Case mơ hồ khi user A đã link Google email X, nay cố link lại email X từ Google account khác. Task: `#AUTH-20`.
+- [ ] **#21** Google Token Exchange Missing Timeout/Retry — `GoogleCallbackCommandHandler.cs:35`. Gọi `ExchangeCodeForIdTokenAsync` không timeout/retry policy. Google API hang → user stuck. Task: `#AUTH-21`.
+- [ ] **#22** 2FA Lazy Re-Encrypt Status Unclear — `Account.cs:47-48`. Flag `TwoFactorSecretEncryptedAt` chưa rõ behavior nếu crash giữa encryption migration. Task: `#AUTH-22`.
+
+**Pass 2:**
+
+- [ ] **#23** `ChangePasswordCommandHandler` KHÔNG check `OldPassword != NewPassword` — `:59`. User set new = old vẫn pass — "force revoke session" mà mật khẩu không đổi. Task: `#AUTH-23`.
+- [ ] **#24** `ChangeEmailCommandHandler` không lock/reserve email mới — `:52-57`. Race condition — user A request change → user B register cùng email → A confirm OTP fail/conflict. Task: `#AUTH-24`.
+- [ ] **#25** `RegisterCommandHandler` race condition cùng email — `:43-45, 66-95, 125`. 2 request đồng thời cùng email cùng pass check, rơi vào `DbUpdateException`; message catch generic không phân biệt email/phone. Task: `#AUTH-25`.
+- [ ] **#26** `AcceptInviteCommandHandler` không validate `InvitationExpiredAt != null` — `:57`. Nếu `InvitationToken != null` nhưng `InvitationExpiredAt == null` → `HasValue=false` → bỏ qua check expiry → invite không bao giờ hết hạn. Task: `#AUTH-26`.
+- [ ] **#27** `VerifyOtpCommandHandler` dùng `<` thay vì `<=` — `:51`. Edge case on-exact-expiry vẫn pass. Task: `#AUTH-27`.
+- [ ] **#28** RefreshToken rotation không serialize TTL — `RefreshTokenCommandHandler.cs:96`. Đổi config `RefreshTokenExpirationDays` ở production → token cũ rotate với TTL cũ, token mới TTL mới → inconsistency audit. Task: `#AUTH-28`.
+
+**Pass 3:**
+
+- [ ] **#29** AuditLog "append-only" KHÔNG enforce ở DB — `AuditLogConfiguration.cs:7-98`. Không có CHECK constraint, không có `INSTEAD OF UPDATE/DELETE` trigger, không có RLS policy, không có hash-chain chống tamper. Chỉ rely application code. Task: `#AUTH-29`.
+- [ ] **#30** `DeleteAccount` KHÔNG cascade các table phụ — `DeleteAccountCommandHandler.cs:51-56`. Chỉ soft-delete Account + revoke refresh + publish event. Backup codes, OTP records, AuditLog vẫn giữ FK. Không anonymize PII (email, phone, fullName) → vi phạm GDPR "right to be forgotten". Task: `#AUTH-30`.
+- [ ] **#31** `PendingEmail` không có cleanup nếu user không confirm — `Account.cs:39`. Change-email flow set PendingEmail, nếu user không verify OTP → PendingEmail tồn tại mãi. Không có background job hay logic auto-clear. Task: `#AUTH-31`.
+- [ ] **#32** `RefreshTokenExpirationDays = 7` hardcode — `AuthTokenIssuer.cs:15`. Không lấy từ config (trong khi `AccessTokenExpirationMinutes` đọc từ `JwtSettings`). Inconsistent. Task: `#AUTH-32`.
+- [ ] **#33** `LastLoginIp` semantic mơ hồ — `RefreshTokenCommandHandler.cs:109-110` update LastLoginIp **mỗi lần refresh**. `LoginCommandHandler:186` chỉ update sau pass 2FA. Hai semantic khác nhau cho cùng field → audit/security forensic sai. Task: `#AUTH-33`.
+
+**Pass 4:**
+
+- [ ] **#34** `GenericRepository.UpdateAsync()` dùng `_dbSet.Update(entity)` — `shared/src/SharedInfrastructure/Persistence/Repositories/GenericRepository.cs:36-39`. Đánh dấu TẤT CẢ column là Modified. Race condition: 2 admin sửa 2 field khác nhau cùng lúc → last-write-win. Fix: `Entry().Property().IsModified = true` riêng từng field, hoặc thêm RowVersion. Task: `#AUTH-34`.
+- [ ] **#35** `GenericRepository.GetAllAsync()` KHÔNG mặc định `AsNoTracking()`. Handler nào quên gọi `.AsNoTracking()` sẽ track toàn bộ entity → memory pressure khi list lớn (vd `AdminListAccountsQuery` 1000 records). Task: `#AUTH-35`.
+- [ ] **#36** ValidationBehavior chạy SAU khi handler đã query DB — `LoginCommandHandler.cs:48-51`. Handler query Account trước → gọi `ValidateAsync()` sau. Nếu validation fail → DB query lãng phí. Pattern nên là MediatR `ValidationBehavior` chạy TRƯỚC handler. Task: `#AUTH-36`.
+- [ ] **#37** `OutboxRelayBackgroundService` có honor `CancellationToken` không? — `Program.cs:37`. Nếu loop `while(true)` không check `stoppingToken` → container shutdown kill giữa chừng publish → mất message hoặc duplicate. Task: `#AUTH-37`.
+- [ ] **#38** `DateTime.UtcNow` gọi nhiều lần trong cùng transaction — `RefreshTokenCommandHandler.cs:95-96`. `IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7)` — sai số nhỏ, không mock được. Fix: inject `TimeProvider`/`IClock` (.NET 8+). Task: `#AUTH-38`.
+- [ ] **#39** Email/PhoneNumber normalize không nhất quán — `RegisterCommandHandler`. Chưa thấy chỗ chung trim + lowercase email trước save/query. PostgreSQL default case-sensitive → register `User@Example.com` rồi login `user@example.com` có thể miss. Task: `#AUTH-39`.
+
+### 69.3. ❌ Tính năng còn thiếu (26)
+
+**Pass 1:**
+
+- [ ] **#40** Token introspection / blacklist endpoint — **P1**. JWT stateless, logout không invalidate access token cho đến hết TTL. Cần Redis blacklist + middleware check. Task: `#AUTH-40`.
+- [ ] **#41** Concurrent session limit (max N devices) — **P2**. Security best practice, prevent attacker từ fake session. `SessionCreatedNotification` đề cập "enforce limit" nhưng không thấy impl. Task: `#AUTH-41`.
+- [ ] **#42** Account cleanup job (hard-delete soft-deleted) sau 90 ngày — **P2**. `AccountsController.cs:499` doc nói 90-day retention + cleanup job, nhưng job không tồn tại. Task: `#AUTH-42`.
+- [ ] **#43** Lockout auto-unlock scheduled job — **P2**. Hiện tại login handler check manual khi user login lại. Cần background job hoặc grace period. Task: `#AUTH-43`.
+- [ ] **#44** Session Device ID Tracking — **P2**. `RefreshToken.DeviceId` có populate nhưng logic hash User-Agent derive ID chưa rõ. Thiếu query "show sessions from device X" / "revoke all except current device". Task: `#AUTH-44`.
+- [ ] **#45** Backup Code Recovery Attempt Limit — **P2**. Có rate limit endpoint regenerate, nhưng KHÔNG limit số lần thử sai backup code khi 2FA login. 8 codes × 5 attempts/challenge → low entropy brute-force. Task: `#AUTH-45`.
+- [ ] **#46** Email Change Rate Limiting — **P2**. `/api/accounts/me/change-email` không rate limit (trong khi phone change có `PolicyAuthOtp` 3 req/min). Task: `#AUTH-46`.
+- [ ] **#47** Account Merge/Consolidation — **P3**. Login Google + local riêng → tạo 2 account riêng. Không có admin merge. Task: `#AUTH-47`.
+- [ ] **#48** IP/UA Whitelist — **P3**. Không có "trusted device" / "skip 2FA nếu IP familiar". Task: `#AUTH-48`.
+- [ ] **#49** Expired OTP Auto-Clean Job — **P2**. DB tích tụ OTP cũ (Account.OtpCode + OtpExpiredAt). Task: `#AUTH-49`.
+- [ ] **#50** Account Reactivation After Soft-Delete — **P2**. DeleteMe soft-delete account. Không có endpoint user restore trong 90 ngày window. Task: `#AUTH-50`.
+- [ ] **#51** Cross-Device 2FA Confirmation — **P3**. Setup device A (init → QR) → confirm từ device B (typical email confirmation link). Task: `#AUTH-51`.
+- [ ] **#52** Suspicious Login Alert — **P2**. Có LoginAttempt + AuditLog tracking IP/UA. Thiếu logic "unusual location detected" → email alert / require 2FA. Task: `#AUTH-52`.
+- [ ] **#53** Password Strength Policy Configurable — **P2**. Hardcode "8-100 ký tự, chữ hoa + thường + số + special". Thiếu config-driven policy. Task: `#AUTH-53`.
+- [ ] **#54** Token Revocation List (TRL) — **P1**. Logout: access token vẫn valid đến hết TTL. Cần BlacklistToken endpoint + Redis cache + middleware check. Task: `#AUTH-54`.
+- [ ] **#55** Admin Forced Logout (Single User) — **P2**. `AdminRevokeAccountSessionsCommand` có. Cần verify endpoint expose. Task: `#AUTH-55`.
+- [ ] **#56** Account Notification Preferences — **P3**. "Email me on login from new IP", "email me on 2FA setup". Task: `#AUTH-56`.
+- [ ] **#57** Admin Account Unlock — **P2**. `UnlockAccountCommand` có. Cần verify endpoint `/api/admin/accounts/{id}/unlock` expose. Task: `#AUTH-57`.
+- [ ] **#58** SMS OTP fallback cho 2FA — **P1**. Chỉ có TOTP, không có SMS/email fallback khi mất authenticator app. Task: `#AUTH-58`.
+
+**Pass 3:**
+
+- [ ] **#59** JWT không có `kid` header / key rotation — **P2**. `JwtHelper.cs:33-75`. Single static signing key. Key leak hoặc rotate định kỳ → invalidate toàn bộ token cùng lúc. Task: `#AUTH-59`.
+- [ ] **#60** Health checks chuẩn k8s — **P1**. `Program.cs`. Không có `app.MapHealthChecks("/health")`, `/ready` cho orchestrator probe. Task: `#AUTH-60`.
+- [ ] **#61** API versioning — **P2**. Flat `/api/...`, không có `/api/v1/...`. Breaking change tương lai force migrate hết client. Task: `#AUTH-61`.
+- [ ] **#62** Endpoint export account data — **P1 (GDPR)**. "Right to data portability" — không có `/api/accounts/me/export`. Task: `#AUTH-62`.
+- [ ] **#63** Multi-tenancy / OrgId / TenantId — **P2**. Account không có `OrgId`/`TenantId`. B2B (Solar Battery cho nhiều khách hàng) không isolate data giữa tenant. Task: `#AUTH-63`.
+- [ ] **#64** Recovery khi mất cả phone + backup codes — **P1**. Chỉ có admin reset 2FA. Thiếu self-serve identity-verification (KYC, ID document, security questions). Task: `#AUTH-64`.
+- [ ] **#65** Optimistic concurrency cho Account update — **P2**. Không thấy `RowVersion`/`xmin` column trong `Account.cs` hoặc `AccountConfiguration`. Hai admin update cùng 1 account → last-write-win. Task: `#AUTH-65`.
+
+**Pass 4:**
+
+- [ ] **#66** `IValidateOptions<JwtSettings>` fail-fast startup — **P1**. `JwtHelper.cs:30`. Throw `InvalidOperationException` CHỈ KHI `GenerateAccessToken()` được gọi. Service start OK với config thiếu key. Fix: `services.AddOptions<JwtSettings>().ValidateDataAnnotations().ValidateOnStart()`. Task: `#AUTH-66`.
+- [ ] **#67** Idempotency middleware đăng ký nhưng handler chưa "đọc" idempotency key — `Program.cs:34` (`AddIdempotencyKey()`). Doc Register/ResendOtp nói cache 24h. Cần verify `SharedInfrastructure/Idempotency/*` có thật sự dedupe response hay chỉ pass-through. Task: `#AUTH-67`.
+
+### 69.4. ⚠️ Code quality / Inconsistency (16)
+
+**Pass 2:**
+
+- [ ] **#68** `LoginCommandHandler` không set `LastLoginIp`/`LastLoginAt`. `RefreshTokenCommandHandler:110` có set. Sai lệch first login vs refresh. Task: `#AUTH-68`.
+- [ ] **#69** `Account.RoleId` non-nullable, default = `Guid.Empty` — `Account.cs:74`. Handler phải check `RoleId == Guid.Empty` thay vì `null`. Không type-safe, dễ miss khi viết code mới. Task: `#AUTH-69`.
+- [ ] **#70** `PasswordHasher` đăng ký Singleton — `ManageDependencyInjection.cs:78`. Nếu future config động (work factor từ DB) → cache config cũ. Nên Scoped. Task: `#AUTH-70`.
+- [ ] **#71** HTTPS redirect bị skip trong Docker — `Program.cs:121-125`. Docker skip HTTPS redirect. Kết hợp CORS AllowAll → nguy hiểm: HTTP-only + cross-origin credentials. Task: `#AUTH-71`.
+- [ ] **#72** `IJwtHelper.IsTokenValid()` dead method — `JwtHelper.cs:99-102`. Throw `NotImplementedException` nhưng vẫn lộ ra interface. Nên xóa hoặc implement. Task: `#AUTH-72`.
+
+**Pass 3:**
+
+- [ ] **#73** Error response không có error code chuẩn. Chỉ có `Message` (string thô). Client không identify lỗi stable (vd `AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`). FE phải parse message → breaks khi đổi text. Task: `#AUTH-73`.
+- [ ] **#74** `OtpHelper.GenerateOtp` dùng `Random` hay `RandomNumberGenerator`? — `OtpHelper.cs:10`. Nếu dùng `Random` (default seeded) → predictable. Task: `#AUTH-74`.
+- [ ] **#75** Migration không có composite index trên `(Email, IsDeleted)`. Query login pattern phổ biến `Where(x => x.Email == email && !x.IsDeleted)`. Table account lớn → full scan. Task: `#AUTH-75`.
+- [ ] **#76** GlobalExceptionMiddleware log full stacktrace — `GlobalExceptionMiddleware.cs:60-62`. 500 errors return generic message nhưng `logger.LogError()` ghi full stack → leak paths, SQL, internal type names. Không PII masking. Task: `#AUTH-76`.
+- [ ] **#77** Không có Correlation ID xuyên suốt request. Request đi qua AuthService → publish RabbitMQ → consumer service khác, không có trace ID end-to-end. Task: `#AUTH-77`.
+- [ ] **#78** Không có metric custom cho auth domain. Chỉ có default ASP.NET metrics. Thiếu: login success/fail rate, 2FA challenge fail rate, OTP usage. Khó alert "tăng đột biến login fail" để phát hiện brute-force. Task: `#AUTH-78`.
+- [ ] **#79** Refresh token rotation không log "reuse detection event". Khi family bị revoke do reuse, không có event publish để security team alert. Task: `#AUTH-79`.
+
+**Pass 4:**
+
+- [ ] **#80** `ClockSkew` mâu thuẫn middleware vs helper. JWT auth middleware (`AddJWTAuthenticationAuthorization.cs:32`): `ClockSkew = TimeSpan.Zero` (chặt). `JwtHelper.ValidateToken()` (`JwtHelper.cs:117-122`): không set → mặc định **5 phút** (lỏng). Hai code path validate token khác semantic → bug khó debug. Task: `#AUTH-80`.
+- [ ] **#81** `async/await` patterns chưa kiểm grep. `.Result`/`.Wait()` block thread (deadlock risk in ASP.NET). `throw ex` (mất stack trace) thay vì `throw`. `async void` ngoài event handler. Task: `#AUTH-81`.
+- [ ] **#82** Lockout reconcile race. Login handler check manual khi user login. Không có grace period/event boundary cho user login exactly at boundary. Task: `#AUTH-82`.
+- [ ] **#83** `PasswordHasher` Singleton + future config risk. Tách riêng khỏi #70 vì hậu quả khác: state-leak nếu thêm cache giữa request. Task: `#AUTH-83`.
+
+### 69.5. 🧪 Test gap (7)
+
+**Pass 2 — Missing test files:**
+
+- [ ] **#84** Không có `ChangeEmailCommandHandlerTests.cs`. Flow đổi email không có unit test coverage. Task: `#AUTH-84`.
+- [ ] **#85** Không có `AcceptInviteCommandHandlerTests.cs`. Invite flow không được kiểm thử tự động. Task: `#AUTH-85`.
+- [ ] **#86** Không có `GoogleCallbackCommandHandlerTests.cs`. Google OAuth flow không test. Task: `#AUTH-86`.
+
+**Pass 4 — Behavior verification missing (bổ sung):**
+
+- [ ] **#87** Không test verify `ChangePassword` thực sự gọi `RevokeAllSessionsCommand`. Nếu sau này dev xóa logic revoke, test vẫn pass. Task: `#AUTH-87`.
+- [ ] **#88** Không có integration test cho `Outbox` event publish loop. Nếu outbox loop bị broken, không test bắt được. Task: `#AUTH-88`.
+- [ ] **#89** Không có perf test cho `PermissionResolver`. N+1 query không bị phát hiện cho đến production. Task: `#AUTH-89`.
+- [ ] **#90** Không có dedicated test cho `ChangePasswordCommandHandler`. Verify old password + revoke sessions logic không cover riêng. Task: `#AUTH-90`.
+
+### 69.6. Tổng kết theo nhóm
+
+| Nhóm | Số lượng | Phase Sprint |
+|------|----------|--------------|
+| 🔴 Bảo mật critical/high | 17 | Phase A (P0) + Phase B (P1) |
+| 🟡 Logic/Edge case | 22 | Phase C |
+| ❌ Tính năng thiếu | 26 (Pass 1: 19 + Pass 3: 7 + Pass 4: 2) | Phase D |
+| ⚠️ Code quality/Inconsistency | 16 | Phase E |
+| 🧪 Thiếu test | 7 | Phase F |
+| **TỔNG** | **88 issue → 90 task** (split #11 thành 2 + thêm #89 perf test) | 6 phase |
+
+### 69.7. Top 10 ưu tiên fix ngay (P0) — Phase A Sprint additional-auth
+
+1. **#9** Hash refresh token trong DB (không lưu plaintext) → `#AUTH-01`
+2. **#2** 2FA disable yêu cầu verify password/TOTP → `#AUTH-02`
+3. **#4** OAuth `state` CSRF validation → `#AUTH-03`
+4. **#5** JWT `ValidateToken` bật issuer/audience/lifetime → `#AUTH-04`
+5. **#6** CORS thay AllowAll bằng whitelist origin → `#AUTH-05`
+6. **#10** Reset token single-use → `#AUTH-06`
+7. **#15** Email unique index thêm filter `is_deleted = false` → `#AUTH-07`
+8. **#13** Logout invalidate 2FA challenge token → `#AUTH-08`
+9. **#7** OTP/2FA constant-time compare (`CryptographicOperations.FixedTimeEquals`) → `#AUTH-09`
+10. **#16** FullName HTML sanitize trong email template → `#AUTH-10`
+
+### 69.8. P1 — Operational hardening (Phase B + selected Phase D)
+
+- **#17** PermissionResolver cache → `#AUTH-16`
+- **#80** ClockSkew unify giữa middleware và helper → `#AUTH-80`
+- **#66** `IValidateOptions<JwtSettings>` ValidateOnStart → `#AUTH-66`
+- **#37, #42, #43, #49** Background jobs: graceful shutdown, hard-delete, OTP cleanup, lockout reconcile → `#AUTH-37`, `#AUTH-42`, `#AUTH-43`, `#AUTH-49`
+- **#60** Health check k8s → `#AUTH-60`
+
+### 69.9. P2 — Feature gap (Sprint additional-auth-B nếu split)
+
+- **#40, #54** Token introspection + blacklist → `#AUTH-40`, `#AUTH-54`
+- **#41, #44** Session/device limit → `#AUTH-41`, `#AUTH-44`
+- **#30, #62** GDPR export + anonymize trên delete → `#AUTH-30`, `#AUTH-62`
+- **#63** Multi-tenancy / OrgId → `#AUTH-63`
+- **#61** API versioning → `#AUTH-61`
+
+### 69.10. Liên kết tham chiếu
+
+- **File gốc audit:** `issue-authservice.md` ở repo root (2582 dòng, gồm 4 pass audit chi tiết + Phụ lục A kiến trúc AuditLog Hybrid + Phụ lục B Implementation Playbook).
+- **Phụ lục A (issue-authservice.md):** Kiến trúc AuditLog Hybrid toàn hệ thống — KHÔNG thuộc scope Sprint additional-auth (cần `AuditAggregatorService` riêng + onboard 10 service). Chỉ phần Phase 1 (refactor `auth_audit_logs` + outbox + trigger append-only) overlap với `#AUTH-29`.
+- **Phụ lục B (issue-authservice.md):** Implementation Playbook chi tiết cho audit (30 pitfalls + 10 nguyên tắc + schema + outbox pattern + correlation/causation + monitoring). Tham khảo khi triển khai `#AUTH-29` + `#AUTH-77` + `#AUTH-78`.
+- **Sprint thực thi:** §17 Sprint additional-auth (90 task `#AUTH-01..90` / `#349..#438`).
+- **Issue Pass tracking:** Mỗi `[ ]` ở §69.1-69.5 đánh dấu `[x]` khi merge PR tương ứng. Leader review weekly trạng thái.
+
+> **Ghi chú:** Đây là danh sách raw từ 4 pass audit. Một số mục có quan hệ nhân quả (vd #14 permission revoke realtime + #17 PermissionResolver cache cùng gốc nhưng giải pháp khác nhau). Khi tạo GitHub issue thực tế nên gom thành ~50-60 ticket độc lập, group theo theme (security batch / ops batch / feature batch). Sprint additional-auth chia thành 90 task để 1-1 traceability với issue gốc.
+
+---
+
+**Hết §69 (AuthService Security Audit — embedded summary from `issue-authservice.md` 88 issues + 90 task mapping).**
+
+---
+
 **End of OVERALL.md (Final Complete Edition)**
 
 **Document lifecycle:**
@@ -13873,8 +14299,10 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 - v4.7 (2026-06-15): **§68 SmsService SMS Forwarder Gateway + Sprint SMS** — embed nguyên văn `backend-sms-fowarder.md` v1 (3428 dòng) làm §68 trong Phần IX mới; heading demote 1 cấp bằng awk skip fenced code blocks (bash comment line 2873 `# Từ thư mục REPO ROOT capstone/backend/` preserve nguyên); gom 42 task triển khai theo Phase 0–10 vào **Sprint SMS** ở §17 (`#SMS-01..42` → `#293..#334`); update Mục lục thêm Phần IX entry; §67 stats bump section 67→68 + sprint backlog liệt kê Sprint SMS + Sprint IoT-2. Sprint SMS biến `SmsService` từ stub `FakeSmsSender` thành SMS Gateway Hub trung tâm — nhận `SendSmsCommand` từ Auth/Battery/Ticket/Notification qua RabbitMQ + Inbox dedup, queue vào DB riêng `sms_db` (xmin concurrency token), push SignalR cho Flutter `sms_fowarder`, báo kết quả qua Outbox (`SmsDeliveryReportEvent`/`SmsFailedEvent`); BCrypt API key per-device + rate limit 60 req/phút + daily limit + TTL redactor 24h; copy nguyên Outbox pattern từ AuthService. Critical deploy warning: atomic switch `SendPhoneOtpEvent` → `SendSmsCommand` ở Phase 9 phải xoá hẳn publish cũ trong cùng commit (tránh double-OTP). FE patch nhỏ Flutter `sms_gateway_remote_datasource.dart` đọc `raw['data']` (§68 Phụ lục C.2). KHÔNG đụng section khác.
 
+- v4.8 (2026-06-17): **§69 AuthService Security Audit + Sprint additional-auth** — embed 88 vấn đề audit từ `issue-authservice.md` (17 bảo mật + 22 logic + 26 thiếu feature + 16 code quality + 7 test gap) làm §69 trong Phần X mới; gom 90 task triển khai theo Phase A-F vào **Sprint additional-auth** ở §17 (`#AUTH-01..90` → `#349..#438`); update Mục lục thêm Phần X entry. Sprint additional-auth là **base sprint** xử lý technical debt AuthService trước khi mở rộng feature auth/permission cho Saga + multi-tenant. Phase A (10 task P0) là top ưu tiên fix ngay — không được skip: hash refresh token DB, 2FA disable verify, OAuth state CSRF, JWT validate issuer/audience/lifetime, CORS whitelist, reset token single-use, email unique index filter, logout invalidate 2FA challenge, constant-time OTP compare, HTML sanitize email template. Phase B (P1) operational hardening: PermissionResolver cache, ClockSkew unify, ValidateOnStart, background jobs (lockout/OTP cleanup), health check k8s. Phụ lục A của `issue-authservice.md` (kiến trúc AuditLog Hybrid + AuditAggregatorService) KHÔNG thuộc scope sprint này — cần sprint riêng + service mới (chỉ phần Phase 1 refactor `auth_audit_logs` overlap với `#AUTH-29`). KHÔNG đụng section khác.
+
 **Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga, IoT v2 pivot).
-**Last major update:** 2026-06-15 (v4.7) — §68 SmsService gateway embed + Sprint SMS 42 task (`backend-sms-fowarder.md` v1 nhúng nguyên văn vào Phần IX).
+**Last major update:** 2026-06-17 (v4.8) — §69 AuthService Security Audit embed + Sprint additional-auth 90 task (`issue-authservice.md` 88 issues mapped 1-1 + thêm #11 split + #89 perf test). GitHub Issues `#349..#438` (90 issue) đã tạo trên `GSU26SE55/backend` với milestone "Sprint additional-auth" (id=13), assignee `@Alexdev257`, label `status: init`.
 
 **Recommended reading order for newcomer:**
 1. §0-0bis (context — 10 phút)
