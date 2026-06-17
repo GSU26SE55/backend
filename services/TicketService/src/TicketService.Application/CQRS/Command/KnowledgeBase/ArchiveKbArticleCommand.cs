@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -7,6 +8,7 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class ArchiveKbArticleCommand : IRequest<CommonResponse<KbArticleActionDto>>, IValidatable<CommonResponse<KbArticleActionDto>>
 {
+    [JsonIgnore]
     public Guid ArticleId { get; set; }
 
     public Task<CommonResponse<KbArticleActionDto>> ValidateAsync()

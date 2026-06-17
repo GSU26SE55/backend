@@ -70,7 +70,7 @@ services:
       # Container-to-container traffic uses the Postgres container port.
       # The host mapping above keeps Docker Postgres reachable from macOS at localhost:5433.
       POSTGRES_PORT: 5432
-      POSTGRES_DB: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Password12345@}
       AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}

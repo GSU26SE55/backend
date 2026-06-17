@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -6,6 +7,7 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class DeleteKbArticleCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    [JsonIgnore]
     public Guid ArticleId { get; set; }
 
     public Task<CommonResponse<object>> ValidateAsync()

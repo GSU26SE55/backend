@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -11,6 +12,7 @@ public class AddTicketKbReferenceCommand : IRequest<CommonResponse<object>>, IVa
     public Guid KbArticleId { get; set; }
     public KbReferenceTypeEnum ReferenceType { get; set; }
     public string? Note { get; set; }
+    [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 
     public Task<CommonResponse<object>> ValidateAsync()
