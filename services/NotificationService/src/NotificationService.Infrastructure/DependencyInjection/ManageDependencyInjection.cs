@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Infrastructure.Channels;
 using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
 using NotificationService.Infrastructure.Persistence.Seeders;
+using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 
@@ -23,6 +25,7 @@ public static class ManageDependencyInjection
         services.AddMessageBus(configuration, typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly);
 
         services.AddScoped<NotificationDataSeeder>();
+        services.AddNotificationChannels();
 
         return services;
     }
@@ -50,5 +53,19 @@ public static class ManageDependencyInjection
     {
         services.AddScoped<INotificationUnitOfWork, UnitOfWork>();
         services.AddHttpContextAccessor();
+    }
+
+    private static void AddNotificationChannels(this IServiceCollection services)
+    {
+        // Named HttpClient "expo" với Polly retry 3 lần exponential backoff
+        services.AddHttpClient("expo", c => { c.Timeout = TimeSpan.FromSeconds(30); })
+                .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
+                    3,
+                    attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))));
+
+        services.AddScoped<ExpoPushChannel>();
+        services.AddScoped<EmailBusChannel>();
+        services.AddScoped<SmsBusChannel>();
+        services.AddScoped<InAppChannel>();
     }
 }
