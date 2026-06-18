@@ -19,9 +19,7 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
 
     public async Task<AccountActionResponse> Handle(AddStaffSkillCommand request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()

@@ -78,7 +78,7 @@ public class PublishOrderTests
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
+        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var response = await handler.Handle(new ForgotPasswordCommand { Email = "user@example.com" }, CancellationToken.None);
 
@@ -174,7 +174,7 @@ public class PublishOrderTests
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
 
         var response = await handler.Handle(new ChangeEmailCommand
         {

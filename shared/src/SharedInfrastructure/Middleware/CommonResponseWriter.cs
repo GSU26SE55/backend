@@ -29,7 +29,7 @@ public static class CommonResponseWriter
     /// <param name="statusCode">HTTP status code đặt vào response.</param>
     /// <param name="message">Lỗi tổng quát hiển thị cho user. Để rỗng nếu chỉ có field errors.</param>
     /// <param name="errors">Danh sách field-level errors. <c>null</c> nếu không có.</param>
-    /// <param name="data">Payload bổ sung (vd <c>errorCode</c>) — thường <c>null</c>.</param>
+    /// <param name="data">Payload bổ sung — thường <c>null</c>.</param>
     public static async Task WriteAsync(
         HttpResponse response,
         int statusCode,

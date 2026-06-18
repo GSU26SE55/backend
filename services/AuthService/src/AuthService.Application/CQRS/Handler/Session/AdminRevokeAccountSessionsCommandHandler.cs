@@ -2,6 +2,7 @@ using AuthService.Application.CQRS.Command.Session;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -12,11 +13,16 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
+    private readonly ITokenRevocationStore _revocationStore;
 
-    public AdminRevokeAccountSessionsCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
+    public AdminRevokeAccountSessionsCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IPublisher publisher,
+        ITokenRevocationStore revocationStore)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _revocationStore = revocationStore;
     }
 
     public async Task<SessionActionResponse> Handle(AdminRevokeAccountSessionsCommand request, CancellationToken cancellationToken)
@@ -48,6 +54,9 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
             session.RevokedReason = reason;
             _unitOfWork.RefreshTokens.UpdateAsync(session);
         }
+
+        // #AUTH-54: bulk revoke access tokens — admin force-logout invalidate ngay tất cả access token.
+        await _revocationStore.RevokeAllByAccountAsync(request.AccountId, TimeSpan.FromHours(1), cancellationToken);
 
         await _publisher.Publish(new AuditTrailNotification(
             AuditActionEnum.AdminForceLogout, request.AccountId, IsSuccess: true,

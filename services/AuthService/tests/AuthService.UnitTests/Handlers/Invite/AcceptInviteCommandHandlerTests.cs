@@ -44,7 +44,7 @@ public class AcceptInviteCommandHandlerTests
         var account = InvitedAccount();
         var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
+        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var resp = await handler.Handle(new AcceptInviteCommand
         {
             InvitationToken = "good-token",
@@ -74,7 +74,7 @@ public class AcceptInviteCommandHandlerTests
     public async Task Accept_InvalidToken_Returns401()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
+        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
 
         var resp = await handler.Handle(new AcceptInviteCommand
         {
@@ -92,7 +92,7 @@ public class AcceptInviteCommandHandlerTests
         var account = InvitedAccount(expiresAt: DateTime.UtcNow.AddHours(-1));
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
+        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var resp = await handler.Handle(new AcceptInviteCommand
         {
             InvitationToken = "good-token",
@@ -111,7 +111,7 @@ public class AcceptInviteCommandHandlerTests
         account.Status = AccountStatusEnum.Active;
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object);
+        var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var resp = await handler.Handle(new AcceptInviteCommand
         {
             InvitationToken = "good-token",

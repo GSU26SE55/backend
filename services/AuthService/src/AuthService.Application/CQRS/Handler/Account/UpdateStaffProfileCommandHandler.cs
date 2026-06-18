@@ -24,9 +24,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
 
     public async Task<AccountActionResponse> Handle(UpdateStaffProfileCommand request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()

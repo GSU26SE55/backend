@@ -18,13 +18,12 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, LoginResponse>
 {
-    private const int RefreshTokenExpirationDays = 7;
-
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtHelper _jwtHelper;
     private readonly IMessageProducerService _messageProducer;
     private readonly IPublisher _publisher;
+    private readonly AuthService.Application.Configuration.JwtSettingsOptions _jwtSettings;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public AcceptInviteCommandHandler(
@@ -33,6 +32,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         IJwtHelper jwtHelper,
         IMessageProducerService messageProducer,
         IPublisher publisher,
+        Microsoft.Extensions.Options.IOptions<AuthService.Application.Configuration.JwtSettingsOptions> jwtSettings,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
@@ -40,6 +40,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         _jwtHelper = jwtHelper;
         _messageProducer = messageProducer;
         _publisher = publisher;
+        _jwtSettings = jwtSettings.Value;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -54,7 +55,9 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         if (account == null)
             return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
 
-        if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value < DateTime.UtcNow)
+        // #AUTH-26: reject nếu InvitationExpiredAt null (invite không bao giờ hết hạn) hoặc đã quá hạn.
+        // Dùng <= cho on-exact-expiry edge case, đồng bộ với #AUTH-27.
+        if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value <= DateTime.UtcNow)
             return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
@@ -80,13 +83,16 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
+        var nowUtc = DateTime.UtcNow;
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
         {
             Id = Guid.NewGuid(),
             AccountId = account.Id,
-            Token = refreshTokenValue,
-            IssuedAt = DateTime.UtcNow,
-            ExpiredAt = DateTime.UtcNow.AddDays(RefreshTokenExpirationDays),
+            // #AUTH-01: lưu hash, return plaintext qua TokenDTO.
+            Token = RefreshTokenHasher.Hash(refreshTokenValue),
+            IssuedAt = nowUtc,
+            OriginalIssuedAt = nowUtc, // #AUTH-28
+            ExpiredAt = nowUtc.AddDays(_jwtSettings.RefreshTokenExpirationDays),
             Status = RefreshTokenStatus.Active,
             IpAddress = ipAddress,
             UserAgent = userAgent,

@@ -18,8 +18,8 @@ public class AccountDto
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-    /// <summary>Id của role hiện tại của account (quan hệ 1-N: Role → Account).</summary>
-    public Guid RoleId { get; set; }
+    /// <summary>Id của role hiện tại của account (quan hệ 1-N: Role → Account). #AUTH-69: nullable.</summary>
+    public Guid? RoleId { get; set; }
 
     /// <summary>Tên role hiện tại — vd "Admin", "Customer". Có thể empty nếu role bị xóa/disable.</summary>
     public string Role { get; set; } = string.Empty;

@@ -89,4 +89,30 @@ public static class AppMetrics
     public static readonly Counter SagaRedeliveryDeduped = Prometheus.Metrics.CreateCounter(
         "saga_alert_ticket_redelivery_deduped_total",
         "Total duplicate event redeliveries deduped via OriginAlertId uniqueness.");
+
+    // ============== #AUTH-78: Auth-domain metrics ==============
+
+    /// <summary>Tổng số attempt login (result = "success" | "wrong_password" | "account_locked" | ...)</summary>
+    public static readonly Counter AuthLoginTotal = Prometheus.Metrics.CreateCounter(
+        "auth_login_total",
+        "Total login attempts by outcome.",
+        new CounterConfiguration { LabelNames = new[] { "result" } });
+
+    /// <summary>Tổng số 2FA challenge (result = "totp_success" | "backup_success" | "sms_success" | "wrong_code" | "expired" | ...)</summary>
+    public static readonly Counter Auth2FAChallengeTotal = Prometheus.Metrics.CreateCounter(
+        "auth_2fa_challenge_total",
+        "Total 2FA challenge attempts by outcome.",
+        new CounterConfiguration { LabelNames = new[] { "result" } });
+
+    /// <summary>Tổng số OTP đã generate/verify (purpose = "register" | "password_reset" | "email_change" | "phone_verify" | "2fa_sms"; result = "generated" | "verified" | "expired" | "wrong")</summary>
+    public static readonly Counter AuthOtpUsageTotal = Prometheus.Metrics.CreateCounter(
+        "auth_otp_usage_total",
+        "Total OTP generation + verification events.",
+        new CounterConfiguration { LabelNames = new[] { "purpose", "result" } });
+
+    /// <summary>Tổng số refresh token rotation (result = "success" | "reuse_detected" | "expired" | "device_mismatch")</summary>
+    public static readonly Counter AuthRefreshTokenTotal = Prometheus.Metrics.CreateCounter(
+        "auth_refresh_token_total",
+        "Total refresh token rotation outcomes.",
+        new CounterConfiguration { LabelNames = new[] { "result" } });
 }

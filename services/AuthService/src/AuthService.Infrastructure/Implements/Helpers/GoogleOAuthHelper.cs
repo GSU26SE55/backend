@@ -78,6 +78,11 @@ public class GoogleOAuthHelper : IGoogleOAuthHelper
         return $"{AuthorizeEndpoint}?{query}";
     }
 
+    // #AUTH-21: retry 2 lần exponential backoff cho transient failure (network blip / 5xx).
+    // 4xx (bad code, bad client_secret) → KHÔNG retry vì retry không fix logic.
+    private const int MaxRetries = 2;
+    private static readonly TimeSpan InitialBackoff = TimeSpan.FromMilliseconds(500);
+
     public async Task<string?> ExchangeCodeForIdTokenAsync(string code, string redirectUri, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(code))
@@ -93,50 +98,90 @@ public class GoogleOAuthHelper : IGoogleOAuthHelper
             return null;
         }
 
-        try
+        var formValues = new Dictionary<string, string>
         {
-            var form = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["code"] = code,
-                ["client_id"] = clientId,
-                ["client_secret"] = clientSecret,
-                ["redirect_uri"] = redirectUri,
-                ["grant_type"] = "authorization_code"
-            });
+            ["code"] = code,
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["redirect_uri"] = redirectUri,
+            ["grant_type"] = "authorization_code"
+        };
 
-            using var response = await _httpClient.PostAsync(TokenEndpoint, form, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Google token exchange failed: {StatusCode} - {Body}", (int)response.StatusCode, body);
-                return null;
-            }
-
-            // Parse 1 lần từ string đã đọc (không đọc stream 2 lần).
-            var payload = string.IsNullOrWhiteSpace(body)
-                ? null
-                : JsonSerializer.Deserialize<GoogleTokenResponse>(body);
-
-            if (payload == null)
-            {
-                _logger.LogWarning("Google token exchange returned empty/invalid body: {Body}", body);
-                return null;
-            }
-
-            if (string.IsNullOrWhiteSpace(payload.IdToken))
-            {
-                _logger.LogWarning("Google token exchange success but id_token is missing. Body: {Body}", body);
-                return null;
-            }
-
-            return payload.IdToken;
-        }
-        catch (Exception ex)
+        Exception? lastException = null;
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            _logger.LogError(ex, "Exception during Google token exchange.");
-            return null;
+            if (attempt > 0)
+            {
+                var backoff = TimeSpan.FromMilliseconds(InitialBackoff.TotalMilliseconds * Math.Pow(2, attempt - 1));
+                _logger.LogWarning("Google token exchange retry attempt {Attempt}/{Max} after {Backoff}ms.",
+                    attempt, MaxRetries, (int)backoff.TotalMilliseconds);
+                try { await Task.Delay(backoff, cancellationToken); }
+                catch (OperationCanceledException) { return null; }
+            }
+
+            try
+            {
+                // FormUrlEncodedContent không reuse được giữa retry → tạo mới mỗi lần.
+                using var form = new FormUrlEncodedContent(formValues);
+                using var response = await _httpClient.PostAsync(TokenEndpoint, form, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // 4xx → bad request (invalid code/secret/redirect) — KHÔNG retry.
+                    // 5xx → server transient → retry.
+                    var statusCode = (int)response.StatusCode;
+                    _logger.LogWarning("Google token exchange failed: {StatusCode} - {Body}", statusCode, body);
+                    if (statusCode >= 400 && statusCode < 500)
+                        return null;
+                    continue; // retry on 5xx
+                }
+
+                // Parse 1 lần từ string đã đọc (không đọc stream 2 lần).
+                var payload = string.IsNullOrWhiteSpace(body)
+                    ? null
+                    : JsonSerializer.Deserialize<GoogleTokenResponse>(body);
+
+                if (payload == null)
+                {
+                    _logger.LogWarning("Google token exchange returned empty/invalid body: {Body}", body);
+                    return null;
+                }
+
+                if (string.IsNullOrWhiteSpace(payload.IdToken))
+                {
+                    _logger.LogWarning("Google token exchange success but id_token is missing. Body: {Body}", body);
+                    return null;
+                }
+
+                return payload.IdToken;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Client disconnect — KHÔNG retry.
+                return null;
+            }
+            catch (TaskCanceledException ex)
+            {
+                // HttpClient timeout (10s) — transient, retry.
+                lastException = ex;
+                _logger.LogWarning("Google token exchange timed out (attempt {Attempt}).", attempt);
+            }
+            catch (HttpRequestException ex)
+            {
+                lastException = ex;
+                _logger.LogWarning(ex, "Google token exchange network error (attempt {Attempt}).", attempt);
+            }
+            catch (Exception ex)
+            {
+                // Lỗi bất ngờ (parse fail, ...) — KHÔNG retry.
+                _logger.LogError(ex, "Exception during Google token exchange.");
+                return null;
+            }
         }
+
+        _logger.LogError(lastException, "Google token exchange exhausted retries.");
+        return null;
     }
 
     private string? ResolveClientId()

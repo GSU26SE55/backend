@@ -1,4 +1,6 @@
 using AuthService.Application.Authorization;
+using AuthService.Application.Configuration;
+using SharedInfrastructure.Metrics;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
@@ -9,38 +11,53 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, LoginResponse>
 {
-    private const int RefreshTokenExpirationDays = 7;
-
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IJwtHelper _jwtHelper;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
+    private readonly AuthSecurityOptions _securityOptions;
+    private readonly JwtSettingsOptions _jwtSettings;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public RefreshTokenCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IJwtHelper jwtHelper,
         IPublisher publisher,
+        IMessageProducerService messageProducer,
+        IOptions<AuthSecurityOptions> securityOptions,
+        IOptions<JwtSettingsOptions> jwtSettings,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _jwtHelper = jwtHelper;
         _publisher = publisher;
+        _messageProducer = messageProducer;
+        _securityOptions = securityOptions.Value;
+        _jwtSettings = jwtSettings.Value;
         _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<LoginResponse> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
+        // #AUTH-01: DB chỉ lưu hash, lookup bằng hash của plaintext client gửi.
+        var incomingHash = string.IsNullOrEmpty(request.RefreshToken)
+            ? string.Empty
+            : RefreshTokenHasher.Hash(request.RefreshToken);
+
         var existing = await _unitOfWork.RefreshTokens
             .GetAllAsync()
             .Include(rt => rt.Account)
                 .ThenInclude(a => a.Role)
-            .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken, cancellationToken);
+            .FirstOrDefaultAsync(rt => rt.Token == incomingHash, cancellationToken);
 
         if (existing == null)
             return Fail(401, "Refresh token không hợp lệ.");
@@ -60,6 +77,21 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
                 rt.RevokedReason = "RefreshToken reuse detected";
                 _unitOfWork.RefreshTokens.UpdateAsync(rt);
             }
+
+            // #AUTH-79: publish security alert event để NotificationService email user
+            // + monitoring tool (Grafana alert) detect anomaly.
+            var (ipForEvt, uaForEvt, _) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
+            await _messageProducer.PublishAsync(new RefreshTokenReuseDetectedEvent(
+                AccountId: existing.AccountId,
+                ReusedTokenId: existing.Id,
+                IpAddress: ipForEvt,
+                UserAgent: uaForEvt,
+                DetectedAt: DateTime.UtcNow,
+                RevokedFamilyCount: allActive.Count), cancellationToken);
+
+            // #AUTH-78
+            AppMetrics.AuthRefreshTokenTotal.WithLabels("reuse_detected").Inc();
+
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Fail(401, "Phát hiện refresh token bị tái sử dụng. Toàn bộ phiên đã bị thu hồi.");
         }
@@ -81,19 +113,49 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
+        // #AUTH-12: device binding — IP + UA phải match giá trị lúc issue token.
+        if (_securityOptions.EnforceDeviceBinding && IsDeviceBindingMismatch(existing, ipAddress, userAgent))
+        {
+            existing.Status = RefreshTokenStatus.Revoked;
+            existing.RevokedAt = DateTime.UtcNow;
+            existing.RevokedReason = "DeviceBindingMismatch";
+            _unitOfWork.RefreshTokens.UpdateAsync(existing);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Fail(401, "Refresh token không hợp lệ cho thiết bị này.");
+        }
+
         var roleName = account.Role?.Name ?? string.Empty;
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
         var newAccessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var newRefreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
+        // #AUTH-01: persist hash, return plaintext to client.
+        // #AUTH-28: copy OriginalIssuedAt từ token cũ → toàn bộ chain rotation chia sẻ 1 expiry
+        // duy nhất tính từ lần issue đầu tiên. Fallback IssuedAt cho row legacy chưa migrate.
+        var nowUtc = DateTime.UtcNow;
+        var originalIssuedAt = existing.OriginalIssuedAt ?? existing.IssuedAt;
+        var newExpiredAt = originalIssuedAt.AddDays(_jwtSettings.RefreshTokenExpirationDays);
+
+        // Edge case: nếu admin GIẢM RefreshTokenExpirationDays giữa chain → new ExpiredAt có thể đã past.
+        // Trong trường hợp đó refuse rotation thay vì cấp token chết → user phải re-login.
+        if (newExpiredAt <= nowUtc)
+        {
+            existing.Status = RefreshTokenStatus.Expired;
+            _unitOfWork.RefreshTokens.UpdateAsync(existing);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Fail(401, "Refresh token chain đã hết hạn theo policy mới. Vui lòng đăng nhập lại.");
+        }
+
+        var newHashed = RefreshTokenHasher.Hash(newRefreshTokenValue);
         var newRefreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             AccountId = account.Id,
-            Token = newRefreshTokenValue,
-            IssuedAt = DateTime.UtcNow,
-            ExpiredAt = DateTime.UtcNow.AddDays(RefreshTokenExpirationDays),
+            Token = newHashed,
+            IssuedAt = nowUtc,
+            OriginalIssuedAt = originalIssuedAt,
+            ExpiredAt = newExpiredAt,
             Status = RefreshTokenStatus.Active,
             IpAddress = ipAddress,
             UserAgent = userAgent,
@@ -103,7 +165,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
 
         existing.Status = RefreshTokenStatus.Used;
         existing.UsedAt = DateTime.UtcNow;
-        existing.ReplacedByToken = newRefreshTokenValue;
+        existing.ReplacedByToken = newHashed;
         _unitOfWork.RefreshTokens.UpdateAsync(existing);
 
         account.LastLoginAt = DateTime.UtcNow;
@@ -112,6 +174,9 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
 
         // Rotation tạo new session → enforce limit. Existing token vừa chuyển Used không tính active.
         await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);
+
+        // #AUTH-78
+        AppMetrics.AuthRefreshTokenTotal.WithLabels("success").Inc();
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -137,4 +202,23 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         StatusCode = statusCode,
         Message = message,
     };
+
+    // #AUTH-12: mismatch nếu CẢ HAI field đã lưu lúc issue và cùng field hiện tại đều có giá trị
+    // nhưng khác nhau. Null/empty được treat là "không enforce" (request không có UA/IP info).
+    private static bool IsDeviceBindingMismatch(RefreshToken existing, string? currentIp, string? currentUa)
+    {
+        if (!string.IsNullOrEmpty(existing.IpAddress) && !string.IsNullOrEmpty(currentIp)
+            && !string.Equals(existing.IpAddress, currentIp, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(existing.UserAgent) && !string.IsNullOrEmpty(currentUa)
+            && !string.Equals(existing.UserAgent, currentUa, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
 }

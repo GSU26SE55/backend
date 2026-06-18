@@ -130,15 +130,16 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void ValidateToken_GarbageToken_Throws()
+    public void ValidateToken_GarbageToken_ReturnsError()
     {
-        // ValidateToken không catch — caller phải catch. Đây là behavior hiện tại của implementation.
-        var act = () => _sut.ValidateToken("not-a-jwt");
-        act.Should().Throw<Exception>();
+        // #AUTH-04: ValidateToken catch tất cả exception và trả tuple (ok=false, err=message).
+        var (ok, err) = _sut.ValidateToken("not-a-jwt");
+        ok.Should().BeFalse();
+        err.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task ValidateToken_TokenSignedWithOtherKey_Throws()
+    public async Task ValidateToken_TokenSignedWithOtherKey_ReturnsError()
     {
         var otherConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -151,8 +152,9 @@ public class JwtHelperTests
         var other = new JwtHelper(otherConfig);
         var token = await other.GenerateAccessToken(MakeAccount(), string.Empty);
 
-        var act = () => _sut.ValidateToken(token);
-        act.Should().Throw<Exception>();
+        var (ok, err) = _sut.ValidateToken(token);
+        ok.Should().BeFalse();
+        err.Should().NotBeNull();
     }
 
     [Fact]
@@ -164,10 +166,18 @@ public class JwtHelperTests
     }
 
     [Fact]
-    public void IsTokenValid_ThrowsNotImplemented()
+    public void IsTokenValid_GarbageToken_ReturnsFalse()
     {
-        var act = () => _sut.IsTokenValid("anything");
-        act.Should().Throw<NotImplementedException>();
+        // #AUTH-11: IsTokenValid delegate sang ValidateToken; trả về false (không throw).
+        _sut.IsTokenValid("anything").Should().BeFalse();
+        _sut.IsTokenValid(string.Empty).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsTokenValid_ValidToken_ReturnsTrue()
+    {
+        var token = await _sut.GenerateAccessToken(MakeAccount(), "Customer");
+        _sut.IsTokenValid(token).Should().BeTrue();
     }
 
     // ============== Reset token ==============

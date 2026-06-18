@@ -1,5 +1,7 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
+using SharedInfrastructure.Metrics;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -29,7 +31,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
 
     public async Task<CommonResponse<string>> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -48,13 +50,14 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             return Fail(423, $"Tài khoản đang bị khóa. Vui lòng thử lại sau {minutesLeft} phút.");
         }
 
-        if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value < DateTime.UtcNow)
+        // #AUTH-27: dùng <= để chặn edge case on-exact-expiry.
+        if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
             return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
 
         if (account.OtpPurpose != OtpPurposeEnum.Register)
             return Fail(422, "OTP không phải dành cho đăng ký.");
 
-        if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
+        if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
             account.FailedLoginAttempts += 1;
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
@@ -63,12 +66,16 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+            AppMetrics.AuthOtpUsageTotal.WithLabels("register", "wrong").Inc(); // #AUTH-78
+
             if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
                 return Fail(423, $"Sai OTP quá {MaxFailedAttempts} lần. Tài khoản bị khóa {LockoutDurationMinutes} phút.");
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
             return Fail(401, $"OTP không chính xác. Còn {remaining} lần thử.");
         }
+
+        AppMetrics.AuthOtpUsageTotal.WithLabels("register", "verified").Inc(); // #AUTH-78
 
         account.EmailConfirmed = true;
         account.OtpCode = null;
@@ -78,8 +85,9 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         account.LockoutEndAt = null;
         account.Status = AccountStatusEnum.Active;
 
-        // Self-register: nếu account chưa gán role (RoleId rỗng) → default Customer.
-        if (account.RoleId == Guid.Empty)
+        // #AUTH-69: RoleId giờ nullable (Guid?). Self-register: chưa gán role → default Customer.
+        // Check cả null lẫn Guid.Empty cho backward-compat với row legacy có RoleId=Empty.
+        if (!account.RoleId.HasValue || account.RoleId.Value == Guid.Empty)
         {
             account.RoleId = CustomerRoleId;
             account.RoleAssignedAt = DateTime.UtcNow;

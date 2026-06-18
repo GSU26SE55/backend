@@ -23,4 +23,9 @@ public interface IJwtHelper
 
     /// <summary>Validate reset token; trả về AccountId nếu hợp lệ, ngược lại trả về error message.</summary>
     (Guid? accountId, string? errorMessage) ValidateResetToken(string token);
+
+    /// <summary>
+    /// #AUTH-06: Validate reset token + trả jti + exp để consumer enforce single-use (Redis SET NX).
+    /// </summary>
+    (Guid? accountId, string? jti, DateTime? expiresAtUtc, string? errorMessage) ValidateResetTokenDetailed(string token);
 }

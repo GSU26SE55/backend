@@ -24,6 +24,12 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
         return _dbSet.AsQueryable();
     }
 
+    /// <summary>#AUTH-35: opt-in tracking. tracking=false dùng AsNoTracking() cho read-only query.</summary>
+    public IQueryable<T> GetAllAsync(bool tracking)
+    {
+        return tracking ? _dbSet.AsQueryable() : _dbSet.AsNoTracking();
+    }
+
     public IQueryable<T> FindAsync(Expression<Func<T, bool>> predicate)
     {
         return _dbSet.Where(predicate);
