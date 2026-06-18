@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Idempotency;
+using StackExchange.Redis;
 using Testcontainers.PostgreSql;
 
 namespace AuthService.IntegrationTests.Fixtures;
@@ -103,6 +104,12 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.RemoveAll<IIdempotencyKeyStore>();
             services.AddSingleton<IIdempotencyKeyStore, InMemoryIdempotencyKeyStore>();
 
+            // 3b. Stub IConnectionMultiplexer — AddIdempotencyKey extension register factory call
+            // ConnectionMultiplexer.Connect("localhost:9999") sẽ fail vì không có Redis thật.
+            // TokenRevocationMiddleware / rate-limit handlers cũng cần IConnectionMultiplexer.
+            services.RemoveAll<IConnectionMultiplexer>();
+            services.AddSingleton<IConnectionMultiplexer>(_ => StubConnectionMultiplexer.Build());
+
             // 4. Replace IMessageProducerService với capture stub.
             services.RemoveAll<IMessageProducerService>();
             services.AddSingleton<IMessageProducerService>(Producer);
@@ -115,6 +122,8 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.RemoveAll<IConfigureOptions<RateLimiterOptions>>();
             services.Configure<RateLimiterOptions>(options =>
             {
+                options.AddPolicy(RateLimitingExtensions.PolicyLogin, _ =>
+                    RateLimitPartition.GetNoLimiter("test-login"));
                 options.AddPolicy(RateLimitingExtensions.PolicyAnonOtp, _ =>
                     RateLimitPartition.GetNoLimiter("test-anon-otp"));
                 options.AddPolicy(RateLimitingExtensions.PolicyAuthOtp, _ =>

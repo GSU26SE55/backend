@@ -1,6 +1,5 @@
 using AuthService.Application.Authorization;
 using AuthService.Application.Configuration;
-using SharedInfrastructure.Metrics;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Session;
 using AuthService.Application.DTOs.Response.Auth;
@@ -15,6 +14,7 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 

@@ -41,7 +41,8 @@ public class PendingEmailCleanupBackgroundService : BackgroundService
 
         // Delay first run đến gần 02:00 UTC tiếp theo (sấp xỉ — đúng cho prod, test fixture sẽ override).
         var initialDelay = ComputeInitialDelay(DateTime.UtcNow);
-        try { await Task.Delay(initialDelay, stoppingToken); }
+        try
+        { await Task.Delay(initialDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         using var timer = new PeriodicTimer(PollInterval);

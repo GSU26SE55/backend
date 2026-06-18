@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AuthService.Domain.Entities;
-using AuthService.IntegrationTests.Fixtures;
 using AuthService.Infrastructure.Persistence;
+using AuthService.IntegrationTests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Events;

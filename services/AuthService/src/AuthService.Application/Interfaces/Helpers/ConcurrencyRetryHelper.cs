@@ -25,7 +25,8 @@ public static class ConcurrencyRetryHelper
         int maxAttempts = DefaultMaxAttempts,
         CancellationToken cancellationToken = default)
     {
-        if (maxAttempts < 1) maxAttempts = 1;
+        if (maxAttempts < 1)
+            maxAttempts = 1;
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {

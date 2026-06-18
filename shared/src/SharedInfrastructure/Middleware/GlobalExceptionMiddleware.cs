@@ -56,7 +56,8 @@ public class GlobalExceptionMiddleware
 
     private static string RedactPii(string message)
     {
-        if (string.IsNullOrEmpty(message)) return message;
+        if (string.IsNullOrEmpty(message))
+            return message;
         var step1 = EmailRedactRegex.Replace(message, "***@$1");
         var step2 = PhoneRedactRegex.Replace(step1, "***");
         return step2;

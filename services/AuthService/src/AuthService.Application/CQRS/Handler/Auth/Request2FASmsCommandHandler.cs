@@ -70,7 +70,8 @@ public class Request2FASmsCommandHandler : IRequestHandler<Request2FASmsCommand,
 
     private static string MaskPhoneNumber(string phone)
     {
-        if (phone.Length <= 4) return new string('*', phone.Length);
+        if (phone.Length <= 4)
+            return new string('*', phone.Length);
         return new string('*', phone.Length - 4) + phone[^4..];
     }
 

@@ -3,7 +3,6 @@ using System.Text;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
-using SharedInfrastructure.Metrics;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 using StackExchange.Redis;
 
 namespace AuthService.Application.CQRS.Handler.Auth;

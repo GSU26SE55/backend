@@ -34,13 +34,15 @@ public class ExpiredOtpCleanupBackgroundService : BackgroundService
         _logger.LogInformation("ExpiredOtpCleanup started. GracePeriod={Hours}h.", CleanupGracePeriod.TotalHours);
 
         var initialDelay = ComputeInitialDelay(DateTime.UtcNow);
-        try { await Task.Delay(initialDelay, stoppingToken); }
+        try
+        { await Task.Delay(initialDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         using var timer = new PeriodicTimer(PollInterval);
         do
         {
-            try { await CleanupAsync(stoppingToken); }
+            try
+            { await CleanupAsync(stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { _logger.LogError(ex, "ExpiredOtpCleanup tick failed."); }
         }
@@ -77,7 +79,8 @@ public class ExpiredOtpCleanupBackgroundService : BackgroundService
     private static TimeSpan ComputeInitialDelay(DateTime nowUtc)
     {
         var target = new DateTime(nowUtc.Year, nowUtc.Month, nowUtc.Day, 2, 30, 0, DateTimeKind.Utc);
-        if (target <= nowUtc) target = target.AddDays(1);
+        if (target <= nowUtc)
+            target = target.AddDays(1);
         return target - nowUtc;
     }
 }

@@ -54,11 +54,14 @@ public class GlobalExceptionMiddlewareTests
         var body = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(body);
         doc.RootElement.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
-        // Middleware trả Vietnamese localized message (xem GlobalExceptionMiddleware.cs).
+        // #AUTH-76: Vietnamese localized message + hint correlationId cho support correlate.
         doc.RootElement.GetProperty("message").GetString()
-            .Should().Be("Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.");
-        // Middleware không expose chi tiết exception (giảm attack surface).
-        doc.RootElement.GetProperty("data").ValueKind.Should().Be(JsonValueKind.Null);
+            .Should().Be("Đã xảy ra lỗi hệ thống. Vui lòng liên hệ support kèm correlationId.");
+        // #AUTH-76: data payload có correlationId thay vì null (dev env có thêm exceptionType/exceptionMessage).
+        // Test env default (không IsProduction) → dev shape; chỉ assert correlationId tồn tại.
+        var dataElement = doc.RootElement.GetProperty("data");
+        dataElement.ValueKind.Should().Be(JsonValueKind.Object);
+        dataElement.TryGetProperty("correlationId", out _).Should().BeTrue();
         doc.RootElement.GetProperty("listErrors").ValueKind.Should().Be(JsonValueKind.Null);
     }
 

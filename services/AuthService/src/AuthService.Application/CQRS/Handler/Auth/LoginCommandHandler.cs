@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using AuthService.Application.CQRS.Command.Auth;
-using SharedInfrastructure.Metrics;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.CQRS.Notification.Login;
 using AuthService.Application.DTOs.Response.Auth;
@@ -11,6 +10,7 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 

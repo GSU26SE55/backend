@@ -115,7 +115,8 @@ public class GoogleOAuthHelper : IGoogleOAuthHelper
                 var backoff = TimeSpan.FromMilliseconds(InitialBackoff.TotalMilliseconds * Math.Pow(2, attempt - 1));
                 _logger.LogWarning("Google token exchange retry attempt {Attempt}/{Max} after {Backoff}ms.",
                     attempt, MaxRetries, (int)backoff.TotalMilliseconds);
-                try { await Task.Delay(backoff, cancellationToken); }
+                try
+                { await Task.Delay(backoff, cancellationToken); }
                 catch (OperationCanceledException) { return null; }
             }
 

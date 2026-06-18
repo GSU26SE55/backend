@@ -4,13 +4,13 @@ using AuthService.Api.Extensions;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
-using SecureCompareHelper = AuthService.Application.Interfaces.Helpers.SecureCompareHelper;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using SharedContracts.Common.Responses;
+using SecureCompareHelper = AuthService.Application.Interfaces.Helpers.SecureCompareHelper;
 
 namespace AuthService.Api.Controllers;
 

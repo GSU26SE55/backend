@@ -1,7 +1,6 @@
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
-using SharedInfrastructure.Metrics;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -9,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 

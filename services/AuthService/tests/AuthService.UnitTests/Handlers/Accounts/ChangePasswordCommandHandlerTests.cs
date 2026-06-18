@@ -108,21 +108,30 @@ public class ChangePasswordCommandHandlerTests
 
         var activeToken1 = new RefreshToken
         {
-            Id = Guid.NewGuid(), AccountId = account.Id, Token = "rt1",
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            Token = "rt1",
             Status = RefreshTokenStatus.Active,
-            IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7)
+            IssuedAt = DateTime.UtcNow,
+            ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var activeToken2 = new RefreshToken
         {
-            Id = Guid.NewGuid(), AccountId = account.Id, Token = "rt2",
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            Token = "rt2",
             Status = RefreshTokenStatus.Active,
-            IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7)
+            IssuedAt = DateTime.UtcNow,
+            ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var alreadyRevoked = new RefreshToken
         {
-            Id = Guid.NewGuid(), AccountId = account.Id, Token = "rt3",
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            Token = "rt3",
             Status = RefreshTokenStatus.Revoked, // không revoke lại
-            IssuedAt = DateTime.UtcNow.AddDays(-1), ExpiredAt = DateTime.UtcNow.AddDays(6),
+            IssuedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiredAt = DateTime.UtcNow.AddDays(6),
             RevokedAt = DateTime.UtcNow.AddHours(-1)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(
@@ -183,9 +192,12 @@ public class ChangePasswordCommandHandlerTests
         _hasher.Setup(h => h.Hash("NewStrong1!")).Returns("NEW-HASH");
         var activeToken = new RefreshToken
         {
-            Id = Guid.NewGuid(), AccountId = account.Id, Token = "rt",
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            Token = "rt",
             Status = RefreshTokenStatus.Active,
-            IssuedAt = DateTime.UtcNow, ExpiredAt = DateTime.UtcNow.AddDays(7)
+            IssuedAt = DateTime.UtcNow,
+            ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(
             accountSeed: new[] { account },
