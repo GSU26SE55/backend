@@ -192,6 +192,7 @@ public class AccountsController : ControllerBase
     /// <response code="409">Email mới đã được tài khoản khác sử dụng.</response>
     /// <response code="422">Email mới trùng email hiện tại.</response>
     [HttpPost("me/change-email")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)] // #AUTH-46
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
@@ -199,6 +200,7 @@ public class AccountsController : ControllerBase
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailCommand command, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -540,6 +542,29 @@ public class AccountsController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <response code="200">Lấy profile thành công.</response>
     /// <response code="401">Chưa đăng nhập hoặc token hết hạn.</response>
+    /// <summary>#AUTH-62: GDPR Article 20 data portability — export full account data dưới dạng JSON.</summary>
+    [HttpGet("me/export")]
+    [ProducesResponseType(typeof(CommonResponse<AuthService.Application.CQRS.Query.Account.AccountDataExportDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportMyData(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var query = new AuthService.Application.CQRS.Query.Account.ExportMyDataQuery { AccountId = userId.Value };
+        var result = await _mediator.Send(query, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            // Download attachment để client browser save as file.
+            Response.Headers.Append("Content-Disposition",
+                $"attachment; filename=\"account-export-{userId.Value:N}-{DateTime.UtcNow:yyyyMMdd}.json\"");
+        }
+        return StatusCode(result.StatusCode, result);
+    }
+
     [HttpGet("me/profile")]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]

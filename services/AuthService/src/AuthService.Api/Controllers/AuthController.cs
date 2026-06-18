@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using SharedContracts.Common.Responses;
+using SecureCompareHelper = AuthService.Application.Interfaces.Helpers.SecureCompareHelper;
 
 namespace AuthService.Api.Controllers;
 
@@ -67,11 +68,13 @@ public class AuthController : ControllerBase
     /// <response code="403">Tài khoản không được phép đăng nhập, ví dụ bị vô hiệu hóa hoặc chưa xác minh theo policy.</response>
     /// <response code="423">Tài khoản đang bị khóa do quá nhiều lần đăng nhập/OTP sai hoặc do trạng thái lock.</response>
     [HttpPost("login")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyLogin)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status423Locked)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
@@ -359,6 +362,70 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>#AUTH-58: yêu cầu gửi SMS OTP fallback cho 2FA login.</summary>
+    [HttpPost("login/2fa/sms")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyTwoFactorVerify)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Request2FASms([FromBody] Request2FASmsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// #AUTH-54: RFC 7009 Token Revocation. Authenticated user gọi để revoke 1 access token cụ thể
+    /// qua jti. Khác Logout (revoke refresh + bulk access) ở chỗ chỉ blacklist jti hiện tại.
+    /// </summary>
+    [HttpPost("revoke")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Revoke([FromBody] RevokeTokenCommand command, CancellationToken cancellationToken)
+    {
+        var callerId = GetCurrentUserId();
+        if (callerId == null)
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+        command.CallerAccountId = callerId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// #AUTH-40: OAuth 2.0 Token Introspection (RFC 7662). Resource server gọi để verify
+    /// access token + check revocation. Trả {active: true/false} + metadata cơ bản.
+    /// </summary>
+    [HttpPost("introspect")]
+    [ProducesResponseType(typeof(CommonResponse<AuthService.Application.CQRS.Command.Auth.TokenIntrospectionDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Introspect([FromBody] IntrospectTokenCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>#AUTH-50: bước 1 reactivate — submit email, server gửi OTP nếu account còn trong window 90 ngày.</summary>
+    [HttpPost("reactivate-request")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAnonOtp)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ReactivateRequest([FromBody] ReactivateRequestCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>#AUTH-50: bước 2 reactivate — submit email + OTP để restore account.</summary>
+    [HttpPost("reactivate-verify")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAnonOtp)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReactivateVerify([FromBody] ReactivateVerifyCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
     /// <summary>
     /// Xác thực OTP reset password và nhận reset token ngắn hạn.
     /// </summary>
@@ -630,7 +697,8 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
             return (Fail(400, "missing_code_or_state"), 400);
 
-        if (string.IsNullOrEmpty(savedState) || !string.Equals(savedState, state, StringComparison.Ordinal))
+        // #AUTH-03: constant-time compare để chống timing leak khi attacker probe state.
+        if (string.IsNullOrEmpty(savedState) || !SecureCompareHelper.FixedTimeEquals(savedState, state))
             return (Fail(401, "invalid_state"), 401);
 
         var result = await _mediator.Send(

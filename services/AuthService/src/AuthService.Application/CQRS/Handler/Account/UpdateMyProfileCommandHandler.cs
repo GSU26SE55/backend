@@ -1,5 +1,6 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Mapping;
 using AuthService.Domain.Entities;
@@ -24,9 +25,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
 
     public async Task<AccountResponse> Handle(UpdateMyProfileCommand request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -41,7 +40,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
 
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
         {
-            var phone = request.PhoneNumber.Trim();
+            var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
             var duplicated = await _unitOfWork.Accounts
                 .GetAllAsync()
                 .AnyAsync(a => a.Id != request.AccountId && a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);

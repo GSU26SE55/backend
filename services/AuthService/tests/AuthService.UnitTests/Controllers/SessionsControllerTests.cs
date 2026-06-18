@@ -18,7 +18,7 @@ public class SessionsControllerTests
             .ReturnsAsync(new SessionListResponse { IsSuccess = true, StatusCode = 200, Data = new() });
 
         var ctrl = new SessionsController(_mediator.Object);
-        var result = await ctrl.GetMySessions(activeOnly: false, CancellationToken.None) as ObjectResult;
+        var result = await ctrl.GetMySessions(activeOnly: false, deviceId: null, CancellationToken.None) as ObjectResult;
 
         result!.StatusCode.Should().Be(200);
         _mediator.Verify(m => m.Send(

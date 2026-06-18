@@ -313,3 +313,74 @@ groups:
         annotations:
           summary: "Postgres connections at {{ $value | humanizePercentage }} of limit"
           description: "Connection pool exhaustion risk — check for connection leaks."
+
+  # =====================================================================
+  # Sprint additional-auth #AUTH-78 — Auth-domain security alerts
+  # =====================================================================
+  - name: auth-security
+    interval: 30s
+    rules:
+      # 11. Login brute force — > 20 invalid_credentials/min trong 5 phút.
+      # Phát hiện credential stuffing / brute force / leaked password list attack.
+      - alert: AuthLoginBruteForce
+        expr: sum(rate(auth_login_total{result="invalid_credentials"}[5m])) > (20/60)
+        for: 5m
+        labels:
+          severity: warning
+          domain: auth
+        annotations:
+          summary: "Login brute force suspected ({{ $value | humanize }} req/s invalid creds)"
+          description: "Invalid credentials rate >20/min sustained 5 phút. Check rate-limit middleware effectiveness + IP source distribution. Có thể cần block IP gateway-level."
+
+      # 12. Refresh token reuse detected — security incident, cần điều tra ngay.
+      # AUTH-28 + AUTH-79: khi family bị revoke do reuse, log ra metric này.
+      - alert: AuthRefreshTokenReuseDetected
+        expr: sum(increase(auth_refresh_token_total{result="reuse_detected"}[10m])) > 0
+        for: 0m  # fire ngay lập tức — không wait
+        labels:
+          severity: critical
+          domain: auth
+        annotations:
+          summary: "Refresh token reuse detected — possible token theft"
+          description: "Token chain bị reuse → attacker stole refresh token HOẶC race condition trong client. Check audit_logs cho AccountId bị affect + invalidate all sessions của user đó."
+
+      # 13. 2FA failure rate spike — > 10 wrong 2FA codes/min trong 5 phút.
+      # Có thể TOTP clock drift hoặc brute force backup code.
+      - alert: Auth2FAFailureSpike
+        expr: sum(rate(auth_2fa_challenge_total{result=~"invalid_code|wrong"}[5m])) > (10/60)
+        for: 5m
+        labels:
+          severity: warning
+          domain: auth
+        annotations:
+          summary: "2FA failure rate spike ({{ $value | humanize }} fail/s)"
+          description: "Wrong 2FA code rate cao bất thường. Check: TOTP server clock drift, backup code brute force, hoặc UI bug khiến user nhập sai."
+
+      # 14. OTP wrong rate spike — > 30/min trong 5 phút.
+      # Brute force OTP registration/reset/email-change/phone-verify.
+      - alert: AuthOtpBruteForce
+        expr: sum(rate(auth_otp_usage_total{result="wrong"}[5m])) by (otp_purpose) > (30/60)
+        for: 5m
+        labels:
+          severity: warning
+          domain: auth
+        annotations:
+          summary: "OTP brute force on {{ $labels.otp_purpose }} ({{ $value | humanize }} wrong/s)"
+          description: "Wrong OTP rate cho purpose={{ $labels.otp_purpose }} cao. Check per-account lockout (5/15min) đang work + per-email rate limit (AUTH-13 otp_attempts:fp:)."
+
+      # 15. Login success drop — anomaly detection: tỷ lệ login thành công sụt < 50% sustained 10 phút.
+      # Có thể DB down, password hash service issue, hoặc 2FA service degraded.
+      - alert: AuthLoginSuccessRateLow
+        expr: |
+          (
+            sum(rate(auth_login_total{result=~"success|success_2fa"}[10m]))
+            /
+            sum(rate(auth_login_total[10m]))
+          ) < 0.5 and sum(rate(auth_login_total[10m])) > (5/60)
+        for: 10m
+        labels:
+          severity: critical
+          domain: auth
+        annotations:
+          summary: "Login success rate < 50% ({{ $value | humanizePercentage }})"
+          description: "Phần lớn login attempts đang fail. Check: DB connection, password verify performance (BCrypt cost), 2FA challenge store (Redis), suspicious mass-login pattern."

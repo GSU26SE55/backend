@@ -159,7 +159,7 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("role_assigned_by");
 
-                    b.Property<Guid>("RoleId")
+                    b.Property<Guid?>("RoleId")
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
@@ -188,10 +188,17 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"is_deleted\" = false");
 
                     b.HasIndex("GoogleId")
                         .IsUnique()
@@ -209,6 +216,9 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasIndex("RoleId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("Email", "IsDeleted")
+                        .HasDatabaseName("ix_accounts_email_isdeleted");
 
                     b.ToTable("accounts", (string)null);
                 });
@@ -699,6 +709,10 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("jwt_id");
 
+                    b.Property<DateTime?>("OriginalIssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("original_issued_at");
+
                     b.Property<string>("ReplacedByToken")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -1026,8 +1040,7 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasOne("AuthService.Domain.Entities.Role", "Role")
                         .WithMany("Accounts")
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Role");
                 });

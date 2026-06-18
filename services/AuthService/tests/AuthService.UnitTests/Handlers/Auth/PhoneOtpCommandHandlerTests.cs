@@ -13,7 +13,7 @@ public class SendPhoneOtpCommandHandlerTests
 {
     private readonly Mock<IMessageProducerService> _producer = new();
 
-    private static global::AuthService.Domain.Entities.Account WithPhone(string? phone = "0900111", bool confirmed = false) => new()
+    private static global::AuthService.Domain.Entities.Account WithPhone(string? phone = "+84900111", bool confirmed = false) => new()
     {
         Id = Guid.NewGuid(),
         Email = "u@example.com",
@@ -63,7 +63,7 @@ public class SendPhoneOtpCommandHandlerTests
         // Sprint SMS Phase 9 atomic switch (#SMS-38): publish SendSmsCommand qua SmsService gateway
         // thay vì SendPhoneOtpEvent trực tiếp. Body chứa OTP code, source="auth", category="otp".
         _producer.Verify(p => p.PublishAsync(It.Is<SendSmsCommand>(c =>
-            c.PhoneNumber == "0900111" &&
+            c.PhoneNumber == "+84900111" &&
             c.Message.Contains(account.OtpCode!) &&
             c.SourceService == "auth" &&
             c.Category == "otp"),

@@ -17,6 +17,9 @@ public interface ITwoFactorChallengeStore
 
     /// <summary>Xóa challenge (dùng khi verify thành công hoặc vượt max attempts).</summary>
     Task InvalidateAsync(string token, CancellationToken ct = default);
+
+    /// <summary>Xóa toàn bộ challenge token đang pending cho 1 account (dùng khi logout). Không throw nếu không có challenge.</summary>
+    Task InvalidateByAccountAsync(Guid accountId, CancellationToken ct = default);
 }
 
 public sealed record TwoFactorChallengeData(Guid AccountId, string IpAddress, string UserAgent, int Attempts, DateTime CreatedAtUtc);

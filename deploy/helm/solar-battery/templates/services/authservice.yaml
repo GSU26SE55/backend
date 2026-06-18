@@ -88,6 +88,35 @@ spec:
           periodSeconds: 10
         resources:
           {{- toYaml $svc.resources | nindent 10 }}
+        # GH-295 — Data Protection keys cho 2FA secret encryption.
+        # Volume PHẢI persist cross-pod-restart. Mất volume = mất khả năng decrypt
+        # mọi TwoFactorSecret trong DB. Backup cùng postgres-data.
+        volumeMounts:
+        - name: auth-dataprotection-keys
+          mountPath: /app/keys
+      volumes:
+      - name: auth-dataprotection-keys
+        persistentVolumeClaim:
+          claimName: auth-dataprotection-keys-pvc
+---
+# GH-295 — PVC cho DataProtection keys. ReadWriteOnce vì AuthService chỉ chạy single-replica
+# (key file là local state, không thể share giữa pods). Khi scale → cần chuyển sang Redis-backed
+# IDataProtectionRepository thay vì file system.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: auth-dataprotection-keys-pvc
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "authservice") | nindent 4 }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $svc.dataProtectionKeys.storage | default "128Mi" }}
+  {{- if $svc.dataProtectionKeys.storageClass }}
+  storageClassName: {{ $svc.dataProtectionKeys.storageClass | quote }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service

@@ -24,9 +24,7 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
 
     public async Task<AccountResponse> Handle(SetMyAvatarCommand request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()

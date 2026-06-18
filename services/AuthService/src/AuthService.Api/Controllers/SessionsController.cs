@@ -52,9 +52,12 @@ public class SessionsController : ControllerBase
     [ProducesResponseType(typeof(SessionListResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMySessions(
         [FromQuery] bool activeOnly = true,
+        [FromQuery] string? deviceId = null, // #AUTH-44: filter sessions theo DeviceId
         CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new GetMySessionsQuery { ActiveOnly = activeOnly }, cancellationToken);
+        var result = await _mediator.Send(
+            new GetMySessionsQuery { ActiveOnly = activeOnly, DeviceId = deviceId },
+            cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 

@@ -33,6 +33,15 @@ builder.Services.AddAuthServiceInfrastructure(builder.Configuration);
 builder.Services.AddIdempotencyKey(builder.Configuration);
 builder.Services.AddOtpRateLimiting();
 
+// #AUTH-60: health checks chuẩn k8s — /live (liveness, app process alive),
+// /ready (readiness, deps ready: DB + Redis + RabbitMQ), /health (full report).
+// Tag "live" = không touch deps. Tag "ready" = check deps. Custom checks tránh phụ thuộc
+// package extra (Microsoft.Extensions.Diagnostics.HealthChecks.*).
+builder.Services.AddHealthChecks()
+    .AddCheck<AuthService.Api.HealthChecks.PostgresHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<AuthService.Api.HealthChecks.RedisHealthCheck>("redis", tags: new[] { "ready" })
+    .AddCheck<AuthService.Api.HealthChecks.RabbitMqHealthCheck>("rabbitmq", tags: new[] { "ready" });
+
 // Data Protection — encrypt TwoFactorSecret at rest (GH-295).
 // Keys persist tới /app/keys (mount Docker volume `auth-dataprotection-keys` để cross-restart).
 //
@@ -127,6 +136,9 @@ if (!app.Environment.IsEnvironment("Docker")
 app.UseCors("AllowAll");
 app.UseRateLimiter();
 app.UseAuthentication();
+// #AUTH-54: chạy SAU JwtBearer authentication, TRƯỚC Authorization.
+// Nếu jti hoặc account đã bị revoke → trả 401 ngay, không cho qua Authorization.
+app.UseMiddleware<AuthService.Api.Middleware.TokenRevocationMiddleware>();
 app.UseAuthorization();
 
 // Idempotency-Key middleware (sau Auth, trước MapControllers) — chống duplicate POST/PUT/PATCH
@@ -134,6 +146,20 @@ app.UseAuthorization();
 app.UseIdempotencyKey();
 
 app.MapControllers();
+
+// #AUTH-60: k8s probes.
+// /live — liveness: app process alive. Predicate: skip all deps checks → luôn 200 nếu app run.
+// /ready — readiness: full deps probe (postgres, redis). Predicate: chỉ check "ready" tag.
+// /health — full report (alias /ready).
+app.MapHealthChecks("/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+app.MapHealthChecks("/health");
 
 // Expose /metrics endpoint cho Prometheus scrape.
 app.MapMetrics();

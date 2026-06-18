@@ -18,9 +18,7 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
 
     public async Task<AccountActionResponse> Handle(DeleteStaffSkillCommand request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var skillCode = request.SkillCode.Trim();
         var skill = await _unitOfWork.StaffSkills

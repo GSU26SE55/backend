@@ -10,12 +10,15 @@ namespace AuthService.Infrastructure.Implements.Services;
 public class TwoFactorChallengeStore : ITwoFactorChallengeStore
 {
     private const string KeyPrefix = "2fa:challenge:";
+    private const string AccountIndexPrefix = "2fa:account:";
     private const string FieldData = "data";
     private const string FieldAttempts = "attempts";
 
     private readonly IConnectionMultiplexer _redis;
 
     public TwoFactorChallengeStore(IConnectionMultiplexer redis) => _redis = redis;
+
+    private static string AccountIndexKey(Guid accountId) => $"{AccountIndexPrefix}{accountId:N}:challenges";
 
     public async Task<string> CreateAsync(Guid accountId, string ipAddress, string userAgent, TimeSpan ttl, CancellationToken ct = default)
     {
@@ -32,6 +35,12 @@ public class TwoFactorChallengeStore : ITwoFactorChallengeStore
             new HashEntry(FieldAttempts, 0),
         });
         await db.KeyExpireAsync(key, ttl);
+
+        // Secondary index để invalidate-by-account (logout flow). TTL = challenge TTL + buffer.
+        var indexKey = AccountIndexKey(accountId);
+        await db.SetAddAsync(indexKey, token);
+        await db.KeyExpireAsync(indexKey, ttl.Add(TimeSpan.FromMinutes(1)));
+
         return token;
     }
 
@@ -77,6 +86,23 @@ public class TwoFactorChallengeStore : ITwoFactorChallengeStore
             return;
         var db = _redis.GetDatabase();
         await db.KeyDeleteAsync(KeyPrefix + token);
+    }
+
+    public async Task InvalidateByAccountAsync(Guid accountId, CancellationToken ct = default)
+    {
+        if (accountId == Guid.Empty)
+            return;
+        var db = _redis.GetDatabase();
+        var indexKey = AccountIndexKey(accountId);
+        var tokens = await db.SetMembersAsync(indexKey);
+        if (tokens.Length > 0)
+        {
+            var keys = new RedisKey[tokens.Length];
+            for (var i = 0; i < tokens.Length; i++)
+                keys[i] = KeyPrefix + (string)tokens[i]!;
+            await db.KeyDeleteAsync(keys);
+        }
+        await db.KeyDeleteAsync(indexKey);
     }
 
     private sealed record ChallengePayload(Guid AccountId, string IpAddress, string UserAgent, DateTime CreatedAtUtc);

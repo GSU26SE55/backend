@@ -81,7 +81,8 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
 
         using var db2 = _factory.CreateDbContext();
         var acc2 = await db2.Users.FirstAsync(a => a.Email == "updatephone@example.com");
-        acc2.PhoneNumber.Should().Be("0900222");
+        // #AUTH-39: PhoneNormalizer convert 09xx → +849xx (E.164).
+        acc2.PhoneNumber.Should().Be("+84900222");
         acc2.PhoneConfirmed.Should().BeFalse();
         acc2.FullName.Should().Be("Updated Name");
     }

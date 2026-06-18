@@ -57,7 +57,7 @@ public class ProfileExtensionHandlerTests
         {
             AccountId = account.Id,
             FullName = "New Name",
-            PhoneNumber = "0900123456",
+            PhoneNumber = "+84900123456",
             Address = "District 1",
             BirthDate = birthDate,
             TimeZone = "Asia/Ho_Chi_Minh"
@@ -65,7 +65,7 @@ public class ProfileExtensionHandlerTests
 
         response.IsSuccess.Should().BeTrue();
         account.FullName.Should().Be("New Name");
-        account.PhoneNumber.Should().Be("0900123456");
+        account.PhoneNumber.Should().Be("+84900123456");
         account.Address.Should().Be("District 1");
         account.DateOfBirth.Should().Be(birthDate);
         response.Data!.Profile!.Address.Should().Be("District 1");
