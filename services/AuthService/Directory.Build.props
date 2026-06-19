@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    #AUTH-81 — Async/await anti-pattern enforcement cho AuthService.
+    Apply cho TẤT CẢ project con (Api/Application/Domain/Infrastructure + Tests).
+    Roslyn analyzer:
+      - VSTHRD002: cấm .Result / .Wait() / .GetAwaiter().GetResult() (sync-over-async deadlock risk)
+      - VSTHRD100: cấm async void method (exception bị nuốt + crash process)
+      - VSTHRD110: cấm gọi async method mà không await/observe Task
+      - CA2200:    throw; thay throw ex; (preserve stack trace)
+    Severity được set trong .editorconfig (root) — search "AUTH-81".
+  -->
+
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisMode>Default</AnalysisMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.10.48">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

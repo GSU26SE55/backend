@@ -5,6 +5,7 @@ using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Interfaces.Services;
+using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +18,10 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginCommand, LoginResponse>
 {
     private const int MaxAttemptsPerChallenge = 5;
+
+    // #AUTH-48: trusted device TTL — 30 ngày. Sau hạn, device row vẫn giữ làm audit
+    // nhưng IsActiveAt(now) trả false → user phải re-trust.
+    private static readonly TimeSpan TrustedDeviceTtl = TimeSpan.FromDays(30);
 
     // #AUTH-45: per-account rate limit cho backup code (chống brute-force qua nhiều challenge).
     // 8 backup codes × 5 attempts/challenge = 40 attempts có thể tích lũy nếu attacker spam challenge.
@@ -193,6 +198,14 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var (tokens, sessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
 
+        // #AUTH-48: Trust device — chỉ cấp khi user opt-in + đi qua path TOTP/SMS (không cấp lúc backup code).
+        // Backup code là emergency, không trust device emergency.
+        if (request.TrustDevice && !request.IsBackupCode)
+        {
+            await TryAddOrRefreshTrustedDeviceAsync(account.Id, deviceId, userAgent, ipAddress,
+                request.TrustDeviceLabel, cancellationToken);
+        }
+
         // #AUTH-78: metric per method success.
         var resultLabel = request.IsSmsCode ? "sms_success" : (request.IsBackupCode ? "backup_success" : "totp_success");
         AppMetrics.Auth2FAChallengeTotal.WithLabels(resultLabel).Inc();
@@ -235,6 +248,79 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
             Message = "Đăng nhập thành công.",
             Data = new LoginResultDto { Tokens = tokens }
         };
+    }
+
+    /// <summary>
+    /// #AUTH-48: Add 1 row TrustedDevice cho account+fingerprint, hoặc refresh ExpiresAt nếu đã có.
+    /// Best-effort: nếu fingerprint không compute được (deviceId/UA null) → skip silently.
+    /// Audit publish bên trong (cùng SaveChanges với business flow).
+    /// </summary>
+    private async Task TryAddOrRefreshTrustedDeviceAsync(
+        Guid accountId,
+        string? deviceId,
+        string? userAgent,
+        string? ipAddress,
+        string? userLabel,
+        CancellationToken cancellationToken)
+    {
+        var fingerprint = TrustedDeviceFingerprintHelper.ComputeFingerprint(deviceId, userAgent);
+        var ipPrefix = TrustedDeviceFingerprintHelper.ComputeIpPrefix(ipAddress);
+        if (fingerprint == null || ipPrefix == null)
+            return; // Không đủ data để trust — skip silently.
+
+        var label = string.IsNullOrWhiteSpace(userLabel)
+            ? TrustedDeviceFingerprintHelper.GenerateLabel(userAgent)
+            : userLabel.Trim();
+
+        var now = DateTime.UtcNow;
+        var expiresAt = now.Add(TrustedDeviceTtl);
+
+        // Lookup row hiện tại cho cùng (account, fingerprint) — KHÔNG filter by IpPrefix
+        // vì user có thể trust lại từ subnet khác (vd về quê) → update IpPrefix.
+        var existing = await _unitOfWork.TrustedDevices
+            .GetAllAsync()
+            .FirstOrDefaultAsync(td => td.AccountId == accountId
+                && td.DeviceFingerprintHash == fingerprint
+                && !td.IsDeleted, cancellationToken);
+
+        if (existing != null)
+        {
+            // Refresh: extend TTL + clear revoke (user re-trust lại sau khi revoke).
+            existing.IpPrefix = ipPrefix;
+            existing.Label = label;
+            existing.UserAgentSnapshot = userAgent;
+            existing.TrustedAt = now;
+            existing.ExpiresAt = expiresAt;
+            existing.RevokedAt = null;
+            existing.RevokedReason = null;
+            _unitOfWork.TrustedDevices.UpdateAsync(existing);
+        }
+        else
+        {
+            var device = new TrustedDevice
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                DeviceFingerprintHash = fingerprint,
+                IpPrefix = ipPrefix,
+                Label = label,
+                UserAgentSnapshot = userAgent,
+                TrustedAt = now,
+                ExpiresAt = expiresAt,
+                UsageCount = 0
+            };
+            await _unitOfWork.TrustedDevices.AddAsync(device);
+        }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.TrustedDeviceAdded, accountId, IsSuccess: true,
+            ActorAccountIdOverride: accountId,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["label"] = label,
+                ["ipPrefix"] = ipPrefix,
+                ["ttlDays"] = (int)TrustedDeviceTtl.TotalDays
+            }), cancellationToken);
     }
 
     /// <summary>

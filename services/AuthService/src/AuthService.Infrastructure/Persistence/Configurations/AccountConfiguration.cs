@@ -110,6 +110,10 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasColumnName("provider")
             .HasMaxLength(50);
 
+        // #AUTH-47: account merge tombstone fields.
+        builder.Property(a => a.MergedIntoId).HasColumnName("merged_into_id");
+        builder.Property(a => a.MergedAt).HasColumnName("merged_at");
+
         builder.Property(a => a.InvitationToken)
             .HasColumnName("invitation_token")
             .HasMaxLength(128);

@@ -17,12 +17,12 @@ namespace AuthService.Application.CQRS.Handler.Account;
 
 public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, AccountActionResponse>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
 
-    // #AUTH-24: reserve email mới trong Redis suốt giai đoạn chờ confirm OTP (10 phút). Chống race
+    // #AUTH-24: reserve email mới trong Redis suốt giai đoạn chờ confirm OTP (5 phút). Chống race
     // user A đang chờ verify đổi sang X, user B register/change-email X cùng lúc.
     private const string EmailReserveKeyPrefix = "email_reserve:";
-    private static readonly TimeSpan EmailReserveTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan EmailReserveTtl = TimeSpan.FromMinutes(5);
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;

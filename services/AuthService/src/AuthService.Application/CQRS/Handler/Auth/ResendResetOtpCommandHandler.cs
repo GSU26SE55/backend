@@ -14,7 +14,7 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpCommand, CommonResponse<string>>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
     private const int ResendCooldownSeconds = 60;
 
     private readonly IAuthUnitOfWork _unitOfWork;

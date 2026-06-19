@@ -25,4 +25,12 @@ public interface IGenericRepository<T> where T : class
     void DeleteAsync(T entity);
 
     Task<bool> AnyAsync(Expression<Func<T, bool>> predicate);
+
+    /// <summary>
+    /// #AUTH-34: Reload entity từ database (overwrite tracker với current values từ DB).
+    /// Dùng sau khi <see cref="System.Data.Common.DbException"/> hoặc <c>DbUpdateConcurrencyException</c>
+    /// để retry-safe — sau Reload, entity reflect state DB hiện tại + RowVersion token mới.
+    /// No-op nếu entity chưa được track (Detached).
+    /// </summary>
+    Task ReloadAsync(T entity, CancellationToken cancellationToken = default);
 }

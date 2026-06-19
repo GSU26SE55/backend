@@ -140,7 +140,7 @@ public class ConfirmEmailChangeCommandHandlerTests
         Status = AccountStatusEnum.Active,
         EmailConfirmed = true,
         OtpCode = otp,
-        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(8),
+        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(3),
         OtpPurpose = OtpPurposeEnum.EmailChange
     };
 

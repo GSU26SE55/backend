@@ -72,4 +72,19 @@ public enum AuditActionEnum
     RoleDeleted = 96,
     PermissionGranted = 97,
     PermissionRevoked = 98,
+
+    // Trusted Device (110-119) — #AUTH-48
+    TrustedDeviceAdded = 110,
+    TrustedDeviceRevoked = 111,
+    TrustedDeviceAllRevoked = 112,
+    LoginWithTrustedDevice = 113,
+
+    // Cross-device 2FA (120-129) — #AUTH-51
+    TwoFactorSetupCrossDeviceRequested = 120,
+    TwoFactorSetupCrossDeviceConfirmed = 121,
+    TwoFactorSetupCrossDeviceExpired = 122,
+
+    // Account Merge (130-139) — #AUTH-47
+    AccountMerged = 130,
+    AccountMergeRejected = 131,
 }

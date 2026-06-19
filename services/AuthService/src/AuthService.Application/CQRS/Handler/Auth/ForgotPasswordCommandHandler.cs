@@ -17,7 +17,7 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswordCommand, CommonResponse<string>>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
 
     // #AUTH-13: per-email rate limit (bổ sung tầng cho IP-based PolicyAnonOtp).
     private const int MaxAttemptsPerHour = 10;

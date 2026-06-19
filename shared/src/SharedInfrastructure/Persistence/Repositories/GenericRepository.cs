@@ -55,4 +55,13 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
     {
         return await _dbSet.AnyAsync(predicate);
     }
+
+    /// <summary>#AUTH-34: reload entity từ DB sau concurrency conflict.</summary>
+    public async Task ReloadAsync(T entity, CancellationToken cancellationToken = default)
+    {
+        var entry = _context.Entry(entity);
+        if (entry.State == EntityState.Detached)
+            return;
+        await entry.ReloadAsync(cancellationToken);
+    }
 }

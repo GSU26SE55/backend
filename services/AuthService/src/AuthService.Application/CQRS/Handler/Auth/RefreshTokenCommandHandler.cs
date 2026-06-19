@@ -168,9 +168,10 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         existing.ReplacedByToken = newHashed;
         _unitOfWork.RefreshTokens.UpdateAsync(existing);
 
-        account.LastLoginAt = DateTime.UtcNow;
-        account.LastLoginIp = ipAddress;
-        _unitOfWork.Accounts.UpdateAsync(account);
+        // #AUTH-33: KHÔNG update LastLoginAt/LastLoginIp ở refresh path. Refresh token ≠ login event.
+        // Field 'last login' giữ semantic chuẩn = lần user nhập password + pass 2FA gần nhất
+        // (set ở LoginCommandHandler / Verify2FALoginCommandHandler / GoogleCallbackCommandHandler).
+        // Audit history đầy đủ có ở LoginAttempt + audit_logs, độc lập với field display này.
 
         // Rotation tạo new session → enforce limit. Existing token vừa chuyển Used không tính active.
         await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);

@@ -14,7 +14,7 @@ namespace AuthService.Infrastructure.BackgroundJobs;
 ///
 /// Trigger: <c>OtpPurpose = EmailChange</c> + <c>OtpExpiredAt &lt; now - 24h</c>.
 /// (Không có field <c>PendingEmailRequestedAt</c> riêng, dùng OtpExpiredAt làm proxy — OTP gen ra
-/// với TTL 10 phút, nên cleanup chỉ xảy ra 24h SAU khi OTP đã expire ~ 24h10p sau lúc request.)
+/// với TTL 5 phút (#AUTH-14), nên cleanup chỉ xảy ra 24h SAU khi OTP đã expire ~ 24h5p sau lúc request.)
 ///
 /// Daily 02:00 UTC. Honor CancellationToken (graceful shutdown).
 /// </summary>

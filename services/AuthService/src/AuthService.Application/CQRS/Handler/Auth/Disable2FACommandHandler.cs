@@ -1,3 +1,4 @@
+using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
@@ -17,19 +18,22 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
     private readonly ITotpService _totp;
     private readonly ITwoFactorSecretProtector _protector;
     private readonly IPublisher _publisher;
+    private readonly IMediator _mediator;
 
     public Disable2FACommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
         ITotpService totp,
         ITwoFactorSecretProtector protector,
-        IPublisher publisher)
+        IPublisher publisher,
+        IMediator mediator)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _totp = totp;
         _protector = protector;
         _publisher = publisher;
+        _mediator = mediator;
     }
 
     public async Task<CommonResponse<string>> Handle(Disable2FACommand request, CancellationToken cancellationToken)
@@ -105,6 +109,14 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
         ), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // #AUTH-48: revoke tất cả trusted device sau disable 2FA — trust device không ý nghĩa nếu không có 2FA.
+        // Chạy sau SaveChanges để tránh transaction nesting (RevokeAll cũng SaveChanges).
+        await _mediator.Send(new RevokeAllTrustedDevicesCommand
+        {
+            AccountId = account.Id,
+            Reason = "2FA disabled"
+        }, cancellationToken);
 
         return new CommonResponse<string>
         {

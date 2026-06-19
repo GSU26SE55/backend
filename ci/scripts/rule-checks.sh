@@ -6,6 +6,15 @@
 #   3. Entity mới trong Domain/Entities/ phải extend AuditableEntity
 #   4. Sprint 5B #233 ADR-017 — Energy/CO2 scope creep guard
 #
+# Note — additional async/await rules enforced ở STAGE 3 (dotnet build), KHÔNG cần check ở đây:
+#   AUTH-81 (2026-06-19): Microsoft.VisualStudio.Threading.Analyzers via
+#   services/AuthService/Directory.Build.props + .editorconfig severity=error:
+#     - VSTHRD002 (.Result, .Wait(), .GetAwaiter().GetResult())
+#     - VSTHRD100 (async void)
+#     - VSTHRD110 (unobserved task)
+#     - CA2200 (throw ex; phải dùng throw;)
+#   → Build sẽ fail nếu code mới vi phạm, KHÔNG cần grep diff ở stage này.
+#
 # Env:
 #   BASE_REF  → ref so sánh (default: origin/dev)
 #

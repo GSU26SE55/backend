@@ -6,6 +6,7 @@ using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.DTOs.Response.Login;
+using AuthService.Application.DTOs.Response.TrustedDevice;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -180,7 +181,7 @@ public class AccountsController : ControllerBase
     ///
     /// Cách hoạt động:
     /// - AccountId lấy từ JWT, client không tự truyền.
-    /// - Handler verify password hiện tại, lưu email mới vào <c>PendingEmail</c>, sinh OTP purpose <c>EmailChange</c> (TTL 10 phút) và gửi OTP tới email mới qua outbox.
+    /// - Handler verify password hiện tại, lưu email mới vào <c>PendingEmail</c>, sinh OTP purpose <c>EmailChange</c> (TTL 5 phút, #AUTH-14) và gửi OTP tới email mới qua outbox.
     /// </remarks>
     /// <param name="command">Email mới và mật khẩu hiện tại.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
@@ -692,6 +693,86 @@ public class AccountsController : ControllerBase
         };
 
         var response = await _mediator.Send(query, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    // ============== #AUTH-48 Trusted Device endpoints ==============
+
+    /// <summary>
+    /// #AUTH-48: Liệt kê tất cả trusted device đang active của tài khoản hiện tại.
+    /// </summary>
+    /// <remarks>
+    /// Active = chưa revoke + chưa hết hạn TTL. Trả về thêm flag <c>isCurrentDevice</c> nếu device hiện tại
+    /// (theo X-Device-Id + UA) match. Dùng để hiển thị trên Settings page.
+    /// </remarks>
+    /// <response code="200">Danh sách thiết bị tin cậy.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpGet("me/trusted-devices")]
+    [ProducesResponseType(typeof(CommonResponse<List<TrustedDeviceDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyTrustedDevices(CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<List<TrustedDeviceDto>> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var response = await _mediator.Send(new GetMyTrustedDevicesQuery { AccountId = userId.Value }, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    /// <summary>
+    /// #AUTH-48: User revoke 1 trusted device cụ thể (vd thiết bị mất, đã bán).
+    /// </summary>
+    /// <remarks>
+    /// Soft-revoke: set RevokedAt + RevokedReason="User revoked", giữ row làm audit. Sau revoke,
+    /// device đó nếu login sẽ phải pass 2FA challenge trở lại.
+    /// </remarks>
+    /// <response code="200">Revoke thành công (hoặc device đã revoke từ trước).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="404">Device không tồn tại hoặc không thuộc account hiện tại.</response>
+    [HttpDelete("me/trusted-devices/{id:guid}")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeTrustedDevice(Guid id, CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        var response = await _mediator.Send(new RevokeTrustedDeviceCommand
+        {
+            AccountId = userId.Value,
+            TrustedDeviceId = id
+        }, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    /// <summary>
+    /// #AUTH-48: Revoke TẤT CẢ trusted device của tài khoản hiện tại.
+    /// </summary>
+    /// <remarks>
+    /// Dùng khi nghi ngờ account bị compromise hoặc khi muốn force-2FA-toàn-bộ. Cũng được call
+    /// automatically khi ChangePassword hoặc Disable2FA — endpoint này dành cho user manual.
+    /// </remarks>
+    /// <response code="200">Đã revoke tất cả (kèm count trong message).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpDelete("me/trusted-devices")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RevokeAllTrustedDevices(CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        var response = await _mediator.Send(new RevokeAllTrustedDevicesCommand
+        {
+            AccountId = userId.Value,
+            Reason = "User manual revoke-all"
+        }, cancellationToken);
         return StatusCode(response.StatusCode, response);
     }
 

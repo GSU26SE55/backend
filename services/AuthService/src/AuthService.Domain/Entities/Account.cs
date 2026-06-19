@@ -96,6 +96,15 @@ public class Account : AuditableEntity
 
     public Role Role { get; set; } = null!;
 
+    /// <summary>
+    /// #AUTH-47: Khi account này được merge VÀO 1 account khác (tức là account này là "source/secondary"),
+    /// lưu Id của target/primary account. Account.IsDeleted = true + MergedIntoId set → tombstone row.
+    /// Null nếu account chưa bị merge.
+    /// </summary>
+    public Guid? MergedIntoId { get; set; }
+
+    public DateTime? MergedAt { get; set; }
+
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 
     public AccountProfile? Profile { get; set; }

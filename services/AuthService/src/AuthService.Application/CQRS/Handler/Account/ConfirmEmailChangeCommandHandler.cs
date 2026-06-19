@@ -95,7 +95,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // #AUTH-24: release Redis reservation cho email mới (best-effort, key tự expire 10p nếu fail).
+        // #AUTH-24: release Redis reservation cho email mới (best-effort, key tự expire 5p nếu fail — #AUTH-14).
         try
         {
             var db = _redis.GetDatabase();

@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -73,22 +74,63 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             };
         }
 
-        account.RoleId = request.RoleId;
-        account.RoleAssignedAt = DateTime.UtcNow;
-        account.RoleAssignedBy = ResolveActorId();
-        _unitOfWork.Accounts.UpdateAsync(account);
+        var actorId = ResolveActorId();
+        var newRoleId = request.RoleId;
 
-        await _publisher.Publish(new AuditTrailNotification(
-            AuditActionEnum.RoleAssigned, request.AccountId, IsSuccess: true,
-            TargetEmail: account.Email,
-            Metadata: new Dictionary<string, object?>
+        // #AUTH-34: retry trên DbUpdateConcurrencyException — race với ChangePassword / Disable / admin khác.
+        var auditPublished = false;
+        var accountInvalidAfterReload = false;
+
+        await ConcurrencyRetryHelper.ExecuteAsync<bool>(
+            operation: async (attempt, ct) =>
             {
-                ["previousRoleId"] = previousRoleId.ToString(),
-                ["newRoleId"] = request.RoleId.ToString(),
-                ["newRoleName"] = role.Name
-            }), cancellationToken);
+                if (attempt > 1 && account.IsDeleted)
+                {
+                    accountInvalidAfterReload = true;
+                    return false;
+                }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                // Re-check trùng role sau reload (admin khác có thể đã đổi sang role này)
+                if (attempt > 1 && account.RoleId == newRoleId)
+                {
+                    accountInvalidAfterReload = true;
+                    return false;
+                }
+
+                account.RoleId = newRoleId;
+                account.RoleAssignedAt = DateTime.UtcNow;
+                account.RoleAssignedBy = actorId;
+                _unitOfWork.Accounts.UpdateAsync(account);
+
+                if (!auditPublished)
+                {
+                    await _publisher.Publish(new AuditTrailNotification(
+                        AuditActionEnum.RoleAssigned, request.AccountId, IsSuccess: true,
+                        TargetEmail: account.Email,
+                        Metadata: new Dictionary<string, object?>
+                        {
+                            ["previousRoleId"] = previousRoleId.ToString(),
+                            ["newRoleId"] = newRoleId.ToString(),
+                            ["newRoleName"] = role.Name
+                        }), ct);
+                    auditPublished = true;
+                }
+
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            },
+            reload: ct => _unitOfWork.Accounts.ReloadAsync(account, ct),
+            cancellationToken: cancellationToken);
+
+        if (accountInvalidAfterReload)
+        {
+            return new AccountActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "Tài khoản đã bị thay đổi bởi tiến trình khác. Vui lòng thử lại."
+            };
+        }
 
         return new AccountActionResponse
         {
