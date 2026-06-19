@@ -88,6 +88,104 @@ namespace TicketService.Infrastructure.Migrations
                     b.ToTable("customer_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("TicketService.Domain.Entities.KbArticleVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ArticleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("article_id");
+
+                    b.Property<string>("ChangeDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("change_description");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DiagnosisSteps")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("diagnosis_steps");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("MajorVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("major_version");
+
+                    b.Property<string>("ManagerRejectReason")
+                        .HasColumnType("text")
+                        .HasColumnName("manager_reject_reason");
+
+                    b.Property<int>("MinorVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("minor_version");
+
+                    b.Property<string>("RecommendedParts")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("recommended_parts");
+
+                    b.Property<string>("SolutionSteps")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("solution_steps");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Symptoms")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("symptoms");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tags");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("MajorVersion");
+
+                    b.HasIndex("ArticleId", "MajorVersion", "MinorVersion")
+                        .IsUnique();
+
+                    b.ToTable("kb_article_versions", (string)null);
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.KnowledgeBaseArticle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -133,9 +231,26 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsInternalOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ManagerRejectReason")
+                        .HasColumnType("text")
+                        .HasColumnName("manager_reject_reason");
+
+                    b.Property<Guid?>("PendingReviewBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_review_by");
+
                     b.Property<string>("RecommendedParts")
                         .HasColumnType("jsonb")
                         .HasColumnName("recommended_parts");
+
+                    b.Property<bool>("ReviewRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("review_required");
 
                     b.Property<string>("SolutionSteps")
                         .IsRequired()
@@ -1177,6 +1292,17 @@ namespace TicketService.Infrastructure.Migrations
                     b.ToTable("alert_ticket_saga_states", (string)null);
                 });
 
+            modelBuilder.Entity("TicketService.Domain.Entities.KbArticleVersion", b =>
+                {
+                    b.HasOne("TicketService.Domain.Entities.KnowledgeBaseArticle", "Article")
+                        .WithMany("Versions")
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.MaintenanceLog", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
@@ -1250,6 +1376,11 @@ namespace TicketService.Infrastructure.Migrations
                         .HasForeignKey("TicketId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.KnowledgeBaseArticle", b =>
+                {
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.Ticket", b =>

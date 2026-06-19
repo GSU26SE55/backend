@@ -16,5 +16,6 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<CustomerAccount> CustomerAccounts { get; }
     IGenericRepository<StaffAccount> StaffAccounts { get; }
     IGenericRepository<KnowledgeBaseArticle> KnowledgeBaseArticles { get; }
+    IGenericRepository<KbArticleVersion> KbArticleVersions { get; }
     IGenericRepository<TicketKbReference> TicketKbReferences { get; }
 }

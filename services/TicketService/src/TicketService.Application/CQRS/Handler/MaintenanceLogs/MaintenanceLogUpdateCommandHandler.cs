@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
@@ -101,7 +101,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             IsSuccess = true,
             StatusCode = 200,
             Message = "Cập nhật nhật ký bảo trì thành công.",
-            Data = new TicketActionDto
+            Data = new TicketActionDTO
             {
                 Id = log.Id.ToString(),
                 TicketId = ticket.Id.ToString(),

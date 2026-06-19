@@ -37,8 +37,8 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
 
     public async Task<RegisterResponse> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var phone = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
+        var phone = PhoneNormalizer.Normalize(request.PhoneNumber).Length == 0 ? null : PhoneNormalizer.Normalize(request.PhoneNumber);
 
         var existing = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -106,8 +106,8 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             existing.OtpPurpose = OtpPurposeEnum.Register;
             existing.FailedLoginAttempts = 0;
             existing.LockoutEndAt = null;
-            // Đảm bảo account có role hợp lệ — fallback Customer nếu chưa gán.
-            if (existing.RoleId == Guid.Empty)
+            // #AUTH-69: RoleId nullable. Check cả null lẫn Guid.Empty (legacy row backward-compat).
+            if (!existing.RoleId.HasValue || existing.RoleId.Value == Guid.Empty)
             {
                 existing.RoleId = CustomerRoleId;
                 existing.RoleAssignedAt = DateTime.UtcNow;
@@ -122,22 +122,78 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-            return Fail(409, "Email hoặc số điện thoại đã được sử dụng.");
+            // #AUTH-25: race condition — 2 request đồng thời pass duplicate check rồi cùng INSERT.
+            // PG raise 23505 (unique violation). Parse ConstraintName để phân biệt email vs phone.
+            // Inner exception là Npgsql.PostgresException; access qua reflection để tránh add Npgsql
+            // package vào Application layer.
+            var sqlState = ExtractSqlState(ex);
+            var constraint = ExtractConstraintName(ex);
+            if (sqlState == "23505")
+            {
+                if (!string.IsNullOrEmpty(constraint))
+                {
+                    var c = constraint.ToLowerInvariant();
+                    if (c.Contains("email"))
+                        return Fail(409, "Email đã được sử dụng.");
+                    if (c.Contains("phone"))
+                        return Fail(409, "Số điện thoại đã được sử dụng.");
+                }
+                return Fail(409, "Email hoặc số điện thoại đã được sử dụng.");
+            }
+            // Lỗi DB khác → log + 500.
+            _logger.LogError(ex, "Register SaveChanges failed with non-unique-violation DB error.");
+            return Fail(500, "Đăng ký thất bại do lỗi hệ thống. Vui lòng thử lại.");
         }
 
-        return new RegisterResponse
+        return BuildSuccess(normalizedEmail);
+    }
+
+    private static RegisterResponse BuildSuccess(string normalizedEmail) => new()
+    {
+        IsSuccess = true,
+        StatusCode = 201,
+        Message = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực OTP.",
+        Data = new RegisterResponseData
         {
-            IsSuccess = true,
-            StatusCode = 201,
-            Message = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực OTP.",
-            Data = new RegisterResponseData
+            Email = normalizedEmail,
+            OtpExpiresInSeconds = OtpLifetimeMinutes * 60
+        }
+    };
+
+    // #AUTH-25: trích SqlState + ConstraintName từ Npgsql.PostgresException qua reflection
+    // (giữ Application layer không phụ thuộc Npgsql package).
+    private static string? ExtractSqlState(Exception ex)
+    {
+        var inner = ex.InnerException;
+        while (inner != null)
+        {
+            var typeName = inner.GetType().FullName ?? string.Empty;
+            if (typeName.Contains("PostgresException", StringComparison.Ordinal))
             {
-                Email = normalizedEmail,
-                OtpExpiresInSeconds = OtpLifetimeMinutes * 60
+                var prop = inner.GetType().GetProperty("SqlState");
+                return prop?.GetValue(inner) as string;
             }
-        };
+            inner = inner.InnerException;
+        }
+        return null;
+    }
+
+    private static string? ExtractConstraintName(Exception ex)
+    {
+        var inner = ex.InnerException;
+        while (inner != null)
+        {
+            var typeName = inner.GetType().FullName ?? string.Empty;
+            if (typeName.Contains("PostgresException", StringComparison.Ordinal))
+            {
+                var prop = inner.GetType().GetProperty("ConstraintName");
+                return prop?.GetValue(inner) as string;
+            }
+            inner = inner.InnerException;
+        }
+        return null;
     }
 
     private static RegisterResponse Fail(int statusCode, string message)

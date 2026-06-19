@@ -24,6 +24,12 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
         return _dbSet.AsQueryable();
     }
 
+    /// <summary>#AUTH-35: opt-in tracking. tracking=false dùng AsNoTracking() cho read-only query.</summary>
+    public IQueryable<T> GetAllAsync(bool tracking)
+    {
+        return tracking ? _dbSet.AsQueryable() : _dbSet.AsNoTracking();
+    }
+
     public IQueryable<T> FindAsync(Expression<Func<T, bool>> predicate)
     {
         return _dbSet.Where(predicate);
@@ -48,5 +54,14 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
     public async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate)
     {
         return await _dbSet.AnyAsync(predicate);
+    }
+
+    /// <summary>#AUTH-34: reload entity từ DB sau concurrency conflict.</summary>
+    public async Task ReloadAsync(T entity, CancellationToken cancellationToken = default)
+    {
+        var entry = _context.Entry(entity);
+        if (entry.State == EntityState.Detached)
+            return;
+        await entry.ReloadAsync(cancellationToken);
     }
 }

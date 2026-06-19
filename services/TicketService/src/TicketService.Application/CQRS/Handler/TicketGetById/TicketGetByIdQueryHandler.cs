@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.Ticket;
-using TicketService.Application.DTOs.Response.Maintenance;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Maintenances;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
@@ -102,7 +102,6 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             MaintenanceLogs = ticket.MaintenanceLogs.Select(m => new MaintenanceLogDTO
             {
                 Id = m.Id.ToString(),
-                TicketId = m.TicketId.ToString(),
                 StaffId = m.StaffId.ToString(),
                 LogType = m.LogType,
                 Summary = m.Summary,

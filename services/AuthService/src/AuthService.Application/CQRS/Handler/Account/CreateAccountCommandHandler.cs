@@ -30,7 +30,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
 
     public async Task<AccountActionResponse> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var emailExists = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -48,7 +48,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
 
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
         {
-            var phone = request.PhoneNumber.Trim();
+            var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
             var phoneExists = await _unitOfWork.Accounts
                 .GetAllAsync()
                 .AnyAsync(a => a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
@@ -86,7 +86,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             Email = request.Email.Trim(),
             PasswordHash = _passwordHasher.Hash(request.Password),
             FullName = request.FullName.Trim(),
-            PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
+            PhoneNumber = PhoneNormalizer.Normalize(request.PhoneNumber).Length == 0 ? null : PhoneNormalizer.Normalize(request.PhoneNumber),
             DateOfBirth = request.DateOfBirth,
             Address = request.Address?.Trim(),
             EmailConfirmed = true,

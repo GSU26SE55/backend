@@ -200,6 +200,7 @@ public class Disable2FACommandHandlerTests
     private readonly Mock<ITotpService> _totp = new();
     private readonly Mock<ITwoFactorSecretProtector> _protector = new();
     private readonly Mock<IPublisher> _publisher = MockPublisher.NoOp();
+    private readonly Mock<IMediator> _mediator = new();
 
     public Disable2FACommandHandlerTests()
     {
@@ -207,7 +208,7 @@ public class Disable2FACommandHandlerTests
     }
 
     private Disable2FACommandHandler Build(Mock<AuthService.Application.Interfaces.Repositories.IAuthUnitOfWork> uow)
-        => new(uow.Object, _hasher.Object, _totp.Object, _protector.Object, _publisher.Object);
+        => new(uow.Object, _hasher.Object, _totp.Object, _protector.Object, _publisher.Object, _mediator.Object);
 
     [Fact]
     public async Task Disable_PasswordAndTotpOk_ClearsSecret()

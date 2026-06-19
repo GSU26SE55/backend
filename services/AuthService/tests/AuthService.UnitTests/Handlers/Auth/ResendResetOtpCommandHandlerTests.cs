@@ -81,7 +81,7 @@ public class ResendResetOtpCommandHandlerTests
             FullName = "U",
             Status = AccountStatusEnum.Active,
             OtpCode = "111111",
-            OtpExpiredAt = DateTime.UtcNow.AddMinutes(9).AddSeconds(45),
+            OtpExpiredAt = DateTime.UtcNow.AddMinutes(4).AddSeconds(45),
             OtpPurpose = OtpPurposeEnum.PasswordReset
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });

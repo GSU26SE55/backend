@@ -18,9 +18,7 @@ public class GetStaffAssignmentProfileQueryHandler : IRequestHandler<GetStaffAss
 
     public async Task<StaffAssignmentProfileResponse> Handle(GetStaffAssignmentProfileQuery request, CancellationToken cancellationToken)
     {
-        var validation = await request.ValidateAsync();
-        if (!validation.IsSuccess)
-            return validation;
+        // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
         var profile = await _unitOfWork.StaffProfiles
             .GetAllAsync()

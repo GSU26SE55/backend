@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
@@ -9,27 +11,36 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using StackExchange.Redis;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, AccountActionResponse>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
+
+    // #AUTH-24: reserve email mới trong Redis suốt giai đoạn chờ confirm OTP (5 phút). Chống race
+    // user A đang chờ verify đổi sang X, user B register/change-email X cùng lúc.
+    private const string EmailReserveKeyPrefix = "email_reserve:";
+    private static readonly TimeSpan EmailReserveTtl = TimeSpan.FromMinutes(5);
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<ChangeEmailCommandHandler> _logger;
 
     public ChangeEmailCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
         IMessageProducerService messageProducer,
+        IConnectionMultiplexer redis,
         ILogger<ChangeEmailCommandHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _messageProducer = messageProducer;
+        _redis = redis;
         _logger = logger;
     }
 
@@ -44,7 +55,7 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
             return Fail(401, "Mật khẩu hiện tại không chính xác.");
 
-        var newEmail = request.NewEmail.Trim().ToLowerInvariant();
+        var newEmail = EmailNormalizer.Normalize(request.NewEmail);
 
         if (account.Email.Equals(newEmail, StringComparison.OrdinalIgnoreCase))
             return Fail(422, "Email mới phải khác email hiện tại.");
@@ -55,6 +66,22 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
 
         if (emailTaken)
             return Fail(409, "Email mới đã được sử dụng bởi tài khoản khác.");
+
+        // #AUTH-24: SET NX reserve email mới với owner = current accountId.
+        // Nếu key đã tồn tại với owner khác → user khác đang trong flow đổi sang email này → reject.
+        // Nếu owner = mình → re-issue (user request OTP mới cùng email) — TTL refresh.
+        var reserveKey = BuildReserveKey(newEmail);
+        var reserveOwner = request.AccountId.ToString("N");
+        var db = _redis.GetDatabase();
+        var acquired = await db.StringSetAsync(reserveKey, reserveOwner, EmailReserveTtl, When.NotExists);
+        if (!acquired)
+        {
+            var existingOwner = await db.StringGetAsync(reserveKey);
+            if (existingOwner != reserveOwner)
+                return Fail(409, "Email mới đang được tài khoản khác xử lý. Vui lòng chọn email khác hoặc thử lại sau.");
+            // Cùng owner → refresh TTL.
+            await db.KeyExpireAsync(reserveKey, EmailReserveTtl);
+        }
 
         var otp = OtpHelper.GenerateOtp(6);
         account.PendingEmail = newEmail;
@@ -84,4 +111,11 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         StatusCode = statusCode,
         Message = message,
     };
+
+    /// <summary>#AUTH-24: key = "email_reserve:" + SHA256(normalizedEmail)[..16] để không lưu raw PII trong Redis.</summary>
+    private static string BuildReserveKey(string normalizedEmail)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedEmail));
+        return EmailReserveKeyPrefix + Convert.ToHexString(bytes)[..16];
+    }
 }

@@ -1,5 +1,6 @@
 using AuthService.Application.CQRS.Command.Session;
 using AuthService.Application.DTOs.Response.RefreshToken;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -37,8 +38,9 @@ public class RevokeAllSessionsCommandHandler : IRequestHandler<RevokeAllSessions
 
         if (request.ExceptCurrent && !string.IsNullOrWhiteSpace(request.CurrentRefreshToken))
         {
-            var current = request.CurrentRefreshToken;
-            query = query.Where(rt => rt.Token != current);
+            // #AUTH-01: DB chỉ lưu hash → so sánh "trừ token hiện tại" cũng phải qua hash.
+            var currentHash = RefreshTokenHasher.Hash(request.CurrentRefreshToken);
+            query = query.Where(rt => rt.Token != currentHash);
         }
 
         var sessions = await query.ToListAsync(cancellationToken);

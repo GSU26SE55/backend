@@ -34,6 +34,10 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
             .HasColumnName("issued_at")
             .IsRequired();
 
+        // #AUTH-28: thời điểm gốc của chain rotation. Nullable cho row cũ trước migration.
+        builder.Property(rt => rt.OriginalIssuedAt)
+            .HasColumnName("original_issued_at");
+
         builder.Property(rt => rt.ExpiredAt)
             .HasColumnName("expired_at")
             .IsRequired();

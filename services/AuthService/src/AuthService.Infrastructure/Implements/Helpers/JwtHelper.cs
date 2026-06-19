@@ -58,14 +58,17 @@ public class JwtHelper : IJwtHelper
 
         var expirationMinutes = ResolveAccessTokenExpirationMinutes();
 
+        // #AUTH-59: kid header để support key rotation. Multi-key validation đọc kid để chọn key đúng.
+        var kid = _configuration["JwtSettings:SigningKeyId"] ?? "v1";
+        var signingKey = new SymmetricSecurityKey(Key) { KeyId = kid };
+
         var TokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
             Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
             Issuer = Issuer,
             Audience = Audience,
-            SigningCredentials =
-                new SigningCredentials(new SymmetricSecurityKey(Key), SecurityAlgorithms.HmacSha256Signature)
+            SigningCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256Signature)
         };
 
         var Token = TokenHandler.CreateToken(TokenDescriptor);
@@ -98,7 +101,11 @@ public class JwtHelper : IJwtHelper
 
     public bool IsTokenValid(string token)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+
+        var (ok, _) = ValidateToken(token);
+        return ok;
     }
 
     public DateTime ConvertUnixTimeToDateTime(long utcExpiredDate)
@@ -109,40 +116,80 @@ public class JwtHelper : IJwtHelper
 
     public (bool, string?) ValidateToken(string AccessToken)
     {
-        var SecretKeyBytes = Encoding.UTF8.GetBytes(SecretKey);
+        if (string.IsNullOrWhiteSpace(AccessToken))
+            return (false, "Token is required.");
+
         var TokenHandler = new JwtSecurityTokenHandler();
+
+        // #AUTH-59: support multi-key validation — current + previous key cho phép token đã issue
+        // với key cũ vẫn pass cho đến khi tự expire.
+        var keys = new List<SecurityKey>
+        {
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretKey))
+            {
+                KeyId = _configuration["JwtSettings:SigningKeyId"] ?? "v1"
+            }
+        };
+        var previousKey = _configuration["JwtSettings:PreviousSecretKey"];
+        if (!string.IsNullOrEmpty(previousKey))
+        {
+            keys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(previousKey))
+            {
+                KeyId = _configuration["JwtSettings:PreviousSigningKeyId"] ?? "v0"
+            });
+        }
 
         var tokenValidateParam = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
+            ValidateIssuer = true,
+            ValidIssuer = _configuration["JwtSettings:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = _configuration["JwtSettings:Audience"],
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(SecretKeyBytes),
-
-            ValidateLifetime = false // ko kiem token het han
+            IssuerSigningKeys = keys,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
         };
 
-        //Check: token valid format
-        var tokenInVerification = TokenHandler.ValidateToken(AccessToken, tokenValidateParam, out var validatedToken);
-        if (validatedToken == null)
-            return (false, "Invalid format token!");
+        try
+        {
+            TokenHandler.ValidateToken(AccessToken, tokenValidateParam, out var validatedToken);
 
-        //Check: algorithm
-        if (validatedToken is not JwtSecurityToken jwtSecurityToken ||
-            jwtSecurityToken.Header.Alg == null ||
-            !jwtSecurityToken.Header.Alg.Equals(
-                SecurityAlgorithms.HmacSha256,
-                StringComparison.InvariantCultureIgnoreCase
-            ))
-            return (false, "Invalid Token Argorithm!");
+            if (validatedToken is not JwtSecurityToken jwtSecurityToken ||
+                string.IsNullOrEmpty(jwtSecurityToken.Header.Alg) ||
+                !jwtSecurityToken.Header.Alg.Equals(
+                    SecurityAlgorithms.HmacSha256,
+                    StringComparison.InvariantCultureIgnoreCase))
+            {
+                return (false, "Invalid token algorithm.");
+            }
 
-        //Check: Access Token expired or not
-        //var utcExpiredToken = long.Parse(tokenInVerification.Claims
-        //    .FirstOrDefault(t => t.Type == JwtRegisteredClaimNames.Exp).Value);
-        //var expiredDate = ConvertUnixTimeToDateTime(utcExpiredToken);
-
-        //if (expiredDate > DateTime.UtcNow) return (false, "Access Token has not expired yet!");s
-        return (true, null);
+            return (true, null);
+        }
+        catch (SecurityTokenExpiredException)
+        {
+            return (false, "Token expired.");
+        }
+        catch (SecurityTokenInvalidIssuerException)
+        {
+            return (false, "Invalid token issuer.");
+        }
+        catch (SecurityTokenInvalidAudienceException)
+        {
+            return (false, "Invalid token audience.");
+        }
+        catch (SecurityTokenInvalidSignatureException)
+        {
+            return (false, "Invalid token signature.");
+        }
+        catch (SecurityTokenException ex)
+        {
+            return (false, ex.Message);
+        }
+        catch (Exception)
+        {
+            return (false, "Invalid token.");
+        }
     }
 
     public string GenerateResetToken(Guid accountId, string email, int expiresInMinutes)
@@ -170,8 +217,14 @@ public class JwtHelper : IJwtHelper
 
     public (Guid? accountId, string? errorMessage) ValidateResetToken(string token)
     {
+        var (id, _, _, err) = ValidateResetTokenDetailed(token);
+        return (id, err);
+    }
+
+    public (Guid? accountId, string? jti, DateTime? expiresAtUtc, string? errorMessage) ValidateResetTokenDetailed(string token)
+    {
         if (string.IsNullOrWhiteSpace(token))
-            return (null, "Reset token không được để trống.");
+            return (null, null, null, "Reset token không được để trống.");
 
         try
         {
@@ -186,24 +239,27 @@ public class JwtHelper : IJwtHelper
                 ValidateAudience = false,
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
-            }, out _);
+            }, out var validated);
 
             if (principal.FindFirst(ResetTokenPurposeClaim)?.Value != ResetTokenPurposeValue)
-                return (null, "Token không phải dành cho reset password.");
+                return (null, null, null, "Token không phải dành cho reset password.");
 
             var raw = principal.FindFirst("AccountId")?.Value;
             if (!Guid.TryParse(raw, out var id))
-                return (null, "Token thiếu AccountId.");
+                return (null, null, null, "Token thiếu AccountId.");
 
-            return (id, null);
+            var jti = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            var exp = validated is JwtSecurityToken jwt ? (DateTime?)jwt.ValidTo : null;
+
+            return (id, jti, exp, null);
         }
         catch (SecurityTokenExpiredException)
         {
-            return (null, "Reset token đã hết hạn.");
+            return (null, null, null, "Reset token đã hết hạn.");
         }
         catch (Exception)
         {
-            return (null, "Reset token không hợp lệ.");
+            return (null, null, null, "Reset token không hợp lệ.");
         }
     }
 }

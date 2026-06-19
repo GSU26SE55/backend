@@ -110,6 +110,10 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasColumnName("provider")
             .HasMaxLength(50);
 
+        // #AUTH-47: account merge tombstone fields.
+        builder.Property(a => a.MergedIntoId).HasColumnName("merged_into_id");
+        builder.Property(a => a.MergedAt).HasColumnName("merged_at");
+
         builder.Property(a => a.InvitationToken)
             .HasColumnName("invitation_token")
             .HasMaxLength(128);
@@ -117,9 +121,9 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.InvitationExpiredAt)
             .HasColumnName("invitation_expired_at");
 
+        // #AUTH-69: nullable — account chưa gán role (vd vừa tạo qua Google OAuth, chờ admin onboard).
         builder.Property(a => a.RoleId)
-            .HasColumnName("role_id")
-            .IsRequired();
+            .HasColumnName("role_id");
 
         builder.Property(a => a.RoleAssignedAt)
             .HasColumnName("role_assigned_at");
@@ -144,7 +148,16 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.DeletedAt)
             .HasColumnName("deleted_at");
 
-        builder.HasIndex(a => a.Email).IsUnique();
+        // #AUTH-34: optimistic concurrency dùng PostgreSQL system column xmin (uint).
+        // Npgsql-specific helper: KHÔNG generate migration DDL — chỉ map system column có sẵn.
+        // EF gắn xmin vào WHERE clause khi UPDATE → 2 update song song → 1 fail DbUpdateConcurrencyException.
+        builder.UseXminAsConcurrencyToken();
+
+        // #AUTH-07: unique chỉ áp dụng cho account chưa xóa, cho phép soft-deleted account reuse email cũ.
+        builder.HasIndex(a => a.Email).IsUnique().HasFilter("\"is_deleted\" = false");
+        // #AUTH-75: composite non-unique index để query lookup "WHERE Email = X AND IsDeleted = false"
+        // hit cả 2 cột cùng lúc — pattern dùng nhiều ở Login/Register/ForgotPassword/Verify*.
+        builder.HasIndex(a => new { a.Email, a.IsDeleted }).HasDatabaseName("ix_accounts_email_isdeleted");
         builder.HasIndex(a => a.PhoneNumber).IsUnique().HasFilter("\"phone_number\" IS NOT NULL");
         builder.HasIndex(a => a.GoogleId).IsUnique().HasFilter("\"google_id\" IS NOT NULL");
         builder.HasIndex(a => a.Status);

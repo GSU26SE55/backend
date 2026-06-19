@@ -2,7 +2,7 @@ using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.TicketDeclareIncident;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -62,7 +62,7 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             IsSuccess = true,
             StatusCode = 200,
             Message = "Ticket declared as incident successfully.",
-            Data = new TicketActionDto
+            Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),
                 Code = ticket.Code,

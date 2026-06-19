@@ -111,6 +111,14 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end_at");
 
+                    b.Property<DateTime?>("MergedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("merged_at");
+
+                    b.Property<Guid?>("MergedIntoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("merged_into_id");
+
                     b.Property<string>("OtpCode")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
@@ -159,7 +167,7 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("role_assigned_by");
 
-                    b.Property<Guid>("RoleId")
+                    b.Property<Guid?>("RoleId")
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
@@ -188,10 +196,17 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"is_deleted\" = false");
 
                     b.HasIndex("GoogleId")
                         .IsUnique()
@@ -210,7 +225,89 @@ namespace AuthService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("Email", "IsDeleted")
+                        .HasDatabaseName("ix_accounts_email_isdeleted");
+
                     b.ToTable("accounts", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.AccountMergeLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AuditLogsLinked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("audit_logs_linked");
+
+                    b.Property<string>("ConflictResolutionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("conflict_resolution_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PerformedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("performed_by");
+
+                    b.Property<Guid>("PrimaryAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("primary_account_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("SecondaryAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("secondary_account_id");
+
+                    b.Property<string>("SecondaryAccountSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("secondary_account_snapshot_json");
+
+                    b.Property<int>("SessionsRevoked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sessions_revoked");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrimaryAccountId")
+                        .HasDatabaseName("ix_account_merge_logs_primary");
+
+                    b.HasIndex("SecondaryAccountId")
+                        .HasDatabaseName("ix_account_merge_logs_secondary");
+
+                    b.ToTable("account_merge_logs", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.AccountProfile", b =>
@@ -699,6 +796,10 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("jwt_id");
 
+                    b.Property<DateTime?>("OriginalIssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("original_issued_at");
+
                     b.Property<string>("ReplacedByToken")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -1021,13 +1122,107 @@ namespace AuthService.Infrastructure.Migrations
                     b.ToTable("staff_skills", (string)null);
                 });
 
+            modelBuilder.Entity("AuthService.Domain.Entities.TrustedDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeviceFingerprintHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("device_fingerprint_hash");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("IpPrefix")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("ip_prefix");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("label");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("revoked_reason");
+
+                    b.Property<DateTime>("TrustedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("trusted_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("UsageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("usage_count");
+
+                    b.Property<string>("UserAgentSnapshot")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("user_agent_snapshot");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "DeviceFingerprintHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_trusted_devices_account_fingerprint_active")
+                        .HasFilter("\"is_deleted\" = false AND \"revoked_at\" IS NULL");
+
+                    b.HasIndex("AccountId", "ExpiresAt")
+                        .HasDatabaseName("ix_trusted_devices_account_expires");
+
+                    b.ToTable("trusted_devices", (string)null);
+                });
+
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>
                 {
                     b.HasOne("AuthService.Domain.Entities.Role", "Role")
                         .WithMany("Accounts")
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Role");
                 });
@@ -1115,6 +1310,17 @@ namespace AuthService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("StaffProfile");
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.TrustedDevice", b =>
+                {
+                    b.HasOne("AuthService.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.Account", b =>

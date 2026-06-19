@@ -53,7 +53,11 @@
 
 ## TypeScript Types
 
-Copy trực tiếp vào `src/features/file-storage/types/file-storage.types.ts`.
+Copy vào feature `file-storage`. Theo rule FE (enum không define inline trong types file):
+- 2 enum `FilePurposeEnum`, `FileStatusEnum` → đặt ở `src/features/file-storage/enums/file-storage.enum.ts` (dùng `as const` object + type alias, không dùng TS `enum`).
+- Các interface (`FileUploadResponse`, `FileMetadataResponse`, payload...) → đặt ở `src/features/file-storage/types/file-storage.types.ts`, **import + re-export** enum từ `enums/`.
+
+Block dưới gộp chung cho dễ đọc; khi copy hãy tách enum ra file `enums/` theo trên.
 
 ```typescript
 // Giữ enum value đồng bộ với backend — không tự ý đổi số.
@@ -99,6 +103,12 @@ export interface FileMetadataResponse {
 ```
 
 > **`publicUrl`:** Có giá trị khi `ObjectStorageOptions.PublicBaseUrl` được cấu hình (môi trường dev local với MinIO port 9090 đã có giá trị). FE **phải handle cả 2 case** — không assume `null`. Fallback về `GET /api/files/{fileId}/download` khi `null`. Dùng helper: `publicUrl ?? \`/api/files/${fileId}/download\``.
+>
+> **Hai field cấu hình URL khác nhau (đừng nhầm):** Backend có 2 option riêng biệt trong `ObjectStorageOptions`, cả hai trỏ về MinIO port 9090 ở dev nhưng dùng cho mục đích khác nhau:
+> - `PublicBaseUrl` (vd `http://localhost:9090/solar-battery-files`) → dùng để build field `publicUrl` trả về **sau upload**.
+> - `PublicServiceUrl` (vd `http://localhost:9090`) → dùng để **ký presigned URL** với hostname mà browser resolve được. Nếu không set thì fallback về `ServiceUrl` (host internal, browser không gọi được).
+>
+> Cả hai được set qua env var trong `docker-compose.yml` (`ObjectStorage__PublicBaseUrl`, `ObjectStorage__PublicServiceUrl`), không nằm trong `appsettings.json`.
 
 ---
 
@@ -227,6 +237,7 @@ FileStorageService chỉ biết metadata file (`purpose`, `status`, `createdBy`)
 **Lỗi thường gặp:**
 - `400` — Không có file trong request
 - `400 isSuccess=false` — File rỗng, thiếu phần mở rộng, hoặc phần mở rộng không hợp lệ với `purpose`
+- `401` — Chưa đăng nhập hoặc access token không hợp lệ/hết hạn (controller có `[Authorize]`)
 - `403` — Không đủ quyền upload với `purpose` yêu cầu, ví dụ non-Admin upload `Firmware`
 - `413 isSuccess=false` — File vượt quá 20 MB. Nếu request bị ASP.NET Core reject trước controller, body vẫn theo JSON lỗi của middleware với `statusCode=413`
 - `500` — Lỗi ghi lên object storage hoặc lưu metadata DB
@@ -250,18 +261,18 @@ Nếu handler đọc được multipart và thấy binary >20 MB:
 }
 ```
 
-Nếu ASP.NET Core reject request trước controller vì multipart request quá lớn, `GlobalExceptionMiddleware` vẫn trả JSON:
+Nếu ASP.NET Core reject request trước controller vì multipart request quá lớn, `GlobalExceptionMiddleware` vẫn trả JSON. Lưu ý: middleware để `message` **rỗng** và chỉ đẩy chi tiết vào `listErrors`:
 
 ```json
 {
   "isSuccess": false,
   "statusCode": 413,
-  "message": "Request payload too large. File tối đa 20 MB.",
+  "message": "",
   "data": null,
   "listErrors": [
     {
       "field": "file",
-      "detail": "Kích thước request vượt quá giới hạn cho phép."
+      "detail": "Kích thước request vượt quá giới hạn cho phép (tối đa 20 MB)."
     }
   ]
 }
@@ -403,7 +414,13 @@ Nếu ASP.NET Core reject request trước controller vì multipart request quá
 
 **Polling khi `Processing`:** FE nên gọi `GET /api/files/{id}/metadata` mỗi 2–5 giây cho đến khi `status=Ready`, hoặc dừng và hiển thị lỗi nếu nhận `Quarantined`/`Deleted`.
 
-**Use case điển hình:** Avatar display — AuthService trả `displayAvatarUrl` dạng `/api/files/{fileId}/download`. FE set `<img src="/api/files/{fileId}/download">`.
+**Use case điển hình:** Avatar display — AuthService trả `displayAvatarUrl` dạng `/api/files/{fileId}/download`.
+
+> ⚠️ **Endpoint này yêu cầu `Authorization: Bearer` (controller có `[Authorize]`).** Thẻ `<img src="/api/files/{fileId}/download">` hoặc `<a href>` của browser **KHÔNG gửi** header này → sẽ nhận `401`. KHÔNG nhúng URL download trực tiếp vào `src`/`href`.
+>
+> **Cách đúng cho FE:** fetch qua axios (có interceptor attach token) → nhận blob → `URL.createObjectURL(blob)` → set vào `<img src={blobUrl}>`, và `URL.revokeObjectURL` khi unmount. Tham khảo pattern `AuthImage` / hook `useFileBlobUrl` (GH-36).
+>
+> **Hoặc** dùng `GET /api/files/{id}/presigned-url` để lấy URL đã ký (bao gồm chữ ký trong query string, không cần header) rồi set thẳng vào `src` — phù hợp file ít nhạy cảm, đặt `expiresInMinutes` ngắn.
 
 ---
 
@@ -599,6 +616,14 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 ---
 
 ## Changelog
+
+### 2026-06-15 — Verify lần 2 vs source code
+
+- **`413` message qua middleware** — docs ghi `message: "Request payload too large. File tối đa 20 MB."`, nhưng `GlobalExceptionMiddleware` thực tế trả `message: ""` (rỗng) và đẩy chi tiết vào `listErrors[0].detail = "Kích thước request vượt quá giới hạn cho phép (tối đa 20 MB)."`. Đã sửa JSON example.
+- **Bổ sung field `PublicServiceUrl`** — code có 2 option URL riêng: `PublicBaseUrl` (build `publicUrl` sau upload) và `PublicServiceUrl` (ký presigned URL). Docs trước chỉ nhắc `PublicBaseUrl`. Đã thêm note phân biệt, cả 2 set qua env trong `docker-compose.yml`.
+- **`401` cho `POST /upload`** — controller có `[Authorize]` nhưng mục "Lỗi thường gặp" của upload chưa liệt kê `401`. Đã bổ sung.
+- **Use-case `<img src>` download sai** — đối chiếu với FE GH-36: endpoint `GET /{id}/download` cần `Authorization: Bearer` nên KHÔNG nhúng trực tiếp vào `<img>`/`<a>` (browser không gửi header → 401). FE phải fetch blob (pattern `AuthImage`/`useFileBlobUrl`) hoặc dùng presigned-url. Đã sửa note ở endpoint download.
+- **Hướng dẫn đặt enum** — làm rõ enum tách ra `enums/file-storage.enum.ts`, types re-export (khớp rule FE), thay vì gợi ý copy nguyên block vào `types/`.
 
 ### 2026-05-19 — Fix enum values sau verify source code
 

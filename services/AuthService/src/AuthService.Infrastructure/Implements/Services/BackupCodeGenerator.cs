@@ -11,7 +11,7 @@ public class BackupCodeGenerator : IBackupCodeGenerator
     private const string Alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
     private const int CodeLength = 8;        // 8 ký tự + 1 dash giữa = 9 ký tự hiển thị
     private const int DashPosition = 4;
-    private const int BcryptWorkFactor = 11; // Match existing password hash cost trong codebase
+    private const int BcryptWorkFactor = 12; // #AUTH-01: align với PasswordHasher.WorkFactor (12) cho nhất quán cost factor.
 
     public IReadOnlyList<string> Generate(int count = 8)
     {

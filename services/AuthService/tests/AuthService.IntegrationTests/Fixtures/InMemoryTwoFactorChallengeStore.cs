@@ -45,6 +45,16 @@ public class InMemoryTwoFactorChallengeStore : ITwoFactorChallengeStore
         return Task.CompletedTask;
     }
 
+    public Task InvalidateByAccountAsync(Guid accountId, CancellationToken ct = default)
+    {
+        foreach (var kvp in _entries)
+        {
+            if (kvp.Value.AccountId == accountId)
+                _entries.TryRemove(kvp.Key, out _);
+        }
+        return Task.CompletedTask;
+    }
+
     public void Clear() => _entries.Clear();
 
     private sealed record ChallengeEntry(Guid AccountId, string IpAddress, string UserAgent, int Attempts, DateTime ExpiresAt);

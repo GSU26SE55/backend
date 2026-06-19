@@ -81,6 +81,11 @@ services:
       minReplicas: 2
       maxReplicas: 10
       targetCPUUtilizationPercentage: 70
+    # GH-295 — DataProtection keys PVC (2FA secret encryption). Mất volume = mất
+    # khả năng decrypt mọi TwoFactorSecret trong DB. Backup cùng postgres-data.
+    dataProtectionKeys:
+      storage: 128Mi
+      # storageClass: longhorn   # override per env (vd longhorn / gp3 / standard)
 
   emailservice:
     enabled: true
@@ -172,6 +177,7 @@ postgres:
   batteryDatabase: battery_db
   ticketDatabase: ticket_db
   notificationDatabase: notification_db
+  smsDatabase: sms_db
   username: postgres
   storage: 5Gi
   # Tăng max_connections để hỗ trợ pool nhiều service × replica.
@@ -267,6 +273,25 @@ config:
   Outbox__BatchSize: "50"
   Outbox__PollIntervalSeconds: "2"
   Outbox__MaxRetries: "10"
+
+  # ----- Sprint additional-auth #AUTH-32 / #AUTH-59 — JWT refresh TTL + key rotation -----
+  JwtSettings__RefreshTokenExpirationDays: "7"
+  JwtSettings__SigningKeyId: "v1"
+  JwtSettings__PreviousSigningKeyId: "v0"
+
+  # ----- Sprint additional-auth #AUTH-53 — Password policy configurable -----
+  PasswordPolicy__MinLength: "12"
+  PasswordPolicy__MaxLength: "100"
+  PasswordPolicy__RequireUppercase: "true"
+  PasswordPolicy__RequireLowercase: "true"
+  PasswordPolicy__RequireDigit: "true"
+  PasswordPolicy__RequireSpecialChar: "true"
+
+  # ----- Sprint additional-auth #AUTH-12 — RefreshToken device binding (IP/UA) -----
+  AuthSecurity__EnforceDeviceBinding: "true"
+
+  # ----- Sprint additional-auth #AUTH-41 — Concurrent session limit -----
+  Session__MaxConcurrentSessions: "5"
 
   Idempotency__Enabled: "true"
   Idempotency__TtlHours: "24"

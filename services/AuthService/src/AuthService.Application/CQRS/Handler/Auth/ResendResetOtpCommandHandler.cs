@@ -8,12 +8,13 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpCommand, CommonResponse<string>>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
     private const int ResendCooldownSeconds = 60;
 
     private readonly IAuthUnitOfWork _unitOfWork;
@@ -32,7 +33,7 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
 
     public async Task<CommonResponse<string>> Handle(ResendResetOtpCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -58,6 +59,7 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
             }
 
             var otp = OtpHelper.GenerateOtp(6);
+            AppMetrics.AuthOtpUsageTotal.WithLabels("password_reset", "generated").Inc(); // #AUTH-78
             account.OtpCode = otp;
             account.OtpExpiredAt = DateTime.UtcNow.AddMinutes(OtpLifetimeMinutes);
             account.OtpPurpose = OtpPurposeEnum.PasswordReset;

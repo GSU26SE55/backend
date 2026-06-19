@@ -28,6 +28,7 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<CustomerAccount> CustomerAccounts => new GenericRepository<CustomerAccount>(_context);
     public IGenericRepository<StaffAccount> StaffAccounts => new GenericRepository<StaffAccount>(_context);
     public IGenericRepository<KnowledgeBaseArticle> KnowledgeBaseArticles => new GenericRepository<KnowledgeBaseArticle>(_context);
+    public IGenericRepository<KbArticleVersion> KbArticleVersions => new GenericRepository<KbArticleVersion>(_context);
     public IGenericRepository<TicketKbReference> TicketKbReferences => new GenericRepository<TicketKbReference>(_context);
 
     public async Task BeginTransactionAsync()

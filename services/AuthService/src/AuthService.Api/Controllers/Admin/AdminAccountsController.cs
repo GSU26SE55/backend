@@ -589,4 +589,46 @@ public class AdminAccountsController : ControllerBase
         var response = await _mediator.Send(query, cancellationToken);
         return StatusCode(response.StatusCode, response);
     }
+
+    /// <summary>
+    /// #AUTH-47: Admin merge 1 account (secondary) vào 1 account khác (primary) — vd link Google account vào local account.
+    /// </summary>
+    /// <remarks>
+    /// Side effects:
+    /// - Secondary bị tombstone (soft-delete + MergedIntoId = primary.Id, email anonymize).
+    /// - Secondary's RefreshToken active đều bị revoke (force logout).
+    /// - GoogleId/Profile/StaffProfile copy sang primary CHỈ KHI primary chưa có (primary thắng conflict).
+    /// - AuditLog của secondary giữ nguyên (immutable per AUTH-29).
+    /// - Insert AccountMergeLog dedicated row (audit + rollback snapshot).
+    ///
+    /// Body: <c>{ secondaryAccountId, reason }</c>. Path id = primaryAccountId.
+    /// </remarks>
+    /// <response code="200">Merge thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (cùng id, thiếu reason, ...).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không phải Admin.</response>
+    /// <response code="404">Primary hoặc secondary không tồn tại.</response>
+    /// <response code="409">1 trong 2 account đã từng bị merge.</response>
+    [HttpPost("{id:guid}/merge")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> MergeAccount(
+        Guid id,
+        [FromBody] global::AuthService.Application.CQRS.Command.Admin.MergeAccountCommand command,
+        CancellationToken cancellationToken)
+    {
+        var actorRaw = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(actorRaw, out var actorId))
+            return Unauthorized();
+
+        command.PrimaryAccountId = id;
+        command.PerformedBy = actorId;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
 }

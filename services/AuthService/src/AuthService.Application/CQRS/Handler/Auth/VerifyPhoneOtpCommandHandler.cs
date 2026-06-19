@@ -1,9 +1,11 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -36,10 +38,17 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
         if (account.OtpPurpose != OtpPurposeEnum.PhoneVerify
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
-            || account.OtpExpiredAt.Value < DateTime.UtcNow)
+            || account.OtpExpiredAt.Value <= DateTime.UtcNow)
             return Fail(422, "OTP không hợp lệ hoặc đã hết hạn.");
 
-        if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
+        // #AUTH-78: track verify path.
+        bool _otpMatch = SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim());
+        if (!_otpMatch)
+            AppMetrics.AuthOtpUsageTotal.WithLabels("phone_verify", "wrong").Inc();
+        else
+            AppMetrics.AuthOtpUsageTotal.WithLabels("phone_verify", "verified").Inc();
+
+        if (!_otpMatch)
         {
             account.FailedLoginAttempts += 1;
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
