@@ -8326,7 +8326,7 @@ Thêm vào §18:
    - **Entity mới (10):** `AuditAggregate` (Aggregator DB, partition by month), `BatteryAuditLog` + `BatteryAuditOutbox`, `TicketAuditLog` + `TicketAuditOutbox` (TÁCH khỏi `TicketActivity` — 2 entity khác purpose), `FileAuditLog` + `FileAuditOutbox`, `AlertAuditLog` + `AlertAuditOutbox`, `EmailAuditLog` + `EmailAuditOutbox`, `NotificationAuditLog` + `NotificationAuditOutbox` (note: pair entity + outbox cho mỗi service onboard)
    - **Entity refactor:** AuthService `auth_audit_logs` thêm 14 cột chuẩn + thêm `audit_outbox` table riêng + upgrade trigger từ hard append-only (AUTH-29) → soft mode (`#AUDIT-10`)
    - **Integration event mới (1):** `AuditCreatedEventV1` (xem `SharedContracts/IntegrationEvents/Audit/`)
-   - **Migration mới:** 
+   - **Migration mới:**
      - AuthService: `AddAuditLogStandardColumns` (14 cột + backfill), `AddAuditOutbox`, `UpgradeAuditAppendOnlyTriggerSoft`
      - BatteryService: `AddBatteryAuditLogSchema`, `AddBatteryAuditOutbox`, `AddBatteryAuditAppendOnlyTrigger`
      - TicketService: `AddTicketAuditLogSchema`, `AddTicketAuditOutbox`, `AddTicketAuditAppendOnlyTrigger` (KHÔNG đụng `TicketActivity` schema)
