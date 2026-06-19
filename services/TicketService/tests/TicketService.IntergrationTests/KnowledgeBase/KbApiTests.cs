@@ -4,7 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
@@ -57,7 +57,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleActionDto>>(_jsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleActionDTO>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Id.Should().NotBeNullOrEmpty();
     }
@@ -95,7 +95,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<CommonResponse<PaginationResponse<KbArticleListItemDto>>>(_jsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<PaginationResponse<KbArticleListItemDTO>>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Items.Should().ContainSingle();
         result.Data.Items.First().Title.Should().Be("Published Article");
@@ -126,7 +126,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDto>>(_jsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDTO>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Title.Should().Be("Get By Id Article");
     }
@@ -170,7 +170,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDto>>(_jsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDTO>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Status.Should().Be(KbArticleStatusEnum.PendingReview);
     }

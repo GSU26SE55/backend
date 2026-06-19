@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 
 namespace TicketService.Api.Controllers;
 
@@ -40,7 +40,7 @@ public class KnowledgeBaseController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lấy danh sách thành công.</response>
     [HttpGet]
-    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<KbArticleListItemDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<KbArticleListItemDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList([FromQuery] GetKbArticleListQuery query, CancellationToken ct)
     {
         var result = await _mediator.Send(query, ct);
@@ -55,7 +55,7 @@ public class KnowledgeBaseController : ControllerBase
     /// <response code="200">Tìm thấy bài viết.</response>
     /// <response code="404">Không tìm thấy bài viết hoặc bài viết đã bị xóa.</response>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
@@ -76,7 +76,7 @@ public class KnowledgeBaseController : ControllerBase
     /// <response code="200">Lấy danh sách gợi ý thành công (tối đa 5 bài).</response>
     /// <response code="404">Không tìm thấy Ticket.</response>
     [HttpGet("suggest")]
-    [ProducesResponseType(typeof(CommonResponse<List<KbArticleSuggestDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<KbArticleSuggestDTO>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Suggest([FromQuery] SuggestKbArticlesQuery query, CancellationToken ct)
     {

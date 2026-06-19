@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
@@ -10,7 +10,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleCommand, CommonResponse<KbArticleDto>>
+public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleCommand, CommonResponse<KbArticleDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -19,7 +19,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         _uow = uow;
     }
 
-    public async Task<CommonResponse<KbArticleDto>> Handle(UpdateKbArticleCommand command, CancellationToken ct)
+    public async Task<CommonResponse<KbArticleDTO>> Handle(UpdateKbArticleCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
@@ -79,7 +79,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<KbArticleDto>
+        return new CommonResponse<KbArticleDTO>
         {
             IsSuccess = true,
             StatusCode = 200,
@@ -88,9 +88,9 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         };
     }
 
-    private static CommonResponse<KbArticleDto> Fail(int statusCode, string message)
+    private static CommonResponse<KbArticleDTO> Fail(int statusCode, string message)
     {
-        return new CommonResponse<KbArticleDto>
+        return new CommonResponse<KbArticleDTO>
         {
             IsSuccess = false,
             StatusCode = statusCode,

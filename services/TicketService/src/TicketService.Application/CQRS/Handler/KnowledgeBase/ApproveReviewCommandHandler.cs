@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
@@ -10,7 +10,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand, CommonResponse<KbArticleActionDto>>
+public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand, CommonResponse<KbArticleActionDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -19,7 +19,7 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
         _uow = uow;
     }
 
-    public async Task<CommonResponse<KbArticleActionDto>> Handle(ApproveReviewCommand command, CancellationToken ct)
+    public async Task<CommonResponse<KbArticleActionDTO>> Handle(ApproveReviewCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
@@ -73,12 +73,12 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<KbArticleActionDto>
+        return new CommonResponse<KbArticleActionDTO>
         {
             IsSuccess = true,
             StatusCode = 200,
             Message = "Yêu cầu thay đổi đã được phê duyệt và cập nhật nội dung thành công.",
-            Data = new KbArticleActionDto
+            Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),
                 Code = article.Code,
@@ -87,9 +87,9 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
         };
     }
 
-    private static CommonResponse<KbArticleActionDto> Fail(int statusCode, string message)
+    private static CommonResponse<KbArticleActionDTO> Fail(int statusCode, string message)
     {
-        return new CommonResponse<KbArticleActionDto>
+        return new CommonResponse<KbArticleActionDTO>
         {
             IsSuccess = false,
             StatusCode = statusCode,

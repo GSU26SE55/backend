@@ -1,5 +1,5 @@
 using TicketService.Application.DTOs.Response.SLA;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 

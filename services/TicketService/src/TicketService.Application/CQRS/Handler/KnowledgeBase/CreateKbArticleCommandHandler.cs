@@ -1,7 +1,7 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
@@ -10,7 +10,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleCommand, CommonResponse<KbArticleActionDto>>
+public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleCommand, CommonResponse<KbArticleActionDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IKbCodeGenerator _codeGenerator;
@@ -21,7 +21,7 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
         _codeGenerator = codeGenerator;
     }
 
-    public async Task<CommonResponse<KbArticleActionDto>> Handle(CreateKbArticleCommand command, CancellationToken ct)
+    public async Task<CommonResponse<KbArticleActionDTO>> Handle(CreateKbArticleCommand command, CancellationToken ct)
     {
         var code = await _codeGenerator.GenerateNextCodeAsync(ct);
 
@@ -67,12 +67,12 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
         await _uow.KbArticleVersions.AddAsync(initialVersion);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<KbArticleActionDto>
+        return new CommonResponse<KbArticleActionDTO>
         {
             IsSuccess = true,
             StatusCode = 201,
             Message = "Bài viết đã được khởi tạo và đang chờ phê duyệt (Version 1.0).",
-            Data = new KbArticleActionDto
+            Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),
                 Code = article.Code,

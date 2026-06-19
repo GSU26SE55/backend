@@ -2,13 +2,13 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class GetKbArticleVersionsQueryHandler : IRequestHandler<GetKbArticleVersionsQuery, CommonResponse<List<KbArticleVersionDto>>>
+public class GetKbArticleVersionsQueryHandler : IRequestHandler<GetKbArticleVersionsQuery, CommonResponse<List<KbArticleVersionDTO>>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -17,7 +17,7 @@ public class GetKbArticleVersionsQueryHandler : IRequestHandler<GetKbArticleVers
         _uow = uow;
     }
 
-    public async Task<CommonResponse<List<KbArticleVersionDto>>> Handle(GetKbArticleVersionsQuery query, CancellationToken ct)
+    public async Task<CommonResponse<List<KbArticleVersionDTO>>> Handle(GetKbArticleVersionsQuery query, CancellationToken ct)
     {
         var versions = await _uow.KbArticleVersions.GetAllAsync()
             .Where(v => v.ArticleId == query.ArticleId)
@@ -25,7 +25,7 @@ public class GetKbArticleVersionsQueryHandler : IRequestHandler<GetKbArticleVers
             .ThenByDescending(v => v.MinorVersion)
             .ToListAsync(ct);
 
-        return new CommonResponse<List<KbArticleVersionDto>>
+        return new CommonResponse<List<KbArticleVersionDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,

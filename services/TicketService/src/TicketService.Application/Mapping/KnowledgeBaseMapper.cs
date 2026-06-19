@@ -1,15 +1,15 @@
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Application.Mapping;
 
 public static class KnowledgeBaseMapper
 {
-    public static KbArticleDto ToDto(KnowledgeBaseArticle article)
+    public static KbArticleDTO ToDto(KnowledgeBaseArticle article)
     {
-        return new KbArticleDto
+        return new KbArticleDTO
         {
             Id = article.Id.ToString(),
             Code = article.Code,
@@ -34,9 +34,9 @@ public static class KnowledgeBaseMapper
         };
     }
 
-    public static KbArticleListItemDto ToListItemDto(KnowledgeBaseArticle a)
+    public static KbArticleListItemDTO ToListItemDto(KnowledgeBaseArticle a)
     {
-        return new KbArticleListItemDto
+        return new KbArticleListItemDTO
         {
             Id = a.Id.ToString(),
             Code = a.Code,
@@ -50,9 +50,9 @@ public static class KnowledgeBaseMapper
         };
     }
 
-    public static KbArticleSuggestDto ToSuggestDto(KnowledgeBaseArticle a)
+    public static KbArticleSuggestDTO ToSuggestDto(KnowledgeBaseArticle a)
     {
-        return new KbArticleSuggestDto
+        return new KbArticleSuggestDTO
         {
             Id = a.Id.ToString(),
             Code = a.Code,
@@ -63,9 +63,9 @@ public static class KnowledgeBaseMapper
         };
     }
 
-    public static KbArticleVersionDto ToVersionDto(KbArticleVersion v)
+    public static KbArticleVersionDTO ToVersionDto(KbArticleVersion v)
     {
-        return new KbArticleVersionDto
+        return new KbArticleVersionDTO
         {
             Id = v.Id.ToString(),
             ArticleId = v.ArticleId.ToString(),
@@ -84,9 +84,9 @@ public static class KnowledgeBaseMapper
         };
     }
 
-    public static KbArticleTemplateDto ToTemplateDto(KnowledgeBaseArticle article)
+    public static KbArticleTemplateDTO ToTemplateDto(KnowledgeBaseArticle article)
     {
-        return new KbArticleTemplateDto
+        return new KbArticleTemplateDTO
         {
             Category = (int)article.Category,
             Symptoms = article.Symptoms,

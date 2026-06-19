@@ -1,7 +1,7 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.CommentAdd;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
@@ -80,7 +80,7 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             IsSuccess = true,
             StatusCode = 201,
             Message = "Thêm bình luận thành công.",
-            Data = new TicketActionDto
+            Data = new TicketActionDTO
             {
                 Id = comment.Id.ToString(),
                 TicketId = ticket.Id.ToString(),

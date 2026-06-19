@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Mapping;
@@ -10,7 +10,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuery, CommonResponse<PaginationResponse<KbArticleListItemDto>>>
+public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuery, CommonResponse<PaginationResponse<KbArticleListItemDTO>>>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketCurrentUserService _currentUserService;
@@ -21,11 +21,11 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         _currentUserService = currentUserService;
     }
 
-    public async Task<CommonResponse<PaginationResponse<KbArticleListItemDto>>> Handle(GetKbArticleListQuery query, CancellationToken ct)
+    public async Task<CommonResponse<PaginationResponse<KbArticleListItemDTO>>> Handle(GetKbArticleListQuery query, CancellationToken ct)
     {
         if (!Guid.TryParse(_currentUserService.UserId, out var customerId))
         {
-            return new CommonResponse<PaginationResponse<KbArticleListItemDto>>
+            return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
             {
                 IsSuccess = false,
                 StatusCode = 401,
@@ -67,11 +67,11 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
             .Take(query.PageSize)
             .ToListAsync(ct);
 
-        return new CommonResponse<PaginationResponse<KbArticleListItemDto>>
+        return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<KbArticleListItemDto>
+            Data = new PaginationResponse<KbArticleListItemDTO>
             {
                 Items = items.Select(KnowledgeBaseMapper.ToListItemDto).ToList(),
                 TotalItems = totalItems,

@@ -1,6 +1,4 @@
-using TicketService.Application.DTOs.Response.Maintenance;
-
-namespace TicketService.Application.DTOs.Response.Maintenance;
+namespace TicketService.Application.DTOs.Response.Maintenances;
 
 public class StaffMaintenanceLogGroupDTO
 {

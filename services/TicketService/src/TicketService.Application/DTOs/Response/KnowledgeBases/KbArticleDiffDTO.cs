@@ -1,6 +1,6 @@
-namespace TicketService.Application.DTOs.Response.KnowledgeBase;
+namespace TicketService.Application.DTOs.Response.KnowledgeBases;
 
-public class KbArticleDiffDto
+public class KbArticleDiffDTO
 {
     public string FromVersion { get; set; } = string.Empty;
     public string ToVersion { get; set; } = string.Empty;

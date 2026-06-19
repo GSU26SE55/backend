@@ -1,8 +1,6 @@
-using SharedContracts.Common.Responses;
-
 namespace TicketService.Application.DTOs.Response.Saga;
 
-public class AlertTicketSagaDto
+public class AlertTicketSagaDTO
 {
     public string CorrelationId { get; set; } = string.Empty;
     public string CurrentState { get; set; } = string.Empty;
@@ -23,9 +21,3 @@ public class AlertTicketSagaDto
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 }
-
-public class AlertTicketSagaListResponse : CommonResponse<PaginationResponse<AlertTicketSagaDto>> { }
-
-public class AlertTicketSagaDetailResponse : CommonResponse<AlertTicketSagaDto> { }
-
-public class SagaReprocessResponse : CommonResponse<object> { }

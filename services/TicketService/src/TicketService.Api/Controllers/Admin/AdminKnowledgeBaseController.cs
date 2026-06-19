@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers.Admin;
@@ -38,7 +38,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     /// <response code="200">Xuất bản thành công.</response>
     /// <response code="409">Trạng thái hiện tại không hợp lệ để xuất bản.</response>
     [HttpPost("{id:guid}/publish")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct)
     {
@@ -54,7 +54,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lưu trữ thành công.</response>
     [HttpPost("{id:guid}/archive")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Archive(Guid id, CancellationToken ct)
     {
         var command = new ArchiveKbArticleCommand { ArticleId = id };
@@ -73,7 +73,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     /// <response code="200">Phê duyệt và xuất bản thành công.</response>
     /// <response code="409">Bài viết không ở trạng thái chờ phê duyệt.</response>
     [HttpPost("{id:guid}/approve-review")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ApproveReview(Guid id, CancellationToken ct)
     {
@@ -93,7 +93,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Từ chối thành công.</response>
     [HttpPost("{id:guid}/reject-review")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     public async Task<IActionResult> RejectReview(Guid id, [FromBody] RejectReviewCommand command, CancellationToken ct)
     {
         command.ArticleId = id;
@@ -113,7 +113,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     /// <response code="200">Hoàn tác thành công.</response>
     /// <response code="404">Không tìm thấy bài viết hoặc số phiên bản yêu cầu.</response>
     [HttpPost("{id:guid}/rollback")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Rollback(Guid id, [FromBody] RollbackKbArticleCommand command, CancellationToken ct)
     {

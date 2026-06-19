@@ -2,19 +2,19 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 
 namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
-public class RejectReviewCommand : IRequest<CommonResponse<KbArticleActionDto>>, IValidatable<CommonResponse<KbArticleActionDto>>
+public class RejectReviewCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
     [JsonIgnore]
     public Guid ArticleId { get; set; }
     public string? Reason { get; set; }
 
-    public Task<CommonResponse<KbArticleActionDto>> ValidateAsync()
+    public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
-        var response = new CommonResponse<KbArticleActionDto>();
+        var response = new CommonResponse<KbArticleActionDTO>();
 
         if (ArticleId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "ID bài viết không hợp lệ." });

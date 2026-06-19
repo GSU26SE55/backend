@@ -5,7 +5,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Query.Ticket;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers.Admin;

@@ -2,13 +2,13 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArticleVersionsQuery, CommonResponse<KbArticleDiffDto>>
+public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArticleVersionsQuery, CommonResponse<KbArticleDiffDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -17,7 +17,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
         _uow = uow;
     }
 
-    public async Task<CommonResponse<KbArticleDiffDto>> Handle(CompareKbArticleVersionsQuery query, CancellationToken ct)
+    public async Task<CommonResponse<KbArticleDiffDTO>> Handle(CompareKbArticleVersionsQuery query, CancellationToken ct)
     {
         var fromVersion = await _uow.KbArticleVersions.GetAllAsync()
             .FirstOrDefaultAsync(v => v.Id == query.FromVersionId, ct);
@@ -50,7 +50,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             toVersionLabel = $"v{toVersion.MajorVersion}.{toVersion.MinorVersion}";
         }
 
-        var diff = new KbArticleDiffDto
+        var diff = new KbArticleDiffDTO
         {
             FromVersion = $"v{fromVersion.MajorVersion}.{fromVersion.MinorVersion}",
             ToVersion = toVersionLabel,
@@ -67,7 +67,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             TagsDiff = new DiffSection { OldValue = string.Join(", ", fromVersion.Tags), NewValue = string.Join(", ", toVersion?.Tags ?? currentArticle!.Tags), IsChanged = !fromVersion.Tags.SequenceEqual(toVersion?.Tags ?? currentArticle!.Tags) }
         };
 
-        return new CommonResponse<KbArticleDiffDto>
+        return new CommonResponse<KbArticleDiffDTO>
         {
             IsSuccess = true,
             StatusCode = 200,
@@ -75,9 +75,9 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
         };
     }
 
-    private static CommonResponse<KbArticleDiffDto> Fail(int statusCode, string message)
+    private static CommonResponse<KbArticleDiffDTO> Fail(int statusCode, string message)
     {
-        return new CommonResponse<KbArticleDiffDto>
+        return new CommonResponse<KbArticleDiffDTO>
         {
             IsSuccess = false,
             StatusCode = statusCode,

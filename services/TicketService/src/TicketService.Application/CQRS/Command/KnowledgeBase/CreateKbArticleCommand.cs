@@ -1,14 +1,13 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
-public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDto>>, IValidatable<CommonResponse<KbArticleActionDto>>
+public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
@@ -23,9 +22,9 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDto
     public List<string> Tags { get; set; } = new();
     public bool IsInternalOnly { get; set; }
 
-    public Task<CommonResponse<KbArticleActionDto>> ValidateAsync()
+    public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
-        var response = new CommonResponse<KbArticleActionDto>
+        var response = new CommonResponse<KbArticleActionDTO>
         {
             IsSuccess = true,
             StatusCode = 200,

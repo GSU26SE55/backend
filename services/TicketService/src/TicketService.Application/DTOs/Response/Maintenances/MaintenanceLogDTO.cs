@@ -1,11 +1,10 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response.Maintenance;
+namespace TicketService.Application.DTOs.Response.Maintenances;
 
 public class MaintenanceLogDTO
 {
     public string Id { get; set; } = string.Empty;
-    public string TicketId { get; set; } = string.Empty;
     public string StaffId { get; set; } = string.Empty;
     public MaintenanceLogTypeEnum LogType { get; set; }
     public string Summary { get; set; } = string.Empty;

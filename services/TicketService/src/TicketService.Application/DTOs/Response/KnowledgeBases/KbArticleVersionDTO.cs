@@ -1,6 +1,6 @@
-namespace TicketService.Application.DTOs.Response.KnowledgeBase;
+namespace TicketService.Application.DTOs.Response.KnowledgeBases;
 
-public class KbArticleVersionDto
+public class KbArticleVersionDTO
 {
     public string Id { get; set; } = string.Empty;
     public string ArticleId { get; set; } = string.Empty;
