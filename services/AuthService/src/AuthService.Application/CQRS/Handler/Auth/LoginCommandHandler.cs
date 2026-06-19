@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.CQRS.Notification.Login;
@@ -9,6 +10,7 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -43,7 +45,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -52,17 +54,22 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         if (account == null)
         {
+            // #AUTH-17: dùng cùng audit action với "sai mật khẩu" + jitter delay để time đáp ứng
+            // miss path ~= match BCrypt verify (~100-200ms) → khó phân biệt qua side-channel.
+            await ApplyEnumerationDelay(cancellationToken);
+
             await PublishAudit(AuditActionEnum.LoginFailedWrongPassword,
                 targetAccountId: null,
                 isSuccess: false,
                 targetEmail: normalizedEmail,
-                reason: "Email không tồn tại trong hệ thống.",
+                reason: "Invalid credentials.",
                 cancellationToken: cancellationToken);
             await PublishLoginAttempt(null, normalizedEmail,
                 LoginAttemptResult.AccountNotFound,
-                note: "Email không tồn tại.",
+                note: "Invalid credentials.",
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            AppMetrics.AuthLoginTotal.WithLabels("invalid_credentials").Inc(); // #AUTH-78
             return Fail(400, "Email hoặc mật khẩu không chính xác.");
         }
 
@@ -190,6 +197,49 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         // Cũng KHÔNG ghi LoginAttempt success — đợi verify-2fa.
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
         {
+            // #AUTH-48: Check trusted device → nếu match (fingerprint + IP prefix), skip challenge issue tokens trực tiếp.
+            // KHÔNG match → flow 2FA challenge bình thường.
+            var trustedDevice = await FindActiveTrustedDeviceAsync(account.Id, deviceId, userAgent, ipAddress, cancellationToken);
+            if (trustedDevice != null)
+            {
+                trustedDevice.LastUsedAt = DateTime.UtcNow;
+                trustedDevice.UsageCount++;
+                _unitOfWork.TrustedDevices.UpdateAsync(trustedDevice);
+
+                var (trustedTokens, trustedSessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
+
+                account.FailedLoginAttempts = 0;
+                account.LastLoginAt = DateTime.UtcNow;
+                account.LastLoginIp = ipAddress;
+                _unitOfWork.Accounts.UpdateAsync(account);
+
+                AppMetrics.AuthLoginTotal.WithLabels("success_trusted_device").Inc();
+                AppMetrics.Auth2FAChallengeTotal.WithLabels("skipped_trusted_device").Inc();
+
+                await PublishAudit(AuditActionEnum.LoginWithTrustedDevice, account.Id, isSuccess: true,
+                    targetEmail: account.Email,
+                    actorAccountIdOverride: account.Id,
+                    metadata: new Dictionary<string, object?>
+                    {
+                        ["trustedDeviceId"] = trustedDevice.Id,
+                        ["label"] = trustedDevice.Label,
+                        ["sessionId"] = trustedSessionId
+                    },
+                    cancellationToken: cancellationToken);
+                await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.Success,
+                    note: "Trusted device — 2FA skipped",
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                return new LoginResponse
+                {
+                    IsSuccess = true,
+                    StatusCode = 200,
+                    Message = "Đăng nhập thành công (thiết bị tin cậy).",
+                    Data = new LoginResultDto { Tokens = trustedTokens }
+                };
+            }
+
             var challengeToken = await _challengeStore.CreateAsync(
                 account.Id,
                 ipAddress ?? string.Empty,
@@ -222,6 +272,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         }
 
         var (tokens, sessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
+
+        AppMetrics.AuthLoginTotal.WithLabels("success").Inc(); // #AUTH-78
 
         var roleName = account.Role?.Name ?? string.Empty;
         await PublishAudit(AuditActionEnum.LoginSuccess, account.Id, true,
@@ -283,5 +335,34 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             StatusCode = statusCode,
             Message = message,
         };
+    }
+
+    // #AUTH-17: delay 100-200ms (RNG-based jitter) trên miss path để time ~= BCrypt verify time.
+    private static Task ApplyEnumerationDelay(CancellationToken cancellationToken)
+    {
+        var jitterMs = RandomNumberGenerator.GetInt32(100, 201);
+        return Task.Delay(jitterMs, cancellationToken);
+    }
+
+    // #AUTH-48: Tìm TrustedDevice active match (account, fingerprint, ipPrefix). null nếu không match.
+    // Match rule: fingerprint === device + IP /24 subnet matched + not revoked + ExpiresAt > now.
+    private async Task<Domain.Entities.TrustedDevice?> FindActiveTrustedDeviceAsync(
+        Guid accountId, string? deviceId, string? userAgent, string? ipAddress, CancellationToken cancellationToken)
+    {
+        var fingerprint = TrustedDeviceFingerprintHelper.ComputeFingerprint(deviceId, userAgent);
+        var ipPrefix = TrustedDeviceFingerprintHelper.ComputeIpPrefix(ipAddress);
+        if (fingerprint == null || ipPrefix == null)
+            return null;
+
+        var now = DateTime.UtcNow;
+        return await _unitOfWork.TrustedDevices
+            .GetAllAsync()
+            .FirstOrDefaultAsync(td =>
+                td.AccountId == accountId
+                && td.DeviceFingerprintHash == fingerprint
+                && td.IpPrefix == ipPrefix
+                && td.RevokedAt == null
+                && td.ExpiresAt > now
+                && !td.IsDeleted, cancellationToken);
     }
 }

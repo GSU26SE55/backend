@@ -78,7 +78,7 @@ public class PublishOrderTests
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
+        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var response = await handler.Handle(new ForgotPasswordCommand { Email = "user@example.com" }, CancellationToken.None);
 
@@ -132,9 +132,11 @@ public class PublishOrderTests
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
+        // Sprint SMS Phase 9 atomic switch (#SMS-38): publish SendSmsCommand qua SmsService gateway
+        // thay vì SendPhoneOtpEvent. Spec yêu cầu publish TRƯỚC SaveChanges để atomic outbox.
         var sequence = new MockSequence();
         _producer.InSequence(sequence)
-            .Setup(p => p.PublishAsync(It.IsAny<SendPhoneOtpEvent>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.PublishAsync(It.IsAny<SendSmsCommand>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         uow.InSequence(sequence)
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
@@ -145,7 +147,9 @@ public class PublishOrderTests
         var response = await handler.Handle(new SendPhoneOtpCommand { AccountId = account.Id }, CancellationToken.None);
 
         response.IsSuccess.Should().BeTrue();
-        _producer.Verify(p => p.PublishAsync(It.IsAny<SendPhoneOtpEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(p => p.PublishAsync(It.IsAny<SendSmsCommand>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Atomic switch: KHÔNG còn publish SendPhoneOtpEvent.
+        _producer.Verify(p => p.PublishAsync(It.IsAny<SendPhoneOtpEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -170,7 +174,7 @@ public class PublishOrderTests
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
 
         var response = await handler.Handle(new ChangeEmailCommand
         {

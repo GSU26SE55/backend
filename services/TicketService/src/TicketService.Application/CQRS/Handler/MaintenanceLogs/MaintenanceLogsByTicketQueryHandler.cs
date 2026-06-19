@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.CQRS.Query.MaintenanceLogs;
-using TicketService.Application.DTOs.Response.Maintenance;
+using TicketService.Application.DTOs.Response.Maintenances;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.MaintenanceLogs;
@@ -25,7 +25,6 @@ public class MaintenanceLogsByTicketQueryHandler : IRequestHandler<MaintenanceLo
         return logs.Select(m => new MaintenanceLogDTO
         {
             Id = m.Id.ToString(),
-            TicketId = m.TicketId.ToString(),
             StaffId = m.StaffId.ToString(),
             LogType = m.LogType,
             Summary = m.Summary,

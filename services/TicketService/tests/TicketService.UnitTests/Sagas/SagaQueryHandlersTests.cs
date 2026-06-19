@@ -18,7 +18,7 @@ public class SagaQueryHandlersTests
         var alertId = Guid.NewGuid();
         var svc = new Mock<IAlertTicketSagaQueryService>();
         svc.Setup(s => s.GetByAlertIdAsync(alertId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((AlertTicketSagaDto?)null);
+            .ReturnsAsync((AlertTicketSagaDTO?)null);
 
         var handler = new GetAlertTicketSagaByIdQueryHandler(svc.Object);
         var result = await handler.Handle(new GetAlertTicketSagaByIdQuery { AlertId = alertId }, default);
@@ -32,7 +32,7 @@ public class SagaQueryHandlersTests
     public async Task GetById_Found_ShouldReturnDto()
     {
         var alertId = Guid.NewGuid();
-        var dto = new AlertTicketSagaDto { AlertId = alertId.ToString(), CurrentState = "Completed" };
+        var dto = new AlertTicketSagaDTO { AlertId = alertId.ToString(), CurrentState = "Completed" };
         var svc = new Mock<IAlertTicketSagaQueryService>();
         svc.Setup(s => s.GetByAlertIdAsync(alertId, It.IsAny<CancellationToken>())).ReturnsAsync(dto);
 
@@ -48,7 +48,7 @@ public class SagaQueryHandlersTests
     public async Task GetList_WithItems_ShouldReturnPaginated()
     {
         var svc = new Mock<IAlertTicketSagaQueryService>();
-        var items = new List<AlertTicketSagaDto>
+        var items = new List<AlertTicketSagaDTO>
         {
             new() { AlertId = Guid.NewGuid().ToString(), CurrentState = "Failed" },
             new() { AlertId = Guid.NewGuid().ToString(), CurrentState = "Failed" }
@@ -78,7 +78,7 @@ public class SagaQueryHandlersTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback<string?, Guid?, Guid?, Guid?, DateTime?, DateTime?, bool?, int, int, bool, CancellationToken>(
                 (_, _, _, _, _, _, _, _, ps, _, _) => captured = ps)
-            .ReturnsAsync((new List<AlertTicketSagaDto>(), 0));
+            .ReturnsAsync((new List<AlertTicketSagaDTO>(), 0));
 
         var handler = new GetAlertTicketSagasQueryHandler(svc.Object);
         await handler.Handle(new GetAlertTicketSagasQuery { PageSize = 999, PageNumber = 0 }, default);

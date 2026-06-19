@@ -14,9 +14,16 @@ namespace AuthService.Infrastructure.BackgroundJobs;
 /// Background job đọc bảng outbox_messages mỗi N giây, publish lên RabbitMQ và mark ProcessedAt.
 /// Khi RabbitMQ down: publish throw → tăng RetryCount, giữ nguyên ProcessedAt=null. Lần tick sau retry.
 /// Cap MaxRetries để tránh poison message lặp vô tận.
+///
+/// #AUTH-37: honor CancellationToken graceful shutdown — mỗi async call pass token, loop check
+/// IsCancellationRequested, mid-batch cancel sẽ flush các message đã publish thành công bằng SaveChanges
+/// ngắn (5s timeout) để không mất state.
 /// </summary>
 public class OutboxRelayBackgroundService : BackgroundService
 {
+    // #AUTH-37: timeout cho final flush khi shutdown.
+    private static readonly TimeSpan ShutdownFlushTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly OutboxOptions _options;
     private readonly ILogger<OutboxRelayBackgroundService> _logger;
@@ -37,8 +44,18 @@ public class OutboxRelayBackgroundService : BackgroundService
         _logger.LogInformation("OutboxRelay started. Interval={Seconds}s, BatchSize={Batch}, MaxRetries={Max}",
             _options.PollIntervalSeconds, _options.BatchSize, _options.MaxRetries);
 
-        while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                    break;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
             try
             {
                 await ProcessBatchAsync(stoppingToken);
@@ -52,6 +69,8 @@ public class OutboxRelayBackgroundService : BackgroundService
                 _logger.LogError(ex, "OutboxRelay tick failed unexpectedly.");
             }
         }
+
+        _logger.LogInformation("OutboxRelay shutting down gracefully.");
     }
 
     private async Task ProcessBatchAsync(CancellationToken cancellationToken)
@@ -73,8 +92,16 @@ public class OutboxRelayBackgroundService : BackgroundService
         if (pending.Count == 0)
             return;
 
+        var stopRequested = false;
         foreach (var msg in pending)
         {
+            // #AUTH-37: check cancellation BEFORE mỗi message để không publish thêm sau khi shutdown.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                stopRequested = true;
+                break;
+            }
+
             try
             {
                 var eventType = Type.GetType(msg.EventType);
@@ -107,6 +134,12 @@ public class OutboxRelayBackgroundService : BackgroundService
                 // Label = short event-type name (vd "UserRegisteredEvent") để Prometheus aggregate by event.
                 AppMetrics.OutboxProcessed.WithLabels(eventType.Name).Inc();
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // #AUTH-37: shutdown signal giữa lúc publish → stop loop, flush các message đã thành công.
+                stopRequested = true;
+                break;
+            }
             catch (Exception ex)
             {
                 msg.RetryCount += 1;
@@ -119,6 +152,23 @@ public class OutboxRelayBackgroundService : BackgroundService
                 if (msg.RetryCount >= _options.MaxRetries)
                     AppMetrics.OutboxSkippedMaxRetry.Inc();
             }
+        }
+
+        // #AUTH-37: nếu shutdown giữa chừng, vẫn flush các thay đổi đã thành công bằng token mới
+        // có timeout ngắn (5s) — đảm bảo ProcessedAt được persist, không re-publish duplicate khi restart.
+        if (stopRequested)
+        {
+            using var flushCts = new CancellationTokenSource(ShutdownFlushTimeout);
+            try
+            {
+                await dbContext.SaveChangesAsync(flushCts.Token);
+                _logger.LogInformation("OutboxRelay flushed batch before shutdown.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "OutboxRelay final flush failed; processed messages may re-publish on restart (idempotent consumer required).");
+            }
+            return;
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

@@ -70,4 +70,45 @@ public class GoogleCallbackCommandHandlerTests
         resp.StatusCode.Should().Be(409);
         resp.Message.Should().Contain("pending");
     }
+
+    /// <summary>#AUTH-86: RedirectUri không trong whitelist → reject (chống open redirect).</summary>
+    [Fact]
+    public async Task Callback_RedirectUriNotWhitelisted_Returns400_NoExchange()
+    {
+        var handler = new GoogleCallbackCommandHandler(_mediator.Object, _google.Object, _configuration);
+        var resp = await handler.Handle(
+            new GoogleCallbackCommand { Code = "code", RedirectUri = "https://evil.example.com/steal" },
+            CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(400);
+        // KHÔNG được call Google API với redirectUri lạ.
+        _google.Verify(g => g.ExchangeCodeForIdTokenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mediator.Verify(m => m.Send(It.IsAny<GoogleAuthCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// #AUTH-86: Google API timeout (Polly retry exhausted) → ExchangeCodeForIdTokenAsync trả null →
+    /// handler 401 (semantic explicit: timeout == failed exchange từ user perspective).
+    /// </summary>
+    [Fact]
+    public async Task Callback_GoogleApiTimeout_TreatsAsExchangeFail_Returns401()
+    {
+        // Helper trả null khi exhaust retry — đã wrap exception OperationCanceledException/HttpRequestException.
+        _google.Setup(g => g.ExchangeCodeForIdTokenAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync((string?)null);
+
+        var handler = new GoogleCallbackCommandHandler(_mediator.Object, _google.Object, _configuration);
+        var resp = await handler.Handle(
+            new GoogleCallbackCommand { Code = "valid-code", RedirectUri = "https://api/cb" },
+            CancellationToken.None);
+
+        resp.StatusCode.Should().Be(401);
+        _mediator.Verify(m => m.Send(It.IsAny<GoogleAuthCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Note: CSRF state mismatch test thuộc về AuthController layer (xem AuthController.ProcessCallbackAsync
+    // dùng SecureCompareHelper.FixedTimeEquals). Handler chỉ nhận code+redirectUri sau khi controller
+    // đã verify state. Email mismatch thuộc về GoogleAuthCommandHandler (downstream mediator).
 }

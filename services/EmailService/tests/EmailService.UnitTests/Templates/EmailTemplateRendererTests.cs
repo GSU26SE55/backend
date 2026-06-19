@@ -139,6 +139,22 @@ public class EmailTemplateRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task RenderAsync_HtmlEncodesUserInput_PreventsXss()
+    {
+        // #AUTH-10: placeholder bị HTML-encode để chống XSS qua FullName, PendingEmail, ...
+        WriteTemplate("Xss", "<p>Hi {{Name}}</p>");
+        var sut = NewRenderer();
+
+        var result = await sut.RenderAsync("Xss", new Dictionary<string, string?>
+        {
+            ["Name"] = "<script>alert('xss')</script>"
+        });
+
+        result.Should().NotContain("<script>");
+        result.Should().Contain("&lt;");
+    }
+
+    [Fact]
     public async Task RenderAsync_CacheDisabled_RereadsFileEveryCall()
     {
         WriteTemplate("Live", "v1 {{Key}}");

@@ -1,5 +1,6 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +38,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
 
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
         {
-            var phone = request.PhoneNumber.Trim();
+            var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
             var duplicated = await _unitOfWork.Accounts
                 .GetAllAsync()
                 .AnyAsync(a => a.Id != request.Id && a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);

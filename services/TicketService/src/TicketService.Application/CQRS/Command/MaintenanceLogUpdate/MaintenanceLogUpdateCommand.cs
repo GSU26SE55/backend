@@ -3,7 +3,8 @@ using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.MaintenanceLogUpdate;

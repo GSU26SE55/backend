@@ -18,7 +18,7 @@ public class ForgotPasswordCommandHandlerTests
     public async Task Forgot_NonExistentEmail_Returns200_NoLeak()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
+        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "ghost@example.com" }, CancellationToken.None);
 
@@ -39,14 +39,14 @@ public class ForgotPasswordCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
+        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "user@example.com" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         account.OtpCode.Should().NotBeNull().And.HaveLength(6);
         account.OtpPurpose.Should().Be(OtpPurposeEnum.PasswordReset);
-        account.OtpExpiredAt.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(10), TimeSpan.FromSeconds(5));
+        account.OtpExpiredAt.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromSeconds(5));
         _producer.Verify(p => p.PublishAsync(It.Is<SendPasswordResetOtpEvent>(e => e.ToEmail == "user@example.com"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -62,7 +62,7 @@ public class ForgotPasswordCommandHandlerTests
             Status = AccountStatusEnum.PendingVerification
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
+        var handler = new ForgotPasswordCommandHandler(uow.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ForgotPasswordCommandHandler>.Instance);
 
         var resp = await handler.Handle(new ForgotPasswordCommand { Email = "pending@example.com" }, CancellationToken.None);
 
@@ -89,7 +89,7 @@ public class VerifyResetOtpCommandHandlerTests
         FullName = "U",
         Status = AccountStatusEnum.Active,
         OtpCode = otp,
-        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(8),
+        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(3),
         OtpPurpose = OtpPurposeEnum.PasswordReset
     };
 
@@ -181,9 +181,9 @@ public class ResetPasswordCommandHandlerTests
         };
         var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync(account);
-        _jwt.Setup(j => j.ValidateResetToken("good-token")).Returns((accountId, (string?)null));
+        _jwt.Setup(j => j.ValidateResetTokenDetailed("good-token")).Returns((accountId, (string?)null, (DateTime?)DateTime.UtcNow.AddMinutes(10), (string?)null));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object, StubRedis.Build().Object, new Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "good-token", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
@@ -198,9 +198,9 @@ public class ResetPasswordCommandHandlerTests
     public async Task Reset_InvalidToken_Returns401()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        _jwt.Setup(j => j.ValidateResetToken(It.IsAny<string>())).Returns(((Guid?)null, "invalid"));
+        _jwt.Setup(j => j.ValidateResetTokenDetailed(It.IsAny<string>())).Returns(((Guid?)null, (string?)null, (DateTime?)null, "invalid"));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object, StubRedis.Build().Object, new Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "bad", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(401);
@@ -212,9 +212,9 @@ public class ResetPasswordCommandHandlerTests
         var accountId = Guid.NewGuid();
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(accountId)).ReturnsAsync((Account?)null);
-        _jwt.Setup(j => j.ValidateResetToken("good")).Returns((accountId, (string?)null));
+        _jwt.Setup(j => j.ValidateResetTokenDetailed("good")).Returns((accountId, (string?)null, (DateTime?)DateTime.UtcNow.AddMinutes(10), (string?)null));
 
-        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object, StubRedis.Build().Object, new Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "good", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(404);

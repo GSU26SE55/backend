@@ -27,7 +27,8 @@ public static class ManageDependencyInjection
         services.AddScopedInterface(configuration);
         services.AddSharedInfrastructure(configuration, "AuthService.Application", "Auth Service API");
 
-        services.AddMessageBus(configuration);
+        // #AUTH-15: register Application-layer consumers (PermissionsChangedConsumer).
+        services.AddMessageBus(configuration, typeof(AuthService.Application.Authorization.PermissionResolver).Assembly);
 
         // Outbox Pattern: override IMessageProducerService bằng OutboxMessagePublisher.
         // Handler publish event → INSERT vào DbContext.OutboxMessages, atomic với business data.
@@ -36,8 +37,36 @@ public static class ManageDependencyInjection
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
         services.AddHostedService<OutboxRelayBackgroundService>();
 
+        // #AUTH-31: dọn PendingEmail "treo" 24h sau khi OTP expire.
+        services.AddHostedService<PendingEmailCleanupBackgroundService>();
+
+        // #AUTH-18 + #AUTH-43: auto-unlock account đã hết lockout sau mỗi 5 phút.
+        services.AddHostedService<LockoutReconcileBackgroundService>();
+
+        // #AUTH-49: dọn OTP scratch fields cũ hơn 24h (không bao gồm OtpPurpose=EmailChange).
+        services.AddHostedService<ExpiredOtpCleanupBackgroundService>();
+
+        // #AUTH-42: hard-delete account đã soft-delete > 90 ngày.
+        services.AddHostedService<AccountHardDeleteBackgroundService>();
+
         // Concurrent session limit policy. Bind từ section "Session" hoặc dùng default (5).
         services.Configure<SessionOptions>(configuration.GetSection(SessionOptions.SectionName));
+
+        // #AUTH-12: device binding cho refresh token (IP/UA cross-check).
+        services.Configure<AuthSecurityOptions>(configuration.GetSection(AuthSecurityOptions.SectionName));
+
+        // #AUTH-32 + #AUTH-66: JwtSettings options với ValidateDataAnnotations + ValidateOnStart.
+        // Deploy thiếu SecretKey/Issuer/Audience → fail fast lúc Build() thay vì runtime crash.
+        services.AddOptions<JwtSettingsOptions>()
+            .Bind(configuration.GetSection(JwtSettingsOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // #AUTH-53: password policy configurable. Bind từ section "PasswordPolicy" + bootstrap static.
+        var passwordPolicyOptions = configuration.GetSection(PasswordPolicyOptions.SectionName)
+            .Get<PasswordPolicyOptions>() ?? new PasswordPolicyOptions();
+        services.Configure<PasswordPolicyOptions>(configuration.GetSection(PasswordPolicyOptions.SectionName));
+        AuthService.Application.Validation.PasswordPolicy.Configure(passwordPolicyOptions);
 
         // Granular permission authorization:
         // [HasPermission("battery.view")] -> policy "perm:battery.view"
@@ -74,16 +103,34 @@ public static class ManageDependencyInjection
     {
         service.AddScoped<IAuthUnitOfWork, UnitOfWork>();
         service.AddScoped<IJwtHelper, JwtHelper>();
-        service.AddHttpClient<IGoogleOAuthHelper, GoogleOAuthHelper>();
-        service.AddSingleton<IPasswordHasher, PasswordHasher>();
+        // #AUTH-21: configure timeout 10s cho HttpClient. Retry sẽ thực hiện trong helper bằng
+        // try/catch + delay (tránh thêm Polly dependency cho chỉ 1 endpoint).
+        service.AddHttpClient<IGoogleOAuthHelper, GoogleOAuthHelper>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        // #AUTH-70 + #AUTH-83: Scoped thay Singleton — tránh cache state nếu future work-factor đọc từ DB
+        // hoặc cấu hình per-request. Hiện tại PasswordHasher stateless nhưng Scoped future-proof.
+        service.AddScoped<IPasswordHasher, PasswordHasher>();
         service.AddScoped<AuthDataSeeder>();
         service.AddHttpContextAccessor();
+
+        // #AUTH-38: abstraction cho DateTime.UtcNow — mockable trong test.
+        service.AddSingleton<ISystemClock, SystemClock>();
+
+        // #AUTH-54: Token Revocation List (TRL) — Redis-backed jti blacklist.
+        service.AddSingleton<ITokenRevocationStore, RedisTokenRevocationStore>();
+
+        // #AUTH-58: 2FA SMS OTP store.
+        service.AddSingleton<ITwoFactorSmsOtpStore, RedisTwoFactorSmsOtpStore>();
 
         // 2FA Hardening (GH-295)
         service.AddSingleton<ITotpService, TotpService>();
         service.AddSingleton<ITwoFactorSecretProtector, TwoFactorSecretProtector>();
         service.AddSingleton<ITwoFactorChallengeStore, TwoFactorChallengeStore>();
         service.AddSingleton<ITwoFactorPendingStore, TwoFactorPendingStore>();
+        // #AUTH-51: cross-device 2FA confirm — Redis-backed token store, TTL 10 phút.
+        service.AddSingleton<ITwoFactorCrossDeviceConfirmStore, TwoFactorCrossDeviceConfirmStore>();
         service.AddSingleton<IBackupCodeGenerator, BackupCodeGenerator>();
         service.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
     }

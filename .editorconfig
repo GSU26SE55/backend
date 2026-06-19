@@ -66,3 +66,31 @@ dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 # Suppress warnings
 # CS1591: Missing XML comment — only enforce on public API if needed
 dotnet_diagnostic.CS1591.severity = none
+
+# =====================================================================
+# #AUTH-81 — Async/await anti-pattern enforcement (AuthService scope)
+# Áp dụng cùng .editorconfig này cho toàn repo, NHƯNG analyzer chỉ được
+# enable ở services/AuthService/Directory.Build.props. Service khác chưa
+# audit thì rule fire không có analyzer → no-op (an toàn).
+# Nâng severity → error để CI fail nếu vi phạm.
+# =====================================================================
+
+# VSTHRD002: Avoid problematic synchronous waits (.Result, .Wait(), .GetAwaiter().GetResult())
+# Lý do: gây deadlock trong ASP.NET sync-context, block thread pool, giảm throughput.
+dotnet_diagnostic.VSTHRD002.severity = error
+
+# VSTHRD100: Avoid async void methods (trừ event handler)
+# Lý do: exception trong async void crash process, không try-catch được từ caller.
+dotnet_diagnostic.VSTHRD100.severity = error
+
+# VSTHRD110: Observe result of async calls (Task không được await sẽ bị mất exception)
+dotnet_diagnostic.VSTHRD110.severity = error
+
+# CA2200: Rethrow to preserve stack details — cấm `throw ex;`, phải dùng `throw;`
+# Lý do: `throw ex` reset stack trace, làm debug khó tìm gốc lỗi.
+dotnet_diagnostic.CA2200.severity = error
+
+# VSTHRD200: Use "Async" suffix — SILENCE.
+# Lý do: ASP.NET Controller convention KHÔNG bắt buộc suffix "Async" cho action method
+# (Microsoft sample, eShopOnContainers, etc đều bỏ suffix). Bật rule này gây 80+ noise.
+dotnet_diagnostic.VSTHRD200.severity = none

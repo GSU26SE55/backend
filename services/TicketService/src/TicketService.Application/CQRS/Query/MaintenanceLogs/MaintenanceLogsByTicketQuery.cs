@@ -1,5 +1,5 @@
 using MediatR;
-using TicketService.Application.DTOs.Response.Maintenance;
+using TicketService.Application.DTOs.Response.Maintenances;
 
 namespace TicketService.Application.CQRS.Query.MaintenanceLogs;
 

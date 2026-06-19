@@ -5,6 +5,7 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -25,7 +26,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
 
     public async Task<CommonResponse<ResetTokenDto>> Handle(VerifyResetOtpCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -40,10 +41,10 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
         if (account.OtpPurpose != OtpPurposeEnum.PasswordReset
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
-            || account.OtpExpiredAt.Value < DateTime.UtcNow)
+            || account.OtpExpiredAt.Value <= DateTime.UtcNow)
             return Fail(401, "OTP không hợp lệ hoặc đã hết hạn.");
 
-        if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
+        if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
             account.FailedLoginAttempts += 1;
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
@@ -51,12 +52,14 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
 
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            AppMetrics.AuthOtpUsageTotal.WithLabels("password_reset", "wrong").Inc(); // #AUTH-78
             return Fail(401, "OTP không chính xác.");
         }
 
         account.FailedLoginAttempts = 0;
         _unitOfWork.Accounts.UpdateAsync(account);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        AppMetrics.AuthOtpUsageTotal.WithLabels("password_reset", "verified").Inc(); // #AUTH-78
 
         var resetToken = _jwtHelper.GenerateResetToken(account.Id, normalizedEmail, ResetTokenLifetimeMinutes);
 

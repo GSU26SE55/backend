@@ -48,7 +48,9 @@ public class Verify2FALoginCommandHandlerTests
     }
 
     private Verify2FALoginCommandHandler Build(Mock<AuthService.Application.Interfaces.Repositories.IAuthUnitOfWork> uow)
-        => new(uow.Object, _store.Object, _totp.Object, _protector.Object, _backup.Object, _issuer.Object, _publisher.Object);
+        => new(uow.Object, _store.Object, _totp.Object, _protector.Object, _backup.Object, _issuer.Object, _publisher.Object,
+               StubRedis.Build().Object,
+               new Mock<AuthService.Application.Interfaces.Services.ITwoFactorSmsOtpStore>().Object);
 
     [Fact]
     public async Task Verify_NoChallenge_Returns422()

@@ -6,6 +6,7 @@ using AuthService.Application.CQRS.Query.Login;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.DTOs.Response.Login;
+using AuthService.Application.DTOs.Response.TrustedDevice;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -164,6 +165,87 @@ public class AccountsController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId == null)
             return Unauthorized(UnauthString());
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Yêu cầu đổi email — gửi OTP 6 số tới email mới để xác thực. Hoàn tất bằng <c>POST /api/accounts/me/confirm-email-change</c>.
+    /// </summary>
+    /// <remarks>
+    /// Body request:
+    /// - <c>NewEmail</c>: email mới, bắt buộc, max 256 ký tự, đúng định dạng.
+    /// - <c>CurrentPassword</c>: mật khẩu hiện tại để xác nhận danh tính, bắt buộc.
+    ///
+    /// Cách hoạt động:
+    /// - AccountId lấy từ JWT, client không tự truyền.
+    /// - Handler verify password hiện tại, lưu email mới vào <c>PendingEmail</c>, sinh OTP purpose <c>EmailChange</c> (TTL 5 phút, #AUTH-14) và gửi OTP tới email mới qua outbox.
+    /// </remarks>
+    /// <param name="command">Email mới và mật khẩu hiện tại.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns>Thông báo kết quả gửi OTP đổi email.</returns>
+    /// <response code="200">Đã gửi OTP tới email mới.</response>
+    /// <response code="400">Validation lỗi (email sai định dạng, password rỗng).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC mật khẩu hiện tại không chính xác.</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Email mới đã được tài khoản khác sử dụng.</response>
+    /// <response code="422">Email mới trùng email hiện tại.</response>
+    [HttpPost("me/change-email")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyAuthOtp)] // #AUTH-46
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        command.AccountId = userId.Value;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xác thực OTP để hoàn tất đổi email. Email mới (đã lưu ở <c>PendingEmail</c>) chính thức có hiệu lực; mọi session bị revoke.
+    /// </summary>
+    /// <remarks>
+    /// Body request:
+    /// - <c>Otp</c>: mã OTP đúng 6 chữ số gửi tới email mới.
+    ///
+    /// Cách hoạt động:
+    /// - AccountId lấy từ JWT; FE không cần gửi lại email mới (đọc từ <c>PendingEmail</c> trong DB).
+    /// - Handler verify OTP purpose <c>EmailChange</c> còn hạn, copy <c>PendingEmail</c> sang <c>Email</c>, set <c>EmailConfirmed = true</c>, revoke toàn bộ refresh token (email = identity).
+    /// </remarks>
+    /// <param name="command">OTP xác thực đổi email.</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns>Thông báo kết quả đổi email.</returns>
+    /// <response code="200">Đổi email thành công. Client cần đăng nhập lại bằng email mới.</response>
+    /// <response code="400">OTP sai định dạng (phải đủ 6 chữ số).</response>
+    /// <response code="401">Chưa đăng nhập HOẶC OTP sai/hết hạn.</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">Không có yêu cầu đổi email đang chờ verify, hoặc email mới đã bị tài khoản khác chiếm trong lúc chờ.</response>
+    /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
+    [HttpPost("me/confirm-email-change")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status423Locked)]
+    public async Task<IActionResult> ConfirmEmailChange([FromBody] ConfirmEmailChangeCommand command, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
 
         command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
@@ -461,6 +543,29 @@ public class AccountsController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <response code="200">Lấy profile thành công.</response>
     /// <response code="401">Chưa đăng nhập hoặc token hết hạn.</response>
+    /// <summary>#AUTH-62: GDPR Article 20 data portability — export full account data dưới dạng JSON.</summary>
+    [HttpGet("me/export")]
+    [ProducesResponseType(typeof(CommonResponse<AuthService.Application.CQRS.Query.Account.AccountDataExportDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportMyData(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var query = new AuthService.Application.CQRS.Query.Account.ExportMyDataQuery { AccountId = userId.Value };
+        var result = await _mediator.Send(query, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            // Download attachment để client browser save as file.
+            Response.Headers.Append("Content-Disposition",
+                $"attachment; filename=\"account-export-{userId.Value:N}-{DateTime.UtcNow:yyyyMMdd}.json\"");
+        }
+        return StatusCode(result.StatusCode, result);
+    }
+
     [HttpGet("me/profile")]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
@@ -588,6 +693,86 @@ public class AccountsController : ControllerBase
         };
 
         var response = await _mediator.Send(query, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    // ============== #AUTH-48 Trusted Device endpoints ==============
+
+    /// <summary>
+    /// #AUTH-48: Liệt kê tất cả trusted device đang active của tài khoản hiện tại.
+    /// </summary>
+    /// <remarks>
+    /// Active = chưa revoke + chưa hết hạn TTL. Trả về thêm flag <c>isCurrentDevice</c> nếu device hiện tại
+    /// (theo X-Device-Id + UA) match. Dùng để hiển thị trên Settings page.
+    /// </remarks>
+    /// <response code="200">Danh sách thiết bị tin cậy.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpGet("me/trusted-devices")]
+    [ProducesResponseType(typeof(CommonResponse<List<TrustedDeviceDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyTrustedDevices(CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new CommonResponse<List<TrustedDeviceDto>> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+
+        var response = await _mediator.Send(new GetMyTrustedDevicesQuery { AccountId = userId.Value }, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    /// <summary>
+    /// #AUTH-48: User revoke 1 trusted device cụ thể (vd thiết bị mất, đã bán).
+    /// </summary>
+    /// <remarks>
+    /// Soft-revoke: set RevokedAt + RevokedReason="User revoked", giữ row làm audit. Sau revoke,
+    /// device đó nếu login sẽ phải pass 2FA challenge trở lại.
+    /// </remarks>
+    /// <response code="200">Revoke thành công (hoặc device đã revoke từ trước).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="404">Device không tồn tại hoặc không thuộc account hiện tại.</response>
+    [HttpDelete("me/trusted-devices/{id:guid}")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeTrustedDevice(Guid id, CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        var response = await _mediator.Send(new RevokeTrustedDeviceCommand
+        {
+            AccountId = userId.Value,
+            TrustedDeviceId = id
+        }, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
+    /// <summary>
+    /// #AUTH-48: Revoke TẤT CẢ trusted device của tài khoản hiện tại.
+    /// </summary>
+    /// <remarks>
+    /// Dùng khi nghi ngờ account bị compromise hoặc khi muốn force-2FA-toàn-bộ. Cũng được call
+    /// automatically khi ChangePassword hoặc Disable2FA — endpoint này dành cho user manual.
+    /// </remarks>
+    /// <response code="200">Đã revoke tất cả (kèm count trong message).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpDelete("me/trusted-devices")]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AccountActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RevokeAllTrustedDevices(CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(Unauth());
+
+        var response = await _mediator.Send(new RevokeAllTrustedDevicesCommand
+        {
+            AccountId = userId.Value,
+            Reason = "User manual revoke-all"
+        }, cancellationToken);
         return StatusCode(response.StatusCode, response);
     }
 

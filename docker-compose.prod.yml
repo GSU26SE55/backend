@@ -78,6 +78,7 @@ services:
       BATTERY_DB_NAME: ${BATTERY_DB_NAME:-battery_db}
       TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
       NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+      SMS_DB_NAME: ${SMS_DB_NAME:-sms_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -239,9 +240,15 @@ services:
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
+      # Sprint SMS — SMS Gateway Hub (sms_db owner).
+      ConnectionStrings__SmsDb: "Host=postgres;Port=5432;Database=${SMS_DB_NAME:-sms_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
     ports:
       - "4004:8080"
     depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       rabbitmq:

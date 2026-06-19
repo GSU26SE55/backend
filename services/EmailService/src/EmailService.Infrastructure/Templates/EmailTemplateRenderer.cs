@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -60,10 +61,17 @@ public class EmailTemplateRenderer : IEmailTemplateRenderer
 
     private static string Replace(string template, IReadOnlyDictionary<string, string?> values)
     {
+        // #AUTH-10: HTML-encode mọi placeholder để chống XSS qua user input
+        // (FullName, PendingEmail, Role, AcceptUrl, ...). HtmlEncoder.Default an toàn cho
+        // cả nội dung text lẫn HTML attribute (URL trong href: '&' → '&amp;' là valid encoding).
         return PlaceholderRegex.Replace(template, match =>
         {
             var key = match.Groups["key"].Value;
-            return values.TryGetValue(key, out var value) ? value ?? string.Empty : match.Value;
+            if (!values.TryGetValue(key, out var value))
+                return match.Value;
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+            return HtmlEncoder.Default.Encode(value);
         });
     }
 }

@@ -1,10 +1,14 @@
+using System.Security.Cryptography;
+using System.Text;
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using StackExchange.Redis;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
@@ -12,12 +16,15 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
 {
     private const int MaxFailedAttempts = 5;
     private const int LockoutDurationMinutes = 15;
+    private const string EmailReserveKeyPrefix = "email_reserve:";
 
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IConnectionMultiplexer _redis;
 
-    public ConfirmEmailChangeCommandHandler(IAuthUnitOfWork unitOfWork)
+    public ConfirmEmailChangeCommandHandler(IAuthUnitOfWork unitOfWork, IConnectionMultiplexer redis)
     {
         _unitOfWork = unitOfWork;
+        _redis = redis;
     }
 
     public async Task<AccountActionResponse> Handle(ConfirmEmailChangeCommand request, CancellationToken cancellationToken)
@@ -34,10 +41,10 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
             return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
 
-        if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value < DateTime.UtcNow)
+        if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
             return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
 
-        if (!string.Equals(account.OtpCode, request.Otp.Trim(), StringComparison.Ordinal))
+        if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
             account.FailedLoginAttempts += 1;
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
@@ -88,6 +95,14 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // #AUTH-24: release Redis reservation cho email mới (best-effort, key tự expire 5p nếu fail — #AUTH-14).
+        try
+        {
+            var db = _redis.GetDatabase();
+            await db.KeyDeleteAsync(BuildReserveKey(pending));
+        }
+        catch { /* swallow — reservation key tự expire, không phải critical path. */ }
+
         return new AccountActionResponse
         {
             IsSuccess = true,
@@ -103,4 +118,10 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         StatusCode = statusCode,
         Message = message,
     };
+
+    private static string BuildReserveKey(string normalizedEmail)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedEmail));
+        return EmailReserveKeyPrefix + Convert.ToHexString(bytes)[..16];
+    }
 }

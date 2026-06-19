@@ -38,7 +38,11 @@ public class AddSharedInfrastructureTests
         services.AddLogging();
         services.AddRouting();
         // Swagger nội bộ cần IWebHostEnvironment để build options.
-        services.AddSingleton<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>(new StubEnv());
+        // #AUTH-76: GlobalExceptionMiddleware cũng inject IHostEnvironment để check IsProduction
+        // → ẩn exceptionType/exceptionMessage trong prod. Register cả 2 interface từ cùng StubEnv.
+        var env = new StubEnv();
+        services.AddSingleton<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>(env);
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostEnvironment>(env);
         // assemblyName bắt buộc — dùng tên SharedContracts vì có Application-style classes (IValidatable).
         // MediatR scan assembly cũng cần nó load được.
         services.AddSharedInfrastructure(BuildConfig(), assemblyName: "SharedContracts", apiTitle: "Test API");

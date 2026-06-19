@@ -41,6 +41,12 @@ public class GetMySessionsQueryHandler : IRequestHandler<GetMySessionsQuery, Ses
             query = query.Where(rt => rt.Status == RefreshTokenStatus.Active && rt.ExpiredAt > DateTime.UtcNow);
         }
 
+        // #AUTH-44: filter sessions theo DeviceId.
+        if (!string.IsNullOrWhiteSpace(request.DeviceId))
+        {
+            query = query.Where(rt => rt.DeviceId == request.DeviceId);
+        }
+
         var sessions = await query
             .OrderByDescending(rt => rt.IssuedAt)
             .Select(rt => new SessionDto

@@ -47,7 +47,7 @@ public class RegisterCommandHandlerTests
             a.Email == "alice@example.com" &&
             a.PasswordHash == "HASHED" &&
             a.FullName == "Alice" &&
-            a.PhoneNumber == "0900111222" &&
+            a.PhoneNumber == "+84900111222" &&
             a.Status == AccountStatusEnum.PendingVerification &&
             a.EmailConfirmed == false &&
             a.OtpPurpose == OtpPurposeEnum.Register &&

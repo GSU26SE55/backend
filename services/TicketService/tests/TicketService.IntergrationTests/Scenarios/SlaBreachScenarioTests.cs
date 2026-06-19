@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,13 +5,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using SharedContracts.Interfaces;
-using TicketService.Application.DTOs.Response.Ticket;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.Persistence;
 using TicketService.IntergrationTests.Fixtures;
-using Xunit;
 
 namespace TicketService.IntergrationTests.Scenarios;
 

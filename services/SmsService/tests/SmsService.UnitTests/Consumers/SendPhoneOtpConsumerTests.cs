@@ -1,38 +1,42 @@
 using MassTransit;
 using MassTransit.Testing;
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
-using SmsService.Infrastructure.Consumers;
-using SmsService.Infrastructure.Services;
+using SmsService.Application.Consumers;
+using SmsService.Application.CQRS.Command.Sms;
 
 namespace SmsService.UnitTests.Consumers;
 
+/// <summary>
+/// Backward-compat consumer cho AuthService cũ — sau khi AuthService migrate (Phase 9)
+/// + verify 1-2 sprint không còn event, sẽ xóa consumer này. Tests đảm bảo behavior:
+/// (1) Render template OTP body chuẩn, (2) Forward QueueSmsCommand với source="auth"+category="otp".
+/// </summary>
 public class SendPhoneOtpConsumerTests : IAsyncLifetime
 {
     private ITestHarness _harness = null!;
-    private IServiceProvider _provider = null!;
-    private Mock<ISmsSender> _smsSender = null!;
+    private ServiceProvider _provider = null!;
+    private Mock<IMediator> _mediator = null!;
     private Mock<IInboxStore> _inbox = null!;
 
     public async Task InitializeAsync()
     {
-        _smsSender = new Mock<ISmsSender>();
-        _smsSender.Setup(s => s.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                  .Returns(Task.CompletedTask);
+        _mediator = new Mock<IMediator>();
+        _mediator
+            .Setup(m => m.Send(It.IsAny<QueueSmsCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommonResponse<Guid> { IsSuccess = true, Data = Guid.NewGuid() });
 
         _inbox = new Mock<IInboxStore>();
         _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(true);
 
         var services = new ServiceCollection();
-        services.AddSingleton(_smsSender.Object);
+        services.AddSingleton(_mediator.Object);
         services.AddSingleton(_inbox.Object);
-
-        services.AddMassTransitTestHarness(x =>
-        {
-            x.AddConsumer<SendPhoneOtpConsumer>();
-        });
+        services.AddMassTransitTestHarness(x => x.AddConsumer<SendPhoneOtpConsumer>());
 
         _provider = services.BuildServiceProvider(true);
         _harness = _provider.GetRequiredService<ITestHarness>();
@@ -43,29 +47,29 @@ public class SendPhoneOtpConsumerTests : IAsyncLifetime
     {
         if (_harness != null)
             await _harness.Stop();
-        if (_provider is IAsyncDisposable ad)
-            await ad.DisposeAsync();
-        else if (_provider is IDisposable d)
-            d.Dispose();
+        await _provider.DisposeAsync();
     }
 
     [Fact]
-    public async Task Consume_FirstTime_SendsSms()
+    public async Task Consume_RendersOtpBody_AndForwardsAsOtpCategory()
     {
         await _harness.Bus.Publish(new SendPhoneOtpEvent("0901234567", "987654"));
 
         var consumerHarness = _harness.GetConsumerHarness<SendPhoneOtpConsumer>();
         (await consumerHarness.Consumed.Any<SendPhoneOtpEvent>()).Should().BeTrue();
 
-        _smsSender.Verify(s => s.SendAsync(
-            "0901234567",
-            It.Is<string>(body => body.Contains("987654")),
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        _mediator.Verify(m => m.Send(
+            It.Is<QueueSmsCommand>(q =>
+                q.PhoneNumber == "0901234567" &&
+                q.Message.Contains("987654") &&
+                q.Message.Contains("khong chia se") &&
+                q.SourceService == "auth" &&
+                q.Category == "otp"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Consume_DuplicateMessage_InboxBlocks_NoSmsSent()
+    public async Task Consume_DuplicateMessage_InboxBlocks_NoForward()
     {
         _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendPhoneOtpConsumer), It.IsAny<CancellationToken>()))
               .ReturnsAsync(false);
@@ -75,27 +79,6 @@ public class SendPhoneOtpConsumerTests : IAsyncLifetime
         var consumerHarness = _harness.GetConsumerHarness<SendPhoneOtpConsumer>();
         (await consumerHarness.Consumed.Any<SendPhoneOtpEvent>()).Should().BeTrue();
 
-        _smsSender.Verify(s => s.SendAsync(
-            It.IsAny<string>(),
-            It.IsAny<string>(),
-            It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task Consume_SmsBodyContainsOtp_AndWarning()
-    {
-        await _harness.Bus.Publish(new SendPhoneOtpEvent("0901234567", "555666"));
-
-        var consumerHarness = _harness.GetConsumerHarness<SendPhoneOtpConsumer>();
-        (await consumerHarness.Consumed.Any<SendPhoneOtpEvent>()).Should().BeTrue();
-
-        _smsSender.Verify(s => s.SendAsync(
-            It.IsAny<string>(),
-            It.Is<string>(body =>
-                body.Contains("555666") &&
-                body.Contains("khong chia se")),  // warning text
-            It.IsAny<CancellationToken>()),
-            Times.Once);
+        _mediator.Verify(m => m.Send(It.IsAny<QueueSmsCommand>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

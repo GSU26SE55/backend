@@ -38,7 +38,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
 
     public async Task<AccountActionResponse> Handle(InviteAccountCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var emailExists = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -56,7 +56,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
 
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
         {
-            var phone = request.PhoneNumber.Trim();
+            var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
             var phoneExists = await _unitOfWork.Accounts
                 .GetAllAsync()
                 .AnyAsync(a => a.PhoneNumber == phone && !a.IsDeleted, cancellationToken);
@@ -101,7 +101,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             Email = normalizedEmail,
             PasswordHash = placeholderPassword,
             FullName = request.FullName.Trim(),
-            PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
+            PhoneNumber = PhoneNormalizer.Normalize(request.PhoneNumber).Length == 0 ? null : PhoneNormalizer.Normalize(request.PhoneNumber),
             EmailConfirmed = false,
             Status = AccountStatusEnum.PendingVerification,
             InvitationToken = invitationToken,

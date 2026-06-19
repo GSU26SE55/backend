@@ -47,8 +47,20 @@ public class Account : AuditableEntity
     /// </summary>
     public DateTime? TwoFactorSecretEncryptedAt { get; set; }
 
+    /// <summary>
+    /// #AUTH-19: bộ đếm CHUNG cho mọi luồng xác thực failure (wrong password ở Login, wrong OTP
+    /// ở VerifyOtp/VerifyResetOtp/VerifyPhoneOtp). Tăng +1 khi fail, reset = 0 khi:
+    /// (a) verify thành công ở bất kỳ luồng nào,
+    /// (b) ForgotPassword được trigger thành công (chấp nhận attacker xóa counter để tránh victim bị lock).
+    /// Khi đạt 5 → set <see cref="LockoutEndAt"/> = now + 15 phút.
+    /// Lockout áp dụng cho TẤT CẢ entrypoint, không tách riêng.
+    /// </summary>
     public int FailedLoginAttempts { get; set; } = 0;
 
+    /// <summary>
+    /// Thời điểm lockout kết thúc (UTC). Null = không lockout. Set bởi handler khi
+    /// <see cref="FailedLoginAttempts"/> đạt threshold.
+    /// </summary>
     public DateTime? LockoutEndAt { get; set; }
 
     public DateTime? LastLoginAt { get; set; }
@@ -70,8 +82,11 @@ public class Account : AuditableEntity
 
     public DateTime? InvitationExpiredAt { get; set; }
 
-    /// <summary>Role hiện tại của account. Mỗi account bắt buộc có đúng 1 role.</summary>
-    public Guid RoleId { get; set; }
+    /// <summary>
+    /// #AUTH-69: Role hiện tại của account. Nullable — null = chưa gán role (vd account vừa tạo
+    /// qua Google OAuth nhưng chưa onboard). Handler check <c>RoleId == null</c> thay vì <c>Guid.Empty</c>.
+    /// </summary>
+    public Guid? RoleId { get; set; }
 
     /// <summary>Thời điểm role được gán/đổi lần cuối — audit "ai đổi khi nào".</summary>
     public DateTime? RoleAssignedAt { get; set; }
@@ -80,6 +95,15 @@ public class Account : AuditableEntity
     public Guid? RoleAssignedBy { get; set; }
 
     public Role Role { get; set; } = null!;
+
+    /// <summary>
+    /// #AUTH-47: Khi account này được merge VÀO 1 account khác (tức là account này là "source/secondary"),
+    /// lưu Id của target/primary account. Account.IsDeleted = true + MergedIntoId set → tombstone row.
+    /// Null nếu account chưa bị merge.
+    /// </summary>
+    public Guid? MergedIntoId { get; set; }
+
+    public DateTime? MergedAt { get; set; }
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 

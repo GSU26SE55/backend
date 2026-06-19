@@ -5,16 +5,30 @@ using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Interfaces.Services;
+using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedInfrastructure.Metrics;
+using StackExchange.Redis;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginCommand, LoginResponse>
 {
     private const int MaxAttemptsPerChallenge = 5;
+
+    // #AUTH-48: trusted device TTL — 30 ngày. Sau hạn, device row vẫn giữ làm audit
+    // nhưng IsActiveAt(now) trả false → user phải re-trust.
+    private static readonly TimeSpan TrustedDeviceTtl = TimeSpan.FromDays(30);
+
+    // #AUTH-45: per-account rate limit cho backup code (chống brute-force qua nhiều challenge).
+    // 8 backup codes × 5 attempts/challenge = 40 attempts có thể tích lũy nếu attacker spam challenge.
+    // Per-account 5/15min ngắt brute-force ở tầng cao hơn challenge-level.
+    private const int BackupCodeMaxAttemptsPerWindow = 5;
+    private static readonly TimeSpan BackupCodeRateLimitWindow = TimeSpan.FromMinutes(15);
+    private const string BackupCodeRateLimitKeyPrefix = "backup_code_attempts:";
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly ITwoFactorChallengeStore _challengeStore;
@@ -23,6 +37,8 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
     private readonly IBackupCodeGenerator _backupCodes;
     private readonly IAuthTokenIssuer _tokenIssuer;
     private readonly IPublisher _publisher;
+    private readonly IConnectionMultiplexer _redis;
+    private readonly ITwoFactorSmsOtpStore _smsOtpStore;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public Verify2FALoginCommandHandler(
@@ -33,6 +49,8 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
         IBackupCodeGenerator backupCodes,
         IAuthTokenIssuer tokenIssuer,
         IPublisher publisher,
+        IConnectionMultiplexer redis,
+        ITwoFactorSmsOtpStore smsOtpStore,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
@@ -42,6 +60,8 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
         _backupCodes = backupCodes;
         _tokenIssuer = tokenIssuer;
         _publisher = publisher;
+        _redis = redis;
+        _smsOtpStore = smsOtpStore;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -89,10 +109,38 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
             return Fail(409, "2FA không còn được bật. Hãy login lại.");
         }
 
-        // Verify code: TOTP hoặc backup code
+        // #AUTH-45: per-account rate limit cho backup code path TRƯỚC khi attempt redeem.
+        if (request.IsBackupCode)
+        {
+            var rateLimitKey = BackupCodeRateLimitKeyPrefix + account.Id.ToString("N");
+            var rateDb = _redis.GetDatabase();
+            var current = await rateDb.StringIncrementAsync(rateLimitKey);
+            if (current == 1)
+                await rateDb.KeyExpireAsync(rateLimitKey, BackupCodeRateLimitWindow);
+            if (current > BackupCodeMaxAttemptsPerWindow)
+            {
+                await _challengeStore.InvalidateAsync(request.ChallengeToken, cancellationToken);
+                await PublishAudit(AuditActionEnum.OtpVerifyFailed, account.Id, false,
+                    targetEmail: account.Email,
+                    reason: "Backup code rate limit exceeded",
+                    cancellationToken: cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                return Fail(429, "Vượt quá số lần thử backup code. Vui lòng thử lại sau 15 phút hoặc dùng TOTP.");
+            }
+        }
+
+        // Verify code: TOTP / backup / SMS OTP (#AUTH-58)
         bool verified;
         Guid? redeemedBackupCodeId = null;
-        if (request.IsBackupCode)
+        if (request.IsSmsCode)
+        {
+            var expected = await _smsOtpStore.GetAsync(request.ChallengeToken, cancellationToken);
+            verified = expected != null
+                && SecureCompareHelper.FixedTimeEquals(expected, request.Code.Trim());
+            if (verified)
+                await _smsOtpStore.InvalidateAsync(request.ChallengeToken, cancellationToken);
+        }
+        else if (request.IsBackupCode)
         {
             verified = await TryRedeemBackupCodeAsync(account.Id, request.Code, cancellationToken);
             if (verified)
@@ -113,6 +161,10 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
 
         if (!verified)
         {
+            // #AUTH-78: metric per method
+            var failResultLabel = request.IsSmsCode ? "sms_wrong" : (request.IsBackupCode ? "backup_wrong" : "totp_wrong");
+            AppMetrics.Auth2FAChallengeTotal.WithLabels(failResultLabel).Inc();
+
             await PublishAudit(AuditActionEnum.OtpVerifyFailed, account.Id, false,
                 targetEmail: account.Email,
                 reason: request.IsBackupCode ? "Wrong backup code" : "Wrong TOTP",
@@ -127,16 +179,37 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
             return Fail(422, $"Mã xác thực không đúng. Còn {Math.Max(0, remaining)} lần thử.");
         }
 
-        // Lazy re-encrypt secret nếu vẫn là plaintext legacy
-        if (!_protector.IsProtected(account.TwoFactorSecret))
+        // #AUTH-22: Lazy re-encrypt secret nếu vẫn là plaintext legacy HOẶC
+        // detect inconsistent state (encrypted secret nhưng EncryptedAt null — vd partial save / DB manipulation).
+        // Trong cả 2 trường hợp: re-protect (idempotent vì Protect kiểm tra prefix "enc:v1:") + reset EncryptedAt.
+        if (!_protector.IsProtected(account.TwoFactorSecret) || account.TwoFactorSecretEncryptedAt == null)
         {
-            account.TwoFactorSecret = _protector.Protect(account.TwoFactorSecret);
+            // Unprotect-then-protect chain xử lý cả case đã protected nhưng EncryptedAt null:
+            // - Plaintext legacy → Unprotect no-op, Protect encrypts.
+            // - Đã protected → Unprotect → re-Protect (cùng kết quả nếu cùng key).
+            var plaintext = _protector.IsProtected(account.TwoFactorSecret)
+                ? _protector.Unprotect(account.TwoFactorSecret)
+                : account.TwoFactorSecret;
+            account.TwoFactorSecret = _protector.Protect(plaintext);
             account.TwoFactorSecretEncryptedAt = DateTime.UtcNow;
             _unitOfWork.Accounts.UpdateAsync(account);
         }
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var (tokens, sessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
+
+        // #AUTH-48: Trust device — chỉ cấp khi user opt-in + đi qua path TOTP/SMS (không cấp lúc backup code).
+        // Backup code là emergency, không trust device emergency.
+        if (request.TrustDevice && !request.IsBackupCode)
+        {
+            await TryAddOrRefreshTrustedDeviceAsync(account.Id, deviceId, userAgent, ipAddress,
+                request.TrustDeviceLabel, cancellationToken);
+        }
+
+        // #AUTH-78: metric per method success.
+        var resultLabel = request.IsSmsCode ? "sms_success" : (request.IsBackupCode ? "backup_success" : "totp_success");
+        AppMetrics.Auth2FAChallengeTotal.WithLabels(resultLabel).Inc();
+        AppMetrics.AuthLoginTotal.WithLabels("success_2fa").Inc();
 
         var roleName = account.Role?.Name ?? string.Empty;
 
@@ -175,6 +248,79 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
             Message = "Đăng nhập thành công.",
             Data = new LoginResultDto { Tokens = tokens }
         };
+    }
+
+    /// <summary>
+    /// #AUTH-48: Add 1 row TrustedDevice cho account+fingerprint, hoặc refresh ExpiresAt nếu đã có.
+    /// Best-effort: nếu fingerprint không compute được (deviceId/UA null) → skip silently.
+    /// Audit publish bên trong (cùng SaveChanges với business flow).
+    /// </summary>
+    private async Task TryAddOrRefreshTrustedDeviceAsync(
+        Guid accountId,
+        string? deviceId,
+        string? userAgent,
+        string? ipAddress,
+        string? userLabel,
+        CancellationToken cancellationToken)
+    {
+        var fingerprint = TrustedDeviceFingerprintHelper.ComputeFingerprint(deviceId, userAgent);
+        var ipPrefix = TrustedDeviceFingerprintHelper.ComputeIpPrefix(ipAddress);
+        if (fingerprint == null || ipPrefix == null)
+            return; // Không đủ data để trust — skip silently.
+
+        var label = string.IsNullOrWhiteSpace(userLabel)
+            ? TrustedDeviceFingerprintHelper.GenerateLabel(userAgent)
+            : userLabel.Trim();
+
+        var now = DateTime.UtcNow;
+        var expiresAt = now.Add(TrustedDeviceTtl);
+
+        // Lookup row hiện tại cho cùng (account, fingerprint) — KHÔNG filter by IpPrefix
+        // vì user có thể trust lại từ subnet khác (vd về quê) → update IpPrefix.
+        var existing = await _unitOfWork.TrustedDevices
+            .GetAllAsync()
+            .FirstOrDefaultAsync(td => td.AccountId == accountId
+                && td.DeviceFingerprintHash == fingerprint
+                && !td.IsDeleted, cancellationToken);
+
+        if (existing != null)
+        {
+            // Refresh: extend TTL + clear revoke (user re-trust lại sau khi revoke).
+            existing.IpPrefix = ipPrefix;
+            existing.Label = label;
+            existing.UserAgentSnapshot = userAgent;
+            existing.TrustedAt = now;
+            existing.ExpiresAt = expiresAt;
+            existing.RevokedAt = null;
+            existing.RevokedReason = null;
+            _unitOfWork.TrustedDevices.UpdateAsync(existing);
+        }
+        else
+        {
+            var device = new TrustedDevice
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                DeviceFingerprintHash = fingerprint,
+                IpPrefix = ipPrefix,
+                Label = label,
+                UserAgentSnapshot = userAgent,
+                TrustedAt = now,
+                ExpiresAt = expiresAt,
+                UsageCount = 0
+            };
+            await _unitOfWork.TrustedDevices.AddAsync(device);
+        }
+
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.TrustedDeviceAdded, accountId, IsSuccess: true,
+            ActorAccountIdOverride: accountId,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["label"] = label,
+                ["ipPrefix"] = ipPrefix,
+                ["ttlDays"] = (int)TrustedDeviceTtl.TotalDays
+            }), cancellationToken);
     }
 
     /// <summary>

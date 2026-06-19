@@ -17,6 +17,14 @@ public class RefreshToken : AuditableEntity
 
     public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// #AUTH-28: thời điểm token gốc của chain rotation được issue (từ login/google/invite).
+    /// Khi rotate, token mới copy giá trị này từ token cũ. ExpiredAt = OriginalIssuedAt + RefreshTokenExpirationDays
+    /// → toàn bộ chain có TTL cố định, đổi config không ảnh hưởng token đang hoạt động.
+    /// Nullable cho phép backward-compat với row cũ chưa có field này (migration backfill = IssuedAt).
+    /// </summary>
+    public DateTime? OriginalIssuedAt { get; set; }
+
     public DateTime ExpiredAt { get; set; }
 
     public RefreshTokenStatus Status { get; set; } = RefreshTokenStatus.Active;

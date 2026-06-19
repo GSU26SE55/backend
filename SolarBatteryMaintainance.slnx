@@ -35,7 +35,11 @@
   </Folder>
   <Folder Name="/Services/SmsService/">
     <Project Path="services/SmsService/src/SmsService.Api/SmsService.Api.csproj" />
+    <Project Path="services/SmsService/src/SmsService.Application/SmsService.Application.csproj" />
+    <Project Path="services/SmsService/src/SmsService.Domain/SmsService.Domain.csproj" />
     <Project Path="services/SmsService/src/SmsService.Infrastructure/SmsService.Infrastructure.csproj" />
+    <Project Path="services/SmsService/tests/SmsService.IntegrationTests/SmsService.IntegrationTests.csproj" />
+    <Project Path="services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/NotificationService/">
     <Project Path="services/NotificationService/src/NotificationService.Api/NotificationService.Api.csproj" />

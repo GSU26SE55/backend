@@ -5,8 +5,8 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
 using TicketService.Application.CQRS.Query.MaintenanceLogs;
-using TicketService.Application.DTOs.Response.Maintenance;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Maintenances;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers;

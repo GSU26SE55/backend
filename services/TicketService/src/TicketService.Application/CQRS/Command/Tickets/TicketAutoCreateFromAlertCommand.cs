@@ -1,8 +1,7 @@
-using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 
 namespace TicketService.Application.CQRS.Command.Tickets;
 

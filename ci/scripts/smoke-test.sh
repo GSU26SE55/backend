@@ -40,6 +40,17 @@ NOTIFICATION_ROUTES=(
   "/api/notifications"
 )
 
+# Sprint SMS — SmsService gateway endpoints.
+# /api/sms-gateway/heartbeat       — Flutter device heartbeat (auth GatewayApiKey scheme)
+# /api/admin/sms-gateway/devices   — Admin list device (auth JWT Bearer + role Admin)
+# /hubs/sms-gateway/negotiate      — SignalR Hub negotiate (auth GatewayApiKey, smoke check route registered)
+# Tất cả đều yêu cầu auth → 401 = OK (route mapped), 404 = FAIL (gateway misconfig).
+SMS_ROUTES=(
+  "/api/sms-gateway/heartbeat"
+  "/api/admin/sms-gateway/devices"
+  "/hubs/sms-gateway/negotiate"
+)
+
 probe_endpoint() {
   local path="$1"
   curl -fsSk --max-time 10 "${HOST}${path}" > /dev/null 2>&1
@@ -92,7 +103,18 @@ for i in $(seq 1 "$MAX_RETRY"); do
   fi
 
   if [ "$all_ok" -eq 1 ]; then
-    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification routes reachable"
+    for ep in "${SMS_ROUTES[@]}"; do
+      echo "[smoke #$i] sms ${HOST}${ep}"
+      # Reuse probe_iot_route — semantics giống nhau (chấp nhận 200/401/403, reject 404/5xx).
+      if ! probe_iot_route "$ep"; then
+        all_ok=0
+        break
+      fi
+    done
+  fi
+
+  if [ "$all_ok" -eq 1 ]; then
+    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification + ${#SMS_ROUTES[@]} sms routes reachable"
     exit 0
   fi
 
