@@ -53,7 +53,7 @@ public class IntegrationEventPublishTests
             It.Is<AccountActivatedEvent>(e =>
                 e.Email == "staff@example.com" &&
                 e.FullName == "Staff One" &&
-                e.PhoneNumber == "0901234567" &&
+                e.PhoneNumber == "+84901234567" &&
                 e.CreationSource == "AdminCreate" &&
                 e.Role == "Staff"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -87,7 +87,7 @@ public class IntegrationEventPublishTests
             It.Is<AccountProfileUpdatedEvent>(e =>
                 e.AccountId == account.Id &&
                 e.FullName == "New Name" &&
-                e.PhoneNumber == "0911111111" &&
+                e.PhoneNumber == "+84911111111" &&
                 e.AvatarUrl == "https://cdn/avatar.png"),
             It.IsAny<CancellationToken>()), Times.Once);
     }

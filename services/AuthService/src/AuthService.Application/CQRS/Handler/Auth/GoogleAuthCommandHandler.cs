@@ -17,7 +17,6 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 
 public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, LoginResponse>
 {
-    private const int RefreshTokenExpirationDays = 7;
     private const string ProviderName = "Google";
     private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
@@ -27,6 +26,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
     private readonly IGoogleOAuthHelper _googleOAuthHelper;
     private readonly IMessageProducerService _messageProducer;
     private readonly IPublisher _publisher;
+    private readonly AuthService.Application.Configuration.JwtSettingsOptions _jwtSettings;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public GoogleAuthCommandHandler(
@@ -36,6 +36,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         IGoogleOAuthHelper googleOAuthHelper,
         IMessageProducerService messageProducer,
         IPublisher publisher,
+        Microsoft.Extensions.Options.IOptions<AuthService.Application.Configuration.JwtSettingsOptions> jwtSettings,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
@@ -44,6 +45,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         _googleOAuthHelper = googleOAuthHelper;
         _messageProducer = messageProducer;
         _publisher = publisher;
+        _jwtSettings = jwtSettings.Value;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -56,7 +58,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         if (!googleUser.EmailVerified)
             return Fail(401, "Email Google chưa được xác thực.");
 
-        var normalizedEmail = googleUser.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(googleUser.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -109,6 +111,12 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             if (account.Status == AccountStatusEnum.PendingVerification)
                 return Fail(409, "Email đã đăng ký nhưng chưa xác thực. Vui lòng verify OTP trước.");
 
+            // #AUTH-20: Google OAuth email mismatch policy.
+            // 3 branches:
+            //  (a) Email tồn tại, CHƯA link Google → tự link nếu email đã verified.
+            //  (b) Email tồn tại, ĐÃ link đúng Google subject hiện tại → login bình thường.
+            //  (c) Email tồn tại, ĐÃ link 1 Google subject KHÁC → reject (case spec: user A đã link
+            //      email X với Google account 1, user B cố login email X bằng Google account 2).
             if (string.IsNullOrEmpty(account.GoogleId))
             {
                 if (!account.EmailConfirmed)
@@ -116,9 +124,9 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 account.GoogleId = googleUser.Subject;
                 account.Provider = ProviderName;
             }
-            else if (account.GoogleId != googleUser.Subject)
+            else if (!string.Equals(account.GoogleId, googleUser.Subject, StringComparison.Ordinal))
             {
-                return Fail(409, "Tài khoản này đã liên kết với 1 Google account khác.");
+                return Fail(409, "Email này đã liên kết với một Google account khác. Vui lòng dùng đúng Google account đã đăng ký, hoặc đăng nhập bằng email/mật khẩu.");
             }
 
             account.LastLoginAt = DateTime.UtcNow;
@@ -140,13 +148,16 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);
         var refreshTokenValue = _jwtHelper.GenerateRefreshToken();
 
+        var nowUtc = DateTime.UtcNow;
         await _unitOfWork.RefreshTokens.AddAsync(new RefreshToken
         {
             Id = Guid.NewGuid(),
             AccountId = account.Id,
-            Token = refreshTokenValue,
-            IssuedAt = DateTime.UtcNow,
-            ExpiredAt = DateTime.UtcNow.AddDays(RefreshTokenExpirationDays),
+            // #AUTH-01: lưu hash; plaintext trả về client.
+            Token = RefreshTokenHasher.Hash(refreshTokenValue),
+            IssuedAt = nowUtc,
+            OriginalIssuedAt = nowUtc, // #AUTH-28
+            ExpiredAt = nowUtc.AddDays(_jwtSettings.RefreshTokenExpirationDays),
             Status = RefreshTokenStatus.Active,
             IpAddress = ipAddress,
             UserAgent = userAgent,

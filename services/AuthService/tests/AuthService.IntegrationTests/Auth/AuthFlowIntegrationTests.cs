@@ -1,5 +1,6 @@
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Domain.Enums;
 using AuthService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -198,10 +199,13 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         body.Data.Tokens!.AccessToken.Should().NotBeNullOrEmpty();
 
         using var db2 = _factory.CreateDbContext();
-        var oldRt = await db2.RefreshTokens.FirstAsync(r => r.Token == oldRefresh);
+        // #AUTH-01: RefreshToken.Token lưu SHA-256 hash; query phải hash plaintext trước.
+        var oldRefreshHash = RefreshTokenHasher.Hash(oldRefresh);
+        var newRefreshHash = RefreshTokenHasher.Hash(body.Data.Tokens!.RefreshToken);
+        var oldRt = await db2.RefreshTokens.FirstAsync(r => r.Token == oldRefreshHash);
         oldRt.Status.Should().Be(RefreshTokenStatus.Used);
         oldRt.UsedAt.Should().NotBeNull();
-        oldRt.ReplacedByToken.Should().Be(body.Data.Tokens!.RefreshToken);
+        oldRt.ReplacedByToken.Should().Be(newRefreshHash);
     }
 
     [Fact]
@@ -242,7 +246,9 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var db2 = _factory.CreateDbContext();
-        var rt = await db2.RefreshTokens.FirstAsync(r => r.Token == refresh);
+        // #AUTH-01: query bằng hash, không phải plaintext.
+        var refreshHash = RefreshTokenHasher.Hash(refresh);
+        var rt = await db2.RefreshTokens.FirstAsync(r => r.Token == refreshHash);
         rt.Status.Should().Be(RefreshTokenStatus.Revoked);
         rt.RevokedReason.Should().Be("UserLogout");
     }

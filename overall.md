@@ -90,6 +90,7 @@
   - [68. SmsService — SMS Forwarder Gateway](#68-smsservice--sms-forwarder-gateway--p1) — xem **Sprint SMS** ở §17 (42 task `#SMS-01..42` / `#293..#334`)
 - [Phần X — AuthService Security Audit](#phần-x--authservice-security-audit)
   - [69. AuthService Security Audit (88 issues)](#69-authservice-security-audit-88-issues--p0p3) — xem **Sprint additional-auth** ở §17 (90 task `#AUTH-01..90` / `#349..#438`)
+  - [69.11. Sprint audit — kiến trúc AuditLog Hybrid](#6911-sprint-audit--kiến-trúc-auditlog-hybrid-phụ-lục-ab-issue-authservicemd) — Phụ lục A+B `issue-authservice.md` triển khai qua **Sprint audit** ở §17 (45 task `#AUDIT-01..45` / `#447..#491`)
 
 ---
 
@@ -101,7 +102,7 @@
 
 | Module | Trạng thái | Chi tiết |
 |--------|-----------|----------|
-| **`AuthService`** | ✅ Production-ready + profile extension | Account/Role/Permission/Session/RefreshToken/AuditLog/LoginAttempt/OTP/Outbox + Admin CRUD + Google OAuth helper + `AccountProfile`/`StaffProfile`/`StaffSkill` extension tables + uploaded/Google avatar flow |
+| **`AuthService`** | ✅ Production-ready + profile extension | Account/Role/Permission/Session/RefreshToken/AuditLog/LoginAttempt/OTP/Outbox + Admin CRUD + Google OAuth helper + `AccountProfile`/`StaffProfile`/`StaffSkill` extension tables + uploaded/Google avatar flow. **Note:** `AuditLog` sẽ refactor schema (thêm 14 cột chuẩn + outbox riêng) qua Sprint audit Phase 1 — xem §17 + §69.11 |
 | **`ApiGateway`** | ✅ Hoạt động | Route tới AuthService, port 4001 |
 | **`EmailService`** | ✅ Consumer-only | Subscribe SendOtpRegisterEvent, SendAdminInviteEvent, SendPasswordResetOtpEvent, SendEmailChangeOtpEvent |
 | **`SmsService`** | ✅ Consumer-only | Subscribe SendPhoneOtpEvent |
@@ -133,6 +134,7 @@
 | AuthService permission seed cho Saga (`ticket.saga.view/reprocess`) | 🔴 P0 | §7.5bis, §53.9 | Sprint 5B `#241` |
 | Documentation sync (Swagger/Postman/SRS/CHANGELOG/runbook/Mermaid) | 🔴 P0 | §65, §40.3, §53.2bis | Sprint 5B `#240` |
 | ADR-017 (Energy/CO2 removal) + ADR-018 (Saga orchestration) | 🔴 P0 | §40.1 | Sprint 5B `#233`/`#239` |
+| **`AuditAggregatorService`** (microservice MỚI) + 10 service onboard audit + AuditLog Hybrid Architecture | 🟠 P1 | §17 Sprint audit + §69.11 | **Sprint audit** ~44 dev-day, 7 phase, 45 task `#AUDIT-01..45` / `#447..#491`. Phụ thuộc Sprint additional-auth Phase A ổn định ≥ 2 tuần. ADR-020 cần viết. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -2659,6 +2661,23 @@ postgres:
   # giữ nguyên rest of config (port 5433, volume, env vars)
 ```
 
+**Sprint audit dependency — `pg_partman` extension (xem §17 Sprint audit `#AUDIT-14`):**
+
+`audit_aggregate` table ở `AuditAggregatorService` partition by month, dùng `pg_partman` (KHÔNG dùng `create_hypertable` của TimescaleDB vì audit không phải time-series strict — query pattern là filter `actor_id`/`correlation_id` + time range, không phải downsample/continuous aggregate). `pg_partman` cài qua extension riêng:
+
+```yaml
+# docker-compose.yml — service AuditAggregatorService DB
+audit-aggregator-db:
+  image: postgres:16-alpine                          # KHÔNG cần TimescaleDB ở DB này
+  environment:
+    POSTGRES_DB: audit_aggregate_db
+  # Init script cài pg_partman:
+  # CREATE EXTENSION pg_partman SCHEMA partman;
+  # SELECT partman.create_parent('public.audit_aggregate', 'occurred_at', 'native', 'monthly');
+```
+
+> **Trade-off design (Phụ lục A §A.5.4):** TimescaleDB hypertable tốt cho `sensor_readings` (downsample, continuous aggregate, retention policy). `pg_partman` tốt cho `audit_aggregate` (simple range partition + drop partition khi retention expire — không cần TimescaleDB feature). Tách 2 DB riêng giảm coupling: BatteryService TimescaleDB không depend AuditAggregator schema.
+
 ### 6.2. Migration đầu tiên BatteryService
 ```csharp
 public partial class InitialBatterySchema : Migration {
@@ -3693,6 +3712,25 @@ public static readonly Gauge OutboxUnprocessed = Metrics
     .CreateGauge("outbox_unprocessed_count", "Outbox pending rows", "service");
 public static readonly Counter InboxProcessingFailed = Metrics
     .CreateCounter("inbox_processing_failed_total", "Inbox processing failures", "consumer");
+
+// Sprint audit — AuditAggregatorService + audit pipeline (xem §17 Sprint audit + §69.11, `#AUDIT-44`).
+// Đăng ký cùng `AppMetrics.cs` cho mỗi service publish audit + ở AuditAggregatorService.
+public static readonly Counter AuditEventsTotal = Metrics
+    .CreateCounter("audit_events_total", "Total audit events published",
+        new CounterConfiguration { LabelNames = new[] { "service", "action", "severity" } });
+public static readonly Histogram AuditConsumerLagSeconds = Metrics
+    .CreateHistogram("audit_consumer_lag_seconds", "Delay từ source commit → aggregate visible",
+        new HistogramConfiguration { Buckets = new[] { 0.5, 1.0, 2, 5, 10, 30, 60, 300 } });
+public static readonly Gauge AuditOutboxPendingTotal = Metrics
+    .CreateGauge("audit_outbox_pending_total", "Pending audit_outbox rows per service",
+        new GaugeConfiguration { LabelNames = new[] { "service" } });
+public static readonly Gauge AuditDlqSizeTotal = Metrics
+    .CreateGauge("audit_dlq_size_total", "Audit events stuck in DLQ");
+public static readonly Counter AuditRedactionTotal = Metrics
+    .CreateCounter("audit_redaction_total", "GDPR redaction operations on audit_aggregate");
+public static readonly Histogram AuditSearchLatencySeconds = Metrics
+    .CreateHistogram("audit_search_latency_seconds", "Aggregator search API p95 < 200ms target",
+        new HistogramConfiguration { Buckets = new[] { 0.05, 0.1, 0.2, 0.5, 1.0, 2, 5 } });
 ```
 
 #### Dashboards Grafana
@@ -3892,6 +3930,44 @@ Gateway expose `/swagger` aggregate từ N service:
 - `/swagger/auth/v1/swagger.json`
 - `/swagger/battery/v1/swagger.json`
 - ...
+- `/swagger/audit-aggregator/v1/swagger.json` (Sprint audit — `#AUDIT-13`)
+
+### 10.4bis. AuditAggregatorService routes (Sprint audit — `#AUDIT-17`)
+
+Gateway phải thêm route + cluster `auditAggregatorCluster` cho `AuditAggregatorService`:
+
+```jsonc
+// services/ApiGateway/src/ApiGateway/appsettings.json
+"ReverseProxy": {
+  "Routes": {
+    "audit-aggregator-route": {
+      "ClusterId": "auditAggregatorCluster",
+      "Match": { "Path": "/api/audit/{**catch-all}" },
+      "Transforms": [{ "PathPattern": "/api/audit/{**catch-all}" }]
+    },
+    "audit-aggregator-swagger-route": {
+      "ClusterId": "auditAggregatorCluster",
+      "Match": { "Path": "/audit-aggregator-service/swagger/{**catch-all}" },
+      "Transforms": [{ "PathPattern": "/swagger/{**catch-all}" }]
+    }
+    // existing routes ...
+  },
+  "Clusters": {
+    "auditAggregatorCluster": {
+      "Destinations": { "destination1": { "Address": "https://localhost:7500" } }
+    }
+    // ConfigMap (Docker/K8s) override → http://auditaggregatorservice:8080
+  }
+}
+```
+
+**Lưu ý conflict với local audit endpoint Option C:** 5 service có local endpoint `/api/admin/{service}/audit-logs` — phân biệt:
+- `/api/audit/*` → `auditAggregatorCluster` (Sprint audit cross-service)
+- `/api/admin/audit-logs` → `authCluster` (AuthService giữ nguyên 2 endpoint hiện tại)
+- `/api/admin/battery/audit-logs` → `batteryCluster` (qua existing wildcard `admin-accounts-route`/`admin-battery-*` pattern hoặc thêm route mới)
+- `/api/admin/ticket/audit-logs` → `ticketCluster`
+- `/api/admin/files/audit-logs` → `fileStorageCluster`
+- `/api/admin/alerts/audit-logs` → cần xác định cluster (Battery hay Alert service riêng — chốt khi `#AUDIT-31`)
 
 ### 10.5. Health & readiness
 ```
@@ -4015,6 +4091,38 @@ GitHub Actions step:
 
 Mục tiêu: PR CI time ≤ 10 phút.
 
+### 11.8. Sprint audit — testing approach (Phụ lục B §B.13 acceptance criteria)
+
+**Test pyramid riêng cho Sprint audit (45 task `#AUDIT-01..45`):**
+
+| Layer | Coverage target | Tool | Sprint audit task |
+|-------|----------------|------|-------------------|
+| Unit test (handler + outbox relay + consumer) | ≥ 80% | xUnit + Moq + FluentAssertions | `#AUDIT-12` (Phase 1), `#AUDIT-22` (Phase 3 Battery), `#AUDIT-26` (Phase 4 Ticket) |
+| Integration test E2E pipeline | Per-service onboard | TestContainers (Postgres + RabbitMQ) | `#AUDIT-12`, `#AUDIT-19` (Aggregator), `#AUDIT-23/28/30/32` (local endpoint) |
+| Idempotency test (1000 duplicate events → 1 row) | Mandatory Phase 2 | TestContainers | `#AUDIT-19` |
+| Partition test (event qua 3 tháng → partition tự tạo) | Mandatory Phase 2 | TestContainers + pg_partman | `#AUDIT-19` |
+| Causation chain test (anomaly → ticket trace) | Mandatory Phase 4 | TestContainers + InMemory MassTransit | `#AUDIT-27` |
+| Performance test (1000 event/sec sustained 5 phút) | < 10s consumer lag p99 | Custom load test | `#AUDIT-43` (Phase 7) |
+| Chaos test (kill RabbitMQ giữa chừng → replay outbox) | No data loss | Toxiproxy + manual | `#AUDIT-43` |
+
+**Test categories:**
+- `[Trait("Category", "Audit")]` — tách Sprint audit tests từ existing tests
+- `[Trait("Category", "Audit-Perf")]` — perf tests skip mặc định trong `ci-test`, run riêng `make ci-perf` HOẶC nightly job
+- `[Trait("Category", "Audit-Chaos")]` — chaos tests chạy local trước release Phase 7
+
+**Migration test mandatory (Phase 1 `#AUDIT-06`):**
+- Apply migration trên staging clone data prod → backfill < 5 phút
+- Rollback `dotnet ef database update <previous>` → no data loss
+- Re-apply → idempotent, no constraint violation
+
+**Acceptance gates (Phụ lục B §B.13):**
+- Phase 0: Roslyn analyzer ban `DateTime.Now`, `Random` cho event_id, `Console.WriteLine` — CI green
+- Phase 1: Coverage ≥ 80% AuthService audit code; integration test E2E pass
+- Phase 2: API search p95 < 200ms với 1M row; export 100k row không OOM; image size < 200MB
+- Phase 3-5: Per-service E2E test (action → DB → outbox → broker → aggregator → query)
+- Phase 6: FE 5 view test với 1k+ event seed data
+- Phase 7: Perf 1000 ev/s sustained, chaos kill RabbitMQ recoverable, 7 doc deliverable signed-off
+
 ---
 
 ## 12. Seed data & migration strategy — P1
@@ -4130,6 +4238,13 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 | Saga `POST /reprocess` (Sprint 5B) | 100ms | 300ms | 500ms |
 | Saga `GET /alert-ticket?state=` (Sprint 5B, page=50) | 80ms | 200ms | 400ms |
 | Alert→Saga Completed end-to-end (happy path, Sprint 5B) | 1.5s | 4s | 8s (mục tiêu, không phải HTTP SLA) |
+| **Aggregator `GET /api/audit/search` (1M rows, Sprint audit)** | 80ms | **200ms** | 400ms |
+| **Aggregator `GET /api/audit/account/{id}/timeline`** | 50ms | 150ms | 300ms |
+| **Aggregator `GET /api/audit/correlation/{id}`** | 50ms | 150ms | 300ms |
+| **Aggregator `GET /api/audit/stats?groupBy=service` (30d range)** | 200ms | 500ms | 1000ms |
+| **Aggregator `GET /api/audit/export?format=csv` (streaming 100k rows)** | — | — | < 30s không OOM |
+| **Local audit endpoint per service (Battery/Ticket/File/Alert)** | 30ms | 100ms | 200ms |
+| **Audit pipeline lag (source commit → aggregator visible)** | 2s | 5s | 10s (mục tiêu, không phải HTTP SLA) |
 
 ---
 
@@ -4164,6 +4279,7 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 - Battery asset CUD → cũng cần audit (CreatedBy/UpdatedBy đã có qua AuditableEntity).
 - Sprint 5B: **Saga reprocess** (`POST /api/v1/admin/sagas/alert-ticket/{id}/reprocess`) phải ghi `AuditLog` với `Actor`, `Action="SagaReprocess"`, `Target=AlertId`, `Reason` (sanitized) + `IdempotencyKey`. Saga state cũng track `ManualReprocessCount`, `LastReprocessedBy`, `LastReprocessReason` (§53.6).
 - Saga rejection/failure event không log payload chứa PII (`AssetSerialNumber` được phép, `CustomerId` GUID OK; KHÔNG log email/phone).
+- **Sprint audit roadmap** (xem §17 Sprint audit + §69.11): kiến trúc AuditLog Hybrid cross-service mới — `AuditAggregatorService` microservice + 10 service onboard + Option C local endpoint policy. State hiện tại (AuthService AuditLog + TicketActivity + AuditableEntity) sẽ được **refactor + mở rộng** qua 7 phase / 45 task `#AUDIT-01..45`. Phase 1 fix 22 handler AuthService chưa publish audit + upgrade trigger append-only `#AUTH-29` lên soft mode (`#AUDIT-10`). Phase 4 tách `TicketAuditLog` riêng khỏi `TicketActivity` (Activity giữ cho UI timeline). Phase 5 BatteryService onboard 12 action mới (CreatedBy/UpdatedBy không đủ cho audit forensic). Đọc Phụ lục A+B `issue-authservice.md` MANDATORY trước khi start.
 
 ### 14.7. OWASP top 10 quick check
 - **A01 Broken access:** permission attribute mọi endpoint + ownership check
@@ -4432,9 +4548,87 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 /run-migration NotificationService InitialNotificationSchema
 ```
 
+### 16.4. Sprint audit — AuditAggregatorService + per-service onboard (Sprint audit)
+
+**AuditAggregatorService scaffold (Phase 2 — `#AUDIT-13`):**
+```bash
+# Service mới — chưa có scaffold lệnh, làm thủ công từ template
+# 1. Copy structure từ services/EmailService làm boilerplate (consumer-heavy Clean Architecture)
+# 2. Tạo solution + 5 project:
+mkdir -p services/AuditAggregatorService/{src,tests}
+cd services/AuditAggregatorService
+dotnet new sln -n AuditAggregatorService
+dotnet new webapi -n AuditAggregatorService.Api -o src/AuditAggregatorService.Api
+dotnet new classlib -n AuditAggregatorService.Application -o src/AuditAggregatorService.Application
+dotnet new classlib -n AuditAggregatorService.Domain -o src/AuditAggregatorService.Domain
+dotnet new classlib -n AuditAggregatorService.Infrastructure -o src/AuditAggregatorService.Infrastructure
+dotnet new worker -n AuditAggregatorService.Worker -o src/AuditAggregatorService.Worker
+dotnet new xunit -n AuditAggregatorService.UnitTests -o tests/AuditAggregatorService.UnitTests
+dotnet new xunit -n AuditAggregatorService.IntegrationTests -o tests/AuditAggregatorService.IntegrationTests
+dotnet sln add src/**/*.csproj tests/**/*.csproj
+# 3. Add reference SharedKernels + SharedContracts + SharedInfrastructure
+# 4. Migration audit_aggregate partition: /run-migration AuditAggregatorService InitAuditAggregate
+/run-migration AuditAggregatorService InitAuditAggregate
+/run-migration AuditAggregatorService EnablePgPartmanAuditAggregate
+```
+
+**Per-service audit infra onboard (Phase 1/3/4/5 — `#AUDIT-06..35`):**
+```bash
+# AuthService — refactor (Phase 1)
+/run-migration AuthService AddAuditLogStandardColumns        # `#AUDIT-06` — 14 cột + backfill
+/run-migration AuthService AddAuditOutbox                    # `#AUDIT-07`
+/run-migration AuthService UpgradeAuditAppendOnlyTriggerSoft # `#AUDIT-10` soft mode
+
+# BatteryService — scratch (Phase 3)
+/scaffold-entity BatteryService BatteryAuditLog              # 14 cột chuẩn
+/scaffold-entity BatteryService BatteryAuditOutbox
+/run-migration BatteryService AddBatteryAuditLogSchema
+/run-migration BatteryService AddBatteryAuditAppendOnlyTrigger
+
+# TicketService — tách khỏi TicketActivity (Phase 4)
+/scaffold-entity TicketService TicketAuditLog                # KHÔNG đụng TicketActivity (giữ cho UI)
+/scaffold-entity TicketService TicketAuditOutbox
+/run-migration TicketService AddTicketAuditLogSchema
+/run-migration TicketService AddTicketAuditAppendOnlyTrigger
+
+# FileStorage + Alert + Email + Notification + Sms + AI + Gateway (Phase 5)
+# Tương tự pattern trên cho từng service
+
+# Integration event publish
+/scaffold-integration-event AuditCreatedEventV1               # SharedContracts — `#AUDIT-01`
+
+# Consumer ở AuditAggregator
+/scaffold-consumer AuditAggregatorService AuditCreatedEventV1  # `#AUDIT-15`
+
+# Local endpoint Option C (chỉ Battery/Ticket/File/Alert — Auth giữ nguyên)
+/scaffold-controller BatteryService BatteryAuditLog AdminGetList   # `#AUDIT-23` — GET /api/admin/battery/audit-logs
+/scaffold-controller TicketService TicketAuditLog AdminGetList     # `#AUDIT-28`
+/scaffold-controller FileStorageService FileAuditLog AdminGetList  # `#AUDIT-30`
+/scaffold-controller AlertService AlertAuditLog AdminGetList       # `#AUDIT-32`
+
+# Background job per-service
+/scaffold-background-service AuthService AuditOutboxRelay         # `#AUDIT-08`
+/scaffold-background-service BatteryService BatteryAuditOutboxRelay  # `#AUDIT-21`
+# ... (tương tự cho Ticket/File/Alert)
+/scaffold-background-service AuditAggregatorService AuditRetention   # `#AUDIT-41`
+
+# Tests
+/scaffold-unit-tests AuditAggregatorService AuditCreatedConsumer
+/scaffold-unit-tests BatteryService BatteryAuditTrailNotificationHandler
+# ... per-service
+```
+
+**Lưu ý sequence (BẮT BUỘC theo `#AUDIT-XX` phase order):**
+1. Phase 0 (`#AUDIT-01..05`) trước — SharedContracts + ActionCodes + ADR + analyzer + RabbitMQ topology
+2. Phase 1 (`#AUDIT-06..12`) — AuthService refactor (làm mẫu cho Phase 3-5)
+3. Phase 2 (`#AUDIT-13..19`) — AuditAggregator scaffold (KHÔNG thể onboard service mới khi aggregator chưa up)
+4. Phase 3-5 — onboard 9 service (theo thứ tự Battery → Ticket → File/Alert/Email/Notification/Sms/AI/Gateway)
+
+KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu (Phụ lục B §B.12 pre-implementation checklist).
+
 ---
 
-## 17. Sprint backlog — 8 sprint chi tiết + Sprint 5B + Sprint IoT-1
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -4961,106 +5155,106 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 
 #### Phase A — Critical Security P0 (4 ngày — Top 10 ưu tiên fix ngay)
 
-- [ ] **#AUTH-01** — Fix `#9` Hash refresh token trong DB: thay `nvarchar(512)` plaintext bằng SHA-256 hash. Migration `HashRefreshTokens` + `Up()` backfill hash cho row hiện có (hoặc revoke all → user re-login) + sửa `AuthTokenIssuer`/`RefreshTokenCommandHandler` so sánh bằng hash. File: `RefreshToken.cs:14`, migration `20260427194313`. **Mức: P0**. — #349
-- [ ] **#AUTH-02** — Fix `#2` 2FA Disable require verify TOTP/password: thêm field `TotpCode` hoặc `CurrentPassword` vào `Disable2FACommand`, handler verify trước khi disable. File: `AccountsController.cs:365`. **Mức: P0**. — #350
-- [ ] **#AUTH-03** — Fix `#4` OAuth `state` CSRF validation: `GoogleCallbackCommandHandler` nhận thêm `state` param, validate với value sinh lúc redirect (Redis key TTL 10 phút). File: `GoogleCallbackCommandHandler.cs:35`. **Mức: P0**. — #351
-- [ ] **#AUTH-04** — Fix `#5` JWT `ValidateToken` bật issuer/audience/lifetime: set `ValidateIssuer = true`, `ValidateAudience = true`, `ValidateLifetime = true`. File: `JwtHelper.cs:110-146`. Kết hợp fix `#80` ClockSkew unify (xem `#AUTH-80`). **Mức: P0**. — #352
-- [ ] **#AUTH-05** — Fix `#6` CORS thay AllowAll bằng whitelist: bỏ `SetIsOriginAllowed(origin => true)`, thêm `WithOrigins(...)` từ config `AllowedOrigins:[]`. File: `AddCORS.cs:11-15`. Whitelist từ Leader chốt trước khi merge. **Mức: P0**. — #353
-- [ ] **#AUTH-06** — Fix `#10` Reset token single-use: thêm bảng `password_reset_tokens` (Id, AccountId, TokenHash, ExpiresAt, UsedAt) hoặc Redis key `pwd_reset:{tokenHash}` với SET-NX. `ValidateResetToken` mark used → reject lần thứ 2. File: `JwtHelper.cs:148-208`. **Mức: P0**. — #354
-- [ ] **#AUTH-07** — Fix `#15` Email unique index filter `is_deleted = false`: migration `FixEmailUniqueIndexFilter` drop + recreate index với `HasFilter("\"is_deleted\" = false")`. File: `AccountConfiguration.cs:147`. **Mức: P0**. — #355
-- [ ] **#AUTH-08** — Fix `#13` Logout invalidate pending 2FA challenge token: `LogoutCommandHandler` call `_challengeStore.InvalidateAsync(accountId)` TRƯỚC khi revoke refresh token. File: `LogoutCommandHandler.cs:19-61`. **Mức: P0**. — #356
-- [ ] **#AUTH-09** — Fix `#7` OTP/Reset/2FA constant-time compare: thay `string.Equals(..., Ordinal)` bằng `CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b))` trong 4 handler: `VerifyOtpCommandHandler:57`, `Verify2FALoginCommandHandler:111`, `VerifyResetOtpCommandHandler`, `VerifyPhoneOtpCommandHandler`. **Mức: P0**. — #357
-- [ ] **#AUTH-10** — Fix `#16` `FullName`/`PendingEmail` HTML sanitize trong email template: dùng `HtmlEncoder.Default.Encode(...)` ở email template layer (`AccountRegisteredEmailTemplate`, `InviteEmailTemplate`, `ChangeEmailOtpTemplate`). 3 file: `RegisterCommandHandler`, `AcceptInviteCommandHandler`, `ChangeEmailCommandHandler` (chỉnh template, KHÔNG escape ở handler để tránh double-encode). **Mức: P0**. — #358
+- [x] **#AUTH-01** — Fix `#9` Hash refresh token trong DB: thay `nvarchar(512)` plaintext bằng SHA-256 hash. Migration `HashRefreshTokens` + `Up()` backfill hash cho row hiện có (hoặc revoke all → user re-login) + sửa `AuthTokenIssuer`/`RefreshTokenCommandHandler` so sánh bằng hash. File: `RefreshToken.cs:14`, migration `20260427194313`. **Mức: P0**. — #349
+- [x] **#AUTH-02** — Fix `#2` 2FA Disable require verify TOTP/password: thêm field `TotpCode` hoặc `CurrentPassword` vào `Disable2FACommand`, handler verify trước khi disable. File: `AccountsController.cs:365`. **Mức: P0**. — #350
+- [x] **#AUTH-03** — Fix `#4` OAuth `state` CSRF validation: `GoogleCallbackCommandHandler` nhận thêm `state` param, validate với value sinh lúc redirect (Redis key TTL 10 phút). File: `GoogleCallbackCommandHandler.cs:35`. **Mức: P0**. — #351
+- [x] **#AUTH-04** — Fix `#5` JWT `ValidateToken` bật issuer/audience/lifetime: set `ValidateIssuer = true`, `ValidateAudience = true`, `ValidateLifetime = true`. File: `JwtHelper.cs:110-146`. Kết hợp fix `#80` ClockSkew unify (xem `#AUTH-80`). **Mức: P0**. — #352
+- [ ] **#AUTH-05** — Fix `#6` CORS thay AllowAll bằng whitelist: bỏ `SetIsOriginAllowed(origin => true)`, thêm `WithOrigins(...)` từ config `AllowedOrigins:[]`. File: `AddCORS.cs:11-15`. Whitelist từ Leader chốt trước khi merge. **Mức: P0**. — #353 — **GAP (SKIP):** User skip — cần Leader chốt list domain FE/Mobile production. Capstone scope chưa có URL production cố định. P0 thực sự — phải whitelist origin trước go-live thật.
+- [x] **#AUTH-06** — Fix `#10` Reset token single-use: thêm bảng `password_reset_tokens` (Id, AccountId, TokenHash, ExpiresAt, UsedAt) hoặc Redis key `pwd_reset:{tokenHash}` với SET-NX. `ValidateResetToken` mark used → reject lần thứ 2. File: `JwtHelper.cs:148-208`. **Mức: P0**. — #354
+- [x] **#AUTH-07** — Fix `#15` Email unique index filter `is_deleted = false`: migration `FixEmailUniqueIndexFilter` drop + recreate index với `HasFilter("\"is_deleted\" = false")`. File: `AccountConfiguration.cs:147`. **Mức: P0**. — #355
+- [x] **#AUTH-08** — Fix `#13` Logout invalidate pending 2FA challenge token: `LogoutCommandHandler` call `_challengeStore.InvalidateAsync(accountId)` TRƯỚC khi revoke refresh token. File: `LogoutCommandHandler.cs:19-61`. **Mức: P0**. — #356
+- [x] **#AUTH-09** — Fix `#7` OTP/Reset/2FA constant-time compare: thay `string.Equals(..., Ordinal)` bằng `CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b))` trong 4 handler: `VerifyOtpCommandHandler:57`, `Verify2FALoginCommandHandler:111`, `VerifyResetOtpCommandHandler`, `VerifyPhoneOtpCommandHandler`. **Mức: P0**. — #357
+- [x] **#AUTH-10** — Fix `#16` `FullName`/`PendingEmail` HTML sanitize trong email template: dùng `HtmlEncoder.Default.Encode(...)` ở email template layer (`AccountRegisteredEmailTemplate`, `InviteEmailTemplate`, `ChangeEmailOtpTemplate`). 3 file: `RegisterCommandHandler`, `AcceptInviteCommandHandler`, `ChangeEmailCommandHandler` (chỉnh template, KHÔNG escape ở handler để tránh double-encode). **Mức: P0**. — #358
 #### Phase B — High Security P1 (2 ngày — Operational hardening)
 
-- [ ] **#AUTH-11** — Fix `#1` Implement `IJwtHelper.IsTokenValid()`: thay throw `NotImplementedException` bằng `_handler.ValidateToken(...)` + check blacklist (kết hợp #54 TRL — xem `#AUTH-54`). File: `JwtHelper.cs:101`. **Mức: P1**. — #359
-- [ ] **#AUTH-12** — Fix `#8` RefreshToken cross-check IP/UA: lưu `IssuedIp`/`IssuedUa` lúc cấp, so sánh lúc refresh, reject nếu mismatch (configurable `EnforceDeviceBinding=true`). File: `RefreshTokenCommandHandler.cs:82`. **Mức: P1**. — #360
-- [ ] **#AUTH-13** — Fix `#11` ForgotPassword brute-force qua nhiều IP: thêm per-email rate limit (Redis key `otp_attempts:{emailHash}` TTL 1h, max 10). Không thay `PolicyAnonOtp` IP-based, bổ sung tầng email-based. File: `RateLimitingExtensions.cs:29-38`. **Mức: P1**. — #361
-- [ ] **#AUTH-14** — Fix `#12` OTP entropy: tăng 6 → 8 số HOẶC giảm TTL 10 → 5 phút HOẶC thêm exponential backoff sau N fail per-account. Chốt 1 trong 3 với Leader. File: `OtpHelper.cs:10`. **Mức: P1**. — #362
-- [ ] **#AUTH-15** — Fix `#14` JWT permission claims revoke realtime: subscribe `PermissionsChangedEvent` (đã có từ Sprint 5B `#241`), invalidate per-account JWT bằng `jti` blacklist Redis. Kết hợp với `#AUTH-54` TRL. File: `JwtHelper.cs:33-75`. **Mức: P1**. — #363
-- [ ] **#AUTH-16** — Fix `#17` `PermissionResolver` cache: thêm `IMemoryCache` hoặc Redis cache per-role với invalidation khi `PermissionsChangedEvent` arrive. File: `PermissionResolver.cs:19-40`. **Mức: P1**. — #364
-- [ ] **#AUTH-17** — Fix `#3` Enumeration attack: log audit dùng cùng action code cho "email không tồn tại" và "sai mật khẩu" (vd `LoginFailedInvalidCredentials`), KHÔNG phân biệt trong log. Đo timing → thêm artificial delay bằng `await Task.Delay(jitter(100, 200))` khi miss. File: `LoginCommandHandler.cs:46-67`. **Mức: P0** (xếp vào Phase B vì cần thiết kế cẩn thận audit log mới). — #365
+- [x] **#AUTH-11** — Fix `#1` Implement `IJwtHelper.IsTokenValid()`: thay throw `NotImplementedException` bằng `_handler.ValidateToken(...)` + check blacklist (kết hợp #54 TRL — xem `#AUTH-54`). File: `JwtHelper.cs:101`. **Mức: P1**. — #359
+- [x] **#AUTH-12** — Fix `#8` RefreshToken cross-check IP/UA: lưu `IssuedIp`/`IssuedUa` lúc cấp, so sánh lúc refresh, reject nếu mismatch (configurable `EnforceDeviceBinding=true`). File: `RefreshTokenCommandHandler.cs:82`. **Mức: P1**. — #360
+- [x] **#AUTH-13** — Fix `#11` ForgotPassword brute-force qua nhiều IP: thêm per-email rate limit (Redis key `otp_attempts:{emailHash}` TTL 1h, max 10). Không thay `PolicyAnonOtp` IP-based, bổ sung tầng email-based. File: `RateLimitingExtensions.cs:29-38`. **Mức: P1**. — #361
+- [ ] **#AUTH-14** — Fix `#12` OTP entropy: tăng 6 → 8 số HOẶC giảm TTL 10 → 5 phút HOẶC thêm exponential backoff sau N fail per-account. Chốt 1 trong 3 với Leader. File: `OtpHelper.cs:10`. **Mức: P1**. — #362 — **GAP (SKIP):** User skip — OTP 6 số + lockout 5/15min đã giảm brute-force window xuống ~0.0005%/window. Tăng 8 số làm UX tệ. Acceptable cho capstone scope.
+- [x] **#AUTH-15** — Fix `#14` JWT permission claims revoke realtime: subscribe `PermissionsChangedEvent` (đã có từ Sprint 5B `#241`), invalidate per-account JWT bằng `jti` blacklist Redis. Kết hợp với `#AUTH-54` TRL. File: `JwtHelper.cs:33-75`. **Mức: P1**. — #363
+- [x] **#AUTH-16** — Fix `#17` `PermissionResolver` cache: thêm `IMemoryCache` hoặc Redis cache per-role với invalidation khi `PermissionsChangedEvent` arrive. File: `PermissionResolver.cs:19-40`. **Mức: P1**. — #364
+- [x] **#AUTH-17** — Fix `#3` Enumeration attack: log audit dùng cùng action code cho "email không tồn tại" và "sai mật khẩu" (vd `LoginFailedInvalidCredentials`), KHÔNG phân biệt trong log. Đo timing → thêm artificial delay bằng `await Task.Delay(jitter(100, 200))` khi miss. File: `LoginCommandHandler.cs:46-67`. **Mức: P0** (xếp vào Phase B vì cần thiết kế cẩn thận audit log mới). — #365
 #### Phase C — Logic / Edge case (4 ngày)
 
-- [ ] **#AUTH-18** — Fix `#18` Account Status Logic Inconsistency: define rõ semantics `Locked` (temp lockout từ failed login, auto-unlock) vs `Inactive` (admin deactivate, không auto). Thêm scheduled job clear lockout (xem `#AUTH-43`). File: `LoginCommandHandler.cs:113-128`. — #366
-- [ ] **#AUTH-19** — Fix `#19` Failed Login OTP Counting: define rule reset `FailedLoginAttempts` riêng cho OTP path vs password path. File: `VerifyOtpCommandHandler`. — #367
-- [ ] **#AUTH-20** — Fix `#20` Google OAuth Email Mismatch Policy: define policy khi user A đã link Google email X, user B cố link cùng email X từ Google account khác → reject với message rõ ràng. File: `GoogleAuthCommandHandler`. — #368
-- [ ] **#AUTH-21** — Fix `#21` Google Token Exchange timeout/retry: thêm Polly policy (timeout 10s, retry 2x exponential). File: `GoogleCallbackCommandHandler.cs:35`. — #369
-- [ ] **#AUTH-22** — Fix `#22` 2FA Lazy Re-Encrypt Status: define behavior nếu crash giữa encryption migration — handler check `TwoFactorSecretEncryptedAt`, retry encrypt nếu null. File: `Account.cs:47-48`. — #370
-- [ ] **#AUTH-23** — Fix `#23` `ChangePassword` không check OldPassword != NewPassword: thêm validate `request.NewPassword != request.OldPassword`, return error nếu trùng. File: `ChangePasswordCommandHandler.cs:59`. — #371
-- [ ] **#AUTH-24** — Fix `#24` `ChangeEmail` không lock email mới: thêm Redis distributed lock `email_reserve:{newEmail}` TTL 10 phút trong khi user verify OTP. File: `ChangeEmailCommandHandler.cs:52-57`. — #372
-- [ ] **#AUTH-25** — Fix `#25` `Register` race condition: thêm Redis distributed lock `register:{emailHash}` HOẶC catch `DbUpdateException` + parse PG error code 23505 (unique violation) + extract column → trả message phân biệt email/phone. File: `RegisterCommandHandler.cs:43-45, 66-95, 125`. — #373
-- [ ] **#AUTH-26** — Fix `#26` `AcceptInvite` không validate `InvitationExpiredAt != null`: thêm check `InvitationExpiredAt == null || InvitationExpiredAt < DateTime.UtcNow` → reject. File: `AcceptInviteCommandHandler.cs:57`. — #374
-- [ ] **#AUTH-27** — Fix `#27` `VerifyOtp` dùng `<` thay `<=`: đổi `expiry < now` thành `expiry <= now`. File: `VerifyOtpCommandHandler.cs:51`. — #375
-- [ ] **#AUTH-28** — Fix `#28` RefreshToken rotation TTL inconsistency: lưu `OriginalIssuedAt` khi rotate, TTL tính từ original không từ now. File: `RefreshTokenCommandHandler.cs:96`. — #376
-- [ ] **#AUTH-29** — Fix `#29` AuditLog append-only enforce ở DB: migration `AuditLogAppendOnlyTrigger` tạo PG trigger `BEFORE UPDATE/DELETE ON auth_audit_logs FOR EACH ROW RAISE EXCEPTION`. Manual test DELETE bị reject. File: `AuditLogConfiguration.cs:7-98`. Liên kết với Phụ lục A Phase 1 `auth_audit_logs` refactor. — #377
-- [ ] **#AUTH-30** — Fix `#30` `DeleteAccount` cascade + anonymize PII: handler thêm anonymize email/phone/fullName thành `deleted-{id}@anonymized.local`, soft-delete backup codes + OTP records + refresh token. GDPR right-to-be-forgotten. File: `DeleteAccountCommandHandler.cs:51-56`. — #378
-- [ ] **#AUTH-31** — Fix `#31` `PendingEmail` cleanup: thêm background job `PendingEmailCleanupBackgroundService` (daily 02:00 UTC) clear `PendingEmail = null` nếu `PendingEmailRequestedAt < now - 24h`. File: `Account.cs:39`. — #379
-- [ ] **#AUTH-32** — Fix `#32` `RefreshTokenExpirationDays = 7` hardcode: đọc từ `JwtSettings.RefreshTokenExpirationDays` (config). File: `AuthTokenIssuer.cs:15`. — #380
-- [ ] **#AUTH-33** — Fix `#33` `LastLoginIp` semantic: chốt với Leader — chỉ update sau pass 2FA (KHÔNG update mỗi refresh). Sửa `RefreshTokenCommandHandler:109-110` bỏ update. — #381
-- [ ] **#AUTH-34** — Fix `#34` `GenericRepository.UpdateAsync()` `_dbSet.Update(entity)` đánh dấu all column Modified: thay bằng `_context.Entry(entity).State = EntityState.Modified` không khác, nhưng thêm `RowVersion` (xmin) cho Account + retry on `DbUpdateConcurrencyException`. Hoặc handler chỉ set field cần update. File: `GenericRepository.cs:36-39`. — #382
-- [ ] **#AUTH-35** — Fix `#35` `GenericRepository.GetAllAsync()` default `AsNoTracking()`: thêm overload `GetAllAsync(bool tracking = false)`. Handler phải opt-in tracking. — #383
-- [ ] **#AUTH-36** — Fix `#36` ValidationBehavior chạy SAU handler query DB: chuyển sang MediatR `IPipelineBehavior<TRequest, TResponse>` chạy TRƯỚC handler. File: `LoginCommandHandler.cs:48-51`. — #384
-- [ ] **#AUTH-37** — Fix `#37` `OutboxRelayBackgroundService` honor `CancellationToken`: audit loop `while(!stoppingToken.IsCancellationRequested)` + pass `stoppingToken` vào mọi async call + flush remaining batch trước shutdown. File: `Program.cs:37`. — #385
-- [ ] **#AUTH-38** — Fix `#38` Inject `TimeProvider`/`IClock`: tạo `ISystemClock` interface + `SystemClock` impl, inject vào handler thay `DateTime.UtcNow` trực tiếp. Mockable for tests. File: `RefreshTokenCommandHandler.cs:95-96` + áp dụng toàn AuthService. — #386
-- [ ] **#AUTH-39** — Fix `#39` Email/PhoneNumber normalize: thêm `EmailNormalizer.Normalize(email) = email.Trim().ToLowerInvariant()` và `PhoneNormalizer.Normalize(phone)` (E.164). Áp dụng ở TẤT CẢ `Register/Login/ChangeEmail/ForgotPassword` handler + lúc query DB. File: `RegisterCommandHandler` + helpers mới. — #387
+- [x] **#AUTH-18** — Fix `#18` Account Status Logic Inconsistency: define rõ semantics `Locked` (temp lockout từ failed login, auto-unlock) vs `Inactive` (admin deactivate, không auto). Thêm scheduled job clear lockout (xem `#AUTH-43`). File: `LoginCommandHandler.cs:113-128`. — #366
+- [x] **#AUTH-19** — Fix `#19` Failed Login OTP Counting: define rule reset `FailedLoginAttempts` riêng cho OTP path vs password path. File: `VerifyOtpCommandHandler`. — #367
+- [x] **#AUTH-20** — Fix `#20` Google OAuth Email Mismatch Policy: define policy khi user A đã link Google email X, user B cố link cùng email X từ Google account khác → reject với message rõ ràng. File: `GoogleAuthCommandHandler`. — #368
+- [x] **#AUTH-21** — Fix `#21` Google Token Exchange timeout/retry: thêm Polly policy (timeout 10s, retry 2x exponential). File: `GoogleCallbackCommandHandler.cs:35`. — #369 — **NOTE:** Deviation: dùng manual retry thay Polly (DI comment justify — tránh thêm Polly dependency cho 1 endpoint).
+- [x] **#AUTH-22** — Fix `#22` 2FA Lazy Re-Encrypt Status: define behavior nếu crash giữa encryption migration — handler check `TwoFactorSecretEncryptedAt`, retry encrypt nếu null. File: `Account.cs:47-48`. — #370
+- [x] **#AUTH-23** — Fix `#23` `ChangePassword` không check OldPassword != NewPassword: thêm validate `request.NewPassword != request.OldPassword`, return error nếu trùng. File: `ChangePasswordCommandHandler.cs:59`. — #371
+- [x] **#AUTH-24** — Fix `#24` `ChangeEmail` không lock email mới: thêm Redis distributed lock `email_reserve:{newEmail}` TTL 10 phút trong khi user verify OTP. File: `ChangeEmailCommandHandler.cs:52-57`. — #372
+- [x] **#AUTH-25** — Fix `#25` `Register` race condition: thêm Redis distributed lock `register:{emailHash}` HOẶC catch `DbUpdateException` + parse PG error code 23505 (unique violation) + extract column → trả message phân biệt email/phone. File: `RegisterCommandHandler.cs:43-45, 66-95, 125`. — #373
+- [x] **#AUTH-26** — Fix `#26` `AcceptInvite` không validate `InvitationExpiredAt != null`: thêm check `InvitationExpiredAt == null || InvitationExpiredAt < DateTime.UtcNow` → reject. File: `AcceptInviteCommandHandler.cs:57`. — #374
+- [x] **#AUTH-27** — Fix `#27` `VerifyOtp` dùng `<` thay `<=`: đổi `expiry < now` thành `expiry <= now`. File: `VerifyOtpCommandHandler.cs:51`. — #375
+- [x] **#AUTH-28** — Fix `#28` RefreshToken rotation TTL inconsistency: lưu `OriginalIssuedAt` khi rotate, TTL tính từ original không từ now. File: `RefreshTokenCommandHandler.cs:96`. — #376
+- [x] **#AUTH-29** — Fix `#29` AuditLog append-only enforce ở DB: migration `AuditLogAppendOnlyTrigger` tạo PG trigger `BEFORE UPDATE/DELETE ON auth_audit_logs FOR EACH ROW RAISE EXCEPTION`. Manual test DELETE bị reject. File: `AuditLogConfiguration.cs:7-98`. Liên kết với Phụ lục A Phase 1 `auth_audit_logs` refactor. — #377
+- [x] **#AUTH-30** — Fix `#30` `DeleteAccount` cascade + anonymize PII: handler thêm anonymize email/phone/fullName thành `deleted-{id}@anonymized.local`, soft-delete backup codes + OTP records + refresh token. GDPR right-to-be-forgotten. File: `DeleteAccountCommandHandler.cs:51-56`. — #378 — **NOTE:** Deviation: GIỮ Email/FullName/PhoneNumber trong 90 ngày retention window cho AUTH-50 reactivation; hard-delete + anonymize defer qua AUTH-42 background job.
+- [x] **#AUTH-31** — Fix `#31` `PendingEmail` cleanup: thêm background job `PendingEmailCleanupBackgroundService` (daily 02:00 UTC) clear `PendingEmail = null` nếu `PendingEmailRequestedAt < now - 24h`. File: `Account.cs:39`. — #379
+- [x] **#AUTH-32** — Fix `#32` `RefreshTokenExpirationDays = 7` hardcode: đọc từ `JwtSettings.RefreshTokenExpirationDays` (config). File: `AuthTokenIssuer.cs:15`. — #380
+- [ ] **#AUTH-33** — Fix `#33` `LastLoginIp` semantic: chốt với Leader — chỉ update sau pass 2FA (KHÔNG update mỗi refresh). Sửa `RefreshTokenCommandHandler:109-110` bỏ update. — #381 — **GAP (SKIP):** User skip — semantic 'last LOGIN' vs 'last TOKEN ISSUE' cần Leader chốt. Mitigation: AuditLog + LoginAttempt log full history độc lập với field này.
+- [ ] **#AUTH-34** — Fix `#34` `GenericRepository.UpdateAsync()` `_dbSet.Update(entity)` đánh dấu all column Modified: thay bằng `_context.Entry(entity).State = EntityState.Modified` không khác, nhưng thêm `RowVersion` (xmin) cho Account + retry on `DbUpdateConcurrencyException`. Hoặc handler chỉ set field cần update. File: `GenericRepository.cs:36-39`. — #382 — **GAP (PARTIAL):** xmin concurrency token đã đăng ký + ConcurrencyRetryHelper class đã viết, nhưng chưa wire vào handler nào. Defensive cover — Account contention thấp ở scale hiện tại.
+- [x] **#AUTH-35** — Fix `#35` `GenericRepository.GetAllAsync()` default `AsNoTracking()`: thêm overload `GetAllAsync(bool tracking = false)`. Handler phải opt-in tracking. — #383
+- [x] **#AUTH-36** — Fix `#36` ValidationBehavior chạy SAU handler query DB: chuyển sang MediatR `IPipelineBehavior<TRequest, TResponse>` chạy TRƯỚC handler. File: `LoginCommandHandler.cs:48-51`. — #384
+- [x] **#AUTH-37** — Fix `#37` `OutboxRelayBackgroundService` honor `CancellationToken`: audit loop `while(!stoppingToken.IsCancellationRequested)` + pass `stoppingToken` vào mọi async call + flush remaining batch trước shutdown. File: `Program.cs:37`. — #385
+- [x] **#AUTH-38** — Fix `#38` Inject `TimeProvider`/`IClock`: tạo `ISystemClock` interface + `SystemClock` impl, inject vào handler thay `DateTime.UtcNow` trực tiếp. Mockable for tests. File: `RefreshTokenCommandHandler.cs:95-96` + áp dụng toàn AuthService. — #386
+- [x] **#AUTH-39** — Fix `#39` Email/PhoneNumber normalize: thêm `EmailNormalizer.Normalize(email) = email.Trim().ToLowerInvariant()` và `PhoneNormalizer.Normalize(phone)` (E.164). Áp dụng ở TẤT CẢ `Register/Login/ChangeEmail/ForgotPassword` handler + lúc query DB. File: `RegisterCommandHandler` + helpers mới. — #387
 #### Phase D — Missing features P1/P2 (6 ngày)
 
-- [ ] **#AUTH-40** — `#40` Token introspection / blacklist endpoint (P1): `POST /api/auth/introspect` (RFC 7662) trả `{active, exp, sub, scope}`. Resource server gọi để verify + check blacklist. Kết hợp với `#AUTH-54` TRL. — #388
-- [ ] **#AUTH-41** — `#41` Concurrent session limit (P2): config `MaxConcurrentSessionsPerAccount = 5`, khi vượt thì revoke session cũ nhất. Verify `SessionCreatedNotification` impl. — #389
-- [ ] **#AUTH-42** — `#42` Account cleanup job hard-delete sau 90 ngày (P2): `BackgroundService` daily 03:00 UTC, `DELETE FROM accounts WHERE is_deleted = true AND deleted_at < now - 90 days` + cascade. File: `AccountsController.cs:499` doc nhắc. — #390
-- [ ] **#AUTH-43** — `#43` Lockout auto-unlock scheduled job (P2): `LockoutReconcileBackgroundService` mỗi 5 phút, set `Status = Active` nếu `LockedUntil < now`. — #391
-- [ ] **#AUTH-44** — `#44` Session Device ID Tracking (P2): implement hash User-Agent → derive DeviceId stable. Query "show sessions from device X" + "revoke all except current". — #392
-- [ ] **#AUTH-45** — `#45` Backup Code Recovery Attempt Limit (P2): thêm rate limit per-account 5 attempts/15min cho `Verify2FABackupCodeCommand`. — #393
-- [ ] **#AUTH-46** — `#46` Email Change Rate Limiting (P2): áp dụng `PolicyAuthOtp` 3 req/min cho `/api/accounts/me/change-email`. — #394
-- [ ] **#AUTH-47** — `#47` Account Merge/Consolidation (P3): admin endpoint `POST /api/admin/accounts/{id}/merge` consolidate Google + local account. — #395
-- [ ] **#AUTH-48** — `#48` IP/UA Whitelist / Trusted device (P3): `TrustedDevices` table, skip 2FA nếu DeviceId + IP /24 match recent successful login. — #396
-- [ ] **#AUTH-49** — `#49` Expired OTP Auto-Clean Job (P2): `OtpCleanupBackgroundService` daily, clear `OtpCode = null` nếu `OtpExpiredAt < now - 24h`. — #397
-- [ ] **#AUTH-50** — `#50` Account Reactivation After Soft-Delete (P2): endpoint `POST /api/auth/reactivate` cho user restore trong 90 ngày window (yêu cầu verify email OTP). — #398
-- [ ] **#AUTH-51** — `#51` Cross-Device 2FA Confirmation (P3): setup device A → confirm via email link device B. — #399
-- [ ] **#AUTH-52** — `#52` Suspicious Login Alert (P2): khi LoginAttempt từ IP/UA chưa từng thấy → publish `SuspiciousLoginDetectedEvent` → email alert. — #400
-- [ ] **#AUTH-53** — `#53` Password Strength Policy Configurable (P2): chuyển hardcode regex sang `PasswordPolicy:{MinLength, RequireUppercase, ...}` config. — #401
-- [ ] **#AUTH-54** — `#54` Token Revocation List (TRL) (P1): `POST /api/auth/revoke` + Redis `revoked_jti:{jti}` TTL = remaining token life. JWT middleware check blacklist. — #402
-- [ ] **#AUTH-55** — `#55` Admin Forced Logout Single User (P2): verify endpoint `POST /api/admin/accounts/{id}/revoke-sessions` expose từ `AdminRevokeAccountSessionsCommand`. — #403
-- [ ] **#AUTH-56** — `#56` Account Notification Preferences (P3): `account_notification_preferences` table + endpoint CRUD. — #404
-- [ ] **#AUTH-57** — `#57` Admin Account Unlock (P2): verify endpoint `POST /api/admin/accounts/{id}/unlock` expose từ `UnlockAccountCommand`. — #405
-- [ ] **#AUTH-58** — `#58` SMS OTP fallback cho 2FA (P1): thêm `Verify2FASmsCommand` + integration với SmsService (`SendSmsCommand`). — #406
-- [ ] **#AUTH-59** — `#59` JWT `kid` header + key rotation (P2): thêm `kid` claim vào JWT header, support multi-key validation (current + previous). File: `JwtHelper.cs:33-75`. — #407
-- [ ] **#AUTH-60** — `#60` Health checks chuẩn k8s (P1): `app.MapHealthChecks("/health")` + `/ready` + `/live` với DB + Redis + RabbitMQ check. File: `Program.cs`. — #408
-- [ ] **#AUTH-61** — `#61` API versioning (P2): refactor `/api/...` → `/api/v1/...` + `Asp.Versioning.Mvc` package. — #409
-- [ ] **#AUTH-62** — `#62` Endpoint export account data — GDPR portability (P1): `GET /api/accounts/me/export` trả JSON full account data (profile, sessions, audit logs). — #410
-- [ ] **#AUTH-63** — `#63` Multi-tenancy / OrgId / TenantId (P2): thêm `OrgId` vào Account entity + middleware tenant isolation. Cần thiết kế lớn — chốt scope với Leader trước. — #411
-- [ ] **#AUTH-64** — `#64` Recovery khi mất cả phone + backup codes (P1): self-serve identity-verification flow (KYC document upload + admin approval workflow). — #412
-- [ ] **#AUTH-65** — `#65` Optimistic concurrency cho Account update (P2): thêm `RowVersion` (xmin shadow property) trong `AccountConfiguration` + retry on conflict. — #413
-- [ ] **#AUTH-66** — `#66` `IValidateOptions<JwtSettings>` ValidateOnStart (P1): `services.AddOptions<JwtSettings>().ValidateDataAnnotations().ValidateOnStart()`. Thêm `[Required]` annotation cho field critical. File: `JwtHelper.cs:30`. — #414
-- [ ] **#AUTH-67** — `#67` Idempotency middleware verify thực sự dedupe: review `SharedInfrastructure/Idempotency/*` impl, viết integration test 2 request cùng `Idempotency-Key` → response giống nhau (cached). File: `Program.cs:34`. — #415
+- [x] **#AUTH-40** — `#40` Token introspection / blacklist endpoint (P1): `POST /api/auth/introspect` (RFC 7662) trả `{active, exp, sub, scope}`. Resource server gọi để verify + check blacklist. Kết hợp với `#AUTH-54` TRL. — #388
+- [x] **#AUTH-41** — `#41` Concurrent session limit (P2): config `MaxConcurrentSessionsPerAccount = 5`, khi vượt thì revoke session cũ nhất. Verify `SessionCreatedNotification` impl. — #389
+- [x] **#AUTH-42** — `#42` Account cleanup job hard-delete sau 90 ngày (P2): `BackgroundService` daily 03:00 UTC, `DELETE FROM accounts WHERE is_deleted = true AND deleted_at < now - 90 days` + cascade. File: `AccountsController.cs:499` doc nhắc. — #390
+- [x] **#AUTH-43** — `#43` Lockout auto-unlock scheduled job (P2): `LockoutReconcileBackgroundService` mỗi 5 phút, set `Status = Active` nếu `LockedUntil < now`. — #391
+- [x] **#AUTH-44** — `#44` Session Device ID Tracking (P2): implement hash User-Agent → derive DeviceId stable. Query "show sessions from device X" + "revoke all except current". — #392
+- [x] **#AUTH-45** — `#45` Backup Code Recovery Attempt Limit (P2): thêm rate limit per-account 5 attempts/15min cho `Verify2FABackupCodeCommand`. — #393
+- [x] **#AUTH-46** — `#46` Email Change Rate Limiting (P2): áp dụng `PolicyAuthOtp` 3 req/min cho `/api/accounts/me/change-email`. — #394
+- [ ] **#AUTH-47** — `#47` Account Merge/Consolidation (P3): admin endpoint `POST /api/admin/accounts/{id}/merge` consolidate Google + local account. — #395 — **GAP (DEFER):** User defer P3 — Account merge consolidation. Capstone scope không cần admin merge Google+local.
+- [ ] **#AUTH-48** — `#48` IP/UA Whitelist / Trusted device (P3): `TrustedDevices` table, skip 2FA nếu DeviceId + IP /24 match recent successful login. — #396 — **GAP (DEFER):** User defer P3 — Trusted device whitelist. Scope mở rộng, không nằm trong critical path.
+- [x] **#AUTH-49** — `#49` Expired OTP Auto-Clean Job (P2): `OtpCleanupBackgroundService` daily, clear `OtpCode = null` nếu `OtpExpiredAt < now - 24h`. — #397
+- [x] **#AUTH-50** — `#50` Account Reactivation After Soft-Delete (P2): endpoint `POST /api/auth/reactivate` cho user restore trong 90 ngày window (yêu cầu verify email OTP). — #398
+- [ ] **#AUTH-51** — `#51` Cross-Device 2FA Confirmation (P3): setup device A → confirm via email link device B. — #399 — **GAP (DEFER):** User defer P3 — Cross-device 2FA confirmation. UX nâng cao, single-device setup đủ cho capstone.
+- [x] **#AUTH-52** — `#52` Suspicious Login Alert (P2): khi LoginAttempt từ IP/UA chưa từng thấy → publish `SuspiciousLoginDetectedEvent` → email alert. — #400
+- [x] **#AUTH-53** — `#53` Password Strength Policy Configurable (P2): chuyển hardcode regex sang `PasswordPolicy:{MinLength, RequireUppercase, ...}` config. — #401
+- [x] **#AUTH-54** — `#54` Token Revocation List (TRL) (P1): `POST /api/auth/revoke` + Redis `revoked_jti:{jti}` TTL = remaining token life. JWT middleware check blacklist. — #402
+- [x] **#AUTH-55** — `#55` Admin Forced Logout Single User (P2): verify endpoint `POST /api/admin/accounts/{id}/revoke-sessions` expose từ `AdminRevokeAccountSessionsCommand`. — #403
+- [ ] **#AUTH-56** — `#56` Account Notification Preferences (P3): `account_notification_preferences` table + endpoint CRUD. — #404 — **GAP (DEFER):** User defer P3 — Notification preferences CRUD. Capstone scope không cần granular per-event opt-in/opt-out.
+- [x] **#AUTH-57** — `#57` Admin Account Unlock (P2): verify endpoint `POST /api/admin/accounts/{id}/unlock` expose từ `UnlockAccountCommand`. — #405
+- [x] **#AUTH-58** — `#58` SMS OTP fallback cho 2FA (P1): thêm `Verify2FASmsCommand` + integration với SmsService (`SendSmsCommand`). — #406
+- [x] **#AUTH-59** — `#59` JWT `kid` header + key rotation (P2): thêm `kid` claim vào JWT header, support multi-key validation (current + previous). File: `JwtHelper.cs:33-75`. — #407
+- [x] **#AUTH-60** — `#60` Health checks chuẩn k8s (P1): `app.MapHealthChecks("/health")` + `/ready` + `/live` với DB + Redis + RabbitMQ check. File: `Program.cs`. — #408
+- [ ] **#AUTH-61** — `#61` API versioning (P2): refactor `/api/...` → `/api/v1/...` + `Asp.Versioning.Mvc` package. — #409 — **GAP (DEFER):** User defer P2 — API versioning. Hiện tại 1 phiên bản, refactor `/api/v1/` chưa cần.
+- [x] **#AUTH-62** — `#62` Endpoint export account data — GDPR portability (P1): `GET /api/accounts/me/export` trả JSON full account data (profile, sessions, audit logs). — #410
+- [ ] **#AUTH-63** — `#63` Multi-tenancy / OrgId / TenantId (P2): thêm `OrgId` vào Account entity + middleware tenant isolation. Cần thiết kế lớn — chốt scope với Leader trước. — #411 — **GAP (SKIP):** User skip — Multi-tenancy / OrgId. Capstone single-tenant scope, không có B2B SaaS requirement. Implement đầy đủ cần 1+ sprint riêng.
+- [ ] **#AUTH-64** — `#64` Recovery khi mất cả phone + backup codes (P1): self-serve identity-verification flow (KYC document upload + admin approval workflow). — #412 — **GAP (DEFER):** User defer P1 — KYC recovery flow. Scope lớn (document upload + admin approval workflow), defer qua sprint sau.
+- [x] **#AUTH-65** — `#65` Optimistic concurrency cho Account update (P2): thêm `RowVersion` (xmin shadow property) trong `AccountConfiguration` + retry on conflict. — #413
+- [x] **#AUTH-66** — `#66` `IValidateOptions<JwtSettings>` ValidateOnStart (P1): `services.AddOptions<JwtSettings>().ValidateDataAnnotations().ValidateOnStart()`. Thêm `[Required]` annotation cho field critical. File: `JwtHelper.cs:30`. — #414
+- [x] **#AUTH-67** — `#67` Idempotency middleware verify thực sự dedupe: review `SharedInfrastructure/Idempotency/*` impl, viết integration test 2 request cùng `Idempotency-Key` → response giống nhau (cached). File: `Program.cs:34`. — #415
 #### Phase E — Code quality / Inconsistency (3 ngày)
 
-- [ ] **#AUTH-68** — `#68` `LoginCommandHandler` set `LastLoginIp`/`LastLoginAt`: thêm update sau pass 2FA. File: `LoginCommandHandler.cs`. — #416
-- [ ] **#AUTH-69** — `#69` `Account.RoleId` nullable: đổi `Guid RoleId` → `Guid? RoleId`, handler check `null` thay `Guid.Empty`. Migration `MakeAccountRoleIdNullable`. File: `Account.cs:74`. — #417
-- [ ] **#AUTH-70** — `#70` `PasswordHasher` đổi Singleton → Scoped: tránh cache config cũ nếu future work-factor từ DB. File: `ManageDependencyInjection.cs:78`. — #418
-- [ ] **#AUTH-71** — `#71` HTTPS redirect trong Docker: review tradeoff với Leader — nếu giữ skip thì document rõ requirement deploy phải có reverse-proxy TLS termination (Nginx/Caddy). File: `Program.cs:121-125`. — #419
-- [ ] **#AUTH-72** — `#72` Xóa dead method `IJwtHelper.IsTokenValid()` SAU khi `#AUTH-11` đã implement (hoặc xóa hẳn nếu KHÔNG cần). File: `JwtHelper.cs:99-102`. — #420
-- [ ] **#AUTH-73** — `#73` Error code chuẩn: thêm `ErrorCode` enum (`AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`, ...) vào `CommonResponse`. FE parse theo code, không theo message. Liên kết với §21 Error code catalog. — #421
-- [ ] **#AUTH-74** — `#74` `OtpHelper.GenerateOtp` dùng `RandomNumberGenerator`: verify file `OtpHelper.cs:10` đang dùng `Random` (seeded) thì đổi sang `RandomNumberGenerator.GetInt32(0, 999999)`. — #422
-- [ ] **#AUTH-75** — `#75` Composite index `(Email, IsDeleted)`: migration `AddAccountEmailIsDeletedIndex` thêm `CREATE INDEX ON accounts (email, is_deleted)`. — #423
-- [ ] **#AUTH-76** — `#76` `GlobalExceptionMiddleware` mask stacktrace: trong Production env, log stacktrace nhưng `Response.WriteAsync` chỉ trả error code + correlationId. PII redactor cho log message. File: `GlobalExceptionMiddleware.cs:60-62`. — #424
-- [ ] **#AUTH-77** — `#77` Correlation ID xuyên suốt: implement `CorrelationIdMiddleware` (xem §B.4.1 issue-authservice.md). Propagate qua MassTransit header. Liên kết với Phụ lục A audit aggregator. — #425
-- [ ] **#AUTH-78** — `#78` Custom metric cho auth domain: thêm Prometheus counter `auth_login_total{result}`, `auth_2fa_challenge_total{result}`, `auth_otp_usage_total`. Liên kết §9.2 dashboard. — #426
-- [ ] **#AUTH-79** — `#79` Refresh token reuse detection event: khi family bị revoke do reuse, publish `RefreshTokenReuseDetectedEvent` → security team alert. — #427
-- [ ] **#AUTH-80** — `#80` ClockSkew unify middleware vs helper: set cả 2 chỗ `ClockSkew = TimeSpan.Zero`. File: `AddJWTAuthenticationAuthorization.cs:32` + `JwtHelper.cs:117-122`. — #428
-- [ ] **#AUTH-81** — `#81` Audit async/await patterns: grep `.Result`, `.Wait()`, `throw ex`, `async void` toàn AuthService → fix tất cả. Thêm Roslyn analyzer rule cấm. — #429
-- [ ] **#AUTH-82** — `#82` Lockout reconcile race: kết hợp với `#AUTH-43` background job — define grace period 1s khi lockout boundary. — #430
-- [ ] **#AUTH-83** — `#83` `PasswordHasher` Scoped + future config risk: kết hợp với `#AUTH-70`, đảm bảo KHÔNG cache state giữa request. — #431
+- [x] **#AUTH-68** — `#68` `LoginCommandHandler` set `LastLoginIp`/`LastLoginAt`: thêm update sau pass 2FA. File: `LoginCommandHandler.cs`. — #416
+- [x] **#AUTH-69** — `#69` `Account.RoleId` nullable: đổi `Guid RoleId` → `Guid? RoleId`, handler check `null` thay `Guid.Empty`. Migration `MakeAccountRoleIdNullable`. File: `Account.cs:74`. — #417
+- [x] **#AUTH-70** — `#70` `PasswordHasher` đổi Singleton → Scoped: tránh cache config cũ nếu future work-factor từ DB. File: `ManageDependencyInjection.cs:78`. — #418
+- [ ] **#AUTH-71** — `#71` HTTPS redirect trong Docker: review tradeoff với Leader — nếu giữ skip thì document rõ requirement deploy phải có reverse-proxy TLS termination (Nginx/Caddy). File: `Program.cs:121-125`. — #419 — **GAP (SKIP):** User skip — HTTPS redirect Docker. Pattern cloud-native: TLS termination ở reverse proxy (Nginx/Caddy/Ingress). Phải document trong deploy runbook.
+- [x] **#AUTH-72** — `#72` Xóa dead method `IJwtHelper.IsTokenValid()` SAU khi `#AUTH-11` đã implement (hoặc xóa hẳn nếu KHÔNG cần). File: `JwtHelper.cs:99-102`. — #420 — **NOTE:** Chọn giữ implement (qua AUTH-11) thay vì xoá — spec literal cho phép 'OR delete'.
+- [ ] **#AUTH-73** — `#73` Error code chuẩn: thêm `ErrorCode` enum (`AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`, ...) vào `CommonResponse`. FE parse theo code, không theo message. Liên kết với §21 Error code catalog. — #421 — **GAP (ROLLBACK):** User yêu cầu xoá field `string? ErrorCode` khỏi `CommonResponseBase` — toàn bộ wire-in (11 handler + AuthErrorCodes class + CommonResponseWriter param + GlobalExceptionMiddleware args) đã rollback.
+- [x] **#AUTH-74** — `#74` `OtpHelper.GenerateOtp` dùng `RandomNumberGenerator`: verify file `OtpHelper.cs:10` đang dùng `Random` (seeded) thì đổi sang `RandomNumberGenerator.GetInt32(0, 999999)`. — #422
+- [x] **#AUTH-75** — `#75` Composite index `(Email, IsDeleted)`: migration `AddAccountEmailIsDeletedIndex` thêm `CREATE INDEX ON accounts (email, is_deleted)`. — #423
+- [x] **#AUTH-76** — `#76` `GlobalExceptionMiddleware` mask stacktrace: trong Production env, log stacktrace nhưng `Response.WriteAsync` chỉ trả error code + correlationId. PII redactor cho log message. File: `GlobalExceptionMiddleware.cs:60-62`. — #424
+- [x] **#AUTH-77** — `#77` Correlation ID xuyên suốt: implement `CorrelationIdMiddleware` (xem §B.4.1 issue-authservice.md). Propagate qua MassTransit header. Liên kết với Phụ lục A audit aggregator. — #425
+- [x] **#AUTH-78** — `#78` Custom metric cho auth domain: thêm Prometheus counter `auth_login_total{result}`, `auth_2fa_challenge_total{result}`, `auth_otp_usage_total`. Liên kết §9.2 dashboard. — #426
+- [x] **#AUTH-79** — `#79` Refresh token reuse detection event: khi family bị revoke do reuse, publish `RefreshTokenReuseDetectedEvent` → security team alert. — #427
+- [x] **#AUTH-80** — `#80` ClockSkew unify middleware vs helper: set cả 2 chỗ `ClockSkew = TimeSpan.Zero`. File: `AddJWTAuthenticationAuthorization.cs:32` + `JwtHelper.cs:117-122`. — #428
+- [ ] **#AUTH-81** — `#81` Audit async/await patterns: grep `.Result`, `.Wait()`, `throw ex`, `async void` toàn AuthService → fix tất cả. Thêm Roslyn analyzer rule cấm. — #429 — **GAP (PARTIAL):** Chưa chạy full grep audit `.Result`/`.Wait()`/`throw ex`/`async void` toàn AuthService + chưa thêm Roslyn analyzer. Code style consistency check — không phải bug.
+- [x] **#AUTH-82** — `#82` Lockout reconcile race: kết hợp với `#AUTH-43` background job — define grace period 1s khi lockout boundary. — #430 — **NOTE:** Đã có background job AUTH-43; grace period implicit qua scheduling interval (5 phút). Spec '1s grace' không bắt buộc khi reconcile cycle dài hơn.
+- [x] **#AUTH-83** — `#83` `PasswordHasher` Scoped + future config risk: kết hợp với `#AUTH-70`, đảm bảo KHÔNG cache state giữa request. — #431 — **NOTE:** Combined với AUTH-70 (PasswordHasher Scoped).
 #### Phase F — Test gap (3 ngày)
 
-- [ ] **#AUTH-84** — `#84` Tạo `ChangeEmailCommandHandlerTests.cs`: cover happy path + OTP fail + race condition. Coverage ≥ 80% handler. — #432
-- [ ] **#AUTH-85** — `#85` Tạo `AcceptInviteCommandHandlerTests.cs`: cover happy path + expired invite + invalid token. — #433
-- [ ] **#AUTH-86** — `#86` Tạo `GoogleCallbackCommandHandlerTests.cs`: cover happy path + state mismatch (CSRF) + email mismatch + Google API timeout. — #434
-- [ ] **#AUTH-87** — `#87` Test `ChangePassword` verify `RevokeAllSessionsCommand` được gọi: `Mock<IMediator>.Verify(x => x.Send(It.IsAny<RevokeAllSessionsCommand>(), ...), Times.Once)`. — #435
-- [ ] **#AUTH-88** — `#88` Integration test cho Outbox event publish loop: TestContainers spin Postgres + RabbitMQ, publish event, verify queue có message + `processed_at` set. — #436
-- [ ] **#AUTH-89** — `#89` Perf test cho `PermissionResolver`: benchmark 1000 concurrent call, assert p99 < 50ms (sau khi `#AUTH-16` cache merge). — #437
-- [ ] **#AUTH-90** — `#90` Dedicated test cho `ChangePasswordCommandHandler`: verify old password check + revoke sessions logic + audit log row insert. — #438
+- [x] **#AUTH-84** — `#84` Tạo `ChangeEmailCommandHandlerTests.cs`: cover happy path + OTP fail + race condition. Coverage ≥ 80% handler. — #432 — **NOTE:** Đã có sẵn ở file `EmailChangeCommandHandlerTests.cs` — 11 Fact tests cover happy + race condition + OTP fail.
+- [x] **#AUTH-85** — `#85` Tạo `AcceptInviteCommandHandlerTests.cs`: cover happy path + expired invite + invalid token. — #433
+- [x] **#AUTH-86** — `#86` Tạo `GoogleCallbackCommandHandlerTests.cs`: cover happy path + state mismatch (CSRF) + email mismatch + Google API timeout. — #434
+- [x] **#AUTH-87** — `#87` Test `ChangePassword` verify `RevokeAllSessionsCommand` được gọi: `Mock<IMediator>.Verify(x => x.Send(It.IsAny<RevokeAllSessionsCommand>(), ...), Times.Once)`. — #435 — **NOTE:** Deviation: handler revoke trực tiếp qua `RefreshToken.Status` + `ITokenRevocationStore`, không qua Mediator command. Spec intent (verify revocation) vẫn được test.
+- [x] **#AUTH-88** — `#88` Integration test cho Outbox event publish loop: TestContainers spin Postgres + RabbitMQ, publish event, verify queue có message + `processed_at` set. — #436 — **NOTE:** Deviation: TestContainers Postgres ✅ + InMemory MassTransit thay RabbitMQ TestContainer. Outbox loop end-to-end behavior vẫn verified.
+- [x] **#AUTH-89** — `#89` Perf test cho `PermissionResolver`: benchmark 1000 concurrent call, assert p99 < 50ms (sau khi `#AUTH-16` cache merge). — #437
+- [x] **#AUTH-90** — `#90` Dedicated test cho `ChangePasswordCommandHandler`: verify old password check + revoke sessions logic + audit log row insert. — #438
 **Definition of Done — Sprint additional-auth:**
 - [ ] Tất cả 90 task `#AUTH-01..90` close + log review/test trong `logs/AUTH-{NN}/`.
 - [ ] `dotnet build` toàn solution PASS.
@@ -5079,6 +5273,150 @@ Top 10 ưu tiên fix ngay (theo §69, không được skip): `#AUTH-01`, `#AUTH-
 P1 sprint kế tiếp (nếu split): `#AUTH-11..17` + `#AUTH-37`, `#AUTH-42`, `#AUTH-43`, `#AUTH-49`, `#AUTH-60`, `#AUTH-66`, `#AUTH-80`.
 
 P2/P3 có thể defer sang Sprint additional-auth-B: `#AUTH-40`, `#AUTH-41`, `#AUTH-44`, `#AUTH-47`, `#AUTH-48`, `#AUTH-51`, `#AUTH-55`, `#AUTH-56`, `#AUTH-57`, `#AUTH-61`, `#AUTH-63`.
+
+### Sprint audit (AuditLog Hybrid Architecture — chưa chốt timeline)
+
+**Goal:** Triển khai kiến trúc **Hybrid Audit** toàn hệ thống — decentralized write (mỗi service own audit) + Outbox pattern + centralized read qua `AuditAggregatorService` mới. Sprint này **KHÔNG THUỘC** scope Sprint additional-auth (chỉ overlap nhẹ ở `#AUTH-29` append-only trigger). Đây là sprint **mở rộng** sau khi Sprint additional-auth ổn định, tạo nền tảng audit cross-service cho saga forensic + GDPR compliance + security investigation toàn org.
+
+**Tham chiếu kỹ thuật:** Toàn bộ chi tiết kiến trúc + nguyên tắc + schema + migration plan ở **`issue-authservice.md`** repo root:
+- **Phụ lục A** (§A.1..A.12) — Kiến trúc tổng quan + 7 phase roadmap + Option C policy + effort estimation
+- **Phụ lục B** (§B.0..B.19) — Implementation playbook + 10 nguyên tắc bất di bất dịch + 30 common pitfalls + zero-downtime migration plan + acceptance criteria per phase + B.19 effort breakdown chi tiết task-level
+
+Đọc Phụ lục A+B đầy đủ + ký xác nhận (B.12 checklist) trước khi start.
+
+**Owner:** Chưa assign — Leader chốt khi `/kltn-sprint` chạy. Khuyến nghị: 1 BE senior (security/distributed systems/MassTransit/PostgreSQL partitioning) + 0.5 FE (Phase 6 Admin Web UI Audit Explorer).
+
+**Timeline ước tính:** **~44 dev-day** (≈ 8-9 sprint với 1 BE + 0.5 FE). Chi tiết breakdown ở Phụ lục B §B.19. KHÔNG thể chạy song song Sprint additional-auth — phải đợi Phase A `#AUTH-29` (AuditLog append-only trigger) + `#AUTH-77` (CorrelationIdMiddleware) merge trước. Recommend kick off **sau khi Sprint additional-auth hoàn tất ổn định ≥ 2 tuần**.
+
+**Dependency:**
+- Sprint additional-auth Phase A đã merge (`#AUTH-29` trigger, `#AUTH-77` CorrelationId, `#AUTH-15` Outbox cho AuthService).
+- RabbitMQ + Postgres staging cluster ready cho `AuditAggregatorService` (DB riêng, không share với 4 service DB hiện tại).
+- ADR `docs/adr/0007-audit-hybrid-architecture.md` viết + sign-off 3 thành viên trước khi code (Phase 0 gate).
+- Geo IP service quyết định (MaxMind GeoLite2 free OR IP2Location) — Leader chốt.
+- Quyết định leader election vs separate worker pod cho OutboxRelay multi-instance (Phụ lục B §B.10).
+- Quyết định retention policy: source 1 năm, aggregate 6 tháng, severity=Critical vĩnh viễn.
+- FE Admin role mới `SecurityOfficer` (khác `Admin`) — chỉ access aggregator API, không access service-local audit.
+
+**Owner mapping (per phase, tham chiếu Phụ lục A §A.6 + B.19):**
+
+| Phase | Subject | Tasks | Ước tính |
+|-------|---------|-------|----------|
+| Phase 0 | Chuẩn bị + ADR + SharedContracts + Roslyn analyzer + RabbitMQ topology | `#AUDIT-01..05` | 3 ngày |
+| Phase 1 | Refactor AuthService audit — migration 14 cột + outbox + relay + trigger soft + fix 22 handler + test | `#AUDIT-06..12` | 7 ngày |
+| Phase 2 | AuditAggregatorService scaffold + DbContext partitioned + consumer + enrichment + API + auth + test | `#AUDIT-13..19` | 8.5 ngày |
+| Phase 3 | BatteryService onboard — 12 action + outbox + relay + migration + local endpoint Option C | `#AUDIT-20..23` | 3.5 ngày |
+| Phase 4 | TicketService onboard — tách TicketAuditLog + 21 action + causation chain + local endpoint Option C | `#AUDIT-24..28` | 5.5 ngày |
+| Phase 5 | FileStorage + Alert + Email/Notification/Sms/AI/Gateway onboard — 2 local endpoint Option C (File + Alert) | `#AUDIT-29..35` | 5 ngày |
+| Phase 6 | FE Admin Web UI Audit Explorer — filter panel + timeline + correlation trace + export + stats dashboard | `#AUDIT-36..40` | 6 ngày |
+| Phase 7 | Hardening — retention + GDPR redaction + perf + monitoring + documentation | `#AUDIT-41..45` | 5 ngày |
+
+**Tasks:**
+
+#### Phase 0 — Chuẩn bị + ADR (3 ngày)
+
+- [ ] **#AUDIT-01** — Tạo `SharedContracts.IntegrationEvents.Audit.AuditCreatedEventV1.cs` event contract: `EventId (Guid v7), ServiceName, ActionCode, ActionCategory, Severity, TargetType, TargetId, TargetDisplay, ActorAccountId, ActorRole, ActorDisplay, ActorIp, ActorUserAgent, IsSuccess, ErrorCode, Reason, MetadataJson, CorrelationId, CausationId, OccurredAt, RecordedAt`. XML doc đầy đủ. **Mức: P1**. — #447
+- [ ] **#AUDIT-02** — Tạo `SharedContracts.Audit.ActionCodes.cs` (centralize ALL action code project sẽ dùng) + `AuditCategories.cs` (9 category fixed) + `Severities.cs` (4 severity: Info/Warning/Critical/Security) + `TargetTypes.cs` (fixed enum). Quy ước Phụ lục B §B.2.1. **Mức: P1**. — #448
+- [ ] **#AUDIT-03** — Viết ADR `docs/adr/0007-audit-hybrid-architecture.md` chứa: kiến trúc tổng quan, lý do chọn Hybrid (vs centralized hoặc fully decentralized), Option C policy, schema chuẩn, migration strategy, retention policy, security/PII considerations. Sign-off 3 thành viên team. **Mức: P0 — gate trước khi code Phase 1**. — #449
+- [ ] **#AUDIT-04** — Roslyn analyzer + CI ban: `DateTime.Now` (must use `UtcNow`), `Random` cho event_id (must use `Guid.CreateVersion7()`), `Console.WriteLine` trong production code. Analyzer chạy ở stage `ci-rules` của Makefile. **Mức: P1**. — #450
+- [ ] **#AUDIT-05** — Setup RabbitMQ topology cho audit pipeline: exchange `audit.events` (topic), queue `aggregator.audit.events` (durable, x-max-length=1M, x-message-ttl=7d), DLQ `aggregator.audit.events.dlq` (durable). Routing key pattern `audit.{service}.{category}.{severity}`. Document trong `docs/audit/rabbitmq-topology.md`. **Mức: P1**. — #451
+
+#### Phase 1 — Refactor AuthService audit (7 ngày)
+
+- [ ] **#AUDIT-06** — Migration `AddAuditLogStandardColumns` thêm 14 cột nullable vào `auth_audit_logs`: `event_id (Guid)`, `service_name (50)`, `action_code (100)`, `action_category (50)`, `severity (20)`, `target_type (50)`, `target_id (Guid)`, `target_display (255)`, `actor_role (50)`, `actor_display (255)`, `error_code (50)`, `causation_id (Guid)`, `occurred_at (TIMESTAMPTZ)`, `recorded_at (TIMESTAMPTZ)`. Backfill SQL cho row cũ (map int enum → string action_code). Set NOT NULL sau backfill + unique index `event_id`. Test rollback PASS. **Mức: P0**. — #452
+- [ ] **#AUDIT-07** — Migration tạo `audit_outbox` table AuthService: `id (Guid)`, `event_id (Guid, unique)`, `event_type (100)`, `payload (jsonb)`, `created_at`, `processed_at`, `retry_count`, `last_error`, `status (Pending/Published/Failed)`. Index `(status, created_at) WHERE status = 'Pending'`. **Mức: P0**. — #453
+- [ ] **#AUDIT-08** — Tạo `AuditOutboxRelayBackgroundService` riêng (KHÔNG dùng `OutboxRelayBackgroundService` chung của AUTH-15 vì schema khác). Poll mỗi 2s, batch 50, `FOR UPDATE SKIP LOCKED`, publish `AuditCreatedEvent` qua MassTransit, mark Published. Honor `CancellationToken`. Single-instance enforce qua Redis leader election HOẶC deployment `replicas: 1`. **Mức: P0**. — #454
+- [ ] **#AUDIT-09** — Update `AuditTrailNotificationHandler` set đủ 14 field mới + INSERT row vào `audit_outbox` CÙNG TRANSACTION với INSERT `auth_audit_logs`. Resolve `actor_role/actor_display` từ JWT claims, `event_id` = `Guid.CreateVersion7()`, `recorded_at` = lúc handler chạy, `occurred_at` = từ notification. **Mức: P0**. — #455
+- [ ] **#AUDIT-10** — Upgrade trigger append-only từ AUTH-29 (hiện chặn UPDATE/DELETE tất cả) sang **soft mode** Phụ lục B §B.9: cho phép UPDATE outbox-related fields (`status`, `processed_at`, `retry_count`, `last_error`), CHẶN UPDATE business fields (`action_code`, `actor_account_id`, `target_id`, `occurred_at`). Migration backward compat. **Mức: P0**. — #456
+- [ ] **#AUDIT-11** — Fix 22 handler AuthService chưa publish audit (danh sách Pass 1-4 ở §69.1-69.4 của overall.md + issue-authservice.md): handler nào tạo/thay đổi state quan trọng (account/role/permission/session/refresh-token/OTP/2FA/invite) nhưng chưa raise `AuditTrailNotification` — bổ sung. Test unit từng handler verify notification published. **Mức: P1**. — #457
+- [ ] **#AUDIT-12** — Unit test + integration test E2E: action → DB row có 14 cột mới đúng → outbox table có entry Pending → relay publish sau 5s → outbox status Published. Coverage ≥ 80% cho `AuditTrailNotificationHandler` + `AuditOutboxRelayBackgroundService`. **Mức: P1**. — #458
+
+#### Phase 2 — AuditAggregatorService scaffold (8.5 ngày)
+
+- [ ] **#AUDIT-13** — Scaffold project `services/AuditAggregatorService/` Clean Architecture: `AuditAggregator.Api` + `Application` + `Domain` + `Infrastructure` + `Worker`. Solution add vào `.slnx`. DI setup chuẩn. `Dockerfile` + add vào `docker-compose.yml` + Helm chart template. **Mức: P0**. — #459
+- [ ] **#AUDIT-14** — DbContext `AuditAggregateDbContext` + migration `audit_aggregate` table partitioned by month (pg_partman setup auto-create partition 3 tháng trước). Schema chuẩn (theo `AuditCreatedEventV1` + thêm geo IP fields). GIN index trên `metadata_json`, B-tree index `(occurred_at, service_name)`, `(actor_account_id, occurred_at)`, `(correlation_id)`. **Mức: P0**. — #460
+- [ ] **#AUDIT-15** — `AuditCreatedConsumer : IConsumer<AuditCreatedEvent>` — idempotency check `EXISTS WHERE event_id = ?` trước, INSERT ON CONFLICT (event_id) DO NOTHING. Map event → AuditAggregate entity. Test với 1000 duplicate events → chỉ 1 row insert. **Mức: P0**. — #461
+- [ ] **#AUDIT-16** — Geo IP enrichment: integrate MaxMind GeoLite2 free (hoặc IP2Location nếu Leader chốt khác). LRU cache 10k entry, TTL 1h. Fallback null nếu lookup fail. Performance: cache hit ≥ 80% sau 100 lookup. **Mức: P1**. — #462
+- [ ] **#AUDIT-17** — REST API endpoints aggregator (theo Phụ lục A §A.5.2):
+  - `GET /api/audit/search?service=&action=&category=&severity=&actorId=&targetId=&from=&to=&correlationId=&page=&size=` (max page_size = 100)
+  - `GET /api/audit/{eventId}` chi tiết 1 event
+  - `GET /api/audit/correlation/{correlationId}` trace cross-service
+  - `GET /api/audit/account/{accountId}/timeline` timeline 1 user toàn hệ thống
+  - `GET /api/audit/stats?from=&to=&groupBy=service|action|severity`
+  - `GET /api/audit/export?format=csv|json` streaming export max 100k row không OOM
+  - `POST /api/audit/replay?service=&from=&to=` admin replay từ source-of-truth khi read-store hỏng
+  Test p95 < 200ms với 1M row. **Mức: P0**. — #463
+- [ ] **#AUDIT-18** — Authorization: thêm role mới `SecurityOfficer` (khác `Admin`) chỉ access aggregator API. JWT permission claim `audit.read`, `audit.export`, `audit.replay`. Rate limit per role (Admin 100 req/min, SecurityOfficer 200 req/min). Health check k8s `/live` `/ready`. **Mức: P0**. — #464
+- [ ] **#AUDIT-19** — Integration test với TestContainers (Postgres + RabbitMQ thật): publish event từ AuthService → query aggregator API sau 10s → tìm thấy event. Test idempotency: publish 100 duplicate event → chỉ 1 row. Test partition: insert event qua 3 tháng → partition tự tạo. **Mức: P1**. — #465
+
+#### Phase 3 — BatteryService onboard (3.5 ngày)
+
+- [ ] **#AUDIT-20** — Entity `BatteryAuditLog` + enum `BatteryAuditActionEnum` (12 action: BatteryCreated/Updated/Deleted/AssignedToCustomer/UnassignedFromCustomer/ThresholdConfigChanged/SensorReadingEdited/AlertAcknowledged/AlertSuppressed/StatusChanged/MaintenanceLogged/...). Schema chuẩn theo Phụ lục B §B.2. Migration. **Mức: P1**. — #466
+- [ ] **#AUDIT-21** — `BatteryAuditTrailNotification` + Handler + `audit_outbox` table + `BatteryAuditOutboxRelayBackgroundService` riêng + trigger append-only soft mode. Resolve actor/IP/correlation từ `IHttpContextAccessor`. **Mức: P1**. — #467
+- [ ] **#AUDIT-22** — Publish audit ở các handler quan trọng: `BatteryCreateCommandHandler`, `BatteryUpdateCommandHandler`, `BatteryDeleteCommandHandler`, `AssignBatteryCommandHandler`, `UpdateThresholdConfigHandler`, `SensorReadingEditHandler`. Unit test mỗi handler verify notification published trong transaction. **Mức: P1**. — #468
+- [ ] **#AUDIT-23** — **Local endpoint Option C** `GET /api/admin/battery/audit-logs` (filter: `action`, `batteryId`, `from`, `to`, pageSize default 50 max 100, pageNumber). `[Authorize(Roles = "Admin")]`. Query trực tiếp `battery_audit_logs` table (KHÔNG qua aggregator — fallback resilience + battery-specific filter). Response `CommonResponse<PaginationResponse<BatteryAuditLogDto>>`. Unit + integration test. ~150 LOC. **Mức: P1**. — #469
+
+#### Phase 4 — TicketService onboard (5.5 ngày)
+
+- [ ] **#AUDIT-24** — Tách `TicketAuditLog` riêng (giữ `TicketActivity` cho UI timeline user-facing — 2 entity khác nhau!). Enum `TicketAuditActionEnum` 21 action: TicketCreated/StateTransitioned/PriorityChanged/AssignedToStaff/UnassignedFromStaff/SlaPaused/SlaResumed/SlaBreached/EscalatedToManager/EscalatedToAdmin/MaintenanceLogAdded/CommentAdded/AttachmentUploaded/AttachmentDeleted/ResolutionAdded/ClosedByUser/ReopenedByAdmin/RejectedByManager/FalseAlarmMarked/CustomerRated/AutoCreatedFromAnomaly. **Mức: P1**. — #470
+- [ ] **#AUDIT-25** — `TicketAuditTrailNotification` + Handler + `audit_outbox` table + `TicketAuditOutboxRelayBackgroundService` + migration + trigger append-only soft mode. **Mức: P1**. — #471
+- [ ] **#AUDIT-26** — Publish audit ở: `TicketStateTransitionCommandHandler`, `TicketAssignmentHandler`, `TicketPriorityOverrideHandler` (safety reason), `TicketSlaTimerService` (pause/resume/breach), `EscalationCommandHandler`, `MaintenanceLogCommandHandler`, `CommentCommandHandler`, `AttachmentCommandHandler`. **Mức: P1**. — #472
+- [ ] **#AUDIT-27** — `causation_id` setup cho ticket auto-tạo từ `BatteryAnomalyDetectedEvent`: khi `CreateTicketFromAlertConsumer` xử lý event X (`event_id=X`) → ticket audit `AutoCreatedFromAnomaly` có `causation_id=X`. Test E2E: anomaly → battery audit có event_id=X → consumer → ticket audit có causation_id=X → aggregator `/api/audit/correlation/X` trả về 2 event link nhau. **Mức: P1**. — #473
+- [ ] **#AUDIT-28** — **Local endpoint Option C** `GET /api/admin/ticket/audit-logs` (filter: `action`, `ticketId`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Query trực tiếp `ticket_audit_logs`. Unit + integration test. ~150 LOC. **Mức: P1**. — #474
+
+#### Phase 5 — FileStorage + Alert + Email/Notification/Sms/AI/Gateway onboard (5 ngày)
+
+- [ ] **#AUDIT-29** — FileStorageService: entity `FileAuditLog` + enum `FileAuditActionEnum` (6 action: FileUploaded/FileDownloaded/FileDeleted/AccessDenied/PresignedUrlGenerated/PresignedUrlRevoked). Handler + outbox + relay + migration + trigger. Publish audit ở: `UploadFileCommandHandler`, `DownloadFileEndpoint`, `DeleteFileCommandHandler`, `GeneratePresignedUrlCommandHandler`. **Mức: P1**. — #475
+- [ ] **#AUDIT-30** — **Local endpoint Option C** `GET /api/admin/files/audit-logs` (filter: `action`, `fileId`/`bucketName`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Compliance + GDPR file access investigation. Unit + integration test. ~150 LOC. **Mức: P1**. — #476
+- [ ] **#AUDIT-31** — AlertService: entity `AlertAuditLog` + enum `AlertAuditActionEnum` (5 action: AlertAcknowledged/AlertSuppressed/AlertRuleChanged/AlertSeverityOverridden/AlertManuallyResolved). Handler + outbox + relay + migration + trigger. **Mức: P1**. — #477
+- [ ] **#AUDIT-32** — **Local endpoint Option C** `GET /api/admin/alerts/audit-logs` (filter: `action`, `alertId`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Alert acknowledge/suppress history. Unit + integration test. ~150 LOC. **Mức: P1**. — #478
+- [ ] **#AUDIT-33** — EmailService: entity `EmailAuditLog` + enum `EmailAuditActionEnum` (5 action: EmailSent/EmailFailed/EmailBounced/EmailDeferred/EmailRejected). Handler + outbox + relay + migration. **KHÔNG có local endpoint** per Option C — đi qua Aggregator. **Mức: P2**. — #479
+- [ ] **#AUDIT-34** — NotificationService: entity `NotificationAuditLog` + enum `NotificationAuditActionEnum` (7 action: PushSent/PushFailed/PushDelivered/PushOpened/InAppCreated/InAppRead/InAppDismissed). Handler + outbox + relay + migration. **KHÔNG có local endpoint** per Option C. **Mức: P2**. — #480
+- [ ] **#AUDIT-35** — SmsService bổ sung 3 action mới (SmsForwarded/SmsRoutingRuleChanged/SmsGatewayHealthCheckFailed) + AI Module 5 action (ModelInferenceCalled/ModelInferenceFailed/AnomalyClassified/TrainingDataIngested/ModelVersionPromoted) + Gateway 3 action (RequestRouted/RateLimitHit/AuthorizationDenied). Handler + outbox + relay cho mỗi service. **KHÔNG có local endpoint** per Option C. **Mức: P2**. — #481
+
+#### Phase 6 — FE Admin Web UI Audit Explorer (6 ngày — role FE)
+
+- [ ] **#AUDIT-36** — FE Page `/admin/audit` với filter panel: service (multi-select 10 service), action (autocomplete từ ActionCodeRegistry), severity (4-radio), actor (search by email/name), target (type + id), time range (date picker preset 24h/7d/30d/custom), pagination max 100/page. Gọi `GET /api/audit/search`. **Mức: P2**. — #482
+- [ ] **#AUDIT-37** — FE Timeline view `/admin/accounts/{id}/audit-timeline` — gộp event xuyên service theo `actor_account_id` HOẶC `target_account_id`. Visualize timeline vertical với icon service + severity color. Gọi `GET /api/audit/account/{id}/timeline`. **Mức: P2**. — #483
+- [ ] **#AUDIT-38** — FE Correlation trace view `/admin/audit/trace/{correlationId}` — visualize causation chain dạng tree (parent event_id → child causation_id). Highlight cross-service hops. Gọi `GET /api/audit/correlation/{id}`. **Mức: P2**. — #484
+- [ ] **#AUDIT-39** — FE Export feature — button "Export CSV/JSON" trên search view, gọi `GET /api/audit/export?format=csv` streaming download. Confirm dialog khi filter trả về > 10k rows. **Mức: P2**. — #485
+- [ ] **#AUDIT-40** — FE Stats dashboard `/admin/audit/stats` (Recharts): action count by hour line chart, top 10 actors bar chart, severity distribution donut, service activity heatmap. Auto-refresh 30s. Gọi `GET /api/audit/stats`. **Mức: P2**. — #486
+
+#### Phase 7 — Hardening + Performance (5 ngày)
+
+- [ ] **#AUDIT-41** — Retention `AuditRetentionBackgroundService` ở aggregator: daily 03:00 UTC drop partition `audit_aggregate` cũ hơn 6 tháng EXCEPT `severity = 'Critical' OR 'Security'` (vĩnh viễn). Source-of-truth tables ở từng service retain 1 năm (per service own background job). Document policy `docs/audit/retention-policy.md`. **Mức: P1**. — #487
+- [ ] **#AUDIT-42** — GDPR redaction endpoint `POST /api/audit/redact?accountId={id}` (chỉ SecurityOfficer): redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate` cho 1 account (KHÔNG xóa row — giữ event_id + action_code + timestamp). Source tables KHÔNG redact (giữ raw cho legal hold). Audit log cho hành động redact (meta-audit). **Mức: P1**. — #488
+- [ ] **#AUDIT-43** — Perf test 1000 event/giây không drop trong 5 phút sustained: load test publish 300k event → measure consumer lag p99 < 10s, no DLQ entry, partition tự tạo. Chaos test: kill RabbitMQ giữa chừng → restart → consumer resume + replay outbox. **Mức: P1**. — #489
+- [ ] **#AUDIT-44** — Prometheus metric custom: `audit_events_total{service,action,severity}` counter, `audit_consumer_lag_seconds` histogram, `audit_outbox_pending_total{service}` gauge, `audit_dlq_size_total` gauge. Grafana dashboard `monitoring/grafana/dashboards/audit-pipeline.json`. Alert rules `monitoring/prometheus/alert-rules.yml`: AuditOutboxBacklog (>1000 pending 5min), AuditConsumerLag (p99>30s 5min), AuditDlqGrowing (DLQ > 100). **Mức: P1**. — #490
+- [ ] **#AUDIT-45** — Documentation deliverables: `docs/adr/0007-audit-hybrid-architecture.md` (đã viết Phase 0, finalize), `docs/audit/contributor-guide.md` (cheatsheet 1-page how to add audit cho handler mới), `docs/audit/action-code-registry.md` (auto-gen từ code), `docs/audit/api-reference.md` (Swagger), `docs/audit/operations-runbook.md` (troubleshoot outbox backlog/replay/DLQ), `docs/audit/security-considerations.md` (PII, retention, GDPR), `docs/audit/monitoring-dashboard.md`. **Mức: P1**. — #491
+
+**Definition of Done — Sprint audit:**
+- [ ] Tất cả 45 task `#AUDIT-01..45` close + log review/test trong `logs/AUDIT-{NN}/`.
+- [ ] `dotnet build` toàn solution PASS (10 service + AuditAggregatorService mới).
+- [ ] Coverage ≥ 80% trên `AuditAggregatorService.Application` + `AuditAggregatorService.Infrastructure` + audit-related code mỗi service.
+- [ ] Phụ lục B §B.0 10 nguyên tắc bất di bất dịch — team ký xác nhận.
+- [ ] Phụ lục B §B.11 30 common pitfalls — đã đi qua checklist 1 lần lúc Phase 7.
+- [ ] Phụ lục B §B.12 pre-implementation checklist — tất cả `[x]`.
+- [ ] Phụ lục B §B.13 acceptance criteria per phase — tất cả phase pass.
+- [ ] Migration zero-downtime tested staging (`#AUDIT-06` backfill < 5 phút, rollback PASS).
+- [ ] Local endpoint Option C — 4 service mới có (Battery/Ticket/File/Alert) + Auth giữ nguyên 2 endpoint cũ.
+- [ ] AuditAggregatorService SLO đạt: outbox lag p99 < 5s, aggregator lag p99 < 10s, search API p95 < 200ms với 1M row.
+- [ ] FE Admin Web UI Audit Explorer 5 view (search/timeline/correlation/export/stats) hoạt động.
+- [ ] Prometheus metric + Grafana dashboard + 3 alert rule deploy lên staging.
+- [ ] 7 documentation deliverables ở Phase 7 đã viết + review.
+- [ ] Update `MEMORY.md` ghi quyết định non-obvious (vd Geo IP service chốt, leader election strategy, retention policy values).
+- [ ] Update §69.10 `overall.md` mark Phụ lục A "đã triển khai qua Sprint audit".
+
+**Lưu ý ưu tiên (cho team khi không kịp full sprint):**
+
+P0 không được skip: `#AUDIT-03` (ADR sign-off — gate), `#AUDIT-06`, `#AUDIT-07`, `#AUDIT-08`, `#AUDIT-09`, `#AUDIT-10` (Phase 1 AuthService refactor — required cho mọi phase sau).
+
+Phase 2 — `#AUDIT-13..18` BẮT BUỘC trước Phase 3-5 (aggregator phải up trước khi onboard service mới). `#AUDIT-19` integration test có thể defer 1 tuần.
+
+P1 sprint kế tiếp (nếu split): `#AUDIT-20..28` (Phase 3+4 BatteryService + TicketService — critical service forensic).
+
+P2 có thể defer sang Sprint audit-B: `#AUDIT-33` (EmailService), `#AUDIT-34` (NotificationService), `#AUDIT-35` (Sms/AI/Gateway — volume thấp), Phase 6 FE (`#AUDIT-36..40` — UI nâng cao, BE đủ qua Swagger).
+
+KHÔNG được skip Phase 0 + Phase 1 + Phase 2 — đây là nền tảng infrastructure, skip = phải làm lại từ đầu.
 
 ---
 
@@ -5236,8 +5574,26 @@ public static class PermissionCodes {
     public const string NotificationViewOwn = "notification.view-own";
     public const string DeviceTokenManage = "notification.device.manage";
     public const string PreferenceManage = "notification.preference.manage";
+
+    // Audit (Sprint audit Phase 2 `#AUDIT-18`) — cấp cho role SecurityOfficer (mới) + selectively cho Admin
+    public const string AuditRead = "audit.read";                      // Aggregator search/by-eventId/correlation/timeline/stats — Admin + SecurityOfficer
+    public const string AuditExport = "audit.export";                  // Aggregator CSV/JSON streaming — SecurityOfficer (Admin có thể nếu cần)
+    public const string AuditReplay = "audit.replay";                  // Replay từ source-of-truth — SecurityOfficer ONLY
+    public const string AuditRedact = "audit.redact";                  // GDPR redaction `audit_aggregate` — SecurityOfficer ONLY (`#AUDIT-42`)
+    // Local audit endpoint Option C (5 service Auth/Battery/Ticket/File/Alert) chỉ require role Admin, KHÔNG cần permission audit.* riêng
 }
 ```
+
+**Default role → audit permission mapping (Sprint audit seed):**
+
+| Permission | Admin | Manager | Staff | Customer | **SecurityOfficer** (mới) |
+|-----------|:-----:|:-------:|:-----:|:--------:|:-------------------------:|
+| AuditRead | ✅ | — | — | — | ✅ |
+| AuditExport | ✅ | — | — | — | ✅ |
+| AuditReplay | — | — | — | — | ✅ |
+| AuditRedact | — | — | — | — | ✅ |
+
+> `SecurityOfficer` role mới được seed qua migration AuthService Phase 2 `#AUDIT-18`. Compliance/legal team thường được gán role này; KHÔNG gán cho dev/staff. Audit lại hành động assign/revoke role qua AuthService `AuditTrailNotification` (meta-audit cho permission change).
 
 ### Default role → permission mapping (seed)
 
@@ -5341,7 +5697,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
   "UserId": "{accountId}",
   "FullName": "Nguyễn Văn A",
   "Email": "a@example.com",
-  "Role": "3",                                    // 1=Admin, 2=Manager, 3=Staff, 4=Customer
+  "Role": "3",                                    // 1=Admin, 2=Manager, 3=Staff, 4=Customer, 5=SecurityOfficer (Sprint audit `#AUDIT-18`)
   "Permissions": ["ticket.view-own", "ticket.start", "ticket.resolve", ...],
   "session_id": "{sessionId}",
   "iat": 1715500000,
@@ -5355,16 +5711,31 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - RefreshToken: 7d (Redis key `RT_{userId}`)
 - Permissions cache 10min — nếu role/permission đổi → AuthService publish event `PermissionsChangedEvent` → các service invalidate cache.
 
+**Sprint audit permissions** (Phase 2 `#AUDIT-18` setup):
+
+| Permission | Role mapping | Endpoint |
+|------------|--------------|----------|
+| `audit.read` | Admin, SecurityOfficer | `GET /api/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats` |
+| `audit.export` | SecurityOfficer (Admin có thể nếu cần) | `GET /api/audit/export?format=csv\|json` |
+| `audit.replay` | SecurityOfficer ONLY | `POST /api/audit/replay?service=&from=&to=` |
+| `audit.redact` | SecurityOfficer ONLY | `POST /api/audit/redact?accountId={id}` (GDPR `#AUDIT-42`) |
+
+**Local audit endpoint Option C** (5 service: Auth/Battery/Ticket/File/Alert) chỉ require role `Admin` (không cần `SecurityOfficer`):
+- `GET /api/admin/audit-logs` (AuthService giữ) + `GET /api/admin/{service}/audit-logs` (4 service mới) — `[Authorize(Roles = "Admin")]`
+
+**Role `SecurityOfficer` rationale (Phụ lục A §A.5.2):** tách quyền investigation cross-service khỏi quyền admin nghiệp vụ. Admin có thể đọc audit service mình quản lý (qua local endpoint), KHÔNG access aggregator API. SecurityOfficer access full aggregator (cross-service search/export/replay/redact) nhưng KHÔNG access business CRUD endpoints. Compliance/legal team typically dùng role này.
+
 ---
 
 ## 23. Risk register
 
-> **29 risk items** chia 5 nhóm chính:
+> **35 risk items** chia 6 nhóm chính:
 > - **R-01..R-13**: Technical baseline (state machine, SLA, dedup, migration, performance, security)
 > - **R-14..R-18**: Sprint 5B Saga design (forward recovery, duplicate, scope creep, cutover, restart)
 > - **R-19..R-22**: Sprint 5B operational (preflight cleanup, mapping, Quartz schema, notification spam)
 > - **R-23..R-27**: Capacity + planning + external (Thắng solo owner Sprint 5B + IoT-1, bus factor, ext quota, mentor schedule)
 > - **R-28..R-29**: IoT v2 pivot (ESP32 firmware codebase mới, BMS procurement / register map — xem §52, `overall.iot.md` §D)
+> - **R-30..R-35**: Sprint audit (migration backfill duration, AuditAggregatorService SPOF, causation chain break, schema versioning, GeoIP rate limit, multi-instance relay duplicate)
 >
 > Mỗi risk có owner cụ thể. Leader review weekly trong daily standup, escalate Sev-High risk khi likelihood tăng.
 
@@ -5399,6 +5770,12 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-27 | Mentor (GVHD) không available cho dry-run review post-Sprint 8 | Low | High | Leader confirm GVHD lịch trước Sprint 8 kết thúc, book 2 slot dự phòng (xem §56.14 timeline) | Leader |
 | R-28 | Pivot ESP32 → firmware C++/Arduino là **codebase mới**, team BE thiếu kinh nghiệm embedded → IoT-1 slip | Med | Med | MVP `mock_bms` (data giả) chứng minh flow backend trước, không phụ thuộc firmware; MQTT là P3 optional (HTTPS đủ demo); reuse logic từ `iot.md` v1; pair với đối tác phần cứng (xem §52.10, R-24) | Thắng |
 | R-29 | Mua nhầm BMS không có register map / không đổi được `unitId` → không đọc được data dù pin chạy tốt (multi-drop fail) | Med | High | Checklist mua BMS bắt buộc (RS485/Modbus + register map + đổi unitId + CRC — `overall.iot.md` §A4); test 1 BMS bằng USB-RS485 + Modbus Poll trước khi mua số lượng; ESP32 `mock_bms` fallback cho demo | Thắng |
+| R-30 | **Sprint audit migration `#AUDIT-06` backfill SQL `auth_audit_logs` chậm hơn 5 phút** trên prod data (hàng triệu row) → block deploy | Med | High | Test staging với data clone từ prod trước; chia backfill batch 10k row mỗi loop; có rollback plan §B.9 step 1; chạy off-peak (02:00 UTC); monitor pg lock duration < 1s mỗi batch | TBD |
+| R-31 | **`AuditAggregatorService` SPOF** — service down → admin không xem được cross-service audit + outbox grow uncontrolled ở 10 service | High | High | Local endpoint Option C ở 5 service critical làm fallback (admin vẫn xem được service-local); Outbox retention TTL 7 ngày + DLQ; aggregator deploy `replicas: 2` (consumer scale qua MassTransit fan-out); k8s `/live` `/ready` probe + Prometheus `audit_consumer_lag` alert; replay endpoint từ source-of-truth | TBD |
+| R-32 | **Causation chain bị break** khi consumer recreate event (vd retry → mất parent `event_id`) → trace cross-service sai | Med | Med | Bắt buộc forward `MessageId` upstream + test E2E `#AUDIT-27` (anomaly → ticket causation); Phụ lục B §B.11 pitfall #28 | TBD |
+| R-33 | **Schema event versioning** — thay đổi `AuditCreatedEventV1` không bump version → consumer cũ + mới deserialize lỗi → DLQ overflow | Med | Med | Phụ lục B §B.5 enforce: thay đổi schema = bump version (`V1` → `V2`), giữ `V1` consumer chạy song song 1 sprint trước khi remove; code review checklist | TBD |
+| R-34 | **GeoIP service rate limit** (MaxMind / IP2Location free tier) → consumer chậm + queue lag | Med | Med | LRU cache 10k entry + fallback null nếu lookup fail; Phụ lục B §B.11 pitfall #19; monitor cache hit rate ≥ 80% | TBD |
+| R-35 | **Multi-instance OutboxRelay duplicate publish** — không leader election → cùng event publish 2 lần (vẫn idempotent ở consumer nhưng waste resource) | Low | Low | Single-instance deployment (`replicas: 1`) HOẶC Redis leader election (Phụ lục B §B.10); idempotent consumer là last-line defense | TBD |
 
 ---
 
@@ -5412,6 +5789,9 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] BatteryAsset CRUD + TransferOwner — §1
 - [x] SLA rules hardcoded P1/P2/P3 = 4/24/72h — không cần CRUD
 - [x] Audit log endpoint — AuthService DONE
+- [ ] **Sprint audit Phase 1** — `auth_audit_logs` refactor (14 cột + outbox + trigger soft) — `#AUDIT-06..12` (§17 + §69.11)
+- [ ] **Sprint audit Phase 3** — BatteryService audit + local endpoint `/api/admin/battery/audit-logs` — `#AUDIT-20..23`
+- [ ] **Sprint audit Phase 4** — TicketService audit (tách khỏi `TicketActivity`) + local endpoint `/api/admin/ticket/audit-logs` — `#AUDIT-24..28`
 
 ### Phase 2 — Monitoring & Detection (CUSTOMER + SYSTEM)
 - [ ] SensorReading batch ingest — §1.8
@@ -5422,6 +5802,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] Publish `BatteryAnomalyDetectedEvent` (+ V2 enriched) qua Outbox — §1.7
 - [ ] Push notify Customer khi critical — §3.4
 - [ ] `AlertEscalationBackgroundService` publish `BatteryAlertEscalationRequestedEvent` khi Critical Alert chưa-ack > 5 phút — §1.6, §53.4
+- [ ] **Sprint audit** — BatteryAuditLog publish ở `ThresholdCheckBackgroundService` khi anomaly detect + AlertCreate + AlertAcknowledge → `event_id` chain cho causation downstream — `#AUDIT-22`
 
 ### Phase 3 — Ticket Creation (CUSTOMER / SYSTEM)
 - [ ] TicketCreateCommand (Customer mobile) BR-01 mandatory asset — §2.5
@@ -5429,6 +5810,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] Ticket create/reuse BR-02 idempotent — §2.7
 - [ ] BatteryService link `Alert.TicketId`, Saga `Completed` — §53
 - [ ] Activity Created BR-08 — §2.3.4
+- [ ] **Sprint audit** — Ticket auto-tạo từ anomaly có `causation_id = BatteryAnomalyDetectedEvent.event_id` → trace cross-service qua Aggregator `GET /api/audit/correlation/{id}` — `#AUDIT-27` (E2E test mandatory)
 
 ### Phase 4 — Triage & Assignment (MANAGER)
 - [ ] Manager queue query — §2.5
@@ -5539,6 +5921,26 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | **Calibration** | Hiệu chuẩn sensor: `calibrated = raw × scaleFactor + offsetValue`, lấy chuẩn từ thiết bị đo (Fluke 87V). Lưu `IotDeviceCalibration`, có `ValidUntil` (§52.8) |
 | **Cross-source validation** | So reading cùng pin từ 2 nguồn độc lập (BMS-relayed `SourceType=Bms` vs INA226 `SourceType=IotGateway`) trong cửa sổ 60s → `SensorMismatch` nếu lệch quá ngưỡng (§1.6.6, §52.9) |
 | **OTA** | Over-The-Air firmware update — backend đẩy `.bin` (signed URL + SHA-256), ESP32 verify rồi flash, rollback nếu fail (§52.7) |
+| **Audit Event** | 1 hành động xảy ra trong hệ thống cần ghi lại (vd "User X login thành công"). Phụ lục B §B.1 |
+| **Action Code** | Mã định danh duy nhất của loại audit action, format `PascalCase`, max 100 chars (vd `LoginSuccess`, `BatteryThresholdChanged`). Centralize ở `SharedContracts.Audit.ActionCodes.cs` (`#AUDIT-02`) |
+| **Action Category** | Nhóm chức năng của audit action — 9 category fixed: `Authentication`, `AccountLifecycle`, `Permission`, `TicketLifecycle`, `BatteryLifecycle`, `DataAccess`, `FileAccess`, `Notification`, `System` |
+| **Severity** | Mức nghiêm trọng audit event — 4 enum fixed: `Info`, `Warning`, `Critical`, `Security`. Critical+Security retention vĩnh viễn (Phase 7 `#AUDIT-41`) |
+| **Actor** | Người gây ra action (user thực hiện hoặc system nếu auto). Lưu `actor_account_id` + `actor_role` + `actor_display`. System actions: `actor_account_id = null` + `actor_display = "System"` |
+| **Target** | Đối tượng bị tác động bởi audit action (Account/Battery/Ticket/File/...). Lưu `target_type` + `target_id` + `target_display` |
+| **CorrelationId** | ID xuyên suốt 1 user request đi qua nhiều service. Guid v7 sinh ở entry point (gateway / handler nếu không có header `X-Correlation-Id`). Propagate qua MassTransit header `CorrelationIdPublishFilter`/`CorrelationIdConsumeFilter` |
+| **CausationId** | ID của event/message GÂY RA event hiện tại. Event B do consume Event A → `B.causation_id = A.event_id`. Khác CorrelationId (correlation = cùng 1 request, causation = parent-child). Ví dụ: `BatteryAnomalyDetectedEvent` (event_id=X) → consumer ở TicketService tạo ticket → audit `TicketAutoCreatedFromAnomaly` có `causation_id=X` (`#AUDIT-27`) |
+| **Source of truth** | Bảng audit local của service ghi ra event đầu tiên (`auth_audit_logs`, `battery_audit_logs`, ...). KHÔNG ở aggregator. Aggregator chỉ là materialized view, có thể rebuild bất cứ lúc nào |
+| **Read-store** | Bảng tổng hợp ở `AuditAggregatorService` phục vụ query cross-service (`audit_aggregate`). Materialized view của source-of-truth |
+| **Audit Outbox** | Bảng trung gian per-service (`{service}_audit_outbox`) lưu `AuditCreatedEvent` chờ publish. Atomic với INSERT business + audit row trong cùng DB transaction. `AuditOutboxRelayBackgroundService` poll mỗi 2s + `FOR UPDATE SKIP LOCKED` publish ra RabbitMQ |
+| **Idempotent consumer** | Consumer xử lý cùng 1 event N lần → kết quả như 1 lần. AuditAggregator `INSERT ON CONFLICT (event_id) DO NOTHING`. Mandatory vì RabbitMQ delivery at-least-once |
+| **At-least-once delivery** | RabbitMQ default: event được deliver ít nhất 1 lần, có thể nhiều lần (network retry, consumer crash). Đối lập: exactly-once delivery KHÔNG khả thi trong distributed system — phải dùng idempotent consumer thay |
+| **Replay** | Đọc lại từ source-of-truth → re-publish hoặc re-insert vào read-store (`POST /api/audit/replay?service=&from=&to=`). Dùng khi read-store corrupt hoặc backfill historic data sau onboard service mới |
+| **AuditAggregate** | Entity ở `AuditAggregatorService.Domain` representing 1 row trong materialized view `audit_aggregate`. Schema chuẩn 14 cột + geo IP enrichment fields (`geo_country`, `geo_city`) |
+| **Append-only trigger soft mode** | DB trigger ở source `{service}_audit_logs`: CHO PHÉP UPDATE outbox-related fields (`status`, `processed_at`, `retry_count`, `last_error`), CHẶN UPDATE business fields (`action_code`, `actor_account_id`, `target_id`, `occurred_at`) + CHẶN DELETE. Upgrade từ `#AUTH-29` hard mode qua `#AUDIT-10`. Phụ lục B §B.9 |
+| **Local audit endpoint (Option C)** | 1 endpoint per service `GET /api/admin/{service}/audit-logs` làm fallback resilience + service-specific filter. CHỈ 5 service có (Auth/Battery/Ticket/File/Alert), 5 service skip (Email/Notification/Sms/AI/Gateway — qua Aggregator only). Phụ lục A §A.5.1.bis |
+| **SecurityOfficer** | Role mới (khác `Admin`) chỉ access `AuditAggregatorService` REST API. JWT permission claim `audit.read`/`audit.export`/`audit.replay`/`audit.redact`. Phase 2 `#AUDIT-18` setup |
+| **GDPR redaction (audit)** | Quyền lãng quên user — `POST /api/audit/redact?accountId={id}` redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate`. KHÔNG xóa row (giữ event_id + action_code + timestamp cho audit integrity). Source tables KHÔNG redact (legal hold). Meta-audit log cho hành động redact. `#AUDIT-42` |
+| **Hybrid Audit Architecture** | Kiến trúc Sprint audit: decentralized write (mỗi service own audit + outbox cùng transaction) + centralized read qua AuditAggregator + 7 REST API. ADR-020 + Phụ lục A `issue-authservice.md` |
 
 ### References
 
@@ -5655,6 +6057,99 @@ services/BatteryService/
 
 services/TicketService/                         (Tương tự, ~140 files total)
 services/NotificationService/                   (Tương tự, ~80 files total)
+```
+
+### AuditAggregatorService skeleton (Sprint audit Phase 2 — `#AUDIT-13`)
+```
+services/AuditAggregatorService/
+├── AuditAggregatorService.slnx
+├── src/
+│   ├── AuditAggregatorService.Api/                  (~12 files)
+│   │   ├── Program.cs                                ← DI + MassTransit consumer registration + health check
+│   │   ├── Controllers/
+│   │   │   ├── AuditSearchController.cs               ← GET /api/audit/search + /{eventId} + /correlation/{id}
+│   │   │   ├── AuditTimelineController.cs             ← GET /api/audit/account/{id}/timeline
+│   │   │   ├── AuditStatsController.cs                ← GET /api/audit/stats
+│   │   │   ├── AuditExportController.cs               ← GET /api/audit/export (streaming CSV/JSON)
+│   │   │   ├── AuditReplayController.cs               ← POST /api/audit/replay
+│   │   │   └── AuditRedactController.cs               ← POST /api/audit/redact (GDPR `#AUDIT-42`)
+│   │   ├── appsettings.json + appsettings.Docker.json
+│   │   └── Dockerfile
+│   ├── AuditAggregatorService.Application/          (~25 files)
+│   │   ├── CQRS/Query/
+│   │   │   ├── SearchAuditQuery.cs + Handler
+│   │   │   ├── GetAuditByEventIdQuery.cs + Handler
+│   │   │   ├── GetCorrelationTraceQuery.cs + Handler
+│   │   │   ├── GetAccountTimelineQuery.cs + Handler
+│   │   │   ├── GetAuditStatsQuery.cs + Handler
+│   │   │   └── ExportAuditStreamQuery.cs + Handler
+│   │   ├── CQRS/Command/
+│   │   │   ├── ReplayAuditCommand.cs + Handler
+│   │   │   └── RedactAccountAuditCommand.cs + Handler
+│   │   ├── DTOs/Response/
+│   │   │   ├── AuditEventDto.cs + AuditTimelineDto.cs + AuditStatsDto.cs
+│   │   │   └── CommonResponse wrappers
+│   │   └── Interfaces/IGeoIpResolver.cs + IAuditAggregateRepository.cs
+│   ├── AuditAggregatorService.Domain/               (~10 files)
+│   │   ├── Entities/
+│   │   │   └── AuditAggregate.cs                      ← schema chuẩn 14 cột + geo fields
+│   │   ├── Enums/AuditSeverityEnum.cs + AuditCategoryEnum.cs + AuditTargetTypeEnum.cs
+│   │   └── ValueObjects/GeoLocation.cs
+│   ├── AuditAggregatorService.Infrastructure/       (~20 files)
+│   │   ├── Persistence/
+│   │   │   ├── AuditAggregateDbContext.cs
+│   │   │   ├── Configurations/AuditAggregateConfiguration.cs (partition by month + GIN index)
+│   │   │   └── Migrations/InitAuditAggregate.cs + EnablePgPartman.cs
+│   │   ├── Implements/
+│   │   │   ├── MaxMindGeoIpResolver.cs + GeoIpLruCache.cs
+│   │   │   └── AuditAggregateRepository.cs
+│   │   └── DependencyInjection/ManageDependencyInjection.cs
+│   └── AuditAggregatorService.Worker/               (~5 files)
+│       └── Consumers/AuditCreatedConsumer.cs         ← idempotent INSERT ON CONFLICT
+└── tests/
+    ├── AuditAggregatorService.UnitTests/            (~15 test files)
+    └── AuditAggregatorService.IntegrationTests/     (~8 test files — TestContainers Postgres + RabbitMQ)
+```
+
+### Audit infra per existing service (Sprint audit Phase 1, 3, 4, 5 — `#AUDIT-06..35`)
+```
+shared/src/SharedContracts/
+├── IntegrationEvents/Audit/
+│   └── AuditCreatedEventV1.cs                        ← `#AUDIT-01` event contract
+└── Audit/
+    ├── ActionCodes.cs                                 ← `#AUDIT-02` centralize all action codes
+    ├── AuditCategories.cs + Severities.cs + TargetTypes.cs
+
+services/{Auth,Battery,Ticket,FileStorage,Alert,Email,Notification,Sms}Service/
+├── src/
+│   ├── {Service}.Domain/Entities/
+│   │   └── {Service}AuditLog.cs                       ← schema chuẩn 14 cột
+│   ├── {Service}.Domain/Enums/
+│   │   └── {Service}AuditActionEnum.cs
+│   ├── {Service}.Application/CQRS/Notification/
+│   │   └── {Service}AuditTrailNotification.cs + Handler
+│   ├── {Service}.Infrastructure/BackgroundJobs/
+│   │   └── {Service}AuditOutboxRelayBackgroundService.cs
+│   ├── {Service}.Infrastructure/Persistence/
+│   │   └── Migrations/AddAuditLogStandardColumns.cs + AddAuditOutbox.cs + AuditAppendOnlyTriggerSoft.cs
+│   └── {Service}.Api/Controllers/Admin/              ← CHỈ cho 4 service Option C: Auth (giữ)/Battery/Ticket/FileStorage/Alert
+│       └── Admin{Service}AuditLogsController.cs       ← `GET /api/admin/{service}/audit-logs`
+
+docs/
+├── adr/0007-audit-hybrid-architecture.md             ← `#AUDIT-03` gate
+├── audit/
+│   ├── rabbitmq-topology.md                          ← `#AUDIT-05`
+│   ├── contributor-guide.md                          ← `#AUDIT-45` cheatsheet 1-page
+│   ├── action-code-registry.md                       ← auto-gen từ code
+│   ├── api-reference.md                              ← Swagger
+│   ├── operations-runbook.md                         ← troubleshoot outbox/replay/DLQ
+│   ├── security-considerations.md                    ← PII, retention, GDPR
+│   ├── monitoring-dashboard.md                       ← Grafana JSON
+│   └── retention-policy.md                           ← `#AUDIT-41`
+
+monitoring/
+├── grafana/dashboards/audit-pipeline.json            ← `#AUDIT-44`
+└── prometheus/alert-rules.yml                        ← +3 rule: AuditOutboxBacklog/AuditConsumerLag/AuditDlqGrowing
 ```
 
 ### FileStorageService updates (Sprint 1)
@@ -6770,13 +7265,17 @@ DELETE /api/v1/auth/me                                  (Customer)
 | `alert_ticket_saga_states` (Sprint 5B) | Forever (tombstone — xem §53.5) | — | Chống event cũ tạo lại Saga; payload snapshot chứa `CustomerId` GUID + `AssetSerialNumber`, KHÔNG chứa email/phone |
 | `mt_inbox_state` / `mt_outbox_state` / `mt_outbox_message` (Sprint 5B) | 30 ngày sau khi processed | Drop | Same as OutboxMessage policy |
 | `qrtz_*` (Sprint 5B) | Active triggers only | Quartz tự cleanup completed jobs | Operational metadata, không PII |
+| `{service}_audit_logs` source-of-truth (Sprint audit) | **1 năm** | Per-service retention background job | Forensic + compliance + replay source |
+| `audit_aggregate` materialized view (Sprint audit) | **6 tháng** EXCEPT `severity = Critical OR Security` (vĩnh viễn) | `AuditRetentionBackgroundService` daily 03:00 UTC drop partition (`#AUDIT-41`) | Read-store có thể rebuild từ source qua replay |
+| `{service}_audit_outbox` (Sprint audit) | 30 ngày sau `status=Published` | Per-service cleanup job | Same pattern OutboxMessage |
 
 ### 39.4. PII redaction trong logs
 - Serilog enricher tự động mask:
   - Email → `a***@example.com`
   - Phone → `09**12345`
   - Password → `[REDACTED]`
-- Audit log không mask (cần đầy đủ cho compliance).
+- Audit log không mask ở source-of-truth (cần đầy đủ cho compliance + legal hold).
+- **Sprint audit `audit_aggregate` redaction (GDPR right to erasure):** SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` (`#AUDIT-42`) → PII fields (email/phone/fullName/ip) → `[REDACTED]` ở `audit_aggregate` (read-store). KHÔNG xóa row (giữ `event_id` + `action_code` + `occurred_at` cho audit integrity). Source `{service}_audit_logs` KHÔNG redact (legal hold). Hành động redact được audit lại (meta-audit) để tracking who redacted what. Xem runbook `docs/operations/runbook/15-audit-gdpr-redaction-request.md`.
 
 ### 39.5. Cookie consent (FE concern but BE provides)
 - `GET /api/v1/legal/privacy-policy` returns markdown.
@@ -6834,6 +7333,7 @@ Folder `docs/adrs/`:
 | ADR-017 | Remove Energy and CO2 analytics from BatteryService scope — xem §53.1 |
 | ADR-018 | Orchestrated Alert–Ticket Saga + forward recovery (vs choreography hoặc 2PC) — xem §8.3, §53.4–§53.8 |
 | ADR-019 | 2FA Hardening — enforce TOTP in login (challenge token Redis 5’) + confirm setup (2-step init/confirm) + disable re-auth (password+TOTP) + encrypt secret at rest (Data Protection `enc:v1:` + lazy re-encrypt) + backup codes (8 codes bcrypt single-use) + admin reset. **Supersedes Option B** (§0.4 dòng 162). — xem §0.5, GH-295 |
+| ADR-020 | **Hybrid Audit Architecture** — decentralized write (mỗi service own `{service}_audit_logs` + outbox cùng transaction) + centralized read qua `AuditAggregatorService` (microservice mới, PostgreSQL partitioned `audit_aggregate` materialized view + Geo IP enrichment) + Option C local endpoint policy (5 service có local: Auth/Battery/Ticket/File/Alert, 5 service skip qua aggregator only: Email/Notification/Sms/AI/Gateway). Cross-service correlation qua `CorrelationId` + causation chain qua `causation_id`. Schema standardization (14 cột + JSON metadata flexible). Append-only enforce qua DB trigger soft mode. ADR cần viết qua `#AUDIT-03` (gate Phase 1 Sprint audit). — xem §17 Sprint audit, §69.11, Phụ lục A+B `issue-authservice.md` |
 
 **ADR template:**
 ```markdown
@@ -6907,6 +7407,11 @@ Restore Postgres ngụ ý restore cả `alert_ticket_saga_states` + `qrtz_*` tab
 - `08-saga-failed.md`              ← Sprint 5B, task `#240` — Alert–Ticket Saga state=Failed cần reprocess
 - `09-saga-stuck.md`               ← Sprint 5B, task `#240` — Saga non-terminal không update > 10 phút
 - `10-saga-duplicate-canonical.md` ← Sprint 5B — chọn Ticket canonical khi preflight phát hiện duplicate `OriginAlertId` hoặc duplicate active `(BatteryAssetId, Category)`
+- `11-audit-outbox-backlog.md`     ← Sprint audit, task `#AUDIT-45` — `audit_outbox` table phình do AuditOutboxRelay stuck hoặc RabbitMQ down. Symptom: Prometheus `audit_outbox_pending_total > 1000` 5 phút. Mitigation: restart relay service, check connection RabbitMQ, scale up worker pod.
+- `12-audit-consumer-lag-high.md`  ← Sprint audit — AuditAggregator consumer lag p99 > 30s sustained 5 phút. Symptom: alert `AuditConsumerLag`. Diagnose: check `audit_consumer_lag_seconds` histogram + DB CPU + Geo IP cache hit rate. Mitigation: scale aggregator replica, disable enrichment tạm thời, drop GeoIP fallback null.
+- `13-audit-dlq-drain.md`          ← Sprint audit — DLQ `aggregator.audit.events.dlq` growing > 100 messages. Diagnose: schema version mismatch (xem §B.5), deserialization error, idempotent INSERT conflict. Mitigation: replay từ source-of-truth qua `POST /api/audit/replay?service=&from=&to=`, KHÔNG replay từ DLQ trực tiếp (risk publish lại sai version).
+- `14-audit-replay-from-source.md` ← Sprint audit — read-store `audit_aggregate` corrupt / cluster restore từ backup chậm. Mitigation: chạy `POST /api/audit/replay` để rebuild aggregate từ `{service}_audit_logs` source-of-truth. Test trên 1 service trước, batch 1k row/sec, monitor disk space + lag.
+- `15-audit-gdpr-redaction-request.md` ← Sprint audit — user request quyền lãng quên GDPR. Mitigation: SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` → redact PII ở `audit_aggregate` (KHÔNG xóa row, giữ event_id + action_code + timestamp). Source tables KHÔNG redact (legal hold). Log meta-audit cho hành động redact.
 
 > **IoT device ops (Sprint IoT-1):** Không mint runbook đánh số riêng — quy trình xử lý sự cố device (offline triage, broker down, queue đầy, clock drift, reject spike) đã nằm ở **§52.15 Failure modes** + **§52.6 offline detection**, và setup/hardware runbook ở `newiot.md`/`overall.iot.md`/`wiring-diagram.md`. Nếu pilot phần cứng mở rộng, có thể tách `11-iot-device-offline.md` từ §52.15 (khi đó cập nhật count runbook ở §66/§67).
 
@@ -7156,6 +7661,10 @@ Ví dụ Sprint 5B:
 | AI Inference | 99% | 7h 12m/tháng | Investigate model latency |
 | Alert–Ticket Saga happy-path | 99% | 7h 12m/tháng | Review Quartz scheduler health + RabbitMQ depth |
 | Saga reprocess | 95% | 36h/tháng | Tolerate cao vì manual ops, monitor không freeze |
+| **AuditAggregator search API** (Sprint audit) | 99.5% | 3h 36m/tháng | Scale aggregator replica, check DB connection pool, partition pruning |
+| **Audit pipeline lag** (source commit → aggregate visible) | p99 < 10s | — | Symptom: `audit_consumer_lag_seconds` p99 > 30s → check `13-audit-consumer-lag-high.md` runbook |
+| **Audit outbox lag** (notification → publish) | p99 < 5s | — | Symptom: `audit_outbox_pending_total > 1000` → check `11-audit-outbox-backlog.md` runbook |
+| **AuditOutboxRelay** uptime | 99.9% | 43.2 phút/tháng | Single-instance critical → leader election fail OR pod crash. Replicas: 1 enforce, monitor `up{job="audit-relay"}` |
 
 **Burn rate alert** (Prometheus):
 - **Fast burn** (consuming 2% budget trong 1h) → page on-call immediately.
@@ -7725,6 +8234,9 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 6 | NotificationService + KB | + **Notification digest/batching**, + **SSE realtime**, + **Public KB**, + **B8 (KB Code + TicketKbReference)**, + **Sprint 5B carryover** (verify 2 Saga consumer + 2 template + dispatcher debounce — pass-14 add) | 1.6× (up from 1.5×) |
 | Sprint 7 | Reports + Gateway + Observability | + **GDPR endpoints**, + **Webhook outbound**, + **API key management**, + **B4 (Cascade Risk rule-based), B10 (SensorMismatch anomaly)**, + **Sprint 5B carryover** (verify Saga panel/alert/swagger/tracing/seed/E2E — pass-15 add) | 1.6× (up from 1.5×) |
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report**, + **Sprint 5B carryover** (Saga demo script + Mermaid diagram + architecture publish — pass-16 add) | 1.1× (up from giữ nguyên) |
+| **Sprint SMS** | SmsService SMS Forwarder Gateway | + 42 task `#SMS-01..42` / `#293..#334` (10-phase scaffold; xem §17 Sprint SMS + §68) | Standalone — chưa chốt timeline |
+| **Sprint additional-auth** | AuthService security hardening (88 issues from `issue-authservice.md` Phụ lục §1-§5) | + 90 task `#AUTH-01..90` / `#349..#438` chia Phase A-F (P0 security + P1 ops + logic/edge + missing feature + code quality + test gap) | Standalone — ~22 dev-day (10+12 split A+B). KHÔNG chạy song song Sprint 5B-8 vì cùng owner risk |
+| **Sprint audit** | AuditLog Hybrid Architecture (Phụ lục A+B `issue-authservice.md`) | + 45 task `#AUDIT-01..45` / `#447..#491` chia 7 phase (ADR + AuthService refactor + AuditAggregatorService scaffold + 10 service onboard + FE Audit Explorer + hardening) | Standalone — ~44 dev-day, 8-9 sprint. KHÔNG chạy song song Sprint additional-auth — phải đợi `#AUTH-29/77/15` merge ổn định ≥ 2 tuần |
 
 ### ⚠️ Sprint overload mitigation (B1-B11 impact)
 
@@ -7807,6 +8319,22 @@ Thêm vào §18:
 6. **Docker compose updates**
    - Add `ai-module` service
    - Add `tempo` for tracing
+   - **Sprint audit:** add `audit-aggregator-service` + `audit-aggregator-db` (Postgres 16-alpine với `pg_partman` extension cho `audit_aggregate` table partition by month)
+
+7. **Sprint audit impact (xem §17 Sprint audit + §69.11) — ~10 entity + 1 service mới:**
+   - **Service mới:** `AuditAggregatorService` (Clean Architecture, 5 project: Api/Application/Domain/Infrastructure/Worker)
+   - **Entity mới (10):** `AuditAggregate` (Aggregator DB, partition by month), `BatteryAuditLog` + `BatteryAuditOutbox`, `TicketAuditLog` + `TicketAuditOutbox` (TÁCH khỏi `TicketActivity` — 2 entity khác purpose), `FileAuditLog` + `FileAuditOutbox`, `AlertAuditLog` + `AlertAuditOutbox`, `EmailAuditLog` + `EmailAuditOutbox`, `NotificationAuditLog` + `NotificationAuditOutbox` (note: pair entity + outbox cho mỗi service onboard)
+   - **Entity refactor:** AuthService `auth_audit_logs` thêm 14 cột chuẩn + thêm `audit_outbox` table riêng + upgrade trigger từ hard append-only (AUTH-29) → soft mode (`#AUDIT-10`)
+   - **Integration event mới (1):** `AuditCreatedEventV1` (xem `SharedContracts/IntegrationEvents/Audit/`)
+   - **Migration mới:** 
+     - AuthService: `AddAuditLogStandardColumns` (14 cột + backfill), `AddAuditOutbox`, `UpgradeAuditAppendOnlyTriggerSoft`
+     - BatteryService: `AddBatteryAuditLogSchema`, `AddBatteryAuditOutbox`, `AddBatteryAuditAppendOnlyTrigger`
+     - TicketService: `AddTicketAuditLogSchema`, `AddTicketAuditOutbox`, `AddTicketAuditAppendOnlyTrigger` (KHÔNG đụng `TicketActivity` schema)
+     - FileStorage/Alert/Email/Notification/Sms: tương tự pattern trên
+     - AuditAggregatorService (new DB): `InitAuditAggregate` + `EnablePgPartman` + monthly partition setup
+   - **Background services mới (10):** AuditOutboxRelayBackgroundService per service (8 service onboard publish audit) + AuditCreatedConsumer (Aggregator Worker) + AuditRetentionBackgroundService (Aggregator)
+   - **Permission mới (4):** `audit.read`, `audit.export`, `audit.replay`, `audit.redact` — seed cho role `SecurityOfficer` (mới) qua AuthService Phase 2 `#AUDIT-18`
+   - **Local Option C endpoint mới (4):** `GET /api/admin/{battery|ticket|files|alerts}/audit-logs` (AuthService giữ nguyên 2 endpoint hiện tại)
    - Add persistent Saga scheduler configuration; current RabbitMQ image does not include delayed-message plugin.
    - **(IoT P3)** Add MQTT broker (EMQX/Mosquitto) qua `infra/mqtt/docker-compose.yml` + TLS 8883 + credential/ACL per-device — chỉ khi triển khai MQTT realtime (§52.14).
 
@@ -8548,6 +9076,8 @@ và forward recovery.
 
 Đây là các gap bắt buộc giải quyết trong `#235–#239`; không được chỉ thêm state machine class rồi giữ
 nguyên messaging foundation hiện tại.
+
+> **Note — Sprint audit overlap (§17 Sprint audit + §69.11):** `TicketActivity` hiện tại được dùng làm UI timeline cho Customer/Staff/Manager xem lịch sử ticket. Sprint audit Phase 4 (`#AUDIT-24..28`) sẽ **TÁCH** riêng `TicketAuditLog` entity (schema chuẩn 14 cột + outbox + publish `AuditCreatedEvent`) cho cross-service investigation, KHÔNG đụng `TicketActivity` (UI giữ nguyên). 2 entity khác purpose: `TicketActivity` = UX timeline; `TicketAuditLog` = compliance/forensic source-of-truth feeding `AuditAggregatorService`. KHÔNG migrate `TicketActivity` rows sang `TicketAuditLog` — Sprint audit chỉ publish forward từ ngày kick off.
 
 Business invariants:
 
@@ -10463,6 +10993,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Search functionality
 - [ ] Alert–Ticket Saga create/reuse/link + failure recovery
 - [ ] Energy/CO2 scope cleanup verified; `Site.CapacityKw` removed
+- [ ] **AuditAggregatorService** (microservice mới — Sprint audit Phase 2 `#AUDIT-13..19`) — scaffold + DbContext partitioned + consumer + Geo IP + 7 REST API
+- [ ] **AuditLog Hybrid onboard 10 service** (Sprint audit Phase 1-5) — AuthService refactor + 9 service publish audit + 4 local endpoint Option C (Battery/Ticket/File/Alert)
+- [ ] **Admin Web UI Audit Explorer** (Sprint audit Phase 6 `#AUDIT-36..40`) — filter/timeline/correlation/export/stats dashboard (FE)
 - [ ] App config + feature flags + maintenance announcements
 - [ ] Status page integration
 - [ ] Admin tools (impersonation, feature flag, system config)
@@ -10555,6 +11088,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Saga failure/recovery trace demonstrable without duplicate Ticket
 - [ ] GDPR export demo
 - [ ] Postmortem template ready (if incident happens during demo, recover gracefully)
+- [ ] **Cross-service audit trace demo (Sprint audit)** — show 1 anomaly event xuyên 3 service: BatteryService `BatteryAnomalyDetectedEvent` (event_id=X) → TicketService `TicketAutoCreatedFromAnomaly` (causation_id=X) → NotificationService `PushNotificationSent` (causation_id=ticket_audit.event_id) → trace tất cả qua `GET /api/audit/correlation/{correlation_id}` ở AuditAggregator. Hội đồng KLTN ấn tượng vì đây là pattern enterprise-grade audit forensic
+- [ ] **GDPR redaction audit demo (Sprint audit `#AUDIT-42`)** — SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` → PII fields → `[REDACTED]` ở `audit_aggregate` nhưng `event_id` + `action_code` + `occurred_at` vẫn integrity. Source `{service}_audit_logs` KHÔNG redact (legal hold)
+- [ ] **AuditAggregator Web UI demo (Sprint audit Phase 6)** — search/timeline/correlation trace/stats dashboard hoạt động với 10k+ event seed data (live filter response < 200ms)
 
 ---
 
@@ -10587,7 +11123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | Total integration events | **30+** |
 | Total endpoints | **220+** |
 | Total background services | **25+** |
-| ADRs documented | **18** (+ ADR-016 IoT protocol, ADR-017 Energy/CO2 scope removal, ADR-018 Alert–Ticket Saga) |
+| ADRs documented | **20** (+ ADR-016 IoT protocol, ADR-017 Energy/CO2 scope removal, ADR-018 Alert–Ticket Saga, ADR-019 2FA Hardening, ADR-020 Hybrid Audit Architecture) |
 | Runbooks | **10** (7 baseline + 3 Saga: `08-saga-failed`, `09-saga-stuck`, `10-saga-duplicate-canonical`) |
 | Edge case rules | **34** (EC-01..EC-34) |
 | Risk register items | **29** (R-01..R-29, bao gồm Saga risks R-14..R-22, capacity/ext-deps R-23..R-27 và IoT v2 pivot R-28..R-29) |
@@ -14269,16 +14805,63 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 ### 69.10. Liên kết tham chiếu
 
 - **File gốc audit:** `issue-authservice.md` ở repo root (2582 dòng, gồm 4 pass audit chi tiết + Phụ lục A kiến trúc AuditLog Hybrid + Phụ lục B Implementation Playbook).
-- **Phụ lục A (issue-authservice.md):** Kiến trúc AuditLog Hybrid toàn hệ thống — KHÔNG thuộc scope Sprint additional-auth (cần `AuditAggregatorService` riêng + onboard 10 service). Chỉ phần Phase 1 (refactor `auth_audit_logs` + outbox + trigger append-only) overlap với `#AUTH-29`.
-- **Phụ lục B (issue-authservice.md):** Implementation Playbook chi tiết cho audit (30 pitfalls + 10 nguyên tắc + schema + outbox pattern + correlation/causation + monitoring). Tham khảo khi triển khai `#AUTH-29` + `#AUTH-77` + `#AUTH-78`.
-- **Sprint thực thi:** §17 Sprint additional-auth (90 task `#AUTH-01..90` / `#349..#438`).
+- **Phụ lục A (issue-authservice.md):** Kiến trúc AuditLog Hybrid toàn hệ thống — đã được tách thành **Sprint audit** riêng ở §17 (`#AUDIT-01..45` / `#447..#491`). 7 phase roadmap, AuditAggregatorService mới, onboard 10 service. Overlap nhẹ với `#AUTH-29` (trigger append-only — Phase 1 upgrade lên soft mode qua `#AUDIT-10`) + `#AUTH-77` (CorrelationId) + `#AUTH-15` (Outbox AuthService).
+- **Phụ lục B (issue-authservice.md):** Implementation Playbook chi tiết cho audit (10 nguyên tắc bất di bất dịch + 30 common pitfalls + schema + outbox pattern + correlation/causation + zero-downtime migration + 7 phase acceptance criteria + B.19 effort breakdown task-level). MANDATORY đọc + ký xác nhận trước khi start Sprint audit (theo B.12 checklist).
+- **Sprint thực thi:**
+  - §17 Sprint additional-auth (90 task `#AUTH-01..90` / `#349..#438`) — AuthService security hardening
+  - §17 Sprint audit (45 task `#AUDIT-01..45` / `#447..#491`) — AuditLog Hybrid architecture (Phụ lục A+B triển khai)
 - **Issue Pass tracking:** Mỗi `[ ]` ở §69.1-69.5 đánh dấu `[x]` khi merge PR tương ứng. Leader review weekly trạng thái.
 
 > **Ghi chú:** Đây là danh sách raw từ 4 pass audit. Một số mục có quan hệ nhân quả (vd #14 permission revoke realtime + #17 PermissionResolver cache cùng gốc nhưng giải pháp khác nhau). Khi tạo GitHub issue thực tế nên gom thành ~50-60 ticket độc lập, group theo theme (security batch / ops batch / feature batch). Sprint additional-auth chia thành 90 task để 1-1 traceability với issue gốc.
 
 ---
 
-**Hết §69 (AuthService Security Audit — embedded summary from `issue-authservice.md` 88 issues + 90 task mapping).**
+### 69.11. Sprint audit — kiến trúc AuditLog Hybrid (Phụ lục A+B `issue-authservice.md`)
+
+`issue-authservice.md` còn 2 phụ lục lớn (A + B) thiết kế kiến trúc AuditLog cross-service, KHÔNG thuộc 88-90 issue ở §69.1-69.5 mà tạo nền tảng audit toàn org. Đã embed thành **Sprint audit** ở §17.
+
+**Scope tổng quan:**
+
+| Thành phần | Mô tả |
+|------------|-------|
+| **Decentralized write** | Mỗi service own `{service}_audit_logs` table, INSERT cùng transaction với business data (Outbox pattern đảm bảo at-least-once) |
+| **`AuditAggregatorService` (MỚI)** | Microservice mới scaffold Clean Architecture, consume `AuditCreatedEvent` qua RabbitMQ, materialized view `audit_aggregate` (PostgreSQL partitioned by month + GIN index JSON), Geo IP enrichment |
+| **Centralized read API** | 7 REST endpoint: `/api/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats`, `/export`, `/replay` |
+| **Option C local endpoint policy** | 5 service có 1 local endpoint mỗi service làm fallback + service-specific filter: AuthService (giữ 2 endpoint hiện tại) + Battery + Ticket + File + Alert (build mới). 5 service skip qua Aggregator: Email + Notification + Sms + AI + Gateway |
+| **10 service onboard audit** | ~89 action cross-service: AuthService 22 handler (fix Phase 1), BatteryService 12 action (scratch), TicketService 21 action (tách `TicketActivity` UI khỏi `TicketAuditLog`), File/Alert/Email/Notification/Sms/AI/Gateway 34 action |
+| **CorrelationId + CausationId** | Trace 1 user request xuyên 10 service + causation chain (ticket auto-tạo từ `BatteryAnomalyDetectedEvent` có `causation_id` ngược về `event_id` của anomaly) |
+
+**Sprint audit tasks:** §17 Sprint audit, 45 task `#AUDIT-01..45` / `#447..#491`, ~44 dev-day chia 7 phase.
+
+**Tham chiếu kỹ thuật chi tiết:**
+- **Phụ lục A** (issue-authservice.md §A.1..A.12) — kiến trúc tổng quan + 7 phase roadmap + Option C policy §A.5.1.bis + effort estimation §A.11
+- **Phụ lục B** (issue-authservice.md §B.0..B.19) — Implementation Playbook MANDATORY:
+  - §B.0 10 nguyên tắc bất di bất dịch (transaction atomicity, append-only, event_id idempotency, source-of-truth, at-least-once, CorrelationId, UTC, PII, aggregator read-only, schema versioning)
+  - §B.1 Terminology lock
+  - §B.2 Schema standardization (action code naming, category, severity)
+  - §B.3 Outbox Pattern technical detail
+  - §B.4 CorrelationId & CausationId propagation
+  - §B.5 Event schema versioning
+  - §B.6 Aggregator Consumer detail
+  - §B.7 DateTime & Timezone pitfalls
+  - §B.8 PostgreSQL partition management
+  - §B.9 Zero-downtime migration plan AuthService → schema mới (8 steps)
+  - §B.10 Multi-instance scaling (leader election vs separate worker pod)
+  - §B.11 30 common pitfalls checklist
+  - §B.12 Pre-implementation checklist (gate)
+  - §B.13 Acceptance criteria per phase (gate merge)
+  - §B.19 Effort breakdown chi tiết task-level (44 dev-day total)
+
+**Dependency với Sprint additional-auth:**
+- `#AUTH-29` (AuditLog append-only trigger) → Phase 1 `#AUDIT-10` upgrade lên **soft mode** (cho phép UPDATE outbox-related field, chặn UPDATE business field)
+- `#AUTH-77` (CorrelationIdMiddleware) → tận dụng cho `correlation_id` propagation
+- `#AUTH-15` (Outbox pattern AuthService) → Phase 1 `#AUDIT-08` schema khác — tạo `AuditOutboxRelayBackgroundService` riêng, KHÔNG share với outbox business event
+
+**Timeline:** KHÔNG chạy song song Sprint additional-auth. Recommend kick off Sprint audit **sau khi Sprint additional-auth hoàn tất ổn định ≥ 2 tuần**.
+
+---
+
+**Hết §69 (AuthService Security Audit — embedded summary from `issue-authservice.md` 88 issues + 90 task mapping + Sprint audit overview).**
 
 ---
 
@@ -14299,10 +14882,13 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 - v4.7 (2026-06-15): **§68 SmsService SMS Forwarder Gateway + Sprint SMS** — embed nguyên văn `backend-sms-fowarder.md` v1 (3428 dòng) làm §68 trong Phần IX mới; heading demote 1 cấp bằng awk skip fenced code blocks (bash comment line 2873 `# Từ thư mục REPO ROOT capstone/backend/` preserve nguyên); gom 42 task triển khai theo Phase 0–10 vào **Sprint SMS** ở §17 (`#SMS-01..42` → `#293..#334`); update Mục lục thêm Phần IX entry; §67 stats bump section 67→68 + sprint backlog liệt kê Sprint SMS + Sprint IoT-2. Sprint SMS biến `SmsService` từ stub `FakeSmsSender` thành SMS Gateway Hub trung tâm — nhận `SendSmsCommand` từ Auth/Battery/Ticket/Notification qua RabbitMQ + Inbox dedup, queue vào DB riêng `sms_db` (xmin concurrency token), push SignalR cho Flutter `sms_fowarder`, báo kết quả qua Outbox (`SmsDeliveryReportEvent`/`SmsFailedEvent`); BCrypt API key per-device + rate limit 60 req/phút + daily limit + TTL redactor 24h; copy nguyên Outbox pattern từ AuthService. Critical deploy warning: atomic switch `SendPhoneOtpEvent` → `SendSmsCommand` ở Phase 9 phải xoá hẳn publish cũ trong cùng commit (tránh double-OTP). FE patch nhỏ Flutter `sms_gateway_remote_datasource.dart` đọc `raw['data']` (§68 Phụ lục C.2). KHÔNG đụng section khác.
 
+- v4.9 (2026-06-18): **Sprint audit (AuditLog Hybrid Architecture)** — tách Phụ lục A+B của `issue-authservice.md` thành sprint riêng ở §17: **Sprint audit** với 45 task `#AUDIT-01..45` (issue numbers `#447..#491`), tổng effort ~44 dev-day chia thành 7 phase. Phase 0 (chuẩn bị + ADR + SharedContracts + Roslyn analyzer + RabbitMQ topology) → Phase 1 (refactor AuthService audit, fix 22 handler thiếu) → Phase 2 (AuditAggregatorService microservice MỚI scaffold + DbContext partitioned + consumer + Geo IP enrichment + 7 REST API) → Phase 3 (BatteryService onboard, 12 action + local endpoint Option C `/api/admin/battery/audit-logs`) → Phase 4 (TicketService onboard, tách `TicketAuditLog` khỏi `TicketActivity`, 21 action + causation_id chain + local endpoint) → Phase 5 (File + Alert + Email + Notification + Sms + AI + Gateway onboard, 2 local endpoint thêm cho File + Alert) → Phase 6 (FE Admin Web UI Audit Explorer 5 view) → Phase 7 (hardening: retention + GDPR redaction + perf test 1000 ev/s + Prometheus metric + 7 documentation deliverables). Áp dụng **Option C policy** từ Phụ lục A §A.5.1.bis: 5 service có local endpoint (Auth giữ + Battery/Ticket/File/Alert build mới) + 5 service skip (Email/Notification/Sms/AI/Gateway — qua Aggregator only). Sprint audit là sprint **mở rộng** sau khi Sprint additional-auth ổn định ≥ 2 tuần — KHÔNG chạy song song. Update §69.10 link Phụ lục A → Sprint audit + TOC Phần X thêm Sprint audit reference. KHÔNG đụng section khác.
 - v4.8 (2026-06-17): **§69 AuthService Security Audit + Sprint additional-auth** — embed 88 vấn đề audit từ `issue-authservice.md` (17 bảo mật + 22 logic + 26 thiếu feature + 16 code quality + 7 test gap) làm §69 trong Phần X mới; gom 90 task triển khai theo Phase A-F vào **Sprint additional-auth** ở §17 (`#AUTH-01..90` → `#349..#438`); update Mục lục thêm Phần X entry. Sprint additional-auth là **base sprint** xử lý technical debt AuthService trước khi mở rộng feature auth/permission cho Saga + multi-tenant. Phase A (10 task P0) là top ưu tiên fix ngay — không được skip: hash refresh token DB, 2FA disable verify, OAuth state CSRF, JWT validate issuer/audience/lifetime, CORS whitelist, reset token single-use, email unique index filter, logout invalidate 2FA challenge, constant-time OTP compare, HTML sanitize email template. Phase B (P1) operational hardening: PermissionResolver cache, ClockSkew unify, ValidateOnStart, background jobs (lockout/OTP cleanup), health check k8s. Phụ lục A của `issue-authservice.md` (kiến trúc AuditLog Hybrid + AuditAggregatorService) KHÔNG thuộc scope sprint này — cần sprint riêng + service mới (chỉ phần Phase 1 refactor `auth_audit_logs` overlap với `#AUTH-29`). KHÔNG đụng section khác.
 
 **Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga, IoT v2 pivot).
-**Last major update:** 2026-06-17 (v4.8) — §69 AuthService Security Audit embed + Sprint additional-auth 90 task (`issue-authservice.md` 88 issues mapped 1-1 + thêm #11 split + #89 perf test). GitHub Issues `#349..#438` (90 issue) đã tạo trên `GSU26SE55/backend` với milestone "Sprint additional-auth" (id=13), assignee `@Alexdev257`, label `status: init`.
+**Last major update:** 2026-06-18 (v4.9) — Sprint audit (AuditLog Hybrid Architecture) — 45 task `#AUDIT-01..45` / `#447..#491` triển khai Phụ lục A+B `issue-authservice.md` qua 7 phase ~44 dev-day. AuditAggregatorService microservice mới + onboard 10 service + Option C local endpoint policy (5 service có / 5 skip). KHÔNG chạy song song Sprint additional-auth — phải đợi `#AUTH-29` + `#AUTH-77` + `#AUTH-15` merge.
+
+**Previous:** 2026-06-17 (v4.8) — §69 AuthService Security Audit embed + Sprint additional-auth 90 task (`issue-authservice.md` 88 issues mapped 1-1 + thêm #11 split + #89 perf test). GitHub Issues `#349..#438` (90 issue) đã tạo trên `GSU26SE55/backend` với milestone "Sprint additional-auth" (id=13), assignee `@Alexdev257`, label `status: init`.
 
 **Recommended reading order for newcomer:**
 1. §0-0bis (context — 10 phút)

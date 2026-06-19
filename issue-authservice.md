@@ -806,7 +806,52 @@ DLQ: exchange.audit.dlq → queue.audit-aggregator.dlq (manual replay)
    - Insert audit_log + outbox cùng transaction business
 5. `OutboxRelayBackgroundService` riêng cho service
 6. Migration + trigger append-only
-7. Endpoint admin `GET /api/admin/{service}-audit-logs` (filter, paging) — phục vụ fallback và replay aggregator
+7. **Local admin endpoint** — theo **Option C policy** ở §A.5.1.bis bên dưới (KHÔNG mỗi service đều có).
+
+---
+
+### A.5.1.bis. Endpoint Local Policy — Option C (Minimal local + Aggregator)
+
+**Nguyên tắc:** Mỗi service KHÔNG có "nhóm endpoint audit riêng" giống AuthService hiện tại. Chỉ service **critical** mới expose **1 endpoint local duy nhất** làm fallback + service-specific filter. Cross-service / advanced queries (stats / export / correlation trace / account timeline) đi qua `AuditAggregatorService`.
+
+**Phân loại service:**
+
+| Service | Local endpoint | Lý do |
+|---------|---------------|-------|
+| **AuthService** | ✅ Đã có (giữ nguyên 2 endpoint hiện tại) | Security investigation, real-time, AuditActionEnum specific |
+| **BatteryService** | ✅ Build mới — `GET /api/admin/battery/audit-logs` | IoT incident response, forensic anomaly tracking |
+| **TicketService** | ✅ Build mới — `GET /api/admin/ticket/audit-logs` | SLA/escalation investigation, compliance (tách khỏi `TicketActivity` UI timeline) |
+| **FileStorageService** | ✅ Build mới — `GET /api/admin/files/audit-logs` | File access compliance, GDPR investigation |
+| **AlertService** | ✅ Build mới — `GET /api/admin/alerts/audit-logs` | Alert acknowledge/suppress history |
+| **EmailService** | ❌ Skip — qua Aggregator | Volume thấp, không cần admin investigation riêng |
+| **NotificationService** | ❌ Skip — qua Aggregator | Push log low-criticality |
+| **SmsService** | ❌ Skip — qua Aggregator | Đã có 8 action, không cần admin UI mới |
+| **AI Module** | ❌ Skip — qua Aggregator | Internal pipeline, ít user-facing |
+| **Gateway** | ❌ Skip — qua Aggregator | Request log đã có ở observability layer |
+
+**Tổng: 5 service có local endpoint (1 endpoint mỗi service) + AuditAggregatorService central API.**
+
+**Spec cho local endpoint (5 service):**
+- Route: `GET /api/admin/{service-name}/audit-logs`
+- Auth: `[Authorize(Roles = "Admin")]`
+- Query trực tiếp `{service}_audit_logs` table (KHÔNG qua aggregator)
+- Filter: `action` (service-specific enum), entity ID (vd `batteryId`/`ticketId`), `from`/`to`, `pageSize` (default 50, max 100), `pageNumber`
+- Response shape: `CommonResponse<PaginationResponse<{Service}AuditLogDto>>`
+- KHÔNG có: stats, export CSV, by-correlation, account-timeline (những thứ này đi qua Aggregator)
+
+**Lý do design:**
+1. **Resilience** — Aggregator down → admin vẫn xem được service-local audit (critical cho incident response).
+2. **Real-time** — local endpoint serve trực tiếp source table → 0ms lag, vs Aggregator p99 ~10s (outbox + RabbitMQ + consumer).
+3. **Service-specific filter** — `BatteryAuditActionEnum`/`TicketAuditActionEnum` chi tiết hơn aggregator string `action_code`.
+4. **Minimal boilerplate** — 1 endpoint × 5 service = 5 endpoints, không phải full CRUD × 10 service = 50 endpoints.
+5. **Tuân B.0 #4** — "Source-of-truth ở từng service" → service self-serve quyền cơ bản.
+6. **Tuân B.0 #9** — "Aggregator KHÔNG được phép viết ngược về service" → aggregator chỉ bổ sung capability, không thay thế.
+
+**Khi nào KHÔNG cần xóa AuthService endpoint cũ:**
+
+Spec sau khi áp Option C, AuthService giữ 2 endpoint hiện tại (`GET /api/admin/audit-logs` + `/by-account/{id}`). KHÔNG migrate sang `/api/admin/auth/audit-logs` để tránh breaking FE Admin UI. Service mới (Battery/Ticket/File/Alert) bắt buộc dùng prefix mới `{service}/audit-logs`.
+
+**Boilerplate ước tính per service mới: ~150 line code** (controller + query DTO + handler + response DTO + unit test).
 
 **Pattern code cho Handler publish audit:**
 
@@ -900,6 +945,20 @@ POST /api/audit/replay?service=&from=&to=                ← admin replay từ s
 ```
 
 **Authorization:** chỉ role `Admin` hoặc `SecurityOfficer` (cần thêm role mới).
+
+> **Lưu ý Option C (xem §A.5.1.bis):** Aggregator API **KHÔNG THAY THẾ** local endpoint của 5 service critical (Auth/Battery/Ticket/File/Alert). Aggregator BỔ SUNG capability cross-service + advanced query (stats/export/correlation/timeline). Phân chia trách nhiệm:
+>
+> | Use case | Endpoint nào |
+> |----------|--------------|
+> | "Account X làm gì TRONG AuthService" | `GET /api/admin/audit-logs/by-account/{id}` (AuthService local) |
+> | "Battery X audit history" | `GET /api/admin/battery/audit-logs?batteryId=X` (BatteryService local) |
+> | "Account X làm gì TOÀN HỆ THỐNG (Auth + Battery + Ticket + File + Alert)" | `GET /api/audit/account/{id}/timeline` (Aggregator) |
+> | "Trace 1 request xuyên service theo CorrelationId" | `GET /api/audit/correlation/{id}` (Aggregator) |
+> | "Stats severity distribution + dashboard" | `GET /api/audit/stats` (Aggregator) |
+> | "Export 100k row CSV" | `GET /api/audit/export` (Aggregator) |
+> | "Investigation khi Aggregator down" | Local endpoint (resilience fallback) |
+> | "Real-time check vừa-mới-xảy-ra" | Local endpoint (0ms lag) |
+> | "Cross-service correlation" | Aggregator (single source) |
 
 ### A.5.3. CorrelationId & CausationId — trace multi-service
 
@@ -996,7 +1055,7 @@ Job daily verify chain: scan partition, recompute hash, alert nếu lệch.
 - [ ] Outbox + relay
 - [ ] Publish audit ở các handler quan trọng: Create, Update, Delete, AssignCustomer, ThresholdChange, SensorEdit
 - [ ] Migration + trigger
-- [ ] Admin endpoint fallback
+- [ ] **Local endpoint (Option C):** `GET /api/admin/battery/audit-logs` (filter: action, batteryId, from/to, paging) — fallback khi Aggregator down + battery-specific filter
 - [ ] Test E2E: action → DB → outbox → broker → aggregator → query API
 
 ### Phase 4 — Onboard TicketService (1 sprint)
@@ -1007,14 +1066,18 @@ Job daily verify chain: scan partition, recompute hash, alert nếu lệch.
 - [ ] Outbox + relay
 - [ ] Publish audit ở: state transition, priority, SLA pause/resume/breach, escalation, maintenance log, comment, attachment
 - [ ] Migration + trigger
+- [ ] **Local endpoint (Option C):** `GET /api/admin/ticket/audit-logs` (filter: action, ticketId, from/to, paging) — SLA/escalation investigation real-time
 - [ ] Special: `causation_id` cho ticket tự tạo từ `BatteryAnomalyDetectedEvent`
 
-### Phase 5 — Onboard FileStorageService + còn lại (1 sprint)
+### Phase 5 — Onboard FileStorage + Alert + Email/Notification/Sms/AI/Gateway (1 sprint)
 
 - [ ] `FileAuditLog` (Upload, Download, Delete, AccessDenied, PresignedUrlGenerated)
-- [ ] EmailService audit (EmailSent, Failed, Bounced)
-- [ ] NotificationService audit (Push sent/failed)
-- [ ] AlertService audit (Acknowledged, Suppressed, RuleChanged)
+- [ ] **Local endpoint (Option C) cho FileStorageService:** `GET /api/admin/files/audit-logs` — compliance + GDPR file access investigation
+- [ ] `AlertAuditLog` (Acknowledged, Suppressed, RuleChanged)
+- [ ] **Local endpoint (Option C) cho AlertService:** `GET /api/admin/alerts/audit-logs` — alert acknowledge/suppress history
+- [ ] EmailService audit (EmailSent, Failed, Bounced) — **KHÔNG có local endpoint** (skip per Option C, qua Aggregator)
+- [ ] NotificationService audit (Push sent/failed) — **KHÔNG có local endpoint** (skip per Option C)
+- [ ] SmsService bổ sung 3 audit action — **KHÔNG có local endpoint** (skip per Option C)
 
 ### Phase 6 — Admin Web UI Audit Explorer (1 sprint, FE)
 
@@ -1090,30 +1153,42 @@ Job daily verify chain: scan partition, recompute hash, alert nếu lệch.
 ## A.10. Coverage gap đã liệt kê (xem thêm phía trên cùng phụ lục này)
 
 Tổng cộng **~89 action thiếu audit** trên 10 service:
-- AuthService: 22 handler chưa publish
-- BatteryService: 12 action (tạo từ scratch)
-- TicketService: 21 action (tách TicketAuditLog riêng)
-- NotificationService: 7 action
-- EmailService: 5 action
-- FileStorageService: 6 action
-- SmsService: bổ sung 3 action (đã có 8)
-- AlertService: 5 action
-- AI Module: 5 action
-- Gateway: 3 action
+- AuthService: 22 handler chưa publish · local endpoint ✅ giữ nguyên (đã có)
+- BatteryService: 12 action (tạo từ scratch) · local endpoint ✅ build mới (Option C)
+- TicketService: 21 action (tách TicketAuditLog riêng) · local endpoint ✅ build mới (Option C)
+- NotificationService: 7 action · ❌ KHÔNG local endpoint (qua Aggregator only)
+- EmailService: 5 action · ❌ KHÔNG local endpoint (qua Aggregator only)
+- FileStorageService: 6 action · local endpoint ✅ build mới (Option C)
+- SmsService: bổ sung 3 action (đã có 8) · ❌ KHÔNG local endpoint mới (qua Aggregator)
+- AlertService: 5 action · local endpoint ✅ build mới (Option C)
+- AI Module: 5 action · ❌ KHÔNG local endpoint (qua Aggregator)
+- Gateway: 3 action · ❌ KHÔNG local endpoint (qua Aggregator)
 
-## A.11. Effort estimation
+**Local endpoint per Option C: 5 service** (Auth giữ nguyên + 4 service build mới: Battery/Ticket/File/Alert). Chi tiết policy + lý do xem §A.5.1.bis.
 
-| Phase | Effort (dev-day) |
-|-------|------------------|
-| Phase 0 — Chuẩn bị + ADR | 3 |
-| Phase 1 — Refactor AuthService | 5 |
-| Phase 2 — AuditAggregatorService | 7 |
-| Phase 3 — BatteryService onboard | 3 |
-| Phase 4 — TicketService onboard | 5 |
-| Phase 5 — File/Email/Notification onboard | 4 |
-| Phase 6 — Admin Web UI | 6 |
-| Phase 7 — Hardening + perf test | 4 |
-| **Tổng** | **~37 dev-day** (≈ 7-8 sprint với 1 BE + 0.5 FE) |
+## A.11. Effort estimation (summary view)
+
+> Bảng này là tổng quan theo phase. Chi tiết task-level breakdown ở **§B.19**. Số baseline sync với §B.19 (42 dev-day sau khi chi tiết hóa, tăng từ ước tính ban đầu 37).
+
+| Phase | Baseline (dev-day) | Local endpoint delta | Total | Ghi chú |
+|-------|--------------------|--------------------|-------|--------|
+| Phase 0 — Chuẩn bị + ADR | 3 | — | **3** | — |
+| Phase 1 — Refactor AuthService | 7 | 0 | **7** | Auth giữ nguyên 2 endpoint hiện tại, không build mới |
+| Phase 2 — AuditAggregatorService | 8.5 | — | **8.5** | Aggregator central API, không phải local |
+| Phase 3 — BatteryService onboard | 3 | +0.5 | **3.5** | 1 local endpoint mới `/api/admin/battery/audit-logs` (~150 LOC) |
+| Phase 4 — TicketService onboard | 5 | +0.5 | **5.5** | 1 local endpoint mới `/api/admin/ticket/audit-logs` |
+| Phase 5 — File + Alert + Email/Notification/Sms/AI/Gateway onboard | 4 | +1.0 | **5** | 2 local endpoint mới (File + Alert × 0.5 day); Email/Notification/Sms/AI/Gateway KHÔNG có local endpoint |
+| Phase 6 — Admin Web UI | 6 | — | **6** | FE gọi cả local + aggregator |
+| Phase 7 — Hardening + perf test | 5 | — | **5** | — |
+| **Tổng** | **42** | **+2** | **44** | ≈ 8-9 sprint với 1 BE + 0.5 FE |
+
+**Boilerplate per local endpoint mới (~150 LOC):**
+- Controller (`Admin{Service}AuditLogsController.cs`): ~30 LOC
+- Query DTO + handler: ~70 LOC
+- Response DTO: ~30 LOC
+- Unit test (filter + paging happy path): ~20 LOC
+
+**Total local endpoint LOC mới: 4 service × ~150 = ~600 LOC** (Auth giữ 0 LOC mới; Battery + Ticket + File + Alert mỗi service ~150 LOC).
 
 ## A.12. Kết luận phụ lục
 
@@ -2139,6 +2214,9 @@ Trước khi bắt đầu code, đảm bảo:
 - [ ] Đặt SLO: outbox lag p99 < 5s, aggregator lag p99 < 10s
 - [ ] Backup strategy: daily snapshot DB Auth/Battery/Ticket/Aggregator
 - [ ] Document team về cách add audit cho handler mới (1-page cheatsheet)
+- [ ] Chốt **Option C policy** (xem §A.5.1.bis): 5 service có local endpoint (Auth giữ + Battery/Ticket/File/Alert build mới), 5 service KHÔNG (Email/Notification/Sms/AI/Gateway — qua Aggregator only)
+- [ ] FE Admin UI plan: 2 view mode — "Service-local view" gọi `/api/admin/{service}/audit-logs` (real-time, fallback) và "Cross-service view" gọi `/api/audit/*` (aggregator)
+- [ ] Auth `[Authorize(Roles = "Admin")]` cho local endpoint vs `Admin|SecurityOfficer` cho aggregator endpoint
 
 ---
 
@@ -2189,9 +2267,35 @@ Trước khi bắt đầu code, đảm bảo:
 - [ ] Migration zero-downtime tested
 - [ ] Handler quan trọng (Create/Update/Delete/AssignCustomer/ThresholdChange) publish audit
 - [ ] Unit test + integration test
+- [ ] **Local endpoint (Option C):** `GET /api/admin/battery/audit-logs` — filter `action` + `batteryId` + `from/to`, paging max 100, Authorize Admin role, query trực tiếp `battery_audit_logs` table
 - [ ] E2E: create battery → query aggregator API sau 10s → tìm thấy event
+- [ ] E2E: create battery → query LOCAL endpoint ngay lập tức → tìm thấy event (0ms lag verify)
 
-### Phase 4-7
+### Phase 4 — TicketService onboard
+
+- [ ] `TicketAuditLog` entity TÁCH KHỎI `TicketActivity` (TicketActivity giữ cho UI timeline user-facing)
+- [ ] `TicketAuditActionEnum` chứa 21 action
+- [ ] Handler resolve actor/IP/correlation + `causation_id` cho ticket auto-tạo từ saga
+- [ ] Outbox + relay riêng
+- [ ] Trigger append-only + migration zero-downtime
+- [ ] Publish audit ở: state transition, priority change, SLA pause/resume/breach, escalation, maintenance log, comment, attachment
+- [ ] **Local endpoint (Option C):** `GET /api/admin/ticket/audit-logs` — filter `action` + `ticketId` + `from/to`, paging max 100, Authorize Admin role
+- [ ] Unit test + integration test + E2E
+
+### Phase 5 — FileStorage + Alert + Email/Notification/Sms/AI/Gateway onboard
+
+- [ ] `FileAuditLog` + 6 action (Upload/Download/Delete/AccessDenied/PresignedUrlGenerated/...)
+- [ ] **Local endpoint cho FileStorage:** `GET /api/admin/files/audit-logs` — compliance + GDPR file access
+- [ ] `AlertAuditLog` + 5 action (Acknowledged/Suppressed/RuleChanged/...)
+- [ ] **Local endpoint cho Alert:** `GET /api/admin/alerts/audit-logs` — alert acknowledge history
+- [ ] EmailService 5 action publish + outbox + relay (KHÔNG local endpoint per Option C)
+- [ ] NotificationService 7 action publish + outbox + relay (KHÔNG local endpoint per Option C)
+- [ ] SmsService bổ sung 3 action mới (KHÔNG local endpoint per Option C)
+- [ ] AI Module 5 action publish (KHÔNG local endpoint per Option C)
+- [ ] Gateway 3 action publish (KHÔNG local endpoint per Option C)
+- [ ] E2E test toàn bộ 5 service: action → outbox → broker → aggregator → query aggregator API tìm thấy
+
+### Phase 6-7
 
 (Tương tự, mỗi phase có acceptance riêng — sẽ chi tiết khi tới phase)
 
@@ -2471,20 +2575,26 @@ Hoàn thành Phase 7, team phải có:
 | Phase 3 — BatteryAuditLog | 1.5 | Pattern đã có từ Phase 1 |
 | Phase 3 — 12 action publish | 1 | |
 | Phase 3 — Migration + trigger + test | 0.5 | |
+| Phase 3 — Local endpoint `/api/admin/battery/audit-logs` (Option C) | 0.5 | ~150 LOC: controller + query DTO + handler + unit test |
 | Phase 4 — TicketAuditLog (tách khỏi Activity) | 2 | Phức tạp hơn vì có Activity sẵn |
 | Phase 4 — 21 action publish | 2 | |
 | Phase 4 — Causation chain test (anomaly → ticket) | 0.5 | |
 | Phase 4 — Migration + test | 0.5 | |
-| Phase 5 — File/Email/Notification audit | 4 | 3 service nhỏ |
+| Phase 4 — Local endpoint `/api/admin/ticket/audit-logs` (Option C) | 0.5 | ~150 LOC |
+| Phase 5 — FileStorage audit (6 action) + outbox + relay | 1.5 | |
+| Phase 5 — Alert audit (5 action) + outbox + relay | 1 | |
+| Phase 5 — Email/Notification/Sms/AI/Gateway audit (publish only, no local endpoint) | 1.5 | 5 service × ~0.3 day |
+| Phase 5 — Local endpoint `/api/admin/files/audit-logs` (Option C) | 0.5 | ~150 LOC |
+| Phase 5 — Local endpoint `/api/admin/alerts/audit-logs` (Option C) | 0.5 | ~150 LOC |
 | Phase 6 — Admin Web UI Audit Explorer | 6 | FE work |
 | Phase 7 — Retention background service | 1 | |
 | Phase 7 — GDPR redaction endpoint | 1 | |
 | Phase 7 — Perf + chaos test | 1.5 | |
 | Phase 7 — Monitoring + alert rules | 0.5 | |
 | Phase 7 — Documentation deliverables | 1 | |
-| **TỔNG** | **~42 dev-day** | |
+| **TỔNG** | **~44 dev-day** | |
 
-> Tăng từ ước tính ban đầu 37 → 42 sau khi chi tiết hóa.
+> Tăng từ ước tính ban đầu 37 → 42 (chi tiết hóa) → 44 (cộng +2 day cho 4 local endpoint mới theo Option C: Battery + Ticket + File + Alert × 0.5 day).
 
 ---
 

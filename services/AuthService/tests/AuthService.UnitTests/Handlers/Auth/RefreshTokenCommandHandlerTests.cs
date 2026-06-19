@@ -42,7 +42,7 @@ public class RefreshTokenCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             AccountId = account.Id,
-            Token = "old-refresh",
+            Token = RefreshTokenHasher.Hash("old-refresh"),
             IssuedAt = DateTime.UtcNow.AddDays(-1),
             ExpiredAt = expiredAt ?? DateTime.UtcNow.AddDays(6),
             Status = status,
@@ -57,7 +57,7 @@ public class RefreshTokenCommandHandlerTests
         var (account, oldToken) = Seed(RefreshTokenStatus.Active);
         var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { oldToken });
 
-        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.AuthSecurityOptions()), Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
 
         response.IsSuccess.Should().BeTrue();
@@ -66,10 +66,12 @@ public class RefreshTokenCommandHandlerTests
 
         oldToken.Status.Should().Be(RefreshTokenStatus.Used);
         oldToken.UsedAt.Should().NotBeNull();
-        oldToken.ReplacedByToken.Should().Be("new-refresh");
+        // #AUTH-01: ReplacedByToken + persisted Token đều là hash của plaintext "new-refresh".
+        var newHashed = RefreshTokenHasher.Hash("new-refresh");
+        oldToken.ReplacedByToken.Should().Be(newHashed);
 
         refreshTokens.Verify(r => r.AddAsync(It.Is<RefreshToken>(rt =>
-            rt.Token == "new-refresh" &&
+            rt.Token == newHashed &&
             rt.AccountId == account.Id &&
             rt.Status == RefreshTokenStatus.Active
         )), Times.Once);
@@ -83,7 +85,7 @@ public class RefreshTokenCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             AccountId = account.Id,
-            Token = "other-active",
+            Token = RefreshTokenHasher.Hash("other-active"),
             Status = RefreshTokenStatus.Active,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7),
@@ -91,7 +93,7 @@ public class RefreshTokenCommandHandlerTests
         };
         var (uow, _, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { usedToken, otherActive });
 
-        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.AuthSecurityOptions()), Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
 
         response.IsSuccess.Should().BeFalse();
@@ -110,7 +112,7 @@ public class RefreshTokenCommandHandlerTests
         var (account, revoked) = Seed(RefreshTokenStatus.Revoked);
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { revoked });
 
-        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.AuthSecurityOptions()), Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
 
         response.StatusCode.Should().Be(401);
@@ -122,7 +124,7 @@ public class RefreshTokenCommandHandlerTests
         var (account, expired) = Seed(RefreshTokenStatus.Active, expiredAt: DateTime.UtcNow.AddSeconds(-1));
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { expired });
 
-        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.AuthSecurityOptions()), Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "old-refresh" }, CancellationToken.None);
 
         response.StatusCode.Should().Be(401);
@@ -134,7 +136,7 @@ public class RefreshTokenCommandHandlerTests
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
 
-        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object);
+        var handler = new RefreshTokenCommandHandler(uow.Object, _jwt.Object, MockPublisher.NoOp().Object, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.AuthSecurityOptions()), Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
         var response = await handler.Handle(new RefreshTokenCommand { RefreshToken = "ghost-token" }, CancellationToken.None);
 
         response.StatusCode.Should().Be(401);

@@ -16,7 +16,7 @@ public class UpdateAccountCommandHandlerTests
             Email = "u@example.com",
             PasswordHash = "x",
             FullName = "Old",
-            PhoneNumber = "0900111",
+            PhoneNumber = "+84900111",
             PhoneConfirmed = true,
             Status = AccountStatusEnum.Active
         };
@@ -28,12 +28,12 @@ public class UpdateAccountCommandHandlerTests
         {
             Id = account.Id,
             FullName = "New",
-            PhoneNumber = "0900222"
+            PhoneNumber = "+84900222"
         }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         account.FullName.Should().Be("New");
-        account.PhoneNumber.Should().Be("0900222");
+        account.PhoneNumber.Should().Be("+84900222");
         account.PhoneConfirmed.Should().BeFalse();
     }
 
@@ -46,7 +46,7 @@ public class UpdateAccountCommandHandlerTests
             Email = "u@example.com",
             PasswordHash = "x",
             FullName = "Old",
-            PhoneNumber = "0900111",
+            PhoneNumber = "+84900111",
             PhoneConfirmed = true,
             Status = AccountStatusEnum.Active
         };
@@ -58,7 +58,7 @@ public class UpdateAccountCommandHandlerTests
         {
             Id = account.Id,
             FullName = "New",
-            PhoneNumber = "0900111"
+            PhoneNumber = "+84900111"
         }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
@@ -82,7 +82,7 @@ public class UpdateAccountCommandHandlerTests
             Email = "other@example.com",
             PasswordHash = "x",
             FullName = "Other",
-            PhoneNumber = "0900222",
+            PhoneNumber = "+84900222",
             Status = AccountStatusEnum.Active
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, other });
@@ -93,7 +93,7 @@ public class UpdateAccountCommandHandlerTests
         {
             Id = account.Id,
             FullName = "Me",
-            PhoneNumber = "0900222"
+            PhoneNumber = "+84900222"
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(409);

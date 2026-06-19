@@ -34,7 +34,7 @@ public class CreateAccountCommandHandlerTests
             Email = "new@example.com",
             Password = "Pass123!",
             FullName = "New",
-            PhoneNumber = "0900111",
+            PhoneNumber = "+84900111",
             RoleId = role.Id
         }, CancellationToken.None);
 
@@ -81,7 +81,7 @@ public class CreateAccountCommandHandlerTests
             Email = "old@example.com",
             PasswordHash = "x",
             FullName = "U",
-            PhoneNumber = "0900111"
+            PhoneNumber = "+84900111"
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
         var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
@@ -91,7 +91,7 @@ public class CreateAccountCommandHandlerTests
             Email = "new@example.com",
             Password = "Pass123!",
             FullName = "New",
-            PhoneNumber = "0900111",
+            PhoneNumber = "+84900111",
             RoleId = Guid.NewGuid()
         }, CancellationToken.None);
 

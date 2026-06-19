@@ -1,13 +1,24 @@
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Handler.Auth;
+using AuthService.Application.Interfaces.Helpers;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
+using Moq;
 
 namespace AuthService.UnitTests.Handlers.Auth;
 
 public class LogoutCommandHandlerTests
 {
+    private static Mock<ITwoFactorChallengeStore> NewChallengeStore()
+    {
+        var m = new Mock<ITwoFactorChallengeStore>();
+        m.Setup(s => s.InvalidateByAccountAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        return m;
+    }
+
     [Fact]
     public async Task Logout_ActiveToken_Revokes()
     {
@@ -16,13 +27,13 @@ public class LogoutCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             AccountId = accountId,
-            Token = "rt-abc",
+            Token = RefreshTokenHasher.Hash("rt-abc"),
             Status = RefreshTokenStatus.Active,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        var handler = new LogoutCommandHandler(uow.Object);
+        var handler = new LogoutCommandHandler(uow.Object, NewChallengeStore().Object, new Moq.Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
 
         var resp = await handler.Handle(new LogoutCommand { AccountId = accountId, RefreshToken = "rt-abc" }, CancellationToken.None);
 
@@ -36,7 +47,7 @@ public class LogoutCommandHandlerTests
     public async Task Logout_TokenNotFound_ReturnsAlreadyInactive()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new LogoutCommandHandler(uow.Object);
+        var handler = new LogoutCommandHandler(uow.Object, NewChallengeStore().Object, new Moq.Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
 
         var resp = await handler.Handle(new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "ghost" }, CancellationToken.None);
 
@@ -52,13 +63,13 @@ public class LogoutCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             AccountId = ownerId,
-            Token = "rt-other",
+            Token = RefreshTokenHasher.Hash("rt-other"),
             Status = RefreshTokenStatus.Active,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        var handler = new LogoutCommandHandler(uow.Object);
+        var handler = new LogoutCommandHandler(uow.Object, NewChallengeStore().Object, new Moq.Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
 
         var resp = await handler.Handle(new LogoutCommand { AccountId = Guid.NewGuid(), RefreshToken = "rt-other" }, CancellationToken.None);
 
@@ -75,13 +86,13 @@ public class LogoutCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             AccountId = accountId,
-            Token = "rt-revoked",
+            Token = RefreshTokenHasher.Hash("rt-revoked"),
             Status = RefreshTokenStatus.Revoked,
             IssuedAt = DateTime.UtcNow,
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(tokenSeed: new[] { token });
-        var handler = new LogoutCommandHandler(uow.Object);
+        var handler = new LogoutCommandHandler(uow.Object, NewChallengeStore().Object, new Moq.Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
 
         var resp = await handler.Handle(new LogoutCommand { AccountId = accountId, RefreshToken = "rt-revoked" }, CancellationToken.None);
 

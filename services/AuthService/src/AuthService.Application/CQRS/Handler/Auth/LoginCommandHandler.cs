@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.CQRS.Notification.Login;
@@ -9,6 +10,7 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
@@ -43,7 +45,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
@@ -52,17 +54,22 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         if (account == null)
         {
+            // #AUTH-17: dùng cùng audit action với "sai mật khẩu" + jitter delay để time đáp ứng
+            // miss path ~= match BCrypt verify (~100-200ms) → khó phân biệt qua side-channel.
+            await ApplyEnumerationDelay(cancellationToken);
+
             await PublishAudit(AuditActionEnum.LoginFailedWrongPassword,
                 targetAccountId: null,
                 isSuccess: false,
                 targetEmail: normalizedEmail,
-                reason: "Email không tồn tại trong hệ thống.",
+                reason: "Invalid credentials.",
                 cancellationToken: cancellationToken);
             await PublishLoginAttempt(null, normalizedEmail,
                 LoginAttemptResult.AccountNotFound,
-                note: "Email không tồn tại.",
+                note: "Invalid credentials.",
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            AppMetrics.AuthLoginTotal.WithLabels("invalid_credentials").Inc(); // #AUTH-78
             return Fail(400, "Email hoặc mật khẩu không chính xác.");
         }
 
@@ -223,6 +230,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         var (tokens, sessionId) = await _tokenIssuer.IssueAsync(account, ipAddress, userAgent, deviceId, cancellationToken);
 
+        AppMetrics.AuthLoginTotal.WithLabels("success").Inc(); // #AUTH-78
+
         var roleName = account.Role?.Name ?? string.Empty;
         await PublishAudit(AuditActionEnum.LoginSuccess, account.Id, true,
             targetEmail: account.Email,
@@ -283,5 +292,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             StatusCode = statusCode,
             Message = message,
         };
+    }
+
+    // #AUTH-17: delay 100-200ms (RNG-based jitter) trên miss path để time ~= BCrypt verify time.
+    private static Task ApplyEnumerationDelay(CancellationToken cancellationToken)
+    {
+        var jitterMs = RandomNumberGenerator.GetInt32(100, 201);
+        return Task.Delay(jitterMs, cancellationToken);
     }
 }

@@ -13,6 +13,8 @@ public static class RateLimitingExtensions
 {
     public const string PolicyAnonOtp = "AnonOtp";
     public const string PolicyAuthOtp = "AuthOtp";
+    /// <summary>Rate limit cho /api/auth/login: 10 req/phút theo IP — chặn credential stuffing/brute force trước DB lockout.</summary>
+    public const string PolicyLogin = "Login";
     /// <summary>Rate limit cho /api/auth/login/verify-2fa: 5 req/5min theo challengeToken (form/body). Fallback IP.</summary>
     public const string PolicyTwoFactorVerify = "TwoFactorVerify";
     /// <summary>Rate limit cho /api/accounts/me/2fa/disable: 3 req/5min theo UserId.</summary>
@@ -53,6 +55,19 @@ public static class RateLimitingExtensions
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                     });
             });
+
+            // #AUTH-04: login endpoint rate limit — 10/phút theo IP. Cao hơn AnonOtp (5/phút) vì
+            // user typo password là common → tránh false-block; vẫn chặn được credential stuffing.
+            options.AddPolicy(PolicyLogin, ctx =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: "login:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "anon"),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    }));
 
             // 2FA Hardening (GH-295) — 3 policy thêm
             options.AddPolicy(PolicyTwoFactorVerify, ctx =>

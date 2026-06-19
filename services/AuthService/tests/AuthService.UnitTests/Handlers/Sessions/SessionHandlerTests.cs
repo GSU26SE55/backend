@@ -156,11 +156,12 @@ public class RevokeAllSessionsCommandHandlerTests
 {
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
+    // #AUTH-01: DB lưu hash → seed luôn hash plaintext "val".
     private static RefreshToken Token(Guid accountId, string val) => new()
     {
         Id = Guid.NewGuid(),
         AccountId = accountId,
-        Token = val,
+        Token = global::AuthService.Application.Interfaces.Helpers.RefreshTokenHasher.Hash(val),
         Status = RefreshTokenStatus.Active,
         IssuedAt = DateTime.UtcNow,
         ExpiredAt = DateTime.UtcNow.AddDays(7)
