@@ -2,17 +2,18 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 
 namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
-public class DeleteKbArticleCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
+public class DeleteKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
     [JsonIgnore]
     public Guid ArticleId { get; set; }
 
-    public Task<CommonResponse<object>> ValidateAsync()
+    public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
-        var response = new CommonResponse<object>();
+        var response = new CommonResponse<KbArticleActionDTO>();
 
         if (ArticleId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "ID bài viết không hợp lệ." });

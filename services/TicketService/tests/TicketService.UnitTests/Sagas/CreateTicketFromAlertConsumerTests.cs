@@ -12,7 +12,7 @@ using SharedContracts.Saga.AlertTicket;
 using SharedKernels.Interfaces;
 using TicketService.Application.Consumers;
 using TicketService.Application.CQRS.Command.Tickets;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -145,7 +145,7 @@ public class CreateTicketFromAlertConsumerTests
             {
                 IsSuccess = true,
                 StatusCode = 201,
-                Data = new TicketActionDto
+                Data = new TicketActionDTO
                 {
                     Id = newTicketId.ToString(),
                     TicketId = newTicketId.ToString(),

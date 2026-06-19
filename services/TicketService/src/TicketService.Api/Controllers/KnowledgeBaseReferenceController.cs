@@ -52,7 +52,7 @@ public class KnowledgeBaseReferenceController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lấy danh sách thành công (sắp xếp mới nhất trước).</response>
     [HttpGet]
-    [ProducesResponseType(typeof(CommonResponse<List<TicketKbReferenceDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<TicketKbReferenceDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReferences([FromQuery] Guid ticketId, CancellationToken ct)
     {
         var query = new GetTicketKbReferencesQuery { TicketId = ticketId };

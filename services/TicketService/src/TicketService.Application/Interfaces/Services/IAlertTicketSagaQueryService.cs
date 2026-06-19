@@ -11,9 +11,9 @@ namespace TicketService.Application.Interfaces.Services;
 /// </summary>
 public interface IAlertTicketSagaQueryService
 {
-    Task<AlertTicketSagaDto?> GetByAlertIdAsync(Guid alertId, CancellationToken cancellationToken);
+    Task<AlertTicketSagaDTO?> GetByAlertIdAsync(Guid alertId, CancellationToken cancellationToken);
 
-    Task<(IReadOnlyList<AlertTicketSagaDto> Items, int Total)> QueryAsync(
+    Task<(IReadOnlyList<AlertTicketSagaDTO> Items, int Total)> QueryAsync(
         string? state,
         Guid? alertId,
         Guid? batteryAssetId,

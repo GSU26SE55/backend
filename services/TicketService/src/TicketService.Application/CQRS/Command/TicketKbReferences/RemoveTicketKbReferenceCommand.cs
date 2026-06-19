@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.DTOs.Response.TicketKbReferences;
 
 namespace TicketService.Application.CQRS.Command.TicketKbReferences;
 

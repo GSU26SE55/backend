@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -79,7 +79,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             IsSuccess = true,
             StatusCode = 201,
             Message = "Ticket created successfully.",
-            Data = new TicketActionDto
+            Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),
                 TicketId = ticket.Id.ToString(),

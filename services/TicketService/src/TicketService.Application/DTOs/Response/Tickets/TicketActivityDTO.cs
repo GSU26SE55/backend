@@ -1,6 +1,6 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response.Ticket;
+namespace TicketService.Application.DTOs.Response.Tickets;
 
 public class TicketActivityDTO
 {

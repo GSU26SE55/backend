@@ -2,14 +2,14 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQuery, CommonResponse<List<KbArticleSuggestDto>>>
+public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQuery, CommonResponse<List<KbArticleSuggestDTO>>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -18,7 +18,7 @@ public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQu
         _uow = uow;
     }
 
-    public async Task<CommonResponse<List<KbArticleSuggestDto>>> Handle(SuggestKbArticlesQuery query, CancellationToken ct)
+    public async Task<CommonResponse<List<KbArticleSuggestDTO>>> Handle(SuggestKbArticlesQuery query, CancellationToken ct)
     {
         var ticket = await _uow.Tickets.GetAllAsync()
             .FirstOrDefaultAsync(t => t.Id == query.TicketId, ct);
@@ -33,7 +33,7 @@ public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQu
             .Take(5)
             .ToListAsync(ct);
 
-        return new CommonResponse<List<KbArticleSuggestDto>>
+        return new CommonResponse<List<KbArticleSuggestDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
@@ -41,9 +41,9 @@ public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQu
         };
     }
 
-    private static CommonResponse<List<KbArticleSuggestDto>> Fail(int statusCode, string message)
+    private static CommonResponse<List<KbArticleSuggestDTO>> Fail(int statusCode, string message)
     {
-        return new CommonResponse<List<KbArticleSuggestDto>>
+        return new CommonResponse<List<KbArticleSuggestDTO>>
         {
             IsSuccess = false,
             StatusCode = statusCode,

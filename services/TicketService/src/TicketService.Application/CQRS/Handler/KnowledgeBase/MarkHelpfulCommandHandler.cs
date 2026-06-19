@@ -2,11 +2,12 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
-public class MarkHelpfulCommandHandler : IRequestHandler<MarkHelpfulCommand, CommonResponse<object>>
+public class MarkHelpfulCommandHandler : IRequestHandler<MarkHelpfulCommand, CommonResponse<KbArticleActionDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -15,7 +16,7 @@ public class MarkHelpfulCommandHandler : IRequestHandler<MarkHelpfulCommand, Com
         _uow = uow;
     }
 
-    public async Task<CommonResponse<object>> Handle(MarkHelpfulCommand command, CancellationToken ct)
+    public async Task<CommonResponse<KbArticleActionDTO>> Handle(MarkHelpfulCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
@@ -27,12 +28,12 @@ public class MarkHelpfulCommandHandler : IRequestHandler<MarkHelpfulCommand, Com
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Cảm ơn bạn đã phản hồi." };
+        return new CommonResponse<KbArticleActionDTO> { IsSuccess = true, StatusCode = 200, Message = "Cảm ơn bạn đã phản hồi." };
     }
 
-    private static CommonResponse<object> Fail(int statusCode, string message)
+    private static CommonResponse<KbArticleActionDTO> Fail(int statusCode, string message)
     {
-        return new CommonResponse<object>
+        return new CommonResponse<KbArticleActionDTO>
         {
             IsSuccess = false,
             StatusCode = statusCode,

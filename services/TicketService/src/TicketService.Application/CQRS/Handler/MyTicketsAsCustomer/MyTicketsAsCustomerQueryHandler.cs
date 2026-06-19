@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedInfrastructure.Services;
 using TicketService.Application.CQRS.Query.Ticket;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 

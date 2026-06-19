@@ -20,7 +20,7 @@ public class AlertTicketSagaQueryService : IAlertTicketSagaQueryService
         _db = db;
     }
 
-    public async Task<AlertTicketSagaDto?> GetByAlertIdAsync(Guid alertId, CancellationToken cancellationToken)
+    public async Task<AlertTicketSagaDTO?> GetByAlertIdAsync(Guid alertId, CancellationToken cancellationToken)
     {
         var saga = await _db.AlertTicketSagaStates
             .AsNoTracking()
@@ -29,7 +29,7 @@ public class AlertTicketSagaQueryService : IAlertTicketSagaQueryService
         return saga is null ? null : Map(saga);
     }
 
-    public async Task<(IReadOnlyList<AlertTicketSagaDto> Items, int Total)> QueryAsync(
+    public async Task<(IReadOnlyList<AlertTicketSagaDTO> Items, int Total)> QueryAsync(
         string? state, Guid? alertId, Guid? batteryAssetId, Guid? customerId,
         DateTime? startedFrom, DateTime? startedTo, bool? isFailed,
         int pageNumber, int pageSize, bool isDescending,
@@ -97,7 +97,7 @@ public class AlertTicketSagaQueryService : IAlertTicketSagaQueryService
         return true;
     }
 
-    private static AlertTicketSagaDto Map(Sagas.AlertTicketSagaState s) => new()
+    private static AlertTicketSagaDTO Map(Sagas.AlertTicketSagaState s) => new()
     {
         CorrelationId = s.CorrelationId.ToString(),
         CurrentState = s.CurrentState,

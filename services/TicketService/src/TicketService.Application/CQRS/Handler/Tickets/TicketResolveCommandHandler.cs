@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
-using TicketService.Application.DTOs.Response.Ticket;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -89,7 +89,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
             IsSuccess = true,
             StatusCode = 200,
             Message = "Ticket resolved.",
-            Data = new TicketActionDto
+            Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),
                 Code = ticket.Code,

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
-using TicketService.Application.DTOs.Response.KnowledgeBase;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Api.Controllers;
@@ -40,7 +40,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <response code="201">Tạo thành công.</response>
     /// <response code="400">Dữ liệu không hợp lệ.</response>
     [HttpPost]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateKbArticleCommand command, CancellationToken ct)
     {
@@ -66,7 +66,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <response code="403">Không có quyền cập nhật.</response>
     /// <response code="404">Không tìm thấy bài viết.</response>
     [HttpPut("{id:guid}")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateKbArticleCommand command, CancellationToken ct)
@@ -86,7 +86,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lấy lịch sử thành công.</response>
     [HttpGet("{id:guid}/versions")]
-    [ProducesResponseType(typeof(CommonResponse<List<KbArticleVersionDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<KbArticleVersionDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct)
     {
         var query = new GetKbArticleVersionsQuery { ArticleId = id };
@@ -103,7 +103,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <response code="200">Lấy nội dung phiên bản thành công.</response>
     /// <response code="404">Không tìm thấy phiên bản.</response>
     [HttpGet("{id:guid}/versions/{versionId:guid}")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleVersionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleVersionDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetVersionById(Guid id, Guid versionId, CancellationToken ct)
     {
@@ -123,10 +123,10 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Trả về kết quả so sánh (Diff).</response>
     [HttpGet("{id:guid}/compare")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleDiffDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> CompareVersions(Guid id, [FromQuery] CompareKbArticleVersionsQuery query, CancellationToken ct)
+    [ProducesResponseType(typeof(CommonResponse<KbArticleDiffDTO>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CompareVersions(Guid id, CancellationToken ct)
     {
-        query.ArticleId = id;
+        var query = new CompareKbArticleVersionsQuery { ArticleId = id };
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -143,7 +143,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// <response code="200">Lấy template thành công.</response>
     /// <response code="400">Bài viết không phải là bản mẫu.</response>
     [HttpGet("{id:guid}/copy-template")]
-    [ProducesResponseType(typeof(CommonResponse<KbArticleTemplateDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleTemplateDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CopyTemplate(Guid id, CancellationToken ct)
     {

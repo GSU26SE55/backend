@@ -7,7 +7,7 @@ using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.TicketKbReferences;
 
-public class GetTicketKbReferencesQueryHandler : IRequestHandler<GetTicketKbReferencesQuery, CommonResponse<List<TicketKbReferenceDto>>>
+public class GetTicketKbReferencesQueryHandler : IRequestHandler<GetTicketKbReferencesQuery, CommonResponse<List<TicketKbReferenceDTO>>>
 {
     private readonly ITicketUnitOfWork _uow;
 
@@ -16,7 +16,7 @@ public class GetTicketKbReferencesQueryHandler : IRequestHandler<GetTicketKbRefe
         _uow = uow;
     }
 
-    public async Task<CommonResponse<List<TicketKbReferenceDto>>> Handle(GetTicketKbReferencesQuery query, CancellationToken ct)
+    public async Task<CommonResponse<List<TicketKbReferenceDTO>>> Handle(GetTicketKbReferencesQuery query, CancellationToken ct)
     {
         var references = await _uow.TicketKbReferences.GetAllAsync()
             .Where(r => r.TicketId == query.TicketId && !r.IsDeleted)
@@ -29,7 +29,7 @@ public class GetTicketKbReferencesQueryHandler : IRequestHandler<GetTicketKbRefe
             .Where(a => articleIds.Contains(a.Id) && !a.IsDeleted)
             .ToDictionaryAsync(a => a.Id, a => a.Title, ct);
 
-        var data = references.Select(r => new TicketKbReferenceDto
+        var data = references.Select(r => new TicketKbReferenceDTO
         {
             Id = r.Id.ToString(),
             TicketId = r.TicketId.ToString(),
@@ -42,7 +42,7 @@ public class GetTicketKbReferencesQueryHandler : IRequestHandler<GetTicketKbRefe
             CreatedAt = r.CreatedAt
         }).ToList();
 
-        return new CommonResponse<List<TicketKbReferenceDto>>
+        return new CommonResponse<List<TicketKbReferenceDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,

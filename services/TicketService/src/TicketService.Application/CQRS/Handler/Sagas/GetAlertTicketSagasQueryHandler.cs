@@ -37,7 +37,7 @@ public class GetAlertTicketSagasQueryHandler : IRequestHandler<GetAlertTicketSag
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AlertTicketSagaDto>
+            Data = new PaginationResponse<AlertTicketSagaDTO>
             {
                 Items = items.ToList(),
                 TotalItems = total,
