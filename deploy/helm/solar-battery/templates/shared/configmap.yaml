@@ -32,6 +32,10 @@ data:
   # Admin invite email link — EmailService append ?token=...
   AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
 
+  # #AUTH-51 — Frontend Web app base URL (cross-device 2FA confirm email link).
+  # AuthService dùng `Frontend:WebBaseUrl` để build URL "https://{domain}/2fa/cross-device-confirm?token=..."
+  Frontend__WebBaseUrl: "https://{{ .Values.global.domain }}"
+
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}
   {{ $key }}: {{ $value | quote }}

@@ -24,7 +24,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(auth_login_total{result=~\"success|success_2fa\"}[10m])) / sum(rate(auth_login_total[10m]))",
+          "expr": "sum(rate(auth_login_total{result=~\"success|success_2fa|success_trusted_device\"}[10m])) / sum(rate(auth_login_total[10m]))",
           "legendFormat": "Success rate",
           "refId": "A"
         }

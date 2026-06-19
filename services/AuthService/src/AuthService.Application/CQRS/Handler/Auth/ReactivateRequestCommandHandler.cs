@@ -15,7 +15,7 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 /// </summary>
 public class ReactivateRequestCommandHandler : IRequestHandler<ReactivateRequestCommand, CommonResponse<string>>
 {
-    private const int OtpLifetimeMinutes = 10;
+    private const int OtpLifetimeMinutes = 5;
     private static readonly TimeSpan ReactivationWindow = TimeSpan.FromDays(90);
 
     private readonly IAuthUnitOfWork _unitOfWork;

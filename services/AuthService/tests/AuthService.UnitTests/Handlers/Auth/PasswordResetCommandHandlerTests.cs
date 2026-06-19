@@ -46,7 +46,7 @@ public class ForgotPasswordCommandHandlerTests
         resp.IsSuccess.Should().BeTrue();
         account.OtpCode.Should().NotBeNull().And.HaveLength(6);
         account.OtpPurpose.Should().Be(OtpPurposeEnum.PasswordReset);
-        account.OtpExpiredAt.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(10), TimeSpan.FromSeconds(5));
+        account.OtpExpiredAt.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromSeconds(5));
         _producer.Verify(p => p.PublishAsync(It.Is<SendPasswordResetOtpEvent>(e => e.ToEmail == "user@example.com"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -89,7 +89,7 @@ public class VerifyResetOtpCommandHandlerTests
         FullName = "U",
         Status = AccountStatusEnum.Active,
         OtpCode = otp,
-        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(8),
+        OtpExpiredAt = expired ?? DateTime.UtcNow.AddMinutes(3),
         OtpPurpose = OtpPurposeEnum.PasswordReset
     };
 

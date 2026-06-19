@@ -19,6 +19,17 @@ public class Verify2FALoginCommand : IRequest<LoginResponse>, IValidatable<Login
     /// <summary>#AUTH-58: true ⇒ <see cref="Code"/> là SMS OTP 6 số (fallback path). Mutex với IsBackupCode.</summary>
     public bool IsSmsCode { get; set; } = false;
 
+    /// <summary>
+    /// #AUTH-48: true ⇒ user tick "Trust this device" → skip 2FA challenge từ device này trong 30 ngày tiếp theo.
+    /// CHỈ có hiệu lực với TOTP/SMS path; backup code path BUỘC bỏ qua (emergency code không trust device).
+    /// </summary>
+    public bool TrustDevice { get; set; } = false;
+
+    /// <summary>
+    /// #AUTH-48: User-friendly label cho trusted device (vd "MacBook nhà"). Optional — fallback auto-gen từ UA.
+    /// </summary>
+    public string? TrustDeviceLabel { get; set; }
+
     public Task<LoginResponse> ValidateAsync()
     {
         var response = new LoginResponse();

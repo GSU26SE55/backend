@@ -16,4 +16,6 @@ public interface IAuthUnitOfWork : IUnitOfWork
     IGenericRepository<StaffProfile> StaffProfiles { get; }
     IGenericRepository<StaffSkill> StaffSkills { get; }
     IGenericRepository<BackupCode> BackupCodes { get; }
+    IGenericRepository<TrustedDevice> TrustedDevices { get; }
+    IGenericRepository<AccountMergeLog> AccountMergeLogs { get; }
 }

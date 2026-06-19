@@ -129,6 +129,8 @@ public static class ManageDependencyInjection
         service.AddSingleton<ITwoFactorSecretProtector, TwoFactorSecretProtector>();
         service.AddSingleton<ITwoFactorChallengeStore, TwoFactorChallengeStore>();
         service.AddSingleton<ITwoFactorPendingStore, TwoFactorPendingStore>();
+        // #AUTH-51: cross-device 2FA confirm — Redis-backed token store, TTL 10 phút.
+        service.AddSingleton<ITwoFactorCrossDeviceConfirmStore, TwoFactorCrossDeviceConfirmStore>();
         service.AddSingleton<IBackupCodeGenerator, BackupCodeGenerator>();
         service.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
     }

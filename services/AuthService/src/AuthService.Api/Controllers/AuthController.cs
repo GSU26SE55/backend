@@ -109,6 +109,81 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// #AUTH-51: Request setup 2FA xuyên thiết bị — gửi confirm link qua email.
+    /// </summary>
+    /// <remarks>
+    /// Use case: user setup 2FA trên laptop (Device A) nhưng laptop không có camera scan QR.
+    /// Endpoint này sinh secret + confirm token (32 bytes hex), lưu Redis TTL 10p, publish email event.
+    ///
+    /// Response trả về <c>otpAuthUri</c> và <c>secret</c> để FE hiển thị QR/secret cho user scan trên Phone (Device B).
+    /// Sau khi Phone nhập TOTP, gọi <c>POST /api/auth/2fa/cross-device-confirm</c> với token từ email link + TOTP code.
+    /// Device A có thể poll trạng thái 2FA của account để biết khi nào confirm xong.
+    /// </remarks>
+    /// <response code="200">Token đã sinh + email queued.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="404">Không tìm thấy tài khoản.</response>
+    /// <response code="409">2FA đã được bật trước đó.</response>
+    [Authorize]
+    [HttpPost("2fa/cross-device-confirm/request")]
+    [ProducesResponseType(typeof(CommonResponse<RequestCrossDevice2FAConfirmResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<RequestCrossDevice2FAConfirmResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<RequestCrossDevice2FAConfirmResponseDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<RequestCrossDevice2FAConfirmResponseDto>), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RequestCrossDevice2FAConfirm(CancellationToken cancellationToken)
+    {
+        var accountId = GetCurrentUserId();
+        if (accountId == null)
+            return Unauthorized();
+
+        var sessionId = User.FindFirst("SessionId")?.Value
+                        ?? User.FindFirst(System.Security.Claims.ClaimTypes.Sid)?.Value
+                        ?? string.Empty;
+
+        var result = await _mediator.Send(new RequestCrossDevice2FAConfirmCommand
+        {
+            AccountId = accountId.Value,
+            RequestingSessionId = sessionId
+        }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// #AUTH-51: Device B confirm 2FA setup bằng token (từ email link) + TOTP code (vừa quét QR).
+    /// </summary>
+    /// <remarks>
+    /// Phải đang login bằng cùng account đã request. Verify TOTP với secret lưu Redis,
+    /// pass → enable 2FA. Token là single-use — sẽ bị xoá sau khi confirm thành công.
+    /// </remarks>
+    /// <response code="200">2FA đã được bật.</response>
+    /// <response code="400">Dữ liệu không hợp lệ.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Token không thuộc về account đang login.</response>
+    /// <response code="404">Token hết hạn hoặc không hợp lệ.</response>
+    /// <response code="409">2FA đã được bật bằng flow khác.</response>
+    /// <response code="422">TOTP code không đúng (có thể retry).</response>
+    [Authorize]
+    [HttpPost("2fa/cross-device-confirm")]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ConfirmCrossDevice2FA(
+        [FromBody] ConfirmCrossDevice2FACommand command, CancellationToken cancellationToken)
+    {
+        var accountId = GetCurrentUserId();
+        if (accountId == null)
+            return Unauthorized();
+        command.AccountId = accountId.Value;
+
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Đăng ký tài khoản mới cho người dùng tự tạo tài khoản.
     /// </summary>
     /// <remarks>

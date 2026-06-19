@@ -370,10 +370,12 @@ groups:
 
       # 15. Login success drop — anomaly detection: tỷ lệ login thành công sụt < 50% sustained 10 phút.
       # Có thể DB down, password hash service issue, hoặc 2FA service degraded.
+      # AUTH-48: success_trusted_device là login pass-through (skip 2FA challenge nhờ trust device match)
+      # → cũng count là success cho tỷ lệ tổng thể.
       - alert: AuthLoginSuccessRateLow
         expr: |
           (
-            sum(rate(auth_login_total{result=~"success|success_2fa"}[10m]))
+            sum(rate(auth_login_total{result=~"success|success_2fa|success_trusted_device"}[10m]))
             /
             sum(rate(auth_login_total[10m]))
           ) < 0.5 and sum(rate(auth_login_total[10m])) > (5/60)
@@ -384,3 +386,21 @@ groups:
         annotations:
           summary: "Login success rate < 50% ({{ $value | humanizePercentage }})"
           description: "Phần lớn login attempts đang fail. Check: DB connection, password verify performance (BCrypt cost), 2FA challenge store (Redis), suspicious mass-login pattern."
+
+      # 16. AUTH-48: Trusted device usage spike — sudden surge có thể indicate compromised trust device list.
+      # Baseline: trusted device login ~ 10-30% sau adoption stable. > 80% spike trong 10m sustained
+      # = bất thường: hoặc 2FA service degraded (user fall back to trusted device flow), hoặc trust list bị abuse.
+      - alert: AuthTrustedDeviceUsageSpike
+        expr: |
+          (
+            sum(rate(auth_login_total{result="success_trusted_device"}[10m]))
+            /
+            sum(rate(auth_login_total{result=~"success|success_2fa|success_trusted_device"}[10m]))
+          ) > 0.8 and sum(rate(auth_login_total{result="success_trusted_device"}[10m])) > (5/60)
+        for: 10m
+        labels:
+          severity: warning
+          domain: auth
+        annotations:
+          summary: "Trusted device login share > 80% ({{ $value | humanizePercentage }})"
+          description: "Tỷ lệ login qua trusted device cao bất thường. Check: 2FA service health (degraded → user pass-through via trust device), trust list integrity (compromised → mass abuse), hoặc UI changes (recently enabled trust opt-in)."

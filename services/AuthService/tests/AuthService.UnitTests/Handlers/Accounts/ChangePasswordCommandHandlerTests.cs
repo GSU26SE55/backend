@@ -7,6 +7,7 @@ using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace AuthService.UnitTests.Handlers.Accounts;
 
@@ -19,6 +20,7 @@ public class ChangePasswordCommandHandlerTests
     private readonly Mock<IPasswordHasher> _hasher = new();
     private readonly Mock<IPublisher> _publisher = new();
     private readonly Mock<ITokenRevocationStore> _revocationStore = new();
+    private readonly Mock<IMediator> _mediator = new();
 
     private static Account NewAccount(string passwordHash = "OLD-HASH")
         => new()
@@ -31,7 +33,7 @@ public class ChangePasswordCommandHandlerTests
         };
 
     private ChangePasswordCommandHandler Build(Mock<AuthService.Application.Interfaces.Repositories.IAuthUnitOfWork> uow)
-        => new(uow.Object, _hasher.Object, _publisher.Object, _revocationStore.Object);
+        => new(uow.Object, _hasher.Object, _publisher.Object, _revocationStore.Object, _mediator.Object);
 
     // ============== #AUTH-90: Old password verify ==============
 
@@ -218,5 +220,82 @@ public class ChangePasswordCommandHandlerTests
                 && n.IsSuccess
                 && n.TargetAccountId == account.Id),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ============== #AUTH-34: Concurrency retry ==============
+
+    [Fact]
+    public async Task ChangePassword_ConcurrencyConflict_RetriesAndSucceeds_AuditPublishedOnce()
+    {
+        var account = NewAccount();
+        _hasher.Setup(h => h.Verify("old-pw", "OLD-HASH")).Returns(true);
+        _hasher.Setup(h => h.Hash("NewStrong1!")).Returns("NEW-HASH");
+
+        var (uow, accountsRepo, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+
+        // 1st SaveChanges → throw; 2nd → succeed.
+        var saveCallCount = 0;
+        uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+           .Returns<CancellationToken>(_ =>
+           {
+               saveCallCount++;
+               return saveCallCount == 1
+                   ? throw new DbUpdateConcurrencyException("xmin mismatch")
+                   : Task.FromResult(1);
+           });
+
+        // Reload no-op (entity giữ nguyên state, business field PasswordHash do handler re-apply).
+        accountsRepo.Setup(r => r.ReloadAsync(It.IsAny<Account>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+
+        var resp = await Build(uow).Handle(new ChangePasswordCommand
+        {
+            AccountId = account.Id,
+            CurrentPassword = "old-pw",
+            NewPassword = "NewStrong1!",
+            ConfirmPassword = "NewStrong1!"
+        }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeTrue();
+        resp.StatusCode.Should().Be(200);
+        account.PasswordHash.Should().Be("NEW-HASH");
+
+        saveCallCount.Should().Be(2, "1 lần fail + 1 lần retry thành công");
+        accountsRepo.Verify(r => r.ReloadAsync(It.IsAny<Account>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        // Audit chỉ publish 1 lần dù retry — tránh double audit row.
+        _publisher.Verify(p => p.Publish(
+            It.Is<AuditTrailNotification>(n => n.Action == AuditActionEnum.PasswordChanged && n.IsSuccess),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ChangePassword_AccountInvalidAfterReload_Returns409()
+    {
+        var account = NewAccount();
+        _hasher.Setup(h => h.Verify("old-pw", "OLD-HASH")).Returns(true);
+        _hasher.Setup(h => h.Hash("NewStrong1!")).Returns("NEW-HASH");
+
+        var (uow, accountsRepo, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+
+        uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+           .ThrowsAsync(new DbUpdateConcurrencyException("xmin mismatch"));
+
+        // Reload mutate account → Inactive (admin disable cùng lúc).
+        accountsRepo.Setup(r => r.ReloadAsync(It.IsAny<Account>(), It.IsAny<CancellationToken>()))
+                    .Callback<Account, CancellationToken>((a, _) => a.Status = AccountStatusEnum.Inactive)
+                    .Returns(Task.CompletedTask);
+
+        var resp = await Build(uow).Handle(new ChangePasswordCommand
+        {
+            AccountId = account.Id,
+            CurrentPassword = "old-pw",
+            NewPassword = "NewStrong1!",
+            ConfirmPassword = "NewStrong1!"
+        }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(409);
+        resp.Message.Should().Contain("thay đổi bởi tiến trình khác");
     }
 }
