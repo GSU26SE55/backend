@@ -4,18 +4,22 @@
 > Content-Type mặc định: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>` — xem phần [Cấu trúc Response chung](#cấu-trúc-response-chung)
 
-NotificationService quản lý notification gửi tới user theo nhiều kênh (Push/Email/SMS/InApp). Flow production chính tạo notification qua **RabbitMQ Consumer** trong `NotificationService.Application/Consumers/`. Tại thời điểm hiện tại có 3 consumer đã wire-up:
+NotificationService quản lý notification gửi tới user theo nhiều kênh (Push/Email/SMS/InApp). Flow production chính tạo notification qua **RabbitMQ Consumer** trong `NotificationService.Application/Consumers/`. Tại thời điểm hiện tại có các consumer đã wire-up:
 
 - `AlertTicketSagaFailedConsumer` ← `AlertTicketSagaFailedEvent` (Sprint 5B #238)
 - `BatteryAlertEscalationRequestedConsumer` ← `BatteryAlertEscalationRequestedEvent` (Sprint 5B #238)
 - `IotDeviceWentOfflineConsumer` ← `IotDeviceWentOfflineEvent` (Sprint IoT-1 #249)
+- `EnvironmentalIncidentDetectedConsumer` ← `EnvironmentalIncidentDetectedEvent` (Sprint IoT-2 #IoT2-31) — Push + Email + SMS, `BypassQuietHours = true`
+- `EnvironmentalIncidentResolvedConsumer` ← `EnvironmentalIncidentResolvedEvent` (Sprint IoT-2 #IoT2-31) — chỉ InApp (clear banner)
+
+> Lưu ý: `EnvironmentalIncidentDetectedConsumer` và `EnvironmentalIncidentResolvedConsumer` được khai báo trong cùng file `EnvironmentalIncidentDetectedConsumer.cs`.
 
 Các loại notification khác trong `NotificationTypeEnum` (TicketCreated, SlaWarning, BatteryAnomalyDetected, …) hiện được tạo qua REST API `POST /api/notifications` (admin/internal tooling) hoặc sẽ mở rộng consumer sau.
 
-REST API hiện tại phơi 2 endpoint phục vụ:
+REST API hiện tại phơi 2 nhóm endpoint:
 
-- Người dùng cuối: xem danh sách notification của chính mình.
-- Admin / công cụ test: tạo notification thủ công (backfill, smoke test).
+- **`/api/notifications`** — Người dùng cuối xem danh sách notification của chính mình; Admin / công cụ test tạo notification thủ công (backfill, smoke test).
+- **`/api/device-tokens`** — Người dùng cuối đăng ký / hủy / liệt kê push token thiết bị (Expo/FCM) cho Mobile/Web.
 
 ---
 
@@ -125,7 +129,7 @@ Tần suất gửi notification — đặt ở `NotificationPreference` per-user
 
 ### `DevicePlatformEnum`
 
-Platform của device token (dùng cho push notification — domain reference).
+Platform của device token — dùng trong request/response của các endpoint `/api/device-tokens` (xem [Endpoints — Device Tokens](#endpoints--device-tokens)).
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
@@ -254,6 +258,7 @@ Sau khi tạo, notification ở trạng thái `Pending` (`Status = 1`); Dispatch
 | `payloadJson` | `string?` | Tùy chọn | — | JSON metadata bổ sung (FE deep-link) |
 | `entityType` | `string?` | Tùy chọn | Tối đa **100 ký tự** nếu có | Loại entity liên quan (`Ticket`, `Battery`,…) |
 | `entityId` | `Guid?` | Tùy chọn | — | ID entity liên quan |
+| `bypassQuietHours` | `bool` | Tùy chọn | — | Sprint IoT-2 #IoT2-31 — bypass quiet hours khi gửi (chỉ dùng cho Critical channel, vd Environmental Incident). Khi `true`, handler merge key `bypassQuietHours: true` vào `payloadJson`; Dispatcher (Sprint 6+) đọc flag này để SKIP `NotificationPreference.QuietHoursStart/End`. Mặc định `false`. |
 
 **Ví dụ:**
 
@@ -295,6 +300,7 @@ Content-Type: application/json
 - Handler không validate `userId` có thực sự tồn tại trong UserService — caller chịu trách nhiệm. Notification với `userId` không tồn tại vẫn được tạo nhưng sẽ không ai nhận được (FE filter theo user khi GET).
 - `title` và `body` được `.Trim()` trước khi lưu; `entityType` cũng được `.Trim()` nếu có giá trị.
 - Endpoint **không** kiểm tra preference của user (Frequency / channel opt-out) — vì đây là endpoint admin/test bypass logic Dispatcher.
+- Khi `bypassQuietHours = true`: handler **merge** key `bypassQuietHours: true` vào `payloadJson`. Nếu `payloadJson` là JSON object hợp lệ → thêm key vào object đó; nếu rỗng → tạo `{"bypassQuietHours":true}`; nếu không parse được thành object → wrap thành `{"bypassQuietHours":true,"original":"<payload cũ>"}`. Flag **không** được lưu thành cột riêng — chỉ tồn tại trong `payloadJson`.
 
 **Lỗi thường gặp:**
 - `400` — Validation fail. Body theo `CommonResponse<T>` với `listErrors`. Các trường hợp:
@@ -322,11 +328,130 @@ Content-Type: application/json
 
 ---
 
+## Endpoints — Device Tokens
+
+Base route: `/api/device-tokens`
+
+Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn lấy từ JWT claim, user chỉ thao tác trên token của chính mình (không nhận `userId` từ body).
+
+---
+
+### `POST /api/device-tokens`
+
+**Mục đích:** Đăng ký push token của thiết bị hiện tại cho user đang đăng nhập.
+
+**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Push token (Expo/FCM) |
+| `platform` | `DevicePlatformEnum` (int) | Bắt buộc | Phải hợp lệ (1=Ios, 2=Android, 3=Web) | Platform thiết bị |
+| `deviceInfo` | `string?` | Tùy chọn | Tối đa **500 ký tự** nếu có | Mô tả thiết bị (model, OS,…) để user nhận diện |
+
+> `userId` **không** nhận từ body — server set từ JWT claim.
+
+**Hành vi (theo token string — unique global ở DB):**
+- Token mới → tạo record, trả **`201`** `"Đăng ký thiết bị thành công."`
+- Token đã đăng ký và **đang active cho chính user hiện tại** → **`409`** `"Thiết bị đã được đăng ký."` (`data` = Id record đang tồn tại)
+- Token đã từng hủy (inactive) **hoặc** thuộc user khác trên cùng thiết bị → reactivate + gán lại cho user hiện tại, trả **`200`** `"Đăng ký lại thiết bị thành công."` (flow re-login / đổi tài khoản)
+
+**Response (`201` / `200` / `409`):** `CommonResponse<Guid>` — `data` = Id của device token.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "message": "Đăng ký thiết bị thành công.",
+  "data": "3c2b1a09-8d7e-6f5a-4b3c-2d1e0f9a8b7c",
+  "listErrors": []
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — Validation fail (`Token` rỗng/`> 500 ký tự` → `"Token không được trống."` / `"Token tối đa 500 ký tự."`; `Platform` không hợp lệ → `"Platform không hợp lệ."`; `DeviceInfo > 500 ký tự` → `"DeviceInfo tối đa 500 ký tự."`) **hoặc** thiếu claim `UserId` → `"Không xác định được user."`
+- `401` — Chưa đăng nhập / token hết hạn.
+- `409` — Thiết bị đã được đăng ký và đang active.
+
+---
+
+### `DELETE /api/device-tokens`
+
+**Mục đích:** Hủy đăng ký push token của thiết bị (logout). Định danh theo `token` string; chỉ hủy được token đang active thuộc về chính mình (set `IsActive = false`, **giữ record** để re-login dễ).
+
+**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Push token cần hủy |
+
+**Response `200`:** `CommonResponse<Guid>` — `data` = Id của device token vừa hủy.
+
+**Lỗi thường gặp:**
+- `400` — Validation lỗi hoặc thiếu claim `UserId`.
+- `401` — Chưa đăng nhập / token hết hạn.
+- `404` — Không tìm thấy token đang đăng ký (active) của user hiện tại.
+
+---
+
+### `GET /api/device-tokens`
+
+**Mục đích:** Liệt kê các thiết bị đã đăng ký của user hiện tại. **Không trả raw token string** — chỉ metadata để user nhận diện thiết bị. Sắp xếp theo lần dùng gần nhất.
+
+**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+
+**Response `200`:** `CommonResponse<DeviceTokenDto[]>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": [
+    {
+      "id": "3c2b1a09-8d7e-6f5a-4b3c-2d1e0f9a8b7c",
+      "platform": 2,
+      "deviceInfo": "Pixel 8 — Android 15",
+      "isActive": true,
+      "lastUsedAt": "2026-06-13T05:34:10Z",
+      "createdAt": "2026-06-01T08:00:00Z"
+    }
+  ],
+  "listErrors": []
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data[].id` | `Guid` | Không | ID của device token record |
+| `data[].platform` | `DevicePlatformEnum` (int) | Không | Platform (1=Ios, 2=Android, 3=Web) |
+| `data[].deviceInfo` | `string?` | Có | Mô tả thiết bị |
+| `data[].isActive` | `bool` | Không | `true` nếu token còn active |
+| `data[].lastUsedAt` | `DateTime?` | Có | Lần dùng gần nhất |
+| `data[].createdAt` | `DateTime` | Không | Thời điểm đăng ký lần đầu |
+
+**Lỗi thường gặp:**
+- `400` — Thiếu claim `UserId` → `"Không xác định được user."`
+- `401` — Chưa đăng nhập / token hết hạn.
+
+---
+
 ## Tham khảo
 
+**Notifications:**
 - Controller: `services/NotificationService/src/NotificationService.Api/Controllers/NotificationsController.cs`
 - Query handler: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Notification/GetNotificationsQueryHandler.cs`
 - Command handler: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Notification/CreateNotificationCommandHandler.cs`
 - DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/Notification/NotificationDto.cs`
+
+**Device Tokens:**
+- Controller: `services/NotificationService/src/NotificationService.Api/Controllers/DeviceTokensController.cs`
+- Handlers: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/DeviceToken/`
+- DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/DeviceToken/DeviceTokenDto.cs`
+- Entity: `services/NotificationService/src/NotificationService.Domain/Entities/DeviceToken.cs`
+
+**Chung:**
 - Domain enums: `services/NotificationService/src/NotificationService.Domain/Enums/`
-- Flow event-driven (RabbitMQ Consumer) — xem `overall.md §3.3` và các consumer trong `NotificationService.Application/Consumers/`.
+- Flow event-driven (RabbitMQ Consumer) — xem `overall.md §3.3` và các consumer trong `NotificationService.Application/Consumers/` (`AlertTicketSagaFailedConsumer`, `BatteryAlertEscalationRequestedConsumer`, `IotDeviceWentOfflineConsumer`, `EnvironmentalIncidentDetectedConsumer`, `EnvironmentalIncidentResolvedConsumer`).
