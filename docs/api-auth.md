@@ -3128,13 +3128,13 @@ Base route: `/api/admin/accounts`
 
 **Auth:** Admin hoặc Manager
 
-**Response thành công `200`:** `isSuccess = true`, message *"Mở khóa tài khoản thành công."* Backend reset `FailedLoginAttempts = 0`, `LockoutEndAt = null`, account chuyển từ `Locked → Active`.
+**Response thành công `200`:** `isSuccess = true`, message *"Đã unlock tài khoản."*, `data = accountId`. Backend reset `FailedLoginAttempts = 0`, `LockoutEndAt = null`, account chuyển từ `Locked → Active`. Audit `AccountUnlocked` với metadata `wasLocked`, `previousFailedAttempts`.
 
-**Idempotent (verified với code — sửa từ docs cũ):**
+**Idempotent (verified với code `UnlockAccountCommandHandler.cs:44-50`):**
 
-Nếu account không ở `Status = Locked` (vd đã `Active`, `Suspended`, `Inactive`) → trả 200 với `isSuccess = TRUE`, message *"Tài khoản không ở trạng thái Locked, không cần unlock."* — **KHÔNG phải `isSuccess=false`** như docs cũ ghi. FE/QA test:
-- `if (response.isSuccess && response.message.includes("không cần unlock"))` → idempotent no-op
-- `if (response.isSuccess && !response.message.includes("không cần unlock"))` → actual unlock happened
+Nếu account không ở `Status = Locked` (vd đã `Active`, `Suspended`, `Inactive`) → trả **`200` với `isSuccess = FALSE`**, message *"Tài khoản không ở trạng thái Locked, không cần unlock."* (HTTP status vẫn 200, nhưng `isSuccess=false` báo no-op). Khi unlock thực sự xảy ra → `isSuccess = true`, message *"Đã unlock tài khoản."*, `data = accountId`. FE/QA test:
+- `if (!response.isSuccess && response.statusCode === 200)` → idempotent no-op (account không Locked)
+- `if (response.isSuccess && response.data)` → actual unlock happened, `data = accountId`
 
 **Lỗi thường gặp:**
 - `400` — `id` không phải Guid hợp lệ

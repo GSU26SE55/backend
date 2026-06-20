@@ -61,22 +61,27 @@ Block dưới gộp chung cho dễ đọc; khi copy hãy tách enum ra file `enu
 
 ```typescript
 // Giữ enum value đồng bộ với backend — không tự ý đổi số.
-export enum FilePurposeEnum {
-  Other = 0,           // exception: 0 là default C# khi form không truyền purpose
-  Avatar = 1,
-  TicketAttachment = 2,
-  MaintenancePhoto = 3,
-  KbImage = 4,
-  Firmware = 5,
-}
+// Rule FE: KHÔNG dùng TypeScript `enum` — dùng `as const` object + type alias.
+export const FilePurposeEnum = {
+  Other: 0,            // exception: 0 là default C# khi form không truyền purpose
+  Avatar: 1,
+  TicketAttachment: 2,
+  MaintenancePhoto: 3,
+  KbImage: 4,
+  Firmware: 5,
+} as const;
+export type FilePurposeEnum =
+  (typeof FilePurposeEnum)[keyof typeof FilePurposeEnum];
 
-export enum FileStatusEnum {
-  Uploaded = 0,
-  Processing = 1,
-  Ready = 2,
-  Quarantined = 3,
-  Deleted = 4,
-}
+export const FileStatusEnum = {
+  Uploaded: 0,
+  Processing: 1,
+  Ready: 2,
+  Quarantined: 3,
+  Deleted: 4,
+} as const;
+export type FileStatusEnum =
+  (typeof FileStatusEnum)[keyof typeof FileStatusEnum];
 
 export interface FileUploadResponse {
   fileId: string;          // UUID — lưu vào domain service để tham chiếu
@@ -616,6 +621,10 @@ Nếu bước FileStorage delete thất bại sau khi domain reference đã clea
 ---
 
 ## Changelog
+
+### 2026-06-20 — Sync TypeScript Types block với doc FE
+
+- **Block TypeScript Types dùng `enum`** — sửa sang `as const` object + type alias để khớp rule FE ("KHÔNG dùng TypeScript `enum`") và đồng bộ với `frontend/docs/api-filestorage.md`. Giá trị enum không đổi (`FilePurposeEnum` 0–5, `FileStatusEnum` 0–4) — chỉ đổi cách khai báo. Lời dẫn ở section TypeScript Types đã yêu cầu dùng `as const`, nay code khớp với lời dẫn.
 
 ### 2026-06-15 — Verify lần 2 vs source code
 
