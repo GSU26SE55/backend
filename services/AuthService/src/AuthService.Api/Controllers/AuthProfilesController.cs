@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Query.Account;
+using AuthService.Application.CQRS.Query.Permission;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.DTOs.Response.Permission;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -66,6 +68,50 @@ public class AuthProfilesController : ControllerBase
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetMyProfileQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy toàn bộ permission của role mà tài khoản đang đăng nhập được gán.
+    /// </summary>
+    /// <remarks>
+    /// Endpoint dùng để FE build feature-gate / permission-check sau khi login mà không cần decode JWT.
+    /// Mọi role đã đăng nhập đều có thể gọi — chỉ cần JWT hợp lệ. Không phân quyền riêng cho Admin.
+    ///
+    /// Cách hoạt động:
+    /// - Controller lấy AccountId từ claim <c>NameIdentifier</c> trong JWT (KHÔNG nhận từ client).
+    /// - Handler resolve qua DB: Account.RoleId → Role (Active, chưa xóa) → RolePermission → Permission.
+    /// - Resolve theo DB thay vì đọc <c>perm[]</c> trong JWT để luôn trả về snapshot mới nhất —
+    ///   phản ánh ngay thay đổi role/permission mà không cần đợi refresh token.
+    ///
+    /// Response shape <see cref="MyPermissionsDto"/>:
+    /// <list type="bullet">
+    ///   <item><description><c>RoleId</c>: Guid role hiện tại.</description></item>
+    ///   <item><description><c>RoleName</c>: tên role ("Admin" / "Manager" / "Staff" / "Customer").</description></item>
+    ///   <item><description><c>Permissions</c>: flat list <see cref="PermissionDto"/> sort theo <c>Module</c> rồi <c>Code</c>.</description></item>
+    /// </list>
+    ///
+    /// Trường hợp đặc biệt:
+    /// - Account đã xóa nhưng JWT chưa hết hạn → 401.
+    /// - Account chưa được gán role hoặc role đã xóa → 403.
+    /// - Role tồn tại nhưng <c>Status != Active</c> (Inactive/Deprecated) → 200, <c>Permissions = []</c> + message giải thích.
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
+    /// <returns><see cref="MyPermissionsResponse"/> chứa role + danh sách permission.</returns>
+    /// <response code="200">Lấy danh sách permission thành công (kể cả khi list rỗng do role không active).</response>
+    /// <response code="401">Chưa đăng nhập, access token không hợp lệ/hết hạn, hoặc account đã bị xóa.</response>
+    /// <response code="403">Account chưa được gán role.</response>
+    [HttpGet("me/permissions")]
+    [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMyPermissions(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized(UnauthMyPermissionsResponse());
+
+        var result = await _mediator.Send(new GetMyPermissionsQuery { AccountId = userId.Value }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -174,6 +220,13 @@ public class AuthProfilesController : ControllerBase
     }
 
     private static AccountResponse UnauthAccountResponse() => new()
+    {
+        IsSuccess = false,
+        StatusCode = 401,
+        Message = "Chưa đăng nhập."
+    };
+
+    private static MyPermissionsResponse UnauthMyPermissionsResponse() => new()
     {
         IsSuccess = false,
         StatusCode = 401,
