@@ -4,7 +4,7 @@
 > **Scope:** Toàn bộ backend còn lại để cover Core Business Flow (4 role · 6 phase · ticket state machine · SLA escalation · BR-01..BR-08 + 4 entity bổ sung) + Sprint 5B Alert–Ticket Saga execution + post-Sprint 8 defense prep.
 > **Source of truth:** `core-business-flow.html` + `.claude/CLAUDE.md` + `.claude/rules/*` + `.claude/memory.md`.
 > **Audience:** Leader + 3 BE Dev (Duy, Thắng, Thái) + 2 FE Dev (Trí, Minh) + GVHD (post-Sprint 8 dry-run review).
-> **Cập nhật:** 2026-06-10 (v4.5) · Sprint 5B Saga + capacity planning + ops template + defense prep + wire value reconcile (xem §67 version log).
+> **Cập nhật:** 2026-06-20 (v5.0) · Sprint Comment (TicketService Comment Hub — 74 task `#COMMENT-01..74` / `#501..#574`, 9 phase ~65 dev-day, 11 bảng mới, ~40 endpoint, 1 SignalR Hub) + Phần XI §70 overview + deprecate §36 phần Comment redirect tới `ticket-comment-hub.md` (xem §67 version log).
 
 ---
 
@@ -91,6 +91,8 @@
 - [Phần X — AuthService Security Audit](#phần-x--authservice-security-audit)
   - [69. AuthService Security Audit (88 issues)](#69-authservice-security-audit-88-issues--p0p3) — xem **Sprint additional-auth** ở §17 (90 task `#AUTH-01..90` / `#349..#438`)
   - [69.11. Sprint audit — kiến trúc AuditLog Hybrid](#6911-sprint-audit--kiến-trúc-auditlog-hybrid-phụ-lục-ab-issue-authservicemd) — Phụ lục A+B `issue-authservice.md` triển khai qua **Sprint audit** ở §17 (45 task `#AUDIT-01..45` / `#447..#491`)
+- [Phần XI — TicketService Comment Hub](#phần-xi--ticketservice-comment-hub)
+  - [70. TicketService Comment Hub (136 feature, 25 nhóm)](#70-ticketservice-comment-hub-136-feature-25-nhóm--p0p2) — chi tiết kiến trúc ở `ticket-comment-hub.md` triển khai qua **Sprint Comment** ở §17 (74 task `#COMMENT-01..74` / `#501..#574`)
 
 ---
 
@@ -4628,7 +4630,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -5417,6 +5419,258 @@ P1 sprint kế tiếp (nếu split): `#AUDIT-20..28` (Phase 3+4 BatteryService +
 P2 có thể defer sang Sprint audit-B: `#AUDIT-33` (EmailService), `#AUDIT-34` (NotificationService), `#AUDIT-35` (Sms/AI/Gateway — volume thấp), Phase 6 FE (`#AUDIT-36..40` — UI nâng cao, BE đủ qua Swagger).
 
 KHÔNG được skip Phase 0 + Phase 1 + Phase 2 — đây là nền tảng infrastructure, skip = phải làm lại từ đầu.
+
+---
+
+### Sprint Comment (TicketService Comment Hub — chưa chốt timeline)
+
+**Goal:** Mở rộng toàn diện module Comment trong `TicketService` từ **2 endpoint hiện có** (POST add + GET list) lên **~40 endpoint + 1 SignalR Hub** với **136 feature** chia thành **25 nhóm chức năng**. Sprint này là **nền móng** cho mọi tương tác trong vòng đời ticket: kênh trao đổi Customer ↔ Staff/Manager + ghi chú nội bộ + audit trail SLA + tích hợp AI + Knowledge Base + realtime collaboration.
+
+**Tham chiếu kỹ thuật (BẮT BUỘC đọc trước khi start):** Toàn bộ chi tiết feature + database schema DDL + endpoint matrix + integration events + source code structure đầy đủ ở **`ticket-comment-hub.md`** repo root:
+- **Phần I** (Hiện trạng) — 10 tính năng đã có + 12 gap phải fill
+- **Phần II** (Kế hoạch mở rộng 25 nhóm × 136 feature) — mỗi nhóm có source structure + rule chi tiết
+- **Phần III** (Tổng kết quy mô) — 11 bảng mới, 4 bảng sửa, 10 enum mới, ~40 endpoint, ~35 handler
+- **Phần IV** (Database schema DDL) — SQL CREATE/ALTER cho từng bảng
+- **Phần V** (Endpoint matrix) — ~40 REST endpoint chia 6 nhóm + 1 SignalR Hub (6 events)
+- **Phần VI** (Integration events matrix) — 9 event + consumer
+- **Phần VII** (Source code structure) — full tree Api/Application/Domain/Infrastructure/Tests
+- **Phần VIII** (Roadmap dependency) — 15 bước critical path
+- **Phần IX** (Configuration & feature flags)
+- **Phần X** (Testing matrix) — unit/integration/perf/security
+
+Cross-ref: thay thế & supersede §36 (Comment / MaintenanceLog advanced — P1) cũ trong overall.md — `ticket-comment-hub.md` là **source of truth**.
+
+**Owner:** Chưa assign — Leader chốt khi `/kltn-sprint` chạy. Khuyến nghị: 2 BE senior (1 senior CQRS/EF + 1 senior MassTransit/SignalR/Redis) + 0.5 FE (Phase 5+ FE integration SignalR + UI comment timeline) + 0.5 AI dev (Phase 8 AI suggest endpoint).
+
+**Timeline ước tính:** **~65 dev-day** (≈ 13-14 sprint với 1 BE + 0.5 FE, hoặc ≈ 7 sprint với 2 BE full-time). Tổng **74 task** `#COMMENT-01..74` chia thành **9 phase**.
+
+**Dependency:**
+- Sprint audit Phase 4 đã merge (`#AUDIT-24..28` — TicketAuditLog tách khỏi TicketActivity, đã có `causation_id` chain) — Sprint Comment publish event sẽ propagate đúng correlation.
+- Sprint additional-auth Phase A đã merge (`#AUTH-29` AuditLog trigger soft mode, `#AUTH-77` CorrelationIdMiddleware) — comment audit trail cần CorrelationId từ JWT.
+- Sprint 5B đã merge — Outbox pattern + Saga foundation ready, Sprint Comment reuse cho `CommentCreatedEvent`/`CommentMentionedEvent` publish.
+- RabbitMQ + Redis staging ready cho SignalR backplane multi-instance + comment cache.
+- AI Module (FastAPI + PyTorch) endpoint `/ai/comment-suggest` ready (Phase 8 dependency — có thể defer nếu chưa ready).
+- ADR `docs/adr/0008-ticket-comment-hub.md` viết + sign-off 3 thành viên team trước khi code (Phase 0 gate).
+- Quyết định **virus scan provider** — ClamAV self-hosted vs VirusTotal API (Leader chốt).
+- Quyết định **translation provider** — Google Translate API key budget vs DeepL vs self-host (Leader chốt).
+- Quyết định **Whisper provider** — OpenAI Whisper API vs Google STT (cho voice-to-text — Phase 9, có thể defer).
+- Quyết định **Markdown library** — Markdig confirmed + Ganss.Xss confirmed cho sanitize.
+
+**Owner mapping (per phase, tham chiếu `ticket-comment-hub.md` Phần VIII roadmap):**
+
+| Phase | Subject | Tasks | Ước tính |
+|-------|---------|-------|----------|
+| Phase 0 | Chuẩn bị + ADR + SharedContracts event + RabbitMQ topology + Roslyn analyzer | `#COMMENT-01..04` | 3 ngày |
+| Phase 1 | CRUD + history + attachment refactor (Nhóm 1, 2, 3) | `#COMMENT-05..14` | 8 ngày |
+| Phase 2 | Authorization + Validation + Security (Nhóm 17, 18) | `#COMMENT-15..20` | 5 ngày |
+| Phase 3 | Participant Management ⭐ cốt lõi (Nhóm 25) | `#COMMENT-21..28` | 6 ngày |
+| Phase 4 | Content — Markdown + Reply + Pin (Nhóm 8, 4, 13) | `#COMMENT-29..34` | 5 ngày |
+| Phase 5 | Engagement — Mention + Reaction + Read + Notification (Nhóm 5, 6, 7, 16, 20) | `#COMMENT-35..44` | 8 ngày |
+| Phase 6 | Templates + Search + Performance (Nhóm 10, 12, 19) | `#COMMENT-45..52` | 6 ngày |
+| Phase 7 | Realtime SignalR (Nhóm 9) | `#COMMENT-53..57` | 5 ngày |
+| Phase 8 | Advanced — AI + Translation + SLA + KB + Metrics + Saga (Nhóm 11, 14, 15, 21, 22) | `#COMMENT-58..66` | 8 ngày |
+| Phase 9 | Polish — Mobile + Export + Compliance + Doc + Test + Ops (Nhóm 23, 24) | `#COMMENT-67..74` | 6 ngày |
+
+**Tasks:**
+
+#### Phase 0 — Chuẩn bị + ADR + SharedContracts + RabbitMQ topology (3 ngày)
+
+- [ ] **#COMMENT-01** — Viết ADR `docs/adr/0008-ticket-comment-hub.md` chứa: kiến trúc Comment Hub (25 nhóm × 136 feature), lý do supersede §36 cũ, lý do tách Participant Management ra entity riêng (vs ngầm định qua role), Option visibility 2 layer (public Customer ↔ Staff vs internal Staff/Manager), schema chuẩn 11 bảng + 4 bảng sửa, migration zero-downtime strategy, retention policy (comment vĩnh viễn, edit history vĩnh viễn cho audit), SignalR vs WebSocket trade-off, AI assist privacy considerations (PII mask trước khi gọi AI module). Sign-off 3 thành viên. **Mức: P0 — gate trước khi code Phase 1**. — #501
+- [ ] **#COMMENT-02** — Tạo `SharedContracts/Events/Ticket/` 9 integration event mới (record type): `CommentCreatedEvent`, `CommentEditedEvent`, `CommentDeletedEvent`, `CommentMentionedEvent`, `CommentReactedEvent`, `ParticipantAddedEvent`, `ParticipantRemovedEvent`, `ParticipantRoleChangedEvent`, `CommentEscalationReviewRequestedEvent` (saga trigger). Mỗi event chứa: `EventId (Guid v7), CommentId, TicketId, ActorUserId, ActorRole, CorrelationId, CausationId, OccurredAt`. XML doc đầy đủ. **Mức: P1**. — #502
+- [ ] **#COMMENT-03** — Setup RabbitMQ topology cho comment pipeline: exchange `comment.events` (topic), queue `notification.comment.events` (durable, x-max-length=500k, x-message-ttl=3d), DLQ `notification.comment.events.dlq`. Routing key pattern `comment.{ticketId}.{eventType}`. Document `docs/comment/rabbitmq-topology.md`. **Mức: P1**. — #503
+- [ ] **#COMMENT-04** — Roslyn analyzer + CI ban: ban hardcode `"@username"` regex trong handler (must use `IMentionParser`), ban inline HTML render (must use `IMarkdownRenderer`), ban direct `_dbContext.TicketComments` access trong handler (must use `_uow.TicketComments`). Analyzer chạy stage `ci-rules`. **Mức: P1**. — #504
+
+#### Phase 1 — CRUD + History + Attachment refactor (8 ngày)
+
+- [ ] **#COMMENT-05** — Migration `AddCommentEditHistory` — tạo bảng `ticket_comment_edits` (id, comment_id FK cascade, old_body, new_body, edited_at, edited_by_user_id, edited_by_role, edit_reason, audit cols) + ALTER `ticket_comments` thêm `edited_at`, `edit_count int default 0`, `last_edited_by_user_id`. Index `IX_ticket_comment_edits_comment_id`. Test rollback PASS. **Mức: P0**. — #505
+- [ ] **#COMMENT-06** — `CommentEditCommand` + `CommentEditCommandHandler` + endpoint `PUT /api/tickets/{ticketId}/comments/{id}`. Rule: Author edit trong 15 phút (config); Manager/Admin bất cứ lúc nào kèm `edit_reason` (required). Log activity `CommentEdited` + insert row `ticket_comment_edits`. Block khi ticket `CLOSED`. Validation body 1-10000 char. **Mức: P0**. — #506
+- [ ] **#COMMENT-07** — `CommentDeleteCommand` + Handler + endpoint `DELETE /api/tickets/{ticketId}/comments/{id}`. Author soft-delete được của mình; Manager/Admin của mọi người. Set `IsDeleted=true, DeletedAt`. Cascade soft delete mention/reaction/read (chain). Log activity `CommentDeleted`. **Mức: P0**. — #507
+- [ ] **#COMMENT-08** — `CommentRestoreCommand` + Handler + endpoint `PATCH /api/tickets/{ticketId}/comments/{id}/restore`. Policy `AdminOnly`. Set `IsDeleted=false, DeletedAt=null`. Log activity `CommentRestored`. **Mức: P1**. — #508
+- [ ] **#COMMENT-09** — `CommentGetByIdQuery` + Handler + endpoint `GET /api/tickets/{ticketId}/comments/{id}`. Trả full detail: edit_count, mention list, reaction aggregate, attachment list. Authorize cùng rule với GetList. **Mức: P1**. — #509
+- [ ] **#COMMENT-10** — `CommentHistoryQuery` + Handler + endpoint `GET /api/tickets/{ticketId}/comments/{id}/history`. Trả list các bản old → new (diff). Authorize: Author + Staff/Manager/Admin (Customer KHÔNG thấy history của Staff). **Mức: P1**. — #510
+- [ ] **#COMMENT-11** — `MyCommentsQuery` + Handler + endpoint `GET /api/comments/me?page=&pageSize=`. List comment của user hiện tại trên mọi ticket họ tham gia. Customer mobile cần endpoint này. **Mức: P2**. — #511
+- [ ] **#COMMENT-12** — Migration `LinkAttachmentToComment` + `AddCommentAttachmentEnhancements` — ALTER `ticket_attachments` thêm `comment_id FK nullable ON DELETE SET NULL`, `thumbnail_url varchar(1000)`, `is_inline bool`, `download_count int default 0`, `virus_scan_status int default 1`. Tạo `VirusScanStatusEnum` (Pending=1, Clean=2, Infected=3, Failed=4). Index `IX_ticket_attachments_comment`. **Mức: P0**. — #512
+- [ ] **#COMMENT-13** — `CommentAttachmentAdd/Remove/List` commands + queries + handlers + 3 endpoint (POST/DELETE/GET) trên path `/api/tickets/{ticketId}/comments/{id}/attachments`. Constraint: max 10 attachment/comment, max 50MB/file, MIME whitelist (image/*, application/pdf, video/mp4, text/plain). Validate file size + type tại middleware. **Mức: P1**. — #513
+- [ ] **#COMMENT-14** — `VirusScanWorker` background service — poll attachment status=Pending → gọi ClamAV (HTTP REST `/scan` endpoint) → update `virus_scan_status`. Block download API nếu status=Infected (return 451 Unavailable For Legal Reasons). Documented trong `docs/comment/virus-scan-setup.md` (ClamAV deploy guide). **Mức: P1 (có thể defer cho phase production)**. — #514
+
+#### Phase 2 — Authorization + Validation + Security (5 ngày)
+
+- [ ] **#COMMENT-15** — `CommentAuthorizationHelper` (Application/Helpers) + `ICommentAuthorizationService` (Application/Interfaces) + `CommentAuthorizationService` (Infrastructure). Method: `CanEditComment(comment, actor, ticket)`, `CanDeleteComment(comment, actor, ticket)`, `CanPinComment(actor)`, `CanViewInternalComment(actor)`. Unit test matrix 4 role × 5 action = 20 case. **Mức: P0**. — #515
+- [ ] **#COMMENT-16** — Granular permissions — thêm 8 P constants vào `PermissionCodes` (AuthService): `comment.create.public`, `comment.create.internal`, `comment.edit.own`, `comment.edit.any`, `comment.delete.own`, `comment.delete.any`, `comment.pin`, `comment.view.internal`, `comment.template.create.global`. Update PermissionResolver default mapping per role. Update §20 Permission matrix overall.md. **Mức: P0**. — #516
+- [ ] **#COMMENT-17** — Block edit/delete khi ticket `Status = CLOSED` — config `Comment:BlockEditOnClosed = true` (default). Admin có thể override với reason. Block tạo comment mới khi `CLOSED` (Customer được phép chỉ ở `CLOSED_PENDING_RATE` kèm rating). Update `CommentAddCommandHandler` + `CommentEditCommandHandler` + `CommentDeleteCommandHandler`. **Mức: P0**. — #517
+- [ ] **#COMMENT-18** — Validation pipeline mở rộng: min body length 1, max 10000 char, reject pure whitespace/emoji, spam detection (cùng body lặp 3 lần trong 5 phút → reject + log). `ISpamDetector` service dùng Redis sliding window. **Mức: P1**. — #518
+- [ ] **#COMMENT-19** — Security services: `IProfanityFilter` (config dict VN/EN — cảnh báo thay vì block), `IPiiDetector` (regex CCCD/sđt/email — cảnh báo trước khi post + log audit nếu vẫn post). Inject vào `CommentAddCommandHandler` + `CommentEditCommandHandler` pipeline. **Mức: P1**. — #519
+- [ ] **#COMMENT-20** — Rate limiting middleware `CommentRateLimitMiddleware` (AspNetCoreRateLimit package). Limit: Customer 10/phút/ticket, Staff 30/phút/global, Manager 60/phút/global, Admin unlimited. Response 429 khi vượt. **Mức: P1**. — #520
+
+#### Phase 3 — Participant Management ⭐ (6 ngày)
+
+- [ ] **#COMMENT-21** — Migration `AddTicketParticipants` — tạo bảng `ticket_participants` (id, ticket_id FK cascade, user_id, user_role, participant_type, can_post, can_view_internal, added_by_user_id, added_at, removed_at, removed_by_user_id, remove_reason). Entity `TicketParticipant` + enum `ParticipantTypeEnum` (Owner=1, PrimaryAssignee=2, Collaborator=3, Watcher=4, Delegate=5, PreviousAssignee=6). Configuration. Partial index `IX_ticket_participants_ticket_active WHERE removed_at IS NULL`. **Mức: P0**. — #521
+- [ ] **#COMMENT-22** — **CRITICAL** — Update `TicketQueryHelper.CanAccessTicket` để join `ticket_participants` (không chỉ check `CustomerId/AssignedStaffId` nữa). Logic mới: actor có quyền nếu là (Customer chính HOẶC Staff assigned HOẶC Manager/Admin role HOẶC tồn tại row active trong `ticket_participants` với `user_id = actor`). Update `CanViewInternalComments` để check `can_view_internal` của participant entry. Unit test 8 case. **Mức: P0**. — #522
+- [ ] **#COMMENT-23** — `ParticipantAddCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/participants`. Authorize: Manager/Admin/PrimaryAssignee add được. Validate: user phải tồn tại (gọi UserService gRPC), không duplicate (user đã có row active). Publish `ParticipantAddedEvent` qua Outbox. **Mức: P0**. — #523
+- [ ] **#COMMENT-24** — `ParticipantRemoveCommand` + Handler + endpoint `DELETE /api/tickets/{ticketId}/participants/{userId}`. Set `removed_at, removed_by, remove_reason`. **Block remove Owner (Customer chính)** — chỉ Admin được, kèm `remove_reason` required + log audit Critical. Publish `ParticipantRemovedEvent` → NotificationService + SignalR force disconnect khỏi hub group `ticket-{id}`. **Mức: P0**. — #524
+- [ ] **#COMMENT-25** — `ParticipantBulkAddCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/participants/bulk`. Body: `{ users: [{ userId, participantType, canPost, canViewInternal }], reason }`. Use case: Manager add cả team Tier 2 vào ticket P1. Transaction-wrapped — all-or-nothing. **Mức: P1**. — #525
+- [ ] **#COMMENT-26** — `ParticipantSelfLeaveCommand` (Watcher tự rời) + `ParticipantUpdateRoleCommand` (Manager đổi role/permission). 2 endpoint: `POST /api/tickets/{ticketId}/participants/leave`, `PATCH /api/tickets/{ticketId}/participants/{userId}`. Publish `ParticipantRoleChangedEvent`. **Mức: P1**. — #526
+- [ ] **#COMMENT-27** — `TicketParticipantsQuery` (list active) + `ParticipantHistoryQuery` (full lịch sử bao gồm removed) + endpoints. Controller mới `TicketParticipantsController.cs`. DTOs: `TicketParticipantDTO`, `ParticipantHistoryDTO`. **Mức: P1**. — #527
+- [ ] **#COMMENT-28** — **CRITICAL** — Auto-add `PreviousAssignee` khi reassign Staff: trong `TicketAssignmentHandler` (đã có), khi `AssignedStaffId` đổi → set row participant cũ thành `participant_type = PreviousAssignee, can_post = false, can_view_internal = true`. Thêm row mới cho Staff mới với `PrimaryAssignee`. Auto-add Customer làm `Owner` khi tạo ticket. Auto-add Staff làm `PrimaryAssignee` khi assigned. Migration data backfill cho ticket cũ. **Mức: P0**. — #528
+
+#### Phase 4 — Content (Markdown + Reply + Pin) (5 ngày)
+
+- [ ] **#COMMENT-29** — Migration `AddCommentMarkdownSupport` — ALTER `ticket_comments` thêm `body_format int default 1`, `body_html text nullable`. Enum `CommentBodyFormatEnum` (PlainText=1, Markdown=2). Default cho comment cũ = PlainText. **Mức: P1**. — #529
+- [ ] **#COMMENT-30** — `IMarkdownRenderer` + `MarkdigMarkdownRenderer` service (Markdig package) + Ganss.Xss `HtmlSanitizer` whitelist tag (`<p>, <strong>, <em>, <code>, <pre>, <ul>, <ol>, <li>, <a>, <blockquote>, <br>, <img>`). Render khi save (body → body_html cached). `<img>` chỉ accept src trùng attachment ID của ticket. Auto-link URL. Unit test XSS injection 10 payload bị sanitize. **Mức: P1**. — #530
+- [ ] **#COMMENT-31** — Migration `AddCommentThreading` — ALTER `ticket_comments` thêm `parent_comment_id uuid nullable FK self`, `thread_root_id uuid nullable`, `reply_count int default 0`. Index `IX_ticket_comments_parent`, `IX_ticket_comments_thread_root`. **Mức: P1**. — #531
+- [ ] **#COMMENT-32** — `CommentReplyCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/comments/{id}/replies` + `CommentRepliesQuery` + endpoint `GET .../replies?page=`. Rule: **MAX 1 LEVEL** (không reply-of-reply). Validate parent cùng ticket. Auto increment `parent.reply_count`. Soft delete parent → reply vẫn show, parent đánh dấu "đã xóa". **Mức: P1**. — #532
+- [ ] **#COMMENT-33** — Migration `AddCommentPinning` — ALTER `ticket_comments` thêm `is_pinned bool default false`, `pinned_at`, `pinned_by_user_id`. Sort khi GetList: `is_pinned DESC, created_at DESC`. **Mức: P2**. — #533
+- [ ] **#COMMENT-34** — `CommentPinCommand` + `CommentUnpinCommand` + handlers + endpoints `POST .../pin`, `DELETE .../pin`. Permission: Staff/Manager/Admin. Enforce max 3 pinned/ticket (Application/Helpers count check). Log activity `CommentPinned`. **Mức: P2**. — #534
+
+#### Phase 5 — Engagement (Mention + Reaction + Read + Notification) (8 ngày)
+
+- [ ] **#COMMENT-35** — Migration `AddCommentMentions` — tạo bảng `ticket_comment_mentions` (id, comment_id FK cascade, mentioned_user_id, mentioned_user_role, mentioned_display_name snapshot, is_acknowledged, acknowledged_at). Entity + Configuration. Index `IX_ticket_comment_mentions_user_unread (mentioned_user_id, is_acknowledged)`. **Mức: P0**. — #535
+- [ ] **#COMMENT-36** — `IMentionParser` + `MentionParserService` (regex `@[a-zA-Z0-9._-]+` → resolve qua UserService gRPC + Redis cache 5 phút) + `MyMentionsQuery` + `CommentMentionAcknowledgeCommand` + 2 endpoint `GET /api/comments/mentions/me?unreadOnly=true`, `PATCH /api/comments/mentions/{id}/acknowledge`. Inject parser vào `CommentAddCommandHandler` → tạo mention rows + publish `CommentMentionedEvent` qua Outbox. **Mức: P0**. — #536
+- [ ] **#COMMENT-37** — Group mention support: `@team:tier2-staff` (mention cả team Tier 2), `@role:manager` (mention mọi manager). Parser detect prefix `team:` hoặc `role:` → expand thành nhiều mention rows. Gọi UserService gRPC list user theo tier/role. **Mức: P2**. — #537
+- [ ] **#COMMENT-38** — Migration `AddCommentReactions` — tạo bảng `ticket_comment_reactions` (id, comment_id FK cascade, user_id, user_role, reaction_type, UNIQUE (comment_id, user_id, reaction_type)). Enum `ReactionTypeEnum` (ThumbsUp=1, Acknowledged=2, Resolved=3, NeedMoreInfo=4, Disagree=5). Index `IX_ticket_comment_reactions_comment_type`. **Mức: P1**. — #538
+- [ ] **#COMMENT-39** — `CommentReactionAdd/Remove` commands + `CommentReactionsQuery` (aggregated) + 3 endpoint (POST/DELETE/GET). Response shape: `{ thumbsUp: { count: 3, users: [...] }, acknowledged: { ... } }`. Publish `CommentReactedEvent` → notify author. **Mức: P1**. — #539
+- [ ] **#COMMENT-40** — Migration `AddCommentReadReceipts` — tạo bảng `ticket_comment_reads` (id, comment_id FK cascade, user_id, user_role, read_at, UNIQUE (comment_id, user_id)). Index `IX_ticket_comment_reads_user`. **Mức: P1**. — #540
+- [ ] **#COMMENT-41** — `CommentMarkReadCommand` (bulk — body chứa `commentIds[]`) + `CommentReadersQuery` (Staff/Manager xem ai đã đọc) + `TicketUnreadCountQuery` (số chưa đọc per ticket) + 3 endpoint (`POST .../mark-read`, `GET .../readers`, `GET .../unread-count`). Auto mark-read khi user gọi GetList page hiện tại. **Mức: P1**. — #541
+- [ ] **#COMMENT-42** — `CommentReadReceiptBulkWriter` background service — channel-based bulk insert (giảm DB pressure khi nhiều user mark-read đồng thời). Batch 100 records / 1s. **Mức: P2**. — #542
+- [ ] **#COMMENT-43** — Inject `IOutboxPublisher` vào tất cả handler Comment đã viết ở Phase 1+3+4+5 → publish 5 event chính (`CommentCreatedEvent`, `CommentEditedEvent`, `CommentDeletedEvent`, `CommentMentionedEvent`, `CommentReactedEvent`) qua Outbox SAU `SaveChangesAsync` cùng transaction. Test atomicity. **Mức: P0**. — #543
+- [ ] **#COMMENT-44** — `NotificationService` 4 consumer mới: `CommentCreatedConsumer` (notify Customer nếu Staff post public, ngược lại; skip nếu IsInternal), `CommentMentionConsumer` (push + email mentioned user), `CommentReactionConsumer` (notify author of comment), `ParticipantChangeConsumer` (welcome/farewell notify). Routing key subscription. Idempotency check `EXISTS WHERE event_id = ?`. **Mức: P0**. — #544
+
+#### Phase 6 — Templates + Search + Performance (6 ngày)
+
+- [ ] **#COMMENT-45** — Migration `AddCommentTemplates` — tạo bảng `comment_templates` (id, name, content, category, is_internal_default, created_by_user_id, scope, team_id nullable, usage_count, is_active). Enum `CommentTemplateCategoryEnum` (Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6), `CommentTemplateScopeEnum` (Personal=1, Team=2, Global=3). `ITemplateRenderer` + `TemplateRendererService` (placeholder `{{customer_name}}`, `{{ticket_code}}`, `{{battery_id}}`, `{{staff_name}}` — resolve từ ticket + customer + battery info). **Mức: P2**. — #545
+- [ ] **#COMMENT-46** — Template CRUD commands (Create/Update/Delete) + `CommentTemplatesQuery` (filter scope, category, active) + controller `CommentTemplatesController.cs` + 4 endpoint. Permission: Personal owner only, Team team members, Global Admin tạo. **Mức: P2**. — #546
+- [ ] **#COMMENT-47** — `CommentFromTemplateCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/comments/from-template/{templateId}`. Resolve placeholder context → render → tạo comment. Increment `template.usage_count`. **Mức: P2**. — #547
+- [ ] **#COMMENT-48** — Migration `AddCommentFullTextSearch` — ALTER `ticket_comments` thêm `body_tsv tsvector` + GIN index + Postgres trigger tự update tsv khi body/body_html đổi. Test query tiếng Việt có dấu `plainto_tsquery('simple', :q)`. **Mức: P1**. — #548
+- [ ] **#COMMENT-49** — Mở rộng `TicketCommentsQuery` filter params: `search` (full-text), `authorRole`, `authorUserId`, `isInternal`, `hasAttachment`, `from`/`to` (time range), `reactionType`, `hasMention`. Update handler dùng `body_tsv @@ plainto_tsquery`. **Mức: P1**. — #549
+- [ ] **#COMMENT-50** — `CommentGlobalSearchQuery` + Handler + endpoint `GET /api/comments/search?q=&customerId=&dateFrom=&dateTo=` (cross-ticket, Admin/Manager only). Phục vụ compliance lookup + legal hold. Max page size 50. **Mức: P2**. — #550
+- [ ] **#COMMENT-51** — Migration `AddCommentIndexes` — composite indexes tối ưu performance:
+  - `ticket_comments(ticket_id, created_at DESC)`
+  - `ticket_comments(ticket_id, is_pinned, created_at DESC)`
+  - `ticket_comments(author_user_id, created_at DESC)`
+  Benchmark trước/sau với 1000 comment/ticket: GetList p95 < 200ms. **Mức: P1**. — #551
+- [ ] **#COMMENT-52** — `ICommentCacheService` + `CommentCacheService` (Redis) — cache GetList page 1 mỗi ticket (TTL 30s), invalidate khi có CommentCreated/Edited/Deleted event. `TicketCommentsCursorQuery` (cursor variant cho mobile infinite scroll — cursor = last comment `created_at`). **Mức: P1**. — #552
+
+#### Phase 7 — Realtime SignalR (5 ngày)
+
+- [ ] **#COMMENT-53** — `TicketCommentHub : Hub` (Api/Hubs) — path `/hubs/ticket-comments`. Client methods: `JoinTicket(ticketId)` (verify quyền qua `ICommentAuthorizationService` trước khi `Groups.AddToGroupAsync`), `LeaveTicket(ticketId)`, `Typing(ticketId)` (broadcast tới group khác). Reuse pattern từ `services/SmsService/src/SmsService.Infrastructure/Realtime/SmsGatewayHub.cs`. **Mức: P1**. — #553
+- [ ] **#COMMENT-54** — `AddSignalR().AddStackExchangeRedis(...)` (Redis backplane cho multi-instance) + `SignalRJwtConfiguration` (JWT qua query string `?access_token=...` cho client SignalR). Update `Api/Program.cs` middleware order: `UseAuthentication() → UseAuthorization() → MapHub<TicketCommentHub>("/hubs/ticket-comments")`. **Mức: P1**. — #554
+- [ ] **#COMMENT-55** — `ITicketCommentRealtimeNotifier` interface (Application) + `SignalRTicketCommentNotifier` impl (Infrastructure) inject `IHubContext<TicketCommentHub>`. Inject vào tất cả comment handlers Phase 1+4+5 → broadcast sau `SaveChangesAsync`. Pattern: `_hubContext.Clients.Group($"ticket-{ticketId}").SendAsync("CommentAdded", dto)`. **Mức: P1**. — #555
+- [ ] **#COMMENT-56** — Implement 6 server-push events: `CommentAdded(dto)`, `CommentEdited(dto)`, `CommentDeleted(commentId, byUser)`, `ReactionAdded(commentId, reaction)`, `UserTyping(ticketId, userId, displayName)`, `MentionReceived(dto)` (chỉ gửi user được mention qua `Clients.User(userId)`). **Mức: P1**. — #556
+- [ ] **#COMMENT-57** — **CRITICAL** — Force-disconnect khi remove participant: trong `ParticipantRemoveCommandHandler`, sau commit → call `_hubContext.Groups.RemoveFromGroupAsync(connectionId, $"ticket-{ticketId}")`. Cần track `connectionId` per user qua `IUserIdProvider`. Integration test: participant bị remove không nhận được CommentAdded event nữa. **Mức: P0**. — #557
+
+#### Phase 8 — Advanced (AI + Translation + SLA + KB + Metrics + Saga) (8 ngày)
+
+- [ ] **#COMMENT-58** — Migration `AddCommentAiSuggestions` — tạo bảng `comment_ai_suggestions` (id, ticket_id, suggested_at, intent, suggestions jsonb, selected_index, edited_before_post, final_comment_id). Enum `CommentAiIntentEnum` (RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4). **Mức: P2**. — #558
+- [ ] **#COMMENT-59** — `CommentSuggestCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/comments/suggest` (body `{ intent }`). `ICommentAiSuggestionClient` + `FastApiCommentAiClient` HTTP POST `/ai/comment-suggest` (input: ticket title + description + last 5 comment + sensor anomaly type + SOH). `IPiiDetector.MaskAsync` → mask CCCD/sđt/email trước khi gửi (cache mask map ở Redis TTL 1h để un-mask khi cần). Trả 3 candidate + log row vào `comment_ai_suggestions`. **Mức: P2**. — #559
+- [ ] **#COMMENT-60** — Sentiment analysis + auto-summarize endpoints: `POST /api/tickets/{ticketId}/comments/sentiment-check` (gọi AI module phân tích tone Customer → alert Manager nếu score < -0.7) + `POST /api/tickets/{ticketId}/comments/summarize` (tóm tắt thread 5 dòng cho Staff Tier 3 mới tiếp nhận). **Mức: P2 (depend AI module ready)**. — #560
+- [ ] **#COMMENT-61** — Migration `AddCommentTranslations` — tạo bảng `ticket_comment_translations` (id, comment_id FK cascade, target_language, translated_body, provider, translated_at, UNIQUE (comment_id, target_language)) + ALTER `ticket_comments` thêm `original_language varchar(5) nullable`. Enum `TranslationProviderEnum` (GoogleTranslate=1, DeepL=2, Manual=3). `ITranslationProvider` + `GoogleTranslateProvider` (API key trong vault). **Mức: P2**. — #561
+- [ ] **#COMMENT-62** — `CommentTranslateCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/comments/{id}/translate?to=en`. Auto-detect language ở `CommentAddCommandHandler` (dùng library `Lingua.NET` hoặc gọi Google detect). Cache bản dịch DB + Redis 30 ngày. **Mức: P2**. — #562
+- [ ] **#COMMENT-63** — SLA integration: hook trong `CommentAddCommandHandler` —
+  - Nếu Staff comment có flag `requestCustomerInfo=true` → call `ISlaTimerService.PauseForCustomerInfo(ticketId, commentId)` với reason `AwaitingCustomerComment`
+  - Nếu Customer comment trên ticket đang pause vì `AwaitingCustomerComment` → call `ISlaTimerService.ResumeOnCustomerReply(ticketId, commentId)`
+  - Mở rộng `SlaPauseEvent` enum reason values + `ISlaTimerService` interface. **Mức: P1**. — #563
+- [ ] **#COMMENT-64** — KB integration: `CommentAttachKbReference` command + endpoint `POST .../attach-kb` (gắn `TicketKbReference` với comment_id). `ConvertCommentToKbDraftCommand` + endpoint `POST .../to-kb-draft` (tạo `KnowledgeBaseArticle` status=Draft từ body comment). `IKbSuggestionService` (match KB từ comment body qua full-text similarity với KB articles). **Mức: P2**. — #564
+- [ ] **#COMMENT-65** — Migration `AddCommentMetrics` — tạo bảng `comment_metrics_daily` (id, metric_date, staff_id, ticket_id, comment_count, avg_response_time_min, internal_count, mention_received_count) + Index `(metric_date, staff_id)`. `CommentMetricsAggregatorService` (HostedService chạy mỗi giờ aggregate vào bảng). `CommentMetricsQuery` + `CommentHeatmapQuery` + endpoints `GET /api/admin/comment-metrics` + `/heatmap`. Controller `AdminCommentMetricsController`. **Mức: P2**. — #565
+- [ ] **#COMMENT-66** — `CommentEscalationReviewSaga` (MassTransit) — trigger khi `CommentMentionedEvent` mention user có role=Manager VÀ ticket có Priority=P1 → request Manager review trong 30 phút → nếu không review → escalate Admin. State: Pending → Reviewed | Escalated. Reuse pattern `AlertTicketSagaStateConfiguration`. **Mức: P2**. — #566
+
+#### Phase 9 — Polish (Mobile + Export + Compliance + Doc + Test + Ops) (6 ngày)
+
+- [ ] **#COMMENT-67** — `CommentVoiceTranscribeCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/comments/voice` (audio multipart upload). `IVoiceTranscriptionService` + `WhisperTranscriptionService` (OpenAI Whisper API hoặc Google STT — Leader chốt). Output text → tạo comment với `body_format=PlainText` + attach audio file vào `ticket_attachments`. **Mức: P2**. — #567
+- [ ] **#COMMENT-68** — `CommentExportPdfCommand` + Handler + endpoint `GET /api/tickets/{ticketId}/comments/export-pdf` (streaming). `IPdfExporter` + `QuestPdfCommentExporter` (QuestPDF package — open source). Include: ticket header + timeline 100% comment + attachments listing + redaction mode (Customer/Manager view khác nhau). `[Authorize(Roles = "Manager,Admin")]`. **Mức: P2**. — #568
+- [ ] **#COMMENT-69** — GDPR compliance:
+  - `CommentEraseUserDataCommand` + endpoint `POST /api/comments/erase-my-data` (Customer yêu cầu) — replace body comment cũ với `[REDACTED — GDPR erasure]`, giữ row + audit metadata
+  - `CommentRetentionService` background service chạy daily 03:00 UTC archive comment > 2 năm (cấu hình `Comment:Retention:ArchiveAfterYears`)
+  - Document policy `docs/comment/retention-policy.md`. **Mức: P1**. — #569
+- [ ] **#COMMENT-70** — Notification preference extension (UserService entity `NotificationPreference`) — thêm field: `notify_on_comment`, `notify_on_mention`, `notify_on_reaction`, `quiet_hours_start`, `quiet_hours_end`, `digest_window_minutes` (gom comment trong N phút thành 1 notify). Update FE settings UI. **Mức: P1**. — #570
+- [ ] **#COMMENT-71** — Documentation deliverables:
+  - `docs/adr/0008-ticket-comment-hub.md` (Phase 0 viết, Phase 9 finalize)
+  - `docs/comment/contributor-guide.md` (cheatsheet how to add comment-related handler)
+  - `docs/comment/api-reference.md` (auto-gen từ Swagger XML)
+  - `docs/comment/operations-runbook.md` (troubleshoot SignalR disconnect, virus scan failure, AI module down)
+  - `docs/comment/permission-matrix.md` (update §20 + chi tiết Comment permissions)
+  - `docs/comment/signalr-client-guide.md` (FE Web/Mobile cách connect + JoinTicket + handle events). **Mức: P1**. — #571
+- [ ] **#COMMENT-72** — Prometheus metric custom:
+  - `comment_events_total{ticket_id, event_type}` counter
+  - `comment_mention_count_total{role}` counter
+  - `comment_reaction_count_total{reaction_type}` counter
+  - `signalr_connected_users_total{ticket_id}` gauge
+  - `comment_outbox_pending_total` gauge
+  - `comment_ai_suggest_latency_seconds` histogram
+  - `comment_cache_hit_ratio` gauge
+  Grafana dashboard `monitoring/grafana/dashboards/comment-hub.json`. Alert rules: `CommentOutboxBacklog (>500 pending 5min)`, `SignalRDisconnectStorm (>100 disconnect/min)`, `CommentRateLimitHit (>1k/hour)`. **Mức: P1**. — #572
+- [ ] **#COMMENT-73** — Test matrix coverage ≥ 80%:
+  - Unit test 30 handler (Edit/Delete/Restore/Reply/Pin/Unpin/ReactionAdd/Remove/MarkRead/ParticipantAdd/Remove/BulkAdd/SelfLeave/UpdateRole + 16 còn lại) — matrix authz × content
+  - Integration test 12 flow E2E (add → edit → delete → restore, mention → notify, threaded reply, pin enforce max 3, participant remove → SignalR disconnect, reassign → PreviousAssignee auto, cascade soft delete, full-text search VN có dấu)
+  - Perf test: 1000 comment/ticket pagination < 200ms, 100 concurrent SignalR user broadcast < 500ms, mark-read bulk 1000 < 1s
+  - Security test: XSS sanitize 10 payload, SQL injection trong search, rate limit enforce, Customer KHÔNG thấy internal qua mọi endpoint. **Mức: P0**. — #573
+- [ ] **#COMMENT-74** — FE handoff doc + integration test cross-team:
+  - API contract sheet (Postman collection `docs/comment/comment-hub.postman.json` 40+ request)
+  - DTO TypeScript types export `docs/comment/comment-hub.types.ts` (cho FE)
+  - SignalR client guide + sample code Web (React) + Mobile (Expo + `@microsoft/signalr`)
+  - Permission matrix tóm tắt cho FE
+  - Demo scenario: Customer-Staff conversation realtime + Manager monitor + AI suggest + mention escalation. **Mức: P1**. — #574
+
+**Definition of Done — Sprint Comment:**
+- [ ] Tất cả 74 task `#COMMENT-01..74` close + log review/test trong `logs/COMMENT-{NN}/`.
+- [ ] `dotnet build` toàn TicketService PASS — không break service khác.
+- [ ] Coverage ≥ 80% trên `TicketService.Application.CQRS.Handler.Comments` + `Templates` + `Participants` + `Metrics` + `TicketService.Infrastructure.Realtime` + `Services`.
+- [ ] ADR-0008 sign-off 3 thành viên team trước Phase 1 (gate).
+- [ ] 11 migration mới + 4 migration ALTER tested zero-downtime trên staging — rollback test PASS từng cái.
+- [ ] 9 integration event publish qua Outbox — atomic với DB write — verified bằng integration test kill RabbitMQ giữa chừng.
+- [ ] NotificationService 4 consumer chạy + idempotent (test publish duplicate 100 lần → chỉ 1 notify).
+- [ ] SignalR hub `/hubs/ticket-comments` connect được qua JWT — multi-instance Redis backplane test 2 pod broadcast → cả 2 nhận.
+- [ ] Permission matrix §20 overall.md update đầy đủ 9 P constants mới.
+- [ ] §36 overall.md mark deprecated/supersede + redirect `ticket-comment-hub.md` (xem §70 mới).
+- [ ] Local endpoint Option C cho Comment audit (tích hợp Sprint audit `#AUDIT-24..28` causation_id chain): `comment.create/edit/delete/pin/unpin/reaction/mention` events có `causation_id` trace cross-service.
+- [ ] FE handoff doc (`#COMMENT-74`) accepted bởi FE team (Trí + Minh ký xác nhận).
+- [ ] Postman collection 40+ request test green.
+- [ ] Prometheus metric + Grafana dashboard + 3 alert rule deploy staging.
+- [ ] Performance SLO: GetList p95 < 200ms với 1000 comment/ticket, SignalR broadcast latency p99 < 500ms với 100 concurrent user.
+- [ ] Security checklist: XSS, SQL injection, rate limit, internal visibility — manual pen test PASS.
+- [ ] Update `MEMORY.md` ghi quyết định non-obvious (virus scan provider chốt, translation provider chốt, Whisper provider chốt, max attachment size, max pinned per ticket).
+- [ ] Update `.claude/CLAUDE.md` section "Comment patterns" — link đến `ticket-comment-hub.md` + `docs/comment/contributor-guide.md`.
+
+**Lưu ý ưu tiên (cho team khi không kịp full sprint):**
+
+P0 không được skip:
+- `#COMMENT-01` (ADR sign-off — gate)
+- `#COMMENT-02` (SharedContracts events — required cho mọi notification feature)
+- `#COMMENT-05..08` (CRUD Edit/Delete/Restore — baseline production expectation)
+- `#COMMENT-12..13` (Attachment refactor — fix gap liên kết lỏng jsonb)
+- `#COMMENT-15..17` (Authz + block edit khi Closed — bảo mật trước khi mở rộng)
+- `#COMMENT-21..24, 28` (Participant management Owner/Add/Remove/Auto-add PreviousAssignee — cốt lõi nghiệp vụ)
+- `#COMMENT-26, 27` có thể defer 1 tuần
+- `#COMMENT-34..36, 43..44` (Mention + Notification — UX critical)
+- `#COMMENT-57` (Force disconnect khi remove participant — bảo mật)
+- `#COMMENT-73` (Test ≥ 80% coverage — DoD gate)
+
+P1 sprint kế tiếp (nếu split Sprint Comment-A và Comment-B):
+- Sprint Comment-A (Phase 0-5): Foundation + Authz + Participant + Content + Engagement — ~32 task ~35 ngày
+- Sprint Comment-B (Phase 6-9): Templates + Search + Realtime + Advanced + Polish — ~42 task ~30 ngày
+
+P2 có thể defer sang Sprint Comment-C:
+- `#COMMENT-37` (Group mention `@team:` `@role:` — nice-to-have)
+- `#COMMENT-58..60` (AI suggest + sentiment + summarize — depend AI module v2)
+- `#COMMENT-61..62` (Translation — depend Google API key budget)
+- `#COMMENT-64` (KB conversion — depend KB module v2)
+- `#COMMENT-67..68` (Voice-to-text + PDF export — phase polish)
+
+KHÔNG được skip:
+- Phase 0 (ADR + SharedContracts) — nền tảng
+- Phase 1 (CRUD + history) — baseline
+- Phase 2 (Authz + Validation) — bảo mật
+- Phase 3 (Participant) — cốt lõi nghiệp vụ
+- Phase 5 partial (`#COMMENT-43..44` Outbox publish + Consumer) — vì các feature sau (Reaction/Read/Mention/SignalR) đều dùng cùng pattern
+- `#COMMENT-57` Force disconnect — bảo mật critical
+
+**Risk register cập nhật (xem §23):**
+- **R-36 (Sprint Comment):** AI module FastAPI có thể chưa ready khi vào Phase 8 → Phase 8 task `#COMMENT-59..60` block. Mitigation: defer Phase 8 sang Sprint Comment-C, hoàn thành Phase 0-7 trước.
+- **R-37 (Sprint Comment):** SignalR backplane Redis multi-instance có thể conflict với SmsService SignalR hub đã có (cùng share Redis prefix). Mitigation: separate Redis DB index hoặc separate prefix key (`ticketcomment:` vs `smsgateway:`).
+- **R-38 (Sprint Comment):** Migration `AddCommentFullTextSearch` (tsvector + GIN + trigger) chạy lâu trên `ticket_comments` lớn (> 1M row). Mitigation: chạy migration off-hours với `CONCURRENTLY` flag + monitor lock contention.
+- **R-39 (Sprint Comment):** Participant model thay đổi `CanAccessTicket` logic — risk break ticket query handlers hiện có. Mitigation: viết integration test full ticket flow (search/list/detail) trước khi merge `#COMMENT-22`.
+- **R-40 (Sprint Comment):** AI suggest có thể leak PII nếu mask service fail. Mitigation: PII mask service có unit test 50+ pattern, fallback "AI unavailable" thay vì gửi raw nếu mask service throw exception.
+
+**Cross-reference:** Toàn bộ chi tiết kỹ thuật ở `ticket-comment-hub.md` (10 phần, 2010 dòng) — Sprint này là **task tracking layer**, design + DDL + endpoint signature ở doc kia là **source of truth**.
 
 ---
 
@@ -7062,6 +7316,12 @@ POST   /api/battery-assets/claim                      (Customer)
 ---
 
 ## 36. Comment / MaintenanceLog advanced — P1
+
+> ⚠️ **DEPRECATED / SUPERSEDED 2026-06-20 (v5.0)** — Phần Comment ở §36 dưới đây giữ lại làm tài liệu lịch sử. **Source of truth mới** cho toàn bộ Comment module là **`ticket-comment-hub.md`** (10 phần, 2010 dòng, 25 nhóm × 136 feature) — triển khai qua **Sprint Comment** ở §17 (74 task `#COMMENT-01..74` / `#501..#574`). Xem **Phần XI §70** ở cuối overall.md để biết tổng quan kiến trúc mới + cross-reference đầy đủ.
+>
+> §36 cũ scope chỉ ~6 feature nhỏ (edit/delete + mention + reaction + pin + template + maintenance-log). Sprint Comment mở rộng lên **136 feature đầy đủ** bao gồm: Participant Management (cốt lõi), Realtime SignalR, Read Receipts, Markdown rich content, Full-text search, Threaded reply, AI-assist + sentiment, Translation, KB integration, SLA hooks, Metrics + dashboard, Mobile voice-to-text, GDPR export/erasure, 9 integration events + Saga.
+>
+> Phần MaintenanceLog (§36.6) **VẪN ÁP DỤNG** — không nằm trong scope Sprint Comment.
 
 ### 36.1. Edit & delete comments
 
@@ -14871,6 +15131,1492 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 ---
 
+# Phần XI — TicketService Comment Hub
+
+## 70. TicketService Comment Hub (136 feature, 25 nhóm) — P0/P2
+
+> **Tham chiếu kiến trúc đầy đủ:** [`ticket-comment-hub.md`](ticket-comment-hub.md) — 10 phần, 2010 dòng, là **source of truth** cho toàn bộ module Comment trong TicketService.
+>
+> **Triển khai qua:** **Sprint Comment** ở §17 — 74 task `#COMMENT-01..74` mapped GitHub Issues `#501..#574` chia thành 9 phase ~65 dev-day.
+>
+> **Supersede:** §36 cũ (Comment / MaintenanceLog advanced — P1) — chỉ phần Comment, MaintenanceLog vẫn giữ §36.6.
+
+### 70.1. Tóm tắt scope
+
+Mở rộng module Comment trong TicketService từ **2 endpoint hiện có** (POST add + GET list) lên **~40 REST endpoint + 1 SignalR Hub (6 server-push events)** phục vụ toàn diện vòng đời ticket ITIL.
+
+**Hiện trạng (Phần I doc):** 10 tính năng cơ bản đã có — Add/List comment, IsInternal flag, Attachment đính kèm, Authorize CanAccessTicket, Activity log, Soft delete, Pagination, Validation. **12 gap nghiêm trọng** cần fill:
+
+1. Không có Edit endpoint
+2. Không có Delete endpoint  
+3. Không có edit history
+4. Attachment liên kết LỎNG (jsonb, không FK)
+5. Không có reply / mention / reaction
+6. Không có realtime (chưa SignalR)
+7. Không có read receipt
+8. Không có participant management
+9. Không có search trong comment
+10. Không có template
+11. XML doc mismatch sort order
+12. Không filter ticket parent IsDeleted khi GET comment
+
+### 70.1bis. Mục đích nghiệp vụ + ITIL ticket lifecycle mapping
+
+**Phạm vi:** chỉ TicketService — không bao gồm thay đổi cross-service (NotificationService, UserService, AI module) ngoài phần Integration Events đã liệt kê ở §70.7 + §70.20.
+
+**5 mục đích nghiệp vụ cốt lõi của Comment module:**
+
+1. **Kênh trao đổi Customer ↔ Staff** trong vòng đời ticket — thay điện thoại/email rời rạc, gom timeline vào ticket. Customer hỏi thêm thông tin, cung cấp ảnh/clip hiện trạng pin; Staff yêu cầu Customer cung cấp dữ liệu (model pin, thời điểm, log đo lường) và thông báo tiến độ ("đã đến site", "đang chờ linh kiện"); Customer xác nhận sau khi Staff resolve.
+2. **Ghi chú nội bộ Staff ↔ Manager** (`IsInternal=true`) — bàn giao kỹ thuật khi reassign Staff, escalate Tier 1 → Tier 2/3, Manager review trước close, Tier 1 escalate sang Tier 2/3 để lại context. Customer KHÔNG nhìn thấy các comment này (filter ở `TicketCommentsQueryHandler.cs:44-47`).
+3. **Đính kèm bằng chứng** — ảnh hiện trạng pin, biên bản, file log sensor. Phân loại nguồn (`AttachmentSourceEnum.CustomerSubmission` vs `StaffWork`) phục vụ audit + phân biệt input Customer (cần verify) vs evidence do Staff thu thập.
+4. **Audit trail cho SLA dispute** — timeline có evidence ai trả lời lúc nào. Mỗi add comment ghi 1 dòng vào `ticket_activities` với `Action = Commented` → audit trail không thể bypass. `AuthorRole + AuthorDisplayName` snapshot ngay tại thời điểm comment → kể cả khi user đổi tên/role sau này, audit vẫn đúng.
+5. **Phục vụ ITIL ticket lifecycle** (state machine `NEW → OPEN → ASSIGNED → IN_PROGRESS → RESOLVED → CLOSED_PENDING_RATE → CLOSED`) — comment tại mỗi state transition:
+
+| Phase | Comment use case |
+|-------|------------------|
+| `OPEN → ASSIGNED` | Manager comment **internal** về rationale priority (lý do gán Tier nào, dựa trên Impact × Urgency matrix) |
+| `ASSIGNED → IN_PROGRESS` | Staff comment "đã tiếp nhận", hỏi Customer info bổ sung (model pin, location, log sensor) |
+| `IN_PROGRESS` | Staff log progress; internal note khi escalate Tier 1 → Tier 2/3; Customer reply cung cấp thêm thông tin |
+| `IN_PROGRESS → RESOLVED` | Staff comment giải thích cách xử lý (public — Customer review trước khi rate) |
+| `RESOLVED → CLOSED_PENDING_RATE` | Customer comment kèm rating; Staff hỏi feedback nếu chưa rate sau 24h |
+| `ESCALATED` (từ P1/P2 breach) | Manager/Tier cao hơn comment hướng đi mới + internal note bàn giao Tier 3 |
+
+> **Mapping Sprint Comment với ITIL lifecycle:** mọi feature ở Sprint Comment đều phục vụ ≥ 1 state transition trên — không có feature "khơi khơi". Đặc biệt: Participant Management (Nhóm 25 / Phase 3) phục vụ `IN_PROGRESS → ESCALATED` flow (Staff cũ chuyển `PreviousAssignee`, Tier 2/3 add vào `Collaborator`); Read Receipt (Nhóm 7) phục vụ `RESOLVED → CLOSED_PENDING_RATE` (biết Customer đã thấy resolution chưa); Mention + Notification (Nhóm 5+16) phục vụ escalate ngay khi mention Manager.
+
+### 70.2. 25 nhóm chức năng × 136 feature
+
+| Nhóm | Tên | Số feature | Mức ưu tiên | Sprint Phase |
+|------|-----|-----------|-------------|--------------|
+| 1 | CRUD cơ bản (Edit/Delete/Restore/GetById/MyComments) | 5 | P0 | Phase 1 |
+| 2 | Lịch sử & Audit (edit history + window + reason) | 3 | P0 | Phase 1 |
+| 3 | Attachment nâng cao (FK chặt + virus scan + thumbnail) | 8 | P0/P1 | Phase 1 |
+| 4 | Threaded Reply (1 level) | 3 | P1 | Phase 4 |
+| 5 | @Mention (parse + notify + ack + group mention) | 5 | P0/P2 | Phase 5 |
+| 6 | Reaction (add/remove/list/aggregate) | 4 | P1 | Phase 5 |
+| 7 | Read Receipts (mark/auto/readers/unread count) | 5 | P1/P2 | Phase 5 |
+| 8 | Rich Content / Markdown + sanitize | 5 | P1 | Phase 4 |
+| 9 | Realtime SignalR (6 events + typing + presence) | 6 | P1 | Phase 7 |
+| 10 | Template / Canned Response (3 scope + placeholder) | 7 | P2 | Phase 6 |
+| 11 | AI-Assist (suggest/sentiment/summarize + PII mask) | 7 | P2 | Phase 8 |
+| 12 | Search & Filter (full-text + global + 6 filter) | 8 | P1/P2 | Phase 6 |
+| 13 | Pin / Highlight (max 3/ticket) | 4 | P2 | Phase 4 |
+| 14 | Translation (auto-detect + VN↔EN + cache) | 4 | P2 | Phase 8 |
+| 15 | Metrics / Analytics (response time + dashboard) | 6 | P2 | Phase 8 |
+| 16 | Notification (push + email + preference + digest) | 6 | P0/P1 | Phase 5 |
+| 17 | Authorization (9 granular permission) | 4 | P0 | Phase 2 |
+| 18 | Validation & Security (XSS/PII/profanity/rate limit) | 8 | P0/P1 | Phase 2 |
+| 19 | Performance & Caching (Redis + cursor + indexes) | 5 | P1 | Phase 6 |
+| 20 | Integration Events / Outbox (9 event + saga) | 6 | P0 | Phase 5 |
+| 21 | SLA Integration (pause/resume hooks + breach evidence) | 3 | P1 | Phase 8 |
+| 22 | Knowledge Base Integration (suggest/attach/draft) | 3 | P2 | Phase 8 |
+| 23 | Mobile-specific (voice-to-text + offline + camera) | 4 | P2 | Phase 9 |
+| 24 | Export / Compliance (PDF + GDPR + retention) | 5 | P1/P2 | Phase 9 |
+| 25 | **Participant Management** ⭐ (add/remove/watcher/delegate) | 12 | P0 | Phase 3 |
+
+**Tổng: 136 feature × 25 nhóm**
+
+### 70.3. Quy mô triển khai
+
+| Hạng mục | Số lượng | Vị trí source code |
+|---------|---------|---------------------|
+| **Tổng feature/function** | **136** | xem §70.17 25 Nhóm chi tiết |
+| **Nhóm chức năng** | **25** | xem §70.17 + §70.21bis (handler/class per Nhóm) |
+| Bảng mới | **11** | `Domain/Entities/` + `Infrastructure/Migrations/` |
+| Bảng sửa (ALTER) | **4** | `ticket_comments`, `ticket_attachments`, `ticket_activities`, `ticket_kb_references` |
+| Enum mới | **10** | `Domain/Enums/` |
+| REST endpoint mới | **~40** | `Api/Controllers/` (4 controller mới + mở rộng `TicketCommentsController`) |
+| SignalR Hub | **1** | `Api/Hubs/TicketCommentHub.cs` |
+| Server-push events | **6** | `CommentAdded/Edited/Deleted/ReactionAdded/UserTyping/MentionReceived` |
+| Command handler | **~35** | `Application/CQRS/Handler/Comments\|Templates\|Participants\|Metrics/` |
+| Query handler | **~18** | `Application/CQRS/Query/Comment\|Template\|Participant\|Metrics/` |
+| Background services | **4** | `Infrastructure/BackgroundServices/` |
+| Integration events | **9** | `SharedContracts/Events/Ticket/` |
+| RabbitMQ consumers (NotificationService) | **4** | `NotificationService/Infrastructure/Consumers/` |
+| Migration files | **15** | `Infrastructure/Migrations/` |
+| Service interfaces | **~15** | `Application/Interfaces/Services/` |
+| ADR document | **1** | `docs/adr/0008-ticket-comment-hub.md` |
+
+### 70.4. Cấu trúc bảng mới (11 bảng)
+
+| # | Bảng | Mục đích | FK chính |
+|---|------|----------|----------|
+| 1 | `ticket_comment_edits` | Lưu edit history (old_body, new_body, edit_reason) | `comment_id` cascade |
+| 2 | `ticket_comment_mentions` | Lưu @mention + acknowledge state | `comment_id` cascade |
+| 3 | `ticket_comment_reactions` | Lưu reaction (5 type) — UNIQUE per user/type | `comment_id` cascade |
+| 4 | `ticket_comment_reads` | Read receipt — UNIQUE per user | `comment_id` cascade |
+| 5 | `ticket_comment_translations` | Cache bản dịch — UNIQUE per language | `comment_id` cascade |
+| 6 | `comment_templates` | Canned response (3 scope) | — |
+| 7 | `comment_ai_suggestions` | Log AI usage cho improvement | `ticket_id` |
+| 8 | `comment_metrics_daily` | Aggregate metrics for dashboard | — |
+| 9 | **`ticket_participants`** ⭐ | Participant management (6 type) | `ticket_id` cascade |
+| 10 | (optional) `comment_template_usage_log` | Tracking template usage | `template_id` |
+| 11 | (optional) `comment_pii_detections` | Log PII detection events | `comment_id` |
+
+### 70.4bis. Bảng sửa chi tiết (4 bảng — cột thêm)
+
+| Bảng | Loại sửa | Cột thêm / Thay đổi |
+|------|---------|---------------------|
+| `ticket_comments` | **Schema change (13 cột)** | `edited_at`, `edit_count`, `last_edited_by_user_id`, `parent_comment_id` (self-FK), `thread_root_id`, `reply_count`, `body_format`, `body_html`, `body_tsv` (tsvector), `is_pinned`, `pinned_at`, `pinned_by_user_id`, `original_language` |
+| `ticket_attachments` | **Schema change (5 cột)** | `comment_id` (FK nullable ON DELETE SET NULL), `thumbnail_url`, `is_inline`, `download_count`, `virus_scan_status` |
+| `ticket_kb_references` | **Schema change (1 cột)** | `comment_id` (nullable) — Nhóm 22 KB integration cho `CommentAttachKbReferenceCommand` |
+| `ticket_activities` | Enum extension (không đổi schema) | Mở rộng `ActivityActionEnum` values: `CommentEdited`, `CommentDeleted`, `CommentRestored`, `CommentPinned`, `CommentReacted`, `ParticipantAdded`, `ParticipantRemoved`, `ParticipantRoleChanged` |
+| `outbox_messages` | Không đổi schema | Dùng publish 9 event types mới (xem §70.20) — reuse Outbox table sẵn có từ Sprint 5B |
+
+> **Lưu ý:** Hub nguyên bản đếm "Bảng sửa (4)" gồm `ticket_comments + ticket_attachments + ticket_activities + outbox_messages`. Overall.md mở rộng lên **5 bảng tương tác** (thêm `ticket_kb_references` từ Nhóm 22) trong đó **3 bảng có schema change thật sự** (`ticket_comments`, `ticket_attachments`, `ticket_kb_references`), 2 bảng còn lại chỉ thay đổi cách sử dụng (enum values / event types).
+
+### 70.5. Enum mới (10)
+
+| Enum | Values | Vị trí |
+|------|--------|--------|
+| `CommentBodyFormatEnum` | PlainText=1, Markdown=2 | `Domain/Enums/` |
+| `ReactionTypeEnum` | ThumbsUp=1, Acknowledged=2, Resolved=3, NeedMoreInfo=4, Disagree=5 | `Domain/Enums/` |
+| `CommentTemplateCategoryEnum` | Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6 | `Domain/Enums/` |
+| `CommentTemplateScopeEnum` | Personal=1, Team=2, Global=3 | `Domain/Enums/` |
+| `TranslationProviderEnum` | GoogleTranslate=1, DeepL=2, Manual=3 | `Domain/Enums/` |
+| `VirusScanStatusEnum` | Pending=1, Clean=2, Infected=3, Failed=4 | `Domain/Enums/` |
+| `CommentAiIntentEnum` | RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4 | `Domain/Enums/` |
+| **`ParticipantTypeEnum`** ⭐ | Owner=1, PrimaryAssignee=2, Collaborator=3, Watcher=4, Delegate=5, PreviousAssignee=6 | `Domain/Enums/` |
+| (optional) `CommentRetentionPolicyEnum` | — | `Domain/Enums/` |
+| `ActivityActionEnum` (extend) | thêm: CommentEdited, CommentDeleted, CommentRestored, CommentPinned, CommentReacted, ParticipantAdded, ParticipantRemoved | `Domain/Enums/` (đã có) |
+
+### 70.6. Permission mới (9 P constants — update §20)
+
+Thêm vào `PermissionCodes` (AuthService) để Sprint additional-auth Phase B PermissionResolver pick up:
+
+```csharp
+public const string CommentCreatePublic     = "comment.create.public";
+public const string CommentCreateInternal   = "comment.create.internal";   // Staff/Manager only
+public const string CommentEditOwn          = "comment.edit.own";
+public const string CommentEditAny          = "comment.edit.any";          // Manager/Admin
+public const string CommentDeleteOwn        = "comment.delete.own";
+public const string CommentDeleteAny        = "comment.delete.any";        // Manager/Admin
+public const string CommentPin              = "comment.pin";
+public const string CommentViewInternal     = "comment.view.internal";     // không cho Customer
+public const string CommentTemplateCreateGlobal = "comment.template.create.global";
+```
+
+### 70.7. Integration events (9)
+
+| Event | Publish khi | Consumer | Routing key |
+|-------|-------------|----------|-------------|
+| `CommentCreatedEvent` | Add comment success | NotificationService | `comment.{ticketId}.created` |
+| `CommentEditedEvent` | Edit comment success | NotificationService (optional) | `comment.{ticketId}.edited` |
+| `CommentDeletedEvent` | Soft delete comment | NotificationService + Audit aggregator | `comment.{ticketId}.deleted` |
+| `CommentMentionedEvent` | Có @mention trong body | NotificationService push/email | `comment.{ticketId}.mentioned` |
+| `CommentReactedEvent` | Add reaction | NotificationService notify author | `comment.{ticketId}.reacted` |
+| `ParticipantAddedEvent` | Add participant | NotificationService welcome notify | `participant.{ticketId}.added` |
+| `ParticipantRemovedEvent` | Remove participant | NotificationService + SignalR disconnect | `participant.{ticketId}.removed` |
+| `ParticipantRoleChangedEvent` | Update participant role | NotificationService | `participant.{ticketId}.role-changed` |
+| `CommentEscalationReviewRequestedEvent` | Saga trigger (mention Manager + P1) | TicketService Saga state machine | `comment.escalation.review-requested` |
+
+### 70.8. Cross-reference với sprint khác
+
+| Sprint | Tương tác | Ghi chú |
+|--------|-----------|---------|
+| Sprint additional-auth (`#AUTH-*`) | Permission codes §70.6 cần PermissionResolver Phase B pickup | Sprint Comment **depends on** Sprint additional-auth Phase B merge |
+| Sprint audit (`#AUDIT-24..28`) | TicketAuditLog + causation_id chain cho comment events | Sprint Comment publish event sẽ propagate đúng correlation — cần Sprint audit Phase 4 merge trước |
+| Sprint 5B (`#233..#241`) | Outbox pattern + Saga foundation | Sprint Comment **reuse** Outbox cho `CommentCreatedEvent`/`CommentMentionedEvent`; Saga §70.7 #9 reuse pattern `AlertTicketSagaStateConfiguration` |
+| Sprint IoT-2 | Không tương tác trực tiếp | — |
+| Sprint SMS | Không tương tác trực tiếp (SMS dùng channel riêng) | — |
+
+### 70.9. Risk register cập nhật (xem §23)
+
+| Risk ID | Mô tả | Mitigation |
+|---------|-------|-----------|
+| **R-36** | AI module FastAPI có thể chưa ready khi vào Phase 8 → Phase 8 task block | Defer Phase 8 sang Sprint Comment-C, hoàn thành Phase 0-7 trước |
+| **R-37** | SignalR Redis backplane conflict với SmsService SignalR hub | Separate Redis DB index hoặc separate prefix key (`ticketcomment:` vs `smsgateway:`) |
+| **R-38** | Migration full-text search chạy lâu trên `ticket_comments` lớn | Chạy off-hours với `CREATE INDEX CONCURRENTLY` + monitor lock contention |
+| **R-39** | Participant model thay đổi `CanAccessTicket` logic — risk break ticket query handlers | Viết integration test full ticket flow trước merge `#COMMENT-22` |
+| **R-40** | AI suggest có thể leak PII nếu mask service fail | PII mask service unit test 50+ pattern, fallback "AI unavailable" thay vì gửi raw |
+
+### 70.10. Definition of Done (link)
+
+Xem **Sprint Comment Definition of Done** ở §17 (sau Sprint audit) — bao gồm: 74 task close, coverage ≥ 80%, 11 migration + 4 ALTER zero-downtime tested, 9 integration event Outbox atomic, NotificationService 4 consumer idempotent, SignalR multi-instance Redis backplane verified, Permission §20 update, FE handoff doc Postman/TypeScript types/SignalR client guide accepted.
+
+### 70.11. Reading guide
+
+**Trước khi code Sprint Comment, đọc theo thứ tự:**
+
+1. `ticket-comment-hub.md` **Phần I** (Hiện trạng) — 15 phút, hiểu gap
+2. `ticket-comment-hub.md` **Phần II Nhóm 25** (Participant Management) — 10 phút, đây là cốt lõi nghiệp vụ
+3. `ticket-comment-hub.md` **Phần IV** (Database schema DDL) — 20 phút, hiểu data model
+4. `ticket-comment-hub.md` **Phần V** (API endpoint matrix) — 10 phút, hiểu API surface
+5. `ticket-comment-hub.md` **Phần VIII** (Roadmap dependency) — 10 phút, hiểu thứ tự code
+6. `overall.md` **§17 Sprint Comment** — 15 phút, breakdown 74 task
+7. `overall.md` **§70 (file này)** — 5 phút, tóm tắt tổng quan
+8. `docs/adr/0008-ticket-comment-hub.md` (sau khi Phase 0 viết) — 15 phút trước Phase 1
+
+**Tổng: ~100 phút onboarding Sprint Comment.**
+
+### 70.12. Tóm tắt lý do làm Sprint Comment
+
+Module Comment hiện tại **chỉ phục vụ được use case đơn giản** (Customer hỏi → Staff trả lời linear). Các business flow phức tạp đang **bị chặn**:
+
+- ❌ Reassign Staff: Staff cũ vẫn xem được ticket sau khi rời team — **rủi ro security**
+- ❌ Multi-Staff collaboration: 1 ticket P1 cần Tier 2 + chuyên gia — không add được người thứ 2
+- ❌ Customer ủy quyền: B2B customer muốn nhân viên khác đại diện — không hỗ trợ
+- ❌ Manager monitor: không biết Customer đã đọc comment Staff chưa
+- ❌ SLA dispute: không có evidence ai trả lời lúc nào (chỉ Activity log + Comment thô)
+- ❌ Escalate Staff Tier 3: không tóm tắt được 50+ comment trong thread dài
+- ❌ Search compliance: legal lookup cross-ticket không có endpoint
+- ❌ Mobile UX: phải polling, không realtime
+- ❌ Customer realtime: không thấy Staff đang gõ, không thấy update tức thì
+- ❌ Knowledge Base growth: comment giải pháp hay không được convert thành KB
+
+Sprint Comment **fix toàn bộ 10 gap nghiệp vụ trên** đồng thời tạo nền móng cho:
+- Mở rộng B2B (Customer = công ty) — Participant management
+- Tích hợp AI module v2 — AI assist + sentiment
+- Compliance & audit — Edit history vĩnh viễn + GDPR
+- Manager dashboard KPI — Metrics aggregation
+- Cross-team collaboration — Watcher mode + bulk add team
+
+---
+
+### 70.13. Hiện trạng Comment — 10 tính năng đã có (chi tiết)
+
+| # | Feature | Endpoint / Vị trí | Mục đích |
+|---|---------|-------------------|----------|
+| 1 | Add comment | `POST /api/tickets/{ticketId}/comments` | Customer/Staff/Manager đăng bình luận |
+| 2 | List comment (pagination) | `GET /api/tickets/{ticketId}/comments` | Hiển thị timeline trao đổi |
+| 3 | `IsInternal` flag | Field trong entity | Phân biệt public (Customer thấy) vs internal (Staff/Manager only) |
+| 4 | Attachment đính kèm khi add | `CommentAddCommand.Attachments` | Gửi ảnh/file kèm comment |
+| 5 | Filter internal cho Customer | `TicketCommentsQueryHandler:44-47` | Bảo mật thông tin nội bộ |
+| 6 | Authorize access ticket | `TicketQueryHelper.CanAccessTicket` | Bảo mật ticket — Customer chủ / Staff assigned / Manager/Admin |
+| 7 | Activity log khi add comment | `_activityLogger.LogAsync(...Commented)` | Audit trail |
+| 8 | Soft delete support | Qua `AuditableEntity` + filter `!IsDeleted` manual | Không xóa hẳn |
+| 9 | Pagination | `PageNumber + PageSize` | Phân trang khi list dài |
+| 10 | Validation pipeline | `IValidatable<TicketActionResponse>` | Body required, attachment field required |
+
+### 70.14. Source code structure hiện tại
+
+```
+services/TicketService/src/
+├── TicketService.Api/
+│   └── Controllers/
+│       └── TicketCommentsController.cs              # 2 endpoint POST + GET
+│
+├── TicketService.Application/
+│   ├── CQRS/
+│   │   ├── Command/CommentAdd/
+│   │   │   └── CommentAddCommand.cs                 # Command + Validation + CommentAttachmentInput record
+│   │   ├── Query/Ticket/
+│   │   │   └── TicketCommentsQuery.cs               # Pagination + ActorRoles
+│   │   └── Handler/Comments/
+│   │       ├── CommentAddCommandHandler.cs          # Tạo comment + attachment + activity log
+│   │       └── TicketCommentsQueryHandler.cs        # Authorize + filter internal + paginate
+│   ├── DTOs/Response/
+│   │   ├── Comments/CommentResponse.cs + CommentActionDTO.cs
+│   │   └── Tickets/TicketCommentDTO.cs              # DTO trả về cho client
+│   ├── Helpers/TicketQueryHelper.cs                 # CanAccessTicket + CanViewInternalComments
+│   └── Interfaces/
+│       ├── Repositories/ITicketUnitOfWork.cs        # TicketComments repository
+│       └── Services/
+│           ├── ITicketCurrentUserService.cs         # Resolve UserId, Role, FullName
+│           └── IActivityLogger.cs                   # Log Commented action
+│
+├── TicketService.Domain/
+│   ├── Entities/
+│   │   ├── TicketComment.cs                         # TicketId, AuthorUserId, AuthorRole, Body, IsInternal, AttachmentFileIds (jsonb List<Guid>)
+│   │   ├── Ticket.cs                                # Có Comments collection
+│   │   ├── TicketAttachment.cs                      # Ghi cùng khi có attachment
+│   │   └── TicketActivity.cs                        # Log Commented action
+│   └── Enums/
+│       ├── ActorRoleEnum.cs                         # Customer=1/Staff=2/Manager=3/Admin=4
+│       ├── ActivityActionEnum.cs                    # Commented
+│       └── AttachmentSourceEnum.cs                  # CustomerSubmission/StaffWork
+│
+├── TicketService.Infrastructure/
+│   ├── Persistence/
+│   │   ├── Configurations/
+│   │   │   ├── TicketCommentConfiguration.cs        # Map → "ticket_comments", jsonb cho AttachmentFileIds
+│   │   │   ├── TicketConfiguration.cs
+│   │   │   ├── TicketAttachmentConfiguration.cs
+│   │   │   └── TicketActivityConfiguration.cs
+│   │   └── Converters/JsonValueConverter.cs         # Convert List<Guid> ↔ jsonb
+│   └── Migrations/
+│       └── 20260517105233_InitialTicketSchema.cs    # CreateTable ticket_comments
+│
+└── tests/
+    ├── TicketService.UnitTests/Handlers/Comments/
+    │   └── CommentAddCommandHandlerTests.cs
+    └── TicketService.IntergrationTests/Tickets/
+        └── TicketCommentApiTests.cs
+```
+
+### 70.15. Database tables hiện tại (chi tiết)
+
+**Bảng chính `ticket_comments`:**
+
+| Column | Type | Constraint | Ghi chú |
+|--------|------|-----------|---------|
+| `id` | uuid | PK | |
+| `ticket_id` | uuid | FK → `tickets.id` ON DELETE CASCADE | |
+| `author_user_id` | uuid | NOT NULL | |
+| `author_role` | int | NOT NULL | `ActorRoleEnum` |
+| `author_display_name` | varchar(256) | nullable | Snapshot tên author |
+| `body` | text | NOT NULL | |
+| `is_internal` | bool | NOT NULL | Customer không thấy nếu `true` |
+| `attachment_file_ids` | **jsonb** | NOT NULL | `List<Guid>` JSON — liên kết LỎNG, không FK |
+| `created_at` | timestamptz | NOT NULL | |
+| `created_by` | uuid | nullable | |
+| `updated_at` | timestamptz | nullable | |
+| `is_deleted` | bool | NOT NULL | |
+| `deleted_at` | timestamptz | nullable | |
+
+**Indexes:** `IX_ticket_comments_ticket_id`, `IX_ticket_comments_author_user_id`
+
+**Bảng phụ thuộc:**
+
+| Bảng | Vai trò trong comment flow | Quan hệ |
+|------|----------------------------|---------|
+| `tickets` | Parent — FK cascade | Comment chỉ sống khi ticket tồn tại |
+| `ticket_attachments` | Ghi cùng khi có file đính kèm | Liên kết LỎNG qua jsonb `attachment_file_ids` |
+| `ticket_activities` | Audit log Action=Commented | Mỗi add comment ghi 1 dòng |
+| `customer_accounts` / `staff_accounts` | Authorize CanAccessTicket | Không join trực tiếp |
+
+### 70.16. Gap analysis chi tiết — 12 gap nghiêm trọng
+
+| # | Gap | Tác động |
+|---|-----|----------|
+| 1 | **Không có Edit endpoint** | Lỡ gõ sai phải xóa, không sửa được |
+| 2 | **Không có Delete endpoint** | Không thể remove spam/sai sót |
+| 3 | **Không có edit history** | Không trace lại nội dung cũ |
+| 4 | **Attachment liên kết LỎNG** (jsonb, không FK) | Không cascade cleanup, không integrity DB |
+| 5 | **Không có reply / mention / reaction** | UX kém so với chat hiện đại |
+| 6 | **Không có realtime** (chưa SignalR) | FE phải polling |
+| 7 | **Không có read receipt** | Không biết Customer đã đọc chưa |
+| 8 | **Không có participant management** | Reassign Staff cũ vẫn xem được; không add chuyên gia ngoài |
+| 9 | **Không có search trong comment** | Ticket dài 50+ comment khó tìm |
+| 10 | **Không có template** | Staff gõ lại cùng nội dung |
+| 11 | **XML doc nói sort ASC** nhưng code thực tế **DESC** (`TicketCommentsQueryHandler.cs:51`) | Mismatch document |
+| 12 | **Không filter `!IsDeleted` ở Ticket parent khi GET comment** | Có thể trả comment của ticket đã xóa (cần kiểm tra) |
+
+### 70.17. 25 nhóm chi tiết — Tính năng + Source structure
+
+> **Cách đọc §70.17:** Mỗi Nhóm có bảng **Tính năng** liệt kê đầy đủ feature + mục đích, kèm **Rule/Constraint/Integration/Flow/SQL/Indexes** khi cần. **Source structure (file/class cụ thể) cho mỗi Nhóm tra cứu tại §70.21** (source code tree đầy đủ tổ chức theo layer Api/Application/Domain/Infrastructure/Tests + SharedContracts + NotificationService) — tìm theo class/file name xuất hiện trong phần Rule/Source structure code blocks dưới. **DDL SQL chi tiết tra cứu tại §70.18** — mỗi bảng mới có CREATE TABLE đầy đủ, mỗi bảng sửa có ALTER TABLE đầy đủ.
+
+#### Nhóm 1: CRUD cơ bản (5 feature, Phase 1)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 1 | Edit comment | Sửa nội dung comment đã đăng |
+| 2 | Soft delete comment | Xóa mềm comment, giữ audit |
+| 3 | Restore comment | Khôi phục comment đã xóa (Admin only) |
+| 4 | Get comment by ID | Xem chi tiết 1 comment |
+| 5 | Get my comments cross-ticket | Customer xem mọi comment của mình trên toàn bộ ticket |
+
+**Rule:** Edit author trong 15 phút; Manager/Admin bất cứ lúc nào kèm edit_reason. Delete Author của mình; Manager/Admin của mọi người. Restore Admin only. Block edit/delete khi ticket CLOSED.
+
+#### Nhóm 2: Lịch sử & Audit (3 feature, Phase 1)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 6 | Edit history (versioning) | Xem các bản cũ của comment, không bao giờ xóa |
+| 7 | Edit window limit (15 phút) | Tránh sửa sau khi đã có reply |
+| 8 | Edit reason | Bắt buộc nếu Manager/Admin edit comment người khác (PII/legal redaction) |
+
+#### Nhóm 3: Attachment nâng cao (8 feature, Phase 1)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 9 | Link attachment với comment_id (FK chặt) | Cascade cleanup khi comment xóa |
+| 10 | Add attachment sau khi đã tạo comment | Bổ sung file sau |
+| 11 | Remove attachment khỏi comment | Quản lý linh hoạt |
+| 12 | Thumbnail ảnh | UX hiển thị preview |
+| 13 | Inline image trong body (markdown `![]()`) | Chèn ảnh giữa text |
+| 14 | Download count | Tracking lượt tải |
+| 15 | Virus scan (ClamAV) | Bảo mật |
+| 16 | Limit file size/type/count | Bảo mật + storage cap |
+
+**Constraint:** Max 10 attachment/comment, max 50MB/file, MIME whitelist (`image/*`, `application/pdf`, `video/mp4`, `text/plain`), block download nếu `virus_scan_status = Infected`.
+
+#### Nhóm 4: Threaded Reply (3 feature, Phase 4)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 17 | Reply 1 comment cụ thể | Trả lời từng câu hỏi |
+| 18 | Đếm số reply | "3 phản hồi" badge |
+| 19 | Threaded view mode | Group theo `thread_root_id` |
+
+**Rule:** Tối đa 1 level reply (không reply-of-reply). Validate parent cùng ticket. Soft delete parent → reply vẫn hiển thị.
+
+#### Nhóm 5: @Mention (5 feature, Phase 5)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 20 | Mention user `@username` trong body | Tag người liên quan |
+| 21 | Notify khi được mention | Push + email qua NotificationService |
+| 22 | List mention của tôi | Xem mention chưa acknowledge |
+| 23 | Acknowledge mention | Đánh dấu đã xem |
+| 24 | Mention nhóm (team/role) | `@team:tier2-staff`, `@role:manager` |
+
+**Integration:** Sau `SaveChangesAsync` → publish `CommentMentionedEvent` qua Outbox → NotificationService consume → push (Expo) + email.
+
+#### Nhóm 6: Reaction (4 feature, Phase 5)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 25 | Add reaction | 👍 ✅ ❓ 👎 ⚠️ |
+| 26 | Remove reaction | Toggle off |
+| 27 | List reactions per comment | Ai đã react gì |
+| 28 | Aggregate count theo type | "3 👍, 1 ✅" |
+
+#### Nhóm 7: Read Receipts (5 feature, Phase 5)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 29 | Mark as read | Đánh dấu đã đọc |
+| 30 | Auto mark-read | Tự đánh dấu khi user gọi GetList |
+| 31 | Xem ai đã đọc | Staff/Manager kiểm tra Customer đã thấy update chưa |
+| 32 | Unread count per ticket | Badge "3 chưa đọc" |
+| 33 | Cảnh báo Customer chưa đọc N comment trong M giờ | Manager proactive escalate |
+
+#### Nhóm 8: Rich Content / Markdown (5 feature, Phase 4)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 34 | Markdown support | Bold, italic, list, code block, link |
+| 35 | XSS sanitize | Bảo mật |
+| 36 | Code block syntax highlight | Paste log đẹp (FE Prism.js render) |
+| 37 | Auto-link URL | Biến URL thành link clickable |
+| 38 | Emoji picker + render | UX |
+
+**Whitelist tag:** `<p>, <strong>, <em>, <code>, <pre>, <ul>, <ol>, <li>, <a>, <blockquote>, <br>, <img>` (img chỉ khi src trùng attachment của ticket).
+
+#### Nhóm 9: Realtime SignalR (6 feature, Phase 7)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 39 | Push comment mới tới mọi client đang xem ticket | Realtime UX |
+| 40 | Push edit/delete | Đồng bộ state |
+| 41 | Push reaction | Realtime emoji |
+| 42 | Typing indicator | "X đang gõ..." |
+| 43 | Push mention trực tiếp | Bắn riêng cho user được mention |
+| 44 | Online presence | Hiển thị ai đang xem ticket |
+
+**Server-push events:** `CommentAdded(dto)`, `CommentEdited(dto)`, `CommentDeleted(id, byUser)`, `ReactionAdded(commentId, reaction)`, `UserTyping(ticketId, userId, displayName)`, `MentionReceived(dto)`.
+
+**Client methods:** `JoinTicket(ticketId)` (verify quyền), `LeaveTicket(ticketId)`, `Typing(ticketId)`.
+
+> **Tham khảo pattern có sẵn:** `services/SmsService/src/SmsService.Infrastructure/Realtime/SmsGatewayHub.cs` (đã có sẵn từ Sprint SMS) — copy pattern Hub + Notifier + Redis backplane + JWT query-string auth, không phải tự viết từ đầu.
+
+#### Nhóm 10: Template / Canned Response (7 feature, Phase 6)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 45 | Tạo template cá nhân | Staff tự dùng |
+| 46 | Tạo template chung | Manager/Admin Global/Team |
+| 47 | Apply template vào comment | Quick paste auto fill placeholder |
+| 48 | Placeholder động | `{{customer_name}}`, `{{ticket_code}}`, `{{battery_id}}` |
+| 49 | Phân loại template | Category enum |
+| 50 | Usage stats | Template nào dùng nhiều |
+| 51 | Share trong team | Team scope |
+
+#### Nhóm 11: AI-Assist (7 feature, Phase 8)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 52 | Suggest comment | AI gợi ý reply cho Staff |
+| 53 | Multiple candidates | 3 phương án để chọn |
+| 54 | Theo intent | RequestInfo / TechAnswer / Resolution / FollowUp |
+| 55 | Log AI usage | Train improve model |
+| 56 | Mask PII trước gửi AI | Bảo mật |
+| 57 | Sentiment analysis | Detect Customer tức giận để alert |
+| 58 | Auto-summarize thread dài | Tóm tắt comment dài cho Staff mới tiếp nhận |
+
+**Flow:** Staff click "AI suggest" → backend mask PII → gọi AI module với context (ticket title + last 5 comment + sensor data) → trả 3 suggestion → Staff chọn 1 → edit → post → log vào `comment_ai_suggestions` để improve model.
+
+#### Nhóm 12: Search & Filter (8 feature, Phase 6)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 59 | Full-text search tiếng Việt có dấu | Tìm trong body comment |
+| 60 | Filter authorRole | Lọc theo role |
+| 61 | Filter authorUserId | Lọc theo user cụ thể |
+| 62 | Filter `isInternal` | Lọc loại |
+| 63 | Filter `hasAttachment` | Có file không |
+| 64 | Filter time range | Theo ngày |
+| 65 | Filter `reactionType` | Có react không |
+| 66 | Global cross-ticket search | Admin/Manager compliance lookup |
+
+**SQL setup:**
+```sql
+CREATE INDEX IX_ticket_comments_body_tsv ON ticket_comments USING gin(body_tsv);
+CREATE TRIGGER ticket_comments_tsv_trigger
+BEFORE INSERT OR UPDATE ON ticket_comments
+FOR EACH ROW EXECUTE FUNCTION tsvector_update_trigger(body_tsv, 'pg_catalog.simple', body);
+```
+
+#### Nhóm 13: Pin / Highlight (4 feature, Phase 4)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 67 | Pin comment | Ghim lên đầu timeline |
+| 68 | Unpin | Bỏ ghim |
+| 69 | Giới hạn 3 pinned/ticket | Tránh spam pin |
+| 70 | Highlight (color/badge) | Nổi bật visually |
+
+**Rule:** Chỉ Manager/Admin/Staff được pin. Sort khi GetList: `is_pinned DESC, created_at DESC`.
+
+#### Nhóm 14: Translation (4 feature, Phase 8)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 71 | Auto-detect ngôn ngữ | Lưu `original_language` |
+| 72 | Dịch comment VN ↔ EN | Lazy translate khi user click |
+| 73 | Cache bản dịch | TTL 30 ngày + Redis |
+| 74 | Hiển thị song ngữ | UX |
+
+#### Nhóm 15: Metrics / Analytics (6 feature, Phase 8)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 75 | Avg response time của Staff | KPI |
+| 76 | Số comment/ticket trung bình | KPI |
+| 77 | % ticket có internal note | Quality indicator |
+| 78 | Mention count per user | Workload signal |
+| 79 | Manager dashboard | So sánh Staff với team avg |
+| 80 | Comment heatmap theo giờ | Activity pattern |
+
+#### Nhóm 16: Notification (6 feature, Phase 5)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 81 | Push comment mới | Mobile (Expo) / Web push |
+| 82 | Email khi user offline | Reach Customer |
+| 83 | Web push browser | Staff |
+| 84 | User preference | Bật/tắt từng loại |
+| 85 | Quiet hours | Không notify giờ ngủ |
+| 86 | Notification digest | Gom comment trong N phút thành 1 notify |
+
+#### Nhóm 17: Authorization (4 feature, Phase 2)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 87 | Granular permission | Tách 9 permission codes (xem §70.6) |
+| 88 | Block comment khi ticket CLOSED | Tránh edit lịch sử (Admin được) |
+| 89 | Cho Customer rate kèm comment khi CLOSED_PENDING_RATE | UX |
+| 90 | Centralize authz helper | Test dễ |
+
+#### Nhóm 18: Validation & Security (8 feature, Phase 2)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 91 | Min/max body length (1–10000) | Quality |
+| 92 | Reject whitespace/emoji thuần | Spam |
+| 93 | Spam detection (dup 3 lần/5p) | Anti-spam |
+| 94 | XSS sanitization | Bảo mật |
+| 95 | Profanity filter | Tone (config dictionary VN/EN) |
+| 96 | Rate limiting | Customer 10/p/ticket, Staff 30/p, Manager 60/p |
+| 97 | PII detection | Cảnh báo khi post CCCD/sđt/email |
+| 98 | Hate speech detection (AI) | Compliance |
+
+#### Nhóm 19: Performance & Caching (5 feature, Phase 6)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 99 | Redis cache comment page 1 | TTL 30s, invalidate khi có comment mới |
+| 100 | Cursor-based pagination | Mobile infinite scroll |
+| 101 | Eager-load attachment count | Tránh N+1 |
+| 102 | DB indexes tối ưu | Composite + GIN |
+| 103 | Bulk read receipt writer | Channel + batch insert |
+
+**Indexes cần có:**
+```
+ticket_comments(ticket_id, created_at DESC)
+ticket_comments(ticket_id, is_pinned, created_at DESC)
+ticket_comments(parent_comment_id)
+ticket_comments(thread_root_id)
+ticket_comments(author_user_id, created_at DESC)
+ticket_comments(body_tsv) GIN
+ticket_comment_mentions(mentioned_user_id, is_acknowledged)
+ticket_comment_reactions(comment_id, reaction_type)
+ticket_comment_reads(user_id, comment_id)
+ticket_attachments(comment_id)
+```
+
+#### Nhóm 20: Integration Events / Outbox (6 feature, Phase 5)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 104 | Publish `CommentCreatedEvent` | Notify cross-service (NotificationService) |
+| 105 | Publish `CommentMentionedEvent` | Mention notify |
+| 106 | Publish `CommentDeletedEvent` | Sync downstream |
+| 107 | Publish `CommentReactedEvent` | Notify author |
+| 108 | Outbox atomic | Đảm bảo deliverability với DB write |
+| 109 | Saga escalation review | Mention Manager + ticket P1 → trigger escalation review saga |
+
+#### Nhóm 21: SLA Integration (3 feature, Phase 8)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 110 | Reset SLA pause khi Customer comment | Auto-resume timer khi đã pause vì chờ Customer |
+| 111 | Auto-pause SLA khi Staff yêu cầu info | Stop timer khi Staff comment `await_customer_info` |
+| 112 | Log comment vào SLA breach evidence | Audit cho dispute |
+
+#### Nhóm 22: Knowledge Base Integration (3 feature, Phase 8)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 113 | Suggest KB article theo nội dung comment | Help Staff trả lời nhanh |
+| 114 | Attach KB reference vào comment | Quick reference |
+| 115 | Convert comment hay → KB draft | Tăng KB database |
+
+#### Nhóm 23: Mobile-specific (4 feature, Phase 9)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 116 | Voice-to-text comment | Customer dictate → convert sang text |
+| 117 | Quick reaction từ notification | Không cần mở app |
+| 118 | Offline draft (FE) | Soạn khi mất mạng, gửi khi online |
+| 119 | Camera attachment trực tiếp | Chụp ảnh + gửi từ comment box |
+
+> **Phần offline draft + camera xử lý ở Mobile (Expo)** — backend chỉ cần endpoint `POST attachment` có chunk/resume upload. Voice-to-text (#116) backend gọi Whisper API qua `IVoiceTranscriptionService` (xem §70.21 Infrastructure/AiClient). Quick reaction từ notification (#117) yêu cầu Expo notification action button — FE work, backend chỉ cần endpoint `POST reaction` đã có ở Nhóm 6.
+
+#### Nhóm 24: Export / Compliance (5 feature, Phase 9)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 120 | Export comment timeline ra PDF | Legal/audit |
+| 121 | Print-friendly view | In ra |
+| 122 | Redact PII trước export | GDPR |
+| 123 | Retention policy auto archive | Comment > N năm archive |
+| 124 | GDPR right-to-erasure | Customer yêu cầu xóa comment của mình |
+
+#### Nhóm 25: Participant Management ⭐ Cốt lõi (12 feature, Phase 3)
+
+| # | Feature | Mục đích |
+|---|---------|----------|
+| 125 | Add participant | Mời user vào ticket chat |
+| 126 | Remove participant | Loại user khỏi chat |
+| 127 | List participants | Xem ai đang trong chat |
+| 128 | Watcher mode | Xem-only, không post |
+| 129 | Collaborator mode | Staff phụ có quyền post |
+| 130 | Delegate Customer | Customer ủy quyền cho người khác đại diện |
+| 131 | Auto-add khi reassign Staff | Staff cũ vẫn ở lại role `PreviousAssignee` |
+| 132 | Bulk add team | Manager add cả Tier 2 vào ticket P1 |
+| 133 | Self-leave | Watcher tự rời |
+| 134 | Permission per participant | `can_post`, `can_view_internal` riêng |
+| 135 | Participant history | Audit ai từng tham gia |
+| 136 | Notification add/remove | Báo user mới được mời |
+
+**Logic phức tạp:**
+- Soft delete participant khi remove (set `removed_at`) — không hard delete, giữ audit
+- Comment cũ của participant bị remove **vẫn giữ nguyên** trong timeline
+- SignalR: khi participant bị remove → force disconnect khỏi hub group `ticket-{id}`
+- **Owner (Customer chính) KHÔNG bị remove được** — chỉ Admin được, kèm lý do
+- Manager/Admin auto là implicit participant — không cần add vào bảng
+- Reassign Staff: Staff cũ tự động chuyển `participant_type = PreviousAssignee` (vẫn xem, không post)
+
+### 70.18. Database schema DDL chi tiết (11 bảng + 4 ALTER)
+
+**70.18.1. ALTER `ticket_comments` (mở rộng — 13 cột):**
+
+```sql
+ALTER TABLE ticket_comments ADD COLUMN edited_at timestamptz NULL;
+ALTER TABLE ticket_comments ADD COLUMN edit_count int NOT NULL DEFAULT 0;
+ALTER TABLE ticket_comments ADD COLUMN last_edited_by_user_id uuid NULL;
+ALTER TABLE ticket_comments ADD COLUMN parent_comment_id uuid NULL REFERENCES ticket_comments(id);
+ALTER TABLE ticket_comments ADD COLUMN thread_root_id uuid NULL;
+ALTER TABLE ticket_comments ADD COLUMN reply_count int NOT NULL DEFAULT 0;
+ALTER TABLE ticket_comments ADD COLUMN body_format int NOT NULL DEFAULT 1;
+ALTER TABLE ticket_comments ADD COLUMN body_html text NULL;
+ALTER TABLE ticket_comments ADD COLUMN body_tsv tsvector NULL;
+ALTER TABLE ticket_comments ADD COLUMN is_pinned bool NOT NULL DEFAULT false;
+ALTER TABLE ticket_comments ADD COLUMN pinned_at timestamptz NULL;
+ALTER TABLE ticket_comments ADD COLUMN pinned_by_user_id uuid NULL;
+ALTER TABLE ticket_comments ADD COLUMN original_language varchar(5) NULL;
+```
+
+**70.18.2. `ticket_comment_edits` (mới):**
+
+```sql
+CREATE TABLE ticket_comment_edits (
+  id uuid PRIMARY KEY,
+  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  old_body text NOT NULL,
+  new_body text NOT NULL,
+  edited_at timestamptz NOT NULL,
+  edited_by_user_id uuid NOT NULL,
+  edited_by_role int NOT NULL,
+  edit_reason text NULL,
+  created_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL
+);
+CREATE INDEX IX_ticket_comment_edits_comment_id ON ticket_comment_edits(comment_id);
+```
+
+**70.18.3. `ticket_comment_mentions` (mới):**
+
+```sql
+CREATE TABLE ticket_comment_mentions (
+  id uuid PRIMARY KEY,
+  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  mentioned_user_id uuid NOT NULL,
+  mentioned_user_role int NOT NULL,
+  mentioned_display_name varchar(256) NOT NULL,
+  is_acknowledged bool NOT NULL DEFAULT false,
+  acknowledged_at timestamptz NULL,
+  created_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL
+);
+CREATE INDEX IX_ticket_comment_mentions_user_unread
+ON ticket_comment_mentions(mentioned_user_id, is_acknowledged);
+```
+
+**70.18.4. `ticket_comment_reactions` (mới):**
+
+```sql
+CREATE TABLE ticket_comment_reactions (
+  id uuid PRIMARY KEY,
+  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  user_role int NOT NULL,
+  reaction_type int NOT NULL,
+  created_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL,
+  CONSTRAINT UQ_ticket_comment_reactions UNIQUE (comment_id, user_id, reaction_type)
+);
+CREATE INDEX IX_ticket_comment_reactions_comment_type
+ON ticket_comment_reactions(comment_id, reaction_type);
+```
+
+**70.18.5. `ticket_comment_reads` (mới):**
+
+```sql
+CREATE TABLE ticket_comment_reads (
+  id uuid PRIMARY KEY,
+  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  user_role int NOT NULL,
+  read_at timestamptz NOT NULL,
+  CONSTRAINT UQ_ticket_comment_reads UNIQUE (comment_id, user_id)
+);
+CREATE INDEX IX_ticket_comment_reads_user ON ticket_comment_reads(user_id, comment_id);
+```
+
+**70.18.6. `ticket_comment_translations` (mới):**
+
+```sql
+CREATE TABLE ticket_comment_translations (
+  id uuid PRIMARY KEY,
+  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  target_language varchar(5) NOT NULL,
+  translated_body text NOT NULL,
+  provider int NOT NULL,
+  translated_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL,
+  CONSTRAINT UQ_ticket_comment_translations UNIQUE (comment_id, target_language)
+);
+```
+
+**70.18.7. `comment_templates` (mới):**
+
+```sql
+CREATE TABLE comment_templates (
+  id uuid PRIMARY KEY,
+  name varchar(200) NOT NULL,
+  content text NOT NULL,
+  category int NOT NULL,
+  is_internal_default bool NOT NULL DEFAULT false,
+  created_by_user_id uuid NOT NULL,
+  scope int NOT NULL,
+  team_id uuid NULL,
+  usage_count int NOT NULL DEFAULT 0,
+  is_active bool NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL,
+  created_by uuid NULL,
+  updated_at timestamptz NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL
+);
+CREATE INDEX IX_comment_templates_scope_active ON comment_templates(scope, is_active);
+```
+
+**70.18.8. `comment_ai_suggestions` (mới):**
+
+```sql
+CREATE TABLE comment_ai_suggestions (
+  id uuid PRIMARY KEY,
+  ticket_id uuid NOT NULL,
+  suggested_at timestamptz NOT NULL,
+  intent int NOT NULL,
+  suggestions jsonb NOT NULL,
+  selected_index int NULL,
+  edited_before_post bool NOT NULL DEFAULT false,
+  final_comment_id uuid NULL,
+  created_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false
+);
+```
+
+**70.18.9. `comment_metrics_daily` (mới):**
+
+```sql
+CREATE TABLE comment_metrics_daily (
+  id uuid PRIMARY KEY,
+  metric_date date NOT NULL,
+  staff_id uuid NULL,
+  ticket_id uuid NULL,
+  comment_count int NOT NULL,
+  avg_response_time_min decimal(10,2) NULL,
+  internal_count int NOT NULL,
+  mention_received_count int NOT NULL,
+  created_at timestamptz NOT NULL
+);
+CREATE INDEX IX_comment_metrics_daily_date_staff ON comment_metrics_daily(metric_date, staff_id);
+```
+
+**70.18.10. `ticket_participants` ⭐ (mới):**
+
+```sql
+CREATE TABLE ticket_participants (
+  id uuid PRIMARY KEY,
+  ticket_id uuid NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  user_role int NOT NULL,
+  participant_type int NOT NULL,
+  can_post bool NOT NULL DEFAULT true,
+  can_view_internal bool NOT NULL DEFAULT false,
+  added_by_user_id uuid NOT NULL,
+  added_at timestamptz NOT NULL,
+  removed_at timestamptz NULL,
+  removed_by_user_id uuid NULL,
+  remove_reason text NULL,
+  created_at timestamptz NOT NULL,
+  is_deleted bool NOT NULL DEFAULT false,
+  deleted_at timestamptz NULL
+);
+CREATE INDEX IX_ticket_participants_ticket_active
+ON ticket_participants(ticket_id) WHERE removed_at IS NULL;
+CREATE INDEX IX_ticket_participants_user ON ticket_participants(user_id);
+```
+
+**70.18.11. ALTER `ticket_attachments` (mở rộng):**
+
+```sql
+ALTER TABLE ticket_attachments ADD COLUMN comment_id uuid NULL REFERENCES ticket_comments(id) ON DELETE SET NULL;
+ALTER TABLE ticket_attachments ADD COLUMN thumbnail_url varchar(1000) NULL;
+ALTER TABLE ticket_attachments ADD COLUMN is_inline bool NOT NULL DEFAULT false;
+ALTER TABLE ticket_attachments ADD COLUMN download_count int NOT NULL DEFAULT 0;
+ALTER TABLE ticket_attachments ADD COLUMN virus_scan_status int NOT NULL DEFAULT 1;
+CREATE INDEX IX_ticket_attachments_comment ON ticket_attachments(comment_id);
+```
+
+**70.18.12. ALTER `ticket_kb_references` (mở rộng — Nhóm 22 KB integration):**
+
+```sql
+ALTER TABLE ticket_kb_references ADD COLUMN comment_id uuid NULL REFERENCES ticket_comments(id) ON DELETE SET NULL;
+CREATE INDEX IX_ticket_kb_references_comment ON ticket_kb_references(comment_id);
+```
+
+**70.18.13. `ActivityActionEnum` extension (Domain/Enums — không đổi schema DB):**
+
+Mở rộng C# enum hiện có (`TicketService.Domain/Enums/ActivityActionEnum.cs`) — thêm 8 values mới phục vụ Sprint Comment:
+
+```csharp
+public enum ActivityActionEnum
+{
+    // ... values cũ (Commented, StateTransitioned, AssignedToStaff, ...)
+    CommentEdited = 30,
+    CommentDeleted = 31,
+    CommentRestored = 32,
+    CommentPinned = 33,
+    CommentReacted = 34,
+    ParticipantAdded = 35,
+    ParticipantRemoved = 36,
+    ParticipantRoleChanged = 37,
+}
+```
+
+> Cột `action` trong `ticket_activities` lưu int → enum value, không cần migration schema.
+
+**70.18.14. Roslyn analyzer ban anti-patterns (CI rules):**
+
+Thêm 3 rule cho Comment module ở stage `ci-rules` của Makefile:
+- Ban hardcode `"@username"` regex trong handler (must use `IMentionParser`)
+- Ban inline HTML render (must use `IMarkdownRenderer`)
+- Ban direct `_dbContext.TicketComments` access trong handler (must use `_uow.TicketComments`)
+
+### 70.19. API endpoint matrix đầy đủ (~40 endpoint)
+
+**70.19.1. Comment endpoints:**
+
+| Method | Path | Mục đích | Auth |
+|--------|------|----------|------|
+| POST | `/api/tickets/{ticketId}/comments` | Add comment (hiện có) | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments` | List (hiện có) | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/cursor` | Cursor pagination cho mobile | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/{id}` | Detail 1 comment | `[Authorize]` |
+| PUT | `/api/tickets/{ticketId}/comments/{id}` | Edit | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/comments/{id}` | Soft delete | `[Authorize]` |
+| PATCH | `/api/tickets/{ticketId}/comments/{id}/restore` | Restore | `AdminOnly` |
+| GET | `/api/tickets/{ticketId}/comments/{id}/history` | Edit history | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/replies` | Reply 1 comment | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/{id}/replies` | List replies | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/reactions` | Add reaction | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/comments/{id}/reactions/{type}` | Remove reaction | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/{id}/reactions` | List reactions | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/mark-read` | Bulk mark read | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/{id}/readers` | Ai đã đọc | `Staff/Manager` |
+| GET | `/api/tickets/{ticketId}/unread-count` | Số chưa đọc | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/pin` | Pin | `Staff/Manager/Admin` |
+| DELETE | `/api/tickets/{ticketId}/comments/{id}/pin` | Unpin | `Staff/Manager/Admin` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/translate` | Translate | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/attachments` | Add attachment sau | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/comments/{id}/attachments/{attId}` | Remove attachment | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/comments/{id}/attachments` | List attachments | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/from-template/{templateId}` | Post từ template | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/comments/suggest` | AI suggest | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/comments/voice` | Voice-to-text | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/attach-kb` | Attach KB reference | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/comments/{id}/to-kb-draft` | Convert → KB draft | `Staff/Manager` |
+| GET | `/api/tickets/{ticketId}/comments/export-pdf` | Export PDF timeline | `Manager/Admin` |
+
+**70.19.2. Cross-ticket endpoints:**
+
+| Method | Path | Mục đích |
+|--------|------|----------|
+| GET | `/api/comments/me` | My comments cross-ticket |
+| GET | `/api/comments/mentions/me` | My mentions |
+| PATCH | `/api/comments/mentions/{id}/acknowledge` | Ack mention |
+| GET | `/api/comments/search` | Global search (Admin/Manager) |
+| POST | `/api/comments/erase-my-data` | GDPR right-to-erasure |
+
+**70.19.3. Template endpoints:**
+
+| Method | Path | Mục đích |
+|--------|------|----------|
+| GET | `/api/comment-templates` | List |
+| POST | `/api/comment-templates` | Create |
+| PUT | `/api/comment-templates/{id}` | Update |
+| DELETE | `/api/comment-templates/{id}` | Delete |
+
+**70.19.4. Participant endpoints ⭐:**
+
+| Method | Path | Mục đích |
+|--------|------|----------|
+| GET | `/api/tickets/{ticketId}/participants` | List active |
+| POST | `/api/tickets/{ticketId}/participants` | Add |
+| POST | `/api/tickets/{ticketId}/participants/bulk` | Bulk add |
+| DELETE | `/api/tickets/{ticketId}/participants/{userId}` | Remove |
+| POST | `/api/tickets/{ticketId}/participants/leave` | Self-leave |
+| PATCH | `/api/tickets/{ticketId}/participants/{userId}` | Update role/permission |
+| GET | `/api/tickets/{ticketId}/participants/history` | Lịch sử full |
+
+**70.19.5. Metrics endpoints:**
+
+| Method | Path | Mục đích |
+|--------|------|----------|
+| GET | `/api/admin/comment-metrics` | Manager dashboard |
+| GET | `/api/admin/comment-metrics/heatmap` | Activity heatmap |
+
+**70.19.6. SignalR Hub:**
+
+| Path | Methods (client → server) | Server-push events |
+|------|--------------------------|---------------------|
+| `/hubs/ticket-comments` | `JoinTicket(ticketId)`, `LeaveTicket(ticketId)`, `Typing(ticketId)` | `CommentAdded`, `CommentEdited`, `CommentDeleted`, `ReactionAdded`, `UserTyping`, `MentionReceived` |
+
+**Tổng: ~40 endpoint REST + 1 SignalR Hub (6 events)**
+
+### 70.20. Integration events matrix đầy đủ (9 events)
+
+| Event | Publish khi | Consumer | Action |
+|-------|-------------|----------|--------|
+| `CommentCreatedEvent` | Add comment success | NotificationService | Push notify Customer/Staff |
+| `CommentEditedEvent` | Edit comment success | NotificationService | (optional) notify thread |
+| `CommentDeletedEvent` | Soft delete comment | NotificationService + Audit | Update FE state |
+| `CommentMentionedEvent` | Có mention trong body | NotificationService | Push notify mentioned user |
+| `CommentReactedEvent` | Add reaction | NotificationService | Notify author of comment |
+| `ParticipantAddedEvent` | Add participant | NotificationService | Welcome notify |
+| `ParticipantRemovedEvent` | Remove participant | NotificationService + SignalR | Force disconnect, notify |
+| `ParticipantRoleChangedEvent` | Update role | NotificationService | Notify role change |
+| (Saga) `CommentEscalationReviewRequestedEvent` | Mention Manager + ticket P1 | TicketService Saga | Trigger escalation review workflow |
+
+### 70.21. Source code structure đầy đủ sau Sprint Comment
+
+```
+services/TicketService/src/
+├── TicketService.Api/
+│   ├── Controllers/
+│   │   ├── TicketCommentsController.cs                  # MỞ RỘNG ~20 endpoint
+│   │   ├── TicketParticipantsController.cs              # MỚI
+│   │   ├── CommentTemplatesController.cs                # MỚI
+│   │   └── AdminCommentMetricsController.cs             # MỚI
+│   ├── Hubs/
+│   │   └── TicketCommentHub.cs                          # MỚI — SignalR
+│   ├── Middleware/
+│   │   └── CommentRateLimitMiddleware.cs                # MỚI
+│   ├── Authentication/
+│   │   └── SignalRJwtConfiguration.cs                   # MỚI
+│   └── Program.cs                                       # Đăng ký SignalR + Redis backplane
+│
+├── TicketService.Application/
+│   ├── CQRS/
+│   │   ├── Command/
+│   │   │   # CommentAdd (đã có)
+│   │   │   ├── CommentEdit/ + CommentDelete/ + CommentRestore/ + CommentReply/
+│   │   │   ├── CommentPin/ + CommentUnpin/
+│   │   │   ├── CommentReactionAdd/ + CommentReactionRemove/
+│   │   │   ├── CommentMarkRead/ + CommentTranslate/
+│   │   │   ├── CommentMentionAcknowledge/
+│   │   │   ├── CommentAttachmentAdd/ + CommentAttachmentRemove/
+│   │   │   ├── CommentFromTemplate/ + CommentSuggest/
+│   │   │   ├── CommentTemplateCreate/ + CommentTemplateUpdate/ + CommentTemplateDelete/
+│   │   │   ├── CommentVoiceTranscribe/
+│   │   │   ├── CommentExportPdf/ + CommentEraseUserData/
+│   │   │   ├── CommentAttachKbReference/ + ConvertCommentToKbDraft/
+│   │   │   ├── ParticipantAdd/ + ParticipantRemove/ + ParticipantBulkAdd/
+│   │   │   └── ParticipantSelfLeave/ + ParticipantUpdateRole/
+│   │   ├── Query/
+│   │   │   ├── Ticket/TicketCommentsQuery.cs            # Mở rộng filter
+│   │   │   ├── Comment/                                 # Folder mới
+│   │   │   │   ├── CommentGetByIdQuery + CommentRepliesQuery + CommentHistoryQuery
+│   │   │   │   ├── CommentReactionsQuery + CommentReadersQuery
+│   │   │   │   ├── CommentAttachmentsQuery + MyCommentsQuery + MyMentionsQuery
+│   │   │   │   ├── CommentGlobalSearchQuery + TicketUnreadCountQuery
+│   │   │   │   └── TicketCommentsCursorQuery
+│   │   │   ├── Template/CommentTemplatesQuery
+│   │   │   ├── Participant/TicketParticipantsQuery + ParticipantHistoryQuery
+│   │   │   └── Metrics/CommentMetricsQuery + CommentHeatmapQuery
+│   │   └── Handler/
+│   │       ├── Comments/ (~30 handler) + Templates/ (4) + Participants/ (7) + Metrics/ (2)
+│   ├── DTOs/Response/
+│   │   ├── Comments/ — CommentResponse, CommentActionDTO, CommentEditHistoryDTO,
+│   │   │              CommentMentionDTO, CommentReactionDTO, CommentReactionAggregateDTO,
+│   │   │              CommentReaderDTO, CommentAiSuggestionDTO
+│   │   ├── Tickets/TicketCommentDTO.cs (Mở rộng)
+│   │   ├── Templates/CommentTemplateDTO
+│   │   ├── Participants/TicketParticipantDTO + ParticipantHistoryDTO
+│   │   └── Metrics/CommentMetricsDTO
+│   ├── Helpers/
+│   │   ├── TicketQueryHelper.cs                         # Mở rộng — join ticket_participants
+│   │   └── CommentAuthorizationHelper.cs                # Mới
+│   └── Interfaces/Services/ (~15 mới)
+│       ├── IMentionParser + IMarkdownRenderer + ITemplateRenderer + ITranslationProvider
+│       ├── IProfanityFilter + IPiiDetector + ISpamDetector
+│       ├── ICommentAuthorizationService + ICommentAiSuggestionClient
+│       ├── ITicketCommentRealtimeNotifier + IVoiceTranscriptionService
+│       └── IPdfExporter + IDataRetentionService + IKbSuggestionService + ICommentCacheService
+│
+├── TicketService.Domain/
+│   ├── Entities/
+│   │   ├── TicketComment.cs (Mở rộng 13 cột) + TicketAttachment.cs (Mở rộng 5 cột)
+│   │   ├── Ticket.cs (Thêm Participants navigation) + TicketActivity.cs (giữ)
+│   │   ├── TicketKbReference.cs (Thêm comment_id)
+│   │   ├── TicketCommentEdit + TicketCommentMention + TicketCommentReaction
+│   │   ├── TicketCommentRead + TicketCommentTranslation
+│   │   ├── TicketParticipant ⭐ + CommentTemplate
+│   │   ├── CommentAiSuggestion + CommentMetricsDaily
+│   └── Enums/
+│       ├── ActorRoleEnum (giữ) + ActivityActionEnum (mở rộng) + AttachmentSourceEnum (giữ)
+│       ├── CommentBodyFormatEnum + ReactionTypeEnum
+│       ├── CommentTemplateCategoryEnum + CommentTemplateScopeEnum
+│       ├── TranslationProviderEnum + VirusScanStatusEnum + CommentAiIntentEnum
+│       └── ParticipantTypeEnum ⭐
+│
+├── TicketService.Infrastructure/
+│   ├── Persistence/
+│   │   ├── Configurations/
+│   │   │   ├── TicketCommentConfiguration (Mở rộng — tsvector, threading)
+│   │   │   ├── TicketAttachmentConfiguration (Mở rộng)
+│   │   │   ├── TicketCommentEditConfiguration + TicketCommentMentionConfiguration
+│   │   │   ├── TicketCommentReactionConfiguration + TicketCommentReadConfiguration
+│   │   │   ├── TicketCommentTranslationConfiguration + TicketParticipantConfiguration
+│   │   │   └── CommentTemplateConfiguration + CommentAiSuggestionConfiguration + CommentMetricsDailyConfiguration
+│   │   └── Converters/ (giữ)
+│   ├── Services/
+│   │   ├── MentionParserService + MarkdigMarkdownRenderer + TemplateRendererService
+│   │   ├── ProfanityFilterService + PiiDetectorService + SpamDetectorService
+│   │   ├── CommentAuthorizationService + KbSuggestionService
+│   ├── Translation/GoogleTranslateProvider
+│   ├── AiClient/FastApiCommentAiClient + WhisperTranscriptionService
+│   ├── Realtime/SignalRTicketCommentNotifier
+│   ├── Caching/CommentCacheService (Redis)
+│   ├── Export/QuestPdfCommentExporter
+│   ├── BackgroundServices/
+│   │   ├── VirusScanWorker + CommentReadReceiptBulkWriter
+│   │   ├── CommentMetricsAggregatorService + CommentRetentionService
+│   ├── Sagas/CommentEscalationReviewSaga
+│   ├── DependencyInjection/ManageDependencyInjection
+│   └── Migrations/ (15 migration mới)
+│       ├── 20260620_AddCommentEditHistory
+│       ├── 20260620_LinkAttachmentToComment + 20260620_AddCommentAttachmentEnhancements
+│       ├── 20260620_AddCommentThreading + 20260620_AddCommentMarkdownSupport
+│       ├── 20260620_AddCommentMentions + 20260620_AddCommentReactions + 20260620_AddCommentReadReceipts
+│       ├── 20260620_AddCommentPinning + 20260620_AddCommentTemplates
+│       ├── 20260620_AddCommentTranslations + 20260620_AddCommentAiSuggestions
+│       ├── 20260620_AddCommentFullTextSearch + 20260620_AddCommentMetrics
+│       ├── 20260620_AddCommentIndexes
+│       └── 20260620_AddTicketParticipants
+│
+└── tests/
+    ├── TicketService.UnitTests/Handlers/
+    │   ├── Comments/ (~30 test class) + Templates/ (4) + Participants/ (7) + Metrics/
+    └── TicketService.IntergrationTests/
+        ├── Tickets/TicketCommentApiTests (Mở rộng)
+        ├── Templates/CommentTemplatesApiTests
+        ├── Participants/TicketParticipantsApiTests
+        └── Hubs/TicketCommentHubTests
+
+shared/src/SharedContracts/Events/Ticket/
+├── CommentCreatedEvent + CommentEditedEvent + CommentDeletedEvent
+├── CommentMentionedEvent + CommentReactedEvent
+├── ParticipantAddedEvent + ParticipantRemovedEvent + ParticipantRoleChangedEvent
+
+services/NotificationService/src/NotificationService.Infrastructure/Consumers/
+├── CommentCreatedConsumer + CommentMentionConsumer
+├── CommentReactionConsumer + ParticipantChangeConsumer
+```
+
+### 70.21bis. Handler/Command/Query class names đầy đủ per Nhóm
+
+> **Mục đích:** Bảng tra cứu chi tiết — khi bắt tay vào 1 Nhóm cụ thể, biết ngay phải tạo file nào. Đường dẫn folder xem §70.21 (full tree).
+
+#### Nhóm 1 — CRUD cơ bản
+- **Commands:** `CommentEditCommand` + `CommentDeleteCommand` + `CommentRestoreCommand`
+- **Queries:** `CommentGetByIdQuery` + `MyCommentsQuery`
+- **Handlers:** `CommentEditCommandHandler`, `CommentDeleteCommandHandler`, `CommentRestoreCommandHandler`, `CommentGetByIdQueryHandler`, `MyCommentsQueryHandler`
+- **Controller:** Mở rộng `TicketCommentsController.cs` (PUT/DELETE/PATCH/GET /me)
+
+#### Nhóm 2 — Lịch sử & Audit
+- **Entity:** `TicketCommentEdit` + `TicketCommentEditConfiguration`
+- **Query:** `CommentHistoryQuery` + `CommentHistoryQueryHandler`
+- **Migration:** `AddCommentEditHistory`
+
+#### Nhóm 3 — Attachment nâng cao
+- **Entity mở rộng:** `TicketAttachment` (thêm `comment_id`, `thumbnail_url`, `is_inline`, `download_count`, `virus_scan_status`)
+- **Enum:** `VirusScanStatusEnum`
+- **Commands:** `CommentAttachmentAddCommand` + `CommentAttachmentRemoveCommand`
+- **Query:** `CommentAttachmentsQuery`
+- **Handlers:** `CommentAttachmentAddCommandHandler`, `CommentAttachmentRemoveCommandHandler`, `CommentAttachmentsQueryHandler`
+- **Background:** `VirusScanWorker`
+- **Migrations:** `LinkAttachmentToComment` + `AddCommentAttachmentEnhancements`
+
+#### Nhóm 4 — Threaded Reply
+- **Entity mở rộng:** `TicketComment` (thêm `parent_comment_id`, `thread_root_id`, `reply_count`)
+- **Command:** `CommentReplyCommand` + `CommentReplyCommandHandler`
+- **Query:** `CommentRepliesQuery` + `CommentRepliesQueryHandler`
+- **Migration:** `AddCommentThreading`
+
+#### Nhóm 5 — @Mention
+- **Entity:** `TicketCommentMention` + `TicketCommentMentionConfiguration`
+- **Service interface:** `IMentionParser` (Application) + `MentionParserService` (Infrastructure)
+- **Command:** `CommentMentionAcknowledgeCommand` + `CommentMentionAcknowledgeCommandHandler`
+- **Query:** `MyMentionsQuery` + `MyMentionsQueryHandler`
+- **Event:** `CommentMentionedEvent` (SharedContracts)
+- **Migration:** `AddCommentMentions`
+
+#### Nhóm 6 — Reaction
+- **Entity:** `TicketCommentReaction` + `TicketCommentReactionConfiguration`
+- **Enum:** `ReactionTypeEnum`
+- **Commands:** `CommentReactionAddCommand` + `CommentReactionRemoveCommand`
+- **Query:** `CommentReactionsQuery`
+- **Handlers:** `CommentReactionAddCommandHandler`, `CommentReactionRemoveCommandHandler`, `CommentReactionsQueryHandler`
+- **Event:** `CommentReactedEvent`
+- **Migration:** `AddCommentReactions`
+
+#### Nhóm 7 — Read Receipts
+- **Entity:** `TicketCommentRead` + `TicketCommentReadConfiguration`
+- **Command:** `CommentMarkReadCommand` + `CommentMarkReadCommandHandler`
+- **Queries:** `CommentReadersQuery` + `TicketUnreadCountQuery`
+- **Handlers:** `CommentReadersQueryHandler`, `TicketUnreadCountQueryHandler`
+- **Background:** `CommentReadReceiptBulkWriter`
+- **Migration:** `AddCommentReadReceipts`
+
+#### Nhóm 8 — Rich Content / Markdown
+- **Entity mở rộng:** `TicketComment` (thêm `body_format`, `body_html`)
+- **Enum:** `CommentBodyFormatEnum`
+- **Service interface:** `IMarkdownRenderer` (Application) + `MarkdigMarkdownRenderer` (Infrastructure — dùng Markdig + Ganss.Xss)
+- **Migration:** `AddCommentMarkdownSupport`
+
+#### Nhóm 9 — Realtime SignalR
+- **Hub:** `TicketCommentHub` (Api/Hubs, path `/hubs/ticket-comments`)
+- **Config:** `SignalRJwtConfiguration` (JWT qua query string)
+- **Service interface:** `ITicketCommentRealtimeNotifier` (Application) + `SignalRTicketCommentNotifier` (Infrastructure)
+- **Program.cs:** thêm `AddSignalR + AddStackExchangeRedis` (backplane multi-instance)
+- **Pattern reference:** `services/SmsService/.../SmsGatewayHub.cs`
+
+#### Nhóm 10 — Template / Canned Response
+- **Entity:** `CommentTemplate` + `CommentTemplateConfiguration`
+- **Enums:** `CommentTemplateCategoryEnum` + `CommentTemplateScopeEnum`
+- **Service interface:** `ITemplateRenderer` + `TemplateRendererService`
+- **Commands:** `CommentTemplateCreateCommand` + `CommentTemplateUpdateCommand` + `CommentTemplateDeleteCommand` + `CommentFromTemplateCommand`
+- **Query:** `CommentTemplatesQuery`
+- **Handlers:** `CommentTemplateCreateCommandHandler`, `CommentTemplateUpdateCommandHandler`, `CommentTemplateDeleteCommandHandler`, `CommentFromTemplateCommandHandler`, `CommentTemplatesQueryHandler`
+- **Controller:** `CommentTemplatesController.cs` (mới)
+- **Migration:** `AddCommentTemplates`
+
+#### Nhóm 11 — AI-Assist
+- **Entity:** `CommentAiSuggestion` + `CommentAiSuggestionConfiguration`
+- **Enum:** `CommentAiIntentEnum`
+- **Service interfaces:** `ICommentAiSuggestionClient` + `IPiiDetector`
+- **Command:** `CommentSuggestCommand` + `CommentSuggestCommandHandler`
+- **Infrastructure:** `FastApiCommentAiClient` (AiClient) + `PiiDetectorService` (Services)
+- **Migration:** `AddCommentAiSuggestions`
+
+#### Nhóm 12 — Search & Filter
+- **Entity mở rộng:** `TicketComment` (thêm `body_tsv` tsvector)
+- **Queries:** `TicketCommentsQuery` (mở rộng filter params) + `CommentGlobalSearchQuery` + `CommentGlobalSearchQueryHandler`
+- **Configuration mở rộng:** `TicketCommentConfiguration` (tsvector + GIN index)
+- **Migration:** `AddCommentFullTextSearch` (+ Postgres trigger `tsvector_update_trigger`)
+
+#### Nhóm 13 — Pin / Highlight
+- **Entity mở rộng:** `TicketComment` (thêm `is_pinned`, `pinned_at`, `pinned_by_user_id`)
+- **Commands:** `CommentPinCommand` + `CommentUnpinCommand`
+- **Handlers:** `CommentPinCommandHandler`, `CommentUnpinCommandHandler`
+- **Migration:** `AddCommentPinning`
+
+#### Nhóm 14 — Translation
+- **Entity:** `TicketCommentTranslation` + `TicketCommentTranslationConfiguration`
+- **Entity mở rộng:** `TicketComment` (thêm `original_language`)
+- **Enum:** `TranslationProviderEnum`
+- **Service interface:** `ITranslationProvider` + `GoogleTranslateProvider` (Translation folder)
+- **Command:** `CommentTranslateCommand` + `CommentTranslateCommandHandler`
+- **Migration:** `AddCommentTranslations`
+
+#### Nhóm 15 — Metrics / Analytics
+- **Entity:** `CommentMetricsDaily` + `CommentMetricsDailyConfiguration`
+- **Background:** `CommentMetricsAggregatorService` (HostedService — chạy mỗi giờ)
+- **Query:** `CommentMetricsQuery` + `CommentMetricsQueryHandler` (+ `CommentHeatmapQuery`)
+- **Controller:** `AdminCommentMetricsController.cs` (mới)
+- **Migration:** `AddCommentMetrics`
+
+#### Nhóm 16 — Notification (cross-service)
+- **Events (SharedContracts):** `CommentCreatedEvent` + `CommentDeletedEvent` + `CommentEditedEvent` + `CommentReactedEvent` + `CommentMentionedEvent`
+- **Consumers (NotificationService):** `CommentCreatedConsumer` + `CommentMentionConsumer` + `CommentReactionConsumer` (+ digest job aggregator)
+- **UserService entity mở rộng:** `NotificationPreference` (thêm `notify_on_comment`, `notify_on_mention`, `notify_on_reaction`, `quiet_hours_start`, `quiet_hours_end`)
+
+#### Nhóm 17 — Authorization
+- **Helpers:** `TicketQueryHelper.cs` (mở rộng — join `ticket_participants`) + `CommentAuthorizationHelper.cs` (mới)
+- **Service interface:** `ICommentAuthorizationService` + `CommentAuthorizationService` (Infrastructure)
+
+#### Nhóm 18 — Validation & Security
+- **Service interfaces:** `IProfanityFilter` + `IPiiDetector` + `ISpamDetector`
+- **Infrastructure (Validation folder):** `ProfanityFilterService` + `PiiDetectorService` + `SpamDetectorService`
+- **Middleware:** `CommentRateLimitMiddleware` (Api/Middleware — dùng AspNetCoreRateLimit package)
+
+#### Nhóm 19 — Performance & Caching
+- **Service:** `CommentCacheService` (Infrastructure/Caching — Redis-based)
+- **Query:** `TicketCommentsCursorQuery` + `TicketCommentsCursorQueryHandler` (cursor variant cho mobile)
+- **Migration:** `AddCommentIndexes` (composite indexes — xem §70.17 Nhóm 19 "Indexes cần có")
+
+#### Nhóm 20 — Integration Events / Outbox
+- **Events (SharedContracts):** `CommentCreatedEvent` + `CommentEditedEvent` + `CommentDeletedEvent` + `CommentMentionedEvent` + `CommentReactedEvent`
+- **Handlers (Application):** mọi handler publish event qua `_outbox.PublishAsync` sau khi `SaveChanges`
+- **Saga (Infrastructure):** `CommentEscalationReviewSaga` (MassTransit Saga state machine)
+
+#### Nhóm 21 — SLA Integration
+- **Handler mở rộng:** `CommentAddCommandHandler` (trigger SLA timer logic)
+- **Service mở rộng:** `ISlaTimerService` (thêm method `PauseForCustomerInfo(ticketId, commentId)` + `ResumeOnCustomerReply(ticketId, commentId)`)
+- **Entity mở rộng:** `SlaPauseEvent` (thêm enum reason `AwaitingCustomerComment`)
+
+#### Nhóm 22 — Knowledge Base Integration
+- **Entity mở rộng:** `TicketKbReference` (thêm `comment_id` nullable)
+- **Commands:** `CommentAttachKbReferenceCommand` + `ConvertCommentToKbDraftCommand`
+- **Service interface:** `IKbSuggestionService` + `KbSuggestionService` (full-text similarity match)
+
+#### Nhóm 23 — Mobile-specific (backend portion)
+- **Command:** `CommentVoiceTranscribeCommand`
+- **Service interface:** `IVoiceTranscriptionService` + `WhisperTranscriptionService` (Infrastructure/AiClient)
+- **Controller mở rộng:** `TicketCommentsController.cs` (endpoint `POST voice` với audio multipart)
+
+#### Nhóm 24 — Export / Compliance
+- **Commands:** `CommentExportPdfCommand` + `CommentEraseUserDataCommand`
+- **Service interfaces:** `IPdfExporter` + `IDataRetentionService`
+- **Infrastructure:** `QuestPdfCommentExporter` (Export folder — dùng QuestPDF package)
+- **Background:** `CommentRetentionService` (auto archive > N năm)
+
+#### Nhóm 25 — Participant Management ⭐
+- **Entity:** `TicketParticipant` + `TicketParticipantConfiguration`
+- **Enum:** `ParticipantTypeEnum` (Owner/PrimaryAssignee/Collaborator/Watcher/Delegate/PreviousAssignee)
+- **Commands:** `ParticipantAddCommand` + `ParticipantRemoveCommand` + `ParticipantBulkAddCommand` + `ParticipantSelfLeaveCommand` + `ParticipantUpdateRoleCommand`
+- **Queries:** `TicketParticipantsQuery` + `ParticipantHistoryQuery`
+- **Handlers:** `ParticipantAddCommandHandler`, `ParticipantRemoveCommandHandler`, `ParticipantBulkAddCommandHandler`, `ParticipantSelfLeaveCommandHandler`, `ParticipantUpdateRoleCommandHandler`, `TicketParticipantsQueryHandler`, `ParticipantHistoryQueryHandler`
+- **Helper mở rộng:** `TicketQueryHelper.cs` (mở rộng `CanAccessTicket` join `ticket_participants`)
+- **Events (SharedContracts):** `ParticipantAddedEvent` + `ParticipantRemovedEvent` + `ParticipantRoleChangedEvent`
+- **Controller:** `TicketParticipantsController.cs` (mới)
+- **Migration:** `AddTicketParticipants`
+
+### 70.22. Roadmap dependency + Critical path
+
+**Thứ tự dependency 15 bước:**
+
+| Bước | Nhóm | Lý do |
+|------|------|------|
+| 1 | Nhóm 1 (CRUD) + Nhóm 2 (history) + Nhóm 3 (attachment refactor) | **Foundation** — mọi tính năng sau đều cần |
+| 2 | Nhóm 17 (authz) + Nhóm 18 (validation) | Bảo mật trước khi mở rộng |
+| 3 | Nhóm 25 (participant) ⭐ | Cốt lõi nghiệp vụ — cần cho mọi mở rộng visibility sau |
+| 4 | Nhóm 8 (markdown) | Đơn lẻ, không phụ thuộc |
+| 5 | Nhóm 4 (reply) + Nhóm 13 (pin) | Đơn lẻ |
+| 6 | Nhóm 5 (mention) + Nhóm 20 (integration events) + Nhóm 16 (notification) | Bộ ba liên kết — cần Outbox publish + NotificationService consume |
+| 7 | Nhóm 6 (reaction) + Nhóm 7 (read receipt) | Sau notification |
+| 8 | Nhóm 10 (template) | Productivity, đơn lẻ |
+| 9 | Nhóm 9 (SignalR realtime) | Wrap broadcast cho mọi feature đã có ở trên |
+| 10 | Nhóm 12 (search) + Nhóm 19 (performance) | Sau khi data nhiều |
+| 11 | Nhóm 14 (translation) | Optional theo locale |
+| 12 | Nhóm 11 (AI assist) | Phụ thuộc AI module ready |
+| 13 | Nhóm 21 (SLA) + Nhóm 22 (KB) | Integration cross-feature |
+| 14 | Nhóm 15 (metrics) | Sau khi có usage data |
+| 15 | Nhóm 23 (mobile) + Nhóm 24 (export/compliance) | Final polish |
+
+**Critical path ASCII:**
+
+```
+Foundation (1+2+3)
+   ↓
+Authz + Validation (17+18)
+   ↓
+Participant (25)         ──┐
+   ↓                       │
+[song song] Markdown (8)   ├──┐
+[song song] Reply (4)      │  │
+[song song] Pin (13)       │  │
+   ↓                       │  │
+Mention + Notification (5+16+20) ─┐
+   ↓                              │
+Reaction + Read (6+7)             │
+   ↓                              │
+SignalR realtime (9) ─────────────┘
+   ↓
+Search + Perf (12+19)
+   ↓
+AI + Translation + Metrics (11+14+15)
+   ↓
+SLA + KB + Mobile + Export (21+22+23+24)
+```
+
+### 70.23. Configuration & feature flags
+
+`appsettings.json`:
+
+```json
+{
+  "Comment": {
+    "MaxBodyLength": 10000,
+    "MinBodyLength": 1,
+    "EditWindowMinutes": 15,
+    "MaxAttachmentsPerComment": 10,
+    "MaxAttachmentSizeMb": 50,
+    "MaxPinnedPerTicket": 3,
+    "AllowedMimeTypes": ["image/jpeg", "image/png", "image/gif", "application/pdf", "video/mp4", "text/plain"],
+    "RateLimit": {
+      "CustomerPerMinute": 10,
+      "StaffPerMinute": 30,
+      "ManagerPerMinute": 60
+    },
+    "Cache": {
+      "Page1TtlSeconds": 30,
+      "UserDisplayNameTtlMinutes": 5,
+      "TranslationTtlDays": 30
+    },
+    "Realtime": {
+      "TypingDebounceMs": 500,
+      "PresenceTimeoutSeconds": 60
+    },
+    "Ai": {
+      "SuggestEndpoint": "https://ai-module/ai/comment-suggest",
+      "MaxSuggestionsPerCall": 3,
+      "TimeoutSeconds": 10
+    },
+    "Translation": {
+      "Provider": "GoogleTranslate",
+      "ApiKey": "[SECRET]"
+    },
+    "Retention": {
+      "ArchiveAfterYears": 2,
+      "PermanentDeleteAfterYears": 7
+    },
+    "Features": {
+      "EnableMarkdown": true,
+      "EnableThreading": true,
+      "EnableMentions": true,
+      "EnableReactions": true,
+      "EnableReadReceipts": true,
+      "EnablePinning": true,
+      "EnableSignalR": true,
+      "EnableAiSuggest": false,
+      "EnableTranslation": false,
+      "EnableVirusScan": false,
+      "EnableProfanityFilter": false,
+      "EnablePiiDetection": true,
+      "EnableTemplates": true,
+      "EnableParticipants": true,
+      "EnableMetrics": true,
+      "EnableExport": false
+    }
+  }
+}
+```
+
+### 70.24. Testing matrix chi tiết
+
+**70.24.1. Unit test (target ≥ 80% coverage)** — per handler:
+- `CommentEditCommandHandler`: edit trong/ngoài 15 phút, không phải author, ticket closed, edit_reason required cho Admin
+- `CommentDeleteCommandHandler`: author vs admin, cascade soft delete mention/reaction/read
+- `CommentRestoreCommandHandler`: Admin only
+- `CommentReplyCommandHandler`: reply-of-reply bị block, cross-ticket parent bị block
+- `CommentReactionAddCommandHandler`: duplicate reaction bị reject (unique constraint)
+- `CommentMarkReadCommandHandler`: bulk insert idempotent
+- `CommentPinCommandHandler`: max 3 pinned enforce
+- `CommentMentionParser`: regex edge cases, không resolve được user → null
+- `MarkdownRenderer`: XSS injection bị sanitize
+- `TemplateRenderer`: placeholder không tồn tại → error
+- `ParticipantAddCommandHandler`: Owner không bị remove được, Customer chỉ Admin remove
+- `CommentAuthorizationHelper`: matrix permission đầy đủ
+
+**70.24.2. Integration test (TestContainers Postgres):**
+- Full flow add → edit → delete → restore
+- Mention → publish event → consumer nhận
+- Threaded reply hiển thị đúng order
+- Full-text search trả đúng kết quả tiếng Việt có dấu
+- SignalR broadcast tới group đúng
+- Participant remove → comment cũ vẫn còn, force disconnect
+- Reassign Staff → Staff cũ auto chuyển `PreviousAssignee`
+- Reaction unique constraint enforce ở DB level
+- Cascade delete: xóa ticket → cascade xóa comment/mention/reaction/read
+
+**70.24.3. Performance test:**
+- 1000 comment trên 1 ticket — query pagination < 200ms
+- SignalR broadcast 100 concurrent user — latency < 500ms
+- Full-text search trên 1M comment — < 500ms
+- Mark-read bulk 1000 comment — < 1s
+- AI suggest latency < 3s (bao gồm gọi AI module)
+
+**70.24.4. Security test:**
+- XSS payload trong markdown body → bị sanitize hoàn toàn
+- SQL injection trong search query → tham số hóa
+- Rate limit enforce đúng theo role
+- Customer không thấy được internal comment qua bất kỳ endpoint nào
+- Participant bị remove không gọi được SignalR hub group ticket-{id}
+
+### 70.25. Phụ lục — Tham chiếu
+
+- **Rules dự án:** `.claude/rules/tech/be.md`
+- **Business flow:** `.claude/docs/core-business-flow.md`
+- **SignalR pattern tham khảo:** `services/SmsService/src/SmsService.Infrastructure/Realtime/SmsGatewayHub.cs`
+- **Outbox pattern:** Đã có `OutboxMessage` entity + `OutboxMessageConfiguration`
+- **Saga pattern:** Đã có `AlertTicketSagaStateConfiguration` làm tham khảo
+- **TimescaleDB pagination pattern:** `be.md §13` — cursor-based reuse được cho comment cursor query
+- **Hub doc gốc (cùng repo):** [`ticket-comment-hub.md`](ticket-comment-hub.md) (đặt tại root của backend repo, tracked bởi git) — tài liệu tham khảo gốc dạng standalone đầy đủ 10 phần × 2010 dòng, đã được tổng hợp hoàn toàn vào §70 (overall.md là source of truth chính, hub file giữ làm reference chi tiết khi cần đọc theo cấu trúc Phần I → X)
+
+**Quy trình triển khai mỗi nhóm:**
+1. Tạo GitHub Issue mô tả scope nhóm (tham chiếu §70.17)
+2. `/kltn-plan {issue-number}` → viết `logs/GH-{number}/plan.md`
+3. User approve plan
+4. `/kltn-implement {issue-number}` → code theo §70.18 (DDL) + §70.19 (endpoint) + §70.21 (source structure)
+5. `/kltn-reviewcode` → `/kltn-test` (theo §70.24 matrix) → `/kltn-ship`
+
+---
+
+**Hết §70 (TicketService Comment Hub — embedded summary from `ticket-comment-hub.md` 136 feature + 74 task Sprint Comment overview).**
+
+---
+
 **End of OVERALL.md (Final Complete Edition)**
 
 **Document lifecycle:**
@@ -14888,13 +16634,14 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 - v4.7 (2026-06-15): **§68 SmsService SMS Forwarder Gateway + Sprint SMS** — embed nguyên văn `backend-sms-fowarder.md` v1 (3428 dòng) làm §68 trong Phần IX mới; heading demote 1 cấp bằng awk skip fenced code blocks (bash comment line 2873 `# Từ thư mục REPO ROOT capstone/backend/` preserve nguyên); gom 42 task triển khai theo Phase 0–10 vào **Sprint SMS** ở §17 (`#SMS-01..42` → `#293..#334`); update Mục lục thêm Phần IX entry; §67 stats bump section 67→68 + sprint backlog liệt kê Sprint SMS + Sprint IoT-2. Sprint SMS biến `SmsService` từ stub `FakeSmsSender` thành SMS Gateway Hub trung tâm — nhận `SendSmsCommand` từ Auth/Battery/Ticket/Notification qua RabbitMQ + Inbox dedup, queue vào DB riêng `sms_db` (xmin concurrency token), push SignalR cho Flutter `sms_fowarder`, báo kết quả qua Outbox (`SmsDeliveryReportEvent`/`SmsFailedEvent`); BCrypt API key per-device + rate limit 60 req/phút + daily limit + TTL redactor 24h; copy nguyên Outbox pattern từ AuthService. Critical deploy warning: atomic switch `SendPhoneOtpEvent` → `SendSmsCommand` ở Phase 9 phải xoá hẳn publish cũ trong cùng commit (tránh double-OTP). FE patch nhỏ Flutter `sms_gateway_remote_datasource.dart` đọc `raw['data']` (§68 Phụ lục C.2). KHÔNG đụng section khác.
 
+- v5.0 (2026-06-20): **Sprint Comment (TicketService Comment Hub) + Phần XI §70** — tài liệu hóa toàn bộ kiến trúc mở rộng Comment module trong `ticket-comment-hub.md` (10 phần, 2010 dòng, 25 nhóm × 136 feature); gom 74 task triển khai theo 9 phase vào **Sprint Comment** ở §17 (`#COMMENT-01..74` → `#501..#574`); thêm **Phần XI** + **§70** tóm tắt overview làm entry-point cross-reference; deprecate §36 (Comment / MaintenanceLog advanced — phần Comment) — giữ lại làm tài liệu lịch sử + redirect tới `ticket-comment-hub.md`, MaintenanceLog §36.6 vẫn áp dụng. Sprint Comment chia thành: Phase 0 (ADR + 9 integration events + RabbitMQ topology + Roslyn analyzer) → Phase 1 (CRUD Edit/Delete/Restore/GetById/MyComments + Edit history + Attachment FK refactor + VirusScanWorker) → Phase 2 (CommentAuthorizationHelper + 9 granular permissions + Block edit khi Closed + Spam/PII/Profanity/RateLimit) → **Phase 3 ⭐ Participant Management** (TicketParticipant entity + 6 ParticipantType enum + CanAccessTicket logic update + Add/Remove/BulkAdd/SelfLeave/UpdateRole + Auto PreviousAssignee khi reassign — cốt lõi nghiệp vụ chặn 10 use case B2B/multi-Staff/Customer delegate/Watcher) → Phase 4 (Markdown + Markdig + Ganss.Xss + Threaded reply 1-level + Pin max 3) → Phase 5 (Mention parser + group mention + Reaction 5 type + Read receipt + 9 Outbox events publish + 4 NotificationService consumer idempotent) → Phase 6 (Comment template 3 scope + placeholder render + Full-text search VN có dấu + body_tsv GIN + Global search Admin + Composite indexes + Redis cache page 1 + Cursor pagination mobile) → Phase 7 (TicketCommentHub SignalR + Redis backplane multi-instance + 6 server-push events + Force disconnect khi remove participant) → Phase 8 (AI suggest + PII mask + Sentiment + Auto-summarize + GoogleTranslate + SLA pause/resume hooks + KB attach/draft + Metrics aggregator + CommentEscalationReviewSaga) → Phase 9 (Voice-to-text Whisper + PDF export QuestPDF + GDPR erasure + Notification preferences extension + 6 doc deliverables + Prometheus metric + Test ≥ 80% coverage + FE handoff Postman/TS types/SignalR client guide). Mức ưu tiên: P0 không skip — `#COMMENT-01..02` (gate ADR + SharedContracts), `#COMMENT-05..08` (CRUD baseline), `#COMMENT-12..13` (Attachment refactor fix gap jsonb), `#COMMENT-15..17` (Authz + block edit Closed), `#COMMENT-21..24, 28` (Participant ⭐ cốt lõi), `#COMMENT-34..36, 43..44` (Mention + Notification), `#COMMENT-57` (Force disconnect security), `#COMMENT-73` (Test ≥ 80%). P1 split tùy chọn: Sprint Comment-A Phase 0-5 (~35 ngày) + Sprint Comment-B Phase 6-9 (~30 ngày). P2 defer: `#COMMENT-37` (group mention), `#COMMENT-58..60` (AI suite), `#COMMENT-61..62` (Translation), `#COMMENT-64` (KB conversion), `#COMMENT-67..68` (Voice + PDF). Dependency: Sprint additional-auth Phase B (PermissionResolver pickup 9 P constants mới), Sprint audit Phase 4 (causation_id chain cho comment events), Sprint 5B (Outbox + Saga foundation reuse), AI Module v2 ready (Phase 8 depend). Risk mới R-36..R-40 (AI not ready, SignalR Redis conflict, full-text migration lock, Participant CanAccessTicket break, PII mask fail). 11 bảng mới + 4 ALTER + 10 enum + ~40 endpoint + 1 SignalR Hub (6 events) + ~35 handler + 9 integration event + 4 consumer + 15 migration + 1 ADR (0008). KHÔNG đụng section khác (ngoài §36 deprecate banner + §17 heading update + TOC Phần XI thêm + permission §20 add 9 P constants).
 - v4.9 (2026-06-18): **Sprint audit (AuditLog Hybrid Architecture)** — tách Phụ lục A+B của `issue-authservice.md` thành sprint riêng ở §17: **Sprint audit** với 45 task `#AUDIT-01..45` (issue numbers `#447..#491`), tổng effort ~44 dev-day chia thành 7 phase. Phase 0 (chuẩn bị + ADR + SharedContracts + Roslyn analyzer + RabbitMQ topology) → Phase 1 (refactor AuthService audit, fix 22 handler thiếu) → Phase 2 (AuditAggregatorService microservice MỚI scaffold + DbContext partitioned + consumer + Geo IP enrichment + 7 REST API) → Phase 3 (BatteryService onboard, 12 action + local endpoint Option C `/api/admin/battery/audit-logs`) → Phase 4 (TicketService onboard, tách `TicketAuditLog` khỏi `TicketActivity`, 21 action + causation_id chain + local endpoint) → Phase 5 (File + Alert + Email + Notification + Sms + AI + Gateway onboard, 2 local endpoint thêm cho File + Alert) → Phase 6 (FE Admin Web UI Audit Explorer 5 view) → Phase 7 (hardening: retention + GDPR redaction + perf test 1000 ev/s + Prometheus metric + 7 documentation deliverables). Áp dụng **Option C policy** từ Phụ lục A §A.5.1.bis: 5 service có local endpoint (Auth giữ + Battery/Ticket/File/Alert build mới) + 5 service skip (Email/Notification/Sms/AI/Gateway — qua Aggregator only). Sprint audit là sprint **mở rộng** sau khi Sprint additional-auth ổn định ≥ 2 tuần — KHÔNG chạy song song. Update §69.10 link Phụ lục A → Sprint audit + TOC Phần X thêm Sprint audit reference. KHÔNG đụng section khác.
 - v4.8 (2026-06-17): **§69 AuthService Security Audit + Sprint additional-auth** — embed 88 vấn đề audit từ `issue-authservice.md` (17 bảo mật + 22 logic + 26 thiếu feature + 16 code quality + 7 test gap) làm §69 trong Phần X mới; gom 90 task triển khai theo Phase A-F vào **Sprint additional-auth** ở §17 (`#AUTH-01..90` → `#349..#438`); update Mục lục thêm Phần X entry. Sprint additional-auth là **base sprint** xử lý technical debt AuthService trước khi mở rộng feature auth/permission cho Saga + multi-tenant. Phase A (10 task P0) là top ưu tiên fix ngay — không được skip: hash refresh token DB, 2FA disable verify, OAuth state CSRF, JWT validate issuer/audience/lifetime, CORS whitelist, reset token single-use, email unique index filter, logout invalidate 2FA challenge, constant-time OTP compare, HTML sanitize email template. Phase B (P1) operational hardening: PermissionResolver cache, ClockSkew unify, ValidateOnStart, background jobs (lockout/OTP cleanup), health check k8s. Phụ lục A của `issue-authservice.md` (kiến trúc AuditLog Hybrid + AuditAggregatorService) KHÔNG thuộc scope sprint này — cần sprint riêng + service mới (chỉ phần Phase 1 refactor `auth_audit_logs` overlap với `#AUTH-29`). KHÔNG đụng section khác.
 
 **Maintained by:** Leader. Cập nhật mỗi cuối sprint khi `/kltn-sprint` chạy. Multi-pass extended review (50+ pass) chỉ dùng khi major architectural change (vd Sprint 5B Saga, IoT v2 pivot).
-**Last major update:** 2026-06-18 (v4.9) — Sprint audit (AuditLog Hybrid Architecture) — 45 task `#AUDIT-01..45` / `#447..#491` triển khai Phụ lục A+B `issue-authservice.md` qua 7 phase ~44 dev-day. AuditAggregatorService microservice mới + onboard 10 service + Option C local endpoint policy (5 service có / 5 skip). KHÔNG chạy song song Sprint additional-auth — phải đợi `#AUTH-29` + `#AUTH-77` + `#AUTH-15` merge.
+**Last major update:** 2026-06-20 (v5.0) — Sprint Comment (TicketService Comment Hub) — 74 task `#COMMENT-01..74` / `#501..#574` triển khai `ticket-comment-hub.md` (10 phần, 2010 dòng, 25 nhóm × 136 feature) qua 9 phase ~65 dev-day. 11 bảng mới + 4 ALTER + 10 enum + ~40 REST endpoint + 1 SignalR Hub (6 events) + 9 integration event + 4 NotificationService consumer. Thêm Phần XI + §70 overview. Deprecate §36 phần Comment (giữ §36.6 MaintenanceLog). Dependency: Sprint additional-auth Phase B (9 P constants), Sprint audit Phase 4 (causation_id), Sprint 5B (Outbox + Saga). Critical task: `#COMMENT-21..24, 28` Participant Management ⭐ — nền móng cốt lõi cho B2B/multi-Staff/Customer delegate/Watcher/Reassign Staff. KHÔNG chạy song song Sprint audit Phase 4 (cần TicketAuditLog merge trước).
 
-**Previous:** 2026-06-17 (v4.8) — §69 AuthService Security Audit embed + Sprint additional-auth 90 task (`issue-authservice.md` 88 issues mapped 1-1 + thêm #11 split + #89 perf test). GitHub Issues `#349..#438` (90 issue) đã tạo trên `GSU26SE55/backend` với milestone "Sprint additional-auth" (id=13), assignee `@Alexdev257`, label `status: init`.
+**Previous:** 2026-06-18 (v4.9) — Sprint audit (AuditLog Hybrid Architecture) — 45 task `#AUDIT-01..45` / `#447..#491` triển khai Phụ lục A+B `issue-authservice.md` qua 7 phase ~44 dev-day. AuditAggregatorService microservice mới + onboard 10 service + Option C local endpoint policy (5 service có / 5 skip). KHÔNG chạy song song Sprint additional-auth — phải đợi `#AUTH-29` + `#AUTH-77` + `#AUTH-15` merge.
 
 **Recommended reading order for newcomer:**
 1. §0-0bis (context — 10 phút)
