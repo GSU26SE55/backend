@@ -119,7 +119,6 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// Tham số <c>toVersion</c> nếu truyền giá trị 0 sẽ mặc định so sánh với phiên bản hiện tại của bài viết.
     /// </remarks>
     /// <param name="id">ID bài viết.</param>
-    /// <param name="query">Chứa thông tin version gốc (fromVersion) và version đích (toVersion).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Trả về kết quả so sánh (Diff).</response>
     [HttpGet("{id:guid}/compare")]
