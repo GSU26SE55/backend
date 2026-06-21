@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Domain.Enums;
@@ -12,6 +13,7 @@ namespace NotificationService.Application.CQRS.Command.Notification;
 /// </summary>
 public class CreateNotificationCommand : IRequest<NotificationActionResponse>, IValidatable<NotificationActionResponse>
 {
+    [JsonIgnore]
     public Guid UserId { get; set; }
     public NotificationTypeEnum Type { get; set; }
     public NotificationChannelEnum Channel { get; set; }

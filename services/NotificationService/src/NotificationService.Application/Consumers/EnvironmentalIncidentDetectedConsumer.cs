@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 
@@ -16,15 +17,24 @@ namespace NotificationService.Application.Consumers;
 ///   <item><b>Push</b> + <b>Email</b> + <b>SMS</b> (Critical channel).</item>
 ///   <item><b>BypassQuietHours = true</b> — Critical incident phải đánh thức người trực ngoài giờ.</item>
 /// </list>
+///
+/// Push template (§15.2):
+/// Title: 🚨 Sự cố môi trường: {IncidentType} tại {SiteName}
+/// Body:  Severity {Severity} — {Description}. Phát hiện lúc {DetectedAt:HH:mm}. Xử lý ngay!
 /// </summary>
 public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalIncidentDetectedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly ITemplateRenderer _templateRenderer;
     private readonly ILogger<EnvironmentalIncidentDetectedConsumer> _logger;
 
-    public EnvironmentalIncidentDetectedConsumer(IMediator mediator, ILogger<EnvironmentalIncidentDetectedConsumer> logger)
+    public EnvironmentalIncidentDetectedConsumer(
+        IMediator mediator,
+        ITemplateRenderer templateRenderer,
+        ILogger<EnvironmentalIncidentDetectedConsumer> logger)
     {
         _mediator = mediator;
+        _templateRenderer = templateRenderer;
         _logger = logger;
     }
 
@@ -36,9 +46,20 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
         // Hiện tại: broadcast (placeholder Guid.Empty) — dispatcher xử lý fan-out.
         var recipientIds = new[] { Guid.Empty };
 
-        var title = $"[ENV CRITICAL] IncidentType={evt.IncidentType} tại {evt.SiteName}";
-        var body = $"Phát hiện sự cố môi trường (Severity {evt.Severity}) site '{evt.SiteName}'. " +
-                   $"{evt.Description ?? string.Empty} Detected at {evt.DetectedAt:O}. Yêu cầu xử lý NGAY.";
+        // Push title/body — §15.2 EnvironmentalIncidentCritical format
+        var title = $"🚨 Sự cố môi trường: {evt.IncidentType} tại {evt.SiteName}";
+        var plainBody = $"Severity {evt.Severity} — {evt.Description ?? string.Empty}. " +
+                        $"Phát hiện lúc {evt.DetectedAt:HH:mm}. Xử lý ngay!";
+
+        var htmlBody = _templateRenderer.Render("environmental-incident-detected", new
+        {
+            SiteName = evt.SiteName,
+            IncidentType = evt.IncidentType.ToString(),
+            Severity = evt.Severity.ToString(),
+            Description = evt.Description,
+            DetectedAt = evt.DetectedAt.ToString("dd/MM/yyyy HH:mm:ss"),
+            IncidentId = evt.IncidentId.ToString()
+        });
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -50,7 +71,8 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
             alertId = evt.AlertId,
             customerId = evt.CustomerId,
             detectedAt = evt.DetectedAt,
-            description = evt.Description
+            description = evt.Description,
+            screen = "IncidentDetail"
         });
 
         // Push + Email + SMS, BypassQuietHours = true (Critical bypass).
@@ -71,7 +93,7 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
                     Type = NotificationTypeEnum.EnvironmentalIncidentDetected,
                     Channel = channel,
                     Title = title,
-                    Body = body,
+                    Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
                     PayloadJson = payload,
                     EntityType = "EnvironmentalIncident",
                     EntityId = evt.IncidentId,

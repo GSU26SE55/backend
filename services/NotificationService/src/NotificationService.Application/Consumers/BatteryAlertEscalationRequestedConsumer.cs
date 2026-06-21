@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 
@@ -20,13 +21,16 @@ namespace NotificationService.Application.Consumers;
 public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEscalationRequestedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly ITemplateRenderer _templateRenderer;
     private readonly ILogger<BatteryAlertEscalationRequestedConsumer> _logger;
 
     public BatteryAlertEscalationRequestedConsumer(
         IMediator mediator,
+        ITemplateRenderer templateRenderer,
         ILogger<BatteryAlertEscalationRequestedConsumer> logger)
     {
         _mediator = mediator;
+        _templateRenderer = templateRenderer;
         _logger = logger;
     }
 
@@ -40,8 +44,20 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
         var recipientIds = new[] { Guid.Empty };
 
         var title = $"[Escalation] Alert chưa ack {evt.MinutesSinceDetection} phút — {evt.AssetSerialNumber}";
-        var body = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +
-                   $"Value: {evt.ActualValue} {evt.Unit}.";
+        var plainBody = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +
+                        $"Value: {evt.ActualValue} {evt.Unit}.";
+
+        var htmlBody = _templateRenderer.Render("battery-alert-escalation-pending", new
+        {
+            AlertId = evt.AlertId,
+            AssetSerialNumber = evt.AssetSerialNumber,
+            AnomalyType = evt.AnomalyType.ToString(),
+            Severity = evt.Severity.ToString(),
+            DetectedAt = evt.DetectedAt.ToString("dd/MM/yyyy HH:mm:ss"),
+            ActualValue = evt.ActualValue,
+            Unit = evt.Unit,
+            MinutesSinceDetection = evt.MinutesSinceDetection
+        });
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -54,7 +70,7 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
 
         foreach (var userId in recipientIds)
         {
-            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.InApp })
+            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.InApp })
             {
                 var cmd = new CreateNotificationCommand
                 {
@@ -62,7 +78,7 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
                     Type = NotificationTypeEnum.BatteryAlertEscalationPending,
                     Channel = channel,
                     Title = title,
-                    Body = body,
+                    Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
                     PayloadJson = payload,
                     EntityType = "Alert",
                     EntityId = evt.AlertId
