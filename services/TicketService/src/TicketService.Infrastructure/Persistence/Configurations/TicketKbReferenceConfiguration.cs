@@ -50,7 +50,7 @@ public class TicketKbReferenceConfiguration : IEntityTypeConfiguration<TicketKbR
         builder.Property(e => e.DeletedAt)
             .HasColumnName("deleted_at");
 
-        builder.HasIndex(e => new { e.TicketId, e.KbArticleId }).IsUnique();
+        builder.HasIndex(e => new { e.TicketId, e.KbArticleId, e.ReferenceType }).IsUnique();
 
         builder.HasOne<Ticket>()
             .WithMany(e => e.KbReferences)

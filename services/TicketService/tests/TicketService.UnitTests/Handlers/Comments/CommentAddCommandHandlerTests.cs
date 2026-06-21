@@ -25,7 +25,7 @@ public class CommentAddCommandHandlerTests
             Description = "Test Description"
         };
 
-        var (uow, _, _, _, _, _, _, comments, attachments, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, comments, attachments, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket }
         );
 
