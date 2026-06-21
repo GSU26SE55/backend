@@ -30,9 +30,10 @@ public class VerifyOtpCommandHandlerTests
     [Fact]
     public async Task Verify_CorrectOtp_ActivatesAccount_AssignsCustomerRole_PublishesEvent_NoTokenIssued()
     {
-        // Account self-register chưa có role → handler phải gán RoleId = CustomerRoleId.
+        // Account self-register chưa có role → handler phải resolve "CUSTOMER" và gán RoleId.
         var account = PendingAccount();
-        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var customerRole = new Role { Id = CustomerRoleId, Name = "Customer", NormalizedName = "CUSTOMER", Status = RoleStatusEnum.Active };
+        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { customerRole });
         var producer = new Mock<IMessageProducerService>();
 
         var handler = new VerifyOtpCommandHandler(uow.Object, producer.Object);
