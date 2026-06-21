@@ -43,7 +43,8 @@ public static class MockTicketUnitOfWork
                    Mock<IGenericRepository<TicketAttachment>> attachments,
                    Mock<IGenericRepository<MaintenanceLog>> logs,
                    Mock<IGenericRepository<KnowledgeBaseArticle>> kbArticles,
-                   Mock<IGenericRepository<KbArticleVersion>> kbVersions)
+                   Mock<IGenericRepository<KbArticleVersion>> kbVersions,
+                   Mock<IGenericRepository<TicketKbReference>> kbReferences)
         BuildExtended(
             IEnumerable<Ticket>? ticketSeed = null,
             IEnumerable<TicketActivity>? activitySeed = null,
@@ -56,7 +57,8 @@ public static class MockTicketUnitOfWork
             IEnumerable<TicketAttachment>? attachmentSeed = null,
             IEnumerable<MaintenanceLog>? logSeed = null,
             IEnumerable<KnowledgeBaseArticle>? kbSeed = null,
-            IEnumerable<KbArticleVersion>? kbVersionSeed = null)
+            IEnumerable<KbArticleVersion>? kbVersionSeed = null,
+            IEnumerable<TicketKbReference>? kbRefSeed = null)
     {
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
@@ -107,6 +109,12 @@ public static class MockTicketUnitOfWork
         var kbVersion = new Mock<IGenericRepository<KbArticleVersion>>();
         kbVersion.Setup(r => r.GetAllAsync()).Returns(kbVersionMock);
 
+        var kbRefMock = (kbRefSeed ?? Array.Empty<TicketKbReference>()).BuildMock();
+        var kbRefs = new Mock<IGenericRepository<TicketKbReference>>();
+        kbRefs.Setup(r => r.GetAllAsync()).Returns(kbRefMock);
+        kbRefs.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<TicketKbReference, bool>>>()))
+              .ReturnsAsync((Expression<Func<TicketKbReference, bool>> p) => (kbRefSeed ?? Array.Empty<TicketKbReference>()).AsQueryable().Any(p));
+
         var outboxMock = (outboxSeed ?? Array.Empty<OutboxMessage>()).BuildMock();
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
         outbox.Setup(r => r.GetAllAsync()).Returns(outboxMock);
@@ -123,6 +131,7 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.MaintenanceLogs).Returns(logs.Object);
         uow.SetupGet(u => u.KnowledgeBaseArticles).Returns(kb.Object);
         uow.SetupGet(u => u.KbArticleVersions).Returns(kbVersion.Object);
+        uow.SetupGet(u => u.TicketKbReferences).Returns(kbRefs.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
 
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -130,6 +139,6 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, comments, attachments, logs, kb, kbVersion);
+        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, comments, attachments, logs, kb, kbVersion, kbRefs);
     }
 }

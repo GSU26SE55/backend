@@ -37,6 +37,14 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
 
+        var isDuplicate = await _uow.TicketKbReferences.AnyAsync(
+            r => r.TicketId == command.TicketId &&
+                 r.KbArticleId == command.KbArticleId &&
+                 r.ReferenceType == command.ReferenceType &&
+                 !r.IsDeleted);
+        if (isDuplicate)
+            return Fail(400, "Bài viết này đã được gán vào Ticket với loại tham chiếu tương tự.");
+
         var reference = new TicketKbReference
         {
             Id = Guid.NewGuid(),

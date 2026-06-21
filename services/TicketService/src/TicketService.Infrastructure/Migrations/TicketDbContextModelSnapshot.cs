@@ -1128,7 +1128,7 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TicketId", "KbArticleId")
+                    b.HasIndex("TicketId", "KbArticleId", "ReferenceType")
                         .IsUnique();
 
                     b.ToTable("ticket_kb_references", (string)null);
