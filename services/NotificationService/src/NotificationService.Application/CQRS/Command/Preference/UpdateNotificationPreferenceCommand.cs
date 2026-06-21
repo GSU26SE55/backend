@@ -6,10 +6,9 @@ using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.CQRS.Command.Preference;
 
-public class UpdateNotificationPreferenceCommand
-    : IRequest<NotificationPreferenceResponse>, IValidatable<NotificationPreferenceResponse>
+public class UpdateNotificationPreferenceCommand : IRequest<NotificationPreferenceResponse>, IValidatable<NotificationPreferenceResponse>
 {
-    /// <summary>Set từ JWT claim ở controller — không nhận từ body.</summary>
+    [JsonIgnore]
     public Guid UserId { get; set; }
 
     public bool PushEnabled { get; set; } = true;
