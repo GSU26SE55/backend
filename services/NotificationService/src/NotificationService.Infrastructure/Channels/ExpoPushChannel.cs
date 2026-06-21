@@ -91,7 +91,9 @@ public class ExpoPushChannel : INotificationChannel
             .FirstOrDefault();
 
         if (deviceToken is null)
+        {
             return;
+        }
 
         deviceToken.IsActive = false;
         _unitOfWork.DeviceTokens.UpdateAsync(deviceToken);
