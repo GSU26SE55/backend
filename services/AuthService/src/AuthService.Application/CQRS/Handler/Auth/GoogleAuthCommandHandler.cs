@@ -18,7 +18,6 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, LoginResponse>
 {
     private const string ProviderName = "Google";
-    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IJwtHelper _jwtHelper;
@@ -69,8 +68,16 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var isNewAccount = account == null;
 
+        // Default role cho Google sign-up lần đầu là Customer. Resolve theo NormalizedName tại runtime —
+        // KHÔNG hardcode GUID (xem SystemRoleResolver).
+        Guid? customerRoleId = null;
+
         if (isNewAccount)
         {
+            customerRoleId = await SystemRoleResolver.ResolveCustomerRoleIdAsync(_unitOfWork, cancellationToken);
+            if (customerRoleId is null)
+                return Fail(500, "Đăng nhập Google thất bại do lỗi hệ thống. Vui lòng thử lại.");
+
             account = new Domain.Entities.Account
             {
                 Id = Guid.NewGuid(),
@@ -88,7 +95,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 LastLoginIp = ipAddress,
                 FailedLoginAttempts = 0,
                 LockoutEndAt = null,
-                RoleId = CustomerRoleId,
+                RoleId = customerRoleId.Value,
                 RoleAssignedAt = DateTime.UtcNow
             };
             await _unitOfWork.Accounts.AddAsync(account);
@@ -140,9 +147,9 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             _unitOfWork.Accounts.UpdateAsync(account);
         }
 
-        // Account mới vừa add — Role nav có thể null; nếu null fallback "Customer" (đã set RoleId=CustomerRoleId ở trên).
+        // Account mới vừa add — Role nav có thể null; nếu null fallback "Customer" (đã set RoleId=customerRoleId ở trên).
         var roleName = account.Role?.Name
-                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
+                       ?? (customerRoleId.HasValue && account.RoleId == customerRoleId ? "Customer" : string.Empty);
 
         var permissionCodes = await PermissionResolver.GetPermissionCodesAsync(_unitOfWork, account.Id, cancellationToken);
         var accessToken = await _jwtHelper.GenerateAccessToken(account, roleName, permissionCodes);

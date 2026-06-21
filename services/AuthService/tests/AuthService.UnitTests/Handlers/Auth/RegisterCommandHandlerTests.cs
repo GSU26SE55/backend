@@ -12,6 +12,16 @@ namespace AuthService.UnitTests.Handlers.Auth;
 
 public class RegisterCommandHandlerTests
 {
+    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
+    private static Role CustomerRole() => new()
+    {
+        Id = CustomerRoleId,
+        Name = "Customer",
+        NormalizedName = "CUSTOMER",
+        Status = RoleStatusEnum.Active
+    };
+
     private readonly Mock<IPasswordHasher> _hasher = new();
     private readonly Mock<IMessageProducerService> _producer = new();
 
@@ -23,7 +33,7 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Register_NewEmail_CreatesPendingAccount_AndPublishesEvent()
     {
-        var (uow, accounts, _, _) = MockUnitOfWork.Build();
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(roleSeed: new[] { CustomerRole() });
 
         var handler = new RegisterCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<RegisterCommandHandler>.Instance);
         var cmd = new RegisterCommand
@@ -54,7 +64,8 @@ public class RegisterCommandHandlerTests
             a.OtpCode!.Length == 6 &&
             a.OtpExpiredAt > DateTime.UtcNow.AddMinutes(4) &&
             a.GoogleId == null &&
-            a.Provider == null
+            a.Provider == null &&
+            a.RoleId == CustomerRoleId
         )), Times.Once);
 
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -105,7 +116,7 @@ public class RegisterCommandHandlerTests
             OtpCode = "111111",
             OtpExpiredAt = DateTime.UtcNow.AddMinutes(2)
         };
-        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing }, roleSeed: new[] { CustomerRole() });
 
         var handler = new RegisterCommandHandler(uow.Object, _hasher.Object, _producer.Object, NullLogger<RegisterCommandHandler>.Instance);
         var response = await handler.Handle(new RegisterCommand

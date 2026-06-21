@@ -16,7 +16,6 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterResponse>
 {
     private const int OtpLifetimeMinutes = 5;
-    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
@@ -62,6 +61,22 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         var otp = OtpHelper.GenerateOtp(6);
         var otpExpiredAt = DateTime.UtcNow.AddMinutes(OtpLifetimeMinutes);
 
+        // Default role cho self-register là Customer. Resolve theo NormalizedName tại runtime —
+        // KHÔNG hardcode GUID (role được seed bằng Guid.NewGuid(), xem SystemRoleResolver).
+        var needsCustomerRole = existing == null
+                                || !existing.RoleId.HasValue
+                                || existing.RoleId.Value == Guid.Empty;
+        Guid? customerRoleId = null;
+        if (needsCustomerRole)
+        {
+            customerRoleId = await SystemRoleResolver.ResolveCustomerRoleIdAsync(_unitOfWork, cancellationToken);
+            if (customerRoleId is null)
+            {
+                _logger.LogError("Register failed: system role 'CUSTOMER' không tồn tại trong DB. Cần seed roles trước khi cho phép đăng ký.");
+                return Fail(500, "Đăng ký thất bại do lỗi hệ thống. Vui lòng thử lại.");
+            }
+        }
+
         if (existing == null)
         {
             var account = new Domain.Entities.Account
@@ -88,7 +103,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
                 GoogleId = null,
                 Provider = null,
                 // 1-N refactor: account bắt buộc có 1 role. Self-register default Customer.
-                RoleId = CustomerRoleId,
+                RoleId = customerRoleId!.Value,
                 RoleAssignedAt = DateTime.UtcNow
             };
 
@@ -109,7 +124,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             // #AUTH-69: RoleId nullable. Check cả null lẫn Guid.Empty (legacy row backward-compat).
             if (!existing.RoleId.HasValue || existing.RoleId.Value == Guid.Empty)
             {
-                existing.RoleId = CustomerRoleId;
+                existing.RoleId = customerRoleId!.Value;
                 existing.RoleAssignedAt = DateTime.UtcNow;
             }
             _unitOfWork.Accounts.UpdateAsync(existing);
