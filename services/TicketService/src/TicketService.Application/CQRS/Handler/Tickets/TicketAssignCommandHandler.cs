@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
+using SharedContracts.Events;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -88,7 +89,7 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             newValue: request.StaffId.ToString(),
             reason: request.Notes);
 
-        await _producer.PublishAsync(new TicketAssignedIntegrationEvent(ticket.Id, ticket.Code, request.StaffId, ticket.Priority.ToString()!), ct);
+        await _producer.PublishAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.StaffId, ticket.Priority.ToString()!), ct);
 
         await _uow.SaveChangesAsync(ct);
 
