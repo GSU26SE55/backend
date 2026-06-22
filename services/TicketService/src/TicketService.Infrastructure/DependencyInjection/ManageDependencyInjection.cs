@@ -17,6 +17,7 @@ using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
+using TicketService.Infrastructure.Realtime;
 using TicketService.Infrastructure.Sagas;
 
 namespace TicketService.Infrastructure.DependencyInjection;
@@ -74,6 +75,10 @@ public static class ManageDependencyInjection
         services.AddScoped<TicketCurrentUserService>();
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
         services.AddScoped<ITicketCurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
+
+        // Realtime Comment Services
+        services.AddScoped<ICommentAuthorizationService, CommentAuthorizationService>();
+        services.AddScoped<ITicketCommentRealtimeNotifier, SignalRTicketCommentNotifier>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

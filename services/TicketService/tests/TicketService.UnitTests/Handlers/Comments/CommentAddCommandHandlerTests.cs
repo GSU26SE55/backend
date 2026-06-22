@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Logging;
+using Moq;
 using TicketService.Application.CQRS.Command.CommentAdd;
 using TicketService.Application.CQRS.Handler.Comments;
+using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -9,7 +13,9 @@ namespace TicketService.UnitTests.Handlers.Comments;
 
 public class CommentAddCommandHandlerTests
 {
-    private readonly Mock<IActivityLogger> _logger = new();
+    private readonly Mock<IActivityLogger> _activityLogger = new();
+    private readonly Mock<ITicketCommentRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<CommentAddCommandHandler>> _loggerMock = new();
 
     [Fact]
     public async Task Handle_ValidRequest_AddsComment()
@@ -43,7 +49,7 @@ public class CommentAddCommandHandlerTests
             }
         };
 
-        var handler = new CommentAddCommandHandler(uow.Object, _logger.Object);
+        var handler = new CommentAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -61,7 +67,7 @@ public class CommentAddCommandHandlerTests
             a.TicketId == ticketId &&
             a.FileName == "file.pdf")), Times.Once);
 
-        _logger.Verify(x => x.LogAsync(
+        _activityLogger.Verify(x => x.LogAsync(
             ticketId,
             userId,
             ActorRoleEnum.Staff,
@@ -70,6 +76,10 @@ public class CommentAddCommandHandlerTests
             null,
             "[Công khai]",
             It.IsAny<string>()), Times.Once);
+
+        _realtimeNotifier.Verify(x => x.NotifyCommentAddedAsync(
+            It.Is<TicketCommentDTO>(dto => dto.TicketId == ticketId.ToString() && dto.Body == "This is a comment"),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

@@ -116,16 +116,21 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// So sánh sự khác biệt giữa hai phiên bản của bài viết.
     /// </summary>
     /// <remarks>
-    /// Tham số <c>toVersion</c> nếu truyền giá trị 0 sẽ mặc định so sánh với phiên bản hiện tại của bài viết.
+    /// Tham số <c>FromVersionId</c> bắt buộc. Nếu không truyền <c>ToVersionId</c>,
+    /// hệ thống mặc định so sánh với phiên bản hiện tại (Current) của bài viết.
     /// </remarks>
     /// <param name="id">ID bài viết.</param>
+    /// <param name="query">Tiêu chí so sánh (FromVersionId bắt buộc, ToVersionId tùy chọn).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Trả về kết quả so sánh (Diff).</response>
+    /// <response code="404">Không tìm thấy phiên bản gốc/đích hoặc bài viết hiện tại.</response>
     [HttpGet("{id:guid}/compare")]
     [ProducesResponseType(typeof(CommonResponse<KbArticleDiffDTO>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> CompareVersions(Guid id, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CompareVersions(Guid id, [FromQuery] CompareKbArticleVersionsQuery query, CancellationToken ct)
     {
-        var query = new CompareKbArticleVersionsQuery { ArticleId = id };
+
+        query.ArticleId = id;
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }

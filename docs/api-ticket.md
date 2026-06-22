@@ -36,7 +36,7 @@
 
 ### `TicketActionResponse`
 
-Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hành động thay đổi trạng thái ticket (POST mutations). `data` trỏ tới `TicketActionDto`.
+Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hành động thay đổi trạng thái ticket (POST mutations). `data` trỏ tới `TicketActionDTO`.
 
 ```json
 {
@@ -61,7 +61,7 @@ Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hà
 
 **TypeScript types:**
 ```ts
-interface TicketActionDto {
+interface TicketActionDTO {
   id: string;
   ticketId?: string; // chỉ có ở response của POST maintenance-logs
   code: string;
@@ -72,7 +72,7 @@ interface TicketActionResponse {
   isSuccess: boolean;
   statusCode: number;
   message: string | null;
-  data: TicketActionDto | null;
+  data: TicketActionDTO | null;
   listErrors: Array<{ field: string | null; detail: string | null }> | null;
 }
 ```
@@ -256,6 +256,36 @@ ClosedPendingRate → Open (Customer reopen → Manager triage lại; lần 2+ t
 | `Staff` | 3 | Nhân viên kỹ thuật |
 | `Customer` | 4 | Khách hàng |
 | `System` | 5 | Hành động tự động của hệ thống |
+
+### `KbArticleStatusEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Draft` | 1 | Nháp |
+| `PendingReview` | 2 | Chờ phê duyệt |
+| `Published` | 3 | Đã xuất bản (Customer xem được) |
+| `Archived` | 4 | Đã lưu trữ (ẩn) |
+
+### `KbVersionStatusEnum`
+
+Trạng thái của một bản ghi lịch sử (`KbArticleVersion`) — khác với `KbArticleStatusEnum` của bài viết chính.
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Pending` | 1 | Chờ duyệt |
+| `Approved` | 2 | Đã duyệt |
+| `Rejected` | 3 | Bị từ chối |
+| `Archived` | 4 | Bản sao lưu (snapshot) |
+
+### `KbReferenceTypeEnum`
+
+Dùng khi gán bài viết Knowledge Base vào Ticket (Nhóm 11).
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `ConsultedDuringResolve` | 1 | Tham khảo khi xử lý |
+| `ProvidedToCustomer` | 2 | Cung cấp cho khách hàng |
+| `GeneratedAfterResolve` | 3 | Tạo ra sau khi xử lý xong |
 
 ---
 
@@ -502,22 +532,27 @@ Base path: `/api/tickets`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `body` | `string` | Bắt buộc | Không rỗng | Nội dung bình luận |
-| `isInternal` | `bool` | Không (mặc định `false`) | — | `true` = chỉ Staff/Manager xem được |
+| `body` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | Nội dung bình luận |
+| `isInternal` | `bool` | Không (mặc định `false`) | — | `true` = chỉ Staff/Manager/Admin xem được (ẩn với Customer) |
 | `attachments` | `CommentAttachmentInput[]?` | Không | — | Danh sách file đính kèm |
 
 **`CommentAttachmentInput`:**
 
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `fileId` | `string` (UUID) | Bắt buộc | FileId từ FileStorageService — gửi dạng UUID string |
-| `fileName` | `string?` | Không | Tên file gốc |
-| `contentType` | `string?` | Không | MIME type |
-| `sizeBytes` | `int64` | Không | Kích thước file (bytes) |
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `fileId` | `Guid` | **Bắt buộc** | Khác `Guid.Empty` (`400` nếu thiếu) | FileId từ FileStorageService |
+| `fileName` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | Tên file gốc |
+| `contentType` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | MIME type |
+| `sizeBytes` | `int64` | Không | — | Kích thước file (bytes) |
+
+> ⚠️ Khác với `MaintenanceAttachmentInput` (chỉ `fileId` bắt buộc) — `CommentAttachmentInput` validate **cả 3 field** `fileId`/`fileName`/`contentType`, thiếu field nào cũng trả `400` với lỗi field riêng (`Attachments[i].FileName`, …).
 
 **Response thành công `201`:** `TicketActionResponse`
 
+**Hành động phụ — Realtime:** Sau khi lưu DB thành công, server phát event `CommentAdded` qua SignalR hub `/hubs/ticket-comments` tới các client đã `JoinTicket` ticket này — xem mục **Realtime — SignalR Hub** ngay dưới Nhóm 1. Lỗi broadcast (vd hub crash) được **catch nội bộ và log**, KHÔNG làm fail request — comment vẫn được lưu và trả `201` bình thường dù real-time push thất bại.
+
 **Lỗi thường gặp:**
+- `400` — Thiếu `body`, hoặc `attachments[i]` thiếu `fileId`/`fileName`/`contentType`
 - `401` — Chưa đăng nhập
 - `404` — Không tìm thấy ticket
 
@@ -571,6 +606,106 @@ Một ticket chỉ được có **1 log đang mở** (`CompletedAt = null`) tạ
 | `403` | Ticket đã ở trạng thái không cho phép thêm log (`Resolved` / `ClosedPendingRate` / `Closed`) — Staff đã đánh dấu giải quyết hoặc ticket đã đóng |
 | `404` | Không tìm thấy ticket |
 | `409` | Đang có một maintenance log khác chưa hoàn thành (`CompletedAt = null`) cho ticket này — phải đóng log cũ trước khi mở log mới |
+
+---
+
+## Realtime — SignalR Hub `/hubs/ticket-comments`
+
+**Mục đích:** Push realtime bình luận mới (`CommentAdded`) + typing indicator (`UserTyping`) cho ticket detail screen — thay thế polling `GET /api/tickets/{ticketId}/comments`.
+
+**Endpoint:** `/hubs/ticket-comments` (gắn ở root, **KHÔNG** có prefix `/api` — vd `http://localhost:{port}/hubs/ticket-comments`)
+**Transport:** WebSockets (SignalR tự fallback sang ServerSentEvents/LongPolling nếu WS bị chặn)
+**Auth:** Cùng JWT access token với REST (`[Authorize]` trên Hub), nhưng SignalR JS client **không gửi header** lúc bắt tay WS — phải truyền qua query string `access_token`:
+
+```
+ws://localhost:{port}/hubs/ticket-comments?access_token=<accessToken>
+```
+
+> Server tự nhận diện: `Program.cs` override `JwtBearerEvents.OnMessageReceived` — nếu path bắt đầu `/hubs/ticket-comments` và có query `access_token`, server lấy token từ query string thay vì header `Authorization`. Dùng `accessTokenFactory` của `@microsoft/signalr` thì KHÔNG cần tự ghép query string — client lib tự làm điều này.
+
+### Client → Server methods
+
+#### `JoinTicket(ticketId: string)`
+
+Bắt buộc gọi **sau khi connect** để nhận event của 1 ticket cụ thể — Hub không tự join group nào khi connect.
+
+- Validate `ticketId` là Guid hợp lệ — sai format → `HubException("Invalid ticket ID format.")`
+- Check quyền truy cập ticket — **cùng rule với REST** (`TicketQueryHelper.CanAccessTicket`: Admin/Manager luôn được; Customer phải là chủ ticket; Staff phải đang `AssignedStaffId`) — không có quyền → `HubException("Forbidden: No access to this ticket.")`
+- Join group `ticket:{ticketId}:public` (mọi role hợp lệ)
+- Nếu role ∈ `Admin`/`Manager`/`Staff` → join thêm group `ticket:{ticketId}:internal` (nhận cả comment `isInternal=true`)
+
+#### `LeaveTicket(ticketId: string)`
+
+Rời cả 2 group của ticket đó. `ticketId` sai format → no-op (không throw).
+
+#### `Typing(ticketId: string)`
+
+Broadcast cho người khác đang xem ticket biết mình đang gõ bình luận. Không có quyền truy cập ticket → no-op (không throw, không broadcast).
+
+### Server → Client events
+
+#### `CommentAdded`
+
+Push khi `POST /api/tickets/{ticketId}/comments` tạo bình luận thành công (xem Nhóm 1).
+
+**Payload:** `TicketCommentDTO` (xem bảng field ở mục DTOs đầu tài liệu) — y nguyên DTO trả về từ REST, camelCase, enum dạng chuỗi.
+
+**Group routing (xem `SignalRTicketCommentNotifier.cs`):**
+- `comment.isInternal == true` → chỉ push tới group `ticket:{ticketId}:internal` (Staff/Manager/Admin đã join)
+- `comment.isInternal == false` → push tới group `ticket:{ticketId}:public` (mọi role đã join, bao gồm Customer)
+
+#### `UserTyping(ticketId: string, userId: string, displayName: string)`
+
+Push tới **người khác** (không phải chính người gõ) trong group `ticket:{ticketId}:public` khi có client gọi `Typing`. **Lưu ý:** chỉ broadcast qua group public — Staff/Manager/Admin xem comment nội bộ vẫn nhận được (họ cũng ở group public), nhưng hiện tại không có channel typing riêng cho nhóm internal.
+
+### Connection lifecycle
+
+- Hub **không tự join group** khi connect (`OnConnectedAsync` dùng default — không override) — client **phải** gọi `JoinTicket` sau mỗi lần connect/reconnect (kể cả auto-reconnect) trước khi nhận event.
+- Khi connection đóng (tab close, mất mạng…), SignalR framework tự gỡ connection khỏi mọi group — không cần gọi `LeaveTicket` trước khi unload, nhưng nên gọi khi user rời màn hình ticket detail trong khi tab vẫn mở (chuyển sang ticket khác) để tránh nhận nhầm event của ticket cũ.
+- Token hết hạn giữa session: Hub không tự refresh — connection bị đóng khi token expire, FE cần `accessTokenFactory` trả token mới nhất mỗi lần reconnect và tự gọi lại `JoinTicket`.
+
+### Hub options (server-side)
+
+| Option | Giá trị | Mục đích |
+|---|---|---|
+| `KeepAliveInterval` | 15 giây | Server ping client để giữ WS sống |
+| `ClientTimeoutInterval` | 60 giây | Server đánh dấu disconnect nếu im lặng quá 60s |
+| `EnableDetailedErrors` | `true` (Development), `false` (Production) | Chi tiết exception trả client khi `HubException` |
+| JSON protocol | camelCase + `JsonStringEnumConverter` | Khớp định dạng JSON với REST response (`TicketCommentDTO`) |
+
+### Test nhanh (FE / tay)
+
+Cách nhanh nhất — dán đoạn dưới vào DevTools Console của bất kỳ trang nào (hoặc 1 file `.html` mở trực tiếp), không cần cài project:
+
+```html
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+  const accessToken = "<dán accessToken lấy từ POST /api/auth/login>";
+  const ticketId = "<dán 1 ticketId có thật>";
+
+  const connection = new signalR.HubConnectionBuilder()
+    .withUrl("http://localhost:{port}/hubs/ticket-comments", {
+      accessTokenFactory: () => accessToken,
+    })
+    .withAutomaticReconnect()
+    .configureLogging(signalR.LogLevel.Information)
+    .build();
+
+  connection.on("CommentAdded", (comment) => console.log("[CommentAdded]", comment));
+  connection.on("UserTyping", (tId, userId, displayName) => console.log("[UserTyping]", displayName));
+
+  connection
+    .start()
+    .then(() => connection.invoke("JoinTicket", ticketId))
+    .then(() => console.log("Joined ticket", ticketId))
+    .catch((err) => console.error(err));
+
+  // Test: mở tab khác / Postman gọi POST /api/tickets/{ticketId}/comments
+  // → console phải in ra "[CommentAdded]" gần như ngay lập tức.
+</script>
+```
+
+> Thay `{port}` bằng port thật của TicketService (`http://localhost:{port}`, không qua API Gateway nếu gateway chưa proxy WebSocket). `accessToken` lấy từ response `POST /api/auth/login` (AuthService, xem `docs/api-auth.md`) — dùng đúng tài khoản có quyền xem `ticketId` đó (Customer chủ ticket, Staff được assign, hoặc Admin/Manager).
 
 ---
 
@@ -1166,7 +1301,7 @@ Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Aler
 | `PageSize` | `int` | ❌ (mặc định 50) | Số item/trang |
 | `IsDescending` | `bool` | ❌ (mặc định `true`) | Sort theo `StartedAt` |
 
-**Response thành công `200`:** `AlertTicketSagaListResponse` = `CommonResponse<PaginationResponse<AlertTicketSagaDto>>`
+**Response thành công `200`:** `AlertTicketSagaListResponse` = `CommonResponse<PaginationResponse<AlertTicketSagaDTO>>`
 
 ```json
 {
@@ -1200,7 +1335,7 @@ Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Aler
 }
 ```
 
-**Chi tiết `AlertTicketSagaDto`:**
+**Chi tiết `AlertTicketSagaDTO`:**
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
@@ -1233,7 +1368,7 @@ Quản lý trạng thái Saga điều phối tự động tạo Ticket từ Aler
 
 **Path param:** `alertId` — UUID của alert gốc trigger Saga.
 
-**Response thành công `200`:** `AlertTicketSagaDetailResponse` = `CommonResponse<AlertTicketSagaDto>` (shape giống item trong list).
+**Response thành công `200`:** `AlertTicketSagaDetailResponse` = `CommonResponse<AlertTicketSagaDTO>` (shape giống item trong list).
 
 **Lỗi thường gặp:**
 - `401` — Chưa đăng nhập
@@ -1378,11 +1513,11 @@ Base path: `/api/ticket/health`
 Base path: `/api/knowledge-base`
 **Auth:** Bắt buộc — `Authorization: Bearer {accessToken}` (controller có `[Authorize]`, mọi role đã đăng nhập). **KHÔNG anonymous.**
 
-> **Enum serialize:** Toàn bộ response của TicketService dùng `JsonStringEnumConverter` → enum (`status`, `category`) trả về dạng **chuỗi** (vd `"Published"`, `"Charging"`). **Ngoại lệ:** `KbArticleVersionDto.status` trả **số** (BE để kiểu `int` raw). Khi **filter/gửi request**, enum lại nhận **số** (`Status=2`, `Category=1`).
+> **Enum serialize:** Toàn bộ response của TicketService dùng `JsonStringEnumConverter` → mọi enum (`status`, `category`, kể cả `KbArticleVersionDTO.status`) trả về dạng **chuỗi** (vd `"Published"`, `"Charging"`). Khi **filter/gửi request** (query string hoặc body), enum cũng nhận **chuỗi tên enum** — gửi đúng tên (vd `Status=Published`, `Category=Charging`), KHÔNG gửi số.
 
 ---
 
-### GET /api/knowledge-base
+### `GET /api/knowledge-base`
 
 **Mục đích:** Tìm kiếm và liệt kê bài viết Knowledge Base. **Lọc theo role:**
 - **Customer:** chỉ trả bài `Published` và `IsInternalOnly = false`. Param `Status` bị bỏ qua.
@@ -1395,19 +1530,19 @@ Base path: `/api/knowledge-base`
 | Param | Type | Mô tả |
 |---|---|---|
 | `Q` | `string?` | Từ khóa — tìm trong `title` và `symptoms` |
-| `Category` | `int?` | Lọc theo danh mục lỗi (gửi **số** của `TicketCategoryEnum`, vd `1` = Charging) |
-| `Status` | `int?` | Lọc theo trạng thái (gửi **số** của `KbArticleStatusEnum` 1–4). **Chỉ áp dụng cho internal role**; Customer bị bỏ qua |
+| `Category` | `TicketCategoryEnum?` | Lọc theo danh mục lỗi — gửi **chuỗi tên enum** (vd `Charging`) |
+| `Status` | `KbArticleStatusEnum?` | Lọc theo trạng thái — gửi **chuỗi tên enum** (vd `Published`). **Chỉ áp dụng cho internal role**; Customer bị bỏ qua |
 | `Tag` | `string?` | Lọc theo **một** thẻ (số ít — không phải mảng) |
 | `PageNumber` | `int` | Trang (mặc định 1) |
 | `PageSize` | `int` | Số item/trang |
 
-> ⚠️ Param đúng theo `GetKbArticleListQuery`: tên là **`Q`** (không phải `Keyword`), **`Tag`** số ít (không phải `Tags[]`), `Status`/`Category` là **`int`** (không phải string enum).
+> ⚠️ Param đúng theo `GetKbArticleListQuery`: tên là **`Q`** (không phải `Keyword`), **`Tag`** số ít (không phải `Tags[]`).
 
-**Response thành công `200`:** `CommonResponse<PaginationResponse<KbArticleListItemDto>>`
+**Response thành công `200`:** `CommonResponse<PaginationResponse<KbArticleListItemDTO>>`
 
 ---
 
-### GET /api/knowledge-base/{id}
+### `GET /api/knowledge-base/{id}`
 
 **Mục đích:** Lấy thông tin chi tiết một bài viết Knowledge Base để đọc. Không tự động tăng lượt xem.
 
@@ -1415,7 +1550,7 @@ Base path: `/api/knowledge-base`
 
 **Path param:** `id` — UUID của bài viết.
 
-**Response thành công `200`:** `CommonResponse<KbArticleDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleDTO>`
 
 **Lỗi thường gặp:**
 - `401` — Chưa đăng nhập
@@ -1423,7 +1558,7 @@ Base path: `/api/knowledge-base`
 
 ---
 
-### GET /api/knowledge-base/suggest
+### `GET /api/knowledge-base/suggest`
 
 **Mục đích:** Gợi ý các bài viết liên quan **theo Ticket** (cùng `Category`, ưu tiên `HelpfulCount`/`ViewCount` cao). Trả tối đa 5 bài đã `Published`.
 
@@ -1437,14 +1572,14 @@ Base path: `/api/knowledge-base`
 
 > ⚠️ Theo `SuggestKbArticlesQuery`, param là **`TicketId` (Guid)** — không phải `query` text. (Doc cũ ghi sai.)
 
-**Response thành công `200`:** `CommonResponse<KbArticleSuggestDto[]>` (tối đa 5 phần tử)
+**Response thành công `200`:** `CommonResponse<KbArticleSuggestDTO[]>` (tối đa 5 phần tử)
 
 **Lỗi thường gặp:**
 - `404` — Không tìm thấy Ticket.
 
 ---
 
-### POST /api/knowledge-base/{id}/helpful
+### `POST /api/knowledge-base/{id}/helpful`
 
 **Mục đích:** Người dùng đánh giá bài viết là hữu ích (Tăng HelpfulCount).
 
@@ -1462,6 +1597,58 @@ Base path: `/api/knowledge-base`
 
 ---
 
+### `GET /api/knowledge-base/{id}/usage-stats`
+
+**Mục đích:** Thống kê số lần bài viết được dùng làm tài liệu tham khảo trong các Ticket, chia theo `KbReferenceTypeEnum`.
+
+**Auth:** Bắt buộc — **chỉ role `Manager` hoặc `Admin`** (`[Authorize(Roles = "Manager,Admin")]`). Staff/Customer không gọi được, dù controller cha cho phép mọi role đã đăng nhập.
+
+**Path param:** `id` — UUID của bài viết Knowledge Base.
+
+**Response thành công `200`:** `CommonResponse<KbUsageStatsDTO>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "kbArticleId": "guid",
+    "kbArticleCode": "KB-2606-0001",
+    "kbArticleTitle": "Pin không sạc được khi nhiệt độ thấp",
+    "totalReferences": 12,
+    "byType": {
+      "consultedDuringResolve": 8,
+      "providedToCustomer": 3,
+      "generatedAfterResolve": 1
+    }
+  }
+}
+```
+
+**Chi tiết `KbUsageStatsDTO`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `kbArticleId` | `string` | ID bài viết |
+| `kbArticleCode` | `string` | Mã bài viết |
+| `kbArticleTitle` | `string` | Tiêu đề bài viết |
+| `totalReferences` | `int` | Tổng số tham chiếu (`TicketKbReference`) chưa bị xóa |
+| `byType` | `KbUsageByTypeDTO` | Đếm tham chiếu theo từng `KbReferenceTypeEnum` |
+
+**`KbUsageByTypeDTO`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `consultedDuringResolve` | `int` | Số lần `ReferenceType = ConsultedDuringResolve` |
+| `providedToCustomer` | `int` | Số lần `ReferenceType = ProvidedToCustomer` |
+| `generatedAfterResolve` | `int` | Số lần `ReferenceType = GeneratedAfterResolve` |
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `403` — Không có role Manager/Admin
+- `404` — Không tìm thấy bài viết
+
+---
+
 ## Nhóm 9 — Knowledge Base (Internal - Staff/Manager/Admin)
 
 Base path: `/api/internal/knowledge-base`
@@ -1469,18 +1656,18 @@ Base path: `/api/internal/knowledge-base`
 
 ---
 
-### POST /api/internal/knowledge-base
+### `POST /api/internal/knowledge-base`
 
 **Mục đích:** Tạo mới một bài viết Knowledge Base.
 Bài viết được khởi tạo ở trạng thái **`PendingReview`**, đồng thời tạo một bản `KbArticleVersion` (V1.0) ở trạng thái `Pending`. Cần Manager/Admin duyệt để xuất bản.
 
 **Auth:** Bắt buộc (Staff, Manager, Admin)
 
-**Request body:** (gửi `category` dạng **số** của `TicketCategoryEnum`)
+**Request body:**
 
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `category` | `int` (`TicketCategoryEnum`) | ✅ | Danh mục lỗi — gửi **số** (vd `1` = Charging), phải là enum hợp lệ |
+| `category` | `TicketCategoryEnum` | ✅ | Danh mục lỗi — gửi **chuỗi tên enum** (vd `Charging`), phải là enum hợp lệ |
 | `title` | `string` | ✅ | Tiêu đề — không rỗng, max 200 ký tự |
 | `symptoms` | `string` | ✅ | Triệu chứng — không rỗng, max 2000 ký tự |
 | `diagnosisSteps` | `string` | ✅ | Bước chẩn đoán — không rỗng, max 4000 ký tự |
@@ -1488,14 +1675,14 @@ Bài viết được khởi tạo ở trạng thái **`PendingReview`**, đồng
 | `recommendedParts` | `string[]?` | Không | Linh kiện khuyến nghị thay thế |
 | `tags` | `string[]?` | Không | Từ khóa — tối đa 10 thẻ, mỗi thẻ ≤ 50 ký tự |
 | `isInternalOnly` | `bool` | Không (mặc định `false`) | `true` = ẩn với khách hàng |
-**Response thành công `201`:** `CommonResponse<KbArticleActionDto>` (trả về `id`, `code`, `status`)
+**Response thành công `201`:** `CommonResponse<KbArticleActionDTO>` (trả về `id`, `code`, `status`)
 
 **Lỗi thường gặp:**
 - `400` — Validation field (`Title`/`Symptoms`/`DiagnosisSteps`/`SolutionSteps` rỗng hoặc quá độ dài; `Category` không hợp lệ; `Tags` > 10)
 
 ---
 
-### PUT /api/internal/knowledge-base/{id}
+### `PUT /api/internal/knowledge-base/{id}`
 
 **Mục đích:** Cập nhật nội dung bài viết hiện có.
 Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thái bài viết sẽ chuyển về PendingReview để chờ Manager duyệt (trừ khi người cập nhật là Manager/Admin hoặc chủ sở hữu bài viết).
@@ -1512,11 +1699,11 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 > ⚠️ Doc cũ ghi `changeDescription` là "required" — **SAI**. Theo `UpdateKbArticleCommand`, field là `string?` và không có rule validate.
 
-**Response thành công `200`:** `CommonResponse<KbArticleDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleDTO>`
 
 ---
 
-### GET /api/internal/knowledge-base/{id}/versions
+### `GET /api/internal/knowledge-base/{id}/versions`
 
 **Mục đích:** Xem danh sách lịch sử các phiên bản của bài viết.
 
@@ -1524,11 +1711,11 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 **Path param:** `id` — UUID của bài viết.
 
-**Response thành công `200`:** `CommonResponse<KbArticleVersionDto[]>`
+**Response thành công `200`:** `CommonResponse<KbArticleVersionDTO[]>`
 
 ---
 
-### GET /api/internal/knowledge-base/{id}/versions/{versionId}
+### `GET /api/internal/knowledge-base/{id}/versions/{versionId}`
 
 **Mục đích:** Lấy chi tiết một phiên bản cụ thể trong lịch sử.
 
@@ -1536,11 +1723,11 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 **Path params:** `id` — UUID bài viết · `versionId` — UUID phiên bản (`KbArticleVersion.id`).
 
-**Response thành công `200`:** `CommonResponse<KbArticleVersionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleVersionDTO>`
 
 ---
 
-### GET /api/internal/knowledge-base/{id}/compare
+### `GET /api/internal/knowledge-base/{id}/compare`
 
 **Mục đích:** So sánh sự khác biệt giữa hai phiên bản của bài viết.
 
@@ -1552,16 +1739,16 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `FromVersionId` | `Guid` | ✅ | ID phiên bản gốc (`KbArticleVersion.id`) |
-| `ToVersionId` | `Guid?` | Không | ID phiên bản đích. Bỏ trống → so sánh với **bản hiện tại** |
+| `fromVersion` | `Guid` | ✅ | ID phiên bản gốc (`KbArticleVersion.id`) |
+| `toVersion` | `Guid?` | Không | ID phiên bản đích. Bỏ trống → so sánh với **bản hiện tại** |
 
-> ⚠️ Doc cũ ghi param `fromVersion`/`toVersion` kiểu `int` — **SAI**. Theo `CompareKbArticleVersionsQuery`, param là **`FromVersionId`/`ToVersionId` kiểu `Guid`** (ID của version, không phải số version).
+> ⚠️ Tham số `fromVersion`/`toVersion` trong API là kiểu **`Guid`** (ID của version, không phải số version hay số nguyên `int`).
 
-**Response thành công `200`:** `CommonResponse<KbArticleDiffDto>` — 6 `DiffSection` (`titleDiff`, `symptomsDiff`, `diagnosisStepsDiff`, `solutionStepsDiff`, `recommendedPartsDiff`, `tagsDiff`), mỗi cái có `oldValue`/`newValue`/`isChanged`.
+**Response thành công `200`:** `CommonResponse<KbArticleDiffDTO>` — 6 `DiffSection` (`titleDiff`, `symptomsDiff`, `diagnosisStepsDiff`, `solutionStepsDiff`, `recommendedPartsDiff`, `tagsDiff`), mỗi cái có `oldValue`/`newValue`/`isChanged`.
 
 ---
 
-### GET /api/internal/knowledge-base/{id}/copy-template
+### `GET /api/internal/knowledge-base/{id}/copy-template`
 
 **Mục đích:** Sao chép cấu trúc bài viết mẫu để tạo bài mới. Chỉ áp dụng cho bài viết có gắn tag **`template`** hoặc **`example`** (so khớp không phân biệt hoa thường).
 
@@ -1569,7 +1756,7 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 **Path param:** `id` — UUID của bài viết mẫu.
 
-**Response thành công `200`:** `CommonResponse<KbArticleTemplateDto>` — gồm `category` (int), `symptoms`, `diagnosisSteps`, `solutionSteps`, `recommendedParts`, `tags` (**không** có `id`/`title`).
+**Response thành công `200`:** `CommonResponse<KbArticleTemplateDTO>` — gồm `category` (`TicketCategoryEnum`, chuỗi), `symptoms`, `diagnosisSteps`, `solutionSteps`, `recommendedParts`, `tags` (**không** có `id`/`title`).
 
 ---
 
@@ -1582,7 +1769,7 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 
 ---
 
-### POST /api/admin/knowledge-base/{id}/approve-review
+### `POST /api/admin/knowledge-base/{id}/approve-review`
 
 **Mục đích:** Chấp nhận các thay đổi (`PendingReview → Published`). Nội dung từ bản nháp được đắp lên bài viết chính.
 
@@ -1590,11 +1777,11 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 
 **Path param:** `id` — UUID bài viết.
 
-**Response thành công `200`:** `CommonResponse<KbArticleActionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleActionDTO>`
 
 ---
 
-### POST /api/admin/knowledge-base/{id}/reject-review
+### `POST /api/admin/knowledge-base/{id}/reject-review`
 
 **Mục đích:** Từ chối thay đổi của Staff.
 
@@ -1608,11 +1795,11 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 |---|---|---|---|
 | `reason` | `string` | ✅ | Lý do từ chối — không được rỗng/whitespace (`400` nếu thiếu) |
 
-**Response thành công `200`:** `CommonResponse<KbArticleActionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleActionDTO>`
 
 ---
 
-### POST /api/admin/knowledge-base/{id}/publish
+### `POST /api/admin/knowledge-base/{id}/publish`
 
 **Mục đích:** Xuất bản bài viết (→ `Published`).
 
@@ -1620,11 +1807,11 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 
 **Path param:** `id` — UUID bài viết.
 
-**Response thành công `200`:** `CommonResponse<KbArticleActionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleActionDTO>`
 
 ---
 
-### POST /api/admin/knowledge-base/{id}/archive
+### `POST /api/admin/knowledge-base/{id}/archive`
 
 **Mục đích:** Lưu trữ bài viết (→ `Archived`, ngừng hiển thị với Customer).
 
@@ -1632,11 +1819,11 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 
 **Path param:** `id` — UUID bài viết.
 
-**Response thành công `200`:** `CommonResponse<KbArticleActionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleActionDTO>`
 
 ---
 
-### POST /api/admin/knowledge-base/{id}/rollback
+### `POST /api/admin/knowledge-base/{id}/rollback`
 
 **Mục đích:** Hoàn tác nội dung bài viết về một phiên bản cũ trong lịch sử. Lấy nội dung phiên bản cũ đè lên bản hiện tại và tăng Version.
 
@@ -1650,11 +1837,11 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 |---|---|---|---|
 | `toVersionId` | `Guid` | ✅ | ID phiên bản (`KbArticleVersion.id`) cần khôi phục (`400` nếu thiếu/rỗng) |
 
-**Response thành công `200`:** `CommonResponse<KbArticleActionDto>`
+**Response thành công `200`:** `CommonResponse<KbArticleActionDTO>`
 
 ---
 
-### DELETE /api/admin/knowledge-base/{id}
+### `DELETE /api/admin/knowledge-base/{id}`
 
 **Mục đích:** Xóa mềm (soft delete) một bài viết Knowledge Base.
 
@@ -1679,7 +1866,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 ---
 
-### POST /api/knowledge-base/references
+### `POST /api/knowledge-base/references`
 
 **Mục đích:** Gán một bài viết KB vào một Ticket.
 
@@ -1700,23 +1887,23 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 ---
 
-### GET /api/knowledge-base/references?ticketId={ticketId}
+### `GET /api/knowledge-base/references?ticketId={ticketId}`
 
 **Mục đích:** Lấy danh sách bài viết KB đã gán cho một Ticket (sắp xếp mới nhất trước).
 
 **Query param:** `ticketId` — UUID của ticket.
 
-**Response thành công `200`:** `CommonResponse<TicketKbReferenceDto[]>`
+**Response thành công `200`:** `CommonResponse<TicketKbReferenceDTO[]>`
 
 > Trả về toàn bộ array — **không pagination**. Chỉ trả các tham chiếu chưa bị xóa (`!IsDeleted`).
 
 ---
 
-### DELETE /api/knowledge-base/references/{referenceId}
+### `DELETE /api/knowledge-base/references/{referenceId}`
 
 **Mục đích:** Gỡ một tham chiếu KB khỏi Ticket (xóa mềm).
 
-**Path param:** `referenceId` — UUID của bản ghi tham chiếu (`TicketKbReferenceDto.id`).
+**Path param:** `referenceId` — UUID của bản ghi tham chiếu (`TicketKbReferenceDTO.id`).
 
 **Response thành công `200`:** `CommonResponse<object>`
 
@@ -1725,9 +1912,11 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 ---
 
-## Knowledge Base DTOs & Enums
+## Knowledge Base DTOs
 
-### KbArticleDto (detail — `GET /{id}`, response của `update`)
+> Enum của domain Knowledge Base (`KbArticleStatusEnum`, `KbVersionStatusEnum`, `KbReferenceTypeEnum`) xem ở mục **Enums** đầu tài liệu — không lặp lại ở đây.
+
+### `KbArticleDTO` (detail — `GET /{id}`, response của `update`)
 
 > Enum `category`/`status` trả về **dạng chuỗi** (`JsonStringEnumConverter`).
 
@@ -1754,7 +1943,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
 | `updatedAt` | `string?` | Có | Thời điểm cập nhật gần nhất |
 
-### KbArticleListItemDto (item trong danh sách — `GET /api/knowledge-base`)
+### `KbArticleListItemDTO` (item trong danh sách — `GET /api/knowledge-base`)
 
 | Field | Type | Mô tả |
 |---|---|---|
@@ -1770,7 +1959,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 > ⚠️ List item **KHÔNG** có `tags` (chỉ detail mới có). **CÓ** `reviewRequired` + `createdAt`.
 
-### KbArticleVersionDto (phiên bản trong lịch sử)
+### `KbArticleVersionDTO` (phiên bản trong lịch sử)
 
 | Field | Type | Mô tả |
 |---|---|---|
@@ -1778,7 +1967,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `articleId` | `string` | ID bài viết gốc |
 | `majorVersion` | `int` | Major version |
 | `minorVersion` | `int` | Minor version |
-| `status` | `int` | `KbVersionStatusEnum` dạng **số** (BE để raw `int`, KHÔNG serialize chuỗi) |
+| `status` | `KbVersionStatusEnum` | Enum chuỗi (e.g. `"Approved"`) — xem mục Enums |
 | `title` / `symptoms` / `diagnosisSteps` / `solutionSteps` | `string` | Nội dung snapshot |
 | `recommendedParts` | `string[]?` | Linh kiện snapshot |
 | `tags` | `string[]` | Thẻ snapshot |
@@ -1786,7 +1975,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `changedBy` | `string` | Người thực hiện thay đổi |
 | `createdAt` | `string` | Thời điểm tạo phiên bản (UTC) |
 
-### KbArticleDiffDto (kết quả `compare`)
+### `KbArticleDiffDTO` (kết quả `compare`)
 
 | Field | Type | Mô tả |
 |---|---|---|
@@ -1796,18 +1985,18 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 **`DiffSection`:** `{ oldValue: string; newValue: string; isChanged: bool }`
 
-### KbArticleTemplateDto (kết quả `copy-template`)
+### `KbArticleTemplateDTO` (kết quả `copy-template`)
 
 | Field | Type | Mô tả |
 |---|---|---|
-| `category` | `int` | Danh mục (số) |
+| `category` | `TicketCategoryEnum` | Enum chuỗi — xem mục Enums |
 | `symptoms` / `diagnosisSteps` / `solutionSteps` | `string` | Nội dung mẫu |
 | `recommendedParts` | `string[]?` | Linh kiện mẫu |
 | `tags` | `string[]` | Thẻ mẫu |
 
 > Không có `id`/`title` — chỉ là cấu trúc để fill vào form tạo bài mới.
 
-### KbArticleSuggestDto (kết quả `suggest`)
+### `KbArticleSuggestDTO` (kết quả `suggest`)
 
 | Field | Type | Mô tả |
 |---|---|---|
@@ -1818,7 +2007,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `helpfulCount` | `int` | Lượt hữu ích |
 | `viewCount` | `int` | Lượt xem |
 
-### KbArticleActionDto
+### `KbArticleActionDTO`
 
 Payload nhẹ dùng cho các hành động chuyển trạng thái.
 
@@ -1828,20 +2017,7 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 | `code` | `string` | Mã bài viết |
 | `status` | `KbArticleStatusEnum` | Trạng thái hiện tại sau thao tác (enum chuỗi) |
 
-### KbArticleStatusEnum
-- Draft (1): Nháp
-- PendingReview (2): Chờ phê duyệt
-- Published (3): Đã xuất bản (Customer thấy được)
-- Archived (4): Đã lưu trữ (Ẩn)
-
-### KbVersionStatusEnum
-Dành cho bảng lịch sử KbArticleVersion.
-- Pending (1): Chờ duyệt
-- Approved (2): Đã duyệt
-- Rejected (3): Bị từ chối
-- Archived (4): Bản sao lưu (Snapshot)
-
-### TicketKbReferenceDto (Nhóm 11 — `GET .../references`)
+### `TicketKbReferenceDTO` (Nhóm 11 — `GET .../references`)
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
@@ -1851,12 +2027,22 @@ Dành cho bảng lịch sử KbArticleVersion.
 | `kbArticleCode` | `string` | Không | Mã bài viết (snapshot lúc gán) |
 | `kbArticleTitle` | `string?` | Có | Tiêu đề bài viết (join từ KB hiện tại) |
 | `referencedByUserId` | `string` | Không | Người gán |
-| `referenceType` | `KbReferenceTypeEnum` | Không | Loại tham chiếu (**chuỗi**, vd `"ConsultedDuringResolve"`) |
+| `referenceType` | `KbReferenceTypeEnum` | Không | Loại tham chiếu (**chuỗi**, vd `"ConsultedDuringResolve"`) — xem mục Enums |
 | `note` | `string?` | Có | Ghi chú |
 | `createdAt` | `string` | Không | Thời điểm gán (UTC) |
 
-### KbReferenceTypeEnum
-Dùng khi link Ticket với Article.
-- ConsultedDuringResolve (1): Tham khảo khi xử lý
-- ProvidedToCustomer (2): Cung cấp cho khách hàng
-- GeneratedAfterResolve (3): Tạo ra sau khi xử lý xong
+---
+
+## Changelog
+
+### 2026-06-22 — Bổ sung SignalR Hub + sửa doc `POST .../comments`
+
+- **Thêm mục "Realtime — SignalR Hub `/hubs/ticket-comments`"** (sau Nhóm 1) — endpoint, auth qua query `access_token`, 3 method `JoinTicket`/`LeaveTicket`/`Typing`, 2 event `CommentAdded`/`UserTyping`, group routing theo `isInternal`, và snippet test nhanh bằng `@microsoft/signalr` CDN cho FE dán vào console.
+- **Sửa `POST /api/tickets/{ticketId}/comments`:** `CommentAttachmentInput.fileName`/`.contentType` trước đây ghi "Không bắt buộc" — **SAI**, `ValidateAsync` thực tế reject `400` nếu rỗng. Đã sửa thành bắt buộc, thêm so sánh với `MaintenanceAttachmentInput` (không validate field-level). Bổ sung `400` vào "Lỗi thường gặp" (trước đó thiếu) và note hành động phụ phát SignalR event sau khi tạo comment.
+
+### 2026-06-22 — Fix Knowledge Base enum bị khai sai kiểu `int`
+
+- **Breaking change cho FE:** `GetKbArticleListQuery.Category`/`.Status` (query param `GET /api/knowledge-base`), `KbArticleVersionDTO.status`, `KbArticleTemplateDTO.category` trước đây khai sai kiểu `int`/`int?` — đã sửa sang đúng enum (`TicketCategoryEnum`, `KbArticleStatusEnum`, `KbVersionStatusEnum`). Toàn bộ 4 field này giờ gửi/nhận **chuỗi tên enum** (vd `Category=Charging`, `"status": "Approved"`), không còn ngoại lệ số như trước.
+- Bổ sung endpoint `GET /api/knowledge-base/{id}/usage-stats` (Nhóm 8) — đã có trong code (Manager/Admin only) nhưng thiếu trong doc.
+- Gom 3 enum của domain Knowledge Base (`KbArticleStatusEnum`, `KbVersionStatusEnum`, `KbReferenceTypeEnum`) vào mục **Enums** chung đầu tài liệu — bỏ bản liệt kê dạng bullet trùng lặp ở cuối file.
+- Đổi tên các DTO trong doc từ hậu tố `Dto` sang `DTO` (khớp tên class C# thật, ví dụ `KbArticleDTO`, `TicketActionDTO`, `AlertTicketSagaDTO`) — áp dụng cho toàn bộ file, không chỉ phần Knowledge Base.

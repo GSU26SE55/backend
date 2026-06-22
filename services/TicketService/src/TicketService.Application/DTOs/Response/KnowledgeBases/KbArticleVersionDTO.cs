@@ -1,3 +1,5 @@
+using TicketService.Domain.Enums;
+
 namespace TicketService.Application.DTOs.Response.KnowledgeBases;
 
 public class KbArticleVersionDTO
@@ -6,7 +8,7 @@ public class KbArticleVersionDTO
     public string ArticleId { get; set; } = string.Empty;
     public int MajorVersion { get; set; }
     public int MinorVersion { get; set; }
-    public int Status { get; set; }
+    public KbVersionStatusEnum Status { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Symptoms { get; set; } = string.Empty;
     public string DiagnosisSteps { get; set; } = string.Empty;
