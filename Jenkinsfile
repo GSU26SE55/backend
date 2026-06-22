@@ -116,36 +116,7 @@ pipeline {
       steps {
         script {
           def baseRef = env.CHANGE_TARGET ?: 'dev'
-          sh """
-            set -eu
-            git fetch origin ${baseRef}:refs/remotes/origin/${baseRef} 2>/dev/null || true
-
-            DIFF=\$(git diff origin/${baseRef}...HEAD -- '*.cs' 2>/dev/null || git diff HEAD~1...HEAD -- '*.cs' 2>/dev/null || echo "")
-
-            if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.(UpdateAsync|DeleteAsync)\\s*\\('; then
-              echo "FAIL: UpdateAsync/DeleteAsync are void in this repo. Do not await them."
-              exit 1
-            fi
-            echo "PASS: no await on void UpdateAsync/DeleteAsync"
-
-            if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.GetAllAsync\\s*\\('; then
-              echo "FAIL: GetAllAsync returns IQueryable in this repo. Do not await it."
-              exit 1
-            fi
-            echo "PASS: no await on GetAllAsync"
-
-            NEW_ENTITIES=\$(git diff origin/${baseRef}...HEAD --name-only --diff-filter=A 2>/dev/null | grep -E 'Domain/Entities/.*\\.cs\$' || true)
-            FAILED=0
-            for file in \$NEW_ENTITIES; do
-              if [ -f "\$file" ] && ! grep -qE 'class\\s+\\w+\\s*:\\s*(\\w+\\s*,\\s*)*AuditableEntity' "\$file"; then
-                if ! grep -qE '^(\\s*public\\s+)?(abstract|enum|interface)' "\$file"; then
-                  echo "FAIL: \$file must extend AuditableEntity"
-                  FAILED=1
-                fi
-              fi
-            done
-            [ \$FAILED -eq 0 ] && echo "PASS: new domain entities extend AuditableEntity" || exit 1
-          """
+          sh "BASE_REF=origin/${baseRef} ./ci/scripts/rule-checks.sh"
         }
       }
     }

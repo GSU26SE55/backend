@@ -1,6 +1,6 @@
-# Ticket Comment Hub — Tổng hợp toàn diện
+# Ticket Chat Hub — Tổng hợp toàn diện
 
-> Tài liệu tổng hợp **hiện trạng** + **kế hoạch mở rộng đầy đủ** cho module Comment trong `TicketService`.
+> Tài liệu tổng hợp **hiện trạng** + **kế hoạch mở rộng đầy đủ** cho module Chat trong `TicketService`.
 > Bao gồm: tính năng, mục đích nghiệp vụ, cấu trúc source code, database schema, endpoint matrix, integration events, roadmap thực hiện.
 >
 > **Phạm vi:** chỉ TicketService — không bao gồm thay đổi cross-service (NotificationService, UserService, AI module) ngoài phần Integration Events đã liệt kê.
@@ -9,7 +9,7 @@
 
 ## Mục lục
 
-- [Phần I — Hiện trạng Comment](#phần-i--hiện-trạng-comment)
+- [Phần I — Hiện trạng Chat](#phần-i--hiện-trạng-chat)
   - [A. Tính năng đã có](#a-tính-năng-đã-có)
   - [B. Mục đích nghiệp vụ](#b-mục-đích-nghiệp-vụ)
   - [C. Source code structure hiện tại](#c-source-code-structure-hiện-tại)
@@ -52,19 +52,19 @@
 
 ---
 
-# Phần I — Hiện trạng Comment
+# Phần I — Hiện trạng Chat
 
 ## A. Tính năng đã có
 
 | # | Feature | Endpoint / Vị trí | Mục đích |
 |---|---------|-------------------|----------|
-| 1 | Add comment | `POST /api/tickets/{ticketId}/comments` | Customer/Staff/Manager đăng bình luận |
-| 2 | List comment (pagination) | `GET /api/tickets/{ticketId}/comments` | Hiển thị timeline trao đổi |
+| 1 | Add chat | `POST /api/tickets/{ticketId}/chats` | Customer/Staff/Manager đăng bình luận |
+| 2 | List chat (pagination) | `GET /api/tickets/{ticketId}/chats` | Hiển thị timeline trao đổi |
 | 3 | `IsInternal` flag | Field trong entity | Phân biệt public (Customer thấy) vs internal (Staff/Manager only) |
-| 4 | Attachment đính kèm khi add | `CommentAddCommand.Attachments` | Gửi ảnh/file kèm comment |
-| 5 | Filter internal cho Customer | `TicketCommentsQueryHandler:44-47` | Bảo mật thông tin nội bộ |
+| 4 | Attachment đính kèm khi add | `ChatAddCommand.Attachments` | Gửi ảnh/file kèm chat |
+| 5 | Filter internal cho Customer | `TicketChatsQueryHandler:44-47` | Bảo mật thông tin nội bộ |
 | 6 | Authorize access ticket | `TicketQueryHelper.CanAccessTicket` | Bảo mật ticket — Customer chủ / Staff assigned / Manager/Admin |
-| 7 | Activity log khi add comment | `_activityLogger.LogAsync(...Commented)` | Audit trail |
+| 7 | Activity log khi add chat | `_activityLogger.LogAsync(...Chatted)` | Audit trail |
 | 8 | Soft delete support | Qua `AuditableEntity` + filter `!IsDeleted` manual | Không xóa hẳn |
 | 9 | Pagination | `PageNumber + PageSize` | Phân trang khi list dài |
 | 10 | Validation pipeline | `IValidatable<TicketActionResponse>` | Body required, attachment field required |
@@ -76,11 +76,11 @@
 3. **Đính kèm bằng chứng** — ảnh hiện trạng pin, biên bản, file log sensor.
 4. **Audit trail cho SLA dispute** — timeline có evidence ai trả lời lúc nào.
 5. **Phục vụ ITIL ticket lifecycle**:
-   - OPEN → ASSIGNED: Manager comment internal về rationale priority
-   - ASSIGNED → IN_PROGRESS: Staff comment "đã tiếp nhận", hỏi Customer info
+   - OPEN → ASSIGNED: Manager chat internal về rationale priority
+   - ASSIGNED → IN_PROGRESS: Staff chat "đã tiếp nhận", hỏi Customer info
    - IN_PROGRESS: Log progress, internal note khi escalate
    - RESOLVED → CLOSED_PENDING_RATE: Staff giải thích cách xử lý
-   - ESCALATED: Manager/Tier cao hơn comment hướng đi mới
+   - ESCALATED: Manager/Tier cao hơn chat hướng đi mới
 
 ## C. Source code structure hiện tại
 
@@ -88,69 +88,69 @@
 services/TicketService/src/
 ├── TicketService.Api/
 │   └── Controllers/
-│       └── TicketCommentsController.cs              # 2 endpoint POST + GET
+│       └── TicketChatsController.cs              # 2 endpoint POST + GET
 │
 ├── TicketService.Application/
 │   ├── CQRS/
 │   │   ├── Command/
-│   │   │   └── CommentAdd/
-│   │   │       └── CommentAddCommand.cs             # Command + Validation + CommentAttachmentInput record
+│   │   │   └── ChatAdd/
+│   │   │       └── ChatAddCommand.cs             # Command + Validation + ChatAttachmentInput record
 │   │   ├── Query/
 │   │   │   └── Ticket/
-│   │   │       └── TicketCommentsQuery.cs           # Pagination + ActorRoles
+│   │   │       └── TicketChatsQuery.cs           # Pagination + ActorRoles
 │   │   └── Handler/
-│   │       └── Comments/
-│   │           ├── CommentAddCommandHandler.cs      # Tạo comment + attachment + activity log
-│   │           └── TicketCommentsQueryHandler.cs    # Authorize + filter internal + paginate
+│   │       └── Chats/
+│   │           ├── ChatAddCommandHandler.cs      # Tạo chat + attachment + activity log
+│   │           └── TicketChatsQueryHandler.cs    # Authorize + filter internal + paginate
 │   ├── DTOs/
 │   │   └── Response/
-│   │       ├── Comments/
-│   │       │   ├── CommentResponse.cs
-│   │       │   └── CommentActionDTO.cs
+│   │       ├── Chats/
+│   │       │   ├── ChatResponse.cs
+│   │       │   └── ChatActionDTO.cs
 │   │       └── Tickets/
-│   │           └── TicketCommentDTO.cs              # DTO trả về cho client
+│   │           └── TicketChatDTO.cs              # DTO trả về cho client
 │   ├── Helpers/
-│   │   └── TicketQueryHelper.cs                     # CanAccessTicket + CanViewInternalComments
+│   │   └── TicketQueryHelper.cs                     # CanAccessTicket + CanViewInternalChats
 │   └── Interfaces/
 │       ├── Repositories/
-│       │   └── ITicketUnitOfWork.cs                 # TicketComments repository
+│       │   └── ITicketUnitOfWork.cs                 # TicketChats repository
 │       └── Services/
 │           ├── ITicketCurrentUserService.cs         # Resolve UserId, Role, FullName
-│           └── IActivityLogger.cs                   # Log Commented action
+│           └── IActivityLogger.cs                   # Log Chatted action
 │
 ├── TicketService.Domain/
 │   ├── Entities/
-│   │   ├── TicketComment.cs                         # TicketId, AuthorUserId, AuthorRole, Body, IsInternal, AttachmentFileIds
-│   │   ├── Ticket.cs                                # Có Comments collection
+│   │   ├── TicketChat.cs                         # TicketId, AuthorUserId, AuthorRole, Body, IsInternal, AttachmentFileIds
+│   │   ├── Ticket.cs                                # Có Chats collection
 │   │   ├── TicketAttachment.cs                      # Ghi cùng khi có attachment
-│   │   └── TicketActivity.cs                        # Log Commented action
+│   │   └── TicketActivity.cs                        # Log Chatted action
 │   └── Enums/
 │       ├── ActorRoleEnum.cs                         # Customer/Staff/Manager/Admin
-│       ├── ActivityActionEnum.cs                    # Commented
+│       ├── ActivityActionEnum.cs                    # Chatted
 │       └── AttachmentSourceEnum.cs                  # CustomerSubmission/StaffWork
 │
 ├── TicketService.Infrastructure/
 │   ├── Persistence/
 │   │   ├── Configurations/
-│   │   │   ├── TicketCommentConfiguration.cs        # Map → "ticket_comments", jsonb cho AttachmentFileIds
+│   │   │   ├── TicketChatConfiguration.cs        # Map → "ticket_chats", jsonb cho AttachmentFileIds
 │   │   │   ├── TicketConfiguration.cs
 │   │   │   ├── TicketAttachmentConfiguration.cs
 │   │   │   └── TicketActivityConfiguration.cs
 │   │   └── Converters/
 │   │       └── JsonValueConverter.cs                # Convert List<Guid> ↔ jsonb
 │   └── Migrations/
-│       └── 20260517105233_InitialTicketSchema.cs    # CreateTable ticket_comments
+│       └── 20260517105233_InitialTicketSchema.cs    # CreateTable ticket_chats
 │
 └── tests/
-    ├── TicketService.UnitTests/Handlers/Comments/
-    │   └── CommentAddCommandHandlerTests.cs
+    ├── TicketService.UnitTests/Handlers/Chats/
+    │   └── ChatAddCommandHandlerTests.cs
     └── TicketService.IntergrationTests/Tickets/
-        └── TicketCommentApiTests.cs
+        └── TicketChatApiTests.cs
 ```
 
 ## D. Database tables liên quan
 
-### Bảng chính: `ticket_comments`
+### Bảng chính: `ticket_chats`
 
 | Column | Type | Constraint | Ghi chú |
 |--------|------|-----------|---------|
@@ -168,15 +168,15 @@ services/TicketService/src/
 | `is_deleted` | bool | NOT NULL | |
 | `deleted_at` | timestamptz | nullable | |
 
-**Indexes:** `IX_ticket_comments_ticket_id`, `IX_ticket_comments_author_user_id`
+**Indexes:** `IX_ticket_chats_ticket_id`, `IX_ticket_chats_author_user_id`
 
 ### Bảng phụ thuộc
 
-| Bảng | Vai trò trong comment flow | Quan hệ |
+| Bảng | Vai trò trong chat flow | Quan hệ |
 |------|----------------------------|---------|
-| `tickets` | Parent — FK cascade | Comment chỉ sống khi ticket tồn tại |
+| `tickets` | Parent — FK cascade | Chat chỉ sống khi ticket tồn tại |
 | `ticket_attachments` | Ghi cùng khi có file đính kèm | Liên kết LỎNG qua jsonb `attachment_file_ids` |
-| `ticket_activities` | Audit log Action=Commented | Mỗi add comment ghi 1 dòng |
+| `ticket_activities` | Audit log Action=Chatted | Mỗi add chat ghi 1 dòng |
 | `customer_accounts` / `staff_accounts` | Authorize CanAccessTicket | Không join trực tiếp |
 
 ## E. Gap / thiếu sót
@@ -191,10 +191,10 @@ services/TicketService/src/
 | 6 | **Không có realtime** (chưa SignalR) | FE phải polling |
 | 7 | **Không có read receipt** | Không biết Customer đã đọc chưa |
 | 8 | **Không có participant management** | Reassign Staff cũ vẫn xem được; không add chuyên gia ngoài |
-| 9 | **Không có search trong comment** | Ticket dài 50+ comment khó tìm |
+| 9 | **Không có search trong chat** | Ticket dài 50+ chat khó tìm |
 | 10 | **Không có template** | Staff gõ lại cùng nội dung |
-| 11 | **XML doc nói sort ASC** nhưng code thực tế **DESC** (`TicketCommentsQueryHandler.cs:51`) | Mismatch document |
-| 12 | **Không filter `!IsDeleted` ở Ticket parent khi GET comment** | Có thể trả comment của ticket đã xóa (cần kiểm tra) |
+| 11 | **XML doc nói sort ASC** nhưng code thực tế **DESC** (`TicketChatsQueryHandler.cs:51`) | Mismatch document |
+| 12 | **Không filter `!IsDeleted` ở Ticket parent khi GET chat** | Có thể trả chat của ticket đã xóa (cần kiểm tra) |
 
 ---
 
@@ -206,32 +206,32 @@ services/TicketService/src/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 1 | Edit comment | Sửa nội dung comment đã đăng |
-| 2 | Soft delete comment | Xóa mềm comment, giữ audit |
-| 3 | Restore comment | Khôi phục comment đã xóa (Admin only) |
-| 4 | Get comment by ID | Xem chi tiết 1 comment |
-| 5 | Get my comments cross-ticket | Customer xem mọi comment của mình trên toàn bộ ticket |
+| 1 | Edit chat | Sửa nội dung chat đã đăng |
+| 2 | Soft delete chat | Xóa mềm chat, giữ audit |
+| 3 | Restore chat | Khôi phục chat đã xóa (Admin only) |
+| 4 | Get chat by ID | Xem chi tiết 1 chat |
+| 5 | Get my chats cross-ticket | Customer xem mọi chat của mình trên toàn bộ ticket |
 
 ### Source structure
 
 ```
 Application/CQRS/Command/
-├── CommentEdit/CommentEditCommand.cs
-├── CommentDelete/CommentDeleteCommand.cs
-└── CommentRestore/CommentRestoreCommand.cs
+├── ChatEdit/ChatEditCommand.cs
+├── ChatDelete/ChatDeleteCommand.cs
+└── ChatRestore/ChatRestoreCommand.cs
 
-Application/CQRS/Query/Comment/
-├── CommentGetByIdQuery.cs
-└── MyCommentsQuery.cs
+Application/CQRS/Query/Chat/
+├── ChatGetByIdQuery.cs
+└── MyChatsQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentEditCommandHandler.cs
-├── CommentDeleteCommandHandler.cs
-├── CommentRestoreCommandHandler.cs
-├── CommentGetByIdQueryHandler.cs
-└── MyCommentsQueryHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatEditCommandHandler.cs
+├── ChatDeleteCommandHandler.cs
+├── ChatRestoreCommandHandler.cs
+├── ChatGetByIdQueryHandler.cs
+└── MyChatsQueryHandler.cs
 
-Api/Controllers/TicketCommentsController.cs (mở rộng PUT, DELETE, PATCH, GET /me)
+Api/Controllers/TicketChatsController.cs (mở rộng PUT, DELETE, PATCH, GET /me)
 ```
 
 ### Rule
@@ -249,27 +249,27 @@ Api/Controllers/TicketCommentsController.cs (mở rộng PUT, DELETE, PATCH, GET
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 6 | Edit history (versioning) | Xem các bản cũ của comment, không bao giờ xóa |
+| 6 | Edit history (versioning) | Xem các bản cũ của chat, không bao giờ xóa |
 | 7 | Edit window limit (15 phút) | Tránh sửa sau khi đã có reply |
-| 8 | Edit reason | Bắt buộc nếu Manager/Admin edit comment người khác (PII/legal redaction) |
+| 8 | Edit reason | Bắt buộc nếu Manager/Admin edit chat người khác (PII/legal redaction) |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── TicketCommentEdit.cs                             # Bảng mới: lưu old_body, new_body, edited_at, edited_by, edit_reason
+└── TicketChatEdit.cs                             # Bảng mới: lưu old_body, new_body, edited_at, edited_by, edit_reason
 
 Infrastructure/Persistence/Configurations/
-└── TicketCommentEditConfiguration.cs
+└── TicketChatEditConfiguration.cs
 
-Application/CQRS/Query/Comment/
-└── CommentHistoryQuery.cs
+Application/CQRS/Query/Chat/
+└── ChatHistoryQuery.cs
 
-Application/CQRS/Handler/Comments/
-└── CommentHistoryQueryHandler.cs
+Application/CQRS/Handler/Chats/
+└── ChatHistoryQueryHandler.cs
 
 Migrations/
-└── AddCommentEditHistory.cs                         # tạo ticket_comment_edits + thêm edited_at, edit_count, last_edited_by_user_id vào ticket_comments
+└── AddChatEditHistory.cs                         # tạo ticket_chat_edits + thêm edited_at, edit_count, last_edited_by_user_id vào ticket_chats
 ```
 
 ---
@@ -280,9 +280,9 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 9 | Link attachment với comment_id (FK chặt) | Cascade cleanup khi comment xóa |
-| 10 | Add attachment sau khi đã tạo comment | Bổ sung file sau |
-| 11 | Remove attachment khỏi comment | Quản lý linh hoạt |
+| 9 | Link attachment với chat_id (FK chặt) | Cascade cleanup khi chat xóa |
+| 10 | Add attachment sau khi đã tạo chat | Bổ sung file sau |
+| 11 | Remove attachment khỏi chat | Quản lý linh hoạt |
 | 12 | Thumbnail ảnh | UX hiển thị preview |
 | 13 | Inline image trong body (markdown `![]()`) | Chèn ảnh giữa text |
 | 14 | Download count | Tracking lượt tải |
@@ -293,34 +293,34 @@ Migrations/
 
 ```
 Domain/Entities/
-└── TicketAttachment.cs                              # Thêm: comment_id (FK nullable), thumbnail_url, is_inline, download_count, virus_scan_status
+└── TicketAttachment.cs                              # Thêm: chat_id (FK nullable), thumbnail_url, is_inline, download_count, virus_scan_status
 
 Domain/Enums/
 └── VirusScanStatusEnum.cs                           # Pending=1, Clean=2, Infected=3, Failed=4
 
 Application/CQRS/Command/
-├── CommentAttachmentAdd/CommentAttachmentAddCommand.cs
-└── CommentAttachmentRemove/CommentAttachmentRemoveCommand.cs
+├── ChatAttachmentAdd/ChatAttachmentAddCommand.cs
+└── ChatAttachmentRemove/ChatAttachmentRemoveCommand.cs
 
-Application/CQRS/Query/Comment/
-└── CommentAttachmentsQuery.cs
+Application/CQRS/Query/Chat/
+└── ChatAttachmentsQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentAttachmentAddCommandHandler.cs
-├── CommentAttachmentRemoveCommandHandler.cs
-└── CommentAttachmentsQueryHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatAttachmentAddCommandHandler.cs
+├── ChatAttachmentRemoveCommandHandler.cs
+└── ChatAttachmentsQueryHandler.cs
 
 Infrastructure/BackgroundServices/
 └── VirusScanWorker.cs                               # Gọi ClamAV, update virus_scan_status
 
 Migrations/
-├── LinkAttachmentToComment.cs                       # Add comment_id FK
-└── AddCommentAttachmentEnhancements.cs              # thumbnail_url, is_inline, download_count, virus_scan_status
+├── LinkAttachmentToChat.cs                       # Add chat_id FK
+└── AddChatAttachmentEnhancements.cs              # thumbnail_url, is_inline, download_count, virus_scan_status
 ```
 
 ### Constraint
 
-- Max 10 attachment/comment
+- Max 10 attachment/chat
 - Max 50MB/file
 - Whitelist MIME: `image/*`, `application/pdf`, `video/mp4`, `text/plain`
 - Block download nếu `virus_scan_status = Infected`
@@ -333,7 +333,7 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 17 | Reply 1 comment cụ thể | Trả lời từng câu hỏi của Customer/Staff |
+| 17 | Reply 1 chat cụ thể | Trả lời từng câu hỏi của Customer/Staff |
 | 18 | Đếm số reply | Hiển thị "3 phản hồi" |
 | 19 | Threaded view mode | Group theo `thread_root_id` |
 
@@ -341,26 +341,26 @@ Migrations/
 
 ```
 Domain/Entities/
-└── TicketComment.cs                                 # Thêm: parent_comment_id (self-FK), thread_root_id, reply_count
+└── TicketChat.cs                                 # Thêm: parent_chat_id (self-FK), thread_root_id, reply_count
 
 Application/CQRS/Command/
-└── CommentReply/CommentReplyCommand.cs
+└── ChatReply/ChatReplyCommand.cs
 
-Application/CQRS/Query/Comment/
-└── CommentRepliesQuery.cs
+Application/CQRS/Query/Chat/
+└── ChatRepliesQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentReplyCommandHandler.cs
-└── CommentRepliesQueryHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatReplyCommandHandler.cs
+└── ChatRepliesQueryHandler.cs
 
 Migrations/
-└── AddCommentThreading.cs
+└── AddChatThreading.cs
 ```
 
 ### Rule
 
 - **Tối đa 1 level reply** (không reply-of-reply)
-- Validate: `parent_comment_id` phải cùng `ticket_id`
+- Validate: `parent_chat_id` phải cùng `ticket_id`
 - Soft delete parent: reply vẫn hiển thị, parent đánh dấu "đã xóa"
 
 ---
@@ -381,7 +381,7 @@ Migrations/
 
 ```
 Domain/Entities/
-└── TicketCommentMention.cs                          # Bảng mới: comment_id, mentioned_user_id, mentioned_user_role, is_acknowledged
+└── TicketChatMention.cs                          # Bảng mới: chat_id, mentioned_user_id, mentioned_user_role, is_acknowledged
 
 Application/Interfaces/Services/
 └── IMentionParser.cs                                # Parse @username từ body
@@ -390,28 +390,28 @@ Infrastructure/Services/
 └── MentionParserService.cs                          # Regex + resolve userId qua UserService cache Redis
 
 Application/CQRS/Command/
-└── CommentMentionAcknowledge/CommentMentionAcknowledgeCommand.cs
+└── ChatMentionAcknowledge/ChatMentionAcknowledgeCommand.cs
 
-Application/CQRS/Query/Comment/
+Application/CQRS/Query/Chat/
 └── MyMentionsQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentMentionAcknowledgeCommandHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatMentionAcknowledgeCommandHandler.cs
 └── MyMentionsQueryHandler.cs
 
 SharedContracts/Events/Ticket/
-└── CommentMentionedEvent.cs
+└── ChatMentionedEvent.cs
 
 Infrastructure/Persistence/Configurations/
-└── TicketCommentMentionConfiguration.cs
+└── TicketChatMentionConfiguration.cs
 
 Migrations/
-└── AddCommentMentions.cs
+└── AddChatMentions.cs
 ```
 
 ### Integration
 
-- Sau khi `_uow.SaveChangesAsync()` thành công → publish `CommentMentionedEvent` qua Outbox
+- Sau khi `_uow.SaveChangesAsync()` thành công → publish `ChatMentionedEvent` qua Outbox
 - `NotificationService` consume → gửi push (Expo) + email
 
 ---
@@ -424,35 +424,35 @@ Migrations/
 |---|---------|----------|
 | 25 | Add reaction | 👍 / ✅ / ❓ / 👎 / ⚠️ |
 | 26 | Remove reaction | Toggle off |
-| 27 | List reactions per comment | Ai đã react gì |
+| 27 | List reactions per chat | Ai đã react gì |
 | 28 | Aggregate count theo type | Hiển thị "3 👍, 1 ✅" |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── TicketCommentReaction.cs                         # Bảng mới: comment_id, user_id, reaction_type — UNIQUE (comment_id, user_id, type)
+└── TicketChatReaction.cs                         # Bảng mới: chat_id, user_id, reaction_type — UNIQUE (chat_id, user_id, type)
 
 Domain/Enums/
 └── ReactionTypeEnum.cs                              # ThumbsUp=1, Acknowledged=2, Resolved=3, NeedMoreInfo=4, Disagree=5
 
 Application/CQRS/Command/
-├── CommentReactionAdd/CommentReactionAddCommand.cs
-└── CommentReactionRemove/CommentReactionRemoveCommand.cs
+├── ChatReactionAdd/ChatReactionAddCommand.cs
+└── ChatReactionRemove/ChatReactionRemoveCommand.cs
 
-Application/CQRS/Query/Comment/
-└── CommentReactionsQuery.cs
+Application/CQRS/Query/Chat/
+└── ChatReactionsQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentReactionAddCommandHandler.cs
-├── CommentReactionRemoveCommandHandler.cs
-└── CommentReactionsQueryHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatReactionAddCommandHandler.cs
+├── ChatReactionRemoveCommandHandler.cs
+└── ChatReactionsQueryHandler.cs
 
 SharedContracts/Events/Ticket/
-└── CommentReactedEvent.cs
+└── ChatReactedEvent.cs
 
 Migrations/
-└── AddCommentReactions.cs
+└── AddChatReactions.cs
 ```
 
 ---
@@ -467,31 +467,31 @@ Migrations/
 | 30 | Auto mark-read | Tự đánh dấu khi user gọi GetList |
 | 31 | Xem ai đã đọc | Staff/Manager kiểm tra Customer đã thấy update chưa |
 | 32 | Unread count per ticket | Badge "3 chưa đọc" |
-| 33 | Cảnh báo Customer chưa đọc N comment trong M giờ | Manager proactive escalate |
+| 33 | Cảnh báo Customer chưa đọc N chat trong M giờ | Manager proactive escalate |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── TicketCommentRead.cs                             # Bảng mới: comment_id, user_id, user_role, read_at — UNIQUE (comment_id, user_id)
+└── TicketChatRead.cs                             # Bảng mới: chat_id, user_id, user_role, read_at — UNIQUE (chat_id, user_id)
 
 Application/CQRS/Command/
-└── CommentMarkRead/CommentMarkReadCommand.cs
+└── ChatMarkRead/ChatMarkReadCommand.cs
 
-Application/CQRS/Query/Comment/
-├── CommentReadersQuery.cs
+Application/CQRS/Query/Chat/
+├── ChatReadersQuery.cs
 └── TicketUnreadCountQuery.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentMarkReadCommandHandler.cs
-├── CommentReadersQueryHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatMarkReadCommandHandler.cs
+├── ChatReadersQueryHandler.cs
 └── TicketUnreadCountQueryHandler.cs
 
 Infrastructure/BackgroundServices/
-└── CommentReadReceiptBulkWriter.cs                  # Bulk insert read receipts (channel + batch)
+└── ChatReadReceiptBulkWriter.cs                  # Bulk insert read receipts (channel + batch)
 
 Migrations/
-└── AddCommentReadReceipts.cs
+└── AddChatReadReceipts.cs
 ```
 
 ---
@@ -512,10 +512,10 @@ Migrations/
 
 ```
 Domain/Entities/
-└── TicketComment.cs                                 # Thêm: body_format (enum), body_html (cached render)
+└── TicketChat.cs                                 # Thêm: body_format (enum), body_html (cached render)
 
 Domain/Enums/
-└── CommentBodyFormatEnum.cs                         # PlainText=1, Markdown=2
+└── ChatBodyFormatEnum.cs                         # PlainText=1, Markdown=2
 
 Application/Interfaces/Services/
 └── IMarkdownRenderer.cs
@@ -524,7 +524,7 @@ Infrastructure/Services/
 └── MarkdigMarkdownRenderer.cs                       # Markdig + Ganss.Xss whitelist tag
 
 Migrations/
-└── AddCommentMarkdownSupport.cs
+└── AddChatMarkdownSupport.cs
 ```
 
 ### Whitelist tag
@@ -539,7 +539,7 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 39 | Push comment mới tới mọi client đang xem ticket | Realtime UX |
+| 39 | Push chat mới tới mọi client đang xem ticket | Realtime UX |
 | 40 | Push edit/delete | Đồng bộ state |
 | 41 | Push reaction | Realtime emoji |
 | 42 | Typing indicator | "X đang gõ..." |
@@ -550,7 +550,7 @@ Migrations/
 
 ```
 Api/Hubs/
-└── TicketCommentHub.cs                              # Path: /hubs/ticket-comments
+└── TicketChatHub.cs                              # Path: /hubs/ticket-chats
 
 Api/Program.cs                                       # AddSignalR + AddStackExchangeRedis (backplane multi-instance)
 
@@ -558,20 +558,20 @@ Api/Authentication/
 └── SignalRJwtConfiguration.cs                       # JWT qua query string ?access_token=...
 
 Application/Interfaces/Services/
-└── ITicketCommentRealtimeNotifier.cs
+└── ITicketChatRealtimeNotifier.cs
 
 Infrastructure/Realtime/
-└── SignalRTicketCommentNotifier.cs                  # Inject IHubContext, broadcast to group ticket-{id}
+└── SignalRTicketChatNotifier.cs                  # Inject IHubContext, broadcast to group ticket-{id}
 ```
 
 ### Server-push events
 
-- `CommentAdded(commentDto)`
-- `CommentEdited(commentDto)`
-- `CommentDeleted(commentId, byUser)`
-- `ReactionAdded(commentId, reaction)`
+- `ChatAdded(chatDto)`
+- `ChatEdited(chatDto)`
+- `ChatDeleted(chatId, byUser)`
+- `ReactionAdded(chatId, reaction)`
 - `UserTyping(ticketId, userId, displayName)`
-- `MentionReceived(commentDto)` — chỉ gửi cho user được mention
+- `MentionReceived(chatDto)` — chỉ gửi cho user được mention
 
 ### Client method
 
@@ -591,7 +591,7 @@ Infrastructure/Realtime/
 |---|---------|----------|
 | 45 | Tạo template cá nhân | Staff tự dùng |
 | 46 | Tạo template chung | Manager/Admin tạo Global/Team |
-| 47 | Apply template vào comment | Quick paste — auto fill placeholder |
+| 47 | Apply template vào chat | Quick paste — auto fill placeholder |
 | 48 | Placeholder động | `{{customer_name}}`, `{{ticket_code}}`, `{{battery_id}}` |
 | 49 | Phân loại template | Category enum |
 | 50 | Usage stats | Template nào dùng nhiều |
@@ -601,11 +601,11 @@ Infrastructure/Realtime/
 
 ```
 Domain/Entities/
-└── CommentTemplate.cs                               # Bảng mới: name, content, category, scope, team_id, usage_count, is_active
+└── ChatTemplate.cs                               # Bảng mới: name, content, category, scope, team_id, usage_count, is_active
 
 Domain/Enums/
-├── CommentTemplateCategoryEnum.cs                   # Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6
-└── CommentTemplateScopeEnum.cs                      # Personal=1, Team=2, Global=3
+├── ChatTemplateCategoryEnum.cs                   # Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6
+└── ChatTemplateScopeEnum.cs                      # Personal=1, Team=2, Global=3
 
 Application/Interfaces/Services/
 └── ITemplateRenderer.cs
@@ -614,26 +614,26 @@ Infrastructure/Services/
 └── TemplateRendererService.cs                       # Resolve placeholder, validate template
 
 Application/CQRS/Command/
-├── CommentTemplateCreate/CommentTemplateCreateCommand.cs
-├── CommentTemplateUpdate/CommentTemplateUpdateCommand.cs
-├── CommentTemplateDelete/CommentTemplateDeleteCommand.cs
-└── CommentFromTemplate/CommentFromTemplateCommand.cs
+├── ChatTemplateCreate/ChatTemplateCreateCommand.cs
+├── ChatTemplateUpdate/ChatTemplateUpdateCommand.cs
+├── ChatTemplateDelete/ChatTemplateDeleteCommand.cs
+└── ChatFromTemplate/ChatFromTemplateCommand.cs
 
 Application/CQRS/Query/Template/
-└── CommentTemplatesQuery.cs
+└── ChatTemplatesQuery.cs
 
 Application/CQRS/Handler/Templates/
-├── CommentTemplateCreateCommandHandler.cs
-├── CommentTemplateUpdateCommandHandler.cs
-├── CommentTemplateDeleteCommandHandler.cs
-├── CommentFromTemplateCommandHandler.cs
-└── CommentTemplatesQueryHandler.cs
+├── ChatTemplateCreateCommandHandler.cs
+├── ChatTemplateUpdateCommandHandler.cs
+├── ChatTemplateDeleteCommandHandler.cs
+├── ChatFromTemplateCommandHandler.cs
+└── ChatTemplatesQueryHandler.cs
 
 Api/Controllers/
-└── CommentTemplatesController.cs                    # Controller mới
+└── ChatTemplatesController.cs                    # Controller mới
 
 Migrations/
-└── AddCommentTemplates.cs
+└── AddChatTemplates.cs
 ```
 
 ---
@@ -644,49 +644,49 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 52 | Suggest comment | AI gợi ý reply cho Staff |
+| 52 | Suggest chat | AI gợi ý reply cho Staff |
 | 53 | Multiple candidates | 3 phương án để chọn |
 | 54 | Theo intent | RequestInfo / TechAnswer / Resolution / FollowUp |
 | 55 | Log AI usage | Train improve model |
 | 56 | Mask PII trước gửi AI | Bảo mật |
 | 57 | Sentiment analysis | Detect Customer tức giận để alert |
-| 58 | Auto-summarize thread dài | Tóm tắt comment dài cho Staff mới tiếp nhận |
+| 58 | Auto-summarize thread dài | Tóm tắt chat dài cho Staff mới tiếp nhận |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── CommentAiSuggestion.cs                           # Bảng mới: ticket_id, intent, suggestions (jsonb), selected_index, edited_before_post
+└── ChatAiSuggestion.cs                           # Bảng mới: ticket_id, intent, suggestions (jsonb), selected_index, edited_before_post
 
 Domain/Enums/
-└── CommentAiIntentEnum.cs                           # RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4
+└── ChatAiIntentEnum.cs                           # RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4
 
 Application/Interfaces/Services/
-├── ICommentAiSuggestionClient.cs                    # HTTP client gọi AI module FastAPI
+├── IChatAiSuggestionClient.cs                    # HTTP client gọi AI module FastAPI
 └── IPiiDetector.cs
 
 Application/CQRS/Command/
-└── CommentSuggest/CommentSuggestCommand.cs
+└── ChatSuggest/ChatSuggestCommand.cs
 
-Application/CQRS/Handler/Comments/
-└── CommentSuggestCommandHandler.cs
+Application/CQRS/Handler/Chats/
+└── ChatSuggestCommandHandler.cs
 
 Infrastructure/AiClient/
-└── FastApiCommentAiClient.cs                        # POST /ai/comment-suggest
+└── FastApiChatAiClient.cs                        # POST /ai/chat-suggest
 
 Infrastructure/Services/
 └── PiiDetectorService.cs                            # Regex CCCD, sđt, email — mask trước khi gửi AI
 
 Migrations/
-└── AddCommentAiSuggestions.cs
+└── AddChatAiSuggestions.cs
 ```
 
 ### Flow
 
 1. Staff gõ vài chữ → click "AI suggest"
-2. Backend mask PII → gọi AI module với context (ticket title + last 5 comment + sensor data)
+2. Backend mask PII → gọi AI module với context (ticket title + last 5 chat + sensor data)
 3. Trả 3 suggestion → Staff chọn 1 → có thể edit → post
-4. Log selection vào `comment_ai_suggestions` để improve model
+4. Log selection vào `chat_ai_suggestions` để improve model
 
 ---
 
@@ -696,7 +696,7 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 59 | Full-text search tiếng Việt có dấu | Tìm trong body comment |
+| 59 | Full-text search tiếng Việt có dấu | Tìm trong body chat |
 | 60 | Filter authorRole | Lọc theo role |
 | 61 | Filter authorUserId | Lọc theo user cụ thể |
 | 62 | Filter `isInternal` | Lọc loại |
@@ -709,31 +709,31 @@ Migrations/
 
 ```
 Domain/Entities/
-└── TicketComment.cs                                 # Thêm: body_tsv (tsvector cho Postgres)
+└── TicketChat.cs                                 # Thêm: body_tsv (tsvector cho Postgres)
 
-Application/CQRS/Query/Comment/
-├── TicketCommentsQuery.cs                           # Mở rộng filter params
-└── CommentGlobalSearchQuery.cs
+Application/CQRS/Query/Chat/
+├── TicketChatsQuery.cs                           # Mở rộng filter params
+└── ChatGlobalSearchQuery.cs
 
-Application/CQRS/Handler/Comments/
-└── CommentGlobalSearchQueryHandler.cs
+Application/CQRS/Handler/Chats/
+└── ChatGlobalSearchQueryHandler.cs
 
 Infrastructure/Persistence/Configurations/
-└── TicketCommentConfiguration.cs                    # Configure tsvector + GIN index
+└── TicketChatConfiguration.cs                    # Configure tsvector + GIN index
 
 Migrations/
-└── AddCommentFullTextSearch.cs                      # + trigger Postgres tự update body_tsv khi body đổi
+└── AddChatFullTextSearch.cs                      # + trigger Postgres tự update body_tsv khi body đổi
 ```
 
 ### SQL
 
 ```sql
-CREATE INDEX IX_ticket_comments_body_tsv
-ON ticket_comments USING gin(body_tsv);
+CREATE INDEX IX_ticket_chats_body_tsv
+ON ticket_chats USING gin(body_tsv);
 
 -- Trigger update tsv khi insert/update
-CREATE TRIGGER ticket_comments_tsv_trigger
-BEFORE INSERT OR UPDATE ON ticket_comments
+CREATE TRIGGER ticket_chats_tsv_trigger
+BEFORE INSERT OR UPDATE ON ticket_chats
 FOR EACH ROW EXECUTE FUNCTION tsvector_update_trigger(body_tsv, 'pg_catalog.simple', body);
 ```
 
@@ -745,7 +745,7 @@ FOR EACH ROW EXECUTE FUNCTION tsvector_update_trigger(body_tsv, 'pg_catalog.simp
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 67 | Pin comment | Ghim lên đầu timeline |
+| 67 | Pin chat | Ghim lên đầu timeline |
 | 68 | Unpin | Bỏ ghim |
 | 69 | Giới hạn 3 pinned/ticket | Tránh spam pin |
 | 70 | Highlight (color/badge) | Nổi bật visually |
@@ -754,18 +754,18 @@ FOR EACH ROW EXECUTE FUNCTION tsvector_update_trigger(body_tsv, 'pg_catalog.simp
 
 ```
 Domain/Entities/
-└── TicketComment.cs                                 # Thêm: is_pinned, pinned_at, pinned_by_user_id
+└── TicketChat.cs                                 # Thêm: is_pinned, pinned_at, pinned_by_user_id
 
 Application/CQRS/Command/
-├── CommentPin/CommentPinCommand.cs
-└── CommentUnpin/CommentUnpinCommand.cs
+├── ChatPin/ChatPinCommand.cs
+└── ChatUnpin/ChatUnpinCommand.cs
 
-Application/CQRS/Handler/Comments/
-├── CommentPinCommandHandler.cs
-└── CommentUnpinCommandHandler.cs
+Application/CQRS/Handler/Chats/
+├── ChatPinCommandHandler.cs
+└── ChatUnpinCommandHandler.cs
 
 Migrations/
-└── AddCommentPinning.cs
+└── AddChatPinning.cs
 ```
 
 ### Rule
@@ -782,7 +782,7 @@ Migrations/
 | # | Feature | Mục đích |
 |---|---------|----------|
 | 71 | Auto-detect ngôn ngữ | Lưu `original_language` |
-| 72 | Dịch comment VN ↔ EN | Lazy translate khi user click |
+| 72 | Dịch chat VN ↔ EN | Lazy translate khi user click |
 | 73 | Cache bản dịch | TTL 30 ngày + Redis |
 | 74 | Hiển thị song ngữ | UX |
 
@@ -790,8 +790,8 @@ Migrations/
 
 ```
 Domain/Entities/
-├── TicketComment.cs                                 # Thêm: original_language (varchar 5)
-└── TicketCommentTranslation.cs                      # Bảng mới: comment_id, target_language, translated_body, provider
+├── TicketChat.cs                                 # Thêm: original_language (varchar 5)
+└── TicketChatTranslation.cs                      # Bảng mới: chat_id, target_language, translated_body, provider
 
 Domain/Enums/
 └── TranslationProviderEnum.cs                       # GoogleTranslate=1, DeepL=2, Manual=3
@@ -803,13 +803,13 @@ Infrastructure/Translation/
 └── GoogleTranslateProvider.cs
 
 Application/CQRS/Command/
-└── CommentTranslate/CommentTranslateCommand.cs
+└── ChatTranslate/ChatTranslateCommand.cs
 
-Application/CQRS/Handler/Comments/
-└── CommentTranslateCommandHandler.cs
+Application/CQRS/Handler/Chats/
+└── ChatTranslateCommandHandler.cs
 
 Migrations/
-└── AddCommentTranslations.cs
+└── AddChatTranslations.cs
 ```
 
 ---
@@ -821,32 +821,32 @@ Migrations/
 | # | Feature | Mục đích |
 |---|---------|----------|
 | 75 | Avg response time của Staff | KPI |
-| 76 | Số comment/ticket trung bình | KPI |
+| 76 | Số chat/ticket trung bình | KPI |
 | 77 | % ticket có internal note | Quality indicator |
 | 78 | Mention count per user | Workload signal |
 | 79 | Manager dashboard | So sánh Staff với team avg |
-| 80 | Comment heatmap theo giờ | Activity pattern |
+| 80 | Chat heatmap theo giờ | Activity pattern |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── CommentMetricsDaily.cs                           # Bảng mới: date, staff_id, ticket_id, comment_count, avg_response_time_min
+└── ChatMetricsDaily.cs                           # Bảng mới: date, staff_id, ticket_id, chat_count, avg_response_time_min
 
 Infrastructure/BackgroundServices/
-└── CommentMetricsAggregatorService.cs               # Hosted service, chạy mỗi giờ
+└── ChatMetricsAggregatorService.cs               # Hosted service, chạy mỗi giờ
 
 Application/CQRS/Query/Metrics/
-└── CommentMetricsQuery.cs
+└── ChatMetricsQuery.cs
 
 Application/CQRS/Handler/Metrics/
-└── CommentMetricsQueryHandler.cs
+└── ChatMetricsQueryHandler.cs
 
 Api/Controllers/
-└── AdminCommentMetricsController.cs                 # Endpoint cho dashboard
+└── AdminChatMetricsController.cs                 # Endpoint cho dashboard
 
 Migrations/
-└── AddCommentMetrics.cs
+└── AddChatMetrics.cs
 ```
 
 ---
@@ -857,31 +857,31 @@ Migrations/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 81 | Push comment mới | Mobile (Expo) / Web push |
+| 81 | Push chat mới | Mobile (Expo) / Web push |
 | 82 | Email khi user offline | Reach Customer |
 | 83 | Web push browser | Staff |
 | 84 | User preference | Bật/tắt từng loại |
 | 85 | Quiet hours | Không notify giờ ngủ |
-| 86 | Notification digest | Gom comment trong N phút thành 1 notify |
+| 86 | Notification digest | Gom chat trong N phút thành 1 notify |
 
 ### Source structure (cross-service)
 
 ```
 SharedContracts/Events/Ticket/
-├── CommentCreatedEvent.cs
-├── CommentDeletedEvent.cs
-├── CommentEditedEvent.cs
-├── CommentReactedEvent.cs
-└── CommentMentionedEvent.cs
+├── ChatCreatedEvent.cs
+├── ChatDeletedEvent.cs
+├── ChatEditedEvent.cs
+├── ChatReactedEvent.cs
+└── ChatMentionedEvent.cs
 
 services/NotificationService/src/NotificationService.Infrastructure/Consumers/
-├── CommentCreatedConsumer.cs
-├── CommentMentionConsumer.cs
-├── CommentReactionConsumer.cs
+├── ChatCreatedConsumer.cs
+├── ChatMentionConsumer.cs
+├── ChatReactionConsumer.cs
 └── (digest job aggregator)
 
 services/UserService/Domain/Entities/
-└── NotificationPreference.cs                        # Thêm: notify_on_comment, notify_on_mention, notify_on_reaction, quiet_hours_start, quiet_hours_end
+└── NotificationPreference.cs                        # Thêm: notify_on_chat, notify_on_mention, notify_on_reaction, quiet_hours_start, quiet_hours_end
 ```
 
 ---
@@ -893,8 +893,8 @@ services/UserService/Domain/Entities/
 | # | Feature | Mục đích |
 |---|---------|----------|
 | 87 | Granular permission | Tách `create.public`, `create.internal`, `edit.own`, `edit.any`, `delete.own`, `delete.any`, `pin`, `view.internal`, `template.create.global` |
-| 88 | Block comment khi ticket CLOSED | Tránh edit lịch sử (Admin được) |
-| 89 | Cho Customer rate kèm comment khi CLOSED_PENDING_RATE | UX |
+| 88 | Block chat khi ticket CLOSED | Tránh edit lịch sử (Admin được) |
+| 89 | Cho Customer rate kèm chat khi CLOSED_PENDING_RATE | UX |
 | 90 | Centralize authz helper | Test dễ |
 
 ### Source structure
@@ -902,13 +902,13 @@ services/UserService/Domain/Entities/
 ```
 Application/Helpers/
 ├── TicketQueryHelper.cs                             # Mở rộng — join ticket_participants
-└── CommentAuthorizationHelper.cs                    # Mới
+└── ChatAuthorizationHelper.cs                    # Mới
 
 Application/Interfaces/Services/
-└── ICommentAuthorizationService.cs
+└── IChatAuthorizationService.cs
 
 Infrastructure/Services/
-└── CommentAuthorizationService.cs                   # CanEditComment(comment, actor) / CanDeleteComment / CanPinComment
+└── ChatAuthorizationService.cs                   # CanEditChat(chat, actor) / CanDeleteChat / CanPinChat
 ```
 
 ---
@@ -942,7 +942,7 @@ Infrastructure/Validation/
 └── SpamDetectorService.cs
 
 Api/Middleware/
-└── CommentRateLimitMiddleware.cs                    # AspNetCoreRateLimit package
+└── ChatRateLimitMiddleware.cs                    # AspNetCoreRateLimit package
 ```
 
 ---
@@ -953,7 +953,7 @@ Api/Middleware/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 99 | Redis cache comment page 1 | Tốc độ — TTL 30s, invalidate khi có comment mới |
+| 99 | Redis cache chat page 1 | Tốc độ — TTL 30s, invalidate khi có chat mới |
 | 100 | Cursor-based pagination | Mobile infinite scroll |
 | 101 | Eager-load attachment count | Tránh N+1 |
 | 102 | DB indexes tối ưu | Composite + GIN |
@@ -963,31 +963,31 @@ Api/Middleware/
 
 ```
 Infrastructure/Caching/
-└── CommentCacheService.cs                           # Redis-based
+└── ChatCacheService.cs                           # Redis-based
 
-Application/CQRS/Query/Comment/
-└── TicketCommentsCursorQuery.cs                     # Cursor variant cho mobile
+Application/CQRS/Query/Chat/
+└── TicketChatsCursorQuery.cs                     # Cursor variant cho mobile
 
-Application/CQRS/Handler/Comments/
-└── TicketCommentsCursorQueryHandler.cs
+Application/CQRS/Handler/Chats/
+└── TicketChatsCursorQueryHandler.cs
 
 Migrations/
-└── AddCommentIndexes.cs                             # Composite indexes
+└── AddChatIndexes.cs                             # Composite indexes
 ```
 
 ### Indexes cần có
 
 ```
-ticket_comments(ticket_id, created_at DESC)
-ticket_comments(ticket_id, is_pinned, created_at DESC)
-ticket_comments(parent_comment_id)
-ticket_comments(thread_root_id)
-ticket_comments(author_user_id, created_at DESC)
-ticket_comments(body_tsv) GIN
-ticket_comment_mentions(mentioned_user_id, is_acknowledged)
-ticket_comment_reactions(comment_id, reaction_type)
-ticket_comment_reads(user_id, comment_id)
-ticket_attachments(comment_id)
+ticket_chats(ticket_id, created_at DESC)
+ticket_chats(ticket_id, is_pinned, created_at DESC)
+ticket_chats(parent_chat_id)
+ticket_chats(thread_root_id)
+ticket_chats(author_user_id, created_at DESC)
+ticket_chats(body_tsv) GIN
+ticket_chat_mentions(mentioned_user_id, is_acknowledged)
+ticket_chat_reactions(chat_id, reaction_type)
+ticket_chat_reads(user_id, chat_id)
+ticket_attachments(chat_id)
 ```
 
 ---
@@ -998,10 +998,10 @@ ticket_attachments(comment_id)
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 104 | Publish `CommentCreatedEvent` | Notify cross-service (NotificationService) |
-| 105 | Publish `CommentMentionedEvent` | Mention notify |
-| 106 | Publish `CommentDeletedEvent` | Sync downstream |
-| 107 | Publish `CommentReactedEvent` | Notify author |
+| 104 | Publish `ChatCreatedEvent` | Notify cross-service (NotificationService) |
+| 105 | Publish `ChatMentionedEvent` | Mention notify |
+| 106 | Publish `ChatDeletedEvent` | Sync downstream |
+| 107 | Publish `ChatReactedEvent` | Notify author |
 | 108 | Outbox atomic | Đảm bảo deliverability với DB write |
 | 109 | Saga escalation review | Mention Manager + ticket P1 → trigger escalation review saga |
 
@@ -1009,17 +1009,17 @@ ticket_attachments(comment_id)
 
 ```
 SharedContracts/Events/Ticket/
-├── CommentCreatedEvent.cs
-├── CommentEditedEvent.cs
-├── CommentDeletedEvent.cs
-├── CommentMentionedEvent.cs
-└── CommentReactedEvent.cs
+├── ChatCreatedEvent.cs
+├── ChatEditedEvent.cs
+├── ChatDeletedEvent.cs
+├── ChatMentionedEvent.cs
+└── ChatReactedEvent.cs
 
-Application/CQRS/Handler/Comments/
+Application/CQRS/Handler/Chats/
 └── (mọi handler publish event qua _outbox.PublishAsync sau khi SaveChanges)
 
 Infrastructure/Sagas/
-└── CommentEscalationReviewSaga.cs                   # MassTransit Saga state machine
+└── ChatEscalationReviewSaga.cs                   # MassTransit Saga state machine
 ```
 
 ---
@@ -1030,23 +1030,23 @@ Infrastructure/Sagas/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 110 | Reset SLA pause khi Customer comment | Auto-resume timer khi đã pause vì chờ Customer |
-| 111 | Auto-pause SLA khi Staff yêu cầu info | Stop timer khi Staff comment `await_customer_info` |
-| 112 | Log comment vào SLA breach evidence | Audit cho dispute |
+| 110 | Reset SLA pause khi Customer chat | Auto-resume timer khi đã pause vì chờ Customer |
+| 111 | Auto-pause SLA khi Staff yêu cầu info | Stop timer khi Staff chat `await_customer_info` |
+| 112 | Log chat vào SLA breach evidence | Audit cho dispute |
 
 ### Source structure
 
 ```
-Application/CQRS/Handler/Comments/
-└── CommentAddCommandHandler.cs                      # Mở rộng — trigger SLA timer logic
+Application/CQRS/Handler/Chats/
+└── ChatAddCommandHandler.cs                      # Mở rộng — trigger SLA timer logic
 
 Application/Interfaces/Services/
 └── ISlaTimerService.cs                              # (đã có) thêm method:
-                                                     # - PauseForCustomerInfo(ticketId, commentId)
-                                                     # - ResumeOnCustomerReply(ticketId, commentId)
+                                                     # - PauseForCustomerInfo(ticketId, chatId)
+                                                     # - ResumeOnCustomerReply(ticketId, chatId)
 
 Domain/Entities/
-└── SlaPauseEvent.cs                                 # (đã có) thêm enum reason "AwaitingCustomerComment"
+└── SlaPauseEvent.cs                                 # (đã có) thêm enum reason "AwaitingCustomerChat"
 ```
 
 ---
@@ -1057,22 +1057,22 @@ Domain/Entities/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 113 | Suggest KB article theo nội dung comment | Help Staff trả lời nhanh |
-| 114 | Attach KB reference vào comment | Quick reference |
-| 115 | Convert comment hay → KB draft | Tăng KB database |
+| 113 | Suggest KB article theo nội dung chat | Help Staff trả lời nhanh |
+| 114 | Attach KB reference vào chat | Quick reference |
+| 115 | Convert chat hay → KB draft | Tăng KB database |
 
 ### Source structure
 
 ```
 Domain/Entities/
-└── TicketKbReference.cs                             # (đã có) thêm field comment_id (nullable)
+└── TicketKbReference.cs                             # (đã có) thêm field chat_id (nullable)
 
 Application/CQRS/Command/
-├── CommentAttachKbReference/CommentAttachKbReferenceCommand.cs
-└── ConvertCommentToKbDraft/ConvertCommentToKbDraftCommand.cs
+├── ChatAttachKbReference/ChatAttachKbReferenceCommand.cs
+└── ConvertChatToKbDraft/ConvertChatToKbDraftCommand.cs
 
 Application/Interfaces/Services/
-└── IKbSuggestionService.cs                          # Match KB từ comment body (full-text similarity)
+└── IKbSuggestionService.cs                          # Match KB từ chat body (full-text similarity)
 
 Infrastructure/Services/
 └── KbSuggestionService.cs
@@ -1086,16 +1086,16 @@ Infrastructure/Services/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 116 | Voice-to-text comment | Customer dictate → convert sang text |
+| 116 | Voice-to-text chat | Customer dictate → convert sang text |
 | 117 | Quick reaction từ notification | Không cần mở app |
 | 118 | Offline draft (FE) | Soạn khi mất mạng, gửi khi online |
-| 119 | Camera attachment trực tiếp | Chụp ảnh + gửi từ comment box |
+| 119 | Camera attachment trực tiếp | Chụp ảnh + gửi từ chat box |
 
 ### Source structure (backend)
 
 ```
 Application/CQRS/Command/
-└── CommentVoiceTranscribe/CommentVoiceTranscribeCommand.cs
+└── ChatVoiceTranscribe/ChatVoiceTranscribeCommand.cs
 
 Application/Interfaces/Services/
 └── IVoiceTranscriptionService.cs                    # Gọi Whisper API hoặc Google STT
@@ -1104,7 +1104,7 @@ Infrastructure/AiClient/
 └── WhisperTranscriptionService.cs
 
 Api/Controllers/
-└── TicketCommentsController.cs                      # Endpoint POST voice với audio multipart
+└── TicketChatsController.cs                      # Endpoint POST voice với audio multipart
 ```
 
 > Phần offline draft + camera xử lý ở **Mobile** (Expo) — backend chỉ cần endpoint POST attachment có chunk/resume upload.
@@ -1117,28 +1117,28 @@ Api/Controllers/
 
 | # | Feature | Mục đích |
 |---|---------|----------|
-| 120 | Export comment timeline ra PDF | Legal/audit |
+| 120 | Export chat timeline ra PDF | Legal/audit |
 | 121 | Print-friendly view | In ra |
 | 122 | Redact PII trước export | GDPR |
-| 123 | Retention policy auto archive | Storage management — comment > N năm archive |
-| 124 | GDPR right-to-erasure | Customer yêu cầu xóa comment của mình |
+| 123 | Retention policy auto archive | Storage management — chat > N năm archive |
+| 124 | GDPR right-to-erasure | Customer yêu cầu xóa chat của mình |
 
 ### Source structure
 
 ```
 Application/CQRS/Command/
-├── CommentExportPdf/CommentExportPdfCommand.cs
-└── CommentEraseUserData/CommentEraseUserDataCommand.cs
+├── ChatExportPdf/ChatExportPdfCommand.cs
+└── ChatEraseUserData/ChatEraseUserDataCommand.cs
 
 Application/Interfaces/Services/
 ├── IPdfExporter.cs
 └── IDataRetentionService.cs
 
 Infrastructure/Export/
-└── QuestPdfCommentExporter.cs                       # Dùng QuestPDF package
+└── QuestPdfChatExporter.cs                       # Dùng QuestPDF package
 
 Infrastructure/BackgroundServices/
-└── CommentRetentionService.cs                       # Auto archive > N năm
+└── ChatRetentionService.cs                       # Auto archive > N năm
 ```
 
 ---
@@ -1209,7 +1209,7 @@ Migrations/
 ### Logic phức tạp
 
 - **Soft delete participant** khi remove (set `removed_at`) — không hard delete, giữ audit
-- Comment cũ của participant bị remove **vẫn giữ nguyên** trong timeline
+- Chat cũ của participant bị remove **vẫn giữ nguyên** trong timeline
 - **SignalR**: khi participant bị remove → force disconnect khỏi hub group `ticket-{id}`
 - **Owner (Customer chính) KHÔNG bị remove được** — chỉ Admin được, và cần lý do
 - **Manager/Admin auto là implicit participant** — không cần add vào bảng (vẫn check role)
@@ -1240,68 +1240,68 @@ Migrations/
 
 ## Bảng mới (11)
 
-1. `ticket_comment_edits` — edit history
-2. `ticket_comment_mentions` — @mention
-3. `ticket_comment_reactions` — reaction
-4. `ticket_comment_reads` — read receipt
-5. `ticket_comment_translations` — translation cache
-6. `comment_templates` — canned response
-7. `comment_ai_suggestions` — AI suggestion log
-8. `comment_metrics_daily` — analytics aggregation
+1. `ticket_chat_edits` — edit history
+2. `ticket_chat_mentions` — @mention
+3. `ticket_chat_reactions` — reaction
+4. `ticket_chat_reads` — read receipt
+5. `ticket_chat_translations` — translation cache
+6. `chat_templates` — canned response
+7. `chat_ai_suggestions` — AI suggestion log
+8. `chat_metrics_daily` — analytics aggregation
 9. `ticket_participants` — participant management ⭐
-10. (optional) `comment_template_usage_log`
-11. (optional) `comment_pii_detections`
+10. (optional) `chat_template_usage_log`
+11. (optional) `chat_pii_detections`
 
 ## Bảng sửa (4)
 
 | Bảng | Cột thêm |
 |------|----------|
-| `ticket_comments` | `edited_at`, `edit_count`, `last_edited_by_user_id`, `parent_comment_id`, `thread_root_id`, `reply_count`, `body_format`, `body_html`, `body_tsv`, `is_pinned`, `pinned_at`, `pinned_by_user_id`, `original_language` (13 cột) |
-| `ticket_attachments` | `comment_id`, `thumbnail_url`, `is_inline`, `download_count`, `virus_scan_status` (5 cột) |
+| `ticket_chats` | `edited_at`, `edit_count`, `last_edited_by_user_id`, `parent_chat_id`, `thread_root_id`, `reply_count`, `body_format`, `body_html`, `body_tsv`, `is_pinned`, `pinned_at`, `pinned_by_user_id`, `original_language` (13 cột) |
+| `ticket_attachments` | `chat_id`, `thumbnail_url`, `is_inline`, `download_count`, `virus_scan_status` (5 cột) |
 | `ticket_activities` | Mở rộng `ActivityActionEnum` values (không đổi schema) |
 | `outbox_messages` | Không đổi schema — dùng publish event types mới |
 
 ## Enum mới (10)
 
-1. `CommentBodyFormatEnum` — PlainText=1, Markdown=2
+1. `ChatBodyFormatEnum` — PlainText=1, Markdown=2
 2. `ReactionTypeEnum` — ThumbsUp=1, Acknowledged=2, Resolved=3, NeedMoreInfo=4, Disagree=5
-3. `CommentTemplateCategoryEnum` — Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6
-4. `CommentTemplateScopeEnum` — Personal=1, Team=2, Global=3
+3. `ChatTemplateCategoryEnum` — Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6
+4. `ChatTemplateScopeEnum` — Personal=1, Team=2, Global=3
 5. `TranslationProviderEnum` — GoogleTranslate=1, DeepL=2, Manual=3
 6. `VirusScanStatusEnum` — Pending=1, Clean=2, Infected=3, Failed=4
-7. `CommentAiIntentEnum` — RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4
+7. `ChatAiIntentEnum` — RequestInfo=1, TechnicalAnswer=2, Resolution=3, FollowUp=4
 8. `ParticipantTypeEnum` — Owner=1, PrimaryAssignee=2, Collaborator=3, Watcher=4, Delegate=5, PreviousAssignee=6
-9. (optional) `CommentRetentionPolicyEnum`
-10. Mở rộng `ActivityActionEnum`: thêm `CommentEdited`, `CommentDeleted`, `CommentRestored`, `CommentPinned`, `CommentReacted`, `ParticipantAdded`, `ParticipantRemoved`
+9. (optional) `ChatRetentionPolicyEnum`
+10. Mở rộng `ActivityActionEnum`: thêm `ChatEdited`, `ChatDeleted`, `ChatRestored`, `ChatPinned`, `ChatReacted`, `ParticipantAdded`, `ParticipantRemoved`
 
 ---
 
 # Phần IV — Database schema chi tiết
 
-## 4.1 `ticket_comments` (mở rộng)
+## 4.1 `ticket_chats` (mở rộng)
 
 ```sql
-ALTER TABLE ticket_comments ADD COLUMN edited_at timestamptz NULL;
-ALTER TABLE ticket_comments ADD COLUMN edit_count int NOT NULL DEFAULT 0;
-ALTER TABLE ticket_comments ADD COLUMN last_edited_by_user_id uuid NULL;
-ALTER TABLE ticket_comments ADD COLUMN parent_comment_id uuid NULL REFERENCES ticket_comments(id);
-ALTER TABLE ticket_comments ADD COLUMN thread_root_id uuid NULL;
-ALTER TABLE ticket_comments ADD COLUMN reply_count int NOT NULL DEFAULT 0;
-ALTER TABLE ticket_comments ADD COLUMN body_format int NOT NULL DEFAULT 1;
-ALTER TABLE ticket_comments ADD COLUMN body_html text NULL;
-ALTER TABLE ticket_comments ADD COLUMN body_tsv tsvector NULL;
-ALTER TABLE ticket_comments ADD COLUMN is_pinned bool NOT NULL DEFAULT false;
-ALTER TABLE ticket_comments ADD COLUMN pinned_at timestamptz NULL;
-ALTER TABLE ticket_comments ADD COLUMN pinned_by_user_id uuid NULL;
-ALTER TABLE ticket_comments ADD COLUMN original_language varchar(5) NULL;
+ALTER TABLE ticket_chats ADD COLUMN edited_at timestamptz NULL;
+ALTER TABLE ticket_chats ADD COLUMN edit_count int NOT NULL DEFAULT 0;
+ALTER TABLE ticket_chats ADD COLUMN last_edited_by_user_id uuid NULL;
+ALTER TABLE ticket_chats ADD COLUMN parent_chat_id uuid NULL REFERENCES ticket_chats(id);
+ALTER TABLE ticket_chats ADD COLUMN thread_root_id uuid NULL;
+ALTER TABLE ticket_chats ADD COLUMN reply_count int NOT NULL DEFAULT 0;
+ALTER TABLE ticket_chats ADD COLUMN body_format int NOT NULL DEFAULT 1;
+ALTER TABLE ticket_chats ADD COLUMN body_html text NULL;
+ALTER TABLE ticket_chats ADD COLUMN body_tsv tsvector NULL;
+ALTER TABLE ticket_chats ADD COLUMN is_pinned bool NOT NULL DEFAULT false;
+ALTER TABLE ticket_chats ADD COLUMN pinned_at timestamptz NULL;
+ALTER TABLE ticket_chats ADD COLUMN pinned_by_user_id uuid NULL;
+ALTER TABLE ticket_chats ADD COLUMN original_language varchar(5) NULL;
 ```
 
-## 4.2 `ticket_comment_edits` (mới)
+## 4.2 `ticket_chat_edits` (mới)
 
 ```sql
-CREATE TABLE ticket_comment_edits (
+CREATE TABLE ticket_chat_edits (
   id uuid PRIMARY KEY,
-  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  chat_id uuid NOT NULL REFERENCES ticket_chats(id) ON DELETE CASCADE,
   old_body text NOT NULL,
   new_body text NOT NULL,
   edited_at timestamptz NOT NULL,
@@ -1312,15 +1312,15 @@ CREATE TABLE ticket_comment_edits (
   is_deleted bool NOT NULL DEFAULT false,
   deleted_at timestamptz NULL
 );
-CREATE INDEX IX_ticket_comment_edits_comment_id ON ticket_comment_edits(comment_id);
+CREATE INDEX IX_ticket_chat_edits_chat_id ON ticket_chat_edits(chat_id);
 ```
 
-## 4.3 `ticket_comment_mentions` (mới)
+## 4.3 `ticket_chat_mentions` (mới)
 
 ```sql
-CREATE TABLE ticket_comment_mentions (
+CREATE TABLE ticket_chat_mentions (
   id uuid PRIMARY KEY,
-  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  chat_id uuid NOT NULL REFERENCES ticket_chats(id) ON DELETE CASCADE,
   mentioned_user_id uuid NOT NULL,
   mentioned_user_role int NOT NULL,
   mentioned_display_name varchar(256) NOT NULL,
@@ -1330,62 +1330,62 @@ CREATE TABLE ticket_comment_mentions (
   is_deleted bool NOT NULL DEFAULT false,
   deleted_at timestamptz NULL
 );
-CREATE INDEX IX_ticket_comment_mentions_user_unread
-ON ticket_comment_mentions(mentioned_user_id, is_acknowledged);
+CREATE INDEX IX_ticket_chat_mentions_user_unread
+ON ticket_chat_mentions(mentioned_user_id, is_acknowledged);
 ```
 
-## 4.4 `ticket_comment_reactions` (mới)
+## 4.4 `ticket_chat_reactions` (mới)
 
 ```sql
-CREATE TABLE ticket_comment_reactions (
+CREATE TABLE ticket_chat_reactions (
   id uuid PRIMARY KEY,
-  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  chat_id uuid NOT NULL REFERENCES ticket_chats(id) ON DELETE CASCADE,
   user_id uuid NOT NULL,
   user_role int NOT NULL,
   reaction_type int NOT NULL,
   created_at timestamptz NOT NULL,
   is_deleted bool NOT NULL DEFAULT false,
   deleted_at timestamptz NULL,
-  CONSTRAINT UQ_ticket_comment_reactions UNIQUE (comment_id, user_id, reaction_type)
+  CONSTRAINT UQ_ticket_chat_reactions UNIQUE (chat_id, user_id, reaction_type)
 );
-CREATE INDEX IX_ticket_comment_reactions_comment_type
-ON ticket_comment_reactions(comment_id, reaction_type);
+CREATE INDEX IX_ticket_chat_reactions_chat_type
+ON ticket_chat_reactions(chat_id, reaction_type);
 ```
 
-## 4.5 `ticket_comment_reads` (mới)
+## 4.5 `ticket_chat_reads` (mới)
 
 ```sql
-CREATE TABLE ticket_comment_reads (
+CREATE TABLE ticket_chat_reads (
   id uuid PRIMARY KEY,
-  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  chat_id uuid NOT NULL REFERENCES ticket_chats(id) ON DELETE CASCADE,
   user_id uuid NOT NULL,
   user_role int NOT NULL,
   read_at timestamptz NOT NULL,
-  CONSTRAINT UQ_ticket_comment_reads UNIQUE (comment_id, user_id)
+  CONSTRAINT UQ_ticket_chat_reads UNIQUE (chat_id, user_id)
 );
-CREATE INDEX IX_ticket_comment_reads_user ON ticket_comment_reads(user_id, comment_id);
+CREATE INDEX IX_ticket_chat_reads_user ON ticket_chat_reads(user_id, chat_id);
 ```
 
-## 4.6 `ticket_comment_translations` (mới)
+## 4.6 `ticket_chat_translations` (mới)
 
 ```sql
-CREATE TABLE ticket_comment_translations (
+CREATE TABLE ticket_chat_translations (
   id uuid PRIMARY KEY,
-  comment_id uuid NOT NULL REFERENCES ticket_comments(id) ON DELETE CASCADE,
+  chat_id uuid NOT NULL REFERENCES ticket_chats(id) ON DELETE CASCADE,
   target_language varchar(5) NOT NULL,
   translated_body text NOT NULL,
   provider int NOT NULL,
   translated_at timestamptz NOT NULL,
   is_deleted bool NOT NULL DEFAULT false,
   deleted_at timestamptz NULL,
-  CONSTRAINT UQ_ticket_comment_translations UNIQUE (comment_id, target_language)
+  CONSTRAINT UQ_ticket_chat_translations UNIQUE (chat_id, target_language)
 );
 ```
 
-## 4.7 `comment_templates` (mới)
+## 4.7 `chat_templates` (mới)
 
 ```sql
-CREATE TABLE comment_templates (
+CREATE TABLE chat_templates (
   id uuid PRIMARY KEY,
   name varchar(200) NOT NULL,
   content text NOT NULL,
@@ -1402,13 +1402,13 @@ CREATE TABLE comment_templates (
   is_deleted bool NOT NULL DEFAULT false,
   deleted_at timestamptz NULL
 );
-CREATE INDEX IX_comment_templates_scope_active ON comment_templates(scope, is_active);
+CREATE INDEX IX_chat_templates_scope_active ON chat_templates(scope, is_active);
 ```
 
-## 4.8 `comment_ai_suggestions` (mới)
+## 4.8 `chat_ai_suggestions` (mới)
 
 ```sql
-CREATE TABLE comment_ai_suggestions (
+CREATE TABLE chat_ai_suggestions (
   id uuid PRIMARY KEY,
   ticket_id uuid NOT NULL,
   suggested_at timestamptz NOT NULL,
@@ -1416,27 +1416,27 @@ CREATE TABLE comment_ai_suggestions (
   suggestions jsonb NOT NULL,
   selected_index int NULL,
   edited_before_post bool NOT NULL DEFAULT false,
-  final_comment_id uuid NULL,
+  final_chat_id uuid NULL,
   created_at timestamptz NOT NULL,
   is_deleted bool NOT NULL DEFAULT false
 );
 ```
 
-## 4.9 `comment_metrics_daily` (mới)
+## 4.9 `chat_metrics_daily` (mới)
 
 ```sql
-CREATE TABLE comment_metrics_daily (
+CREATE TABLE chat_metrics_daily (
   id uuid PRIMARY KEY,
   metric_date date NOT NULL,
   staff_id uuid NULL,
   ticket_id uuid NULL,
-  comment_count int NOT NULL,
+  chat_count int NOT NULL,
   avg_response_time_min decimal(10,2) NULL,
   internal_count int NOT NULL,
   mention_received_count int NOT NULL,
   created_at timestamptz NOT NULL
 );
-CREATE INDEX IX_comment_metrics_daily_date_staff ON comment_metrics_daily(metric_date, staff_id);
+CREATE INDEX IX_chat_metrics_daily_date_staff ON chat_metrics_daily(metric_date, staff_id);
 ```
 
 ## 4.10 `ticket_participants` (mới) ⭐
@@ -1467,69 +1467,69 @@ CREATE INDEX IX_ticket_participants_user ON ticket_participants(user_id);
 ## 4.11 `ticket_attachments` (mở rộng)
 
 ```sql
-ALTER TABLE ticket_attachments ADD COLUMN comment_id uuid NULL REFERENCES ticket_comments(id) ON DELETE SET NULL;
+ALTER TABLE ticket_attachments ADD COLUMN chat_id uuid NULL REFERENCES ticket_chats(id) ON DELETE SET NULL;
 ALTER TABLE ticket_attachments ADD COLUMN thumbnail_url varchar(1000) NULL;
 ALTER TABLE ticket_attachments ADD COLUMN is_inline bool NOT NULL DEFAULT false;
 ALTER TABLE ticket_attachments ADD COLUMN download_count int NOT NULL DEFAULT 0;
 ALTER TABLE ticket_attachments ADD COLUMN virus_scan_status int NOT NULL DEFAULT 1;
-CREATE INDEX IX_ticket_attachments_comment ON ticket_attachments(comment_id);
+CREATE INDEX IX_ticket_attachments_chat ON ticket_attachments(chat_id);
 ```
 
 ---
 
 # Phần V — API endpoint matrix
 
-## 5.1 Comment endpoints
+## 5.1 Chat endpoints
 
 | Method | Path | Mục đích | Auth |
 |--------|------|----------|------|
-| POST | `/api/tickets/{ticketId}/comments` | Add comment (hiện có) | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments` | List (hiện có) | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/cursor` | Cursor pagination cho mobile | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/{id}` | Detail 1 comment | `[Authorize]` |
-| PUT | `/api/tickets/{ticketId}/comments/{id}` | Edit | `[Authorize]` |
-| DELETE | `/api/tickets/{ticketId}/comments/{id}` | Soft delete | `[Authorize]` |
-| PATCH | `/api/tickets/{ticketId}/comments/{id}/restore` | Restore | `AdminOnly` |
-| GET | `/api/tickets/{ticketId}/comments/{id}/history` | Edit history | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/replies` | Reply 1 comment | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/{id}/replies` | List replies | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/reactions` | Add reaction | `[Authorize]` |
-| DELETE | `/api/tickets/{ticketId}/comments/{id}/reactions/{type}` | Remove reaction | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/{id}/reactions` | List reactions | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/mark-read` | Bulk mark read | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/{id}/readers` | Ai đã đọc | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/chats` | Add chat (hiện có) | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats` | List (hiện có) | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/cursor` | Cursor pagination cho mobile | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/{id}` | Detail 1 chat | `[Authorize]` |
+| PUT | `/api/tickets/{ticketId}/chats/{id}` | Edit | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/chats/{id}` | Soft delete | `[Authorize]` |
+| PATCH | `/api/tickets/{ticketId}/chats/{id}/restore` | Restore | `AdminOnly` |
+| GET | `/api/tickets/{ticketId}/chats/{id}/history` | Edit history | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/replies` | Reply 1 chat | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/{id}/replies` | List replies | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/reactions` | Add reaction | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/chats/{id}/reactions/{type}` | Remove reaction | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/{id}/reactions` | List reactions | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/mark-read` | Bulk mark read | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/{id}/readers` | Ai đã đọc | `Staff/Manager` |
 | GET | `/api/tickets/{ticketId}/unread-count` | Số chưa đọc | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/pin` | Pin | `Staff/Manager/Admin` |
-| DELETE | `/api/tickets/{ticketId}/comments/{id}/pin` | Unpin | `Staff/Manager/Admin` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/translate` | Translate | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/attachments` | Add attachment sau | `[Authorize]` |
-| DELETE | `/api/tickets/{ticketId}/comments/{id}/attachments/{attId}` | Remove attachment | `[Authorize]` |
-| GET | `/api/tickets/{ticketId}/comments/{id}/attachments` | List attachments | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/from-template/{templateId}` | Post từ template | `Staff/Manager` |
-| POST | `/api/tickets/{ticketId}/comments/suggest` | AI suggest | `Staff/Manager` |
-| POST | `/api/tickets/{ticketId}/comments/voice` | Voice-to-text | `[Authorize]` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/attach-kb` | Attach KB reference | `Staff/Manager` |
-| POST | `/api/tickets/{ticketId}/comments/{id}/to-kb-draft` | Convert → KB draft | `Staff/Manager` |
-| GET | `/api/tickets/{ticketId}/comments/export-pdf` | Export PDF timeline | `Manager/Admin` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/pin` | Pin | `Staff/Manager/Admin` |
+| DELETE | `/api/tickets/{ticketId}/chats/{id}/pin` | Unpin | `Staff/Manager/Admin` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/translate` | Translate | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/attachments` | Add attachment sau | `[Authorize]` |
+| DELETE | `/api/tickets/{ticketId}/chats/{id}/attachments/{attId}` | Remove attachment | `[Authorize]` |
+| GET | `/api/tickets/{ticketId}/chats/{id}/attachments` | List attachments | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/from-template/{templateId}` | Post từ template | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/chats/suggest` | AI suggest | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/chats/voice` | Voice-to-text | `[Authorize]` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/attach-kb` | Attach KB reference | `Staff/Manager` |
+| POST | `/api/tickets/{ticketId}/chats/{id}/to-kb-draft` | Convert → KB draft | `Staff/Manager` |
+| GET | `/api/tickets/{ticketId}/chats/export-pdf` | Export PDF timeline | `Manager/Admin` |
 
 ## 5.2 Cross-ticket endpoints
 
 | Method | Path | Mục đích |
 |--------|------|----------|
-| GET | `/api/comments/me` | My comments cross-ticket |
-| GET | `/api/comments/mentions/me` | My mentions |
-| PATCH | `/api/comments/mentions/{id}/acknowledge` | Ack mention |
-| GET | `/api/comments/search` | Global search (Admin/Manager) |
-| POST | `/api/comments/erase-my-data` | GDPR right-to-erasure |
+| GET | `/api/chats/me` | My chats cross-ticket |
+| GET | `/api/chats/mentions/me` | My mentions |
+| PATCH | `/api/chats/mentions/{id}/acknowledge` | Ack mention |
+| GET | `/api/chats/search` | Global search (Admin/Manager) |
+| POST | `/api/chats/erase-my-data` | GDPR right-to-erasure |
 
 ## 5.3 Template endpoints
 
 | Method | Path | Mục đích |
 |--------|------|----------|
-| GET | `/api/comment-templates` | List |
-| POST | `/api/comment-templates` | Create |
-| PUT | `/api/comment-templates/{id}` | Update |
-| DELETE | `/api/comment-templates/{id}` | Delete |
+| GET | `/api/chat-templates` | List |
+| POST | `/api/chat-templates` | Create |
+| PUT | `/api/chat-templates/{id}` | Update |
+| DELETE | `/api/chat-templates/{id}` | Delete |
 
 ## 5.4 Participant endpoints
 
@@ -1547,14 +1547,14 @@ CREATE INDEX IX_ticket_attachments_comment ON ticket_attachments(comment_id);
 
 | Method | Path | Mục đích |
 |--------|------|----------|
-| GET | `/api/admin/comment-metrics` | Manager dashboard |
-| GET | `/api/admin/comment-metrics/heatmap` | Activity heatmap |
+| GET | `/api/admin/chat-metrics` | Manager dashboard |
+| GET | `/api/admin/chat-metrics/heatmap` | Activity heatmap |
 
 ## 5.6 SignalR Hub
 
 | Path | Methods (client → server) | Server-push events |
 |------|--------------------------|---------------------|
-| `/hubs/ticket-comments` | `JoinTicket(ticketId)`, `LeaveTicket(ticketId)`, `Typing(ticketId)` | `CommentAdded`, `CommentEdited`, `CommentDeleted`, `ReactionAdded`, `UserTyping`, `MentionReceived` |
+| `/hubs/ticket-chats` | `JoinTicket(ticketId)`, `LeaveTicket(ticketId)`, `Typing(ticketId)` | `ChatAdded`, `ChatEdited`, `ChatDeleted`, `ReactionAdded`, `UserTyping`, `MentionReceived` |
 
 **Tổng: ~40 endpoint REST + 1 SignalR Hub (6 events)**
 
@@ -1564,15 +1564,15 @@ CREATE INDEX IX_ticket_attachments_comment ON ticket_attachments(comment_id);
 
 | Event | Publish khi | Consumer | Action |
 |-------|-------------|----------|--------|
-| `CommentCreatedEvent` | Add comment success | NotificationService | Push notify Customer/Staff |
-| `CommentEditedEvent` | Edit comment success | NotificationService | (optional) notify thread |
-| `CommentDeletedEvent` | Soft delete comment | NotificationService + Audit | Update FE state |
-| `CommentMentionedEvent` | Có mention trong body | NotificationService | Push notify mentioned user |
-| `CommentReactedEvent` | Add reaction | NotificationService | Notify author of comment |
+| `ChatCreatedEvent` | Add chat success | NotificationService | Push notify Customer/Staff |
+| `ChatEditedEvent` | Edit chat success | NotificationService | (optional) notify thread |
+| `ChatDeletedEvent` | Soft delete chat | NotificationService + Audit | Update FE state |
+| `ChatMentionedEvent` | Có mention trong body | NotificationService | Push notify mentioned user |
+| `ChatReactedEvent` | Add reaction | NotificationService | Notify author of chat |
 | `ParticipantAddedEvent` | Add participant | NotificationService | Welcome notify |
 | `ParticipantRemovedEvent` | Remove participant | NotificationService + SignalR | Force disconnect, notify |
 | `ParticipantRoleChangedEvent` | Update role | NotificationService | Notify role change |
-| (Saga) `CommentEscalationReviewRequested` | Mention Manager + ticket P1 | TicketService Saga | Trigger escalation review workflow |
+| (Saga) `ChatEscalationReviewRequested` | Mention Manager + ticket P1 | TicketService Saga | Trigger escalation review workflow |
 
 ---
 
@@ -1582,14 +1582,14 @@ CREATE INDEX IX_ticket_attachments_comment ON ticket_attachments(comment_id);
 services/TicketService/src/
 ├── TicketService.Api/
 │   ├── Controllers/
-│   │   ├── TicketCommentsController.cs                  # MỞ RỘNG ~20 endpoint
+│   │   ├── TicketChatsController.cs                  # MỞ RỘNG ~20 endpoint
 │   │   ├── TicketParticipantsController.cs              # MỚI
-│   │   ├── CommentTemplatesController.cs                # MỚI
-│   │   └── AdminCommentMetricsController.cs             # MỚI
+│   │   ├── ChatTemplatesController.cs                # MỚI
+│   │   └── AdminChatMetricsController.cs             # MỚI
 │   ├── Hubs/
-│   │   └── TicketCommentHub.cs                          # MỚI — SignalR
+│   │   └── TicketChatHub.cs                          # MỚI — SignalR
 │   ├── Middleware/
-│   │   └── CommentRateLimitMiddleware.cs                # MỚI
+│   │   └── ChatRateLimitMiddleware.cs                # MỚI
 │   ├── Authentication/
 │   │   └── SignalRJwtConfiguration.cs                   # MỚI
 │   └── Program.cs                                       # Đăng ký SignalR + Redis backplane
@@ -1597,30 +1597,30 @@ services/TicketService/src/
 ├── TicketService.Application/
 │   ├── CQRS/
 │   │   ├── Command/
-│   │   │   # CommentAdd (đã có)
-│   │   │   ├── CommentEdit/
-│   │   │   ├── CommentDelete/
-│   │   │   ├── CommentRestore/
-│   │   │   ├── CommentReply/
-│   │   │   ├── CommentPin/
-│   │   │   ├── CommentUnpin/
-│   │   │   ├── CommentReactionAdd/
-│   │   │   ├── CommentReactionRemove/
-│   │   │   ├── CommentMarkRead/
-│   │   │   ├── CommentTranslate/
-│   │   │   ├── CommentMentionAcknowledge/
-│   │   │   ├── CommentAttachmentAdd/
-│   │   │   ├── CommentAttachmentRemove/
-│   │   │   ├── CommentFromTemplate/
-│   │   │   ├── CommentSuggest/
-│   │   │   ├── CommentTemplateCreate/
-│   │   │   ├── CommentTemplateUpdate/
-│   │   │   ├── CommentTemplateDelete/
-│   │   │   ├── CommentVoiceTranscribe/
-│   │   │   ├── CommentExportPdf/
-│   │   │   ├── CommentEraseUserData/
-│   │   │   ├── CommentAttachKbReference/
-│   │   │   ├── ConvertCommentToKbDraft/
+│   │   │   # ChatAdd (đã có)
+│   │   │   ├── ChatEdit/
+│   │   │   ├── ChatDelete/
+│   │   │   ├── ChatRestore/
+│   │   │   ├── ChatReply/
+│   │   │   ├── ChatPin/
+│   │   │   ├── ChatUnpin/
+│   │   │   ├── ChatReactionAdd/
+│   │   │   ├── ChatReactionRemove/
+│   │   │   ├── ChatMarkRead/
+│   │   │   ├── ChatTranslate/
+│   │   │   ├── ChatMentionAcknowledge/
+│   │   │   ├── ChatAttachmentAdd/
+│   │   │   ├── ChatAttachmentRemove/
+│   │   │   ├── ChatFromTemplate/
+│   │   │   ├── ChatSuggest/
+│   │   │   ├── ChatTemplateCreate/
+│   │   │   ├── ChatTemplateUpdate/
+│   │   │   ├── ChatTemplateDelete/
+│   │   │   ├── ChatVoiceTranscribe/
+│   │   │   ├── ChatExportPdf/
+│   │   │   ├── ChatEraseUserData/
+│   │   │   ├── ChatAttachKbReference/
+│   │   │   ├── ConvertChatToKbDraft/
 │   │   │   ├── ParticipantAdd/
 │   │   │   ├── ParticipantRemove/
 │   │   │   ├── ParticipantBulkAdd/
@@ -1628,55 +1628,55 @@ services/TicketService/src/
 │   │   │   └── ParticipantUpdateRole/
 │   │   ├── Query/
 │   │   │   ├── Ticket/
-│   │   │   │   └── TicketCommentsQuery.cs               # Mở rộng filter
-│   │   │   ├── Comment/                                 # Folder mới
-│   │   │   │   ├── CommentGetByIdQuery.cs
-│   │   │   │   ├── CommentRepliesQuery.cs
-│   │   │   │   ├── CommentHistoryQuery.cs
-│   │   │   │   ├── CommentReactionsQuery.cs
-│   │   │   │   ├── CommentReadersQuery.cs
-│   │   │   │   ├── CommentAttachmentsQuery.cs
-│   │   │   │   ├── MyCommentsQuery.cs
+│   │   │   │   └── TicketChatsQuery.cs               # Mở rộng filter
+│   │   │   ├── Chat/                                 # Folder mới
+│   │   │   │   ├── ChatGetByIdQuery.cs
+│   │   │   │   ├── ChatRepliesQuery.cs
+│   │   │   │   ├── ChatHistoryQuery.cs
+│   │   │   │   ├── ChatReactionsQuery.cs
+│   │   │   │   ├── ChatReadersQuery.cs
+│   │   │   │   ├── ChatAttachmentsQuery.cs
+│   │   │   │   ├── MyChatsQuery.cs
 │   │   │   │   ├── MyMentionsQuery.cs
-│   │   │   │   ├── CommentGlobalSearchQuery.cs
+│   │   │   │   ├── ChatGlobalSearchQuery.cs
 │   │   │   │   ├── TicketUnreadCountQuery.cs
-│   │   │   │   └── TicketCommentsCursorQuery.cs
+│   │   │   │   └── TicketChatsCursorQuery.cs
 │   │   │   ├── Template/
-│   │   │   │   └── CommentTemplatesQuery.cs
+│   │   │   │   └── ChatTemplatesQuery.cs
 │   │   │   ├── Participant/
 │   │   │   │   ├── TicketParticipantsQuery.cs
 │   │   │   │   └── ParticipantHistoryQuery.cs
 │   │   │   └── Metrics/
-│   │   │       ├── CommentMetricsQuery.cs
-│   │   │       └── CommentHeatmapQuery.cs
+│   │   │       ├── ChatMetricsQuery.cs
+│   │   │       └── ChatHeatmapQuery.cs
 │   │   └── Handler/
-│   │       ├── Comments/                                # ~30 handler
+│   │       ├── Chats/                                # ~30 handler
 │   │       ├── Templates/                               # 4 handler
 │   │       ├── Participants/                            # 7 handler
 │   │       └── Metrics/                                 # 2 handler
 │   ├── DTOs/
 │   │   └── Response/
-│   │       ├── Comments/                                # Mở rộng DTO
-│   │       │   ├── CommentResponse.cs
-│   │       │   ├── CommentActionDTO.cs
-│   │       │   ├── CommentEditHistoryDTO.cs
-│   │       │   ├── CommentMentionDTO.cs
-│   │       │   ├── CommentReactionDTO.cs
-│   │       │   ├── CommentReactionAggregateDTO.cs
-│   │       │   ├── CommentReaderDTO.cs
-│   │       │   └── CommentAiSuggestionDTO.cs
+│   │       ├── Chats/                                # Mở rộng DTO
+│   │       │   ├── ChatResponse.cs
+│   │       │   ├── ChatActionDTO.cs
+│   │       │   ├── ChatEditHistoryDTO.cs
+│   │       │   ├── ChatMentionDTO.cs
+│   │       │   ├── ChatReactionDTO.cs
+│   │       │   ├── ChatReactionAggregateDTO.cs
+│   │       │   ├── ChatReaderDTO.cs
+│   │       │   └── ChatAiSuggestionDTO.cs
 │   │       ├── Tickets/
-│   │       │   └── TicketCommentDTO.cs                  # Mở rộng
+│   │       │   └── TicketChatDTO.cs                  # Mở rộng
 │   │       ├── Templates/
-│   │       │   └── CommentTemplateDTO.cs
+│   │       │   └── ChatTemplateDTO.cs
 │   │       ├── Participants/
 │   │       │   ├── TicketParticipantDTO.cs
 │   │       │   └── ParticipantHistoryDTO.cs
 │   │       └── Metrics/
-│   │           └── CommentMetricsDTO.cs
+│   │           └── ChatMetricsDTO.cs
 │   ├── Helpers/
 │   │   ├── TicketQueryHelper.cs                         # Mở rộng — join ticket_participants
-│   │   └── CommentAuthorizationHelper.cs                # Mới
+│   │   └── ChatAuthorizationHelper.cs                # Mới
 │   └── Interfaces/
 │       ├── Repositories/
 │       │   └── ITicketUnitOfWork.cs                     # Mở rộng các repo mới
@@ -1690,58 +1690,58 @@ services/TicketService/src/
 │           ├── IProfanityFilter.cs                      # Mới
 │           ├── IPiiDetector.cs                          # Mới
 │           ├── ISpamDetector.cs                         # Mới
-│           ├── ICommentAuthorizationService.cs          # Mới
-│           ├── ICommentAiSuggestionClient.cs            # Mới
-│           ├── ITicketCommentRealtimeNotifier.cs        # Mới
+│           ├── IChatAuthorizationService.cs          # Mới
+│           ├── IChatAiSuggestionClient.cs            # Mới
+│           ├── ITicketChatRealtimeNotifier.cs        # Mới
 │           ├── IVoiceTranscriptionService.cs            # Mới
 │           ├── IPdfExporter.cs                          # Mới
 │           ├── IDataRetentionService.cs                 # Mới
 │           ├── IKbSuggestionService.cs                  # Mới
-│           └── ICommentCacheService.cs                  # Mới
+│           └── IChatCacheService.cs                  # Mới
 │
 ├── TicketService.Domain/
 │   ├── Entities/
-│   │   ├── TicketComment.cs                             # Mở rộng 13 cột
+│   │   ├── TicketChat.cs                             # Mở rộng 13 cột
 │   │   ├── TicketAttachment.cs                          # Mở rộng 5 cột
 │   │   ├── Ticket.cs                                    # Thêm Participants navigation
 │   │   ├── TicketActivity.cs                            # (giữ)
-│   │   ├── TicketKbReference.cs                         # Thêm comment_id
-│   │   ├── TicketCommentEdit.cs                         # Mới
-│   │   ├── TicketCommentMention.cs                      # Mới
-│   │   ├── TicketCommentReaction.cs                     # Mới
-│   │   ├── TicketCommentRead.cs                         # Mới
-│   │   ├── TicketCommentTranslation.cs                  # Mới
+│   │   ├── TicketKbReference.cs                         # Thêm chat_id
+│   │   ├── TicketChatEdit.cs                         # Mới
+│   │   ├── TicketChatMention.cs                      # Mới
+│   │   ├── TicketChatReaction.cs                     # Mới
+│   │   ├── TicketChatRead.cs                         # Mới
+│   │   ├── TicketChatTranslation.cs                  # Mới
 │   │   ├── TicketParticipant.cs                         # Mới ⭐
-│   │   ├── CommentTemplate.cs                           # Mới
-│   │   ├── CommentAiSuggestion.cs                       # Mới
-│   │   └── CommentMetricsDaily.cs                       # Mới
+│   │   ├── ChatTemplate.cs                           # Mới
+│   │   ├── ChatAiSuggestion.cs                       # Mới
+│   │   └── ChatMetricsDaily.cs                       # Mới
 │   └── Enums/
 │       ├── ActorRoleEnum.cs                             # (giữ)
 │       ├── ActivityActionEnum.cs                        # Mở rộng values
 │       ├── AttachmentSourceEnum.cs                      # (giữ)
-│       ├── CommentBodyFormatEnum.cs                     # Mới
+│       ├── ChatBodyFormatEnum.cs                     # Mới
 │       ├── ReactionTypeEnum.cs                          # Mới
-│       ├── CommentTemplateCategoryEnum.cs               # Mới
-│       ├── CommentTemplateScopeEnum.cs                  # Mới
+│       ├── ChatTemplateCategoryEnum.cs               # Mới
+│       ├── ChatTemplateScopeEnum.cs                  # Mới
 │       ├── TranslationProviderEnum.cs                   # Mới
 │       ├── VirusScanStatusEnum.cs                       # Mới
-│       ├── CommentAiIntentEnum.cs                       # Mới
+│       ├── ChatAiIntentEnum.cs                       # Mới
 │       └── ParticipantTypeEnum.cs                       # Mới ⭐
 │
 ├── TicketService.Infrastructure/
 │   ├── Persistence/
 │   │   ├── Configurations/
-│   │   │   ├── TicketCommentConfiguration.cs            # Mở rộng — thêm config tsvector, threading
+│   │   │   ├── TicketChatConfiguration.cs            # Mở rộng — thêm config tsvector, threading
 │   │   │   ├── TicketAttachmentConfiguration.cs         # Mở rộng
-│   │   │   ├── TicketCommentEditConfiguration.cs        # Mới
-│   │   │   ├── TicketCommentMentionConfiguration.cs     # Mới
-│   │   │   ├── TicketCommentReactionConfiguration.cs    # Mới
-│   │   │   ├── TicketCommentReadConfiguration.cs        # Mới
-│   │   │   ├── TicketCommentTranslationConfiguration.cs # Mới
+│   │   │   ├── TicketChatEditConfiguration.cs        # Mới
+│   │   │   ├── TicketChatMentionConfiguration.cs     # Mới
+│   │   │   ├── TicketChatReactionConfiguration.cs    # Mới
+│   │   │   ├── TicketChatReadConfiguration.cs        # Mới
+│   │   │   ├── TicketChatTranslationConfiguration.cs # Mới
 │   │   │   ├── TicketParticipantConfiguration.cs        # Mới
-│   │   │   ├── CommentTemplateConfiguration.cs          # Mới
-│   │   │   ├── CommentAiSuggestionConfiguration.cs      # Mới
-│   │   │   └── CommentMetricsDailyConfiguration.cs      # Mới
+│   │   │   ├── ChatTemplateConfiguration.cs          # Mới
+│   │   │   ├── ChatAiSuggestionConfiguration.cs      # Mới
+│   │   │   └── ChatMetricsDailyConfiguration.cs      # Mới
 │   │   └── Converters/                                  # (giữ)
 │   ├── Services/
 │   │   ├── MentionParserService.cs
@@ -1750,77 +1750,77 @@ services/TicketService/src/
 │   │   ├── ProfanityFilterService.cs
 │   │   ├── PiiDetectorService.cs
 │   │   ├── SpamDetectorService.cs
-│   │   ├── CommentAuthorizationService.cs
+│   │   ├── ChatAuthorizationService.cs
 │   │   └── KbSuggestionService.cs
 │   ├── Translation/
 │   │   └── GoogleTranslateProvider.cs
 │   ├── AiClient/
-│   │   ├── FastApiCommentAiClient.cs
+│   │   ├── FastApiChatAiClient.cs
 │   │   └── WhisperTranscriptionService.cs
 │   ├── Realtime/
-│   │   └── SignalRTicketCommentNotifier.cs
+│   │   └── SignalRTicketChatNotifier.cs
 │   ├── Caching/
-│   │   └── CommentCacheService.cs                       # Redis
+│   │   └── ChatCacheService.cs                       # Redis
 │   ├── Export/
-│   │   └── QuestPdfCommentExporter.cs
+│   │   └── QuestPdfChatExporter.cs
 │   ├── BackgroundServices/
 │   │   ├── VirusScanWorker.cs
-│   │   ├── CommentReadReceiptBulkWriter.cs
-│   │   ├── CommentMetricsAggregatorService.cs
-│   │   └── CommentRetentionService.cs
+│   │   ├── ChatReadReceiptBulkWriter.cs
+│   │   ├── ChatMetricsAggregatorService.cs
+│   │   └── ChatRetentionService.cs
 │   ├── Sagas/
-│   │   └── CommentEscalationReviewSaga.cs
+│   │   └── ChatEscalationReviewSaga.cs
 │   ├── DependencyInjection/
 │   │   └── ManageDependencyInjection.cs                 # Đăng ký services + background + cache
 │   └── Migrations/                                      # 15 migration mới
-│       ├── 20260620_AddCommentEditHistory.cs
-│       ├── 20260620_LinkAttachmentToComment.cs
-│       ├── 20260620_AddCommentThreading.cs
-│       ├── 20260620_AddCommentMentions.cs
-│       ├── 20260620_AddCommentReactions.cs
-│       ├── 20260620_AddCommentReadReceipts.cs
-│       ├── 20260620_AddCommentMarkdownSupport.cs
-│       ├── 20260620_AddCommentPinning.cs
-│       ├── 20260620_AddCommentTemplates.cs
-│       ├── 20260620_AddCommentTranslations.cs
-│       ├── 20260620_AddCommentAiSuggestions.cs
-│       ├── 20260620_AddCommentFullTextSearch.cs
-│       ├── 20260620_AddCommentMetrics.cs
-│       ├── 20260620_AddCommentAttachmentEnhancements.cs
-│       ├── 20260620_AddCommentIndexes.cs
+│       ├── 20260620_AddChatEditHistory.cs
+│       ├── 20260620_LinkAttachmentToChat.cs
+│       ├── 20260620_AddChatThreading.cs
+│       ├── 20260620_AddChatMentions.cs
+│       ├── 20260620_AddChatReactions.cs
+│       ├── 20260620_AddChatReadReceipts.cs
+│       ├── 20260620_AddChatMarkdownSupport.cs
+│       ├── 20260620_AddChatPinning.cs
+│       ├── 20260620_AddChatTemplates.cs
+│       ├── 20260620_AddChatTranslations.cs
+│       ├── 20260620_AddChatAiSuggestions.cs
+│       ├── 20260620_AddChatFullTextSearch.cs
+│       ├── 20260620_AddChatMetrics.cs
+│       ├── 20260620_AddChatAttachmentEnhancements.cs
+│       ├── 20260620_AddChatIndexes.cs
 │       └── 20260620_AddTicketParticipants.cs
 │
 └── tests/
     ├── TicketService.UnitTests/
     │   └── Handlers/
-    │       ├── Comments/                                # ~30 test class
+    │       ├── Chats/                                # ~30 test class
     │       ├── Templates/                               # 4 test class
     │       ├── Participants/                            # 7 test class
     │       └── Metrics/
     └── TicketService.IntergrationTests/
         ├── Tickets/
-        │   └── TicketCommentApiTests.cs                 # Mở rộng
+        │   └── TicketChatApiTests.cs                 # Mở rộng
         ├── Templates/
-        │   └── CommentTemplatesApiTests.cs
+        │   └── ChatTemplatesApiTests.cs
         ├── Participants/
         │   └── TicketParticipantsApiTests.cs
         └── Hubs/
-            └── TicketCommentHubTests.cs
+            └── TicketChatHubTests.cs
 
 shared/src/SharedContracts/Events/Ticket/
-├── CommentCreatedEvent.cs                               # Mới
-├── CommentEditedEvent.cs                                # Mới
-├── CommentDeletedEvent.cs                               # Mới
-├── CommentMentionedEvent.cs                             # Mới
-├── CommentReactedEvent.cs                               # Mới
+├── ChatCreatedEvent.cs                               # Mới
+├── ChatEditedEvent.cs                                # Mới
+├── ChatDeletedEvent.cs                               # Mới
+├── ChatMentionedEvent.cs                             # Mới
+├── ChatReactedEvent.cs                               # Mới
 ├── ParticipantAddedEvent.cs                             # Mới
 ├── ParticipantRemovedEvent.cs                           # Mới
 └── ParticipantRoleChangedEvent.cs                       # Mới
 
 services/NotificationService/src/NotificationService.Infrastructure/Consumers/
-├── CommentCreatedConsumer.cs                            # Mới
-├── CommentMentionConsumer.cs                            # Mới
-├── CommentReactionConsumer.cs                           # Mới
+├── ChatCreatedConsumer.cs                            # Mới
+├── ChatMentionConsumer.cs                            # Mới
+├── ChatReactionConsumer.cs                           # Mới
 └── ParticipantChangeConsumer.cs                         # Mới
 ```
 
@@ -1880,11 +1880,11 @@ SLA + KB + Mobile + Export (21+22+23+24)
 
 ```json
 {
-  "Comment": {
+  "Chat": {
     "MaxBodyLength": 10000,
     "MinBodyLength": 1,
     "EditWindowMinutes": 15,
-    "MaxAttachmentsPerComment": 10,
+    "MaxAttachmentsPerChat": 10,
     "MaxAttachmentSizeMb": 50,
     "MaxPinnedPerTicket": 3,
     "AllowedMimeTypes": ["image/jpeg", "image/png", "image/gif", "application/pdf", "video/mp4", "text/plain"],
@@ -1903,7 +1903,7 @@ SLA + KB + Mobile + Export (21+22+23+24)
       "PresenceTimeoutSeconds": 60
     },
     "Ai": {
-      "SuggestEndpoint": "https://ai-module/ai/comment-suggest",
+      "SuggestEndpoint": "https://ai-module/ai/chat-suggest",
       "MaxSuggestionsPerCall": 3,
       "TimeoutSeconds": 10
     },
@@ -1944,18 +1944,18 @@ SLA + KB + Mobile + Export (21+22+23+24)
 ## 10.1 Unit test (target ≥ 80% coverage)
 
 Per handler:
-- `CommentEditCommandHandler`: edit trong/ngoài 15 phút, không phải author, ticket closed, edit_reason required cho Admin
-- `CommentDeleteCommandHandler`: author vs admin, cascade soft delete mention/reaction/read
-- `CommentRestoreCommandHandler`: Admin only
-- `CommentReplyCommandHandler`: reply-of-reply bị block, cross-ticket parent bị block
-- `CommentReactionAddCommandHandler`: duplicate reaction bị reject (unique constraint)
-- `CommentMarkReadCommandHandler`: bulk insert idempotent
-- `CommentPinCommandHandler`: max 3 pinned enforce
-- `CommentMentionParser`: regex edge cases, không resolve được user → null
+- `ChatEditCommandHandler`: edit trong/ngoài 15 phút, không phải author, ticket closed, edit_reason required cho Admin
+- `ChatDeleteCommandHandler`: author vs admin, cascade soft delete mention/reaction/read
+- `ChatRestoreCommandHandler`: Admin only
+- `ChatReplyCommandHandler`: reply-of-reply bị block, cross-ticket parent bị block
+- `ChatReactionAddCommandHandler`: duplicate reaction bị reject (unique constraint)
+- `ChatMarkReadCommandHandler`: bulk insert idempotent
+- `ChatPinCommandHandler`: max 3 pinned enforce
+- `ChatMentionParser`: regex edge cases, không resolve được user → null
 - `MarkdownRenderer`: XSS injection bị sanitize
 - `TemplateRenderer`: placeholder không tồn tại → error
 - `ParticipantAddCommandHandler`: Owner không bị remove được, Customer chỉ Admin remove
-- `CommentAuthorizationHelper`: matrix permission đầy đủ
+- `ChatAuthorizationHelper`: matrix permission đầy đủ
 
 ## 10.2 Integration test (TestContainers Postgres)
 
@@ -1964,17 +1964,17 @@ Per handler:
 - Threaded reply hiển thị đúng order
 - Full-text search trả đúng kết quả tiếng Việt có dấu
 - SignalR broadcast tới group đúng
-- Participant remove → comment cũ vẫn còn, force disconnect
+- Participant remove → chat cũ vẫn còn, force disconnect
 - Reassign Staff → Staff cũ auto chuyển `PreviousAssignee`
 - Reaction unique constraint enforce ở DB level
-- Cascade delete: xóa ticket → cascade xóa comment/mention/reaction/read
+- Cascade delete: xóa ticket → cascade xóa chat/mention/reaction/read
 
 ## 10.3 Performance test
 
-- 1000 comment trên 1 ticket — query pagination < 200ms
+- 1000 chat trên 1 ticket — query pagination < 200ms
 - SignalR broadcast 100 concurrent user — latency < 500ms
-- Full-text search trên 1M comment — < 500ms
-- Mark-read bulk 1000 comment — < 1s
+- Full-text search trên 1M chat — < 500ms
+- Mark-read bulk 1000 chat — < 1s
 - AI suggest latency < 3s (bao gồm gọi AI module)
 
 ## 10.4 Security test
@@ -1982,7 +1982,7 @@ Per handler:
 - XSS payload trong markdown body → bị sanitize hoàn toàn
 - SQL injection trong search query → tham số hóa
 - Rate limit enforce đúng theo role
-- Customer không thấy được internal comment qua bất kỳ endpoint nào
+- Customer không thấy được internal chat qua bất kỳ endpoint nào
 - Participant bị remove không gọi được SignalR hub group ticket-{id}
 
 ---
@@ -1994,7 +1994,7 @@ Per handler:
 - **SignalR pattern tham khảo:** `services/SmsService/src/SmsService.Infrastructure/Realtime/SmsGatewayHub.cs`
 - **Outbox pattern:** Đã có `OutboxMessage` entity + `OutboxMessageConfiguration`
 - **Saga pattern:** Đã có `AlertTicketSagaStateConfiguration` làm tham khảo
-- **TimescaleDB pagination pattern:** `be.md §13` — cursor-based reuse được cho comment cursor query
+- **TimescaleDB pagination pattern:** `be.md §13` — cursor-based reuse được cho chat cursor query
 
 ---
 
