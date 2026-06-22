@@ -1,5 +1,6 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
@@ -10,7 +11,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.BackgroundJobs;
 
-public class EscalationBackgroundService : IConsumer<SlaBreachedIntegrationEvent>
+public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
@@ -29,7 +30,7 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedIntegrationEvent
         _producer = producer;
     }
 
-    public async Task Consume(ConsumeContext<SlaBreachedIntegrationEvent> context)
+    public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
     {
         var message = context.Message;
 
@@ -59,7 +60,7 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedIntegrationEvent
             await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: EscalationReasonEnum.SlaBreach.ToString(), reason: "SLA breached");
 
             // Outbox: Ticket Escalated
-            await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
+            await _producer.PublishAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code, (int)EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
 
             await _uow.SaveChangesAsync(context.CancellationToken);
         }

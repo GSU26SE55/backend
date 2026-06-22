@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -64,7 +65,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
             reason: request.Reason);
 
         // Outbox: Staff Reassigned
-        await _producer.PublishAsync(new TicketAssignedIntegrationEvent(ticket.Id, ticket.Code, request.NewStaffId, ticket.Priority.ToString()!), ct);
+        await _producer.PublishAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewStaffId, ticket.Priority.ToString()!), ct);
 
         await _uow.SaveChangesAsync(ct);
 

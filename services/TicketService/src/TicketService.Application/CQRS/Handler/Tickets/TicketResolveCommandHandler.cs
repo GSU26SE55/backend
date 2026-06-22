@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -80,7 +81,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
-        await _producer.PublishAsync(new TicketResolvedIntegrationEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
+        await _producer.PublishAsync(new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
 
         await _uow.SaveChangesAsync(ct);
 

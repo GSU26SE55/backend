@@ -1,5 +1,6 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -53,7 +54,7 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             reason: request.IncidentDescription);
 
         // Outbox: Incident Declared
-        await _producer.PublishAsync(new IncidentDeclaredIntegrationEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
+        await _producer.PublishAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

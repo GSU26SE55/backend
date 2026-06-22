@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -63,7 +64,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         await _uow.Tickets.AddAsync(ticket);
 
         // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code), ct);
+        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,

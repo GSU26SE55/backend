@@ -1,5 +1,6 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -68,7 +69,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             newValue: $"Auto-created from alert {request.OriginAlertId}");
 
         // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code), ct);
+        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 
