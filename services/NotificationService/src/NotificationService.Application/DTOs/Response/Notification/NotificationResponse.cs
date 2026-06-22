@@ -7,3 +7,5 @@ public class NotificationResponse : CommonResponse<NotificationDto> { }
 public class NotificationListResponse : CommonResponse<PaginationResponse<NotificationDto>> { }
 
 public class NotificationActionResponse : CommonResponse<Guid> { }
+
+public class NotificationCountResponse : CommonResponse<int> { }
