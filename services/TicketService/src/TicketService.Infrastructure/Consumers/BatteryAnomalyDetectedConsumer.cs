@@ -1,4 +1,3 @@
-using System.Linq;
 using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Consumers;
+namespace TicketService.Infrastructure.Consumers;
 
 /// <summary>
 /// **DEPRECATED Sprint 5B #238** — Saga state machine giờ handle BatteryAnomalyDetectedEvent V1/V2.

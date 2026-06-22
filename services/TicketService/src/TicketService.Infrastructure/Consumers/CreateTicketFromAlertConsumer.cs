@@ -7,7 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Consumers;
+namespace TicketService.Infrastructure.Consumers;
 
 /// <summary>
 /// TicketService consumer cho <see cref="CreateTicketFromAlertCommand"/> từ Saga.

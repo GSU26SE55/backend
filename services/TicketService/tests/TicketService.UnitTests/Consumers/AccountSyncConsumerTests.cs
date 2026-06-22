@@ -1,15 +1,11 @@
-using FluentAssertions;
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
-using MockQueryable.Moq;
-using Moq;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 using SharedKernels.Interfaces;
-using TicketService.Application.Consumers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Consumers;
 
 namespace TicketService.UnitTests.Consumers;
 
