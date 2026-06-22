@@ -4,6 +4,6 @@ namespace TicketService.Application.DTOs.Response.Tickets;
 
 public class TicketActionResponse : CommonResponse<TicketActionDTO> { }
 public class TicketActivityResponse : CommonResponse<List<TicketActivityDTO>> { }
-public class TicketCommentResponse : CommonResponse<List<TicketCommentDTO>> { }
+public class TicketChatResponse : CommonResponse<List<TicketChatDTO>> { }
 public class TicketDetailResponse : CommonResponse<TicketDetailDTO> { }
 public class TicketResponse : CommonResponse<List<TicketDTO>> { }

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using TicketService.Application.CQRS.Command.CommentAdd;
-using TicketService.Application.CQRS.Handler.Comments;
+using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Services;
@@ -9,16 +9,16 @@ using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
 
-namespace TicketService.UnitTests.Handlers.Comments;
+namespace TicketService.UnitTests.Handlers.Chats;
 
-public class CommentAddCommandHandlerTests
+public class ChatAddCommandHandlerTests
 {
     private readonly Mock<IActivityLogger> _activityLogger = new();
-    private readonly Mock<ITicketCommentRealtimeNotifier> _realtimeNotifier = new();
-    private readonly Mock<ILogger<CommentAddCommandHandler>> _loggerMock = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<ChatAddCommandHandler>> _loggerMock = new();
 
     [Fact]
-    public async Task Handle_ValidRequest_AddsComment()
+    public async Task Handle_ValidRequest_AddsChat()
     {
         // Arrange
         var ticketId = Guid.NewGuid();
@@ -31,11 +31,11 @@ public class CommentAddCommandHandlerTests
             Description = "Test Description"
         };
 
-        var (uow, _, _, _, _, _, _, comments, attachments, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket }
         );
 
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             TicketId = ticketId,
             UserId = userId,
@@ -43,13 +43,13 @@ public class CommentAddCommandHandlerTests
             UserDisplayName = "Staff User",
             Body = "This is a comment",
             IsInternal = false,
-            Attachments = new List<CommentAttachmentInput>
+            Attachments = new List<ChatAttachmentInput>
             {
-                new CommentAttachmentInput(Guid.NewGuid(), "file.pdf", "application/pdf", 1024)
+                new ChatAttachmentInput(Guid.NewGuid(), "file.pdf", "application/pdf", 1024)
             }
         };
 
-        var handler = new CommentAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object);
+        var handler = new ChatAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -58,7 +58,7 @@ public class CommentAddCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(201);
 
-        comments.Verify(x => x.AddAsync(It.Is<TicketComment>(c =>
+        chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>
             c.TicketId == ticketId &&
             c.Body == "This is a comment" &&
             c.AttachmentFileIds.Count == 1)), Times.Once);
@@ -72,13 +72,13 @@ public class CommentAddCommandHandlerTests
             userId,
             ActorRoleEnum.Staff,
             "Staff User",
-            ActivityActionEnum.Commented,
+            ActivityActionEnum.Chatted,
             null,
             "[Công khai]",
             It.IsAny<string>()), Times.Once);
 
-        _realtimeNotifier.Verify(x => x.NotifyCommentAddedAsync(
-            It.Is<TicketCommentDTO>(dto => dto.TicketId == ticketId.ToString() && dto.Body == "This is a comment"),
+        _realtimeNotifier.Verify(x => x.NotifyChatAddedAsync(
+            It.Is<TicketChatDTO>(dto => dto.TicketId == ticketId.ToString() && dto.Body == "This is a comment"),
             It.IsAny<CancellationToken>()), Times.Once);
 
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -88,7 +88,7 @@ public class CommentAddCommandHandlerTests
     public async Task Validate_EmptyBody_ReturnsError()
     {
         // Arrange
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             TicketId = Guid.NewGuid(),
             UserId = Guid.NewGuid(),

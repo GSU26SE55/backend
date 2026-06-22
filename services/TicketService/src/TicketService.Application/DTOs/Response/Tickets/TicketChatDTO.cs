@@ -2,7 +2,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.DTOs.Response.Tickets;
 
-public class TicketCommentDTO
+public class TicketChatDTO
 {
     public string Id { get; set; } = string.Empty;
     public string TicketId { get; set; } = string.Empty;

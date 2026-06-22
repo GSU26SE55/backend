@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622154709_RenameTicketCommentsToTicketChats")]
+    partial class RenameTicketCommentsToTicketChats
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1049,16 +1052,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<int>("EditCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("edit_count");
-
-                    b.Property<DateTime?>("EditedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("edited_at");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -1066,10 +1059,6 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<bool>("IsInternal")
                         .HasColumnType("boolean")
                         .HasColumnName("is_internal");
-
-                    b.Property<Guid?>("LastEditedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("last_edited_by_user_id");
 
                     b.Property<Guid>("TicketId")
                         .HasColumnType("uuid")
@@ -1086,69 +1075,6 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("TicketId");
 
                     b.ToTable("ticket_chats", (string)null);
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatEdit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChatId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("chat_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("EditReason")
-                        .HasColumnType("text")
-                        .HasColumnName("edit_reason");
-
-                    b.Property<DateTime>("EditedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("edited_at");
-
-                    b.Property<int>("EditedByRole")
-                        .HasColumnType("integer")
-                        .HasColumnName("edited_by_role");
-
-                    b.Property<Guid>("EditedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("edited_by_user_id");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<string>("NewBody")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("new_body");
-
-                    b.Property<string>("OldBody")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("old_body");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChatId");
-
-                    b.ToTable("ticket_chat_edits", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketKbReference", b =>
@@ -1444,17 +1370,6 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Ticket");
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatEdit", b =>
-                {
-                    b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
-                        .WithMany()
-                        .HasForeignKey("ChatId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Chat");
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketKbReference", b =>

@@ -6,18 +6,18 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
-namespace TicketService.Application.CQRS.Handler.Comments;
+namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class TicketCommentsQueryHandler : IRequestHandler<TicketCommentsQuery, CommonResponse<PaginationResponse<TicketCommentDTO>>>
+public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonResponse<PaginationResponse<TicketChatDTO>>>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
 
-    public TicketCommentsQueryHandler(ITicketUnitOfWork unitOfWork)
+    public TicketChatsQueryHandler(ITicketUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CommonResponse<PaginationResponse<TicketCommentDTO>>> Handle(TicketCommentsQuery request, CancellationToken cancellationToken)
+    public async Task<CommonResponse<PaginationResponse<TicketChatDTO>>> Handle(TicketChatsQuery request, CancellationToken cancellationToken)
     {
         // 1. Kiểm tra ticket có tồn tại không và check quyền truy cập ticket
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
@@ -27,33 +27,33 @@ public class TicketCommentsQueryHandler : IRequestHandler<TicketCommentsQuery, C
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
-            return new CommonResponse<PaginationResponse<TicketCommentDTO>> { IsSuccess = false, StatusCode = 404, Message = "Ticket not found" };
+            return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 404, Message = "Ticket not found" };
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
-            return new CommonResponse<PaginationResponse<TicketCommentDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
+            return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
-        // 2. Xác định xem actor có quyền xem comment nội bộ không
-        var canViewInternalComments = TicketQueryHelper.CanViewInternalComments(request.ActorRoles);
+        // 2. Xác định xem actor có quyền xem chat nội bộ không
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
-        // 3. Query comments
-        var query = _unitOfWork.TicketComments.GetAllAsync()
+        // 3. Query chats
+        var query = _unitOfWork.TicketChats.GetAllAsync()
             .AsNoTracking()
             .Where(c => c.TicketId == request.TicketId && !c.IsDeleted);
 
-        // 4. Lọc comment nội bộ nếu là Customer
-        if (!canViewInternalComments)
+        // 4. Lọc chat nội bộ nếu là Customer
+        if (!canViewInternalChats)
         {
             query = query.Where(c => !c.IsInternal);
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var rawComments = await query
+        var rawChats = await query
             .OrderByDescending(c => c.CreatedAt)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        var items = rawComments.Select(c => new TicketCommentDTO
+        var items = rawChats.Select(c => new TicketChatDTO
         {
             Id = c.Id.ToString(),
             TicketId = c.TicketId.ToString(),
@@ -66,11 +66,11 @@ public class TicketCommentsQueryHandler : IRequestHandler<TicketCommentsQuery, C
             CreatedAt = c.CreatedAt
         }).ToList();
 
-        return new CommonResponse<PaginationResponse<TicketCommentDTO>>
+        return new CommonResponse<PaginationResponse<TicketChatDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketCommentDTO>
+            Data = new PaginationResponse<TicketChatDTO>
             {
                 Items = items,
                 TotalItems = total,

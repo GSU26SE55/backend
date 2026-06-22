@@ -6,7 +6,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 
 namespace TicketService.Application.CQRS.Query.Ticket;
 
-public class TicketCommentsQuery : IRequest<CommonResponse<PaginationResponse<TicketCommentDTO>>>
+public class TicketChatsQuery : IRequest<CommonResponse<PaginationResponse<TicketChatDTO>>>
 {
     [JsonIgnore]
     [BindNever]

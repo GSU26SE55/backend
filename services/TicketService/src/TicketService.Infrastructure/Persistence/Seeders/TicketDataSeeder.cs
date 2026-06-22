@@ -29,7 +29,7 @@ public class TicketDataSeeder
             return;
         await SeedSlaTimersAsync(tickets, ct);
         await SeedActivitiesAsync(tickets, staffs, customers, ct);
-        await SeedCommentsAsync(tickets, staffs, customers, ct);
+        await SeedChatsAsync(tickets, staffs, customers, ct);
         await SeedMaintenanceLogsAsync(tickets, staffs, kbArticles, ct);
         await SeedSagaStatesAsync(tickets, ct);
     }
@@ -574,23 +574,23 @@ public class TicketDataSeeder
         await _context.SaveChangesAsync(ct);
     }
 
-    private async Task SeedCommentsAsync(
+    private async Task SeedChatsAsync(
         List<Ticket> tickets,
         List<StaffAccount> staffs,
         List<CustomerAccount> customers,
         CancellationToken ct)
     {
-        var hasComments = await _context.TicketComments.AnyAsync(ct);
-        if (hasComments)
+        var hasChats = await _context.TicketChats.AnyAsync(ct);
+        if (hasChats)
             return;
 
         var firstStaff = staffs.First();
         var firstCustomer = customers.First();
-        var comments = new List<TicketComment>();
+        var chats = new List<TicketChat>();
 
         foreach (var ticket in tickets.Take(3))
         {
-            comments.Add(new TicketComment
+            chats.Add(new TicketChat
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
@@ -603,7 +603,7 @@ public class TicketDataSeeder
                 Ticket = ticket
             });
 
-            comments.Add(new TicketComment
+            chats.Add(new TicketChat
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
@@ -616,7 +616,7 @@ public class TicketDataSeeder
                 Ticket = ticket
             });
 
-            comments.Add(new TicketComment
+            chats.Add(new TicketChat
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
@@ -630,7 +630,7 @@ public class TicketDataSeeder
             });
         }
 
-        _context.TicketComments.AddRange(comments);
+        _context.TicketChats.AddRange(chats);
         await _context.SaveChangesAsync(ct);
     }
 

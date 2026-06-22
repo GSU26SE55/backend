@@ -7,7 +7,8 @@ public interface ITicketUnitOfWork : IUnitOfWork
 {
     IGenericRepository<Ticket> Tickets { get; }
     IGenericRepository<TicketActivity> TicketActivities { get; }
-    IGenericRepository<TicketComment> TicketComments { get; }
+    IGenericRepository<TicketChat> TicketChats { get; }
+    IGenericRepository<TicketChatEdit> TicketChatEdits { get; }
     IGenericRepository<TicketAttachment> TicketAttachments { get; }
     IGenericRepository<SlaTimer> SlaTimers { get; }
     IGenericRepository<SlaPauseEvent> SlaPauseEvents { get; }

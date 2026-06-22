@@ -24,7 +24,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             .AsNoTracking()
             .Include(t => t.SlaTimer)
             .Include(t => t.Activities.OrderByDescending(a => a.CreatedAt))
-            .Include(t => t.Comments.Where(c => !c.IsDeleted).OrderByDescending(c => c.CreatedAt))
+            .Include(t => t.Chats.Where(c => !c.IsDeleted).OrderByDescending(c => c.CreatedAt))
             .Include(t => t.MaintenanceLogs.Where(m => !m.IsDeleted).OrderByDescending(m => m.CreatedAt))
             .Include(t => t.Attachments.Where(a => !a.IsDeleted).OrderByDescending(a => a.CreatedAt))
             .FirstOrDefaultAsync(t => t.Id == request.Id && !t.IsDeleted, cancellationToken);
@@ -35,7 +35,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
-        var canViewInternalComments = TicketQueryHelper.CanViewInternalComments(request.ActorRoles);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
         var dto = new TicketDetailDTO
         {
@@ -83,9 +83,9 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
                 Reason = a.Reason,
                 CreatedAt = a.CreatedAt
             }).ToList(),
-            Comments = ticket.Comments
-                .Where(c => canViewInternalComments || !c.IsInternal)
-                .Select(c => new TicketCommentDTO
+            Chats = ticket.Chats
+                .Where(c => canViewInternalChats || !c.IsInternal)
+                .Select(c => new TicketChatDTO
                 {
                     Id = c.Id.ToString(),
                     TicketId = c.TicketId.ToString(),

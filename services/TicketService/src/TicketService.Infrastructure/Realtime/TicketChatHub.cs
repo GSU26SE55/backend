@@ -10,12 +10,12 @@ using TicketService.Application.Interfaces.Services;
 namespace TicketService.Infrastructure.Realtime;
 
 [Authorize]
-public class TicketCommentHub : Hub
+public class TicketChatHub : Hub
 {
-    private readonly ICommentAuthorizationService _authService;
-    private readonly ILogger<TicketCommentHub> _logger;
+    private readonly IChatAuthorizationService _authService;
+    private readonly ILogger<TicketChatHub> _logger;
 
-    public TicketCommentHub(ICommentAuthorizationService authService, ILogger<TicketCommentHub> logger)
+    public TicketChatHub(IChatAuthorizationService authService, ILogger<TicketChatHub> logger)
     {
         _authService = authService;
         _logger = logger;
@@ -31,14 +31,14 @@ public class TicketCommentHub : Hub
     {
         if (!Guid.TryParse(ticketIdStr, out var ticketId))
         {
-            _logger.LogWarning("[TicketCommentHub] JoinTicket failed. Invalid ticket ID format: {TicketIdStr}", ticketIdStr);
+            _logger.LogWarning("[TicketChatHub] JoinTicket failed. Invalid ticket ID format: {TicketIdStr}", ticketIdStr);
             throw new HubException("Invalid ticket ID format.");
         }
 
         var actorUserId = GetCurrentUserId();
         if (!actorUserId.HasValue)
         {
-            _logger.LogWarning("[TicketCommentHub] JoinTicket failed. User unauthorized.");
+            _logger.LogWarning("[TicketChatHub] JoinTicket failed. User unauthorized.");
             throw new HubException("Unauthorized.");
         }
 
@@ -47,20 +47,20 @@ public class TicketCommentHub : Hub
         var canAccess = await _authService.CanAccessTicketAsync(ticketId, actorUserId.Value, actorRoles);
         if (!canAccess)
         {
-            _logger.LogWarning("[TicketCommentHub] JoinTicket failed. User {UserId} does not have access to ticket {TicketId}", actorUserId, ticketId);
+            _logger.LogWarning("[TicketChatHub] JoinTicket failed. User {UserId} does not have access to ticket {TicketId}", actorUserId, ticketId);
             throw new HubException("Forbidden: No access to this ticket.");
         }
 
-        // Add to public comments group
+        // Add to public chats group
         await Groups.AddToGroupAsync(Context.ConnectionId, PublicGroup(ticketId));
 
-        // Add to internal comments group if user is Staff/Manager/Admin
-        if (_authService.CanViewInternalComments(actorRoles))
+        // Add to internal chats group if user is Staff/Manager/Admin
+        if (_authService.CanViewInternalChats(actorRoles))
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
         }
 
-        _logger.LogInformation("[TicketCommentHub] User {UserId} connected to ticket {TicketId} (ConnId: {ConnId})", actorUserId, ticketId, Context.ConnectionId);
+        _logger.LogInformation("[TicketChatHub] User {UserId} connected to ticket {TicketId} (ConnId: {ConnId})", actorUserId, ticketId, Context.ConnectionId);
     }
 
     /// <summary>
@@ -76,11 +76,11 @@ public class TicketCommentHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, PublicGroup(ticketId));
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
 
-        _logger.LogInformation("[TicketCommentHub] User {UserId} disconnected from ticket {TicketId} (ConnId: {ConnId})", GetCurrentUserId(), ticketId, Context.ConnectionId);
+        _logger.LogInformation("[TicketChatHub] User {UserId} disconnected from ticket {TicketId} (ConnId: {ConnId})", GetCurrentUserId(), ticketId, Context.ConnectionId);
     }
 
     /// <summary>
-    /// Client broadcasts that they are typing a comment.
+    /// Client broadcasts that they are typing a chat message.
     /// </summary>
     public async Task Typing(string ticketIdStr)
     {

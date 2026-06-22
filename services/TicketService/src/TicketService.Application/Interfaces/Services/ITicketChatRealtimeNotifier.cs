@@ -4,7 +4,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 
 namespace TicketService.Application.Interfaces.Services;
 
-public interface ITicketCommentRealtimeNotifier
+public interface ITicketChatRealtimeNotifier
 {
-    Task NotifyCommentAddedAsync(TicketCommentDTO comment, CancellationToken cancellationToken = default);
+    Task NotifyChatAddedAsync(TicketChatDTO chat, CancellationToken cancellationToken = default);
 }

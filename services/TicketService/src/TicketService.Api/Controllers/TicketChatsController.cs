@@ -3,7 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -12,15 +12,15 @@ using TicketService.Domain.Enums;
 namespace TicketService.Api.Controllers;
 
 [ApiController]
-[Route("api/tickets/{ticketId}/comments")]
+[Route("api/tickets/{ticketId}/chats")]
 [Authorize]
 [Produces("application/json")]
-public class TicketCommentsController : ControllerBase
+public class TicketChatsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ITicketCurrentUserService _currentUser;
 
-    public TicketCommentsController(IMediator mediator, ITicketCurrentUserService currentUser)
+    public TicketChatsController(IMediator mediator, ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
         _currentUser = currentUser;
@@ -45,7 +45,7 @@ public class TicketCommentsController : ControllerBase
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AddComment(Guid ticketId, [FromBody] CommentAddCommand command, CancellationToken ct)
+    public async Task<IActionResult> AddChat(Guid ticketId, [FromBody] ChatAddCommand command, CancellationToken ct)
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
@@ -83,8 +83,8 @@ public class TicketCommentsController : ControllerBase
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketCommentDTO>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetComments(
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChats(
         Guid ticketId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -94,7 +94,7 @@ public class TicketCommentsController : ControllerBase
         if (!actorId.HasValue)
             return Unauthorized();
 
-        var result = await _mediator.Send(new TicketCommentsQuery
+        var result = await _mediator.Send(new TicketChatsQuery
         {
             TicketId = ticketId,
             ActorUserId = actorId.Value,

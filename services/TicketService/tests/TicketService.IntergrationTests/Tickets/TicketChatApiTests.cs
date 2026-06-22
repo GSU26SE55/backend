@@ -4,7 +4,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -13,14 +13,14 @@ using TicketService.IntergrationTests.Fixtures;
 
 namespace TicketService.IntergrationTests.Tickets;
 
-public class TicketCommentApiTests : IClassFixture<TicketApiFactory>
+public class TicketChatApiTests : IClassFixture<TicketApiFactory>
 {
     private readonly HttpClient _client;
     private readonly System.Text.Json.JsonSerializerOptions _jsonOptions;
     private readonly TicketDbContext _db;
     private readonly Guid _ticketId = Guid.NewGuid();
 
-    public TicketCommentApiTests(TicketApiFactory factory)
+    public TicketChatApiTests(TicketApiFactory factory)
     {
         _client = factory.CreateClient();
         _jsonOptions = new System.Text.Json.JsonSerializerOptions
@@ -74,17 +74,17 @@ public class TicketCommentApiTests : IClassFixture<TicketApiFactory>
     }
 
     [Fact]
-    public async Task AddComment_ValidData_Returns201Created()
+    public async Task AddChat_ValidData_Returns201Created()
     {
         // Arrange
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             Body = "This is a test comment from integration tests.",
             IsInternal = false
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tickets/{_ticketId}/comments", command);
+        var response = await _client.PostAsJsonAsync($"/api/tickets/{_ticketId}/chats", command);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -96,16 +96,16 @@ public class TicketCommentApiTests : IClassFixture<TicketApiFactory>
     }
 
     [Fact]
-    public async Task AddComment_InvalidData_Returns400BadRequest()
+    public async Task AddChat_InvalidData_Returns400BadRequest()
     {
         // Arrange
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             Body = "" // Invalid
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tickets/{_ticketId}/comments", command);
+        var response = await _client.PostAsJsonAsync($"/api/tickets/{_ticketId}/chats", command);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -116,10 +116,10 @@ public class TicketCommentApiTests : IClassFixture<TicketApiFactory>
     }
 
     [Fact]
-    public async Task GetComments_Returns200OK()
+    public async Task GetChats_Returns200OK()
     {
         // Arrange
-        var comment = new TicketComment
+        var chat = new TicketChat
         {
             Id = Guid.NewGuid(),
             TicketId = _ticketId,
@@ -131,19 +131,19 @@ public class TicketCommentApiTests : IClassFixture<TicketApiFactory>
             IsInternal = false,
             IsDeleted = false
         };
-        _db.TicketComments.Add(comment);
+        _db.TicketChats.Add(chat);
         await _db.SaveChangesAsync();
 
         // Act
-        var response = await _client.GetAsync($"/api/tickets/{_ticketId}/comments?page=1&pageSize=10");
+        var response = await _client.GetAsync($"/api/tickets/{_ticketId}/chats?page=1&pageSize=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<CommonResponse<PaginationResponse<TicketCommentDTO>>>(_jsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<PaginationResponse<TicketChatDTO>>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data.Should().NotBeNull();
         result.Data!.Items.Should().NotBeEmpty();
-        result.Data!.Items.Should().Contain(x => x.Id == comment.Id.ToString());
+        result.Data!.Items.Should().Contain(x => x.Id == chat.Id.ToString());
     }
 }

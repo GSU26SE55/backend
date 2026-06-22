@@ -19,7 +19,8 @@ public class UnitOfWork : ITicketUnitOfWork
 
     public IGenericRepository<Ticket> Tickets => new GenericRepository<Ticket>(_context);
     public IGenericRepository<TicketActivity> TicketActivities => new GenericRepository<TicketActivity>(_context);
-    public IGenericRepository<TicketComment> TicketComments => new GenericRepository<TicketComment>(_context);
+    public IGenericRepository<TicketChat> TicketChats => new GenericRepository<TicketChat>(_context);
+    public IGenericRepository<TicketChatEdit> TicketChatEdits => new GenericRepository<TicketChatEdit>(_context);
     public IGenericRepository<TicketAttachment> TicketAttachments => new GenericRepository<TicketAttachment>(_context);
     public IGenericRepository<SlaTimer> SlaTimers => new GenericRepository<SlaTimer>(_context);
     public IGenericRepository<SlaPauseEvent> SlaPauseEvents => new GenericRepository<SlaPauseEvent>(_context);

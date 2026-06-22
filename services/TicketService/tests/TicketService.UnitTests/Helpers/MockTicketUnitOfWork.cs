@@ -39,7 +39,7 @@ public static class MockTicketUnitOfWork
                    Mock<IGenericRepository<StaffAccount>> staff,
                    Mock<IGenericRepository<SlaTimer>> slaTimers,
                    Mock<IGenericRepository<SlaPauseEvent>> slaPauseEvents,
-                   Mock<IGenericRepository<TicketComment>> comments,
+                   Mock<IGenericRepository<TicketChat>> chats,
                    Mock<IGenericRepository<TicketAttachment>> attachments,
                    Mock<IGenericRepository<MaintenanceLog>> logs,
                    Mock<IGenericRepository<KnowledgeBaseArticle>> kbArticles,
@@ -53,7 +53,7 @@ public static class MockTicketUnitOfWork
             IEnumerable<OutboxMessage>? outboxSeed = null,
             IEnumerable<SlaTimer>? slaTimerSeed = null,
             IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null,
-            IEnumerable<TicketComment>? commentSeed = null,
+            IEnumerable<TicketChat>? chatSeed = null,
             IEnumerable<TicketAttachment>? attachmentSeed = null,
             IEnumerable<MaintenanceLog>? logSeed = null,
             IEnumerable<KnowledgeBaseArticle>? kbSeed = null,
@@ -88,9 +88,9 @@ public static class MockTicketUnitOfWork
         var slaPauseEvents = new Mock<IGenericRepository<SlaPauseEvent>>();
         slaPauseEvents.Setup(r => r.GetAllAsync()).Returns(slaPauseEventsMock);
 
-        var commentsMock = (commentSeed ?? Array.Empty<TicketComment>()).BuildMock();
-        var comments = new Mock<IGenericRepository<TicketComment>>();
-        comments.Setup(r => r.GetAllAsync()).Returns(commentsMock);
+        var chatsMock = (chatSeed ?? Array.Empty<TicketChat>()).BuildMock();
+        var chats = new Mock<IGenericRepository<TicketChat>>();
+        chats.Setup(r => r.GetAllAsync()).Returns(chatsMock);
 
         var attachmentsMock = (attachmentSeed ?? Array.Empty<TicketAttachment>()).BuildMock();
         var attachments = new Mock<IGenericRepository<TicketAttachment>>();
@@ -126,7 +126,7 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.StaffAccounts).Returns(staff.Object);
         uow.SetupGet(u => u.SlaTimers).Returns(slaTimers.Object);
         uow.SetupGet(u => u.SlaPauseEvents).Returns(slaPauseEvents.Object);
-        uow.SetupGet(u => u.TicketComments).Returns(comments.Object);
+        uow.SetupGet(u => u.TicketChats).Returns(chats.Object);
         uow.SetupGet(u => u.TicketAttachments).Returns(attachments.Object);
         uow.SetupGet(u => u.MaintenanceLogs).Returns(logs.Object);
         uow.SetupGet(u => u.KnowledgeBaseArticles).Returns(kb.Object);
@@ -139,6 +139,6 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, comments, attachments, logs, kb, kbVersion, kbRefs);
+        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, chats, attachments, logs, kb, kbVersion, kbRefs);
     }
 }

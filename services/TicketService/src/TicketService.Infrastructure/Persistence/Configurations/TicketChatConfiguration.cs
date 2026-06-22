@@ -6,11 +6,11 @@ using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
-public class TicketCommentConfiguration : IEntityTypeConfiguration<TicketComment>
+public class TicketChatConfiguration : IEntityTypeConfiguration<TicketChat>
 {
-    public void Configure(EntityTypeBuilder<TicketComment> builder)
+    public void Configure(EntityTypeBuilder<TicketChat> builder)
     {
-        builder.ToTable("ticket_comments");
+        builder.ToTable("ticket_chats");
 
         builder.Property(e => e.Id)
             .HasColumnName("id")
@@ -42,6 +42,16 @@ public class TicketCommentConfiguration : IEntityTypeConfiguration<TicketComment
             .HasColumnType("jsonb")
             .HasConversion(new JsonValueConverter<List<Guid>>());
 
+        builder.Property(e => e.EditedAt)
+            .HasColumnName("edited_at");
+
+        builder.Property(e => e.EditCount)
+            .HasColumnName("edit_count")
+            .HasDefaultValue(0);
+
+        builder.Property(e => e.LastEditedByUserId)
+            .HasColumnName("last_edited_by_user_id");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -61,7 +71,7 @@ public class TicketCommentConfiguration : IEntityTypeConfiguration<TicketComment
         builder.HasIndex(e => e.AuthorUserId);
 
         builder.HasOne(e => e.Ticket)
-            .WithMany(e => e.Comments)
+            .WithMany(e => e.Chats)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
     }

@@ -62,7 +62,7 @@ builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSch
 
         var accessToken = context.Request.Query["access_token"];
         var path = context.HttpContext.Request.Path;
-        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket-comments"))
+        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket-chats"))
         {
             context.Token = accessToken;
         }
@@ -136,7 +136,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<TicketCommentHub>("/hubs/ticket-comments");
+app.MapHub<TicketChatHub>("/hubs/ticket-chats");
 app.MapMetrics();
 app.MapHealthChecks("/health");
 

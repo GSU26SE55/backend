@@ -17,7 +17,8 @@ public class TicketDbContext : DbContext
 
     public virtual DbSet<Ticket> Tickets { get; set; }
     public virtual DbSet<TicketActivity> TicketActivities { get; set; }
-    public virtual DbSet<TicketComment> TicketComments { get; set; }
+    public virtual DbSet<TicketChat> TicketChats { get; set; }
+    public virtual DbSet<TicketChatEdit> TicketChatEdits { get; set; }
     public virtual DbSet<TicketAttachment> TicketAttachments { get; set; }
     public virtual DbSet<SlaTimer> SlaTimers { get; set; }
     public virtual DbSet<SlaPauseEvent> SlaPauseEvents { get; set; }

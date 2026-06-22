@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -14,20 +14,20 @@ using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Handler.Comments;
+namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, TicketActionResponse>
+public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
-    private readonly ITicketCommentRealtimeNotifier _realtimeNotifier;
-    private readonly ILogger<CommentAddCommandHandler> _logger;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<ChatAddCommandHandler> _logger;
 
-    public CommentAddCommandHandler(
+    public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
-        ITicketCommentRealtimeNotifier realtimeNotifier,
-        ILogger<CommentAddCommandHandler> logger)
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        ILogger<ChatAddCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -35,13 +35,13 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
         _logger = logger;
     }
 
-    public async Task<TicketActionResponse> Handle(CommentAddCommand request, CancellationToken ct)
+    public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        var comment = new TicketComment
+        var chat = new TicketChat
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
@@ -54,7 +54,7 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             AttachmentFileIds = request.Attachments?.Select(a => a.FileId).ToList() ?? new List<Guid>()
         };
 
-        await _uow.TicketComments.AddAsync(comment);
+        await _uow.TicketChats.AddAsync(chat);
 
         if (request.Attachments != null && request.Attachments.Any())
         {
@@ -83,43 +83,43 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             request.UserId,
             request.UserRole,
             request.UserDisplayName,
-            ActivityActionEnum.Commented,
+            ActivityActionEnum.Chatted,
             null,
             request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-            $"Đã thêm bình luận: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+            $"Đã thêm tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
         await _uow.SaveChangesAsync(ct);
 
-        // Broadcast comment via SignalR
+        // Broadcast chat via SignalR
         try
         {
-            var commentDto = new TicketCommentDTO
+            var chatDto = new TicketChatDTO
             {
-                Id = comment.Id.ToString(),
-                TicketId = comment.TicketId.ToString(),
-                AuthorUserId = comment.AuthorUserId.ToString(),
-                AuthorRole = comment.AuthorRole,
-                AuthorDisplayName = comment.AuthorDisplayName,
-                Body = comment.Body,
-                IsInternal = comment.IsInternal,
-                AttachmentFileIds = comment.AttachmentFileIds.Select(id => id.ToString()).ToList(),
-                CreatedAt = comment.CreatedAt
+                Id = chat.Id.ToString(),
+                TicketId = chat.TicketId.ToString(),
+                AuthorUserId = chat.AuthorUserId.ToString(),
+                AuthorRole = chat.AuthorRole,
+                AuthorDisplayName = chat.AuthorDisplayName,
+                Body = chat.Body,
+                IsInternal = chat.IsInternal,
+                AttachmentFileIds = chat.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+                CreatedAt = chat.CreatedAt
             };
-            await _realtimeNotifier.NotifyCommentAddedAsync(commentDto, ct);
+            await _realtimeNotifier.NotifyChatAddedAsync(chatDto, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[CommentAdd] Failed to broadcast CommentAdded SignalR event for ticket {TicketId}", ticket.Id);
+            _logger.LogError(ex, "[ChatAdd] Failed to broadcast ChatAdded SignalR event for ticket {TicketId}", ticket.Id);
         }
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm bình luận thành công.",
+            Message = "Thêm tin nhắn chat thành công.",
             Data = new TicketActionDTO
             {
-                Id = comment.Id.ToString(),
+                Id = chat.Id.ToString(),
                 TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
                 Status = ticket.Status

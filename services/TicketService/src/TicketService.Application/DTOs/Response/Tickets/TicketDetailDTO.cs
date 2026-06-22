@@ -20,7 +20,7 @@ public class TicketDetailDTO : TicketDTO
     public EscalationReasonEnum? EscalationReason { get; set; }
     public string? OriginAlertId { get; set; }
     public List<TicketActivityDTO> Activities { get; set; } = new();
-    public List<TicketCommentDTO> Comments { get; set; } = new();
+    public List<TicketChatDTO> Chats { get; set; } = new();
     public List<MaintenanceLogDTO> MaintenanceLogs { get; set; } = new();
     public List<string> AttachmentFileIds { get; set; } = new();
 }

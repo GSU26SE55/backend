@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 
 namespace TicketService.Application.Interfaces.Services;
 
-public interface ICommentAuthorizationService
+public interface IChatAuthorizationService
 {
     Task<bool> CanAccessTicketAsync(Guid ticketId, Guid actorUserId, IReadOnlyCollection<string> actorRoles, CancellationToken cancellationToken = default);
-    bool CanViewInternalComments(IReadOnlyCollection<string> actorRoles);
+    bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles);
 }

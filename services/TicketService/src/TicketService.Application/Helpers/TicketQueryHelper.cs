@@ -67,7 +67,7 @@ public static class TicketQueryHelper
         return HasRole(actorRoles, "Staff") && assignedStaffId == actorUserId.Value;
     }
 
-    public static bool CanViewInternalComments(IReadOnlyCollection<string> actorRoles)
+    public static bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
 
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)

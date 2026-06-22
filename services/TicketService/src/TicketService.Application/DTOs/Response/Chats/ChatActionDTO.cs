@@ -1,8 +1,8 @@
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.DTOs.Response.Comments;
+namespace TicketService.Application.DTOs.Response.Chats;
 
-public class CommentActionDTO
+public class ChatActionDTO
 {
     public string Id { get; set; } = string.Empty;
     public string? TicketId { get; set; }

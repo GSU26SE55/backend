@@ -10,11 +10,11 @@ using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Infrastructure.Implements.Services;
 
-public class CommentAuthorizationService : ICommentAuthorizationService
+public class ChatAuthorizationService : IChatAuthorizationService
 {
     private readonly ITicketUnitOfWork _unitOfWork;
 
-    public CommentAuthorizationService(ITicketUnitOfWork unitOfWork)
+    public ChatAuthorizationService(ITicketUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
@@ -33,8 +33,8 @@ public class CommentAuthorizationService : ICommentAuthorizationService
         return TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, actorUserId, actorRoles);
     }
 
-    public bool CanViewInternalComments(IReadOnlyCollection<string> actorRoles)
+    public bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles)
     {
-        return TicketQueryHelper.CanViewInternalComments(actorRoles);
+        return TicketQueryHelper.CanViewInternalChats(actorRoles);
     }
 }

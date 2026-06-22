@@ -5,9 +5,9 @@ using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Command.CommentAdd;
+namespace TicketService.Application.CQRS.Command.ChatAdd;
 
-public class CommentAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
@@ -20,7 +20,7 @@ public class CommentAddCommand : IRequest<TicketActionResponse>, IValidatable<Ti
 
     public required string Body { get; set; }
     public bool IsInternal { get; set; }
-    public List<CommentAttachmentInput>? Attachments { get; set; }
+    public List<ChatAttachmentInput>? Attachments { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -60,7 +60,7 @@ public class CommentAddCommand : IRequest<TicketActionResponse>, IValidatable<Ti
     }
 }
 
-public record CommentAttachmentInput(
+public record ChatAttachmentInput(
     Guid FileId,
     string FileName,
     string ContentType,

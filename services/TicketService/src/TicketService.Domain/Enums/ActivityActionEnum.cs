@@ -15,8 +15,8 @@ public enum ActivityActionEnum
     StaffAssigned = 4,
     /// <summary>Đã điều chuyển nhân viên xử lý.</summary>
     StaffReassigned = 5,
-    /// <summary>Đã thêm bình luận.</summary>
-    Commented = 6,
+    /// <summary>Đã thêm tin nhắn chat.</summary>
+    Chatted = 6,
     /// <summary>Đã thêm nhật ký bảo trì.</summary>
     MaintenanceLogged = 7,
     /// <summary>Đã đính kèm tệp.</summary>

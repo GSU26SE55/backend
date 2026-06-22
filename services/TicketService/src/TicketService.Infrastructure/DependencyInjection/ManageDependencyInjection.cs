@@ -76,9 +76,9 @@ public static class ManageDependencyInjection
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
         services.AddScoped<ITicketCurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
 
-        // Realtime Comment Services
-        services.AddScoped<ICommentAuthorizationService, CommentAuthorizationService>();
-        services.AddScoped<ITicketCommentRealtimeNotifier, SignalRTicketCommentNotifier>();
+        // Realtime Chat Services
+        services.AddScoped<IChatAuthorizationService, ChatAuthorizationService>();
+        services.AddScoped<ITicketChatRealtimeNotifier, SignalRTicketChatNotifier>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

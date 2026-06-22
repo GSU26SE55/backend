@@ -36,7 +36,7 @@ public class Ticket : AuditableEntity
     // Navigation properties
     public SlaTimer? SlaTimer { get; set; }
     public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();
-    public ICollection<TicketComment> Comments { get; set; } = new List<TicketComment>();
+    public ICollection<TicketChat> Chats { get; set; } = new List<TicketChat>();
     public ICollection<MaintenanceLog> MaintenanceLogs { get; set; } = new List<MaintenanceLog>();
     public ICollection<TicketAttachment> Attachments { get; set; } = new List<TicketAttachment>();
     public ICollection<TicketKbReference> KbReferences { get; set; } = new List<TicketKbReference>();
