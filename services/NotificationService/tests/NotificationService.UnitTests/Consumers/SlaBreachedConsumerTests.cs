@@ -6,35 +6,8 @@ using SharedContracts.Events;
 
 namespace NotificationService.UnitTests.Consumers;
 
-public class SlaConsumersTests
+public class SlaBreachedConsumerTests
 {
-    [Fact]
-    public async Task SlaWarning_Writes_InAppPush()
-    {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<SlaWarningConsumer>();
-        var evt = new SlaWarningEvent
-        {
-            TicketId = Guid.NewGuid(),
-            WarningAt = new DateTime(2026, 6, 22, 10, 0, 0, DateTimeKind.Utc),
-            Percentage = 80
-        };
-
-        await harness.Bus.Publish(evt);
-        (await harness.Consumed.Any<SlaWarningEvent>()).Should().BeTrue();
-
-        written.Should().HaveCount(2);
-        written.Should().AllSatisfy(n =>
-        {
-            n.Type.Should().Be(NotificationTypeEnum.SlaWarning);
-            n.UserId.Should().Be(Guid.Empty);
-            n.EntityType.Should().Be("Ticket");
-            n.EntityId.Should().Be(evt.TicketId);
-            n.Body.Should().Contain("80");
-        });
-
-        await harness.Stop();
-    }
-
     [Fact]
     public async Task SlaBreached_Writes_InAppPush_WithPriority()
     {
