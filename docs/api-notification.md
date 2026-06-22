@@ -16,10 +16,11 @@ NotificationService quản lý notification gửi tới user theo nhiều kênh 
 
 Các loại notification khác trong `NotificationTypeEnum` (TicketCreated, SlaWarning, BatteryAnomalyDetected, …) hiện được tạo qua REST API `POST /api/notifications` (admin/internal tooling) hoặc sẽ mở rộng consumer sau.
 
-REST API hiện tại phơi 2 nhóm endpoint:
+REST API hiện tại phơi 3 nhóm endpoint:
 
 - **`/api/notifications`** — Người dùng cuối xem danh sách notification của chính mình; Admin / công cụ test tạo notification thủ công (backfill, smoke test).
 - **`/api/device-tokens`** — Người dùng cuối đăng ký / hủy / liệt kê push token thiết bị (Expo/FCM) cho Mobile/Web.
+- **`/api/notification-preferences`** — Người dùng cuối xem / cập nhật cài đặt kênh gửi (push/email/sms/in-app) và quiet hours của chính mình.
 
 ---
 
@@ -50,7 +51,10 @@ REST API hiện tại phơi 2 nhóm endpoint:
   "items": [ ... ],
   "totalItems": 42,
   "pageNumber": 1,
-  "pageSize": 10
+  "pageSize": 10,
+  "totalPages": 5,
+  "hasNextPage": true,
+  "hasPreviousPage": false
 }
 ```
 
@@ -60,6 +64,9 @@ REST API hiện tại phơi 2 nhóm endpoint:
 | `totalItems` | `int` | Tổng số bản ghi match filter (không phụ thuộc page) |
 | `pageNumber` | `int` | Trang hiện tại (1-based) |
 | `pageSize` | `int` | Số bản ghi tối đa mỗi trang |
+| `totalPages` | `int` | Tổng số trang — `ceil(totalItems / pageSize)` (computed) |
+| `hasNextPage` | `bool` | `true` nếu còn trang sau (`pageNumber < totalPages`) (computed) |
+| `hasPreviousPage` | `bool` | `true` nếu có trang trước (`pageNumber > 1`) (computed) |
 
 **Lỗi HTTP chung:**
 - `400` — Validation hoặc input không hợp lệ; body theo `CommonResponse<T>` với `listErrors`
@@ -120,7 +127,7 @@ Kênh phát notification.
 
 ### `NotificationFrequencyEnum`
 
-Tần suất gửi notification — đặt ở `NotificationPreference` per-user. Không xuất hiện trên 2 endpoint hiện tại nhưng được khai báo trong domain để hỗ trợ digest (§49 — Notification advanced).
+Tần suất gửi notification — đặt ở `NotificationPreference` per-user (default `Immediate`). Hiện **chưa expose** qua endpoint `/api/notification-preferences` (request/response của PUT/GET không có field `frequency`) — chỉ tồn tại ở tầng entity để hỗ trợ digest sau (§49 — Notification advanced).
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
@@ -155,8 +162,8 @@ Base route: `/api/notifications`
 
 | Param | Type | Bắt buộc | Default | Mô tả |
 |---|---|---|---|---|
-| `pageNumber` | `int` | Không | `1` | Số trang (1-based) |
-| `pageSize` | `int` | Không | `10` | Số bản ghi mỗi trang |
+| `pageNumber` | `int` | Không | `1` | Số trang (1-based). Giá trị `≤ 0` tự về `1`. |
+| `pageSize` | `int` | Không | `10` | Số bản ghi mỗi trang. Giá trị `≤ 0` tự về `10`; **tối đa `100`** — gửi lớn hơn sẽ bị clamp xuống `100`. |
 | `type` | `NotificationTypeEnum?` (int) | Không | `null` | Lọc theo loại notification (1=TicketCreated, 2=TicketAssigned,…) |
 | `channel` | `NotificationChannelEnum?` (int) | Không | `null` | Lọc theo kênh (1=Push, 2=Email, 3=Sms, 4=InApp) |
 | `status` | `NotificationStatusEnum?` (int) | Không | `null` | Lọc theo trạng thái (1=Pending, 2=Sent, 3=Failed, 4=Read) |
@@ -224,6 +231,7 @@ Authorization: Bearer eyJ...
 - Mảng `items` có thể rỗng (`[]`) khi user chưa có notification nào hoặc filter quá hẹp — vẫn trả `200` chứ không phải `404`.
 - Query đã filter sẵn `IsDeleted = false` (soft delete) và `UserId = current user`. User KHÔNG thể đọc notification của user khác.
 - Enum được serialize ra **số nguyên** (giá trị int), không phải string. FE map ngược ra tên qua bảng [Enums](#enums).
+- Entity `Notification` còn có cột `FailureReason` (lý do khi `Status = Failed`) **chỉ lưu nội bộ DB — KHÔNG expose** qua DTO/API.
 
 **Lỗi thường gặp:**
 - `400` — JWT đã pass `[Authorize]` nhưng claim `UserId` (hoặc `sub` / `NameIdentifier`) thiếu hoặc malformed → server không xác định được user. Đây là **client request error** (token shape sai), không phải auth fail. Body theo `CommonResponse<T>`:
@@ -393,7 +401,7 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 **Lỗi thường gặp:**
 - `400` — Validation lỗi hoặc thiếu claim `UserId`.
 - `401` — Chưa đăng nhập / token hết hạn.
-- `404` — Không tìm thấy token đang đăng ký (active) của user hiện tại.
+- `404` — Không tìm thấy token đang đăng ký (active) của user hiện tại → `"Không tìm thấy thiết bị đang đăng ký."`
 
 ---
 
@@ -438,6 +446,125 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 
 ---
 
+## Endpoints — Notification Preferences
+
+Base route: `/api/notification-preferences`
+
+Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Email/SMS/InApp) và quiet hours. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn lấy từ JWT claim, user chỉ thao tác trên preference của chính mình (không nhận `userId` từ body). Mỗi user có **1 record duy nhất** (1-1 với Account).
+
+> Dispatcher (Sprint 6+) đọc preference này để quyết định gửi qua kênh nào và có tôn trọng quiet hours không (trừ notification có flag `bypassQuietHours` — xem `POST /api/notifications`).
+
+---
+
+### `GET /api/notification-preferences`
+
+**Mục đích:** Lấy cài đặt thông báo của **user hiện tại**. Nếu user **chưa từng cấu hình**, trả về **giá trị mặc định** (KHÔNG ghi DB — không tạo record).
+
+**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+
+**Response `200`:** `CommonResponse<NotificationPreferenceDto>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": {
+    "pushEnabled": true,
+    "emailEnabled": true,
+    "smsEnabled": false,
+    "inAppEnabled": true,
+    "quietHoursStart": "22:00",
+    "quietHoursEnd": "07:00",
+    "timeZone": "Asia/Ho_Chi_Minh"
+  },
+  "listErrors": []
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.pushEnabled` | `bool` | Không | Bật push notification |
+| `data.emailEnabled` | `bool` | Không | Bật email |
+| `data.smsEnabled` | `bool` | Không | Bật SMS |
+| `data.inAppEnabled` | `bool` | Không | Bật in-app |
+| `data.quietHoursStart` | `string?` | Có | Giờ bắt đầu quiet hours dạng `"HH:mm"`; `null` = không quiet hours |
+| `data.quietHoursEnd` | `string?` | Có | Giờ kết thúc quiet hours dạng `"HH:mm"`; `null` = không quiet hours |
+| `data.timeZone` | `string` | Không | Timezone IANA (vd `"Asia/Ho_Chi_Minh"`) |
+
+**Giá trị mặc định (user chưa cấu hình):**
+
+```json
+{
+  "pushEnabled": true,
+  "emailEnabled": true,
+  "smsEnabled": false,
+  "inAppEnabled": true,
+  "quietHoursStart": null,
+  "quietHoursEnd": null,
+  "timeZone": "Asia/Ho_Chi_Minh"
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — Thiếu claim `UserId` → `"Không xác định được UserId từ token."` (body theo `CommonResponse<object>`).
+- `401` — Chưa đăng nhập / token hết hạn.
+
+---
+
+### `PUT /api/notification-preferences`
+
+**Mục đích:** Cập nhật (upsert) cài đặt thông báo của user hiện tại. Nếu chưa có record → **tạo mới**; nếu đã có → **ghi đè**.
+
+**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Default | Validation | Mô tả |
+|---|---|---|---|---|---|
+| `pushEnabled` | `bool` | Không | `true` | — | Bật push |
+| `emailEnabled` | `bool` | Không | `true` | — | Bật email |
+| `smsEnabled` | `bool` | Không | `false` | — | Bật SMS |
+| `inAppEnabled` | `bool` | Không | `true` | — | Bật in-app |
+| `quietHoursStart` | `string?` | Tùy chọn | `null` | Phải đúng định dạng `"HH:mm"` nếu có | Giờ bắt đầu quiet hours; `null` = xóa quiet hours |
+| `quietHoursEnd` | `string?` | Tùy chọn | `null` | Phải đúng định dạng `"HH:mm"` nếu có | Giờ kết thúc quiet hours; `null` = xóa quiet hours |
+| `timeZone` | `string` | Không | `"Asia/Ho_Chi_Minh"` | Không rỗng, tối đa **100 ký tự** | Timezone IANA |
+
+> `userId` **không** nhận từ body — server set từ JWT claim.
+> Quiet hours qua đêm (vd `22:00`–`07:00`) được hỗ trợ. Critical notifications (EnvironmentalIncident, SlaBreached, IncidentDeclared,…) vẫn được gửi bất kể quiet hours.
+
+**Ví dụ:**
+
+```json
+PUT /api/notification-preferences
+Authorization: Bearer eyJ...
+Content-Type: application/json
+
+{
+  "pushEnabled": true,
+  "emailEnabled": false,
+  "smsEnabled": false,
+  "inAppEnabled": true,
+  "quietHoursStart": "22:00",
+  "quietHoursEnd": "07:00",
+  "timeZone": "Asia/Ho_Chi_Minh"
+}
+```
+
+**Response thành công `200`:** `CommonResponse<NotificationPreferenceDto>` — trả về preference sau khi cập nhật (shape giống `GET`).
+
+**Lưu ý:**
+- Sau khi commit, handler **xóa cache Redis** key `notif_pref:{userId}` để Dispatcher đọc preference mới ở lần dispatch kế tiếp.
+- Entity `NotificationPreference` còn có field `Frequency` (`NotificationFrequencyEnum`, default `Immediate`) **không** nhận từ body và **không** trả ra DTO — hiện chưa expose.
+
+**Lỗi thường gặp:**
+- `400` — Validation fail. Body theo `CommonResponse<NotificationPreferenceDto>` với `listErrors`. Các trường hợp:
+  - `QuietHoursStart` / `QuietHoursEnd` sai định dạng → `"Định dạng phải là HH:mm."`
+  - `TimeZone` rỗng → `"TimeZone không được trống."` / `> 100 ký tự` → `"TimeZone tối đa 100 ký tự."`
+  - Thiếu claim `UserId` → `"Không xác định được UserId từ token."`
+- `401` — Chưa đăng nhập / token hết hạn.
+
+---
+
 ## Tham khảo
 
 **Notifications:**
@@ -452,6 +579,14 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 - DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/DeviceToken/DeviceTokenDto.cs`
 - Entity: `services/NotificationService/src/NotificationService.Domain/Entities/DeviceToken.cs`
 
+**Notification Preferences:**
+- Controller: `services/NotificationService/src/NotificationService.Api/Controllers/PreferencesController.cs`
+- Handlers: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Preference/`
+- DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/Preference/NotificationPreferenceDto.cs`
+- Entity: `services/NotificationService/src/NotificationService.Domain/Entities/NotificationPreference.cs`
+
 **Chung:**
 - Domain enums: `services/NotificationService/src/NotificationService.Domain/Enums/`
+- Pagination wrapper (computed fields `totalPages`/`hasNextPage`/`hasPreviousPage`): `shared/src/SharedContracts/Common/Responses/PaginationResponse.cs`
+- Pagination request (clamp `pageSize` max 100): `shared/src/SharedContracts/Common/Requests/PaginationRequest.cs`
 - Flow event-driven (RabbitMQ Consumer) — xem `overall.md §3.3` và các consumer trong `NotificationService.Application/Consumers/` (`AlertTicketSagaFailedConsumer`, `BatteryAlertEscalationRequestedConsumer`, `IotDeviceWentOfflineConsumer`, `EnvironmentalIncidentDetectedConsumer`, `EnvironmentalIncidentResolvedConsumer`).

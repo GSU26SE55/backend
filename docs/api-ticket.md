@@ -311,7 +311,7 @@ Dùng khi gán bài viết Knowledge Base vào Ticket (Nhóm 11).
 | `isIncident` | `bool` | Không | Có được đánh dấu là Incident không |
 | `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
 | `updatedAt` | `string?` | Null nếu chưa cập nhật | Thời điểm cập nhật gần nhất |
-| `slaTimer` | `SlaTimerDTO` | Không | Thông tin SLA timer hiện tại |
+| `slaTimer` | `SlaTimerDTO?` | **Null khi chưa có SLA** | Thông tin SLA timer hiện tại — `null` khi ticket chưa triage (chưa tạo timer) |
 
 ### `TicketDetailDTO` (chi tiết một ticket — extend `TicketDTO`)
 
@@ -374,12 +374,12 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 |---|---|---|---|
 | `id` | `string` | Không | ID comment |
 | `ticketId` | `string` | Không | ID ticket |
-| `authorUserId` | `string?` | Null | ID người viết |
+| `authorUserId` | `string` | Không (default `""`) | ID người viết — BE trả chuỗi rỗng (không phải `null`) nếu không xác định |
 | `authorRole` | `ActorRoleEnum` | Không | Role của người viết |
 | `authorDisplayName` | `string?` | Null | Tên hiển thị |
 | `body` | `string` | Không | Nội dung bình luận |
 | `isInternal` | `bool` | Không | `true` = chỉ Staff/Manager xem được, ẩn với Customer |
-| `attachmentFileIds` | `string[]?` | Null | Danh sách FileId đính kèm |
+| `attachmentFileIds` | `string[]` | Không (default `[]`) | Danh sách FileId đính kèm — luôn là mảng (rỗng nếu không có), không bao giờ `null` |
 | `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
 
 ### `MaintenanceLogDTO`
@@ -387,7 +387,6 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `id` | `string` | Không | ID nhật ký |
-| `ticketId` | `string` | Không | ID ticket |
 | `staffId` | `string` | Không | ID Staff tạo nhật ký |
 | `logType` | `MaintenanceLogTypeEnum` | Không | Loại nhật ký |
 | `summary` | `string` | Không (default `""`) | Tóm tắt công việc |
@@ -397,10 +396,10 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `resolutionNote` | `string?` | Null | Ghi chú kết quả |
 | `startedAt` | `string` | Không | Thời điểm bắt đầu (UTC) |
 | `completedAt` | `string?` | Null | Thời điểm hoàn thành (UTC) |
-| `attachmentFileIds` | `string[]?` | Null | File đính kèm chung |
-| `beforePhotosFileIds` | `string[]?` | Null | Ảnh trước khi sửa |
-| `afterPhotosFileIds` | `string[]?` | Null | Ảnh sau khi sửa |
-| `relatedKbArticleIds` | `string[]?` | Null | ID bài viết KB liên quan |
+| `attachmentFileIds` | `string[]` | Không (default `[]`) | File đính kèm chung — luôn là mảng (rỗng nếu không có), không `null` |
+| `beforePhotosFileIds` | `string[]` | Không (default `[]`) | Ảnh trước khi sửa — luôn là mảng, không `null` |
+| `afterPhotosFileIds` | `string[]` | Không (default `[]`) | Ảnh sau khi sửa — luôn là mảng, không `null` |
+| `relatedKbArticleIds` | `string[]` | Không (default `[]`) | ID bài viết KB liên quan — luôn là mảng, không `null` |
 | `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
 
 ### `StaffMaintenanceLogGroupDTO`
@@ -749,10 +748,12 @@ Base path: `/api/customer/tickets`
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `title` | `string` | Bắt buộc | Không rỗng, max 200 ký tự | Tiêu đề ngắn gọn |
-| `description` | `string` | Bắt buộc | Max 2000 ký tự | Mô tả chi tiết vấn đề |
+| `title` | `string` | Bắt buộc | Không rỗng/whitespace (`400` nếu thiếu) | Tiêu đề ngắn gọn |
+| `description` | `string` | Bắt buộc | Không rỗng/whitespace (`400` nếu thiếu) | Mô tả chi tiết vấn đề |
 | `category` | `TicketCategoryEnum` | Bắt buộc | — | Loại lỗi |
 | `batteryAssetId` | `Guid?` | Không | — | ID thiết bị đang gặp lỗi |
+
+> **Lưu ý:** `TicketCreateCommand.ValidateAsync()` hiện chỉ check **không rỗng/whitespace** cho `title`/`description` — **KHÔNG** enforce giới hạn độ dài (max 200/2000). FE nên tự giới hạn input để tránh dữ liệu quá dài.
 
 **Response thành công `201`:** `TicketActionResponse`
 
@@ -857,8 +858,8 @@ Base path: `/api/staff/tickets`
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `logType` | `MaintenanceLogTypeEnum?` | Không | Loại nhật ký cho log tự động |
-| `latitude` | `decimal?` | Không | Vĩ độ check-in |
-| `longitude` | `decimal?` | Không | Kinh độ check-in |
+
+> **Lưu ý:** `TicketStartCommand` chỉ nhận `logType`. **Không** có field tọa độ check-in (`latitude`/`longitude`) ở endpoint này — nếu cần ghi tọa độ, dùng `checkInLatitude`/`checkInLongitude`/`checkInAt` khi tạo maintenance log qua `POST /api/tickets/{ticketId}/maintenance-logs`.
 
 **Response thành công `200`:** `TicketActionResponse`
 
@@ -2034,6 +2035,17 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 ---
 
 ## Changelog
+
+### 2026-06-22 — Đối chiếu DTO/request với code thực tế (6 fix)
+
+Verify toàn bộ doc với codebase TicketService. Enums (16/16) và SignalR Hub khớp 100%. Sửa 6 sai lệch:
+
+- **`MaintenanceLogDTO`:** xóa field `ticketId` — DTO thực tế ([`MaintenanceLogDTO.cs`]) **không có** property này (đừng nhầm với `TicketActionDTO.ticketId`).
+- **`MaintenanceLogDTO`:** `attachmentFileIds`/`beforePhotosFileIds`/`afterPhotosFileIds`/`relatedKbArticleIds` trước ghi `string[]?` (Null) — thực tế là `List<string>` default `[]`, **không bao giờ null**. Đổi sang `string[]` (luôn mảng).
+- **`TicketCommentDTO`:** `authorUserId` thực tế `string=""` (không null, sửa từ `string?`); `attachmentFileIds` thực tế `List<string>` default `[]` (không null, sửa từ `string[]?`).
+- **`TicketDTO.slaTimer`:** thực tế `SlaTimerDTO?` — null khi ticket chưa triage. Sửa từ non-null sang nullable.
+- **`POST /api/staff/tickets/{id}/start`:** xóa field `latitude`/`longitude` khỏi body — `TicketStartCommand` **chỉ có** `logType`. Tọa độ check-in chỉ ghi qua endpoint maintenance-log.
+- **`POST /api/customer/tickets`:** bỏ "max 200/2000 ký tự" khỏi validation `title`/`description` — `TicketCreateCommand.ValidateAsync()` chỉ check không rỗng, **không** enforce độ dài.
 
 ### 2026-06-22 — Bổ sung SignalR Hub + sửa doc `POST .../comments`
 
