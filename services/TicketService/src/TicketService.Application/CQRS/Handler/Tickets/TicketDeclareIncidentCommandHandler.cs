@@ -3,6 +3,7 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.DTOs.Response.Tickets;
+using SharedContracts.Events;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -53,7 +54,7 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             reason: request.IncidentDescription);
 
         // Outbox: Incident Declared
-        await _producer.PublishAsync(new IncidentDeclaredIntegrationEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
+        await _producer.PublishAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

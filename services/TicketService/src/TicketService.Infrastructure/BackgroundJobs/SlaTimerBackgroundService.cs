@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
@@ -71,7 +72,7 @@ public class SlaTimerBackgroundService : BackgroundService
                 _logger.LogWarning("SLA breached for ticket {TicketId}", timer.TicketId);
                 timer.Status = SlaTimerStatusEnum.Breached;
                 timer.BreachAt = currentTime;
-                await producer.PublishAsync(new SlaBreachedIntegrationEvent(timer.TicketId, timer.BreachAt.Value), stoppingToken);
+                await producer.PublishAsync(new SlaBreachedEvent { TicketId = timer.TicketId, BreachedAt = timer.BreachAt.Value, Priority = timer.Ticket?.Priority.ToString() ?? string.Empty }, stoppingToken);
             }
             else
             {
@@ -84,7 +85,7 @@ public class SlaTimerBackgroundService : BackgroundService
                     // SLA warning
                     _logger.LogWarning("SLA warning for ticket {TicketId}", timer.TicketId);
                     timer.WarningSentAt = currentTime;
-                    await producer.PublishAsync(new SlaWarningIntegrationEvent(timer.TicketId, timer.WarningSentAt.Value, percentage), stoppingToken);
+                    await producer.PublishAsync(new SlaWarningEvent { TicketId = timer.TicketId, WarningAt = timer.WarningSentAt.Value, Percentage = percentage }, stoppingToken);
                 }
             }
         }
