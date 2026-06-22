@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NotificationService.Application.Consumers;
 using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
@@ -13,8 +14,8 @@ using SharedContracts.Events;
 namespace NotificationService.UnitTests.Consumers;
 
 /// <summary>
-/// Sprint 5B #238 — BatteryAlertEscalationRequestedConsumer publishes Push + InApp
-/// notifications cho escalation event.
+/// Sprint 5B #238 — BatteryAlertEscalationRequestedConsumer publishes Push + Email + InApp
+/// notifications cho escalation event (overall.md §3.4).
 /// </summary>
 public class BatteryAlertEscalationRequestedConsumerTests
 {
@@ -23,6 +24,7 @@ public class BatteryAlertEscalationRequestedConsumerTests
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x => x.AddConsumer<BatteryAlertEscalationRequestedConsumer>())
             .AddSingleton(mediator)
+            .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
             .AddSingleton(NullLogger<BatteryAlertEscalationRequestedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
@@ -42,7 +44,7 @@ public class BatteryAlertEscalationRequestedConsumerTests
         MinutesSinceDetection: 6);
 
     [Fact]
-    public async Task Consume_ShouldDispatch_PushAndInAppNotifications()
+    public async Task Consume_ShouldDispatch_PushEmailInAppNotifications()
     {
         var mediator = new Mock<IMediator>();
         var calls = new List<CreateNotificationCommand>();
@@ -55,8 +57,9 @@ public class BatteryAlertEscalationRequestedConsumerTests
         await harness.Bus.Publish(MakeEvent());
         (await harness.Consumed.Any<BatteryAlertEscalationRequestedEvent>()).Should().BeTrue();
 
-        calls.Should().HaveCount(2);
+        calls.Should().HaveCount(3);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
+        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Email);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
         calls.Should().AllSatisfy(c =>
             c.Type.Should().Be(NotificationTypeEnum.BatteryAlertEscalationPending));

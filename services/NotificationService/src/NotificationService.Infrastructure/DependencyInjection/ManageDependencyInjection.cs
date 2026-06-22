@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
+using NotificationService.Application.Templates;
 using NotificationService.Infrastructure.Channels;
 using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
@@ -55,6 +56,7 @@ public static class ManageDependencyInjection
     {
         services.AddScoped<INotificationUnitOfWork, UnitOfWork>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>();
         services.AddHttpContextAccessor();
     }
 

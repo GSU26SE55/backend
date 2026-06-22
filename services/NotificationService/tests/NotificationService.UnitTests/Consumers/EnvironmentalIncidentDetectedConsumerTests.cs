@@ -8,44 +8,43 @@ using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
-using SharedContracts.Common.Responses;
-using SharedContracts.Saga.AlertTicket;
+using SharedContracts.Events;
 
 namespace NotificationService.UnitTests.Consumers;
 
 /// <summary>
-/// Sprint 5B #238 — AlertTicketSagaFailedConsumer publish 3 channels (Push/Email/InApp)
-/// cho Admin reprocess required.
+/// GH-111 — EnvironmentalIncidentDetectedConsumer:
+/// Push + Email + SMS (§3.4), BypassQuietHours=true, push format §15.2.
 /// </summary>
-public class AlertTicketSagaFailedConsumerTests
+public class EnvironmentalIncidentDetectedConsumerTests
 {
     private static async Task<ITestHarness> StartHarness(IMediator mediator)
     {
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<AlertTicketSagaFailedConsumer>())
+            .AddMassTransitTestHarness(x => x.AddConsumer<EnvironmentalIncidentDetectedConsumer>())
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
-            .AddSingleton(NullLogger<AlertTicketSagaFailedConsumer>.Instance)
+            .AddSingleton(NullLogger<EnvironmentalIncidentDetectedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
         return harness;
     }
 
-    private static AlertTicketSagaFailedEvent MakeEvent(string stage = "TicketRequested", Guid? ticketId = null) => new(
-        CorrelationId: Guid.NewGuid(),
-        AlertId: Guid.NewGuid(),
-        TicketId: ticketId,
-        BatteryAssetId: Guid.NewGuid(),
+    private static EnvironmentalIncidentDetectedEvent MakeEvent() => new(
+        IncidentId: Guid.NewGuid(),
+        SiteId: Guid.NewGuid(),
         CustomerId: Guid.NewGuid(),
-        AssetSerialNumber: "BMS-F",
-        FailedAtStage: stage,
-        Reason: "Asset not found",
-        ErrorCode: "ASSET_NOT_FOUND",
-        FailedAt: DateTime.UtcNow);
+        SiteName: "Site Hanoi",
+        IncidentType: 1,
+        Severity: 3,
+        DetectedAt: new DateTime(2026, 6, 21, 14, 30, 0, DateTimeKind.Utc),
+        AlertId: Guid.NewGuid(),
+        Description: "Smoke detected near battery rack"
+    );
 
     [Fact]
-    public async Task Consume_ShouldDispatch_PushEmailInApp_Channels()
+    public async Task Consume_ShouldDispatch_PushEmailSms_Channels()
     {
         var mediator = new Mock<IMediator>();
         var calls = new List<CreateNotificationCommand>();
@@ -56,19 +55,89 @@ public class AlertTicketSagaFailedConsumerTests
 
         var harness = await StartHarness(mediator.Object);
         await harness.Bus.Publish(MakeEvent());
-        (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
 
         calls.Should().HaveCount(3);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Email);
-        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
-        calls.Should().AllSatisfy(c => c.Type.Should().Be(NotificationTypeEnum.AlertTicketSagaFailed));
+        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Sms);
+        calls.Should().AllSatisfy(c =>
+            c.Type.Should().Be(NotificationTypeEnum.EnvironmentalIncidentDetected));
 
         await harness.Stop();
     }
 
     [Fact]
-    public async Task Consume_ShouldSetEntityType_AlertTicketSaga()
+    public async Task Consume_PushTitle_ShouldMatchSection15_2Format()
+    {
+        var mediator = new Mock<IMediator>();
+        var captured = new List<CreateNotificationCommand>();
+        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
+            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
+                captured.Add((CreateNotificationCommand)c))
+            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
+
+        var harness = await StartHarness(mediator.Object);
+        await harness.Bus.Publish(MakeEvent());
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
+
+        // §15.2: Title = "🚨 Sự cố môi trường: {IncidentType} tại {SiteName}"
+        captured.Should().AllSatisfy(c =>
+        {
+            c.Title.Should().Contain("Site Hanoi");
+            c.Title.Should().StartWith("🚨");
+        });
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_PushBody_ShouldContain_SeverityAndTime()
+    {
+        var mediator = new Mock<IMediator>();
+        var captured = new List<CreateNotificationCommand>();
+        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
+            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
+                captured.Add((CreateNotificationCommand)c))
+            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
+
+        var harness = await StartHarness(mediator.Object);
+        await harness.Bus.Publish(MakeEvent());
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
+
+        // Push/SMS body should contain severity and time; Email body is HTML
+        var pushCmd = captured.First(c => c.Channel == NotificationChannelEnum.Push);
+        pushCmd.Body.Should().Contain("Severity");
+        pushCmd.Body.Should().Contain("14:30");
+        pushCmd.Body.Should().Contain("Xử lý ngay");
+
+        var emailCmd = captured.First(c => c.Channel == NotificationChannelEnum.Email);
+        emailCmd.Body.Should().Contain("<html");
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_ShouldSetBypassQuietHours_True()
+    {
+        var mediator = new Mock<IMediator>();
+        var captured = new List<CreateNotificationCommand>();
+        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
+            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
+                captured.Add((CreateNotificationCommand)c))
+            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
+
+        var harness = await StartHarness(mediator.Object);
+        await harness.Bus.Publish(MakeEvent());
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
+
+        captured.Should().AllSatisfy(c => c.BypassQuietHours.Should().BeTrue());
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_ShouldSetEntityType_EnvironmentalIncident()
     {
         var mediator = new Mock<IMediator>();
         var captured = new List<CreateNotificationCommand>();
@@ -80,19 +149,19 @@ public class AlertTicketSagaFailedConsumerTests
         var evt = MakeEvent();
         var harness = await StartHarness(mediator.Object);
         await harness.Bus.Publish(evt);
-        (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
 
         captured.Should().AllSatisfy(c =>
         {
-            c.EntityType.Should().Be("AlertTicketSaga");
-            c.EntityId.Should().Be(evt.AlertId);
+            c.EntityType.Should().Be("EnvironmentalIncident");
+            c.EntityId.Should().Be(evt.IncidentId);
         });
 
         await harness.Stop();
     }
 
     [Fact]
-    public async Task Consume_BodyShouldContain_StageAndReason()
+    public async Task Consume_PayloadShouldContain_IncidentIdAndSiteId()
     {
         var mediator = new Mock<IMediator>();
         var captured = new List<CreateNotificationCommand>();
@@ -101,60 +170,18 @@ public class AlertTicketSagaFailedConsumerTests
                 captured.Add((CreateNotificationCommand)c))
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
-        var harness = await StartHarness(mediator.Object);
-        await harness.Bus.Publish(MakeEvent(stage: "AlertLinkRequested"));
-        (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
-
-        captured.Should().AllSatisfy(c =>
-        {
-            c.Body.Should().Contain("AlertLinkRequested");
-            c.Body.Should().Contain("Asset not found");
-        });
-        await harness.Stop();
-    }
-
-    [Fact]
-    public async Task Consume_PayloadShouldEmbedCorrelationAndTicketId()
-    {
-        var mediator = new Mock<IMediator>();
-        var captured = new List<CreateNotificationCommand>();
-        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
-            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
-                captured.Add((CreateNotificationCommand)c))
-            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
-
-        var ticketId = Guid.NewGuid();
-        var evt = MakeEvent(ticketId: ticketId);
+        var evt = MakeEvent();
         var harness = await StartHarness(mediator.Object);
         await harness.Bus.Publish(evt);
-        (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
+        (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
 
         captured.Should().AllSatisfy(c =>
         {
-            c.PayloadJson.Should().Contain(evt.CorrelationId.ToString());
-            c.PayloadJson.Should().Contain(ticketId.ToString());
-            c.PayloadJson.Should().Contain("ASSET_NOT_FOUND");
+            c.PayloadJson.Should().Contain(evt.IncidentId.ToString());
+            c.PayloadJson.Should().Contain(evt.SiteId.ToString());
+            c.PayloadJson.Should().Contain("IncidentDetail");
         });
 
-        await harness.Stop();
-    }
-
-    [Fact]
-    public async Task Consume_NullTicketId_ShouldStillWork()
-    {
-        var mediator = new Mock<IMediator>();
-        var captured = new List<CreateNotificationCommand>();
-        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
-            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
-                captured.Add((CreateNotificationCommand)c))
-            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
-
-        var evt = MakeEvent(ticketId: null);
-        var harness = await StartHarness(mediator.Object);
-        await harness.Bus.Publish(evt);
-        (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
-
-        captured.Should().HaveCount(3);
         await harness.Stop();
     }
 }

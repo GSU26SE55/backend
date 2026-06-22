@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Saga.AlertTicket;
 
@@ -20,13 +21,16 @@ namespace NotificationService.Application.Consumers;
 public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly ITemplateRenderer _templateRenderer;
     private readonly ILogger<AlertTicketSagaFailedConsumer> _logger;
 
     public AlertTicketSagaFailedConsumer(
         IMediator mediator,
+        ITemplateRenderer templateRenderer,
         ILogger<AlertTicketSagaFailedConsumer> logger)
     {
         _mediator = mediator;
+        _templateRenderer = templateRenderer;
         _logger = logger;
     }
 
@@ -39,8 +43,20 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
         var recipientIds = new[] { Guid.Empty };
 
         var title = $"[Saga Failed] Alert {evt.AlertId} — {evt.FailedAtStage}";
-        var body = $"Alert-Ticket Saga failed at stage '{evt.FailedAtStage}': {evt.Reason}. " +
-                   $"Admin reprocess required. Asset: {evt.AssetSerialNumber}";
+        var plainBody = $"Alert-Ticket Saga failed at stage '{evt.FailedAtStage}': {evt.Reason}. " +
+                        $"Admin reprocess required. Asset: {evt.AssetSerialNumber}";
+
+        var htmlBody = _templateRenderer.Render("alert-ticket-saga-failed", new
+        {
+            CorrelationId = evt.CorrelationId,
+            AlertId = evt.AlertId,
+            TicketId = evt.TicketId?.ToString(),
+            AssetSerialNumber = evt.AssetSerialNumber,
+            FailedAtStage = evt.FailedAtStage,
+            Reason = evt.Reason,
+            ErrorCode = evt.ErrorCode,
+            FailedAt = evt.FailedAt.ToString("dd/MM/yyyy HH:mm:ss")
+        });
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -62,7 +78,7 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
                     Type = NotificationTypeEnum.AlertTicketSagaFailed,
                     Channel = channel,
                     Title = title,
-                    Body = body,
+                    Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
                     PayloadJson = payload,
                     EntityType = "AlertTicketSaga",
                     EntityId = evt.AlertId
