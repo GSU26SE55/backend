@@ -111,6 +111,101 @@ public class NotificationsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Đánh dấu 1 notification của user hiện tại là đã đọc.
+    /// </summary>
+    /// <remarks>
+    /// **Quyền:** mọi user đã đăng nhập. Chỉ thao tác được trên notification của chính mình.
+    ///
+    /// - Đánh dấu thành công → `Status=Read`, `ReadAt=UtcNow`, trả **200**.
+    /// - Notification đã đọc trước đó → **idempotent**, vẫn trả **200** (không ghi lại).
+    /// - Notification không tồn tại hoặc thuộc user khác → **404**.
+    /// </remarks>
+    /// <param name="id">Id notification (route).</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Đánh dấu đã đọc thành công (kể cả idempotent).</response>
+    /// <response code="400">Thiếu claim UserId trong token.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="404">Không tìm thấy notification của user hiện tại.</response>
+    [HttpPatch("{id:guid}/read")]
+    [Authorize]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkRead(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return BadRequest(new NotificationActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Không xác định được user."
+            });
+
+        var command = new MarkNotificationReadCommand { Id = id, UserId = userId };
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Đánh dấu mọi notification chưa đọc của user hiện tại thành đã đọc.
+    /// </summary>
+    /// <remarks>
+    /// **Quyền:** mọi user đã đăng nhập. Cập nhật mọi noti `Status != Read` của chính mình →
+    /// `Status=Read`, `ReadAt=UtcNow`. Trả về số notification đã được đánh dấu (`Data`).
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Đánh dấu thành công — `Data` là số noti đã mark (0 nếu không có noti chưa đọc).</response>
+    /// <response code="400">Thiếu claim UserId trong token.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    [HttpPost("read-all")]
+    [Authorize]
+    [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return BadRequest(new NotificationCountResponse
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Không xác định được user."
+            });
+
+        var command = new MarkAllNotificationsReadCommand { UserId = userId };
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Đếm số notification chưa đọc (Status != Read) của user hiện tại — phục vụ badge.
+    /// </summary>
+    /// <remarks>**Quyền:** mọi user đã đăng nhập. "Chưa đọc" = `Status != Read &amp;&amp; !IsDeleted`.</remarks>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Trả số notification chưa đọc trong `Data`.</response>
+    /// <response code="400">Thiếu claim UserId trong token.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    [HttpGet("unread-count")]
+    [Authorize]
+    [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetUnreadCount(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return BadRequest(new NotificationCountResponse
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Không xác định được user."
+            });
+
+        var result = await _mediator.Send(new GetUnreadCountQuery { UserId = userId }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
     private bool TryGetCurrentUserId(out Guid userId)
     {
         var raw = User.FindFirstValue("UserId")
