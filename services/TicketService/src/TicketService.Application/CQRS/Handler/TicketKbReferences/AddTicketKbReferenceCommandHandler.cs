@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -11,10 +12,12 @@ namespace TicketService.Application.CQRS.Handler.TicketKbReferences;
 public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbReferenceCommand, CommonResponse<object>>
 {
     private readonly ITicketUnitOfWork _uow;
+    private readonly ITicketCurrentUserService _currentUser;
 
-    public AddTicketKbReferenceCommandHandler(ITicketUnitOfWork uow)
+    public AddTicketKbReferenceCommandHandler(ITicketUnitOfWork uow, ITicketCurrentUserService currentUser)
     {
         _uow = uow;
+        _currentUser = currentUser;
     }
 
     public async Task<CommonResponse<object>> Handle(AddTicketKbReferenceCommand command, CancellationToken ct)
@@ -23,6 +26,26 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
             .FirstOrDefaultAsync(t => t.Id == command.TicketId, ct);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
+
+        // KIỂM TRA PHÂN QUYỀN:
+        // - Admin/Manager được gán bài viết cho bất kỳ ticket nào.
+        // - Staff phải là người được gán vào Ticket (AssignedStaffId == CurrentUserId).
+        // - Các trường hợp khác bị chặn.
+        var userRole = _currentUser.Role;
+        if (userRole != "Admin" && userRole != "Manager")
+        {
+            if (userRole == "Staff")
+            {
+                if (ticket.AssignedStaffId != command.CurrentUserId)
+                {
+                    return Fail(403, "Chỉ nhân viên kỹ thuật được phân công xử lý Ticket này mới được phép gán tài liệu tham khảo.");
+                }
+            }
+            else
+            {
+                return Fail(403, "Bạn không có quyền thực hiện hành động này.");
+            }
+        }
 
         // KIỂM TRA LOCK LOGIC: Không cho gán bài viết khi đã báo Resolved hoặc đã Closed
         if (ticket.Status == TicketStatusEnum.Resolved ||
@@ -37,26 +60,37 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
 
-        var isDuplicate = await _uow.TicketKbReferences.AnyAsync(
-            r => r.TicketId == command.TicketId &&
-                 r.KbArticleId == command.KbArticleId &&
-                 r.ReferenceType == command.ReferenceType &&
-                 !r.IsDeleted);
-        if (isDuplicate)
-            return Fail(400, "Bài viết này đã được gán vào Ticket với loại tham chiếu tương tự.");
+        var existing = await _uow.TicketKbReferences.GetAllAsync()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(r => r.TicketId == command.TicketId && r.KbArticleId == command.KbArticleId, ct);
 
-        var reference = new TicketKbReference
+        if (existing != null)
         {
-            Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
-            KbArticleId = command.KbArticleId,
-            KbArticleCode = article.Code,
-            ReferencedByUserId = command.CurrentUserId,
-            ReferenceType = command.ReferenceType,
-            Note = command.Note
-        };
+            existing.IsDeleted = false;
+            existing.DeletedAt = null;
+            existing.KbArticleCode = article.Code;
+            existing.ReferencedByUserId = command.CurrentUserId;
+            existing.ReferenceType = command.ReferenceType;
+            existing.Note = command.Note;
 
-        await _uow.TicketKbReferences.AddAsync(reference);
+            _uow.TicketKbReferences.UpdateAsync(existing);
+        }
+        else
+        {
+            var reference = new TicketKbReference
+            {
+                Id = Guid.NewGuid(),
+                TicketId = command.TicketId,
+                KbArticleId = command.KbArticleId,
+                KbArticleCode = article.Code,
+                ReferencedByUserId = command.CurrentUserId,
+                ReferenceType = command.ReferenceType,
+                Note = command.Note
+            };
+
+            await _uow.TicketKbReferences.AddAsync(reference);
+        }
+
         await _uow.SaveChangesAsync(ct);
 
         return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã gán bài viết vào Ticket thành công." };

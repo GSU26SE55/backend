@@ -2,6 +2,7 @@ using FluentAssertions;
 using Moq;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
 using TicketService.Application.CQRS.Handler.TicketKbReferences;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -10,7 +11,9 @@ namespace TicketService.UnitTests.Handlers.TicketKbReferences;
 
 public class TicketKbReferenceHandlerTests
 {
-    private static Ticket BuildTicket(TicketStatusEnum status = TicketStatusEnum.InProgress)
+    private readonly Mock<ITicketCurrentUserService> _currentUserMock = new();
+
+    private static Ticket BuildTicket(TicketStatusEnum status = TicketStatusEnum.InProgress, Guid? assignedStaffId = null)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -18,7 +21,8 @@ public class TicketKbReferenceHandlerTests
             Status = status,
             Category = TicketCategoryEnum.Charging,
             Title = "Test Ticket",
-            Description = "Test"
+            Description = "Test",
+            AssignedStaffId = assignedStaffId
         };
 
     private static KnowledgeBaseArticle BuildArticle()
@@ -41,8 +45,9 @@ public class TicketKbReferenceHandlerTests
     [Fact]
     public async Task Add_WhenTicketNotFound_Returns404()
     {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object);
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
         var result = await handler.Handle(new AddTicketKbReferenceCommand
         {
@@ -58,10 +63,11 @@ public class TicketKbReferenceHandlerTests
     [Fact]
     public async Task Add_WhenArticleNotFound_Returns404()
     {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var ticket = BuildTicket();
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket });
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object);
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
         var result = await handler.Handle(new AddTicketKbReferenceCommand
         {
@@ -75,8 +81,9 @@ public class TicketKbReferenceHandlerTests
     }
 
     [Fact]
-    public async Task Add_WhenDuplicate_Returns400()
+    public async Task Add_WhenAlreadyExists_RestoresAndUpdates()
     {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var ticket = BuildTicket();
         var article = BuildArticle();
         var existingRef = new TicketKbReference
@@ -86,36 +93,44 @@ public class TicketKbReferenceHandlerTests
             KbArticleId = article.Id,
             KbArticleCode = article.Code,
             ReferenceType = KbReferenceTypeEnum.ConsultedDuringResolve,
-            ReferencedByUserId = Guid.NewGuid()
+            ReferencedByUserId = Guid.NewGuid(),
+            IsDeleted = true
         };
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article },
             kbRefSeed: new[] { existingRef });
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object);
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
         var result = await handler.Handle(new AddTicketKbReferenceCommand
         {
             TicketId = ticket.Id,
             KbArticleId = article.Id,
-            ReferenceType = KbReferenceTypeEnum.ConsultedDuringResolve
+            ReferenceType = KbReferenceTypeEnum.ConsultedDuringResolve,
+            Note = "Updated Note"
         }, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        kbRefs.Verify(r => r.UpdateAsync(It.Is<TicketKbReference>(
+            x => x.TicketId == ticket.Id &&
+                 x.KbArticleId == article.Id &&
+                 x.IsDeleted == false &&
+                 x.Note == "Updated Note")), Times.Once);
     }
 
     [Fact]
     public async Task Add_WhenValid_ReturnsSuccess()
     {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var ticket = BuildTicket();
         var article = BuildArticle();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article });
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object);
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
         var result = await handler.Handle(new AddTicketKbReferenceCommand
         {
@@ -131,6 +146,62 @@ public class TicketKbReferenceHandlerTests
             x => x.TicketId == ticket.Id &&
                  x.KbArticleId == article.Id &&
                  x.KbArticleCode == article.Code)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Add_WhenStaffNotAssigned_Returns403()
+    {
+        var staffId = Guid.NewGuid();
+        var otherStaffId = Guid.NewGuid();
+        var ticket = BuildTicket(assignedStaffId: otherStaffId);
+        var article = BuildArticle();
+
+        _currentUserMock.Setup(s => s.Role).Returns("Staff");
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
+            CurrentUserId = staffId
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task Add_WhenStaffAssigned_Returns200()
+    {
+        var staffId = Guid.NewGuid();
+        var ticket = BuildTicket(assignedStaffId: staffId);
+        var article = BuildArticle();
+
+        _currentUserMock.Setup(s => s.Role).Returns("Staff");
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
+            CurrentUserId = staffId
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        kbRefs.Verify(r => r.AddAsync(It.Is<TicketKbReference>(
+            x => x.TicketId == ticket.Id &&
+                 x.KbArticleId == article.Id)), Times.Once);
     }
 
     // ────────────────────────────────────────────────

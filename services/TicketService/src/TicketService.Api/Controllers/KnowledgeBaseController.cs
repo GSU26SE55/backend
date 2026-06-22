@@ -30,7 +30,7 @@ public class KnowledgeBaseController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Các tham số lọc:
-    /// - <c>Category</c>: Lọc theo danh mục bài viết.
+    /// - <c>Category</c>: Lọc theo danh mục bài viết (Charging, Overheat, NoPower, Performance, Other, Repair).
     /// - <c>Status</c>: Lọc theo trạng thái (Draft, PendingReview, Published, Archived).
     /// - <c>Tag</c>: Lọc theo thẻ.
     /// - <c>Q</c>: Từ khóa tìm kiếm trong tiêu đề và nội dung triệu chứng.

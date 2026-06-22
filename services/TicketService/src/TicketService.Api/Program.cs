@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
@@ -7,6 +8,7 @@ using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
+using TicketService.Infrastructure.Realtime;
 
 EnvFileLoader.LoadIfExists();
 
@@ -35,6 +37,37 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AutoCloseBackgroundService>();
+
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+})
+.AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
+builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+{
+    var existingOnMessageReceived = options.Events.OnMessageReceived;
+    options.Events.OnMessageReceived = async context =>
+    {
+        if (existingOnMessageReceived != null)
+        {
+            await existingOnMessageReceived(context);
+        }
+
+        var accessToken = context.Request.Query["access_token"];
+        var path = context.HttpContext.Request.Path;
+        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket-comments"))
+        {
+            context.Token = accessToken;
+        }
+    };
+});
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TicketDbContext>("TicketDb");
@@ -83,7 +116,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSharedInfrastructure();
 
-// Prometheus HTTP metrics
+// UseHttpMetrics
 app.UseHttpMetrics();
 
 if (!app.Environment.IsProduction())
@@ -103,6 +136,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<TicketCommentHub>("/hubs/ticket-comments");
 app.MapMetrics();
 app.MapHealthChecks("/health");
 

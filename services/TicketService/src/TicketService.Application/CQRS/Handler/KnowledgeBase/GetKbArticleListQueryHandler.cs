@@ -45,11 +45,11 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         {
             // Internal roles can filter by status
             if (query.Status.HasValue)
-                dbQuery = dbQuery.Where(a => (int)a.Status == query.Status.Value);
+                dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
         }
 
         if (query.Category.HasValue)
-            dbQuery = dbQuery.Where(a => (int)a.Category == query.Category.Value);
+            dbQuery = dbQuery.Where(a => a.Category == query.Category.Value);
 
         if (!string.IsNullOrWhiteSpace(query.Tag))
             dbQuery = dbQuery.Where(a => a.Tags.Contains(query.Tag));

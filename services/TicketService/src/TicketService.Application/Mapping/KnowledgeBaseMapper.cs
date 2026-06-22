@@ -71,7 +71,7 @@ public static class KnowledgeBaseMapper
             ArticleId = v.ArticleId.ToString(),
             MajorVersion = v.MajorVersion,
             MinorVersion = v.MinorVersion,
-            Status = (int)v.Status,
+            Status = v.Status,
             Title = v.Title,
             Symptoms = v.Symptoms,
             DiagnosisSteps = v.DiagnosisSteps,
@@ -88,7 +88,7 @@ public static class KnowledgeBaseMapper
     {
         return new KbArticleTemplateDTO
         {
-            Category = (int)article.Category,
+            Category = article.Category,
             Symptoms = article.Symptoms,
             DiagnosisSteps = article.DiagnosisSteps,
             SolutionSteps = article.SolutionSteps,
