@@ -12,6 +12,12 @@ public class TicketAttachment : AuditableEntity
     public required string ContentType { get; set; }
     public long SizeBytes { get; set; }
     public AttachmentSourceEnum Source { get; set; }
+    public Guid? ChatId { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public bool IsInline { get; set; }
+    public int DownloadCount { get; set; }
+    public VirusScanStatusEnum VirusScanStatus { get; set; } = VirusScanStatusEnum.Pending;
 
     public required Ticket Ticket { get; set; }
+    public TicketChat? Chat { get; set; }
 }
