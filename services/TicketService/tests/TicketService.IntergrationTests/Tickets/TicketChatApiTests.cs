@@ -458,4 +458,201 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task RestoreChat_DeletedChat_Returns200OK()
+    {
+        // Arrange — chat đã bị soft-delete trước đó
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.NewGuid(),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Other Customer",
+            Body = "Body to restore",
+            IsInternal = false,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act — request không gửi TestAuthHandler.RolesHeader nên giữ default đủ cả 4 role (gồm Admin)
+        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeTrue();
+        result.Data!.Id.Should().Be(chat.Id.ToString());
+
+        await _db.Entry(chat).ReloadAsync();
+        chat.IsDeleted.Should().BeFalse();
+        chat.DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreChat_TicketClosed_Returns200OK()
+    {
+        // Arrange — restore là hành động data-correction của Admin, không bị chặn dù ticket đã Closed
+        var closedTicketId = Guid.NewGuid();
+        _db.Tickets.Add(new Ticket
+        {
+            Id = closedTicketId,
+            Code = "TKT-COMMENT-5",
+            Title = "Closed Ticket",
+            Description = "Closed ticket details",
+            Status = TicketStatusEnum.Closed,
+            CustomerId = Guid.Parse(TestAuthHandler.UserId),
+            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Category = TicketCategoryEnum.Other,
+            IsDeleted = false
+        });
+
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = closedTicketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Body on closed ticket",
+            IsInternal = false,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var response = await _client.PatchAsync($"/api/tickets/{closedTicketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await _db.Entry(chat).ReloadAsync();
+        chat.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RestoreChat_ChatNotDeleted_Returns400BadRequest()
+    {
+        // Arrange — chat đang active, chưa từng bị xóa
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Active body",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RestoreChat_ChatBelongsToDifferentTicket_Returns404NotFound()
+    {
+        // Arrange — chat thuộc 1 ticket khác, PATCH qua route của _ticketId
+        var otherTicketId = Guid.NewGuid();
+        _db.Tickets.Add(new Ticket
+        {
+            Id = otherTicketId,
+            Code = "TKT-COMMENT-6",
+            Title = "Other Ticket",
+            Description = "Other ticket details",
+            Status = TicketStatusEnum.InProgress,
+            CustomerId = Guid.Parse(TestAuthHandler.UserId),
+            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Category = TicketCategoryEnum.Other,
+            IsDeleted = false
+        });
+
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Original body",
+            IsInternal = false,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act — gọi qua route của _ticketId, không phải otherTicketId
+        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RestoreChat_ChatNotFound_Returns404NotFound()
+    {
+        // Act
+        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{Guid.NewGuid()}/restore", new StringContent(string.Empty));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task RestoreChat_NonAdminRole_Returns403Forbidden()
+    {
+        // Arrange — chat đã bị soft-delete trước đó
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.NewGuid(),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Other Customer",
+            Body = "Body not restored",
+            IsInternal = false,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act — override role claim qua TestAuthHandler.RolesHeader, bỏ Admin → [Authorize(Roles="Admin")] phải chặn
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/tickets/{_ticketId}/chats/{chat.Id}/restore")
+        {
+            Content = new StringContent(string.Empty)
+        };
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Customer,Staff,Manager");
+        var response = await _client.SendAsync(request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.IsDeleted.Should().BeTrue();
+    }
 }

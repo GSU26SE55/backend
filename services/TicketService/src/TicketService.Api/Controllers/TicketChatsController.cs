@@ -6,6 +6,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatRestore;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -152,6 +153,43 @@ public class TicketChatsController : ControllerBase
             userRole = ActorRoleEnum.Admin;
 
         command.UserRole = userRole;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Khôi phục bình luận đã bị xóa (soft-delete) — chỉ Admin.
+    /// </summary>
+    /// <remarks>
+    /// - Set <c>IsDeleted=false, DeletedAt=null</c> và ghi activity log <c>ChatRestored</c>.
+    /// - Không bị chặn khi ticket đã <c>Closed</c> (hành động data-correction của Admin).
+    /// </remarks>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần khôi phục.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Khôi phục bình luận thành công.</response>
+    /// <response code="400">Bình luận chưa bị xóa.</response>
+    /// <response code="403">Không có quyền khôi phục bình luận.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpPatch("{id}/restore")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RestoreChat(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var command = new ChatRestoreCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            // [Authorize(Roles = "Admin")] đã chặn mọi role khác trước khi vào action này.
+            UserRole = ActorRoleEnum.Admin
+        };
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
