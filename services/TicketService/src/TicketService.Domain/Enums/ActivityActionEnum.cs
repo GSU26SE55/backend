@@ -54,5 +54,7 @@ public enum ActivityActionEnum
     /// <summary>Phê duyệt triage.</summary>
     TriageApproved = 24,
     /// <summary>Đã chỉnh sửa tin nhắn chat.</summary>
-    ChatEdited = 26
+    ChatEdited = 26,
+    /// <summary>Đã xóa tin nhắn chat.</summary>
+    ChatDeleted = 27
 }

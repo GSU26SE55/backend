@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -91,6 +92,51 @@ public class TicketChatsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> EditChat(Guid ticketId, Guid id, [FromBody] ChatEditCommand command, CancellationToken ct)
     {
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+
+        var roleStr = _currentUser.Role;
+        var userRole = ActorRoleEnum.Staff; // Default
+        if (roleStr == "Customer")
+            userRole = ActorRoleEnum.Customer;
+        else if (roleStr == "Manager")
+            userRole = ActorRoleEnum.Manager;
+        else if (roleStr == "Admin")
+            userRole = ActorRoleEnum.Admin;
+
+        command.UserRole = userRole;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xóa (soft-delete) bình luận — Author xóa được của mình bất cứ lúc nào;
+    /// Manager/Admin xóa được của bất kỳ ai nhưng phải kèm <c>DeleteReason</c>.
+    /// </summary>
+    /// <remarks>
+    /// - Block khi ticket đã <c>Closed</c>.
+    /// - Set <c>IsDeleted=true, DeletedAt</c> và ghi activity log <c>ChatDeleted</c>.
+    /// </remarks>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần xóa.</param>
+    /// <param name="command">Lý do xóa (bắt buộc nếu không phải Author).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Xóa bình luận thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc ticket đã đóng.</response>
+    /// <response code="403">Không có quyền xóa bình luận này.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpDelete("{id}")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteChat(Guid ticketId, Guid id, [FromBody] ChatDeleteCommand? command, CancellationToken ct)
+    {
+        command ??= new ChatDeleteCommand();
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);

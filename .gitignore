@@ -32,6 +32,7 @@ coverage/
 AGENTS.md
 *.skill
 .claude.local/
+.claude/
 coverage.runsettings
 # ---------- Logs ----------
 *.log

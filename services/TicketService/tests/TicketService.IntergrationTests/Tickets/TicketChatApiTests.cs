@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Entities;
@@ -260,5 +261,201 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
 
         var updated = await _db.TicketChats.FindAsync(chat.Id);
         updated!.Body.Should().Be("Original body");
+    }
+
+    [Fact]
+    public async Task DeleteChat_Author_Returns200OK()
+    {
+        // Arrange — chat do chính test user tạo
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Body to delete",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeTrue();
+        result.Data!.Id.Should().Be(chat.Id.ToString());
+
+        await _db.Entry(chat).ReloadAsync();
+        chat.IsDeleted.Should().BeTrue();
+        chat.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteChat_WithJsonBodyOnDeleteVerb_BindsSuccessfully()
+    {
+        // Arrange — xác nhận ASP.NET Core thực sự bind [FromBody] trên [HttpDelete]:
+        // một số HTTP client/proxy có thể strip body trên DELETE, nên test gửi body
+        // qua HttpRequestMessage.Content (giống cách FE phải gọi) thay vì DeleteAsync() rỗng.
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Body to delete with reason",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/tickets/{_ticketId}/chats/{chat.Id}")
+        {
+            Content = JsonContent.Create(new { deleteReason = "Spam content" })
+        };
+
+        // Act
+        var response = await _client.SendAsync(request);
+
+        // Assert — body trên DELETE được model bind đúng, không bị 400/415 do framework/proxy
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await _db.Entry(chat).ReloadAsync();
+        chat.IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DeleteChat_NonAuthor_Returns403Forbidden()
+    {
+        // Arrange — chat thuộc người khác, test user (resolve role Customer) không phải Manager/Admin
+        var otherAuthorId = Guid.NewGuid();
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = otherAuthorId,
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Other Customer",
+            Body = "Body of someone else",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteChat_TicketClosed_Returns400BadRequest()
+    {
+        // Arrange — ticket riêng đã Closed
+        var closedTicketId = Guid.NewGuid();
+        _db.Tickets.Add(new Ticket
+        {
+            Id = closedTicketId,
+            Code = "TKT-COMMENT-3",
+            Title = "Closed Ticket",
+            Description = "Closed ticket details",
+            Status = TicketStatusEnum.Closed,
+            CustomerId = Guid.Parse(TestAuthHandler.UserId),
+            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Category = TicketCategoryEnum.Other,
+            IsDeleted = false
+        });
+
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = closedTicketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Body on closed ticket",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var response = await _client.DeleteAsync($"/api/tickets/{closedTicketId}/chats/{chat.Id}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteChat_ChatBelongsToDifferentTicket_Returns404NotFound()
+    {
+        // Arrange — chat thuộc 1 ticket khác, DELETE qua route của _ticketId
+        var otherTicketId = Guid.NewGuid();
+        _db.Tickets.Add(new Ticket
+        {
+            Id = otherTicketId,
+            Code = "TKT-COMMENT-4",
+            Title = "Other Ticket",
+            Description = "Other ticket details",
+            Status = TicketStatusEnum.InProgress,
+            CustomerId = Guid.Parse(TestAuthHandler.UserId),
+            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Category = TicketCategoryEnum.Other,
+            IsDeleted = false
+        });
+
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Original body",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        // Act — gọi qua route của _ticketId, không phải otherTicketId
+        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteChat_ChatNotFound_Returns404NotFound()
+    {
+        // Act
+        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }
