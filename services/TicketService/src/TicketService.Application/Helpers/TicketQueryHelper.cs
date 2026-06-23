@@ -70,6 +70,9 @@ public static class TicketQueryHelper
     public static bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
 
+    public static bool IsManagerOrAdmin(IReadOnlyCollection<string> actorRoles)
+        => HasAnyRole(actorRoles, "Admin", "Manager");
+
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)
         => check.Any(r => HasRole(roles, r));
 

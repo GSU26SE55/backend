@@ -4,9 +4,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
+using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.CQRS.Command.ChatRestore;
+using TicketService.Application.CQRS.Query.ChatAttachmentList;
+using TicketService.Application.CQRS.Query.ChatGetById;
+using TicketService.Application.CQRS.Query.ChatHistory;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -235,6 +240,165 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Lấy chi tiết đầy đủ 1 bình luận (edit_count, attachment list, mention/reaction — rỗng tạm thời).
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy chi tiết thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpGet("{id}")]
+    [ProducesResponseType(typeof(CommonResponse<TicketChatDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatById(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatGetByIdQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy lịch sử các bản sửa (old/new body) của 1 bình luận — Customer chỉ xem được history của chat do chính mình viết.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy lịch sử thành công.</response>
+    /// <response code="403">Không có quyền xem lịch sử bình luận này.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpGet("{id}/history")]
+    [ProducesResponseType(typeof(CommonResponse<List<ChatEditHistoryDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatHistory(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatHistoryQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Thêm đính kèm vào bình luận đã tồn tại — Author hoặc Manager/Admin. Tối đa 10 file/bình luận, 50MB/file, MIME whitelist.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="command">Thông tin file đã upload (FileId tham chiếu file lưu ở nơi khác).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Thêm đính kèm thành công.</response>
+    /// <response code="400">Vượt giới hạn số lượng/kích thước/loại file, hoặc ticket đã đóng.</response>
+    /// <response code="403">Không có quyền thêm đính kèm.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpPost("{id}/attachments")]
+    [ProducesResponseType(typeof(CommonResponse<TicketAttachmentDTO>), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddChatAttachment(Guid ticketId, Guid id, [FromBody] ChatAttachmentAddCommand command, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.UserId = actorId.Value;
+        command.UserRole = ResolveActorRole(_currentUser.Role);
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xóa (soft-delete) đính kèm — Author của bình luận hoặc Manager/Admin.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="attachmentId">ID của đính kèm cần xóa.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Xóa đính kèm thành công.</response>
+    /// <response code="403">Không có quyền xóa đính kèm này.</response>
+    /// <response code="404">Không tìm thấy ticket, bình luận hoặc đính kèm.</response>
+    [HttpDelete("{id}/attachments/{attachmentId}")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveChatAttachment(Guid ticketId, Guid id, Guid attachmentId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var command = new ChatAttachmentRemoveCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            AttachmentId = attachmentId,
+            UserId = actorId.Value,
+            UserRole = ResolveActorRole(_currentUser.Role)
+        };
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy danh sách đính kèm của 1 bình luận.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpGet("{id}/attachments")]
+    [ProducesResponseType(typeof(CommonResponse<List<TicketAttachmentDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ListChatAttachments(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatAttachmentListQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
     private Guid? GetCurrentUserId()
     {
         var raw = _currentUser.UserId;
@@ -244,5 +408,16 @@ public class TicketChatsController : ControllerBase
     private string[] GetCurrentRoles()
     {
         return User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+    }
+
+    private static ActorRoleEnum ResolveActorRole(string? roleStr)
+    {
+        return roleStr switch
+        {
+            "Customer" => ActorRoleEnum.Customer,
+            "Manager" => ActorRoleEnum.Manager,
+            "Admin" => ActorRoleEnum.Admin,
+            _ => ActorRoleEnum.Staff
+        };
     }
 }
