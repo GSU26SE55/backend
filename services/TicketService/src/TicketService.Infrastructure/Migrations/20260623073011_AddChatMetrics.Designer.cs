@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623073011_AddChatMetrics")]
+    partial class AddChatMetrics
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -79,11 +82,9 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FinalChatId")
-                        .HasDatabaseName("ix_chat_ai_suggestions_final_chat_id");
+                    b.HasIndex("FinalChatId");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_chat_ai_suggestions_ticket_id");
+                    b.HasIndex("TicketId");
 
                     b.ToTable("chat_ai_suggestions", (string)null);
                 });
@@ -231,11 +232,9 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Scope")
-                        .HasDatabaseName("ix_chat_templates_scope");
+                    b.HasIndex("Scope");
 
-                    b.HasIndex("TeamId")
-                        .HasDatabaseName("ix_chat_templates_team_id");
+                    b.HasIndex("TeamId");
 
                     b.ToTable("chat_templates", (string)null);
                 });
@@ -1512,8 +1511,7 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ChatId")
-                        .HasDatabaseName("ix_ticket_chat_mentions_chat_id");
+                    b.HasIndex("ChatId");
 
                     b.HasIndex("MentionedUserId", "IsAcknowledged")
                         .HasDatabaseName("ix_ticket_chat_mentions_user_unread");

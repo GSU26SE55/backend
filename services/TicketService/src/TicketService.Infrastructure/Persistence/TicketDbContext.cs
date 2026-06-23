@@ -29,6 +29,14 @@ public class TicketDbContext : DbContext
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
+    public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
+    public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }
+    public virtual DbSet<TicketChatReaction> TicketChatReactions { get; set; }
+    public virtual DbSet<TicketChatRead> TicketChatReads { get; set; }
+    public virtual DbSet<ChatTemplate> ChatTemplates { get; set; }
+    public virtual DbSet<ChatAiSuggestion> ChatAiSuggestions { get; set; }
+    public virtual DbSet<TicketChatTranslation> TicketChatTranslations { get; set; }
+    public virtual DbSet<ChatMetricsDaily> ChatMetricsDailies { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

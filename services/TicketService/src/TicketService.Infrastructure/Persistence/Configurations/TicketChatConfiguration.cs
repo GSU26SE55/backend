@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
@@ -52,6 +53,38 @@ public class TicketChatConfiguration : IEntityTypeConfiguration<TicketChat>
         builder.Property(e => e.LastEditedByUserId)
             .HasColumnName("last_edited_by_user_id");
 
+        builder.Property(e => e.BodyFormat)
+            .HasColumnName("body_format")
+            .HasConversion<int>()
+            .HasDefaultValue(ChatBodyFormatEnum.PlainText);
+
+        builder.Property(e => e.BodyHtml)
+            .HasColumnName("body_html");
+
+        builder.Property(e => e.ParentChatId)
+            .HasColumnName("parent_chat_id");
+
+        builder.Property(e => e.ThreadRootId)
+            .HasColumnName("thread_root_id");
+
+        builder.Property(e => e.ReplyCount)
+            .HasColumnName("reply_count")
+            .HasDefaultValue(0);
+
+        builder.Property(e => e.IsPinned)
+            .HasColumnName("is_pinned")
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.PinnedAt)
+            .HasColumnName("pinned_at");
+
+        builder.Property(e => e.PinnedByUserId)
+            .HasColumnName("pinned_by_user_id");
+
+        builder.Property(e => e.OriginalLanguage)
+            .HasColumnName("original_language")
+            .HasMaxLength(5);
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -69,10 +102,31 @@ public class TicketChatConfiguration : IEntityTypeConfiguration<TicketChat>
 
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.AuthorUserId);
+        builder.HasIndex(e => e.ParentChatId)
+            .HasDatabaseName("ix_ticket_chats_parent");
+        builder.HasIndex(e => e.ThreadRootId)
+            .HasDatabaseName("ix_ticket_chats_thread_root");
+
+        builder.HasIndex(e => new { e.TicketId, e.CreatedAt })
+            .HasDatabaseName("ix_ticket_chats_ticket_created_at")
+            .IsDescending(false, true);
+
+        builder.HasIndex(e => new { e.TicketId, e.IsPinned, e.CreatedAt })
+            .HasDatabaseName("ix_ticket_chats_ticket_pinned_created_at")
+            .IsDescending(false, false, true);
+
+        builder.HasIndex(e => new { e.AuthorUserId, e.CreatedAt })
+            .HasDatabaseName("ix_ticket_chats_author_created_at")
+            .IsDescending(false, true);
 
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Chats)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(e => e.ParentChat)
+            .WithMany()
+            .HasForeignKey(e => e.ParentChatId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -15,6 +15,16 @@ public class TicketChat : AuditableEntity
     public DateTime? EditedAt { get; set; }
     public int EditCount { get; set; } = 0;
     public Guid? LastEditedByUserId { get; set; }
+    public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
+    public string? BodyHtml { get; set; }
+    public Guid? ParentChatId { get; set; }
+    public Guid? ThreadRootId { get; set; }
+    public int ReplyCount { get; set; } = 0;
+    public bool IsPinned { get; set; }
+    public DateTime? PinnedAt { get; set; }
+    public Guid? PinnedByUserId { get; set; }
+    public string? OriginalLanguage { get; set; }
 
     public required Ticket Ticket { get; set; }
+    public TicketChat? ParentChat { get; set; }
 }

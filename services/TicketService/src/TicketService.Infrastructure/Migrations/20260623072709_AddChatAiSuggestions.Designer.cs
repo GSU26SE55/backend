@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623072709_AddChatAiSuggestions")]
+    partial class AddChatAiSuggestions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -79,83 +82,11 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FinalChatId")
-                        .HasDatabaseName("ix_chat_ai_suggestions_final_chat_id");
+                    b.HasIndex("FinalChatId");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_chat_ai_suggestions_ticket_id");
+                    b.HasIndex("TicketId");
 
                     b.ToTable("chat_ai_suggestions", (string)null);
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.ChatMetricsDaily", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<double>("AvgResponseTimeMin")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("double precision")
-                        .HasDefaultValue(0.0)
-                        .HasColumnName("avg_response_time_min");
-
-                    b.Property<int>("ChatCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("chat_count");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<int>("InternalCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("internal_count");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<int>("MentionReceivedCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("mention_received_count");
-
-                    b.Property<DateOnly>("MetricDate")
-                        .HasColumnType("date")
-                        .HasColumnName("metric_date");
-
-                    b.Property<Guid>("StaffId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("staff_id");
-
-                    b.Property<Guid>("TicketId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ticket_id");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MetricDate", "StaffId")
-                        .HasDatabaseName("ix_chat_metrics_daily_date_staff");
-
-                    b.ToTable("chat_metrics_daily", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.ChatTemplate", b =>
@@ -231,11 +162,9 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Scope")
-                        .HasDatabaseName("ix_chat_templates_scope");
+                    b.HasIndex("Scope");
 
-                    b.HasIndex("TeamId")
-                        .HasDatabaseName("ix_chat_templates_team_id");
+                    b.HasIndex("TeamId");
 
                     b.ToTable("chat_templates", (string)null);
                 });
@@ -1334,11 +1263,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("last_edited_by_user_id");
 
-                    b.Property<string>("OriginalLanguage")
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)")
-                        .HasColumnName("original_language");
-
                     b.Property<Guid?>("ParentChatId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_chat_id");
@@ -1512,8 +1436,7 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ChatId")
-                        .HasDatabaseName("ix_ticket_chat_mentions_chat_id");
+                    b.HasIndex("ChatId");
 
                     b.HasIndex("MentionedUserId", "IsAcknowledged")
                         .HasDatabaseName("ix_ticket_chat_mentions_user_unread");
@@ -1627,64 +1550,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDatabaseName("ix_ticket_chat_reads_chat_user");
 
                     b.ToTable("ticket_chat_reads", (string)null);
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatTranslation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChatId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("chat_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<int>("Provider")
-                        .HasColumnType("integer")
-                        .HasColumnName("provider");
-
-                    b.Property<string>("TargetLanguage")
-                        .IsRequired()
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)")
-                        .HasColumnName("target_language");
-
-                    b.Property<DateTime>("TranslatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("translated_at");
-
-                    b.Property<string>("TranslatedBody")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("translated_body");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChatId", "TargetLanguage")
-                        .IsUnique()
-                        .HasDatabaseName("ix_ticket_chat_translations_chat_lang");
-
-                    b.ToTable("ticket_chat_translations", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketKbReference", b =>
@@ -2125,17 +1990,6 @@ namespace TicketService.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketChatRead", b =>
-                {
-                    b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
-                        .WithMany()
-                        .HasForeignKey("ChatId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Chat");
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatTranslation", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
                         .WithMany()
