@@ -26,7 +26,7 @@ public class SlaBreachedConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.SlaBreached);
-            n.UserId.Should().Be(Guid.Empty);
+            n.UserId.Should().Be(ConsumerTestHarness.DefaultRecipient);
             n.EntityId.Should().Be(evt.TicketId);
             n.Body.Should().Contain("P2");
         });

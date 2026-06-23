@@ -56,6 +56,7 @@ public static class ManageDependencyInjection
     {
         services.AddScoped<INotificationUnitOfWork, UnitOfWork>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddScoped<IRecipientResolver, RecipientResolver>();
         services.AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>();
         services.AddHttpContextAccessor();
     }

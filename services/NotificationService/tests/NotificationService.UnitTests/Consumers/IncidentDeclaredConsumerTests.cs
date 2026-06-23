@@ -21,7 +21,7 @@ public class IncidentDeclaredConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.IncidentDeclared);
-            n.UserId.Should().Be(Guid.Empty);
+            n.UserId.Should().Be(ConsumerTestHarness.DefaultRecipient);
             n.EntityId.Should().Be(evt.TicketId);
             n.Title.Should().Contain("TKT-011");
         });

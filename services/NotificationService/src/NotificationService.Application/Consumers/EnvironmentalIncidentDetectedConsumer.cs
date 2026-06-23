@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
@@ -11,6 +12,7 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// Sprint IoT-2 #IoT2-31 (S6-BE-05) — Smoke/Water/EnvAnomaly incident → page Manager + Admin.
+/// GH-604: recipient resolve qua <see cref="IRecipientResolver"/> (broadcast Manager + Admin).
 ///
 /// Routing (overall.md §3.4 + §49.3):
 /// <list type="bullet">
@@ -26,15 +28,18 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
 {
     private readonly IMediator _mediator;
     private readonly ITemplateRenderer _templateRenderer;
+    private readonly IRecipientResolver _recipientResolver;
     private readonly ILogger<EnvironmentalIncidentDetectedConsumer> _logger;
 
     public EnvironmentalIncidentDetectedConsumer(
         IMediator mediator,
         ITemplateRenderer templateRenderer,
+        IRecipientResolver recipientResolver,
         ILogger<EnvironmentalIncidentDetectedConsumer> logger)
     {
         _mediator = mediator;
         _templateRenderer = templateRenderer;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -42,9 +47,13 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
     {
         var evt = context.Message;
 
-        // TODO Sprint 6 — query Manager/Admin user IDs cho SiteId qua AccountSyncReadModel.
-        // Hiện tại: broadcast (placeholder Guid.Empty) — dispatcher xử lý fan-out.
-        var recipientIds = new[] { Guid.Empty };
+        // GH-604: recipient resolve qua read-model (broadcast Manager + Admin).
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentDetected incident={IncidentId} — skip.", evt.IncidentId);
+            return;
+        }
 
         // Push title/body — §15.2 EnvironmentalIncidentCritical format
         var title = $"🚨 Sự cố môi trường: {evt.IncidentType} tại {evt.SiteName}";
@@ -113,23 +122,35 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
 
 /// <summary>
 /// Sprint IoT-2 #IoT2-31 (paired) — resolved event để clear in-app banner.
+/// GH-604: recipient resolve qua <see cref="IRecipientResolver"/> (broadcast Manager + Admin).
 /// Channel chỉ InApp (không spam Push/SMS lúc đã xử lý).
 /// </summary>
 public class EnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalIncidentResolvedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly IRecipientResolver _recipientResolver;
     private readonly ILogger<EnvironmentalIncidentResolvedConsumer> _logger;
 
-    public EnvironmentalIncidentResolvedConsumer(IMediator mediator, ILogger<EnvironmentalIncidentResolvedConsumer> logger)
+    public EnvironmentalIncidentResolvedConsumer(
+        IMediator mediator,
+        IRecipientResolver recipientResolver,
+        ILogger<EnvironmentalIncidentResolvedConsumer> logger)
     {
         _mediator = mediator;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<EnvironmentalIncidentResolvedEvent> context)
     {
         var evt = context.Message;
-        var recipientIds = new[] { Guid.Empty };
+
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentResolved incident={IncidentId} — skip.", evt.IncidentId);
+            return;
+        }
 
         var label = evt.WasFalseAlarm ? "false-alarm" : "resolved";
         var title = $"[ENV] Đã {label} — site {evt.SiteId}";

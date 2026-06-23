@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;

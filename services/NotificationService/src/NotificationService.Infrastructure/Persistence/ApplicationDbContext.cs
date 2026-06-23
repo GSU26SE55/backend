@@ -23,6 +23,7 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<DeviceToken> DeviceTokens { get; set; }
     public virtual DbSet<NotificationPreference> NotificationPreferences { get; set; }
     public virtual DbSet<NotificationTemplate> NotificationTemplates { get; set; }
+    public virtual DbSet<AccountReadModel> AccountReadModels { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

@@ -1,4 +1,4 @@
-using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Domain.Enums;
 
 namespace NotificationService.Application.Services;

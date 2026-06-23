@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NotificationService.Application.Consumers;
 using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
@@ -24,11 +25,21 @@ public class EnvironmentalIncidentDetectedConsumerTests
             .AddMassTransitTestHarness(x => x.AddConsumer<EnvironmentalIncidentDetectedConsumer>())
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
+            .AddSingleton(Resolver())
             .AddSingleton(NullLogger<EnvironmentalIncidentDetectedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
         return harness;
+    }
+
+    /// <summary>Resolver mock: trả về đúng 1 recipient cho mọi role (3 channel × 1 = 3 notification).</summary>
+    private static IRecipientResolver Resolver()
+    {
+        var r = new Mock<IRecipientResolver>();
+        r.Setup(x => x.GetActiveByRoleAsync(It.IsAny<CancellationToken>(), It.IsAny<string[]>()))
+            .ReturnsAsync(new[] { Guid.NewGuid() });
+        return r.Object;
     }
 
     private static EnvironmentalIncidentDetectedEvent MakeEvent() => new(

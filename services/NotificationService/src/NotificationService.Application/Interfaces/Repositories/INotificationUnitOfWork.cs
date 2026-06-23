@@ -9,4 +9,5 @@ public interface INotificationUnitOfWork : IUnitOfWork
     IGenericRepository<DeviceToken> DeviceTokens { get; }
     IGenericRepository<NotificationPreference> NotificationPreferences { get; }
     IGenericRepository<NotificationTemplate> NotificationTemplates { get; }
+    IGenericRepository<AccountReadModel> Accounts { get; }
 }
