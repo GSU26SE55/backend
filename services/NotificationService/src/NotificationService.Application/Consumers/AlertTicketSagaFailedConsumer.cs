@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
+using SharedContracts.Interfaces;
 using SharedContracts.Saga.AlertTicket;
 
 namespace NotificationService.Application.Consumers;
@@ -14,7 +15,7 @@ namespace NotificationService.Application.Consumers;
 /// notify Admin (primary) + Manager (CC) khi Alert-Ticket Saga vào terminal Failed.
 /// Admin reprocess via <c>POST /api/admin/sagas/alert-ticket/{alertId}/reprocess</c>.
 ///
-/// Notification debounce 5 phút per AlertId.
+/// GH-593 — Notification debounce 5 phút per AlertId (qua <see cref="NotificationDebounce"/> + ICacheService).
 ///
 /// Sprint 5B #238 (xem overall.md §53.11).
 /// </summary>
@@ -22,21 +23,32 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
 {
     private readonly IMediator _mediator;
     private readonly ITemplateRenderer _templateRenderer;
+    private readonly ICacheService _cache;
     private readonly ILogger<AlertTicketSagaFailedConsumer> _logger;
 
     public AlertTicketSagaFailedConsumer(
         IMediator mediator,
         ITemplateRenderer templateRenderer,
+        ICacheService cache,
         ILogger<AlertTicketSagaFailedConsumer> logger)
     {
         _mediator = mediator;
         _templateRenderer = templateRenderer;
+        _cache = cache;
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<AlertTicketSagaFailedEvent> context)
     {
         var evt = context.Message;
+
+        // GH-593 — debounce 5 phút per AlertId: bỏ qua event trùng trong cửa sổ.
+        if (!await NotificationDebounce.TryBeginAsync(_cache, evt.AlertId, context.CancellationToken))
+        {
+            _logger.LogInformation(
+                "Debounce: skip duplicate saga-failed notification AlertId={AlertId}", evt.AlertId);
+            return;
+        }
 
         // TODO #238: query Admin user IDs (and Manager nếu phân quyền cho Saga reprocess view).
         // Placeholder: emit for AdminBroadcast user.

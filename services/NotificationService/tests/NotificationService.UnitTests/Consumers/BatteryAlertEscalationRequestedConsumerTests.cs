@@ -10,6 +10,7 @@ using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.UnitTests.Consumers;
 
@@ -19,17 +20,27 @@ namespace NotificationService.UnitTests.Consumers;
 /// </summary>
 public class BatteryAlertEscalationRequestedConsumerTests
 {
-    private static async Task<ITestHarness> StartHarness(IMediator mediator)
+    private static async Task<ITestHarness> StartHarness(IMediator mediator, ICacheService? cache = null)
     {
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x => x.AddConsumer<BatteryAlertEscalationRequestedConsumer>())
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
+            .AddSingleton(cache ?? ProceedCache())
             .AddSingleton(NullLogger<BatteryAlertEscalationRequestedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
         return harness;
+    }
+
+    /// <summary>Cache mock mặc định: GetAsync trả null → debounce cho phép xử lý (lần đầu).</summary>
+    private static ICacheService ProceedCache()
+    {
+        var c = new Mock<ICacheService>();
+        c.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        return c.Object;
     }
 
     private static BatteryAlertEscalationRequestedEvent MakeEvent() => new(
@@ -149,6 +160,58 @@ public class BatteryAlertEscalationRequestedConsumerTests
 
         // Consumer logs warning but does not throw — message considered consumed.
         (await harness.Consumed.Any<BatteryAlertEscalationRequestedEvent>()).Should().BeTrue();
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_DuplicateAlertId_WithinWindow_ShouldSkip()
+    {
+        var mediator = new Mock<IMediator>();
+        var calls = new List<CreateNotificationCommand>();
+        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
+            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) =>
+                calls.Add((CreateNotificationCommand)c))
+            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
+
+        // Debounce key đã tồn tại → consumer phải skip.
+        var cache = new Mock<ICacheService>();
+        cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("2026-06-23T00:00:00.0000000Z");
+
+        var harness = await StartHarness(mediator.Object, cache.Object);
+        await harness.Bus.Publish(MakeEvent());
+        (await harness.Consumed.Any<BatteryAlertEscalationRequestedEvent>()).Should().BeTrue();
+
+        calls.Should().BeEmpty();
+        cache.Verify(x => x.SetAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_FirstEvent_ShouldSetDebounceKey_5Min()
+    {
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
+
+        var cache = new Mock<ICacheService>();
+        cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var evt = MakeEvent();
+        var harness = await StartHarness(mediator.Object, cache.Object);
+        await harness.Bus.Publish(evt);
+        (await harness.Consumed.Any<BatteryAlertEscalationRequestedEvent>()).Should().BeTrue();
+
+        cache.Verify(x => x.SetAsync(
+            It.Is<string>(k => k == $"notif_debounce:{evt.AlertId}"),
+            It.IsAny<string>(),
+            It.Is<TimeSpan?>(t => t == TimeSpan.FromMinutes(5)),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         await harness.Stop();
     }
