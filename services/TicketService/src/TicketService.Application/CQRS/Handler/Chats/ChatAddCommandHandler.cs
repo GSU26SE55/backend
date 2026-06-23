@@ -21,17 +21,20 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly IMarkdownRenderer _markdownRenderer;
     private readonly ILogger<ChatAddCommandHandler> _logger;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         ITicketChatRealtimeNotifier realtimeNotifier,
+        IMarkdownRenderer markdownRenderer,
         ILogger<ChatAddCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
+        _markdownRenderer = markdownRenderer;
         _logger = logger;
     }
 
@@ -40,6 +43,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
+
+        if (ticket.Status == TicketStatusEnum.Closed)
+            return Fail(400, "Không thể thêm bình luận khi ticket đã đóng.");
 
         var chat = new TicketChat
         {
@@ -51,8 +57,12 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             AuthorDisplayName = request.UserDisplayName,
             Body = request.Body,
             IsInternal = request.IsInternal,
+            BodyFormat = request.BodyFormat,
             AttachmentFileIds = request.Attachments?.Select(a => a.FileId).ToList() ?? new List<Guid>()
         };
+
+        if (chat.BodyFormat == ChatBodyFormatEnum.Markdown)
+            chat.BodyHtml = _markdownRenderer.RenderToHtml(chat.Body, chat.AttachmentFileIds);
 
         await _uow.TicketChats.AddAsync(chat);
 

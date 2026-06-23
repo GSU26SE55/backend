@@ -5,12 +5,14 @@ using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Command.ChatAdd;
+namespace TicketService.Application.CQRS.Command.ChatReply;
 
-public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class ChatReplyCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
+    [JsonIgnore]
+    public Guid ParentChatId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
@@ -20,8 +22,6 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
 
     public required string Body { get; set; }
     public bool IsInternal { get; set; }
-    public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
-    public List<ChatAttachmentInput>? Attachments { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -30,25 +30,16 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         if (TicketId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
 
+        if (ParentChatId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "ParentChatId", Detail = "ParentChatId không hợp lệ." });
+
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
 
         if (string.IsNullOrWhiteSpace(Body))
             response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận không được để trống." });
-
-        if (Attachments != null && Attachments.Any())
-        {
-            for (int i = 0; i < Attachments.Count; i++)
-            {
-                var att = Attachments[i];
-                if (att.FileId == Guid.Empty)
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileId", Detail = "FileId không được để trống." });
-                if (string.IsNullOrWhiteSpace(att.FileName))
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileName", Detail = "FileName không được để trống." });
-                if (string.IsNullOrWhiteSpace(att.ContentType))
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].ContentType", Detail = "ContentType không được để trống." });
-            }
-        }
+        else if (Body.Length > 10000)
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận tối đa 10000 ký tự." });
 
         if (response.ListErrors.Count > 0)
         {
@@ -60,10 +51,3 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         return Task.FromResult(response);
     }
 }
-
-public record ChatAttachmentInput(
-    Guid FileId,
-    string FileName,
-    string ContentType,
-    long SizeBytes
-);

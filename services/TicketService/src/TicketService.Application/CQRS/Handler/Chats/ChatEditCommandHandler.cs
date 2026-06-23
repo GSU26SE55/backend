@@ -10,6 +10,7 @@ using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -19,15 +20,18 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
+    private readonly IMarkdownRenderer _markdownRenderer;
     private readonly ChatOptions _chatOptions;
 
     public ChatEditCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
+        IMarkdownRenderer markdownRenderer,
         IOptions<ChatOptions> chatOptions)
     {
         _uow = uow;
         _activityLogger = activityLogger;
+        _markdownRenderer = markdownRenderer;
         _chatOptions = chatOptions.Value;
     }
 
@@ -95,6 +99,10 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         chat.EditedAt = DateTime.UtcNow;
         chat.EditCount += 1;
         chat.LastEditedByUserId = request.UserId;
+
+        if (chat.BodyFormat == ChatBodyFormatEnum.Markdown)
+            chat.BodyHtml = _markdownRenderer.RenderToHtml(chat.Body, chat.AttachmentFileIds);
+
         _uow.TicketChats.UpdateAsync(chat);
 
         await _activityLogger.LogAsync(

@@ -1,25 +1,24 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Query.Ticket;
+using TicketService.Application.CQRS.Query.ChatReplies;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonResponse<PaginationResponse<TicketChatDTO>>>
+public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonResponse<PaginationResponse<TicketChatDTO>>>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
 
-    public TicketChatsQueryHandler(ITicketUnitOfWork unitOfWork)
+    public ChatRepliesQueryHandler(ITicketUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CommonResponse<PaginationResponse<TicketChatDTO>>> Handle(TicketChatsQuery request, CancellationToken cancellationToken)
+    public async Task<CommonResponse<PaginationResponse<TicketChatDTO>>> Handle(ChatRepliesQuery request, CancellationToken cancellationToken)
     {
-        // 1. Kiểm tra ticket có tồn tại không và check quyền truy cập ticket
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
@@ -27,41 +26,36 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
-            return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 404, Message = "Ticket not found" };
+            return Fail(404, "Ticket not found");
 
-        var activeParticipants = await _unitOfWork.TicketParticipants.GetAllAsync()
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+            return Fail(403, "Forbidden");
+
+        // Parent có thể đã bị soft-delete — vẫn cho xem replies của nó (đánh dấu "đã xoá" ở FE).
+        var parentExists = await _unitOfWork.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
-            .Select(p => new { p.UserId, p.CanViewInternal })
-            .ToListAsync(cancellationToken);
+            .AnyAsync(c => c.Id == request.ParentChatId && c.TicketId == request.TicketId, cancellationToken);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
-            return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
+        if (!parentExists)
+            return Fail(404, "Không tìm thấy bình luận.");
 
-        // 2. Xác định xem actor có quyền xem chat nội bộ không
-        var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
-        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
-        // 3. Query chats
         var query = _unitOfWork.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(c => c.TicketId == request.TicketId && !c.IsDeleted);
+            .Where(c => c.ParentChatId == request.ParentChatId && !c.IsDeleted);
 
-        // 4. Lọc chat nội bộ nếu là Customer
         if (!canViewInternalChats)
-        {
             query = query.Where(c => !c.IsInternal);
-        }
 
         var total = await query.CountAsync(cancellationToken);
-        var rawChats = await query
-            .OrderByDescending(c => c.IsPinned)
-            .ThenByDescending(c => c.CreatedAt)
+        var rawReplies = await query
+            .OrderBy(c => c.CreatedAt)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        var items = rawChats.Select(c => new TicketChatDTO
+        var items = rawReplies.Select(c => new TicketChatDTO
         {
             Id = c.Id.ToString(),
             TicketId = c.TicketId.ToString(),
@@ -76,10 +70,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             BodyHtml = c.BodyHtml,
             ParentChatId = c.ParentChatId?.ToString(),
             ThreadRootId = c.ThreadRootId?.ToString(),
-            ReplyCount = c.ReplyCount,
-            IsPinned = c.IsPinned,
-            PinnedAt = c.PinnedAt,
-            PinnedByUserId = c.PinnedByUserId?.ToString()
+            ReplyCount = c.ReplyCount
         }).ToList();
 
         return new CommonResponse<PaginationResponse<TicketChatDTO>>
@@ -95,4 +86,11 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             }
         };
     }
+
+    private static CommonResponse<PaginationResponse<TicketChatDTO>> Fail(int statusCode, string message) => new()
+    {
+        IsSuccess = false,
+        StatusCode = statusCode,
+        Message = message
+    };
 }

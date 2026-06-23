@@ -58,5 +58,11 @@ public enum ActivityActionEnum
     /// <summary>Đã xóa tin nhắn chat.</summary>
     ChatDeleted = 27,
     /// <summary>Đã khôi phục tin nhắn chat.</summary>
-    ChatRestored = 28
+    ChatRestored = 28,
+    /// <summary>Đã trả lời tin nhắn chat.</summary>
+    ChatReplied = 29,
+    /// <summary>Đã pin tin nhắn chat.</summary>
+    ChatPinned = 30,
+    /// <summary>Đã unpin tin nhắn chat.</summary>
+    ChatUnpinned = 31
 }

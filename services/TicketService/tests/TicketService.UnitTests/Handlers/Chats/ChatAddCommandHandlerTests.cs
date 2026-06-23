@@ -15,6 +15,7 @@ public class ChatAddCommandHandlerTests
 {
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<IMarkdownRenderer> _markdownRenderer = new();
     private readonly Mock<ILogger<ChatAddCommandHandler>> _loggerMock = new();
 
     [Fact]
@@ -49,7 +50,7 @@ public class ChatAddCommandHandlerTests
             }
         };
 
-        var handler = new ChatAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object);
+        var handler = new ChatAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -82,6 +83,80 @@ public class ChatAddCommandHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
 
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_MarkdownBody_RendersBodyHtml()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }
+        );
+
+        _markdownRenderer.Setup(r => r.RenderToHtml("**bold**", It.IsAny<IEnumerable<Guid>>())).Returns("<p><strong>bold</strong></p>");
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "**bold**",
+            BodyFormat = ChatBodyFormatEnum.Markdown
+        };
+
+        var handler = new ChatAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>
+            c.BodyFormat == ChatBodyFormatEnum.Markdown &&
+            c.BodyHtml == "<p><strong>bold</strong></p>")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_TicketClosed_ReturnsBadRequest()
+    {
+        var ticketId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description",
+            Status = TicketStatusEnum.Closed
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }
+        );
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "This is a comment"
+        };
+
+        var handler = new ChatAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Never);
     }
 
     [Fact]

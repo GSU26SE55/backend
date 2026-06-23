@@ -8,10 +8,14 @@ using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatPin;
+using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Command.ChatRestore;
+using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
 using TicketService.Application.CQRS.Query.ChatHistory;
+using TicketService.Application.CQRS.Query.ChatReplies;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -396,6 +400,137 @@ public class TicketChatsController : ControllerBase
             ActorRoles = GetCurrentRoles()
         }, ct);
 
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Trả lời 1 bình luận — tối đa 1 cấp (không thể reply vào 1 reply).
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cha (parent).</param>
+    /// <param name="command">Nội dung trả lời.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Trả lời bình luận thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc parent đã là 1 reply.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận cha.</response>
+    [HttpPost("{id}/replies")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddChatReply(Guid ticketId, Guid id, [FromBody] ChatReplyCommand command, CancellationToken ct)
+    {
+        command.TicketId = ticketId;
+        command.ParentChatId = id;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserRole = ResolveActorRole(_currentUser.Role);
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy danh sách reply của 1 bình luận (phân trang) — sort theo CreatedAt ASC.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cha (parent).</param>
+    /// <param name="page">Số trang (mặc định 1).</param>
+    /// <param name="pageSize">Kích thước trang (mặc định 10).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận cha.</response>
+    [HttpGet("{id}/replies")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatReplies(
+        Guid ticketId,
+        Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatRepliesQuery
+        {
+            TicketId = ticketId,
+            ParentChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles(),
+            PageNumber = page,
+            PageSize = pageSize
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Pin 1 bình luận — chỉ Staff/Manager/Admin. Tối đa 3 bình luận pin/ticket.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần pin.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Pin bình luận thành công.</response>
+    /// <response code="400">Bình luận đã được pin hoặc đã đạt giới hạn 3 pin/ticket.</response>
+    /// <response code="403">Không có quyền pin bình luận.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpPost("{id}/pin")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PinChat(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var command = new ChatPinCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserRole = ResolveActorRole(_currentUser.Role)
+        };
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Unpin 1 bình luận — chỉ Staff/Manager/Admin.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần unpin.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Unpin bình luận thành công.</response>
+    /// <response code="400">Bình luận chưa được pin.</response>
+    /// <response code="403">Không có quyền unpin bình luận.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpDelete("{id}/pin")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UnpinChat(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var command = new ChatUnpinCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
+            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserRole = ResolveActorRole(_currentUser.Role)
+        };
+
+        var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 

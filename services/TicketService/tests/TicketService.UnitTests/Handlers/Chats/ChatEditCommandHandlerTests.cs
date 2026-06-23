@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -18,6 +19,7 @@ public class ChatEditCommandHandlerTests
     private readonly Mock<IGenericRepository<TicketChatEdit>> _chatEditsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
+    private readonly Mock<IMarkdownRenderer> _markdownRenderer = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
 
     private ChatEditCommandHandler CreateHandler()
@@ -26,7 +28,7 @@ public class ChatEditCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.SetupGet(u => u.TicketChatEdits).Returns(_chatEditsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatEditCommandHandler(_uow.Object, _activityLogger.Object, _chatOptions);
+        return new ChatEditCommandHandler(_uow.Object, _activityLogger.Object, _markdownRenderer.Object, _chatOptions);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -38,7 +40,7 @@ public class ChatEditCommandHandlerTests
         Status = status
     };
 
-    private static TicketChat MakeChat(Guid id, Guid ticketId, Guid authorId, DateTime createdAt, Ticket ticket) => new()
+    private static TicketChat MakeChat(Guid id, Guid ticketId, Guid authorId, DateTime createdAt, Ticket ticket, ChatBodyFormatEnum bodyFormat = ChatBodyFormatEnum.PlainText) => new()
     {
         Id = id,
         TicketId = ticketId,
@@ -46,7 +48,8 @@ public class ChatEditCommandHandlerTests
         AuthorRole = ActorRoleEnum.Customer,
         Body = "Original body",
         CreatedAt = createdAt,
-        Ticket = ticket
+        Ticket = ticket,
+        BodyFormat = bodyFormat
     };
 
     [Fact]
@@ -88,6 +91,38 @@ public class ChatEditCommandHandlerTests
             ActivityActionEnum.ChatEdited, It.IsAny<string>(), It.IsAny<string>(), null), Times.Once);
 
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_MarkdownChatEdited_RerendersBodyHtml()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket, ChatBodyFormatEnum.Markdown);
+        chat.BodyHtml = "<p>Original body</p>";
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+        _markdownRenderer.Setup(r => r.RenderToHtml("Edited **body**", chat.AttachmentFileIds)).Returns("<p>Edited <strong>body</strong></p>");
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited **body**"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        chat.BodyHtml.Should().Be("<p>Edited <strong>body</strong></p>");
+        _markdownRenderer.Verify(r => r.RenderToHtml("Edited **body**", chat.AttachmentFileIds), Times.Once);
     }
 
     [Fact]

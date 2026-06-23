@@ -79,6 +79,7 @@ public static class ManageDependencyInjection
         // Realtime Chat Services
         services.AddScoped<IChatAuthorizationService, ChatAuthorizationService>();
         services.AddScoped<ITicketChatRealtimeNotifier, SignalRTicketChatNotifier>();
+        services.AddScoped<IMarkdownRenderer, MarkdigMarkdownRenderer>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)
