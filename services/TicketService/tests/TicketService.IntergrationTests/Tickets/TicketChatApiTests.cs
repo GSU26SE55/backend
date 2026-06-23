@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatEdit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -145,5 +146,119 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         result.Data.Should().NotBeNull();
         result.Data!.Items.Should().NotBeEmpty();
         result.Data!.Items.Should().Contain(x => x.Id == chat.Id.ToString());
+    }
+
+    [Fact]
+    public async Task EditChat_AuthorWithinWindow_Returns200OK()
+    {
+        // Arrange — chat vừa tạo, trong 15 phút edit window, author = test user
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Original body",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        var command = new ChatEditCommand { Body = "Edited body via integration test" };
+
+        // Act
+        var response = await _client.PutAsJsonAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}", command);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeTrue();
+        result.Data!.Id.Should().Be(chat.Id.ToString());
+
+        // _db vẫn track entity "chat" từ lúc seed nên phải reload từ DB, không thì đọc lại giá trị cũ trong memory
+        await _db.Entry(chat).ReloadAsync();
+        chat.Body.Should().Be("Edited body via integration test");
+        chat.EditCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task EditChat_EmptyBody_Returns400BadRequest()
+    {
+        // Arrange
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Original body",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        var command = new ChatEditCommand { Body = "" };
+
+        // Act
+        var response = await _client.PutAsJsonAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}", command);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
+        result!.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task EditChat_ChatBelongsToDifferentTicket_Returns404NotFound()
+    {
+        // Arrange — chat thuộc 1 ticket khác, PUT qua route của _ticketId
+        var otherTicketId = Guid.NewGuid();
+        _db.Tickets.Add(new Ticket
+        {
+            Id = otherTicketId,
+            Code = "TKT-COMMENT-2",
+            Title = "Other Ticket",
+            Description = "Other ticket details",
+            Status = TicketStatusEnum.InProgress,
+            CustomerId = Guid.Parse(TestAuthHandler.UserId),
+            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Category = TicketCategoryEnum.Other,
+            IsDeleted = false
+        });
+
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            Ticket = null!,
+            AuthorUserId = Guid.Parse(TestAuthHandler.UserId),
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Test Customer",
+            Body = "Original body",
+            IsInternal = false,
+            IsDeleted = false
+        };
+        _db.TicketChats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        var command = new ChatEditCommand { Body = "Trying to edit via wrong ticket route" };
+
+        // Act — gọi qua route của _ticketId, không phải otherTicketId
+        var response = await _client.PutAsJsonAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}", command);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var updated = await _db.TicketChats.FindAsync(chat.Id);
+        updated!.Body.Should().Be("Original body");
     }
 }

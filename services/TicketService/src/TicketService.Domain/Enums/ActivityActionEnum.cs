@@ -52,5 +52,7 @@ public enum ActivityActionEnum
     /// <summary>Nhân viên cấp cao giải quyết.</summary>
     ResolvedByEscalatedStaff = 23,
     /// <summary>Phê duyệt triage.</summary>
-    TriageApproved = 24
+    TriageApproved = 24,
+    /// <summary>Đã chỉnh sửa tin nhắn chat.</summary>
+    ChatEdited = 26
 }

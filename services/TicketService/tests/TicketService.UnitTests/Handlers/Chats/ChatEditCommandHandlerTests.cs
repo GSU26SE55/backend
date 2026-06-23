@@ -1,0 +1,387 @@
+using Microsoft.Extensions.Options;
+using Moq;
+using SharedKernels.Interfaces;
+using TicketService.Application.Common.Models;
+using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
+
+namespace TicketService.UnitTests.Handlers.Chats;
+
+public class ChatEditCommandHandlerTests
+{
+    private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChatEdit>> _chatEditsRepo = new();
+    private readonly Mock<ITicketUnitOfWork> _uow = new();
+    private readonly Mock<IActivityLogger> _activityLogger = new();
+    private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
+
+    private ChatEditCommandHandler CreateHandler()
+    {
+        _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
+        _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
+        _uow.SetupGet(u => u.TicketChatEdits).Returns(_chatEditsRepo.Object);
+        _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        return new ChatEditCommandHandler(_uow.Object, _activityLogger.Object, _chatOptions);
+    }
+
+    private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
+    {
+        Id = id,
+        Code = "TKT-001",
+        Title = "Test Ticket",
+        Description = "Test Description",
+        Status = status
+    };
+
+    private static TicketChat MakeChat(Guid id, Guid ticketId, Guid authorId, DateTime createdAt, Ticket ticket) => new()
+    {
+        Id = id,
+        TicketId = ticketId,
+        AuthorUserId = authorId,
+        AuthorRole = ActorRoleEnum.Customer,
+        Body = "Original body",
+        CreatedAt = createdAt,
+        Ticket = ticket
+    };
+
+    [Fact]
+    public async Task Handle_AuthorEditWithinWindow_Succeeds()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        chat.Body.Should().Be("Edited body");
+        chat.EditCount.Should().Be(1);
+        chat.LastEditedByUserId.Should().Be(authorId);
+
+        _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e =>
+            e.ChatId == chatId && e.OldBody == "Original body" && e.NewBody == "Edited body")), Times.Once);
+
+        _activityLogger.Verify(x => x.LogAsync(
+            ticketId, authorId, ActorRoleEnum.Customer, "Author",
+            ActivityActionEnum.ChatEdited, It.IsAny<string>(), It.IsAny<string>(), null), Times.Once);
+
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_AuthorEditAfterWindow_ReturnsForbidden()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-20), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        chat.Body.Should().Be("Original body");
+    }
+
+    [Fact]
+    public async Task Handle_ManagerEditWithoutReason_ReturnsValidationError()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-60), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = managerId,
+            UserRole = ActorRoleEnum.Manager,
+            UserDisplayName = "Manager",
+            Body = "Edited by manager"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
+    }
+
+    [Fact]
+    public async Task Handle_ManagerEditWithReason_Succeeds()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-60), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = managerId,
+            UserRole = ActorRoleEnum.Manager,
+            UserDisplayName = "Manager",
+            Body = "Edited by manager",
+            EditReason = "Redact PII"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        chat.Body.Should().Be("Edited by manager");
+        _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e => e.EditReason == "Redact PII")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_NonAuthorNonManager_ReturnsForbidden()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var otherStaffId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = otherStaffId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Other Staff",
+            Body = "Trying to edit"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task Handle_TicketClosed_ReturnsBadRequest()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId, TicketStatusEnum.Closed);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task Handle_ChatNotFound_ReturnsNotFound()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync((TicketChat?)null);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task Handle_TicketNotFound_ReturnsNotFound()
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync((Ticket?)null);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task Handle_ChatBelongsToDifferentTicket_ReturnsNotFound()
+    {
+        var actualTicketId = Guid.NewGuid();
+        var otherTicketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(actualTicketId);
+        var chat = MakeChat(chatId, actualTicketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+        _ticketsRepo.Setup(r => r.GetByIdAsync(otherTicketId)).ReturnsAsync(MakeTicket(otherTicketId));
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = otherTicketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+        chat.Body.Should().Be("Original body");
+        _chatEditsRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatEdit>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Validate_EmptyBody_ReturnsError()
+    {
+        var command = new ChatEditCommand
+        {
+            TicketId = Guid.NewGuid(),
+            ChatId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = ""
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "Body");
+    }
+
+    [Fact]
+    public async Task Validate_BodyTooLong_ReturnsError()
+    {
+        var command = new ChatEditCommand
+        {
+            TicketId = Guid.NewGuid(),
+            ChatId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = new string('a', 10001)
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "Body");
+    }
+
+    [Fact]
+    public async Task Validate_EditReasonTooLong_ReturnsError()
+    {
+        var command = new ChatEditCommand
+        {
+            TicketId = Guid.NewGuid(),
+            ChatId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Manager,
+            UserDisplayName = "Manager",
+            Body = "Edited body",
+            EditReason = new string('a', 1001)
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
+    }
+}
