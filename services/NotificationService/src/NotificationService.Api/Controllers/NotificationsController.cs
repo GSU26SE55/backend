@@ -126,13 +126,17 @@ public class NotificationsController : ControllerBase
     /// <response code="200">Đánh dấu đã đọc thành công (kể cả idempotent).</response>
     /// <response code="400">Thiếu claim UserId trong token.</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không đủ quyền (chỉ phát sinh khi endpoint gắn role/policy).</response>
     /// <response code="404">Không tìm thấy notification của user hiện tại.</response>
+    /// <response code="500">Lỗi server không xử lý được (GlobalExceptionMiddleware).</response>
     [HttpPatch("{id:guid}/read")]
     [Authorize]
     [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -159,11 +163,15 @@ public class NotificationsController : ControllerBase
     /// <response code="200">Đánh dấu thành công — `Data` là số noti đã mark (0 nếu không có noti chưa đọc).</response>
     /// <response code="400">Thiếu claim UserId trong token.</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không đủ quyền (chỉ phát sinh khi endpoint gắn role/policy).</response>
+    /// <response code="500">Lỗi server không xử lý được (GlobalExceptionMiddleware).</response>
     [HttpPost("read-all")]
     [Authorize]
     [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -187,11 +195,15 @@ public class NotificationsController : ControllerBase
     /// <response code="200">Trả số notification chưa đọc trong `Data`.</response>
     /// <response code="400">Thiếu claim UserId trong token.</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không đủ quyền (chỉ phát sinh khi endpoint gắn role/policy).</response>
+    /// <response code="500">Lỗi server không xử lý được (GlobalExceptionMiddleware).</response>
     [HttpGet("unread-count")]
     [Authorize]
     [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationCountResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetUnreadCount(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
