@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
@@ -24,17 +25,20 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
     private readonly IMediator _mediator;
     private readonly ITemplateRenderer _templateRenderer;
     private readonly ICacheService _cache;
+    private readonly IRecipientResolver _recipientResolver;
     private readonly ILogger<BatteryAlertEscalationRequestedConsumer> _logger;
 
     public BatteryAlertEscalationRequestedConsumer(
         IMediator mediator,
         ITemplateRenderer templateRenderer,
         ICacheService cache,
+        IRecipientResolver recipientResolver,
         ILogger<BatteryAlertEscalationRequestedConsumer> logger)
     {
         _mediator = mediator;
         _templateRenderer = templateRenderer;
         _cache = cache;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -50,10 +54,13 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
             return;
         }
 
-        // TODO #238: query Manager/Admin user IDs by CustomerId + Site permissions.
-        // Placeholder: emit for AdminBroadcast user — actual recipient resolution
-        // sẽ map qua AccountSyncReadModel khi Sprint 6 NotificationService finalize.
-        var recipientIds = new[] { Guid.Empty };
+        // GH-604: recipient resolve qua read-model (broadcast Manager + Admin).
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager/Admin recipient resolved for BatteryAlertEscalation AlertId={AlertId} — skip.", evt.AlertId);
+            return;
+        }
 
         var title = $"[Escalation] Alert chưa ack {evt.MinutesSinceDetection} phút — {evt.AssetSerialNumber}";
         var plainBody = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +

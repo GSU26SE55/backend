@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using MockQueryable.Moq;
-using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;

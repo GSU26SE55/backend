@@ -26,7 +26,7 @@ public class SlaWarningConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.SlaWarning);
-            n.UserId.Should().Be(Guid.Empty);
+            n.UserId.Should().Be(ConsumerTestHarness.DefaultRecipient);
             n.EntityType.Should().Be("Ticket");
             n.EntityId.Should().Be(evt.TicketId);
             n.Body.Should().Contain("80");

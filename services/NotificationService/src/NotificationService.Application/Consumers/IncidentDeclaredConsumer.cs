@@ -1,6 +1,8 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 
@@ -8,20 +10,35 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — Manager declare P1 Critical Incident từ Ticket → notify Manager + Admin.
+/// GH-604: recipient resolve qua <see cref="IRecipientResolver"/> (broadcast Manager + Admin).
 /// DeclaredByUserId là người declare, KHÔNG phải recipient. Ghi trực tiếp qua UnitOfWork (InApp + Push).
 /// </summary>
 public class IncidentDeclaredConsumer : IConsumer<IncidentDeclaredEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
+    private readonly IRecipientResolver _recipientResolver;
+    private readonly ILogger<IncidentDeclaredConsumer> _logger;
 
-    public IncidentDeclaredConsumer(INotificationUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+    public IncidentDeclaredConsumer(
+        INotificationUnitOfWork unitOfWork,
+        IRecipientResolver recipientResolver,
+        ILogger<IncidentDeclaredConsumer> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _recipientResolver = recipientResolver;
+        _logger = logger;
+    }
 
     public async Task Consume(ConsumeContext<IncidentDeclaredEvent> context)
     {
         var evt = context.Message;
 
-        // TODO Sprint 6 — resolve Manager + Admin user IDs.
-        var recipientIds = new[] { Guid.Empty };
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager/Admin recipient resolved for IncidentDeclared ticket={TicketId} — skip.", evt.TicketId);
+            return;
+        }
 
         var title = $"🚨 Critical Incident: {evt.Code}";
         var body = $"Ticket {evt.Code} đã được declare thành Critical Incident. Cần xử lý khẩn.";

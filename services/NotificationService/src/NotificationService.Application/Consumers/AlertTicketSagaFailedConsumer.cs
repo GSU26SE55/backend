@@ -3,6 +3,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Interfaces;
@@ -24,17 +25,20 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
     private readonly IMediator _mediator;
     private readonly ITemplateRenderer _templateRenderer;
     private readonly ICacheService _cache;
+    private readonly IRecipientResolver _recipientResolver;
     private readonly ILogger<AlertTicketSagaFailedConsumer> _logger;
 
     public AlertTicketSagaFailedConsumer(
         IMediator mediator,
         ITemplateRenderer templateRenderer,
         ICacheService cache,
+        IRecipientResolver recipientResolver,
         ILogger<AlertTicketSagaFailedConsumer> logger)
     {
         _mediator = mediator;
         _templateRenderer = templateRenderer;
         _cache = cache;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -50,9 +54,13 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
             return;
         }
 
-        // TODO #238: query Admin user IDs (and Manager nếu phân quyền cho Saga reprocess view).
-        // Placeholder: emit for AdminBroadcast user.
-        var recipientIds = new[] { Guid.Empty };
+        // GH-604: recipient resolve qua read-model (broadcast Admin + Manager).
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Admin", "Manager");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Admin/Manager recipient resolved for AlertTicketSagaFailed AlertId={AlertId} — skip.", evt.AlertId);
+            return;
+        }
 
         var title = $"[Saga Failed] Alert {evt.AlertId} — {evt.FailedAtStage}";
         var plainBody = $"Alert-Ticket Saga failed at stage '{evt.FailedAtStage}': {evt.Reason}. " +

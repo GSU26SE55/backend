@@ -21,7 +21,7 @@ public class TicketEscalatedConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.TicketEscalated);
-            n.UserId.Should().Be(Guid.Empty);
+            n.UserId.Should().Be(ConsumerTestHarness.DefaultRecipient);
             n.EntityId.Should().Be(evt.TicketId);
             n.PayloadJson.Should().Contain("\"reason\":2");
             n.Body.Should().Contain("SLA breach");

@@ -1,7 +1,7 @@
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 
-namespace NotificationService.Application.DTOs.Response.Notification;
+namespace NotificationService.Application.DTOs.Request.Notification;
 
 /// <summary>
 /// Input cho Dispatcher — 1 event → nhiều recipients → nhiều channels.

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NotificationService.Application.Consumers;
 using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Common.Responses;
@@ -27,11 +28,21 @@ public class AlertTicketSagaFailedConsumerTests
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
             .AddSingleton(cache ?? ProceedCache())
+            .AddSingleton(Resolver())
             .AddSingleton(NullLogger<AlertTicketSagaFailedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
         return harness;
+    }
+
+    /// <summary>Resolver mock: trả về đúng 1 recipient cho mọi role (3 channel × 1 = 3 notification).</summary>
+    private static IRecipientResolver Resolver()
+    {
+        var r = new Mock<IRecipientResolver>();
+        r.Setup(x => x.GetActiveByRoleAsync(It.IsAny<CancellationToken>(), It.IsAny<string[]>()))
+            .ReturnsAsync(new[] { Guid.NewGuid() });
+        return r.Object;
     }
 
     /// <summary>Cache mock mặc định: GetAsync trả null → debounce cho phép xử lý (lần đầu).</summary>

@@ -9,7 +9,7 @@ namespace NotificationService.UnitTests.Consumers;
 public class TicketResolvedConsumerTests
 {
     [Fact]
-    public async Task TicketResolved_Writes_PlaceholderRecipient_WithSummary()
+    public async Task TicketResolved_Writes_ResolvedRecipient_WithSummary()
     {
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketResolvedConsumer>();
         var evt = new TicketResolvedEvent(Guid.NewGuid(), "TKT-003", Guid.NewGuid(), "Đã thay cell pin");
@@ -21,7 +21,7 @@ public class TicketResolvedConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.TicketResolved);
-            n.UserId.Should().Be(Guid.Empty);
+            n.UserId.Should().Be(ConsumerTestHarness.DefaultRecipient);
             n.Body.Should().Contain("Đã thay cell pin");
         });
 

@@ -1,27 +1,44 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 
 namespace NotificationService.Application.Consumers;
 
 /// <summary>
-/// GH-107 — Ticket resolved → notify Customer + Manager (placeholder Guid.Empty).
-/// StaffId trong event là người resolve, KHÔNG phải recipient. Ghi trực tiếp qua UnitOfWork (InApp + Push).
+/// GH-107 — Ticket resolved → notify Manager. GH-604: recipient resolve qua <see cref="IRecipientResolver"/>
+/// (broadcast Manager). Customer cụ thể của ticket bị DEFER (event chỉ mang StaffId người resolve,
+/// không có CustomerId) — follow-up enrich event sau. Ghi trực tiếp qua UnitOfWork (InApp + Push).
 /// </summary>
 public class TicketResolvedConsumer : IConsumer<TicketResolvedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
+    private readonly IRecipientResolver _recipientResolver;
+    private readonly ILogger<TicketResolvedConsumer> _logger;
 
-    public TicketResolvedConsumer(INotificationUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+    public TicketResolvedConsumer(
+        INotificationUnitOfWork unitOfWork,
+        IRecipientResolver recipientResolver,
+        ILogger<TicketResolvedConsumer> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _recipientResolver = recipientResolver;
+        _logger = logger;
+    }
 
     public async Task Consume(ConsumeContext<TicketResolvedEvent> context)
     {
         var evt = context.Message;
 
-        // TODO Sprint 6 — resolve Customer + Manager user IDs.
-        var recipientIds = new[] { Guid.Empty };
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager recipient resolved for TicketResolved ticket={TicketId} — skip.", evt.TicketId);
+            return;
+        }
 
         var title = $"Ticket {evt.Code} đã được xử lý";
         var body = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
