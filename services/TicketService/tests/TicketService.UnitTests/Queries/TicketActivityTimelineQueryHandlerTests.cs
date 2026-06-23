@@ -13,12 +13,15 @@ public class TicketActivityTimelineQueryHandlerTests
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockTicketRepo = new();
     private readonly Mock<IGenericRepository<TicketActivity>> _mockActivityRepo = new();
+    private readonly Mock<IGenericRepository<TicketParticipant>> _mockParticipantRepo = new();
     private readonly TicketActivityTimelineQueryHandler _handler;
 
     public TicketActivityTimelineQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockTicketRepo.Object);
         _mockUow.Setup(x => x.TicketActivities).Returns(_mockActivityRepo.Object);
+        _mockParticipantRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketParticipant>([]));
+        _mockUow.Setup(x => x.TicketParticipants).Returns(_mockParticipantRepo.Object);
         _handler = new TicketActivityTimelineQueryHandler(_mockUow.Object);
     }
 

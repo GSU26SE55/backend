@@ -46,7 +46,7 @@ public class TicketKbReferenceHandlerTests
     public async Task Add_WhenTicketNotFound_Returns404()
     {
         _currentUserMock.Setup(s => s.Role).Returns("Admin");
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
         var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
         var result = await handler.Handle(new AddTicketKbReferenceCommand
@@ -65,7 +65,7 @@ public class TicketKbReferenceHandlerTests
     {
         _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var ticket = BuildTicket();
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket });
         var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
 
@@ -97,7 +97,7 @@ public class TicketKbReferenceHandlerTests
             IsDeleted = true
         };
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article },
             kbRefSeed: new[] { existingRef });
@@ -127,7 +127,7 @@ public class TicketKbReferenceHandlerTests
         var ticket = BuildTicket();
         var article = BuildArticle();
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article });
         var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
@@ -158,7 +158,7 @@ public class TicketKbReferenceHandlerTests
 
         _currentUserMock.Setup(s => s.Role).Returns("Staff");
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article });
         var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
@@ -184,7 +184,7 @@ public class TicketKbReferenceHandlerTests
 
         _currentUserMock.Setup(s => s.Role).Returns("Staff");
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
             kbSeed: new[] { article });
         var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
@@ -211,7 +211,7 @@ public class TicketKbReferenceHandlerTests
     [Fact]
     public async Task Remove_WhenReferenceNotFound_Returns404()
     {
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
         var handler = new RemoveTicketKbReferenceCommandHandler(uow.Object);
 
         var result = await handler.Handle(new RemoveTicketKbReferenceCommand
@@ -236,7 +236,7 @@ public class TicketKbReferenceHandlerTests
             ReferencedByUserId = Guid.NewGuid()
         };
 
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
             kbRefSeed: new[] { reference });
         var handler = new RemoveTicketKbReferenceCommandHandler(uow.Object);
 

@@ -66,6 +66,42 @@ public class TicketAssignCommandHandlerTests
         _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Handle_ApprovedTicket_CreatesPrimaryAssigneeParticipant()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+        };
+
+        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = managerId, ManagerName = "Manager A" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
+            p.UserId == staffId && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee)), Times.Once);
+    }
     #endregion
 
     #region Failure Cases

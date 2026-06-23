@@ -29,11 +29,18 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (ticket is null)
             return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 404, Message = "Ticket not found" };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        var activeParticipants = await _unitOfWork.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
+            .Select(p => new { p.UserId, p.CanViewInternal })
+            .ToListAsync(cancellationToken);
+
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
         // 2. Xác định xem actor có quyền xem chat nội bộ không
-        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
+        var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
         // 3. Query chats
         var query = _unitOfWork.TicketChats.GetAllAsync()

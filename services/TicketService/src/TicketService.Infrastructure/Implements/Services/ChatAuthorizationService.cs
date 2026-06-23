@@ -30,11 +30,26 @@ public class ChatAuthorizationService : IChatAuthorizationService
         if (ticket is null)
             return false;
 
-        return TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, actorUserId, actorRoles);
+        if (TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, actorUserId, actorRoles))
+            return true;
+
+        return await _unitOfWork.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .AnyAsync(p => p.TicketId == ticketId && p.UserId == actorUserId && p.RemovedAt == null && !p.IsDeleted, cancellationToken);
     }
 
     public bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles)
     {
         return TicketQueryHelper.CanViewInternalChats(actorRoles);
+    }
+
+    public async Task<bool> CanViewInternalChatsAsync(Guid ticketId, Guid actorUserId, IReadOnlyCollection<string> actorRoles, CancellationToken cancellationToken = default)
+    {
+        if (TicketQueryHelper.CanViewInternalChats(actorRoles))
+            return true;
+
+        return await _unitOfWork.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .AnyAsync(p => p.TicketId == ticketId && p.UserId == actorUserId && p.RemovedAt == null && !p.IsDeleted && p.CanViewInternal, cancellationToken);
     }
 }

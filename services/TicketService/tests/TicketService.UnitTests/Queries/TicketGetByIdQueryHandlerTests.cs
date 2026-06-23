@@ -12,11 +12,14 @@ public class TicketGetByIdQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockRepo = new();
+    private readonly Mock<IGenericRepository<TicketParticipant>> _mockParticipantRepo = new();
     private readonly TicketGetByIdQueryHandler _handler;
 
     public TicketGetByIdQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
+        _mockParticipantRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketParticipant>([]));
+        _mockUow.Setup(x => x.TicketParticipants).Returns(_mockParticipantRepo.Object);
         _handler = new TicketGetByIdQueryHandler(_mockUow.Object);
     }
 

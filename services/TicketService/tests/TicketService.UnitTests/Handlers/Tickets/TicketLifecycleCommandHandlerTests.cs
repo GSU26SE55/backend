@@ -49,6 +49,44 @@ public class TicketLifecycleCommandHandlerTests
     }
 
     [Fact]
+    public async Task Reassign_ValidRequest_MovesOldStaffToPreviousAssigneeAndCreatesNewPrimaryAssignee()
+    {
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var oldStaffId = Guid.NewGuid();
+        var newStaffId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, AssignedStaffId = oldStaffId };
+        var oldParticipant = new TicketParticipant
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Ticket = ticket,
+            UserId = oldStaffId,
+            UserRole = ActorRoleEnum.Staff,
+            ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
+            CanPost = true,
+            CanViewInternal = true,
+            AddedByUserId = managerId,
+            AddedAt = DateTime.UtcNow
+        };
+        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewStaffId = newStaffId, ManagerName = "Mgr" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }, participantSeed: new[] { oldParticipant });
+
+        var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        oldParticipant.ParticipantType.Should().Be(ParticipantTypeEnum.PreviousAssignee);
+        oldParticipant.CanPost.Should().BeFalse();
+
+        participants.Verify(x => x.UpdateAsync(oldParticipant), Times.Once);
+        participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
+            p.UserId == newStaffId && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee)), Times.Once);
+    }
+
+    [Fact]
     public async Task Reassign_InvalidTransition_Returns403()
     {
         var ticketId = Guid.NewGuid();

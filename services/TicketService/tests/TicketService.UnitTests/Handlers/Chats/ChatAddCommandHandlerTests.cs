@@ -31,7 +31,7 @@ public class ChatAddCommandHandlerTests
             Description = "Test Description"
         };
 
-        var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket }
         );
 

@@ -32,10 +32,18 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         if (ticket is null)
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 404, Message = "Not found" };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        var activeParticipants = await _unitOfWork.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .Where(p => p.TicketId == request.Id && p.RemovedAt == null && !p.IsDeleted)
+            .Select(p => new { p.UserId, p.CanViewInternal })
+            .ToListAsync(cancellationToken);
+
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
-        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
+        var participantCanViewInternal = request.ActorUserId.HasValue
+            && activeParticipants.Any(p => p.UserId == request.ActorUserId.Value && p.CanViewInternal);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
         var dto = new TicketDetailDTO
         {

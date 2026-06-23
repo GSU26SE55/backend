@@ -44,7 +44,8 @@ public static class MockTicketUnitOfWork
                    Mock<IGenericRepository<MaintenanceLog>> logs,
                    Mock<IGenericRepository<KnowledgeBaseArticle>> kbArticles,
                    Mock<IGenericRepository<KbArticleVersion>> kbVersions,
-                   Mock<IGenericRepository<TicketKbReference>> kbReferences)
+                   Mock<IGenericRepository<TicketKbReference>> kbReferences,
+                   Mock<IGenericRepository<TicketParticipant>> participants)
         BuildExtended(
             IEnumerable<Ticket>? ticketSeed = null,
             IEnumerable<TicketActivity>? activitySeed = null,
@@ -58,7 +59,8 @@ public static class MockTicketUnitOfWork
             IEnumerable<MaintenanceLog>? logSeed = null,
             IEnumerable<KnowledgeBaseArticle>? kbSeed = null,
             IEnumerable<KbArticleVersion>? kbVersionSeed = null,
-            IEnumerable<TicketKbReference>? kbRefSeed = null)
+            IEnumerable<TicketKbReference>? kbRefSeed = null,
+            IEnumerable<TicketParticipant>? participantSeed = null)
     {
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
@@ -119,6 +121,13 @@ public static class MockTicketUnitOfWork
         var outbox = new Mock<IGenericRepository<OutboxMessage>>();
         outbox.Setup(r => r.GetAllAsync()).Returns(outboxMock);
 
+        var participantsMock = (participantSeed ?? Array.Empty<TicketParticipant>()).BuildMock();
+        var participants = new Mock<IGenericRepository<TicketParticipant>>();
+        participants.Setup(r => r.GetAllAsync()).Returns(participantsMock);
+        participants.Setup(r => r.FindAsync(It.IsAny<Expression<Func<TicketParticipant, bool>>>())).Returns((Expression<Func<TicketParticipant, bool>> p) => participantsMock.Where(p));
+        participants.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<TicketParticipant, bool>>>()))
+              .ReturnsAsync((Expression<Func<TicketParticipant, bool>> p) => (participantSeed ?? Array.Empty<TicketParticipant>()).AsQueryable().Any(p));
+
         var uow = new Mock<ITicketUnitOfWork>();
         uow.SetupGet(u => u.Tickets).Returns(tickets.Object);
         uow.SetupGet(u => u.TicketActivities).Returns(activities.Object);
@@ -133,12 +142,13 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.KbArticleVersions).Returns(kbVersion.Object);
         uow.SetupGet(u => u.TicketKbReferences).Returns(kbRefs.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
+        uow.SetupGet(u => u.TicketParticipants).Returns(participants.Object);
 
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
-        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, chats, attachments, logs, kb, kbVersion, kbRefs);
+        return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, chats, attachments, logs, kb, kbVersion, kbRefs, participants);
     }
 }

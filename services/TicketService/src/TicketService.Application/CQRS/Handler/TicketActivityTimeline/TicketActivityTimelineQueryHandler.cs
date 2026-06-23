@@ -28,7 +28,13 @@ public class TicketActivityTimelineQueryHandler : IRequestHandler<TicketActivity
         if (ticket is null)
             return new CommonResponse<List<TicketActivityDTO>> { IsSuccess = false, StatusCode = 404, Message = "Not found" };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        var activeParticipantUserIds = await _unitOfWork.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
+            .Select(p => p.UserId)
+            .ToListAsync(cancellationToken);
+
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipantUserIds))
             return new CommonResponse<List<TicketActivityDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
         var activities = await _unitOfWork.TicketActivities.GetAllAsync()

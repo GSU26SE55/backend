@@ -67,8 +67,25 @@ public static class TicketQueryHelper
         return HasRole(actorRoles, "Staff") && assignedStaffId == actorUserId.Value;
     }
 
+    /// <summary>Overload có xét active participant row (#522) — actor có row active trên ticket cũng được truy cập dù không phải Customer chính/Staff assigned.</summary>
+    public static bool CanAccessTicket(
+        Guid customerId,
+        Guid? assignedStaffId,
+        Guid? actorUserId,
+        IReadOnlyCollection<string> actorRoles,
+        IReadOnlyCollection<Guid> activeParticipantUserIds)
+    {
+        if (CanAccessTicket(customerId, assignedStaffId, actorUserId, actorRoles))
+            return true;
+        return actorUserId.HasValue && activeParticipantUserIds.Contains(actorUserId.Value);
+    }
+
     public static bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
+
+    /// <summary>Overload có xét participant.CanViewInternal (#522) — participant được cấp quyền xem internal dù không phải Staff/Manager/Admin.</summary>
+    public static bool CanViewInternalChats(IReadOnlyCollection<string> actorRoles, bool participantCanViewInternal)
+        => CanViewInternalChats(actorRoles) || participantCanViewInternal;
 
     public static bool IsManagerOrAdmin(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager");

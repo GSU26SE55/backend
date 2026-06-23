@@ -54,8 +54,8 @@ public class TicketChatHub : Hub
         // Add to public chats group
         await Groups.AddToGroupAsync(Context.ConnectionId, PublicGroup(ticketId));
 
-        // Add to internal chats group if user is Staff/Manager/Admin
-        if (_authService.CanViewInternalChats(actorRoles))
+        // Add to internal chats group if user is Staff/Manager/Admin, hoặc participant có CanViewInternal=true
+        if (await _authService.CanViewInternalChatsAsync(ticketId, actorUserId.Value, actorRoles))
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
         }

@@ -27,7 +27,7 @@ public class MaintenanceLogAddCommandHandlerTests
             Description = "Test Description"
         };
 
-        var (uow, _, _, _, _, _, _, _, attachments, logs, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, attachments, logs, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket }
         );
 

@@ -8,6 +8,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 
@@ -62,6 +63,21 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         };
 
         await _uow.Tickets.AddAsync(ticket);
+
+        // Auto-tạo participant Owner cho Customer tạo ticket (#528)
+        await _uow.TicketParticipants.AddAsync(new TicketParticipant
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Ticket = ticket,
+            UserId = request.CustomerId,
+            UserRole = ActorRoleEnum.Customer,
+            ParticipantType = ParticipantTypeEnum.Owner,
+            CanPost = true,
+            CanViewInternal = false,
+            AddedByUserId = request.CustomerId,
+            AddedAt = DateTime.UtcNow
+        });
 
         // Outbox: Ticket Created
         await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);

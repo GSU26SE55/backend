@@ -36,7 +36,7 @@ public class TicketCreateCommandHandlerTests
         };
 
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
-        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(customerSeed: customers);
+        var (uow, tickets, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
 
         var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object);
 
@@ -51,6 +51,8 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
+        participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
+            p.UserId == customerId && p.ParticipantType == ParticipantTypeEnum.Owner)), Times.Once);
         _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
