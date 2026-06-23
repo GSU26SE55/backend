@@ -34,8 +34,10 @@ public class CreateNotificationCommand : IRequest<NotificationActionResponse>, I
     {
         var response = new NotificationActionResponse();
 
-        if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không được rỗng." });
+        // GH-594: KHÔNG reject UserId == Guid.Empty. Consumer phát notification "broadcast"
+        // với recipient placeholder Guid.Empty (recipient thật resolve sau qua dispatcher /
+        // AccountSyncReadModel — Sprint 6). Reject ở đây khiến ValidationBehavior short-circuit
+        // → notification không bao giờ được tạo. Vẫn validate Type/Channel/Title/Body bên dưới.
 
         if (!Enum.IsDefined(typeof(NotificationTypeEnum), Type))
             response.ListErrors.Add(new Errors { Field = "Type", Detail = "Type không hợp lệ." });
