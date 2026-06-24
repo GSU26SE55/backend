@@ -3,7 +3,7 @@ using Moq;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
+using SharedContracts.Events;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -51,7 +51,7 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
     }

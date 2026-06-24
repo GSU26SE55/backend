@@ -16,13 +16,16 @@ public class ReportEnvironmentalIncidentCommandHandler
 {
     private readonly IBatteryUnitOfWork _uow;
     private readonly IIntegrationEventOutboxWriter _outbox;
+    private readonly IEnvironmentalMetricsRecorder _metrics;
 
     public ReportEnvironmentalIncidentCommandHandler(
         IBatteryUnitOfWork uow,
-        IIntegrationEventOutboxWriter outbox)
+        IIntegrationEventOutboxWriter outbox,
+        IEnvironmentalMetricsRecorder metrics)
     {
         _uow = uow;
         _outbox = outbox;
+        _metrics = metrics;
     }
 
     public async Task<EnvironmentalIncidentResponse> Handle(ReportEnvironmentalIncidentCommand request, CancellationToken cancellationToken)
@@ -100,6 +103,10 @@ public class ReportEnvironmentalIncidentCommandHandler
         await _outbox.WriteAsync(evt, cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
+
+        // Sprint 7 #118 — metric cho AlertManager (detection latency = lag từ DetectedAt đến lúc ghi nhận).
+        var detectionLatency = Math.Max(0, (DateTime.UtcNow - incident.DetectedAt).TotalSeconds);
+        _metrics.IncidentDetected(incident.IncidentType.ToString(), incident.Severity.ToString(), detectionLatency);
 
         return new EnvironmentalIncidentResponse
         {

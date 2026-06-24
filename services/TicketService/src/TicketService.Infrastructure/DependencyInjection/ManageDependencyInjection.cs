@@ -58,8 +58,15 @@ public static class ManageDependencyInjection
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
+        // Sprint 7 #114 (§5.2) — saga failed-rate report reader.
+        services.AddScoped<TicketService.Application.Interfaces.Services.ISagaReportService,
+            TicketService.Infrastructure.Implements.Services.SagaReportService>();
+        // Sprint 7 #117 — SLA aggregate gauge (cho Grafana "SLA Ops").
+        services.AddSingleton<TicketService.Application.Interfaces.Services.ISlaMetricsRecorder,
+            TicketService.Infrastructure.Observability.SlaMetricsRecorder>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
+        services.AddHostedService<SlaGaugeBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)

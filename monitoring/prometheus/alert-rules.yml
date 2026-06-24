@@ -142,6 +142,38 @@ groups:
           description: "Quartz timer drift hoặc consumer crash. Runbook: docs/runbooks/09-saga-stuck.md"
 
   # =====================================================================
+  # Sprint 7 #118 — Environmental monitoring (smoke/water/over-temp incident)
+  # Metrics emit từ BatteryService.Infrastructure.Observability.EnvironmentalMetrics:
+  #   environmental_incident_detected_total{type, severity}           (counter)
+  #   environmental_incident_detection_latency_seconds{...}_bucket    (histogram — lag DetectedAt → ghi nhận)
+  # =====================================================================
+  - name: environmental-monitoring
+    interval: 30s
+    rules:
+      # Incident Critical (smoke/water) detect → page NGAY (an toàn). Latency phát hiện phải thấp.
+      - alert: EnvironmentalIncidentCriticalDetected
+        expr: increase(environmental_incident_detected_total{severity="Critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical environmental incident detected ({{ $labels.type }})"
+          description: "{{ $value }} sự cố môi trường Critical (type={{ $labels.type }}) trong 5m. Page Manager + Admin ngay."
+
+      # Detection latency cao — p95 lag từ lúc incident xảy ra đến lúc hệ thống ghi nhận > 5 phút.
+      - alert: EnvironmentalIncidentDetectionLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(environmental_incident_detection_latency_seconds_bucket[15m])) by (le)
+          ) > 300
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Environmental incident detection latency p95 {{ $value }}s"
+          description: "Phát hiện sự cố môi trường chậm (p95 > 5 phút). Kiểm tra pipeline report/ingest ambient."
+
+  # =====================================================================
   # Sprint IoT-2 — IoT edge device fleet (§52.12 metric schema)
   # Metrics emit từ BatteryService.Infrastructure.Observability.IotMetrics:
   #   iot_device_heartbeats_total{device_id, status}      (counter, status=ok|clock_drift)

@@ -219,6 +219,27 @@ Open ──→ Acknowledged ──→ Resolved
 | `Stable` | 1 | Kênh phát hành ổn định |
 | `Beta` | 2 | Kênh thử nghiệm |
 
+### `ElectricalTopologyEnum` (Sprint 7 B4)
+
+Cách đấu nối điện của pin trong site — dùng để tính **cascade risk** (rủi ro 1 pin hỏng lan sang pin lân cận). Topology càng "dính" nhau thì hệ số rủi ro lan truyền càng cao.
+
+| Giá trị | Int | Ý nghĩa | Hệ số rủi ro (Rule 1) |
+|---|---|---|---|
+| `Independent` | 1 | Pin đơn lẻ, không kết nối điện với pin khác — hỏng không lây | +0.0 |
+| `SeriesString` | 2 | Mắc nối tiếp (string voltage) — mất 1 pin có thể ngắt cả chuỗi | +0.6 |
+| `ParallelBank` | 3 | Mắc song song (bank capacity) — 1 pin hỏng làm tăng tải pin còn lại | +0.2 |
+| `SeriesParallel` | 4 | Hỗn hợp nối tiếp + song song | +0.4 |
+
+### `CascadeRiskLevel` (Sprint 7 B4)
+
+Mức rủi ro lan truyền, **derive từ `cascadeRiskScore`** (0.0–1.0).
+
+| Giá trị | Int | Ngưỡng score | Ý nghĩa |
+|---|---|---|---|
+| `Low` | 1 | `< 0.5` | Rủi ro lan truyền thấp |
+| `Medium` | 2 | `0.5 – < 0.7` | Rủi ro trung bình — Manager review (không auto-upgrade) |
+| `High` | 3 | `>= 0.7` | Rủi ro cao — publish `BatteryCascadeRiskHighEvent` → TicketService auto-upgrade Priority ticket liên quan lên P1 |
+
 ---
 
 ## Nhóm 1 — Alerts (Cảnh báo)
@@ -2409,6 +2430,216 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 ---
 
+## Nhóm 12 — Cascade Risk Assessment (Sprint 7 B4 · §31.7)
+
+**Bối cảnh & tác dụng:** Đánh giá rủi ro **1 pin hỏng lây lan sang pin lân cận cùng site** (cascade/propagation). `cascadeRiskScore` (0.0–1.0) được `CascadeRiskBackgroundService` tính lại **mỗi 5 phút** cho mọi asset đang có Open alert, theo 3 rule cộng dồn rồi clamp ≤ 1.0:
+
+1. **Topology factor** — theo `ElectricalTopology` (xem enum): Independent +0.0 · ParallelBank +0.2 · SeriesParallel +0.4 · SeriesString +0.6.
+2. **Proximity** — số asset **cùng Site** có Open alert trong 1h gần đây: ≥1 → +0.2 · ≥3 → +0.2 (cộng dồn).
+3. **Thermal runaway** — asset có alert `Overheat` + `Critical` + `Open` → +0.3.
+
+Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` → TicketService consumer **auto-upgrade Priority ticket liên quan lên P1** (safety override, ghi `TicketActivity`).
+
+> Adaptation: project đã bỏ `BatteryGroup` nên proximity nhóm theo `SiteId`.
+
+### `GET /api/battery-assets/{id}/cascade-risk`
+
+**Mục đích:** Lấy cascade risk hiện tại của 1 asset (trả score đã lưu, không recompute on-demand).
+
+**Auth:** Bắt buộc (Admin/Manager/Staff/Customer)
+
+**Path param:** `id` — Guid của BatteryAsset.
+
+**Response thành công `200`:** `CommonResponse<CascadeRiskDto>`
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "",
+  "data": {
+    "batteryAssetId": "8f1c...",
+    "serialNumber": "BAT-2026-001",
+    "siteId": "3a2b...",
+    "cascadeRiskScore": 0.800,
+    "level": "High",
+    "electricalTopology": "SeriesString",
+    "cascadeRiskUpdatedAt": "2026-06-24T03:15:00Z"
+  },
+  "listErrors": null
+}
+```
+
+**Chi tiết `CascadeRiskDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `batteryAssetId` | `string` | Không | ID asset (UUID string) |
+| `serialNumber` | `string?` | Null nếu không lấy được | Serial number của pin |
+| `siteId` | `string?` | **Null nếu asset chưa gán site** | ID site |
+| `cascadeRiskScore` | `decimal` | Không | Điểm rủi ro 0.0–1.0 (lưu DB, refresh mỗi 5 phút) |
+| `level` | `CascadeRiskLevel` | Không | Mức derive từ score: `Low`/`Medium`/`High` (xem enum) |
+| `electricalTopology` | `ElectricalTopologyEnum` | Không | Cách đấu nối điện (xem enum) |
+| `cascadeRiskUpdatedAt` | `DateTime?` | **Null nếu chưa từng tính** | Thời điểm recompute gần nhất (UTC) |
+
+**Lỗi thường gặp:** `404` — không tìm thấy asset (hoặc đã soft-delete) · `401`/`403`.
+
+---
+
+### `GET /api/sites/{id}/cascade-risk-summary`
+
+**Mục đích:** Heat map cascade risk tổng hợp toàn bộ asset trong 1 site (Manager dashboard).
+
+**Auth:** Bắt buộc (Admin/Manager)
+
+**Path param:** `id` — Guid của Site.
+
+**Response thành công `200`:** `CommonResponse<SiteCascadeRiskSummaryDto>`
+
+**Chi tiết `SiteCascadeRiskSummaryDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `siteId` | `string` | Không | ID site |
+| `totalAssets` | `int` | Không | Tổng số asset (chưa xóa) trong site |
+| `highRiskCount` | `int` | Không | Số asset mức `High` (score ≥ 0.7) |
+| `mediumRiskCount` | `int` | Không | Số asset mức `Medium` (0.5 ≤ score < 0.7) |
+| `lowRiskCount` | `int` | Không | Số asset mức `Low` (score < 0.5) |
+| `maxScore` | `decimal` | Không | Score lớn nhất trong site (0 nếu site rỗng) |
+| `highRiskAssets` | `CascadeRiskDto[]` | Không (mảng có thể rỗng) | Danh sách asset `High`, sort theo score giảm dần |
+
+**Lỗi thường gặp:** `404` — không tìm thấy site · `401`/`403`.
+
+---
+
+### `POST /api/battery-assets/{id}/topology`
+
+**Mục đích:** Admin gán **electrical topology** cho asset (ảnh hưởng trực tiếp tới cascade risk). Sau khi set, score được **recompute ngay** để response phản ánh topology mới.
+
+**Auth:** Bắt buộc (chỉ **Admin**)
+
+**Path param:** `id` — Guid của BatteryAsset (lấy từ path, **không** nhận trong body).
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `electricalTopology` | `ElectricalTopologyEnum` | **Bắt buộc** | Phải thuộc `1..4` | Cách đấu nối điện |
+
+```json
+{ "electricalTopology": 2 }
+```
+
+**Response thành công `200`:** `CommonResponse<CascadeRiskDto>` (DTO giống GET cascade-risk ở trên, đã recompute).
+
+**Lỗi thường gặp:**
+- `400` — Field-level validation (xem `listErrors`): `electricalTopology` ngoài 1..4, hoặc `id` rỗng. Mỗi lỗi có `field` + `detail`.
+- `404` — không tìm thấy asset.
+- `401`/`403` — chưa đăng nhập / không phải Admin.
+
+---
+
+## Nhóm 13 — Reports (Sprint 7 #114 · §5.2)
+
+**Quy ước chung mọi report:**
+- **Export:** thêm query `?format=csv` hoặc `?format=xlsx` → trả **file download** (XLSX dùng ClosedXML; CSV có UTF-8 BOM cho tiếng Việt). Không truyền `format` (hoặc giá trị khác) → trả **JSON** `CommonResponse<List<...>>`.
+- **Thời gian:** `from`/`to` là UTC, tùy chọn. Report time-series mặc định **30 ngày gần nhất** nếu bỏ trống. `granularity`: `day` (mặc định) · `week` · `month`.
+- Route phẳng `api/reports/...` (project bỏ API versioning).
+- Tất cả là `GET`. Auth mặc định **Admin/Manager** (riêng `ambient-trend` mở thêm Staff/Customer).
+
+### `GET /api/reports/battery-health-by-type`
+
+**Mục đích:** Sức khỏe pin theo từng loại — tổng asset, số có alert active, health score.
+**Auth:** Admin/Manager · **Query:** chỉ `format`.
+**Response `200`:** `CommonResponse<List<BatteryHealthByTypeRow>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `typeId` | `string` | Không | ID loại pin |
+| `name` | `string?` | Null nếu loại pin không có tên | Tên loại pin |
+| `totalAssets` | `int` | Không | Tổng asset thuộc loại này |
+| `withActiveAlerts` | `int` | Không | Số asset đang có Open alert |
+| `healthScore` | `decimal` | Không | 0–100: % asset **không** có alert active (`(total-withAlerts)/total*100`) |
+
+### `GET /api/reports/alert-volume`
+
+**Mục đích:** Số lượng Alert theo thời gian (time-series).
+**Auth:** Admin/Manager · **Query:** `from?`, `to?`, `granularity?` (mặc định 30 ngày/day), `format?`.
+**Response `200`:** `CommonResponse<List<ReportTimeSeriesPoint>>` — `{ date: DateTime, count: int }` (cả 2 không null).
+
+### `GET /api/reports/top-anomalies`
+
+**Mục đích:** Top loại anomaly theo số lượng (kèm số Critical).
+**Auth:** Admin/Manager · **Query:** `from?`, `to?`, `limit?` (mặc định 10, tối đa 100), `format?`.
+**Response `200`:** `CommonResponse<List<TopAnomalyRow>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `anomalyType` | `string` | Không | Tên `AnomalyTypeEnum` (vd "Overheat") |
+| `count` | `int` | Không | Tổng số alert loại này |
+| `criticalCount` | `int` | Không | Số alert có severity Critical |
+
+### `GET /api/reports/asset-lifecycle`
+
+**Mục đích:** Vòng đời asset — tuổi (ngày), cycle count (BMS), tổng alert.
+**Auth:** Admin/Manager · **Query:** chỉ `format`.
+**Response `200`:** `CommonResponse<List<AssetLifecycleRow>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `assetId` | `string` | Không | ID asset |
+| `serialNumber` | `string?` | Null nếu không có | Serial number |
+| `ageDays` | `int` | Không | Số ngày từ `installDate` đến nay |
+| `cycleCount` | `int?` | **Null nếu chưa có reading có cycleCount** | Số chu kỳ sạc/xả mới nhất từ BMS |
+| `alertsTotal` | `int` | Không | Tổng số alert của asset |
+
+### `GET /api/reports/warranty-expiring`
+
+**Mục đích:** Asset sắp hết bảo hành trong N ngày.
+**Auth:** Admin/Manager · **Query:** `within?` (chuỗi "90d" hoặc số, mặc định 90 ngày), `format?`.
+**Response `200`:** `CommonResponse<List<WarrantyExpiringRow>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `assetId` | `string` | Không | ID asset |
+| `serialNumber` | `string?` | Null nếu không có | Serial number |
+| `warrantyEndDate` | `DateTime?` | Null nếu không set | Ngày hết bảo hành (UTC) |
+| `daysRemaining` | `int?` | Null nếu không có warrantyEndDate | Số ngày còn lại đến khi hết hạn |
+| `customerId` | `string` | Không | ID khách hàng sở hữu |
+
+### `GET /api/reports/environmental-incidents`
+
+**Mục đích:** Sự cố môi trường theo site/loại/thời gian (Sprint 7 mới).
+**Auth:** Admin/Manager · **Query:** `from?`, `to?`, `siteId?` (Guid), `type?` (int = `EnvironmentalIncidentTypeEnum`), `format?`.
+**Response `200`:** `CommonResponse<List<EnvironmentalIncidentRow>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `siteId` | `string` | Không | ID site |
+| `incidentType` | `string` | Không | Tên `EnvironmentalIncidentTypeEnum` |
+| `severity` | `string` | Không | Tên `AlertSeverityEnum` |
+| `detectedAt` | `DateTime` | Không | Thời điểm phát hiện (UTC) |
+| `resolvedAt` | `DateTime?` | **Null nếu chưa resolve** | Thời điểm xử lý xong (UTC) |
+| `durationHours` | `decimal?` | **Null nếu chưa resolve** | Thời gian tồn tại sự cố (giờ) |
+| `wasFalseAlarm` | `bool` | Không | `true` nếu được đánh dấu báo động giả |
+
+### `GET /api/reports/ambient-trend`
+
+**Mục đích:** Xu hướng nhiệt độ/độ ẩm/bức xạ môi trường theo thời gian cho 1 site (Sprint 7 mới).
+**Auth:** Admin/Manager/**Staff/Customer** · **Query:** `siteId` (Guid, **bắt buộc**), `from?`, `to?`, `granularity?` (mặc định 30 ngày/day), `format?`.
+**Response `200`:** `CommonResponse<List<AmbientTrendPoint>>`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `date` | `DateTime` | Không | Mốc bucket (UTC) |
+| `avgTemp` | `decimal` | Không | Nhiệt độ môi trường trung bình (°C) |
+| `maxTemp` | `decimal` | Không | Nhiệt độ cao nhất (°C) |
+| `minTemp` | `decimal` | Không | Nhiệt độ thấp nhất (°C) |
+| `humidityAvg` | `decimal?` | **Null nếu bucket không có dữ liệu độ ẩm** | Độ ẩm trung bình (%RH) |
+| `irradianceAvg` | `decimal?` | **Null nếu không có dữ liệu bức xạ** | Bức xạ mặt trời trung bình |
+
+---
+
 ## Bảng tổng hợp Endpoints
 
 | Method | Path | Mục đích | Auth |
@@ -2484,3 +2715,15 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | POST | `/api/admin/iot-firmware-releases/{id}/publish` | Publish release | Admin |
 | POST | `/api/admin/iot-firmware-releases/{id}/archive` | Archive release | Admin |
 | POST | `/api/admin/iot-firmware-releases/upload-binary` | Upload file `.bin` firmware | Admin |
+| GET | `/api/battery-assets/{id}/cascade-risk` | Cascade risk của 1 asset (Sprint 7 B4) | Admin/Manager/Staff/Customer |
+| GET | `/api/sites/{id}/cascade-risk-summary` | Heat map cascade risk theo site (Sprint 7 B4) | Admin/Manager |
+| POST | `/api/battery-assets/{id}/topology` | Set electrical topology (Sprint 7 B4) | Admin |
+| GET | `/api/reports/battery-health-by-type` | Báo cáo sức khỏe pin theo loại (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/alert-volume` | Báo cáo số alert theo thời gian (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/top-anomalies` | Báo cáo top loại anomaly (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/asset-lifecycle` | Báo cáo vòng đời asset (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/warranty-expiring` | Báo cáo asset sắp hết bảo hành (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/environmental-incidents` | Báo cáo sự cố môi trường (Sprint 7) | Admin/Manager |
+| GET | `/api/reports/ambient-trend` | Báo cáo xu hướng môi trường theo site (Sprint 7) | Admin/Manager/Staff/Customer |
+
+> **Reports (Sprint 7):** mọi endpoint `/api/reports/*` hỗ trợ `?format=csv\|xlsx` để export file; không có `format` → JSON.

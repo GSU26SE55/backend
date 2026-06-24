@@ -247,4 +247,29 @@ spec:
       labels: { severity: warning }
       annotations:
         summary: "Postgres connections > 80% of limit"
+
+  # ---- Sprint 7 #118 — Environmental incident monitoring ----
+  # Metrics: environmental_incident_detected_total{type,severity},
+  #          environmental_incident_detection_latency_seconds_bucket.
+  - name: environmental-monitoring
+    interval: 30s
+    rules:
+    - alert: EnvironmentalIncidentCriticalDetected
+      expr: increase(environmental_incident_detected_total{severity="Critical"}[5m]) > 0
+      for: 0m
+      labels: { severity: critical }
+      annotations:
+        summary: "Critical environmental incident detected ({{`{{ $labels.type }}`}})"
+        description: "{{`{{ $value }}`}} Critical incident (type={{`{{ $labels.type }}`}}) in 5m. Page Manager + Admin."
+
+    - alert: EnvironmentalIncidentDetectionLatencyHigh
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(environmental_incident_detection_latency_seconds_bucket[15m])) by (le)
+        ) > 300
+      for: 10m
+      labels: { severity: warning }
+      annotations:
+        summary: "Env incident detection latency p95 {{`{{ $value }}`}}s"
+        description: "Environmental incident detection slow (p95 > 5min). Check report/ingest pipeline."
 {{- end }}

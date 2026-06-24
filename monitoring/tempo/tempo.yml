@@ -1,0 +1,23 @@
+# Sprint 7 #116 — Grafana Tempo (monolithic, local storage) — distributed tracing backend.
+# Nhận trace OTLP từ service (OpenTelemetry SDK export về tempo:4317) → lưu local → Grafana query.
+# Config tối thiểu canonical — ingester/compactor dùng default (Tempo latest strict-parse loại field thừa).
+
+server:
+  http_listen_port: 3200          # Tempo query API (Grafana datasource trỏ vào đây).
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317  # Service export trace về đây (OpenTelemetry__OtlpEndpoint=http://tempo:4317).
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks

@@ -1,0 +1,187 @@
+{
+  "uid": "solar-iot-fleet",
+  "title": "Sprint IoT-1 — Fleet & MQTT",
+  "tags": ["solar-battery", "iot", "sprint-iot-1"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"] },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Devices — Active",
+      "id": 1,
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(iot_devices_online_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Devices — Offline",
+      "id": 2,
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(iot_devices_online_count)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Heartbeats/sec (5m avg)",
+      "id": 3,
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(iot_device_heartbeats_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "type": "stat",
+      "title": "Sensor Inserts/sec",
+      "id": 4,
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(iot_sensor_readings_ingested_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Device offline events (cumulative 5m)",
+      "id": 10,
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "increase(iot_devices_offline_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "marked offline" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 50 },
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 3 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sensor outlier reject rate",
+      "id": 11,
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(iot_sensor_readings_rejected_total{reason=\"sensor_outlier\"}[10m])) / (sum(rate(iot_sensor_readings_ingested_total[10m])) + sum(rate(iot_sensor_readings_rejected_total{reason=\"sensor_outlier\"}[10m])))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "reject %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.1 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Firmware update status (1h cumulative)",
+      "id": 12,
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum by (status) (increase(iot_firmware_updates_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heartbeat clock_drift ratio (fleet)",
+      "id": 13,
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(iot_device_heartbeats_total{status=\"clock_drift\"}[5m])) / clamp_min(sum(rate(iot_device_heartbeats_total[5m])), 1)", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "drift ratio" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "type": "stat",
+      "title": "MQTT Bridge connected",
+      "id": 20,
+      "gridPos": { "x": 0, "y": 20, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "mqtt_bridge_connected", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DISCONNECTED", "color": "red" }, "1": { "text": "CONNECTED", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "MQTT subscriber queue depth",
+      "id": 21,
+      "gridPos": { "x": 6, "y": 20, "w": 18, "h": 4 },
+      "targets": [
+        { "expr": "mqtt_subscriber_queue_depth", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{topic}}" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Sprint IoT-2 — Auto-decommissioned (1h, #IoT2-17)",
+      "id": 32,
+      "gridPos": { "x": 0, "y": 24, "w": 6, "h": 6 },
+      "targets": [
+        { "expr": "sum(increase(iot_devices_auto_decommissioned_total[1h]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "devices" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 1 },
+            { "color": "red", "value": 3 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sprint IoT-2 — Cross-source mismatch alerts (#IoT2-28)",
+      "id": 33,
+      "gridPos": { "x": 6, "y": 24, "w": 6, "h": 6 },
+      "targets": [
+        { "expr": "rate(iot_cross_source_mismatch_alerts_total[5m])", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "alert/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sprint IoT-2 — Reject reasons breakdown (#IoT2-15..18)",
+      "id": 34,
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "sum by (reason) (rate(iot_sensor_readings_rejected_total[5m]))", "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "BatteryService IoT logs",
+      "id": 31,
+      "gridPos": { "x": 0, "y": 30, "w": 24, "h": 8 },
+      "targets": [
+        { "expr": "{container=\"solar-batteryservice\"} |~ \"(?i)(IotDevice|iot-devices|mqtt|firmware-check|provision|SensorMismatch|auto-decommission)\"", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+      ]
+    }
+  ]
+}

@@ -273,6 +273,17 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("battery_type_id");
 
+                    b.Property<decimal>("CascadeRiskScore")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(4, 3)
+                        .HasColumnType("numeric(4,3)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("cascade_risk_score");
+
+                    b.Property<DateTime?>("CascadeRiskUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cascade_risk_updated_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -288,6 +299,12 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<int>("ElectricalTopology")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("electrical_topology");
 
                     b.Property<DateTime>("InstallDate")
                         .HasColumnType("timestamp with time zone")

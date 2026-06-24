@@ -3,7 +3,7 @@ using Moq;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
+using SharedContracts.Events;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -63,7 +63,7 @@ public class TicketAssignCommandHandlerTests
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager A", ActivityActionEnum.StaffAssigned, null, staffId.ToString(), "Please handle this."), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
     #endregion

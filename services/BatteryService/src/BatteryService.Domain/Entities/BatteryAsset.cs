@@ -31,6 +31,15 @@ public class BatteryAsset : AuditableEntity
 
     public DateTime? LastSensorReadingAt { get; set; }
 
+    /// <summary>Sprint 7 B4 (§31.7) — điểm rủi ro lan truyền 0.0–1.0, recompute bởi CascadeRiskBackgroundService.</summary>
+    public decimal CascadeRiskScore { get; set; }
+
+    /// <summary>Sprint 7 B4 (§31.7) — thời điểm tính CascadeRiskScore lần cuối.</summary>
+    public DateTime? CascadeRiskUpdatedAt { get; set; }
+
+    /// <summary>Sprint 7 B4 (§31.7) — cách đấu nối điện, dùng cho topology factor khi tính cascade risk.</summary>
+    public ElectricalTopologyEnum ElectricalTopology { get; set; } = ElectricalTopologyEnum.Independent;
+
     public BatteryType BatteryType { get; set; } = null!;
 
     public Site? Site { get; set; }
