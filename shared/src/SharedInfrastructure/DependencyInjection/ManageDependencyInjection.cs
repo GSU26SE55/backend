@@ -41,6 +41,9 @@ public static class ManageDependencyInjection
             options.Configuration = configuration.GetConnectionString("Redis");
         });
         services.AddScoped<ICacheService, RedisCacheService>();
+
+        // Sprint 7 #116 — OpenTelemetry tracing → Tempo (no-op nếu chưa cấu hình OtlpEndpoint).
+        services.AddOpenTelemetryTracing(configuration, apiTitle);
         return services;
     }
 

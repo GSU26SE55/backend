@@ -9,6 +9,9 @@ data:
   ASPNETCORE_ENVIRONMENT: {{ .Values.global.aspnetEnvironment | quote }}
   ASPNETCORE_URLS: "http://+:8080"
 
+  # Sprint 7 #116 — OpenTelemetry → Tempo. Tự wire khi tempo.enabled; ngược lại để trống (tracing tắt).
+  OpenTelemetry__OtlpEndpoint: {{ if .Values.tempo.enabled }}"http://tempo:4317"{{ else }}{{ .Values.global.otlpEndpoint | default "" | quote }}{{ end }}
+
   # Database-backed services set their connection strings in their Deployment
   # so Kubernetes can expand POSTGRES_PASSWORD from an explicit env var.
 

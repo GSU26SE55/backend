@@ -28,6 +28,7 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  tempo-data:        # Sprint 7 #116 — Tempo trace storage.
   # GH-295 — ASP.NET Data Protection keys cho encrypt 2FA TwoFactorSecret.
   # ⚠️ MẤT VOLUME = MẤT ALL 2FA. Backup cùng schedule với postgres-data.
   auth-dataprotection-keys:
@@ -487,6 +488,21 @@ services:
       - "3001:3000"
     depends_on:
       - prometheus
+      - tempo
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # Sprint 7 #116 — Distributed tracing backend. Service export OTLP về tempo:4317.
+  tempo:
+    image: grafana/tempo:latest
+    container_name: solar-tempo
+    profiles: ["monitoring"]
+    mem_limit: 384m
+    cpus: "0.30"
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
     networks: [solar-net]
     restart: unless-stopped
 

@@ -3,7 +3,7 @@ using Moq;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
+using SharedContracts.Events;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -55,6 +55,6 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
 
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

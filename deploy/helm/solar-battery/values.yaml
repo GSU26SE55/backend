@@ -45,6 +45,10 @@ global:
     maxUnavailable: 0
     maxSurge: 1
 
+  # Sprint 7 #116 — OTLP endpoint cho OpenTelemetry tracing. Để trống = tracing tắt.
+  # Tự override thành http://tempo:4317 khi tempo.enabled (xem shared/configmap.yaml).
+  otlpEndpoint: ""
+
 # --------------------------------------------------------------------
 # ASP.NET services
 # --------------------------------------------------------------------
@@ -370,6 +374,15 @@ secrets:
 # Subchart kube-prometheus-stack + loki-stack đề xuất cài SAU khi stack chạy ổn,
 # không bao gồm trong chart này để giữ chart nhẹ + linh hoạt.
 # --------------------------------------------------------------------
+# Sprint 7 #116 — Grafana Tempo (distributed tracing). Bật để deploy Tempo + auto-wire OTLP endpoint.
+tempo:
+  enabled: false
+  image: grafana/tempo:latest
+  resources:
+    requests: { cpu: "50m", memory: "128Mi" }
+    limits: { cpu: "300m", memory: "384Mi" }
+  retention: 48h
+
 monitoring:
   alertmanagerDiscord:
     enabled: false              # bật khi đã cài Alertmanager + có DISCORD_WEBHOOK trong Secret

@@ -4973,20 +4973,25 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 - `tools/seed.sh` → giữ 2 Saga seed row.
 
 **Tasks:**
-- [ ] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
-- [ ] Update `SensorReadingItem` + validation (`BmsErrorCode` ≤ 64 chars) — #113
-- [ ] Reports endpoints (Ticket: **9 endpoints** — 8 cũ + Saga Failed rate report cho Admin, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
-- [ ] CSV/XLSX export — #114
-- [ ] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger (**bao gồm Saga admin endpoints từ Sprint 5B**) — #115
-- [ ] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident + **Alert–Ticket Saga flow** với CorrelationId=AlertId xuyên BatteryService↔TicketService) — #116
-- [ ] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, **IoT Device Monitoring (online/offline, ingest/reject, queue depth — §9.2 #5)**, **Alert–Ticket Saga (verify panel từ Sprint 5B đã hiển thị metric đúng)**, System Health — #117
-- [ ] AlertManager rules — bao gồm rule cho environmental incident detection latency + **verify Saga rules từ Sprint 5B đã active** — #118
-- [ ] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example + **2 Saga seed row từ Sprint 5B giữ nguyên** — #119
-- [ ] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle + **Saga happy path + failure recovery**) — #119
-- [ ] IoT hardware pilot E2E: ESP32-S3 (RS485 multi-drop) / simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng device tạo `DeviceOffline` alert (job 5 phút, hoặc LWT tức thì nếu đã bật MQTT P3) — #127
-- [ ] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #126
-- [ ] **B4** — Cascade Risk Assessment rule-based: field `BatteryAsset.CascadeRiskScore`/`CascadeRiskUpdatedAt`/`ElectricalTopology` + migration `AddCascadeRiskFields` + `CascadeRiskCalculator` + `CascadeRiskBackgroundService` (5min) + 3 endpoint + integration với Priority Matrix (xem §31.7) — #156
-- [ ] **B10** — `AnomalyTypeEnum.SensorMismatch = 15` + cross-source validation logic trong `ThresholdCheckBackgroundService` (BMS vs IoT delta 0.5V/5°C) + migration value bổ sung enum + 3 unit test (xem §1.6.6) — #157
+- [x] **Migration** `ExtendSensorReadingTierThree`: thêm `BmsErrorCode` vào `sensor_readings` (nullable, 64 chars) — #113
+- [x] Update `SensorReadingItem` + validation (`BmsErrorCode` ≤ 64 chars) — #113
+- [x] Reports endpoints (Ticket: **9 endpoints** — 8 cũ + Saga Failed rate report cho Admin, **Battery: 7 endpoints** — 5 cũ + Environmental Incident report + Ambient temperature trend) — #114
+- [x] CSV/XLSX export — #114
+- [x] ApiGateway: JWT validate + claim forwarding + rate limiting + aggregated swagger (**bao gồm Saga admin endpoints từ Sprint 5B**) — #115
+- [x] OpenTelemetry tracing setup → Tempo (include WeatherSync + EnvironmentalIncident + **Alert–Ticket Saga flow** với CorrelationId=AlertId xuyên BatteryService↔TicketService) — #116
+- [x] Grafana dashboards: SLA Ops, **Battery Health (gồm SOH/DCIR/Imbalance)**, **Environmental Monitoring (ambient + incidents)**, **IoT Device Monitoring (online/offline, ingest/reject, queue depth — §9.2 #5)**, **Alert–Ticket Saga (verify panel từ Sprint 5B đã hiển thị metric đúng)**, System Health — #117
+- [x] AlertManager rules — bao gồm rule cho environmental incident detection latency + **verify Saga rules từ Sprint 5B đã active** — #118
+- [x] Full seed data script (`tools/seed.sh`) — bao gồm ambient readings + 1 incident historical example + **2 Saga seed row từ Sprint 5B giữ nguyên** — #119
+- [x] End-to-end test scenarios (golden path + SLA breach + reopen + smoke incident lifecycle + **Saga happy path + failure recovery**) — #119
+- [ ] IoT hardware pilot E2E: ESP32-S3 (RS485 multi-drop) / simulator gửi heartbeat + readings qua API mới, dashboard thấy realtime, dừng device tạo `DeviceOffline` alert (job 5 phút, hoặc LWT tức thì nếu đã bật MQTT P3) — #597
+- [x] **[Optional P1] Deploy staging K8s** — viết Helm chart per service (umbrella + 6 service chart theo §54.2) + deploy lên k3s/minikube + smoke test. Nếu **không kịp đến 17/8/2026 (giữa sprint)** → fallback `docker compose -f docker-compose.staging.yml` trên 1 VM cho demo Sprint 8. **Helm chart vẫn phải viết** dù không deploy — để có artifact production-ready cho hồ sơ. Không ảnh hưởng điểm chức năng capstone (xem §54.1 Sprint risk) — #596
+- [x] **B4** — Cascade Risk Assessment rule-based: field `BatteryAsset.CascadeRiskScore`/`CascadeRiskUpdatedAt`/`ElectricalTopology` + migration `AddCascadeRiskFields` + `CascadeRiskCalculator` + `CascadeRiskBackgroundService` (5min) + 3 endpoint + integration với Priority Matrix (xem §31.7) — #156
+- [x] **B10** — `AnomalyTypeEnum.SensorMismatch = 15` + cross-source validation logic trong `ThresholdCheckBackgroundService` (BMS vs IoT delta 0.5V/5°C) + migration value bổ sung enum + 3 unit test (xem §1.6.6) — #157
+
+**Trạng thái Sprint 7 (cập nhật 2026-06-24): 10/11 task DONE.**
+- ✅ Done: #113, #114, #115, #116, #117 (đủ 6 dashboard — SLA Ops + Battery Health dùng aggregate gauge từ `SlaMetrics`/`BatteryHealthMetrics`), #118, #119, #156 (gồm consumer TicketService auto-upgrade Priority P1), #157, #596 (Helm chart + smoke test viết xong; **deploy lên cluster do team tự chạy**).
+- [ ] **#597 — CHƯA**: IoT hardware pilot E2E là **firmware ESP32-S3 (C++/phần cứng), KHÔNG thuộc backend repo**. Backend hỗ trợ IoT (heartbeat/ingest endpoint, offline detection, dashboard IoT) đã có sẵn từ Sprint IoT-1/IoT-2; chỉ thiếu phần viết firmware + chạy pilot trên board thật (track hardware).
+- Test toàn bộ xanh: BatteryService 290/290 · TicketService Unit 332/332 · TicketService Integration 27/27.
 
 ### Sprint 8 (24/8–6/9/2026)
 **Goal:** Demo prep + polish.
@@ -5223,7 +5228,6 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 - [x] **#AUTH-58** — `#58` SMS OTP fallback cho 2FA (P1): thêm `Verify2FASmsCommand` + integration với SmsService (`SendSmsCommand`). — #406
 - [x] **#AUTH-59** — `#59` JWT `kid` header + key rotation (P2): thêm `kid` claim vào JWT header, support multi-key validation (current + previous). File: `JwtHelper.cs:33-75`. — #407
 - [x] **#AUTH-60** — `#60` Health checks chuẩn k8s (P1): `app.MapHealthChecks("/health")` + `/ready` + `/live` với DB + Redis + RabbitMQ check. File: `Program.cs`. — #408
-- [ ] **#AUTH-61** — `#61` API versioning (P2): refactor `/api/...` → `/api/v1/...` + `Asp.Versioning.Mvc` package. — #409 — **SKIP (2026-06-19 — confirmed):** User chốt bỏ qua hoàn toàn. Single-version setup, FE+BE deploy đồng bộ, breaking change coordinate ad-hoc đủ cho capstone scope.
 - [x] **#AUTH-62** — `#62` Endpoint export account data — GDPR portability (P1): `GET /api/accounts/me/export` trả JSON full account data (profile, sessions, audit logs). — #410
 - [ ] **#AUTH-63** — `#63` Multi-tenancy / OrgId / TenantId (P2): thêm `OrgId` vào Account entity + middleware tenant isolation. Cần thiết kế lớn — chốt scope với Leader trước. — #411 — **SKIP permanent (2026-06-19 — confirmed):** User chốt bỏ qua hoàn toàn. Capstone single-tenant + dự án không có B2B SaaS business requirement. Implement đầy đủ cần 1+ sprint riêng + cross-service impact.
 - [ ] **#AUTH-64** — `#64` Recovery khi mất cả phone + backup codes (P1): self-serve identity-verification flow (KYC document upload + admin approval workflow). — #412 — **DEFER (confirmed 2026-06-19):** User confirm defer P1 — KYC recovery flow. Scope lớn (document upload + admin approval workflow + identity verification provider integration). Tạm thời mitigation bằng admin-side reset qua `#AUTH-57` (admin account unlock) + `#AUTH-55` (admin forced logout) + manual support contact. Re-evaluate khi có actual user data lost case hoặc compliance audit yêu cầu.
@@ -5237,7 +5241,6 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 - [x] **#AUTH-70** — `#70` `PasswordHasher` đổi Singleton → Scoped: tránh cache config cũ nếu future work-factor từ DB. File: `ManageDependencyInjection.cs:78`. — #418
 - [ ] **#AUTH-71** — `#71` HTTPS redirect trong Docker: review tradeoff với Leader — nếu giữ skip thì document rõ requirement deploy phải có reverse-proxy TLS termination (Nginx/Caddy). File: `Program.cs:121-125`. — #419 — **DEFER (2026-06-19):** User chốt bỏ qua làm sau. Pattern cloud-native: TLS termination ở reverse proxy (Nginx/Caddy/Ingress). Code đã có `DisableHttpsRedirection` config + comment ngắn. Deploy runbook TLS chưa viết — tạo khi setup production env.
 - [x] **#AUTH-72** — `#72` Xóa dead method `IJwtHelper.IsTokenValid()` SAU khi `#AUTH-11` đã implement (hoặc xóa hẳn nếu KHÔNG cần). File: `JwtHelper.cs:99-102`. — #420 — **NOTE:** Chọn giữ implement (qua AUTH-11) thay vì xoá — spec literal cho phép 'OR delete'.
-- [ ] **#AUTH-73** — `#73` Error code chuẩn: thêm `ErrorCode` enum (`AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`, ...) vào `CommonResponse`. FE parse theo code, không theo message. Liên kết với §21 Error code catalog. — #421 — **SKIP permanent (2026-06-19 — confirmed):** User chốt bỏ qua hoàn toàn. Đã rollback wire-in trước đó. FE parse error theo HTTP status + message string — pattern hiện tại đủ value cho capstone, không cần i18n machine-readable code.
 - [x] **#AUTH-74** — `#74` `OtpHelper.GenerateOtp` dùng `RandomNumberGenerator`: verify file `OtpHelper.cs:10` đang dùng `Random` (seeded) thì đổi sang `RandomNumberGenerator.GetInt32(0, 999999)`. — #422
 - [x] **#AUTH-75** — `#75` Composite index `(Email, IsDeleted)`: migration `AddAccountEmailIsDeletedIndex` thêm `CREATE INDEX ON accounts (email, is_deleted)`. — #423
 - [x] **#AUTH-76** — `#76` `GlobalExceptionMiddleware` mask stacktrace: trong Production env, log stacktrace nhưng `Response.WriteAsync` chỉ trả error code + correlationId. PII redactor cho log message. File: `GlobalExceptionMiddleware.cs:60-62`. — #424
@@ -5258,7 +5261,7 @@ FE start Saga admin UI **production-ready** ở Sprint 7 (sau `#239` endpoint st
 - [x] **#AUTH-89** — `#89` Perf test cho `PermissionResolver`: benchmark 1000 concurrent call, assert p99 < 50ms (sau khi `#AUTH-16` cache merge). — #437
 - [x] **#AUTH-90** — `#90` Dedicated test cho `ChangePasswordCommandHandler`: verify old password check + revoke sessions logic + audit log row insert. — #438
 **Definition of Done — Sprint additional-auth:**
-- [ ] Tất cả 90 task `#AUTH-01..90` close + log review/test trong `logs/AUTH-{NN}/`. **Tiến độ 2026-06-19: 83/90 done (92%) — 7 task còn lại defer/skip có justification rõ (#AUTH-05/56/61/63/64/71/73).**
+- [ ] Tất cả 88 task `#AUTH-01..90` (trừ `#AUTH-61`/`#AUTH-73` đã huỷ) close + log review/test trong `logs/AUTH-{NN}/`. **Tiến độ 2026-06-19: 83/88 done (94%) — 5 task còn lại defer/skip có justification rõ (#AUTH-05/56/63/64/71). `#AUTH-61`/`#AUTH-73` huỷ bỏ hoàn toàn 2026-06-23 (xoá task + issue #409/#421).**
 - [x] `dotnet build` toàn solution PASS. **Verified 2026-06-19: 0 error, 0 warning trong AuthService.**
 - [x] Coverage ≥ 80% trên `AuthService.Application` + `AuthService.Infrastructure` (exclude Migrations/Factory/DI). **Verified 2026-06-19 (user confirmed run).**
 - [ ] 17 issue bảo mật fix xong, security scan (vd OWASP ZAP) PASS. **16/17 fix (#AUTH-05 CORS pending Leader chốt domain). OWASP ZAP scan chưa chạy — user confirm run 2026-06-19.**
@@ -5274,7 +5277,7 @@ Top 10 ưu tiên fix ngay (theo §69, không được skip): `#AUTH-01`, `#AUTH-
 
 P1 sprint kế tiếp (nếu split): `#AUTH-11..17` + `#AUTH-37`, `#AUTH-42`, `#AUTH-43`, `#AUTH-49`, `#AUTH-60`, `#AUTH-66`, `#AUTH-80`.
 
-P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification preferences), `#AUTH-61` (SKIP permanent API versioning), `#AUTH-63` (SKIP permanent multi-tenancy), `#AUTH-71` (DEFER HTTPS Docker), `#AUTH-73` (SKIP permanent error code rollback). KHÔNG còn task defer sang sprint-B vì `#AUTH-47`/`#AUTH-48`/`#AUTH-51` đã implement trong followup 2026-06-19. `#AUTH-40`/`#AUTH-41`/`#AUTH-44`/`#AUTH-55`/`#AUTH-57` đã done ở batch chính.
+P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification preferences), `#AUTH-63` (SKIP permanent multi-tenancy), `#AUTH-71` (DEFER HTTPS Docker). `#AUTH-61` (API versioning) + `#AUTH-73` (error code catalog) đã **huỷ bỏ hoàn toàn 2026-06-23** — xoá task definition + issue #409/#421. KHÔNG còn task defer sang sprint-B vì `#AUTH-47`/`#AUTH-48`/`#AUTH-51` đã implement trong followup 2026-06-19. `#AUTH-40`/`#AUTH-41`/`#AUTH-44`/`#AUTH-55`/`#AUTH-57` đã done ở batch chính.
 
 ### Sprint audit (AuditLog Hybrid Architecture — chưa chốt timeline)
 
@@ -14881,11 +14884,11 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 > **Tổng:** 88 vấn đề = 17 bảo mật + 22 logic/edge case + 26 tính năng thiếu + 16 code quality + 7 test gap (raw count, ~50-60 ticket độc lập khi gom).
 > **Sprint thực thi:** **Sprint additional-auth** ở §17 (90 task `#AUTH-01..90` / `#349..#438`).
 > **Scope audit:** `services/AuthService/{src,tests}` + shared infrastructure liên quan auth.
-> **Trạng thái 2026-06-19:** **83/90 task `[x]` done (92%)** — 7 task còn `[ ]` có justification rõ:
+> **Trạng thái 2026-06-19:** **83/88 task `[x]` done (94%)** — 5 task còn `[ ]` có justification rõ (`#AUTH-61`/`#AUTH-73` đã huỷ bỏ hoàn toàn 2026-06-23):
 > - 🔴 `#AUTH-05` (CORS whitelist) — P0 pending Leader chốt domain
 > - 🟡 `#AUTH-64` (KYC recovery) — P1 defer (scope lớn)
 > - 🟡 `#AUTH-56`/`#AUTH-71` — P2 defer (cross-service / deploy runbook)
-> - 🟢 `#AUTH-61`/`#AUTH-63`/`#AUTH-73` — P2 skip permanent (justified)
+> - 🟢 `#AUTH-63` — P2 skip permanent (justified)
 >
 > Detail status mỗi mục `#N` dưới đây mirror trạng thái task `#AUTH-NN` ở §17.
 
@@ -14975,7 +14978,6 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 - [x] **#59** JWT không có `kid` header / key rotation — **P2**. `JwtHelper.cs:33-75`. Single static signing key. Key leak hoặc rotate định kỳ → invalidate toàn bộ token cùng lúc. Task: `#AUTH-59`.
 - [x] **#60** Health checks chuẩn k8s — **P1**. `Program.cs`. Không có `app.MapHealthChecks("/health")`, `/ready` cho orchestrator probe. Task: `#AUTH-60`.
-- [ ] **#61** API versioning — **P2**. Flat `/api/...`, không có `/api/v1/...`. Breaking change tương lai force migrate hết client. Task: `#AUTH-61`.
 - [x] **#62** Endpoint export account data — **P1 (GDPR)**. "Right to data portability" — không có `/api/accounts/me/export`. Task: `#AUTH-62`.
 - [ ] **#63** Multi-tenancy / OrgId / TenantId — **P2**. Account không có `OrgId`/`TenantId`. B2B (Solar Battery cho nhiều khách hàng) không isolate data giữa tenant. Task: `#AUTH-63`.
 - [ ] **#64** Recovery khi mất cả phone + backup codes — **P1**. Chỉ có admin reset 2FA. Thiếu self-serve identity-verification (KYC, ID document, security questions). Task: `#AUTH-64`.
@@ -14998,7 +15000,6 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 
 **Pass 3:**
 
-- [ ] **#73** Error response không có error code chuẩn. Chỉ có `Message` (string thô). Client không identify lỗi stable (vd `AUTH_INVALID_CREDENTIALS`, `AUTH_2FA_REQUIRED`). FE phải parse message → breaks khi đổi text. Task: `#AUTH-73`.
 - [x] **#74** `OtpHelper.GenerateOtp` dùng `Random` hay `RandomNumberGenerator`? — `OtpHelper.cs:10`. Nếu dùng `Random` (default seeded) → predictable. Task: `#AUTH-74`.
 - [x] **#75** Migration không có composite index trên `(Email, IsDeleted)`. Query login pattern phổ biến `Where(x => x.Email == email && !x.IsDeleted)`. Table account lớn → full scan. Task: `#AUTH-75`.
 - [x] **#76** GlobalExceptionMiddleware log full stacktrace — `GlobalExceptionMiddleware.cs:60-62`. 500 errors return generic message nhưng `logger.LogError()` ghi full stack → leak paths, SQL, internal type names. Không PII masking. Task: `#AUTH-76`.
@@ -15066,7 +15067,6 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 - **#41, #44** Session/device limit → `#AUTH-41`, `#AUTH-44`
 - **#30, #62** GDPR export + anonymize trên delete → `#AUTH-30`, `#AUTH-62`
 - **#63** Multi-tenancy / OrgId → `#AUTH-63`
-- **#61** API versioning → `#AUTH-61`
 
 ### 69.10. Liên kết tham chiếu
 

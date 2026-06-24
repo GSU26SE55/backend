@@ -22,4 +22,9 @@ public class AnomalyEngineOptions
     public int AutoResolveIntervalSeconds { get; set; } = 300;
     public int AutoResolveLookbackMinutes { get; set; } = 10;
     public int AutoResolveBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// Sprint 7 B4 (§31.7) — chu kỳ recompute cascade risk (mặc định 5 phút).
+    /// </summary>
+    public int CascadeRiskIntervalSeconds { get; set; } = 300;
 }
