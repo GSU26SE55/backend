@@ -18,8 +18,10 @@ public class StaffPerformanceReportQueryHandler
     {
         var q = _uow.Tickets.GetAllAsync().AsNoTracking().Include(t => t.SlaTimer)
             .Where(t => !t.IsDeleted && t.AssignedStaffId != null);
-        if (request.From.HasValue) q = q.Where(t => t.CreatedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(t => t.CreatedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(t => t.CreatedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(t => t.CreatedAt <= request.To.Value);
 
         var data = await q.Select(t => new
         {
@@ -34,7 +36,8 @@ public class StaffPerformanceReportQueryHandler
         var staff = await _uow.StaffAccounts.GetAllAsync().AsNoTracking()
             .Select(s => new { s.Id, s.AccountId, s.FullName }).ToListAsync(ct);
         var names = new Dictionary<Guid, string>();
-        foreach (var s in staff) { names[s.Id] = s.FullName; names[s.AccountId] = s.FullName; }
+        foreach (var s in staff)
+        { names[s.Id] = s.FullName; names[s.AccountId] = s.FullName; }
 
         var rows = data.GroupBy(x => x.StaffId).Select(g =>
         {

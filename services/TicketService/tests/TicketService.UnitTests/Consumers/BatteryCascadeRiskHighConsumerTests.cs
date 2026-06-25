@@ -51,8 +51,12 @@ public class BatteryCascadeRiskHighConsumerTests
         var ticketId = Guid.NewGuid();
         var ticket = new Ticket
         {
-            Id = ticketId, Code = "T-1", Title = "t", Description = "d",
-            BatteryAssetId = assetId, Status = TicketStatusEnum.Open,
+            Id = ticketId,
+            Code = "T-1",
+            Title = "t",
+            Description = "d",
+            BatteryAssetId = assetId,
+            Status = TicketStatusEnum.Open,
             Priority = TicketPriorityEnum.P3Normal
         };
         _ticketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.AsQueryable().BuildMock());
@@ -74,8 +78,12 @@ public class BatteryCascadeRiskHighConsumerTests
         var ticketId = Guid.NewGuid();
         var ticket = new Ticket
         {
-            Id = ticketId, Code = "T-1", Title = "t", Description = "d",
-            BatteryAssetId = assetId, Status = TicketStatusEnum.Open,
+            Id = ticketId,
+            Code = "T-1",
+            Title = "t",
+            Description = "d",
+            BatteryAssetId = assetId,
+            Status = TicketStatusEnum.Open,
             Priority = TicketPriorityEnum.P1Critical
         };
         _ticketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.AsQueryable().BuildMock());
@@ -104,8 +112,12 @@ public class BatteryCascadeRiskHighConsumerTests
         var assetId = Guid.NewGuid();
         var ticket = new Ticket
         {
-            Id = Guid.NewGuid(), Code = "T-1", Title = "t", Description = "d",
-            BatteryAssetId = assetId, Status = TicketStatusEnum.InProgress,
+            Id = Guid.NewGuid(),
+            Code = "T-1",
+            Title = "t",
+            Description = "d",
+            BatteryAssetId = assetId,
+            Status = TicketStatusEnum.InProgress,
             Priority = TicketPriorityEnum.P2High
         };
         _ticketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.AsQueryable().BuildMock());

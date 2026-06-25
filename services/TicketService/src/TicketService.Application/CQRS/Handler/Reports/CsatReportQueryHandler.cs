@@ -16,8 +16,10 @@ public class CsatReportQueryHandler
     public async Task<CommonResponse<CsatDto>> Handle(CsatReportQuery request, CancellationToken ct)
     {
         var q = _uow.Tickets.GetAllAsync().AsNoTracking().Where(t => !t.IsDeleted && t.Rating != null);
-        if (request.From.HasValue) q = q.Where(t => t.RatedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(t => t.RatedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(t => t.RatedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(t => t.RatedAt <= request.To.Value);
 
         var ratings = await q.Select(t => (int)t.Rating!.Value).ToListAsync(ct);
 

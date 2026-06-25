@@ -23,19 +23,19 @@ public class TicketReportHandlersTests
     private static Ticket Ticket(TicketCategoryEnum cat = TicketCategoryEnum.Charging, short? rating = null,
         int reopen = 0, TicketStatusEnum status = TicketStatusEnum.Open,
         DateTime? created = null, DateTime? resolved = null) => new()
-    {
-        Id = Guid.NewGuid(),
-        Code = "T-1",
-        Title = "t",
-        Description = "d",
-        Category = cat,
-        Status = status,
-        Rating = rating,
-        RatedAt = rating != null ? DateTime.UtcNow : null,
-        ReopenCount = reopen,
-        CreatedAt = created ?? DateTime.UtcNow,
-        ResolvedAt = resolved
-    };
+        {
+            Id = Guid.NewGuid(),
+            Code = "T-1",
+            Title = "t",
+            Description = "d",
+            Category = cat,
+            Status = status,
+            Rating = rating,
+            RatedAt = rating != null ? DateTime.UtcNow : null,
+            ReopenCount = reopen,
+            CreatedAt = created ?? DateTime.UtcNow,
+            ResolvedAt = resolved
+        };
 
     [Fact]
     public async Task SlaByPriority_Counts_Met_Breached_And_Compliance()

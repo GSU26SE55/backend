@@ -78,7 +78,8 @@ public class SagaReportService : ISagaReportService
 
     private static decimal Percentile95(IReadOnlyList<double> sorted)
     {
-        if (sorted.Count == 0) return 0m;
+        if (sorted.Count == 0)
+            return 0m;
         // nearest-rank: index = ceil(0.95 * N) - 1
         var rank = (int)Math.Ceiling(0.95 * sorted.Count) - 1;
         rank = Math.Clamp(rank, 0, sorted.Count - 1);

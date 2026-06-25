@@ -42,7 +42,8 @@ public class WarrantyExpiringReportQueryHandler
 
     private static int ParseWithin(string? within)
     {
-        if (string.IsNullOrWhiteSpace(within)) return 90;
+        if (string.IsNullOrWhiteSpace(within))
+            return 90;
         var digits = new string(within.Where(char.IsDigit).ToArray());
         return int.TryParse(digits, out var d) && d > 0 ? d : 90;
     }

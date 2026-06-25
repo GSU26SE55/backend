@@ -17,8 +17,10 @@ public class SlaByPriorityReportQueryHandler
     public async Task<CommonResponse<List<SlaByPriorityRow>>> Handle(SlaByPriorityReportQuery request, CancellationToken ct)
     {
         var q = _uow.SlaTimers.GetAllAsync().AsNoTracking().Where(s => !s.IsDeleted);
-        if (request.From.HasValue) q = q.Where(s => s.StartedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(s => s.StartedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(s => s.StartedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(s => s.StartedAt <= request.To.Value);
 
         var data = await q.Select(s => new { s.Priority, s.Status }).ToListAsync(ct);
 

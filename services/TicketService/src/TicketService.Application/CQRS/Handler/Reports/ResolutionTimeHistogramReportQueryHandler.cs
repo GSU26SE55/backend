@@ -21,8 +21,10 @@ public class ResolutionTimeHistogramReportQueryHandler
     public async Task<CommonResponse<List<HistogramBucketRow>>> Handle(ResolutionTimeHistogramReportQuery request, CancellationToken ct)
     {
         var q = _uow.Tickets.GetAllAsync().AsNoTracking().Where(t => !t.IsDeleted && t.ResolvedAt != null);
-        if (request.From.HasValue) q = q.Where(t => t.CreatedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(t => t.CreatedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(t => t.CreatedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(t => t.CreatedAt <= request.To.Value);
 
         var data = await q.Select(t => new { t.CreatedAt, t.ResolvedAt }).ToListAsync(ct);
 
@@ -30,7 +32,8 @@ public class ResolutionTimeHistogramReportQueryHandler
         foreach (var t in data)
         {
             var hours = (t.ResolvedAt!.Value - t.CreatedAt).TotalHours;
-            if (hours < 0) hours = 0;
+            if (hours < 0)
+                hours = 0;
             var bucket = Buckets.First(b => hours <= b.MaxHours);
             counts[bucket.Label]++;
         }
