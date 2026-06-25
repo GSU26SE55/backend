@@ -57,8 +57,11 @@ public class FileAuthorizationService : IFileAuthorizationService
             FilePurposeEnum.Avatar => true,
             FilePurposeEnum.KbImage => true,
             FilePurposeEnum.Firmware => false,
-            FilePurposeEnum.TicketAttachment or FilePurposeEnum.MaintenancePhoto
-                => HasAnyRole(ManagerRole, StaffRole) || file.CreatedBy == CurrentUserId,
+            // Ảnh ticket/maintenance: cho mọi user đã đăng nhập đọc. Customer (chủ ticket) phải xem
+            // được ảnh do Staff/Manager đính kèm trong comment PUBLIC của ticket mình.
+            // Kiểm soát "internal" nằm ở tầng comment (BE đã ẩn comment internal + fileId của nó
+            // khỏi Customer), nên file layer không cần check CreatedBy ở đây.
+            FilePurposeEnum.TicketAttachment or FilePurposeEnum.MaintenancePhoto => true,
             _ => file.CreatedBy == CurrentUserId
         };
     }
