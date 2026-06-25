@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAdd;
@@ -10,18 +11,24 @@ using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatMarkAsRead;
 using TicketService.Application.CQRS.Command.ChatOverrideAdd;
 using TicketService.Application.CQRS.Command.ChatOverrideDelete;
 using TicketService.Application.CQRS.Command.ChatOverrideEdit;
 using TicketService.Application.CQRS.Command.ChatPin;
+using TicketService.Application.CQRS.Command.ChatReactionAdd;
+using TicketService.Application.CQRS.Command.ChatReactionRemove;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Command.ChatRestore;
 using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
 using TicketService.Application.CQRS.Query.ChatHistory;
+using TicketService.Application.CQRS.Query.ChatReactions;
+using TicketService.Application.CQRS.Query.ChatReaders;
 using TicketService.Application.CQRS.Query.ChatReplies;
 using TicketService.Application.CQRS.Query.Ticket;
+using TicketService.Application.CQRS.Query.TicketUnreadCount;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
@@ -36,10 +43,12 @@ public class TicketChatsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ITicketCurrentUserService _currentUser;
+    private readonly ILogger<TicketChatsController> _logger;
 
-    public TicketChatsController(IMediator mediator, ITicketCurrentUserService currentUser)
+    public TicketChatsController(IMediator mediator, ITicketCurrentUserService currentUser, ILogger<TicketChatsController> logger)
     {
         _mediator = mediator;
+        _logger = logger;
         _currentUser = currentUser;
     }
 
@@ -344,6 +353,31 @@ public class TicketChatsController : ControllerBase
             PageSize = pageSize
         }, ct);
 
+        // Auto mark-read trang hiện tại (#541) — Command riêng, không ảnh hưởng response của Query.
+        var chatIds = result.Data?.Items?
+            .Where(c => Guid.TryParse(c.Id, out _))
+            .Select(c => Guid.Parse(c.Id))
+            .ToList();
+
+        if (chatIds != null && chatIds.Count > 0)
+        {
+            try
+            {
+                await _mediator.Send(new ChatMarkAsReadCommand
+                {
+                    TicketId = ticketId,
+                    UserId = actorId.Value,
+                    UserRole = ResolveActorRole(_currentUser.Role),
+                    ActorRoles = GetCurrentRoles(),
+                    ChatIds = chatIds
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[GetChats] Auto mark-read failed for ticket {TicketId}, user {UserId}", ticketId, actorId.Value);
+            }
+        }
+
         return StatusCode(result.StatusCode, result);
     }
 
@@ -638,6 +672,188 @@ public class TicketChatsController : ControllerBase
         };
 
         var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Thêm reaction vào 1 bình luận — idempotent nếu đã reaction cùng loại.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="command">Loại reaction.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Thêm reaction thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpPost("{id}/reactions")]
+    [ProducesResponseType(typeof(ChatReactionActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddChatReaction(Guid ticketId, Guid id, [FromBody] ChatReactionAddCommand command, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.UserId = actorId.Value;
+        command.UserRole = ResolveActorRole(_currentUser.Role);
+        command.ActorRoles = GetCurrentRoles();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Xóa reaction khỏi 1 bình luận — no-op nếu chưa reaction loại này.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="type">Loại reaction cần xóa.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Xóa reaction thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpDelete("{id}/reactions")]
+    [ProducesResponseType(typeof(ChatReactionActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveChatReaction(Guid ticketId, Guid id, [FromQuery] ReactionTypeEnum type, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var command = new ChatReactionRemoveCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = actorId.Value,
+            UserRole = ResolveActorRole(_currentUser.Role),
+            ActorRoles = GetCurrentRoles(),
+            ReactionType = type
+        };
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy reaction aggregate của 1 bình luận — group theo 5 loại reaction.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy reaction thành công.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpGet("{id}/reactions")]
+    [ProducesResponseType(typeof(CommonResponse<TicketService.Application.DTOs.Response.Chats.TicketChatReactionsAggregateDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatReactions(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatReactionsQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Mark-read 1 hoặc nhiều chat (bulk) — đồng thời dùng cho auto mark-read khi GetList.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="command">Danh sách ChatId cần mark-read.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Mark-read thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ.</response>
+    [HttpPost("mark-read")]
+    [ProducesResponseType(typeof(ChatMarkAsReadResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MarkChatsAsRead(Guid ticketId, [FromBody] ChatMarkAsReadCommand command, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.UserId = actorId.Value;
+        command.UserRole = ResolveActorRole(_currentUser.Role);
+        command.ActorRoles = GetCurrentRoles();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy danh sách user đã đọc 1 bình luận — chỉ Staff/Manager/Admin.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpGet("{id}/readers")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(ChatReadersResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatReaders(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatReadersQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Số chat chưa đọc của user hiện tại trên ticket này.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy số chưa đọc thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpGet("unread-count")]
+    [ProducesResponseType(typeof(TicketUnreadCountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTicketUnreadCount(Guid ticketId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new TicketUnreadCountQuery
+        {
+            TicketId = ticketId,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
         return StatusCode(result.StatusCode, result);
     }
 

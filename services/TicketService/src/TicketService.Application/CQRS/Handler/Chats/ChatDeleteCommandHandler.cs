@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatDelete;
@@ -21,17 +23,20 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
     private readonly IActivityLogger _activityLogger;
     private readonly IChatAuthorizationService _chatAuthorizationService;
     private readonly ChatOptions _chatOptions;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public ChatDeleteCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         IChatAuthorizationService chatAuthorizationService,
-        IOptions<ChatOptions> chatOptions)
+        IOptions<ChatOptions> chatOptions,
+        IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
         _chatOptions = chatOptions.Value;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(ChatDeleteCommand request, CancellationToken ct)
@@ -88,6 +93,12 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             ChatTextHelper.Truncate(oldBody),
             null,
             request.DeleteReason);
+
+        await _outboxWriter.WriteAsync(new ChatDeletedEvent(
+            chat.Id,
+            chat.TicketId,
+            request.UserId,
+            (int)request.UserRole), ct);
 
         await _uow.SaveChangesAsync(ct);
 

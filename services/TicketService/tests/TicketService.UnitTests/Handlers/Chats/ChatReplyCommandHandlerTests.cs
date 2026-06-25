@@ -1,4 +1,5 @@
 using Moq;
+using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Handler.Chats;
@@ -15,13 +16,14 @@ public class ChatReplyCommandHandlerTests
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     private ChatReplyCommandHandler CreateHandler()
     {
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object);
+        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object);
     }
 
     private static Ticket MakeTicket(Guid id) => new()

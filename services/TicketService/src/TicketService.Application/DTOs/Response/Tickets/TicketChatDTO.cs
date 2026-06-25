@@ -1,3 +1,4 @@
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.DTOs.Response.Tickets;
@@ -29,10 +30,6 @@ public class TicketChatDTO
     /// <summary>Chi tiết attachment đầy đủ — chỉ điền khi GetById (#509); GetList vẫn dùng AttachmentFileIds.</summary>
     public List<TicketAttachmentDTO>? Attachments { get; set; }
 
-    /// <summary>
-    /// Mention/reaction list — luôn rỗng ở Phase 1 vì CRUD mention/reaction thuộc Wave 4 (#536/#539),
-    /// chưa join bảng ticket_chat_mentions/ticket_chat_reactions. Field giữ sẵn để FE không cần đổi shape khi Wave 4 xong.
-    /// </summary>
-    public List<object> Mentions { get; set; } = new();
-    public List<object> Reactions { get; set; } = new();
+    public List<TicketChatMentionDTO> Mentions { get; set; } = new();
+    public TicketChatReactionsAggregateDTO Reactions { get; set; } = new();
 }

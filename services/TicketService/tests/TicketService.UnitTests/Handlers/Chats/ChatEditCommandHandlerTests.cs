@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Moq;
+using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatEdit;
@@ -26,6 +27,7 @@ public class ChatEditCommandHandlerTests
     private readonly Mock<IProfanityFilter> _profanityFilter = new();
     private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     public ChatEditCommandHandlerTests()
     {
@@ -42,7 +44,8 @@ public class ChatEditCommandHandlerTests
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
         return new ChatEditCommandHandler(
             _uow.Object, _activityLogger.Object, _markdownRenderer.Object,
-            chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions);
+            chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions,
+            _outboxWriter.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()

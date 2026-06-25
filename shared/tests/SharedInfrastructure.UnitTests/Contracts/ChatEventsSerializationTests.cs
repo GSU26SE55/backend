@@ -10,7 +10,8 @@ public class ChatEventsSerializationTests
     {
         var evt = new ChatCreatedEvent(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, "Staff A",
-            "Hello ticket", false, new List<Guid> { Guid.NewGuid() });
+            "Hello ticket", false, new List<Guid> { Guid.NewGuid() },
+            Guid.NewGuid(), null);
 
         var result = JsonSerializer.Deserialize<ChatCreatedEvent>(JsonSerializer.Serialize(evt));
 
@@ -52,7 +53,7 @@ public class ChatEventsSerializationTests
     [Fact]
     public void ChatReactedEvent_RoundTrips()
     {
-        var evt = new ChatReactedEvent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, 1, false);
+        var evt = new ChatReactedEvent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, 1, false, Guid.NewGuid());
 
         var result = JsonSerializer.Deserialize<ChatReactedEvent>(JsonSerializer.Serialize(evt));
 

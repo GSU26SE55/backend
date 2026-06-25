@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.CQRS.Handler.Chats;
@@ -29,6 +31,7 @@ public class ChatAddCommandHandlerTests
     private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly Mock<ILogger<ChatAddCommandHandler>> _loggerMock = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     public ChatAddCommandHandlerTests()
     {
@@ -41,7 +44,7 @@ public class ChatAddCommandHandlerTests
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
-            _chatOptions, _loggerMock.Object);
+            _chatOptions, _loggerMock.Object, _outboxWriter.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -475,5 +478,103 @@ public class ChatAddCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(e => e.Field == "Body");
+    }
+
+    [Fact]
+    public async Task Handle_MentionOfActiveParticipant_CreatesMentionAndPublishesEvent()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var mentionedUserId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+        var participant = new TicketParticipant
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Ticket = ticket,
+            UserId = mentionedUserId,
+            UserRole = ActorRoleEnum.Staff,
+            ParticipantType = ParticipantTypeEnum.Collaborator,
+            CanPost = true,
+            CanViewInternal = true,
+            AddedByUserId = userId,
+            AddedAt = DateTime.UtcNow
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            participantSeed: new[] { participant }
+        );
+        var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "Cần xác nhận",
+            UserPermissions = PublicCreatePermission,
+            Mentions = new List<ChatMentionInput> { new(mentionedUserId, "Staff B") }
+        };
+
+        var handler = CreateHandler(uow);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        mentionsRepo.Verify(r => r.AddAsync(It.Is<TicketChatMention>(m =>
+            m.MentionedUserId == mentionedUserId &&
+            m.MentionedUserRole == ActorRoleEnum.Staff &&
+            m.MentionedDisplayName == "Staff B")), Times.Once);
+
+        _outboxWriter.Verify(x => x.WriteAsync(
+            It.Is<ChatMentionedEvent>(e => e.MentionedUserId == mentionedUserId && e.ActorUserId == userId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_MentionOfNonParticipant_ReturnsValidationError()
+    {
+        var ticketId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }
+        );
+        var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "Cần xác nhận",
+            UserPermissions = PublicCreatePermission,
+            Mentions = new List<ChatMentionInput> { new(Guid.NewGuid(), "Không phải participant") }
+        };
+
+        var handler = CreateHandler(uow);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        result.ListErrors.Should().Contain(e => e.Field == "Mentions[0].UserId");
+        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Never);
+        mentionsRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatMention>()), Times.Never);
     }
 }

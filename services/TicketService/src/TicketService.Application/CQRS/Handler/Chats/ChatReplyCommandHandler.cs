@@ -1,5 +1,7 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
@@ -13,11 +15,16 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
-    public ChatReplyCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
+    public ChatReplyCommandHandler(
+        ITicketUnitOfWork uow,
+        IActivityLogger activityLogger,
+        IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
         _activityLogger = activityLogger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(ChatReplyCommand request, CancellationToken ct)
@@ -67,6 +74,18 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             null,
             request.IsInternal ? "[Nội bộ]" : "[Công khai]",
             $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+
+        await _outboxWriter.WriteAsync(new ChatCreatedEvent(
+            reply.Id,
+            reply.TicketId,
+            reply.AuthorUserId,
+            (int)reply.AuthorRole,
+            reply.AuthorDisplayName,
+            reply.Body,
+            reply.IsInternal,
+            reply.AttachmentFileIds,
+            ticket.CustomerId,
+            ticket.AssignedStaffId), ct);
 
         await _uow.SaveChangesAsync(ct);
 

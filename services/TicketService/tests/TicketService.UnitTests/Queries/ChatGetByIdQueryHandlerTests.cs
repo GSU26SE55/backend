@@ -14,6 +14,8 @@ public class ChatGetByIdQueryHandlerTests
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<IGenericRepository<TicketAttachment>> _attachmentsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChatMention>> _mentionsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChatReaction>> _reactionsRepo = new();
     private readonly ChatGetByIdQueryHandler _handler;
 
     public ChatGetByIdQueryHandlerTests()
@@ -21,6 +23,10 @@ public class ChatGetByIdQueryHandlerTests
         _mockUow.Setup(x => x.Tickets).Returns(_ticketsRepo.Object);
         _mockUow.Setup(x => x.TicketChats).Returns(_chatsRepo.Object);
         _mockUow.Setup(x => x.TicketAttachments).Returns(_attachmentsRepo.Object);
+        _mockUow.Setup(x => x.TicketChatMentions).Returns(_mentionsRepo.Object);
+        _mockUow.Setup(x => x.TicketChatReactions).Returns(_reactionsRepo.Object);
+        _mentionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatMention>(new List<TicketChatMention>()));
+        _reactionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatReaction>(new List<TicketChatReaction>()));
         _handler = new ChatGetByIdQueryHandler(_mockUow.Object);
     }
 

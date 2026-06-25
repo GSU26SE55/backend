@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.CQRS.Query.MyChats;
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 
@@ -29,6 +31,10 @@ public class MyChatsQueryHandler : IRequestHandler<MyChatsQuery, CommonResponse<
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
+        var chatIds = rawChats.Select(c => c.Id).ToList();
+        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
+        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, chatIds, cancellationToken);
+
         var items = rawChats.Select(c => new TicketChatDTO
         {
             Id = c.Id.ToString(),
@@ -50,7 +56,9 @@ public class MyChatsQueryHandler : IRequestHandler<MyChatsQuery, CommonResponse<
             ReplyCount = c.ReplyCount,
             IsPinned = c.IsPinned,
             PinnedAt = c.PinnedAt,
-            PinnedByUserId = c.PinnedByUserId?.ToString()
+            PinnedByUserId = c.PinnedByUserId?.ToString(),
+            Mentions = mentionsByChat.TryGetValue(c.Id, out var m) ? m : new(),
+            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()
         }).ToList();
 
         return new CommonResponse<PaginationResponse<TicketChatDTO>>

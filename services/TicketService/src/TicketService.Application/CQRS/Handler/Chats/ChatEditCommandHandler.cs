@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatEdit;
@@ -25,6 +27,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     private readonly IProfanityFilter _profanityFilter;
     private readonly IPiiDetector _piiDetector;
     private readonly ChatOptions _chatOptions;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public ChatEditCommandHandler(
         ITicketUnitOfWork uow,
@@ -33,7 +36,8 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         IChatAuthorizationService chatAuthorizationService,
         IProfanityFilter profanityFilter,
         IPiiDetector piiDetector,
-        IOptions<ChatOptions> chatOptions)
+        IOptions<ChatOptions> chatOptions,
+        IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -42,6 +46,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         _profanityFilter = profanityFilter;
         _piiDetector = piiDetector;
         _chatOptions = chatOptions.Value;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(ChatEditCommand request, CancellationToken ct)
@@ -135,6 +140,15 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
                 ticket.Id, request.UserId, request.UserRole, request.UserDisplayName,
                 ActivityActionEnum.ChatFlagged, null, null, string.Join(" | ", warnings));
         }
+
+        await _outboxWriter.WriteAsync(new ChatEditedEvent(
+            chat.Id,
+            chat.TicketId,
+            request.UserId,
+            (int)request.UserRole,
+            oldBody,
+            request.Body,
+            request.EditReason ?? string.Empty), ct);
 
         await _uow.SaveChangesAsync(ct);
 

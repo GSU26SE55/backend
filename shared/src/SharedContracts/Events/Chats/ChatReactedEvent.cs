@@ -12,5 +12,6 @@ public record ChatReactedEvent(
     Guid ActorUserId,
     int ActorRole,              // ActorRoleEnum value
     int ReactionType,           // ReactionTypeEnum value
-    bool IsRemoved
+    bool IsRemoved,
+    Guid ChatAuthorUserId
 ) : IntegrationEvent;

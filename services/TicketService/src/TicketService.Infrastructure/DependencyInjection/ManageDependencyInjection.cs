@@ -60,6 +60,10 @@ public static class ManageDependencyInjection
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
+
+        // Read receipt — channel-based bulk writer (#541/#542)
+        services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();
+        services.AddHostedService<ChatReadReceiptBulkWriter>();
     }
 
     private static void AddHelpers(this IServiceCollection services)

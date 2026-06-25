@@ -149,6 +149,14 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
+        // Default rỗng cho 3 repo Chat Wave 4 (#536/#539/#541) — test nào cần seed data thì gọi
+        // lại uow.SetupMentions/SetupReactions/SetupReads (MockChatExtraRepos.cs) sau BuildExtended,
+        // Moq override setup cũ. Tránh NullReferenceException ở handler nào gọi GetAllAsync() trên
+        // các repo này mà test chưa setup riêng (ví dụ TicketChatsQueryHandler populate Mentions/Reactions).
+        uow.SetupMentions();
+        uow.SetupReactions();
+        uow.SetupReads();
+
         return (uow, tickets, activities, customers, staff, slaTimers, slaPauseEvents, chats, attachments, logs, kb, kbVersion, kbRefs, participants);
     }
 }

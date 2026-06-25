@@ -85,7 +85,7 @@ public class TicketChatPhase1ApiTests : IClassFixture<TicketApiFactory>
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Id.Should().Be(chat.Id.ToString());
         result.Data!.Mentions.Should().BeEmpty();
-        result.Data!.Reactions.Should().BeEmpty();
+        result.Data!.Reactions.ThumbsUp.Count.Should().Be(0);
     }
 
     [Fact]

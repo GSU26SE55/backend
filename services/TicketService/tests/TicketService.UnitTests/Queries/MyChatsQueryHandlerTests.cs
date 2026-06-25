@@ -12,11 +12,17 @@ public class MyChatsQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChatMention>> _mentionsRepo = new();
+    private readonly Mock<IGenericRepository<TicketChatReaction>> _reactionsRepo = new();
     private readonly MyChatsQueryHandler _handler;
 
     public MyChatsQueryHandlerTests()
     {
         _mockUow.Setup(x => x.TicketChats).Returns(_chatsRepo.Object);
+        _mockUow.Setup(x => x.TicketChatMentions).Returns(_mentionsRepo.Object);
+        _mockUow.Setup(x => x.TicketChatReactions).Returns(_reactionsRepo.Object);
+        _mentionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatMention>(new List<TicketChatMention>()));
+        _reactionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatReaction>(new List<TicketChatReaction>()));
         _handler = new MyChatsQueryHandler(_mockUow.Object);
     }
 

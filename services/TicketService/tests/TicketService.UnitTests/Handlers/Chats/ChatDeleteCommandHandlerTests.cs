@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Moq;
+using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatDelete;
@@ -19,6 +20,7 @@ public class ChatDeleteCommandHandlerTests
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     private ChatDeleteCommandHandler CreateHandler()
     {
@@ -26,7 +28,7 @@ public class ChatDeleteCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
-        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions);
+        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()

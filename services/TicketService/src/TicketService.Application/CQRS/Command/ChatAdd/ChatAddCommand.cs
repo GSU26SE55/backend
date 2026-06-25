@@ -32,6 +32,7 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
     public bool IsInternal { get; set; }
     public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
     public List<ChatAttachmentInput>? Attachments { get; set; }
+    public List<ChatMentionInput>? Mentions { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -68,6 +69,18 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
             }
         }
 
+        if (Mentions != null && Mentions.Any())
+        {
+            for (int i = 0; i < Mentions.Count; i++)
+            {
+                var mention = Mentions[i];
+                if (mention.UserId == Guid.Empty)
+                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].UserId", Detail = "UserId không được để trống." });
+                if (string.IsNullOrWhiteSpace(mention.DisplayName))
+                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].DisplayName", Detail = "DisplayName không được để trống." });
+            }
+        }
+
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
@@ -84,4 +97,9 @@ public record ChatAttachmentInput(
     string FileName,
     string ContentType,
     long SizeBytes
+);
+
+public record ChatMentionInput(
+    Guid UserId,
+    string DisplayName
 );

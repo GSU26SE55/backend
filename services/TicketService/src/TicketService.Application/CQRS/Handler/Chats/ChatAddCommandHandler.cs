@@ -4,12 +4,16 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -31,6 +35,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IPiiDetector _piiDetector;
     private readonly ChatOptions _chatOptions;
     private readonly ILogger<ChatAddCommandHandler> _logger;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -42,7 +47,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IProfanityFilter profanityFilter,
         IPiiDetector piiDetector,
         IOptions<ChatOptions> chatOptions,
-        ILogger<ChatAddCommandHandler> logger)
+        ILogger<ChatAddCommandHandler> logger,
+        IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -54,6 +60,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _piiDetector = piiDetector;
         _chatOptions = chatOptions.Value;
         _logger = logger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
@@ -84,6 +91,35 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             warnings.Add($"Nội dung có thể chứa từ ngữ không phù hợp: {string.Join(", ", profanityMatches)}.");
         if (_piiDetector.ContainsPii(request.Body, out var piiMatches))
             warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
+
+        List<TicketParticipant> activeParticipants = new();
+        if (request.Mentions != null && request.Mentions.Any())
+        {
+            activeParticipants = await _uow.TicketParticipants.GetAllAsync()
+                .AsNoTracking()
+                .Where(p => p.TicketId == ticket.Id && p.RemovedAt == null && !p.IsDeleted)
+                .ToListAsync(ct);
+
+            for (int i = 0; i < request.Mentions.Count; i++)
+            {
+                var mentionInput = request.Mentions[i];
+                if (!activeParticipants.Any(p => p.UserId == mentionInput.UserId))
+                {
+                    var response = new TicketActionResponse
+                    {
+                        IsSuccess = false,
+                        StatusCode = 400,
+                        Message = "Dữ liệu đầu vào không hợp lệ."
+                    };
+                    response.ListErrors.Add(new Errors
+                    {
+                        Field = $"Mentions[{i}].UserId",
+                        Detail = "User được mention phải là participant active của ticket."
+                    });
+                    return response;
+                }
+            }
+        }
 
         var chat = new TicketChat
         {
@@ -126,6 +162,36 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             }
         }
 
+        var createdMentions = new List<TicketChatMention>();
+        if (request.Mentions != null && request.Mentions.Any())
+        {
+            foreach (var mentionInput in request.Mentions)
+            {
+                var participant = activeParticipants.First(p => p.UserId == mentionInput.UserId);
+                var mention = new TicketChatMention
+                {
+                    Id = Guid.NewGuid(),
+                    ChatId = chat.Id,
+                    Chat = chat,
+                    MentionedUserId = mentionInput.UserId,
+                    MentionedUserRole = participant.UserRole,
+                    MentionedDisplayName = mentionInput.DisplayName,
+                    IsAcknowledged = false
+                };
+                await _uow.TicketChatMentions.AddAsync(mention);
+                createdMentions.Add(mention);
+
+                await _outboxWriter.WriteAsync(new ChatMentionedEvent(
+                    chat.Id,
+                    chat.TicketId,
+                    mentionInput.UserId,
+                    (int)participant.UserRole,
+                    mentionInput.DisplayName,
+                    request.UserId,
+                    false), ct);
+            }
+        }
+
         await _activityLogger.LogAsync(
             ticket.Id,
             request.UserId,
@@ -143,6 +209,18 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 ActivityActionEnum.ChatFlagged, null, null, string.Join(" | ", warnings));
         }
 
+        await _outboxWriter.WriteAsync(new ChatCreatedEvent(
+            chat.Id,
+            chat.TicketId,
+            chat.AuthorUserId,
+            (int)chat.AuthorRole,
+            chat.AuthorDisplayName,
+            chat.Body,
+            chat.IsInternal,
+            chat.AttachmentFileIds,
+            ticket.CustomerId,
+            ticket.AssignedStaffId), ct);
+
         await _uow.SaveChangesAsync(ct);
 
         // Broadcast chat via SignalR
@@ -158,7 +236,18 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 Body = chat.Body,
                 IsInternal = chat.IsInternal,
                 AttachmentFileIds = chat.AttachmentFileIds.Select(id => id.ToString()).ToList(),
-                CreatedAt = chat.CreatedAt
+                CreatedAt = chat.CreatedAt,
+                Mentions = createdMentions.Select(m => new TicketChatMentionDTO
+                {
+                    Id = m.Id.ToString(),
+                    ChatId = m.ChatId.ToString(),
+                    MentionedUserId = m.MentionedUserId.ToString(),
+                    MentionedUserRole = m.MentionedUserRole,
+                    MentionedDisplayName = m.MentionedDisplayName,
+                    IsAcknowledged = m.IsAcknowledged,
+                    AcknowledgedAt = m.AcknowledgedAt,
+                    CreatedAt = m.CreatedAt
+                }).ToList()
             };
             await _realtimeNotifier.NotifyChatAddedAsync(chatDto, ct);
         }

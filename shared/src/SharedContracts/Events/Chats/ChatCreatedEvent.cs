@@ -14,5 +14,7 @@ public record ChatCreatedEvent(
     string AuthorDisplayName,
     string Body,
     bool IsInternal,
-    List<Guid> AttachmentFileIds
+    List<Guid> AttachmentFileIds,
+    Guid CustomerId,
+    Guid? AssignedStaffId
 ) : IntegrationEvent;

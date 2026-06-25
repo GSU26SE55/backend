@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.CQRS.Query.ChatGetById;
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -65,6 +67,10 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
             })
             .ToListAsync(cancellationToken);
 
+        var chatIds = new[] { chat.Id };
+        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
+        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, chatIds, cancellationToken);
+
         var dto = new TicketChatDTO
         {
             Id = chat.Id.ToString(),
@@ -87,7 +93,9 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
             IsPinned = chat.IsPinned,
             PinnedAt = chat.PinnedAt,
             PinnedByUserId = chat.PinnedByUserId?.ToString(),
-            Attachments = attachments
+            Attachments = attachments,
+            Mentions = mentionsByChat.TryGetValue(chat.Id, out var m) ? m : new(),
+            Reactions = reactionsByChat.TryGetValue(chat.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()
         };
 
         return new CommonResponse<TicketChatDTO>
