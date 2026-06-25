@@ -36,6 +36,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly ChatOptions _chatOptions;
     private readonly ILogger<ChatAddCommandHandler> _logger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IGroupMentionResolverService _groupMentionResolver;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -48,7 +49,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IPiiDetector piiDetector,
         IOptions<ChatOptions> chatOptions,
         ILogger<ChatAddCommandHandler> logger,
-        IIntegrationEventOutboxWriter outboxWriter)
+        IIntegrationEventOutboxWriter outboxWriter,
+        IGroupMentionResolverService groupMentionResolver)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -61,6 +63,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _chatOptions = chatOptions.Value;
         _logger = logger;
         _outboxWriter = outboxWriter;
+        _groupMentionResolver = groupMentionResolver;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
@@ -93,13 +96,19 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
 
         List<TicketParticipant> activeParticipants = new();
-        if (request.Mentions != null && request.Mentions.Any())
+        bool needParticipants = (request.Mentions != null && request.Mentions.Any())
+                             || (request.GroupMentions != null && request.GroupMentions.Any());
+
+        if (needParticipants)
         {
             activeParticipants = await _uow.TicketParticipants.GetAllAsync()
                 .AsNoTracking()
                 .Where(p => p.TicketId == ticket.Id && p.RemovedAt == null && !p.IsDeleted)
                 .ToListAsync(ct);
+        }
 
+        if (request.Mentions != null && request.Mentions.Any())
+        {
             for (int i = 0; i < request.Mentions.Count; i++)
             {
                 var mentionInput = request.Mentions[i];
@@ -117,6 +126,24 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                         Detail = "User được mention phải là participant active của ticket."
                     });
                     return response;
+                }
+            }
+        }
+
+        // Resolve group mentions → individual users (dedup với individual mentions)
+        var resolvedGroupUsers = new List<(Guid UserId, ActorRoleEnum Role, string? DisplayName)>();
+        if (request.GroupMentions != null && request.GroupMentions.Any())
+        {
+            var seenUserIds = new HashSet<Guid>(
+                request.Mentions?.Select(m => m.UserId) ?? Enumerable.Empty<Guid>());
+
+            foreach (var gm in request.GroupMentions)
+            {
+                var resolved = await _groupMentionResolver.ResolveAsync(gm, activeParticipants, ct);
+                foreach (var user in resolved)
+                {
+                    if (seenUserIds.Add(user.UserId))
+                        resolvedGroupUsers.Add(user);
                 }
             }
         }
@@ -163,6 +190,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         }
 
         var createdMentions = new List<TicketChatMention>();
+
+        // Individual mentions
         if (request.Mentions != null && request.Mentions.Any())
         {
             foreach (var mentionInput in request.Mentions)
@@ -190,6 +219,32 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     request.UserId,
                     false), ct);
             }
+        }
+
+        // Group mentions (already deduped against individual mentions)
+        foreach (var (userId, role, displayName) in resolvedGroupUsers)
+        {
+            var mention = new TicketChatMention
+            {
+                Id = Guid.NewGuid(),
+                ChatId = chat.Id,
+                Chat = chat,
+                MentionedUserId = userId,
+                MentionedUserRole = role,
+                MentionedDisplayName = displayName,
+                IsAcknowledged = false
+            };
+            await _uow.TicketChatMentions.AddAsync(mention);
+            createdMentions.Add(mention);
+
+            await _outboxWriter.WriteAsync(new ChatMentionedEvent(
+                chat.Id,
+                chat.TicketId,
+                userId,
+                (int)role,
+                displayName ?? string.Empty,
+                request.UserId,
+                true), ct);
         }
 
         await _activityLogger.LogAsync(

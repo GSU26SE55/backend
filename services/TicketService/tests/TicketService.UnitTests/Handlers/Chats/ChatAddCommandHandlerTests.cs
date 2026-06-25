@@ -32,6 +32,7 @@ public class ChatAddCommandHandlerTests
     private readonly Mock<ILogger<ChatAddCommandHandler>> _loggerMock = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
+    private readonly Mock<IGroupMentionResolverService> _groupMentionResolver = new();
 
     public ChatAddCommandHandlerTests()
     {
@@ -39,12 +40,15 @@ public class ChatAddCommandHandlerTests
             .ReturnsAsync(false);
         _profanityFilter.Setup(x => x.ContainsProfanity(It.IsAny<string>(), out NoMatches)).Returns(false);
         _piiDetector.Setup(x => x.ContainsPii(It.IsAny<string>(), out NoMatches)).Returns(false);
+        _groupMentionResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
     }
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
-            _chatOptions, _loggerMock.Object, _outboxWriter.Object);
+            _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -576,5 +580,201 @@ public class ChatAddCommandHandlerTests
         result.ListErrors.Should().Contain(e => e.Field == "Mentions[0].UserId");
         chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Never);
         mentionsRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatMention>()), Times.Never);
+    }
+
+    // ─── Group mention tests (#537) ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_GroupMentionRole_CreatesGroupMentionRows()
+    {
+        var ticketId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
+        var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
+
+        _groupMentionResolver
+            .Setup(x => x.ResolveAsync(
+                It.Is<GroupMentionInput>(g => g.GroupType == "role" && g.GroupIdentifier == "manager"),
+                It.IsAny<List<TicketParticipant>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>
+            {
+                (managerId, ActorRoleEnum.Manager, "Manager A")
+            });
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Cc @role:manager",
+            UserPermissions = PublicCreatePermission,
+            GroupMentions = new List<GroupMentionInput> { new("role", "manager") }
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        mentionsRepo.Verify(r => r.AddAsync(It.Is<TicketChatMention>(m =>
+            m.MentionedUserId == managerId &&
+            m.MentionedUserRole == ActorRoleEnum.Manager &&
+            m.MentionedDisplayName == "Manager A" &&
+            m.IsAcknowledged == false)), Times.Once);
+
+        _outboxWriter.Verify(x => x.WriteAsync(
+            It.Is<ChatMentionedEvent>(e =>
+                e.MentionedUserId == managerId &&
+                e.IsGroupMention == true &&
+                e.ActorUserId == authorId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_GroupMentionResolves0Users_ChatStillSucceeds()
+    {
+        var ticketId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
+        var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
+
+        // Resolver returns empty — no matching participants
+        _groupMentionResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Ping @team:tier3-staff",
+            UserPermissions = PublicCreatePermission,
+            GroupMentions = new List<GroupMentionInput> { new("team", "tier3-staff") }
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(201);
+        mentionsRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatMention>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_GroupAndIndividualSameUser_DeduplicatesToOneRecord()
+    {
+        var ticketId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var sharedUserId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var participant = new TicketParticipant
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Ticket = ticket,
+            UserId = sharedUserId,
+            UserRole = ActorRoleEnum.Staff,
+            ParticipantType = ParticipantTypeEnum.Collaborator,
+            CanPost = true,
+            CanViewInternal = false,
+            AddedByUserId = authorId,
+            AddedAt = DateTime.UtcNow
+        };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            participantSeed: new[] { participant });
+        var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
+
+        // Group also resolves the same user
+        _groupMentionResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>
+            {
+                (sharedUserId, ActorRoleEnum.Staff, "Staff A")
+            });
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Manager,
+            UserDisplayName = "Manager",
+            Body = "Hey",
+            UserPermissions = PublicCreatePermission,
+            Mentions = new List<ChatMentionInput> { new(sharedUserId, "Staff A") }, // individual
+            GroupMentions = new List<GroupMentionInput> { new("role", "staff") }    // same user via group
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        // Only 1 mention record — individual wins (IsGroupMention=false)
+        mentionsRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatMention>()), Times.Once);
+        mentionsRepo.Verify(r => r.AddAsync(It.Is<TicketChatMention>(m =>
+            m.MentionedUserId == sharedUserId &&
+            m.MentionedDisplayName == "Staff A")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Validate_InvalidGroupType_ReturnsError()
+    {
+        var command = new ChatAddCommand
+        {
+            TicketId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Test message",
+            GroupMentions = new List<GroupMentionInput> { new("invalid_type", "manager") }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "GroupMentions[0].GroupType");
+    }
+
+    [Fact]
+    public async Task Validate_InvalidRoleIdentifier_ReturnsError()
+    {
+        var command = new ChatAddCommand
+        {
+            TicketId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Test message",
+            GroupMentions = new List<GroupMentionInput> { new("role", "superadmin") }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "GroupMentions[0].GroupIdentifier");
+    }
+
+    [Fact]
+    public async Task Validate_InvalidTeamIdentifier_ReturnsError()
+    {
+        var command = new ChatAddCommand
+        {
+            TicketId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Test message",
+            GroupMentions = new List<GroupMentionInput> { new("team", "tier4-staff") }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(e => e.Field == "GroupMentions[0].GroupIdentifier");
     }
 }

@@ -7,6 +7,7 @@ using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
 using SharedInfrastructure.Services;
 using TicketService.Application.Common.Models;
+using TicketService.Application.Common.Services;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
@@ -89,6 +90,9 @@ public static class ManageDependencyInjection
         services.AddScoped<ISpamDetector, SpamDetector>();
         services.AddScoped<IProfanityFilter, ProfanityFilter>();
         services.AddScoped<IPiiDetector, PiiDetector>();
+
+        // Group mention resolver (#537)
+        services.AddScoped<IGroupMentionResolverService, LocalGroupMentionResolver>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

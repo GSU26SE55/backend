@@ -33,6 +33,12 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
     public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
     public List<ChatAttachmentInput>? Attachments { get; set; }
     public List<ChatMentionInput>? Mentions { get; set; }
+    public List<GroupMentionInput>? GroupMentions { get; set; }
+
+    private static readonly HashSet<string> ValidRoleIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+        { "manager", "staff", "admin", "customer" };
+    private static readonly HashSet<string> ValidTeamIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+        { "tier1-staff", "tier2-staff", "tier3-staff" };
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -81,6 +87,20 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
             }
         }
 
+        if (GroupMentions != null && GroupMentions.Any())
+        {
+            for (int i = 0; i < GroupMentions.Count; i++)
+            {
+                var gm = GroupMentions[i];
+                if (gm.GroupType != "role" && gm.GroupType != "team")
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupType", Detail = "GroupType phải là 'role' hoặc 'team'." });
+                else if (gm.GroupType == "role" && !ValidRoleIdentifiers.Contains(gm.GroupIdentifier))
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier cho role phải là 'manager', 'staff', 'admin', hoặc 'customer'." });
+                else if (gm.GroupType == "team" && !ValidTeamIdentifiers.Contains(gm.GroupIdentifier))
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier cho team phải là 'tier1-staff', 'tier2-staff', hoặc 'tier3-staff'." });
+            }
+        }
+
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
@@ -102,4 +122,9 @@ public record ChatAttachmentInput(
 public record ChatMentionInput(
     Guid UserId,
     string DisplayName
+);
+
+public record GroupMentionInput(
+    string GroupType,       // "role" | "team"
+    string GroupIdentifier  // role: "manager"|"staff"|"admin"|"customer"  team: "tier1-staff"|"tier2-staff"|"tier3-staff"
 );
