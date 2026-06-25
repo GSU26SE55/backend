@@ -16,8 +16,10 @@ public class CategoryBreakdownReportQueryHandler
     public async Task<CommonResponse<List<CategoryBreakdownRow>>> Handle(CategoryBreakdownReportQuery request, CancellationToken ct)
     {
         var q = _uow.Tickets.GetAllAsync().AsNoTracking().Where(t => !t.IsDeleted);
-        if (request.From.HasValue) q = q.Where(t => t.CreatedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(t => t.CreatedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(t => t.CreatedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(t => t.CreatedAt <= request.To.Value);
 
         var data = await q.GroupBy(t => t.Category)
             .Select(g => new { Category = g.Key, Count = g.Count() }).ToListAsync(ct);

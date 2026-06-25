@@ -18,8 +18,10 @@ public class SlaByStaffReportQueryHandler
     {
         var q = _uow.Tickets.GetAllAsync().AsNoTracking().Include(t => t.SlaTimer)
             .Where(t => !t.IsDeleted && t.AssignedStaffId != null);
-        if (request.From.HasValue) q = q.Where(t => t.CreatedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(t => t.CreatedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(t => t.CreatedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(t => t.CreatedAt <= request.To.Value);
 
         var data = await q.Select(t => new
         {

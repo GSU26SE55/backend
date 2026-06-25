@@ -19,8 +19,10 @@ public class TopAnomaliesReportQueryHandler
     {
         var limit = request.Limit <= 0 ? 10 : Math.Min(request.Limit, 100);
         var q = _uow.Alerts.GetAllAsync().AsNoTracking().Where(a => !a.IsDeleted);
-        if (request.From.HasValue) q = q.Where(a => a.DetectedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(a => a.DetectedAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(a => a.DetectedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(a => a.DetectedAt <= request.To.Value);
 
         var grouped = await q
             .GroupBy(a => a.AnomalyType)
