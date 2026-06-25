@@ -64,5 +64,7 @@ public enum ActivityActionEnum
     /// <summary>Đã pin tin nhắn chat.</summary>
     ChatPinned = 30,
     /// <summary>Đã unpin tin nhắn chat.</summary>
-    ChatUnpinned = 31
+    ChatUnpinned = 31,
+    /// <summary>Chat bị flag bởi spam/profanity/PII filter (audit trail, không chặn post trừ spam).</summary>
+    ChatFlagged = 32
 }

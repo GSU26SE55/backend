@@ -1,3 +1,5 @@
+using TicketService.Application.Common.Models;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
@@ -174,6 +176,123 @@ public class ChatAuthorizationServiceTests
         var result = await service.CanViewInternalChatsAsync(ticket.Id, Guid.NewGuid(), new[] { "Customer" });
 
         result.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Permission matrix — 4 role x 5 action = 20 case (#515/#516)
+
+    // Permission set per role — khớp PermissionSeed.RoleDefaults (AuthService) cho domain chat.*.
+    public static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> RolePermissions = new Dictionary<string, IReadOnlyCollection<string>>
+    {
+        ["Customer"] = new[] { ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn },
+        ["Staff"] = new[]
+        {
+            ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal
+        },
+        ["Manager"] = new[]
+        {
+            ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
+            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+        },
+        ["Admin"] = new[]
+        {
+            ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
+            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+        }
+    };
+
+    public static readonly IEnumerable<object[]> AllRoles = RolePermissions.Keys.Select(r => new object[] { r });
+
+    private static Ticket MakeChatTicket() => new()
+    {
+        Id = Guid.NewGuid(),
+        Code = "T-001",
+        Title = "Test",
+        Description = "desc"
+    };
+
+    private static (ChatAuthorizationService service, TicketChat chat) MakeServiceAndOwnChat(Guid actorId)
+    {
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var ticket = MakeChatTicket();
+        var chat = new TicketChat { Id = Guid.NewGuid(), TicketId = ticket.Id, Ticket = ticket, AuthorUserId = actorId, AuthorRole = ActorRoleEnum.Customer, Body = "x", CreatedAt = DateTime.UtcNow };
+        return (new ChatAuthorizationService(uow.Object), chat);
+    }
+
+    private static (ChatAuthorizationService service, TicketChat chat) MakeServiceAndOthersChat()
+    {
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var ticket = MakeChatTicket();
+        var chat = new TicketChat { Id = Guid.NewGuid(), TicketId = ticket.Id, Ticket = ticket, AuthorUserId = Guid.NewGuid(), AuthorRole = ActorRoleEnum.Customer, Body = "x", CreatedAt = DateTime.UtcNow };
+        return (new ChatAuthorizationService(uow.Object), chat);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void CanEditChat_AsAuthorWithinWindow_AlwaysAllowed_RegardlessOfRole(string role)
+    {
+        var actorId = Guid.NewGuid();
+        var (service, chat) = MakeServiceAndOwnChat(actorId);
+
+        var result = service.CanEditChat(chat, actorId, RolePermissions[role], reasonProvided: false, editWindowMinutes: 15);
+
+        result.Should().Be(ChatAuthorizationResult.Allowed);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void CanEditChat_AsNonAuthorWithReason_AllowedOnlyWithEditAnyPermission(string role)
+    {
+        var (service, chat) = MakeServiceAndOthersChat();
+        var hasEditAny = RolePermissions[role].Contains(ChatPermissionCodes.ChatEditAny);
+
+        var result = service.CanEditChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true, editWindowMinutes: 15);
+
+        result.Should().Be(hasEditAny ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.Forbidden);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void CanDeleteChat_AsAuthor_AlwaysAllowed_RegardlessOfRole(string role)
+    {
+        var actorId = Guid.NewGuid();
+        var (service, chat) = MakeServiceAndOwnChat(actorId);
+
+        var result = service.CanDeleteChat(chat, actorId, RolePermissions[role], reasonProvided: false);
+
+        result.Should().Be(ChatAuthorizationResult.Allowed);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void CanDeleteChat_AsNonAuthorWithReason_AllowedOnlyWithDeleteAnyPermission(string role)
+    {
+        var (service, chat) = MakeServiceAndOthersChat();
+        var hasDeleteAny = RolePermissions[role].Contains(ChatPermissionCodes.ChatDeleteAny);
+
+        var result = service.CanDeleteChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true);
+
+        result.Should().Be(hasDeleteAny ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.Forbidden);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void CanPinChat_AllowedOnlyWithPinPermission(string role)
+    {
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var service = new ChatAuthorizationService(uow.Object);
+        var hasPin = RolePermissions[role].Contains(ChatPermissionCodes.ChatPin);
+
+        var result = service.CanPinChat(RolePermissions[role]);
+
+        result.Should().Be(hasPin);
     }
 
     #endregion

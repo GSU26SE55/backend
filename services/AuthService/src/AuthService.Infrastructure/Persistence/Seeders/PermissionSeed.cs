@@ -71,6 +71,17 @@ internal static class PermissionSeed
         // Alert–Ticket Saga ops — Sprint 5B #241
         new(PermissionCodes.TicketSagaView, "TicketSaga", "Xem danh sách Alert-Ticket Saga + state hiện tại"),
         new(PermissionCodes.TicketSagaReprocess, "TicketSaga", "Reprocess Saga đang Failed (admin only)"),
+
+        // Chat — Sprint Chat Phase 2 #516
+        new(PermissionCodes.ChatCreatePublic, "Chat", "Tạo bình luận công khai trên ticket"),
+        new(PermissionCodes.ChatCreateInternal, "Chat", "Tạo bình luận nội bộ (ẩn với Customer)"),
+        new(PermissionCodes.ChatEditOwn, "Chat", "Sửa bình luận của chính mình"),
+        new(PermissionCodes.ChatEditAny, "Chat", "Sửa bình luận của bất kỳ ai"),
+        new(PermissionCodes.ChatDeleteOwn, "Chat", "Xóa bình luận của chính mình"),
+        new(PermissionCodes.ChatDeleteAny, "Chat", "Xóa bình luận của bất kỳ ai"),
+        new(PermissionCodes.ChatPin, "Chat", "Pin/unpin bình luận"),
+        new(PermissionCodes.ChatViewInternal, "Chat", "Xem bình luận nội bộ"),
+        new(PermissionCodes.ChatTemplateCreateGlobal, "Chat", "Tạo chat template phạm vi Global"),
     };
 
     /// <summary>Mapping role → list permission codes mặc định cho 4 system roles.</summary>
@@ -93,6 +104,12 @@ internal static class PermissionSeed
                 PermissionCodes.ReportsView, PermissionCodes.ReportsExport,
                 PermissionCodes.AuditView,
                 PermissionCodes.TicketSagaView, // Sprint 5B #241 — Manager read-only
+                // Sprint Chat Phase 2 #516 — Manager có toàn quyền chat (giữ đúng hành vi isManagerOrAdmin cũ)
+                PermissionCodes.ChatCreatePublic, PermissionCodes.ChatCreateInternal,
+                PermissionCodes.ChatEditOwn, PermissionCodes.ChatEditAny,
+                PermissionCodes.ChatDeleteOwn, PermissionCodes.ChatDeleteAny,
+                PermissionCodes.ChatPin, PermissionCodes.ChatViewInternal,
+                PermissionCodes.ChatTemplateCreateGlobal,
             },
 
             ["STAFF"] = new[]
@@ -102,6 +119,10 @@ internal static class PermissionSeed
                 PermissionCodes.TicketView, PermissionCodes.TicketResolve,
                 PermissionCodes.NotificationView,
                 PermissionCodes.KnowledgeBaseView,
+                // Sprint Chat Phase 2 #516 — Staff không có quyền "any"/template global (giữ đúng hành vi cũ)
+                PermissionCodes.ChatCreatePublic, PermissionCodes.ChatCreateInternal,
+                PermissionCodes.ChatEditOwn, PermissionCodes.ChatDeleteOwn,
+                PermissionCodes.ChatPin, PermissionCodes.ChatViewInternal,
             },
 
             ["CUSTOMER"] = new[]
@@ -110,6 +131,8 @@ internal static class PermissionSeed
                 PermissionCodes.TicketView, PermissionCodes.TicketCreate,
                 PermissionCodes.NotificationView,
                 PermissionCodes.KnowledgeBaseView,
+                // Sprint Chat Phase 2 #516 — Customer chỉ tạo/sửa/xóa chat public của chính mình
+                PermissionCodes.ChatCreatePublic, PermissionCodes.ChatEditOwn, PermissionCodes.ChatDeleteOwn,
             }
         };
 

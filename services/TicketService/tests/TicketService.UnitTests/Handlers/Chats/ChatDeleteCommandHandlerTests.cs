@@ -1,11 +1,14 @@
+using Microsoft.Extensions.Options;
 using Moq;
 using SharedKernels.Interfaces;
+using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Implements.Services;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
@@ -15,13 +18,15 @@ public class ChatDeleteCommandHandlerTests
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
+    private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
 
     private ChatDeleteCommandHandler CreateHandler()
     {
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object);
+        var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
+        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -100,7 +105,8 @@ public class ChatDeleteCommandHandlerTests
             ChatId = chatId,
             UserId = managerId,
             UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager"
+            UserDisplayName = "Manager",
+            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -132,7 +138,8 @@ public class ChatDeleteCommandHandlerTests
             UserId = managerId,
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
-            DeleteReason = "Spam content"
+            DeleteReason = "Spam content",
+            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -166,7 +173,8 @@ public class ChatDeleteCommandHandlerTests
             UserId = adminId,
             UserRole = ActorRoleEnum.Admin,
             UserDisplayName = "Admin",
-            DeleteReason = "Policy violation"
+            DeleteReason = "Policy violation",
+            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -176,7 +184,7 @@ public class ChatDeleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NonAuthorNonManager_ReturnsForbidden()
+    public async Task Handle_NonAuthorWithoutDeleteAnyPermission_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -212,6 +220,36 @@ public class ChatDeleteCommandHandlerTests
         var chatId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var ticket = MakeTicket(ticketId, TicketStatusEnum.Closed);
+        var chat = MakeChat(chatId, ticketId, authorId, ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatDeleteCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        chat.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_TicketClosedPendingRate_AuthorStillBlocked()
+    {
+        // #517 — ClosedPendingRate chỉ miễn cho hành động Add (Customer), Delete luôn bị chặn dù là Author.
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId, TicketStatusEnum.ClosedPendingRate);
         var chat = MakeChat(chatId, ticketId, authorId, ticket);
 
         _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);

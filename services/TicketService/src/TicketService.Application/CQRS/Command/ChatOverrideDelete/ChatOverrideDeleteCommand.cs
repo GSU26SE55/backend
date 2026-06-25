@@ -5,9 +5,13 @@ using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Command.ChatUnpin;
+namespace TicketService.Application.CQRS.Command.ChatOverrideDelete;
 
-public class ChatUnpinCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+/// <summary>
+/// Admin override — xóa bình luận dù ticket đang <c>Closed</c>/<c>ClosedPendingRate</c> (#517).
+/// Endpoint riêng biệt, bắt buộc <see cref="OverrideReason"/>, chỉ Admin gọi được.
+/// </summary>
+public class ChatOverrideDeleteCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
@@ -19,8 +23,8 @@ public class ChatUnpinCommand : IRequest<TicketActionResponse>, IValidatable<Tic
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
-    [JsonIgnore]
-    public List<string> UserPermissions { get; set; } = new();
+
+    public required string OverrideReason { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -34,6 +38,11 @@ public class ChatUnpinCommand : IRequest<TicketActionResponse>, IValidatable<Tic
 
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+
+        if (string.IsNullOrWhiteSpace(OverrideReason))
+            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "Bắt buộc nhập lý do override khi ticket đã đóng." });
+        else if (OverrideReason.Length > 1000)
+            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "Lý do override tối đa 1000 ký tự." });
 
         if (response.ListErrors.Count > 0)
         {

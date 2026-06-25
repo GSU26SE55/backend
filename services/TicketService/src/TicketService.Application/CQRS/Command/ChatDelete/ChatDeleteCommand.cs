@@ -19,6 +19,8 @@ public class ChatDeleteCommand : IRequest<TicketActionResponse>, IValidatable<Ti
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
+    [JsonIgnore]
+    public List<string> UserPermissions { get; set; } = new();
 
     public string? DeleteReason { get; set; }
 

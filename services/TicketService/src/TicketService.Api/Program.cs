@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using TicketService.Api.Extensions;
 using TicketService.Application.DependencyInjection;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
@@ -37,6 +38,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AutoCloseBackgroundService>();
+builder.Services.AddChatRateLimiting();
 
 builder.Services.AddSignalR(options =>
 {
@@ -134,6 +136,7 @@ if (!app.Environment.IsEnvironment("Docker"))
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<TicketChatHub>("/hubs/ticket-chats");

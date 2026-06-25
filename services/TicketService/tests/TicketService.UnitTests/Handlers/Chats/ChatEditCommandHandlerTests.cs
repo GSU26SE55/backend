@@ -9,18 +9,29 @@ using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Implements.Services;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatEditCommandHandlerTests
 {
+    private IReadOnlyList<string> NoMatches = Array.Empty<string>();
+
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<IGenericRepository<TicketChatEdit>> _chatEditsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly Mock<IMarkdownRenderer> _markdownRenderer = new();
+    private readonly Mock<IProfanityFilter> _profanityFilter = new();
+    private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
+
+    public ChatEditCommandHandlerTests()
+    {
+        _profanityFilter.Setup(x => x.ContainsProfanity(It.IsAny<string>(), out NoMatches)).Returns(false);
+        _piiDetector.Setup(x => x.ContainsPii(It.IsAny<string>(), out NoMatches)).Returns(false);
+    }
 
     private ChatEditCommandHandler CreateHandler()
     {
@@ -28,7 +39,10 @@ public class ChatEditCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.SetupGet(u => u.TicketChatEdits).Returns(_chatEditsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatEditCommandHandler(_uow.Object, _activityLogger.Object, _markdownRenderer.Object, _chatOptions);
+        var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
+        return new ChatEditCommandHandler(
+            _uow.Object, _activityLogger.Object, _markdownRenderer.Object,
+            chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -176,7 +190,8 @@ public class ChatEditCommandHandlerTests
             UserId = managerId,
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
-            Body = "Edited by manager"
+            Body = "Edited by manager",
+            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -208,7 +223,8 @@ public class ChatEditCommandHandlerTests
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
             Body = "Edited by manager",
-            EditReason = "Redact PII"
+            EditReason = "Redact PII",
+            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -219,7 +235,7 @@ public class ChatEditCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NonAuthorNonManager_ReturnsForbidden()
+    public async Task Handle_NonAuthorWithoutEditAnyPermission_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -255,6 +271,36 @@ public class ChatEditCommandHandlerTests
         var chatId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var ticket = MakeTicket(ticketId, TicketStatusEnum.Closed);
+        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
+
+        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
+        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+
+        var handler = CreateHandler();
+        var command = new ChatEditCommand
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            UserId = authorId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Author",
+            Body = "Edited body"
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task Handle_TicketClosedPendingRate_AuthorStillBlocked()
+    {
+        // #517 — ClosedPendingRate chỉ miễn cho hành động Add (Customer), Edit luôn bị chặn dù là Author.
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId, TicketStatusEnum.ClosedPendingRate);
         var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
 
         _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);

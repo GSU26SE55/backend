@@ -21,17 +21,26 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly IMarkdownRenderer _markdownRenderer;
+    private readonly IChatAuthorizationService _chatAuthorizationService;
+    private readonly IProfanityFilter _profanityFilter;
+    private readonly IPiiDetector _piiDetector;
     private readonly ChatOptions _chatOptions;
 
     public ChatEditCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         IMarkdownRenderer markdownRenderer,
+        IChatAuthorizationService chatAuthorizationService,
+        IProfanityFilter profanityFilter,
+        IPiiDetector piiDetector,
         IOptions<ChatOptions> chatOptions)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _markdownRenderer = markdownRenderer;
+        _chatAuthorizationService = chatAuthorizationService;
+        _profanityFilter = profanityFilter;
+        _piiDetector = piiDetector;
         _chatOptions = chatOptions.Value;
     }
 
@@ -48,36 +57,41 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(400, "Không thể sửa bình luận khi ticket đã đóng.");
+        var blockReason = ChatClosedStateHelper.GetBlockReason(
+            ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Edit, _chatOptions.BlockEditOnClosed);
+        if (blockReason != null)
+            return Fail(400, blockReason);
 
-        var isAuthor = chat.AuthorUserId == request.UserId;
-        var isManagerOrAdmin = request.UserRole == ActorRoleEnum.Manager || request.UserRole == ActorRoleEnum.Admin;
+        var authResult = _chatAuthorizationService.CanEditChat(
+            chat,
+            request.UserId,
+            request.UserPermissions,
+            !string.IsNullOrWhiteSpace(request.EditReason),
+            _chatOptions.EditWindowMinutes);
 
-        if (isAuthor)
+        if (authResult == ChatAuthorizationResult.EditWindowExpired)
+            return Fail(403, $"Đã quá thời gian cho phép chỉnh sửa ({_chatOptions.EditWindowMinutes} phút).");
+
+        if (authResult == ChatAuthorizationResult.ReasonRequired)
         {
-            var elapsed = DateTime.UtcNow - chat.CreatedAt;
-            if (elapsed > TimeSpan.FromMinutes(_chatOptions.EditWindowMinutes))
-                return Fail(403, $"Đã quá thời gian cho phép chỉnh sửa ({_chatOptions.EditWindowMinutes} phút).");
-        }
-        else if (isManagerOrAdmin)
-        {
-            if (string.IsNullOrWhiteSpace(request.EditReason))
+            var response = new TicketActionResponse
             {
-                var response = new TicketActionResponse
-                {
-                    IsSuccess = false,
-                    StatusCode = 400,
-                    Message = "Dữ liệu đầu vào không hợp lệ."
-                };
-                response.ListErrors.Add(new Errors { Field = "EditReason", Detail = "Bắt buộc nhập lý do khi sửa bình luận của người khác." });
-                return response;
-            }
+                IsSuccess = false,
+                StatusCode = 400,
+                Message = "Dữ liệu đầu vào không hợp lệ."
+            };
+            response.ListErrors.Add(new Errors { Field = "EditReason", Detail = "Bắt buộc nhập lý do khi sửa bình luận của người khác." });
+            return response;
         }
-        else
-        {
+
+        if (authResult == ChatAuthorizationResult.Forbidden)
             return Fail(403, "Không có quyền sửa bình luận này.");
-        }
+
+        var warnings = new List<string>();
+        if (_profanityFilter.ContainsProfanity(request.Body, out var profanityMatches))
+            warnings.Add($"Nội dung có thể chứa từ ngữ không phù hợp: {string.Join(", ", profanityMatches)}.");
+        if (_piiDetector.ContainsPii(request.Body, out var piiMatches))
+            warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
 
         var oldBody = chat.Body;
 
@@ -115,6 +129,13 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             ChatTextHelper.Truncate(request.Body),
             request.EditReason);
 
+        if (warnings.Count > 0)
+        {
+            await _activityLogger.LogAsync(
+                ticket.Id, request.UserId, request.UserRole, request.UserDisplayName,
+                ActivityActionEnum.ChatFlagged, null, null, string.Join(" | ", warnings));
+        }
+
         await _uow.SaveChangesAsync(ct);
 
         return new TicketActionResponse
@@ -127,7 +148,8 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
                 Id = chat.Id.ToString(),
                 TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
-                Status = ticket.Status
+                Status = ticket.Status,
+                Warnings = warnings.Count > 0 ? warnings : null
             }
         };
     }

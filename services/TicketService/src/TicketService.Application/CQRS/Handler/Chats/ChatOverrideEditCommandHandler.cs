@@ -2,40 +2,43 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Helpers;
-using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatDelete;
+using TicketService.Application.CQRS.Command.ChatOverrideEdit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, TicketActionResponse>
+/// <summary>
+/// Admin override Edit — bypass block Closed/ClosedPendingRate + bỏ qua edit window/own-any check (#517).
+/// Mirror logic của <see cref="ChatEditCommandHandler"/>.
+/// </summary>
+public class ChatOverrideEditCommandHandler : IRequestHandler<ChatOverrideEditCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
-    private readonly IChatAuthorizationService _chatAuthorizationService;
-    private readonly ChatOptions _chatOptions;
+    private readonly IMarkdownRenderer _markdownRenderer;
 
-    public ChatDeleteCommandHandler(
+    public ChatOverrideEditCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
-        IChatAuthorizationService chatAuthorizationService,
-        IOptions<ChatOptions> chatOptions)
+        IMarkdownRenderer markdownRenderer)
     {
         _uow = uow;
         _activityLogger = activityLogger;
-        _chatAuthorizationService = chatAuthorizationService;
-        _chatOptions = chatOptions.Value;
+        _markdownRenderer = markdownRenderer;
     }
 
-    public async Task<TicketActionResponse> Handle(ChatDeleteCommand request, CancellationToken ct)
+    public async Task<TicketActionResponse> Handle(ChatOverrideEditCommand request, CancellationToken ct)
     {
+        if (request.UserRole != ActorRoleEnum.Admin)
+            return Fail(403, "Chỉ Admin được override khi ticket đã đóng.");
+
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
             return Fail(404, "Không tìm thấy bình luận.");
@@ -47,36 +50,30 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        var blockReason = ChatClosedStateHelper.GetBlockReason(
-            ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Delete, _chatOptions.BlockEditOnClosed);
-        if (blockReason != null)
-            return Fail(400, blockReason);
-
-        var authResult = _chatAuthorizationService.CanDeleteChat(
-            chat,
-            request.UserId,
-            request.UserPermissions,
-            !string.IsNullOrWhiteSpace(request.DeleteReason));
-
-        if (authResult == ChatAuthorizationResult.ReasonRequired)
-        {
-            var response = new TicketActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Dữ liệu đầu vào không hợp lệ."
-            };
-            response.ListErrors.Add(new Errors { Field = "DeleteReason", Detail = "Bắt buộc nhập lý do khi xóa bình luận của người khác." });
-            return response;
-        }
-
-        if (authResult == ChatAuthorizationResult.Forbidden)
-            return Fail(403, "Không có quyền xóa bình luận này.");
-
         var oldBody = chat.Body;
 
-        chat.IsDeleted = true;
-        chat.DeletedAt = DateTime.UtcNow;
+        var chatEdit = new TicketChatEdit
+        {
+            Id = Guid.NewGuid(),
+            ChatId = chat.Id,
+            Chat = chat,
+            OldBody = oldBody,
+            NewBody = request.Body,
+            EditedAt = DateTime.UtcNow,
+            EditedByUserId = request.UserId,
+            EditedByRole = request.UserRole,
+            EditReason = request.OverrideReason
+        };
+        await _uow.TicketChatEdits.AddAsync(chatEdit);
+
+        chat.Body = request.Body;
+        chat.EditedAt = DateTime.UtcNow;
+        chat.EditCount += 1;
+        chat.LastEditedByUserId = request.UserId;
+
+        if (chat.BodyFormat == ChatBodyFormatEnum.Markdown)
+            chat.BodyHtml = _markdownRenderer.RenderToHtml(chat.Body, chat.AttachmentFileIds);
+
         _uow.TicketChats.UpdateAsync(chat);
 
         await _activityLogger.LogAsync(
@@ -84,10 +81,10 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             request.UserId,
             request.UserRole,
             request.UserDisplayName,
-            ActivityActionEnum.ChatDeleted,
+            ActivityActionEnum.ChatEdited,
             ChatTextHelper.Truncate(oldBody),
-            null,
-            request.DeleteReason);
+            ChatTextHelper.Truncate(request.Body),
+            request.OverrideReason);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -95,7 +92,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa bình luận thành công.",
+            Message = "Sửa bình luận (override) thành công.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

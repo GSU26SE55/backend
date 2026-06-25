@@ -5,11 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Helpers;
-using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatOverrideAdd;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
@@ -19,71 +16,41 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActionResponse>
+/// <summary>
+/// Admin override Add — bypass block Closed/ClosedPendingRate (#517). Mirror logic của
+/// <see cref="ChatAddCommandHandler"/> nhưng không qua <c>ChatClosedStateHelper</c> và không
+/// check permission create.public/internal (Admin luôn có đủ quyền theo seed mapping #516).
+/// </summary>
+public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IMarkdownRenderer _markdownRenderer;
-    private readonly IChatAuthorizationService _chatAuthorizationService;
-    private readonly ISpamDetector _spamDetector;
-    private readonly IProfanityFilter _profanityFilter;
-    private readonly IPiiDetector _piiDetector;
-    private readonly ChatOptions _chatOptions;
-    private readonly ILogger<ChatAddCommandHandler> _logger;
+    private readonly ILogger<ChatOverrideAddCommandHandler> _logger;
 
-    public ChatAddCommandHandler(
+    public ChatOverrideAddCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         ITicketChatRealtimeNotifier realtimeNotifier,
         IMarkdownRenderer markdownRenderer,
-        IChatAuthorizationService chatAuthorizationService,
-        ISpamDetector spamDetector,
-        IProfanityFilter profanityFilter,
-        IPiiDetector piiDetector,
-        IOptions<ChatOptions> chatOptions,
-        ILogger<ChatAddCommandHandler> logger)
+        ILogger<ChatOverrideAddCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
         _markdownRenderer = markdownRenderer;
-        _chatAuthorizationService = chatAuthorizationService;
-        _spamDetector = spamDetector;
-        _profanityFilter = profanityFilter;
-        _piiDetector = piiDetector;
-        _chatOptions = chatOptions.Value;
         _logger = logger;
     }
 
-    public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
+    public async Task<TicketActionResponse> Handle(ChatOverrideAddCommand request, CancellationToken ct)
     {
+        if (request.UserRole != ActorRoleEnum.Admin)
+            return Fail(403, "Chỉ Admin được override khi ticket đã đóng.");
+
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
-
-        var blockReason = ChatClosedStateHelper.GetBlockReason(
-            ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Add, _chatOptions.BlockEditOnClosed);
-        if (blockReason != null)
-            return Fail(400, blockReason);
-
-        if (!_chatAuthorizationService.CanCreateChat(request.IsInternal, request.UserPermissions))
-            return Fail(403, request.IsInternal ? "Không có quyền tạo bình luận nội bộ." : "Không có quyền tạo bình luận.");
-
-        if (await _spamDetector.IsSpamAsync(request.TicketId, request.UserId, request.Body, ct))
-        {
-            await _activityLogger.LogAsync(
-                ticket.Id, request.UserId, request.UserRole, request.UserDisplayName,
-                ActivityActionEnum.ChatFlagged, null, null, "Spam detected — cùng nội dung lặp ≥3 lần trong 5 phút.");
-            await _uow.SaveChangesAsync(ct);
-            return Fail(400, "Phát hiện spam — cùng nội dung đã được gửi lặp lại nhiều lần trong thời gian ngắn.");
-        }
-
-        var warnings = new List<string>();
-        if (_profanityFilter.ContainsProfanity(request.Body, out var profanityMatches))
-            warnings.Add($"Nội dung có thể chứa từ ngữ không phù hợp: {string.Join(", ", profanityMatches)}.");
-        if (_piiDetector.ContainsPii(request.Body, out var piiMatches))
-            warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
 
         var chat = new TicketChat
         {
@@ -118,9 +85,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     FileName = att.FileName,
                     ContentType = att.ContentType,
                     SizeBytes = att.SizeBytes,
-                    Source = request.UserRole == ActorRoleEnum.Customer
-                        ? AttachmentSourceEnum.CustomerSubmission
-                        : AttachmentSourceEnum.StaffWork
+                    Source = AttachmentSourceEnum.StaffWork
                 };
                 await _uow.TicketAttachments.AddAsync(attachment);
             }
@@ -133,19 +98,11 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             request.UserDisplayName,
             ActivityActionEnum.Chatted,
             null,
-            request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-            $"Đã thêm tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
-
-        if (warnings.Count > 0)
-        {
-            await _activityLogger.LogAsync(
-                ticket.Id, request.UserId, request.UserRole, request.UserDisplayName,
-                ActivityActionEnum.ChatFlagged, null, null, string.Join(" | ", warnings));
-        }
+            request.IsInternal ? "[Nội bộ — Admin override]" : "[Công khai — Admin override]",
+            request.OverrideReason);
 
         await _uow.SaveChangesAsync(ct);
 
-        // Broadcast chat via SignalR
         try
         {
             var chatDto = new TicketChatDTO
@@ -164,21 +121,20 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[ChatAdd] Failed to broadcast ChatAdded SignalR event for ticket {TicketId}", ticket.Id);
+            _logger.LogError(ex, "[ChatOverrideAdd] Failed to broadcast ChatAdded SignalR event for ticket {TicketId}", ticket.Id);
         }
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm tin nhắn chat thành công.",
+            Message = "Thêm tin nhắn chat (override) thành công.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),
                 TicketId = ticket.Id.ToString(),
                 Code = ticket.Code,
-                Status = ticket.Status,
-                Warnings = warnings.Count > 0 ? warnings : null
+                Status = ticket.Status
             }
         };
     }

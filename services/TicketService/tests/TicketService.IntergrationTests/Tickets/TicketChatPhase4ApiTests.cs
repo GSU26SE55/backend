@@ -219,7 +219,12 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
     {
         var chat = SeedChat();
 
-        var response = await _client.PostAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/pin", new StringContent(string.Empty));
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tickets/{_ticketId}/chats/{chat.Id}/pin")
+        {
+            Content = new StringContent(string.Empty)
+        };
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Staff");
+        var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -236,7 +241,12 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
         SeedChat(isPinned: true);
         var fourthChat = SeedChat();
 
-        var response = await _client.PostAsync($"/api/tickets/{_ticketId}/chats/{fourthChat.Id}/pin", new StringContent(string.Empty));
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tickets/{_ticketId}/chats/{fourthChat.Id}/pin")
+        {
+            Content = new StringContent(string.Empty)
+        };
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Staff");
+        var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
@@ -269,7 +279,9 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
     {
         var chat = SeedChat(isPinned: true);
 
-        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/pin");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/tickets/{_ticketId}/chats/{chat.Id}/pin");
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Staff");
+        var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -282,7 +294,9 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
     {
         var chat = SeedChat();
 
-        var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/pin");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/tickets/{_ticketId}/chats/{chat.Id}/pin");
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Staff");
+        var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

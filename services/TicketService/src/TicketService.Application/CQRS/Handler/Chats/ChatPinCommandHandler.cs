@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Command.ChatPin;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
@@ -16,15 +17,20 @@ public class ChatPinCommandHandler : IRequestHandler<ChatPinCommand, TicketActio
 
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
+    private readonly IChatAuthorizationService _chatAuthorizationService;
 
-    public ChatPinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
+    public ChatPinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService)
     {
         _uow = uow;
         _activityLogger = activityLogger;
+        _chatAuthorizationService = chatAuthorizationService;
     }
 
     public async Task<TicketActionResponse> Handle(ChatPinCommand request, CancellationToken ct)
     {
+        if (!_chatAuthorizationService.CanPinChat(request.UserPermissions))
+            return Fail(403, "Không có quyền pin bình luận.");
+
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
             return Fail(404, "Không tìm thấy bình luận.");

@@ -63,6 +63,11 @@ public class TicketApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<SharedInfrastructure.Idempotency.IIdempotencyKeyStore,
                                   StubIdempotencyKeyStore>();
 
+            // Sprint Chat Phase 2 #518 — In-memory ICacheService stub cho integration test
+            // (production dùng RedisCacheService, không sẵn trong test env; SpamDetector phụ thuộc cache này).
+            services.RemoveAll<SharedContracts.Interfaces.ICacheService>();
+            services.AddSingleton<SharedContracts.Interfaces.ICacheService, StubCacheService>();
+
             // --- FIX SLOWNESS: Override MassTransit and HostedServices ---
             services.AddMassTransitTestHarness();
 

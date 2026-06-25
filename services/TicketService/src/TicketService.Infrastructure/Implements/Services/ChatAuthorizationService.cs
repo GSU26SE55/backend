@@ -4,9 +4,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using TicketService.Application.Common.Models;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Entities;
 
 namespace TicketService.Infrastructure.Implements.Services;
 
@@ -52,4 +54,49 @@ public class ChatAuthorizationService : IChatAuthorizationService
             .AsNoTracking()
             .AnyAsync(p => p.TicketId == ticketId && p.UserId == actorUserId && p.RemovedAt == null && !p.IsDeleted && p.CanViewInternal, cancellationToken);
     }
+
+    public ChatAuthorizationResult CanEditChat(
+        TicketChat chat,
+        Guid actorUserId,
+        IReadOnlyCollection<string> actorPermissions,
+        bool reasonProvided,
+        int editWindowMinutes)
+    {
+        if (chat.AuthorUserId == actorUserId)
+        {
+            var elapsed = DateTime.UtcNow - chat.CreatedAt;
+            return elapsed > TimeSpan.FromMinutes(editWindowMinutes)
+                ? ChatAuthorizationResult.EditWindowExpired
+                : ChatAuthorizationResult.Allowed;
+        }
+
+        if (actorPermissions.Contains(ChatPermissionCodes.ChatEditAny))
+            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
+
+        return ChatAuthorizationResult.Forbidden;
+    }
+
+    public ChatAuthorizationResult CanDeleteChat(
+        TicketChat chat,
+        Guid actorUserId,
+        IReadOnlyCollection<string> actorPermissions,
+        bool reasonProvided)
+    {
+        if (chat.AuthorUserId == actorUserId)
+            return ChatAuthorizationResult.Allowed;
+
+        if (actorPermissions.Contains(ChatPermissionCodes.ChatDeleteAny))
+            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
+
+        return ChatAuthorizationResult.Forbidden;
+    }
+
+    public bool CanCreateChat(bool isInternal, IReadOnlyCollection<string> actorPermissions)
+        => actorPermissions.Contains(isInternal ? ChatPermissionCodes.ChatCreateInternal : ChatPermissionCodes.ChatCreatePublic);
+
+    public bool CanPinChat(IReadOnlyCollection<string> actorPermissions)
+        => actorPermissions.Contains(ChatPermissionCodes.ChatPin);
+
+    public bool CanViewInternalChat(IReadOnlyCollection<string> actorPermissions)
+        => actorPermissions.Contains(ChatPermissionCodes.ChatViewInternal);
 }

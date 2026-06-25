@@ -19,6 +19,8 @@ public class ChatPinCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
+    [JsonIgnore]
+    public List<string> UserPermissions { get; set; } = new();
 
     public Task<TicketActionResponse> ValidateAsync()
     {

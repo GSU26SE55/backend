@@ -9,4 +9,6 @@ public class TicketActionDTO
     public string? TicketId { get; set; }
     public string Code { get; set; } = string.Empty;
     public TicketStatusEnum Status { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Warnings { get; set; }
 }

@@ -2,12 +2,17 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedContracts.Common.Responses;
+using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatOverrideAdd;
+using TicketService.Application.CQRS.Command.ChatOverrideDelete;
+using TicketService.Application.CQRS.Command.ChatOverrideEdit;
 using TicketService.Application.CQRS.Command.ChatPin;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Command.ChatRestore;
@@ -53,6 +58,7 @@ public class TicketChatsController : ControllerBase
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Không tìm thấy ticket.</response>
     [HttpPost]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -73,6 +79,7 @@ public class TicketChatsController : ControllerBase
             userRole = ActorRoleEnum.Admin;
 
         command.UserRole = userRole;
+        command.UserPermissions = _currentUser.Permissions.ToList();
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -95,6 +102,7 @@ public class TicketChatsController : ControllerBase
     /// <response code="403">Không có quyền sửa bình luận này.</response>
     /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
     [HttpPut("{id}")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -117,6 +125,7 @@ public class TicketChatsController : ControllerBase
             userRole = ActorRoleEnum.Admin;
 
         command.UserRole = userRole;
+        command.UserPermissions = _currentUser.Permissions.ToList();
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -139,6 +148,7 @@ public class TicketChatsController : ControllerBase
     /// <response code="403">Không có quyền xóa bình luận này.</response>
     /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
     [HttpDelete("{id}")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -162,6 +172,99 @@ public class TicketChatsController : ControllerBase
             userRole = ActorRoleEnum.Admin;
 
         command.UserRole = userRole;
+        command.UserPermissions = _currentUser.Permissions.ToList();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin override — thêm bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="command">Nội dung bình luận + lý do override.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Thêm bình luận (override) thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (thiếu OverrideReason).</response>
+    /// <response code="403">Không phải Admin.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpPost("closed-override")]
+    [Authorize(Roles = "Admin")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> OverrideAddChat(Guid ticketId, [FromBody] ChatOverrideAddCommand command, CancellationToken ct)
+    {
+        command.TicketId = ticketId;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        // [Authorize(Roles = "Admin")] đã chặn mọi role khác trước khi vào action này.
+        command.UserRole = ActorRoleEnum.Admin;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin override — sửa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần sửa.</param>
+    /// <param name="command">Nội dung mới + lý do override.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Sửa bình luận (override) thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (thiếu OverrideReason).</response>
+    /// <response code="403">Không phải Admin.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpPut("{id}/closed-override")]
+    [Authorize(Roles = "Admin")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> OverrideEditChat(Guid ticketId, Guid id, [FromBody] ChatOverrideEditCommand command, CancellationToken ct)
+    {
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserRole = ActorRoleEnum.Admin;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Admin override — xóa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận cần xóa.</param>
+    /// <param name="command">Lý do override.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Xóa bình luận (override) thành công.</response>
+    /// <response code="400">Dữ liệu không hợp lệ (thiếu OverrideReason).</response>
+    /// <response code="403">Không phải Admin.</response>
+    /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
+    [HttpDelete("{id}/closed-override")]
+    [Authorize(Roles = "Admin")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> OverrideDeleteChat(Guid ticketId, Guid id, [FromBody] ChatOverrideDeleteCommand command, CancellationToken ct)
+    {
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -482,6 +585,7 @@ public class TicketChatsController : ControllerBase
     /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
     [HttpPost("{id}/pin")]
     [Authorize(Roles = "Staff,Manager,Admin")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -495,7 +599,8 @@ public class TicketChatsController : ControllerBase
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
             UserDisplayName = _currentUser.FullName ?? "Unknown",
-            UserRole = ResolveActorRole(_currentUser.Role)
+            UserRole = ResolveActorRole(_currentUser.Role),
+            UserPermissions = _currentUser.Permissions.ToList()
         };
 
         var result = await _mediator.Send(command, ct);
@@ -514,6 +619,7 @@ public class TicketChatsController : ControllerBase
     /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
     [HttpDelete("{id}/pin")]
     [Authorize(Roles = "Staff,Manager,Admin")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -527,7 +633,8 @@ public class TicketChatsController : ControllerBase
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
             UserDisplayName = _currentUser.FullName ?? "Unknown",
-            UserRole = ResolveActorRole(_currentUser.Role)
+            UserRole = ResolveActorRole(_currentUser.Role),
+            UserPermissions = _currentUser.Permissions.ToList()
         };
 
         var result = await _mediator.Send(command, ct);

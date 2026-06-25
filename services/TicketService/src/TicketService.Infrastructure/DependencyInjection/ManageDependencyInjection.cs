@@ -80,6 +80,11 @@ public static class ManageDependencyInjection
         services.AddScoped<IChatAuthorizationService, ChatAuthorizationService>();
         services.AddScoped<ITicketChatRealtimeNotifier, SignalRTicketChatNotifier>();
         services.AddScoped<IMarkdownRenderer, MarkdigMarkdownRenderer>();
+
+        // Chat Authorization + Validation (#518/#519)
+        services.AddScoped<ISpamDetector, SpamDetector>();
+        services.AddScoped<IProfanityFilter, ProfanityFilter>();
+        services.AddScoped<IPiiDetector, PiiDetector>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

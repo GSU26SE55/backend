@@ -1,32 +1,36 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Helpers;
-using TicketService.Application.CQRS.Command.ChatUnpin;
+using TicketService.Application.CQRS.Command.ChatOverrideDelete;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
-public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketActionResponse>
+/// <summary>
+/// Admin override Delete — bypass block Closed/ClosedPendingRate + bỏ qua own-any check (#517).
+/// Mirror logic của <see cref="ChatDeleteCommandHandler"/>.
+/// </summary>
+public class ChatOverrideDeleteCommandHandler : IRequestHandler<ChatOverrideDeleteCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
-    private readonly IChatAuthorizationService _chatAuthorizationService;
 
-    public ChatUnpinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService)
+    public ChatOverrideDeleteCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
-        _chatAuthorizationService = chatAuthorizationService;
     }
 
-    public async Task<TicketActionResponse> Handle(ChatUnpinCommand request, CancellationToken ct)
+    public async Task<TicketActionResponse> Handle(ChatOverrideDeleteCommand request, CancellationToken ct)
     {
-        if (!_chatAuthorizationService.CanPinChat(request.UserPermissions))
-            return Fail(403, "Không có quyền unpin bình luận.");
+        if (request.UserRole != ActorRoleEnum.Admin)
+            return Fail(403, "Chỉ Admin được override khi ticket đã đóng.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
@@ -39,12 +43,10 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        if (!chat.IsPinned)
-            return Fail(400, "Bình luận chưa được pin.");
+        var oldBody = chat.Body;
 
-        chat.IsPinned = false;
-        chat.PinnedAt = null;
-        chat.PinnedByUserId = null;
+        chat.IsDeleted = true;
+        chat.DeletedAt = DateTime.UtcNow;
         _uow.TicketChats.UpdateAsync(chat);
 
         await _activityLogger.LogAsync(
@@ -52,9 +54,10 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
             request.UserId,
             request.UserRole,
             request.UserDisplayName,
-            ActivityActionEnum.ChatUnpinned,
-            ChatTextHelper.Truncate(chat.Body),
-            null);
+            ActivityActionEnum.ChatDeleted,
+            ChatTextHelper.Truncate(oldBody),
+            null,
+            request.OverrideReason);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -62,7 +65,7 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Unpin bình luận thành công.",
+            Message = "Xóa bình luận (override) thành công.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),
