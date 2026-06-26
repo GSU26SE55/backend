@@ -149,7 +149,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
-app.MapHub<TicketChatHub>("/hubs/ticket-chats");
+app.MapHub<TicketChatHub>("/hubs/ticket-chats").RequireAuthorization();
 app.MapMetrics();
 app.MapHealthChecks("/health");
 

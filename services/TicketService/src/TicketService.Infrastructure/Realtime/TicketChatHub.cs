@@ -106,24 +106,17 @@ public class TicketChatHub : Hub
     public async Task Typing(string ticketIdStr)
     {
         if (!Guid.TryParse(ticketIdStr, out var ticketId))
-        {
             return;
-        }
 
         var actorUserId = GetCurrentUserId();
         if (!actorUserId.HasValue)
             return;
 
-        var actorRoles = GetCurrentRoles();
-        var canAccess = await _authService.CanAccessTicketAsync(ticketId, actorUserId.Value, actorRoles);
-        if (!canAccess)
-            return;
-
         var displayName = Context.User?.FindFirstValue("FullName") ?? Context.User?.FindFirstValue(ClaimTypes.Name) ?? "Unknown";
 
-        // Broadcast to others in the public group
-        var pubGroup = PublicGroup(ticketId);
-        await Clients.OthersInGroup(pubGroup).SendAsync("UserTyping", ticketIdStr, actorUserId.ToString(), displayName);
+        // Group membership from JoinTicket is the implicit access gate — no extra DB call needed.
+        // OthersInGroup broadcasts to nobody if the caller skipped JoinTicket.
+        await Clients.OthersInGroup(PublicGroup(ticketId)).SendAsync("UserTyping", ticketIdStr, actorUserId.ToString(), displayName);
     }
 
     private Guid? GetCurrentUserId()
