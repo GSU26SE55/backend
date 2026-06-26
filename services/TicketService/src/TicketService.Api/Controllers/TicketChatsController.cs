@@ -29,6 +29,7 @@ using TicketService.Application.CQRS.Command.ChatSentimentCheck;
 using TicketService.Application.CQRS.Command.ChatSuggest;
 using TicketService.Application.CQRS.Command.ChatSummarize;
 using TicketService.Application.CQRS.Command.ChatUnpin;
+using TicketService.Application.CQRS.Query.ChatAttachmentDownload;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
 using TicketService.Application.CQRS.Query.ChatHistory;
@@ -539,6 +540,44 @@ public class TicketChatsController : ControllerBase
         {
             TicketId = ticketId,
             ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy URL download của đính kèm sau khi kiểm tra trạng thái virus scan.
+    /// Trả 451 nếu file bị nhiễm virus, 202 nếu đang scan, 200+URL nếu sạch.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của bình luận.</param>
+    /// <param name="attachmentId">ID của đính kèm.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Trả về download URL.</response>
+    /// <response code="202">File đang được scan, thử lại sau.</response>
+    /// <response code="403">Không có quyền truy cập.</response>
+    /// <response code="404">Không tìm thấy ticket, bình luận hoặc đính kèm.</response>
+    /// <response code="451">File bị nhiễm virus — không thể tải xuống.</response>
+    [HttpGet("{id}/attachments/{attachmentId}/download")]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), 451)]
+    public async Task<IActionResult> DownloadChatAttachment(Guid ticketId, Guid id, Guid attachmentId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatAttachmentDownloadQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            AttachmentId = attachmentId,
             ActorUserId = actorId.Value,
             ActorRoles = GetCurrentRoles()
         }, ct);

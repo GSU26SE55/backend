@@ -11,9 +11,8 @@ namespace TicketService.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_ticket_kb_references_ticket_id_kb_article_id_reference_type",
-                table: "ticket_kb_references");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_ticket_kb_references_ticket_id_kb_article_id_reference_type\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"ix_ticket_kb_references_ticket_id_kb_article_id_reference_type\";");
 
             migrationBuilder.AddColumn<Guid>(
                 name: "chat_id",
@@ -43,9 +42,8 @@ namespace TicketService.Infrastructure.Migrations
                 name: "ix_ticket_kb_references_chat_kb_unique",
                 table: "ticket_kb_references");
 
-            migrationBuilder.DropIndex(
-                name: "IX_ticket_kb_references_ticket_id_kb_article_id_reference_type",
-                table: "ticket_kb_references");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_ticket_kb_references_ticket_id_kb_article_id_reference_type\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"ix_ticket_kb_references_ticket_id_kb_article_id_reference_type\";");
 
             migrationBuilder.DropColumn(
                 name: "chat_id",

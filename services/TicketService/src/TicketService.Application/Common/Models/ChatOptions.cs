@@ -35,8 +35,37 @@ public class ChatOptions
     /// </summary>
     public Dictionary<string, List<string>> ProfanityWords { get; set; } = new();
 
+    /// <summary>Feature toggles (#514).</summary>
+    public FeaturesSection Features { get; set; } = new();
+
+    /// <summary>ClamAV virus scan config (#514).</summary>
+    public VirusScanSection VirusScan { get; set; } = new();
+
     /// <summary>Cấu hình AI suggest endpoint (#559).</summary>
     public AiSection Ai { get; set; } = new();
+
+    public class FeaturesSection
+    {
+        /// <summary>Master switch — mặc định false (disabled) cho đến khi ClamAV deploy xong.</summary>
+        public bool EnableVirusScan { get; set; } = false;
+    }
+
+    public class VirusScanSection
+    {
+        /// <summary>ClamAV REST base URL, e.g. http://clamav:3000</summary>
+        public string Endpoint { get; set; } = "http://clamav:3000";
+
+        public int TimeoutSeconds { get; set; } = 60;
+
+        /// <summary>Số attachment Pending xử lý mỗi lần poll.</summary>
+        public int BatchSize { get; set; } = 20;
+
+        /// <summary>Khoảng cách giữa 2 lần poll (giây).</summary>
+        public int IntervalSeconds { get; set; } = 30;
+
+        /// <summary>Base URL của FileStorageService để download file trước khi scan.</summary>
+        public string FileStorageBaseUrl { get; set; } = "http://file-storage-service";
+    }
 
     public class AiSection
     {

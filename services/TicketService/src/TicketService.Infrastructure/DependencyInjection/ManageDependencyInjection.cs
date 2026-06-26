@@ -74,6 +74,9 @@ public static class ManageDependencyInjection
 
         // #569 — GDPR retention: daily archive chats older than Chat:Retention:ArchiveAfterYears
         services.AddHostedService<ChatRetentionService>();
+
+        // #514 — VirusScan worker (disabled by default via Chat:Features:EnableVirusScan=false)
+        services.AddHostedService<VirusScanWorker>();
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -130,6 +133,22 @@ public static class ManageDependencyInjection
         {
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
             http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
+        });
+
+        // #514 — ClamAV REST client (typed HttpClient)
+        services.AddHttpClient<IClamAvClient, ClamAvHttpClient>((sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.BaseAddress = new Uri(opts.VirusScan.Endpoint);
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(10, opts.VirusScan.TimeoutSeconds));
+        });
+
+        // #514 — Named HttpClient cho VirusScanWorker download file từ FileStorageService
+        services.AddHttpClient("FileDownload", (sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.BaseAddress = new Uri(opts.VirusScan.FileStorageBaseUrl);
+            http.Timeout = TimeSpan.FromSeconds(30);
         });
     }
 
