@@ -9,7 +9,9 @@ using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
+using NotificationService.UnitTests.Helpers;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.UnitTests.Consumers;
 
@@ -19,13 +21,14 @@ namespace NotificationService.UnitTests.Consumers;
 /// </summary>
 public class EnvironmentalIncidentDetectedConsumerTests
 {
-    private static async Task<ITestHarness> StartHarness(IMediator mediator)
+    private static async Task<ITestHarness> StartHarness(IMediator mediator, ICacheService? cache = null)
     {
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x => x.AddConsumer<EnvironmentalIncidentDetectedConsumer>())
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
             .AddSingleton(Resolver())
+            .AddSingleton(cache ?? ConsumerTestHarness.ProceedCache())
             .AddSingleton(NullLogger<EnvironmentalIncidentDetectedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
