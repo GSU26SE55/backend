@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Role;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -12,10 +13,12 @@ namespace AuthService.Application.CQRS.Handler.Role;
 public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public CreateRoleCommandHandler(IAuthUnitOfWork unitOfWork)
+    public CreateRoleCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<RoleActionResponse> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
@@ -47,6 +50,12 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleA
         };
 
         await _unitOfWork.Roles.AddAsync(role);
+
+        // #AUDIT-11 — publish audit trước SaveChanges (atomic với business data).
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.RoleCreated, null, true,
+            Metadata: new Dictionary<string, object?> { ["roleId"] = role.Id, ["roleName"] = role.Name }), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new RoleActionResponse

@@ -34,6 +34,8 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<Alert> Alerts { get; set; }
 
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
+    public virtual DbSet<BatteryAuditLog> BatteryAuditLogs { get; set; }       // Sprint audit #AUDIT-20
+    public virtual DbSet<BatteryAuditOutbox> BatteryAuditOutboxes { get; set; } // Sprint audit #AUDIT-21
 
     // Sprint 5B #89 — Ambient monitoring.
     public virtual DbSet<AmbientReading> AmbientReadings { get; set; }

@@ -71,6 +71,22 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
         builder.Property(asset => asset.LastSensorReadingAt)
             .HasColumnName("last_sensor_reading_at");
 
+        // Sprint 7 B4 (§31.7) — cascade risk fields.
+        builder.Property(asset => asset.CascadeRiskScore)
+            .HasColumnName("cascade_risk_score")
+            .HasPrecision(4, 3)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
+        builder.Property(asset => asset.CascadeRiskUpdatedAt)
+            .HasColumnName("cascade_risk_updated_at");
+
+        builder.Property(asset => asset.ElectricalTopology)
+            .HasColumnName("electrical_topology")
+            .HasConversion<int>()
+            .HasDefaultValue(ElectricalTopologyEnum.Independent)
+            .IsRequired();
+
         builder.Property(asset => asset.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

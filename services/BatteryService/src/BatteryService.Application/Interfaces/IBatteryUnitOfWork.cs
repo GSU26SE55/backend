@@ -18,6 +18,8 @@ public interface IBatteryUnitOfWork : IUnitOfWork
     IGenericRepository<SensorReading> SensorReadings { get; }
 
     IGenericRepository<Alert> Alerts { get; }
+    IGenericRepository<BatteryAuditLog> BatteryAuditLogs { get; }       // Sprint audit #AUDIT-20
+    IGenericRepository<BatteryAuditOutbox> BatteryAuditOutboxes { get; } // Sprint audit #AUDIT-21
 
     IGenericRepository<OutboxMessage> OutboxMessages { get; }
 

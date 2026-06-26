@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -38,7 +38,7 @@ public class TicketCreateCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(customerSeed: customers);
 
-        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object);
+        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -51,7 +51,7 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
     }

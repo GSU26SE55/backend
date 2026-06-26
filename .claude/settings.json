@@ -1,6 +1,4 @@
 {
-  "enabledMcpjsonServers": ["context7"],
-
   "permissions": {
     "allow": [
       "WebSearch",
@@ -28,12 +26,15 @@
       "Bash(ruff:*)",
       "Bash(uvicorn:*)",
       "Bash(pytest:*)",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "PowerShell(dotnet build \"d:\\\\FPT\\\\SEM9\\\\GSU25SE55\\\\backend\\\\services\\\\BatteryService\\\\src\\\\BatteryService.Infrastructure\\\\BatteryService.Infrastructure.csproj\" --no-restore -v q 2>&1)",
+      "PowerShell(dotnet build \"d:\\\\FPT\\\\SEM9\\\\GSU25SE55\\\\backend\\\\services\\\\TicketService\\\\src\\\\TicketService.Infrastructure\\\\TicketService.Infrastructure.csproj\" --no-restore -v q 2>&1)"
     ]
   },
-
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
   "hooks": {
-
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -43,6 +44,12 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/be/block-dangerous-commands.sh",
             "timeout": 5,
             "statusMessage": "Checking command safety..."
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lifecycle/scan-secrets-precommit.sh",
+            "timeout": 10,
+            "statusMessage": "Scanning staged diff for secrets..."
           }
         ]
       },
@@ -58,7 +65,6 @@
         ]
       }
     ],
-
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -116,10 +122,39 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ai/check-random-seed.sh",
             "timeout": 5,
             "statusMessage": "Checking random seed in training script..."
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lifecycle/track-edits-suggest-compact.sh",
+            "timeout": 5,
+            "statusMessage": "Tracking session size..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lifecycle/session-start.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lifecycle/stop-suggest-lesson.sh",
+            "timeout": 5
           }
         ]
       }
     ]
-
   }
 }

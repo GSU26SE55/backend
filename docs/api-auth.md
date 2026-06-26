@@ -2572,6 +2572,159 @@ Header: `Authorization: Bearer {accessToken}`
 
 ---
 
+### `GET /api/auth/me/permissions`
+
+**Mục đích:** Lấy toàn bộ permission của **role mà tài khoản hiện tại đang được gán**. Endpoint này được thiết kế để FE build feature-gate (ẩn/hiện button, route, menu) sau khi login mà không cần phải decode JWT thủ công.
+
+**Tác dụng & khi nào dùng:**
+
+- Sau khi login thành công → FE gọi 1 lần để cache `Permissions` vào client state (Zustand/TanStack Query) → dùng cho mọi check `checkPermission(user, P.X)` toàn app.
+- Khi cần verify FE migration: đảm bảo `P.*` constants trong code khớp với DB.
+- Khi admin vừa thay đổi permission của role → FE re-fetch endpoint này (thay vì đợi refresh token) để áp permission mới ngay lập tức.
+- Khác với catalog endpoints — `GET /api/permissions` (public, mọi role) và `GET /api/admin/permissions` (Admin-only) đều trả **catalog** tất cả permission trong hệ thống; endpoint này trả **subset** thuộc về role của user hiện tại.
+
+**Auth:** Bắt buộc (mọi role — Admin / Manager / Staff / Customer đều gọi được, chỉ cần JWT hợp lệ)
+
+**Headers:**
+
+```
+Authorization: Bearer {accessToken}
+```
+
+**Request:** Không có body, không có query param. `AccountId` được server tự đọc từ claim `NameIdentifier` trong JWT (client không thể override).
+
+**Ghi chú implementation (quan trọng):**
+
+- Server **resolve qua DB** (`Account → Role → RolePermission → Permission`), **KHÔNG đọc** mảng `perm[]` đã embed trong JWT. Lý do: trả về snapshot mới nhất, phản ánh ngay khi admin sửa role/permission mà không cần đợi user refresh token.
+- Filter `!IsDeleted` ở cả 4 bảng (Account, Role, RolePermission, Permission).
+- Distinct theo `Permission.Id`, sort theo `Module` rồi `Code`.
+- Không cache phía server (latency 1 query JOIN nhỏ, FE đã cache phía client).
+
+**Response thành công `200`:** `data` là `MyPermissionsDto`.
+
+**Chi tiết `MyPermissionsDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `roleId` | `Guid` | Không | Guid role mà account đang được gán |
+| `roleName` | `string` | Không | Tên role (`"Admin"` / `"Manager"` / `"Staff"` / `"Customer"`) |
+| `permissions` | `PermissionDto[]` | Không (có thể rỗng) | Flat list permission, sort theo `module` → `code`. Rỗng nếu role không active hoặc chưa được gán permission |
+
+**Chi tiết `PermissionDto`** (cùng shape với `GET /api/admin/permissions`):
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | Guid identifier |
+| `code` | `string` | Không | Dot-separated key (vd `"ticket.view"`, `"alert.acknowledge"`) — match với `P.*` constant ở FE |
+| `module` | `string` | Không | Namespace logic (`"Ticket"` / `"Alert"` / `"Battery"` / `"Account"` / `"Admin"`) — FE có thể group accordion theo field này |
+| `description` | `string?` | Có thể null | Mô tả tiếng Việt dùng cho UI admin gán permission |
+| `isSystemPermission` | `bool` | Không | `true` = permission hệ thống tạo (không cho admin xóa) |
+| `createdAt` | `DateTime` | Không | Thời điểm permission được seed/tạo |
+
+**Ví dụ JSON response (happy path — role `Staff` có 5 permission):**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "",
+  "data": {
+    "roleId": "3e3a9c8f-2b1a-4d5e-8c7f-9b0a1d2e3f40",
+    "roleName": "Staff",
+    "permissions": [
+      {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "code": "alert.acknowledge",
+        "module": "Alert",
+        "description": "Acknowledge cảnh báo từ pin",
+        "isSystemPermission": true,
+        "createdAt": "2026-05-11T14:05:53.000Z"
+      },
+      {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "code": "battery.view",
+        "module": "Battery",
+        "description": "Xem chi tiết pin và sensor reading",
+        "isSystemPermission": true,
+        "createdAt": "2026-05-11T14:05:53.000Z"
+      },
+      {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "code": "ticket.view",
+        "module": "Ticket",
+        "description": "Xem danh sách ticket được assign",
+        "isSystemPermission": true,
+        "createdAt": "2026-05-11T14:05:53.000Z"
+      },
+      {
+        "id": "44444444-4444-4444-4444-444444444444",
+        "code": "ticket.update",
+        "module": "Ticket",
+        "description": "Cập nhật trạng thái ticket trong scope assigned",
+        "isSystemPermission": true,
+        "createdAt": "2026-05-11T14:05:53.000Z"
+      },
+      {
+        "id": "55555555-5555-5555-5555-555555555555",
+        "code": "ticket.comment",
+        "module": "Ticket",
+        "description": "Bình luận/log maintenance trên ticket",
+        "isSystemPermission": true,
+        "createdAt": "2026-05-11T14:05:53.000Z"
+      }
+    ],
+    "listErrors": []
+  }
+}
+```
+
+**Ví dụ JSON response (role không active — `200` nhưng `permissions = []`):**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Role hiện không hoạt động — không có permission nào được áp dụng.",
+  "data": {
+    "roleId": "3e3a9c8f-2b1a-4d5e-8c7f-9b0a1d2e3f40",
+    "roleName": "Staff",
+    "permissions": []
+  },
+  "listErrors": []
+}
+```
+
+**Lỗi thường gặp:**
+
+| HTTP | `message` | Tình huống |
+|------|-----------|-----------|
+| `401` | `"Chưa đăng nhập."` | Header `Authorization` thiếu / sai format / không decode được claim `NameIdentifier` |
+| `401` | `"Token không chứa AccountId hợp lệ."` | Defensive — JWT thiếu/sai format `AccountId` (không xảy ra với token do AuthService issue) |
+| `401` | `"Tài khoản không tồn tại hoặc đã bị xóa."` | Account đã bị admin xóa nhưng JWT chưa hết hạn |
+| `403` | `"Tài khoản chưa được gán role."` | Account tồn tại nhưng `RoleId` orphan (role đã bị xóa) hoặc chưa từng gán role nào |
+
+**Ví dụ JSON response (`403`):**
+
+```json
+{
+  "isSuccess": false,
+  "statusCode": 403,
+  "message": "Tài khoản chưa được gán role.",
+  "data": null,
+  "listErrors": []
+}
+```
+
+**Khác biệt với các endpoint permission khác:**
+
+| Endpoint | Auth | Scope | Use case |
+|----------|------|-------|----------|
+| `GET /api/auth/me/permissions` | Mọi role có JWT | Permission của role **user hiện tại** | FE feature-gate sau login |
+| `GET /api/admin/permissions` | Admin only | **Catalog** toàn bộ permission trong hệ thống (có `?module=` filter) | Admin dashboard render dropdown khi tạo/edit role |
+| `GET /api/admin/roles/{roleId}/permissions` | Admin only | Permission của 1 role bất kỳ (`roleId` truyền từ URL) | Admin edit role — load list current permissions để pre-check checkbox |
+
+---
+
 ### `GET /api/staff`
 
 **Mục đích:** Admin/Manager lấy danh sách staff phục vụ màn hình phân công ticket.
@@ -2975,13 +3128,13 @@ Base route: `/api/admin/accounts`
 
 **Auth:** Admin hoặc Manager
 
-**Response thành công `200`:** `isSuccess = true`, message *"Mở khóa tài khoản thành công."* Backend reset `FailedLoginAttempts = 0`, `LockoutEndAt = null`, account chuyển từ `Locked → Active`.
+**Response thành công `200`:** `isSuccess = true`, message *"Đã unlock tài khoản."*, `data = accountId`. Backend reset `FailedLoginAttempts = 0`, `LockoutEndAt = null`, account chuyển từ `Locked → Active`. Audit `AccountUnlocked` với metadata `wasLocked`, `previousFailedAttempts`.
 
-**Idempotent (verified với code — sửa từ docs cũ):**
+**Idempotent (verified với code `UnlockAccountCommandHandler.cs:44-50`):**
 
-Nếu account không ở `Status = Locked` (vd đã `Active`, `Suspended`, `Inactive`) → trả 200 với `isSuccess = TRUE`, message *"Tài khoản không ở trạng thái Locked, không cần unlock."* — **KHÔNG phải `isSuccess=false`** như docs cũ ghi. FE/QA test:
-- `if (response.isSuccess && response.message.includes("không cần unlock"))` → idempotent no-op
-- `if (response.isSuccess && !response.message.includes("không cần unlock"))` → actual unlock happened
+Nếu account không ở `Status = Locked` (vd đã `Active`, `Suspended`, `Inactive`) → trả **`200` với `isSuccess = FALSE`**, message *"Tài khoản không ở trạng thái Locked, không cần unlock."* (HTTP status vẫn 200, nhưng `isSuccess=false` báo no-op). Khi unlock thực sự xảy ra → `isSuccess = true`, message *"Đã unlock tài khoản."*, `data = accountId`. FE/QA test:
+- `if (!response.isSuccess && response.statusCode === 200)` → idempotent no-op (account không Locked)
+- `if (response.isSuccess && response.data)` → actual unlock happened, `data = accountId`
 
 **Lỗi thường gặp:**
 - `400` — `id` không phải Guid hợp lệ
@@ -3410,7 +3563,73 @@ Base route: `/api/admin/roles`
 
 ---
 
-## Nhóm 8 — Admin: Permissions
+## Nhóm 8 — Permissions
+
+Module này có **2 lớp endpoint** chia sẻ cùng DTO `PermissionDto` nhưng khác nhau ở quyền truy cập:
+
+| Endpoint | Controller | Auth | Mục đích |
+|---|---|---|---|
+| `GET /api/permissions` | `PermissionsController` | `[Authorize]` — **mọi role** | FE/Mobile load catalog đầy đủ để build picker / đối chiếu `P.*` constant, **không cần quyền admin** |
+| `GET /api/admin/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Catalog + thao tác gán role↔permission (admin panel) |
+| `GET /api/admin/roles/{roleId}/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Permission đang gán cho 1 role |
+| `PUT /api/admin/roles/{roleId}/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Set toàn bộ permission cho role (replace) |
+
+> **Phân biệt 3 endpoint trả permission** (dễ nhầm):
+> - `GET /api/permissions` — **catalog public** (mọi role), trả TẤT CẢ permission trong hệ thống.
+> - `GET /api/admin/permissions` — **catalog admin-only**, cùng data nhưng yêu cầu role Admin (dùng cho admin gán permission).
+> - `GET /api/auth/me/permissions` ([Nhóm 3](#get-apiauthmepermissions)) — trả **subset** permission của role mà user hiện tại đang được gán (dùng build feature-gate).
+
+---
+
+### `GET /api/permissions`
+
+**Mục đích:** Lấy **catalog toàn bộ permission** trong hệ thống. Endpoint dùng chung — chỉ cần access token hợp lệ, **KHÔNG phân quyền theo role** (không có slug/role `admin`).
+
+**Tác dụng & khi nào dùng:**
+
+- FE/Mobile cần load danh mục permission đầy đủ (build picker, đối chiếu `P.*` constant, hiển thị mô tả) mà **không cần quyền admin**.
+- Khác với `GET /api/admin/permissions` ở chỗ **không yêu cầu role Admin** — Manager/Staff/Customer đã đăng nhập đều gọi được.
+- Khác với `GET /api/auth/me/permissions` ở chỗ trả **toàn bộ catalog** (không phải subset theo role của user).
+
+**Auth:** Bắt buộc (mọi role — Admin / Manager / Staff / Customer đều gọi được, chỉ cần JWT hợp lệ)
+
+**Headers:**
+
+```
+Authorization: Bearer {accessToken}
+```
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `module` | `string?` | Lọc theo module (e.g., `Battery`, `Ticket`). Để trống = trả tất cả |
+
+**Response:** `PermissionListResponse` — flat list `PermissionDto`, sort theo `Module` rồi `Code`.
+
+**Chi tiết `PermissionDto`** (cùng shape với `GET /api/admin/permissions`):
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | ID permission |
+| `code` | `string` | Không | Code dạng `module.action` (e.g., `battery.view`) — match với `P.*` constant ở FE |
+| `module` | `string` | Không | Module thuộc về |
+| `description` | `string?` | Null nếu không có | Mô tả tiếng Việt |
+| `isSystemPermission` | `bool` | Không | `true` = không cho admin xóa |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo |
+
+**Response codes:**
+
+| Status | Trường hợp |
+|---|---|
+| 200 | Lấy danh sách permission thành công |
+| 401 | Chưa đăng nhập / token hết hạn |
+
+> **Lưu ý:** Endpoint này **KHÔNG** trả `403` — vì chỉ gắn `[Authorize]` (không filter role). Mọi user đã đăng nhập đều truy cập được. Catalog system permissions (43 permission) xem bảng đầy đủ ở [`GET /api/admin/permissions`](#get-apiadminpermissions) bên dưới.
+
+---
+
+## Nhóm 8b — Admin: Permissions
 
 Base route: `/api/admin/permissions`
 **Auth:** Admin
@@ -3583,16 +3802,27 @@ Base route: `/api/admin/audit-logs`
 
 | Param | Type | Mô tả |
 |---|---|---|
-| `pageNumber` | `int` | Trang |
-| `pageSize` | `int` | Số item/trang |
+| `pageNumber` | `int` | Trang (mặc định 1; ≤0 tự về 1) |
+| `pageSize` | `int` | Số item/trang (mặc định 20, trần 100; ≤0 tự về 10) |
 | `action` | `AuditActionEnum?` | Lọc theo loại hành động |
 | `targetAccountId` | `Guid?` | Xem tất cả hành động liên quan đến account này |
 | `actorAccountId` | `Guid?` | Xem tất cả hành động actor này thực hiện |
 | `isSuccess` | `bool?` | Lọc theo kết quả thành công/thất bại |
-| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive) |
-| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive) |
+| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive — `CreatedAt >= fromUtc`) |
+| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive — `CreatedAt < toUtc`) |
 
-**Response:** `PaginationResponse<AuditLogDto>`
+**Response:** `PaginationResponse<AuditLogDto>` (sort `CreatedAt` giảm dần — mới nhất trước).
+
+**Status code:**
+
+| Code | Khi nào |
+|---|---|
+| `200` | Lấy danh sách thành công (kể cả rỗng) |
+| `422` | `fromUtc >= toUtc` — `message = "FromUtc phải nhỏ hơn ToUtc."`, `listErrors = null` |
+| `401` | Chưa đăng nhập / token hết hạn |
+| `403` | Không có role Admin |
+
+> ⚠️ Annotation `[ProducesResponseType(400)]` trên controller chỉ là metadata Swagger; runtime handler thực tế trả **`422`** cho lỗi khoảng thời gian.
 
 **Chi tiết `AuditLogDto`:**
 

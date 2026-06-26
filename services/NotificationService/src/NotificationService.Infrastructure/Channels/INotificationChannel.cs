@@ -10,7 +10,7 @@ public interface INotificationChannel
 
 /// <summary>
 /// Dữ liệu đủ để gửi qua bất kỳ channel nào.
-/// Dispatcher (#109) populate các field channel-specific trước khi gọi SendAsync.
+/// Dispatcher populate các field channel-specific trước khi gọi SendAsync.
 /// </summary>
 public class SendRequest
 {

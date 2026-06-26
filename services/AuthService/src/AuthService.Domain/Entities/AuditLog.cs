@@ -47,4 +47,48 @@ public class AuditLog : AuditableEntity
 
     /// <summary>Correlation id của request (để link với request log / trace).</summary>
     public string? CorrelationId { get; set; }
+
+    // ===== Sprint audit #AUDIT-06 — 14 cột chuẩn Hybrid Audit (đồng bộ AuditCreatedEventV1) =====
+
+    /// <summary>Idempotency key xuyên hệ thống (Guid v7 khi có, fallback v4). Unique.</summary>
+    public Guid EventId { get; set; }
+
+    /// <summary>Service phát sinh — luôn "AuthService".</summary>
+    public string ServiceName { get; set; } = "AuthService";
+
+    /// <summary>Action code chuẩn dạng string (map từ <see cref="Action"/> enum) — xem SharedContracts ActionCodes.</summary>
+    public string ActionCode { get; set; } = string.Empty;
+
+    /// <summary>Category chuẩn (9 fixed) — xem SharedContracts AuditCategories.</summary>
+    public string ActionCategory { get; set; } = string.Empty;
+
+    /// <summary>Severity chuẩn (Info/Warning/Critical/Security).</summary>
+    public string Severity { get; set; } = string.Empty;
+
+    /// <summary>Loại target chuẩn (Account/Role/Session/...) — xem SharedContracts TargetTypes.</summary>
+    public string? TargetType { get; set; }
+
+    /// <summary>Id target chung (generic). Với Auth thường = <see cref="TargetAccountId"/>.</summary>
+    public Guid? TargetId { get; set; }
+
+    /// <summary>Tên hiển thị target (denormalized cho forensic), vd email/full name.</summary>
+    public string? TargetDisplay { get; set; }
+
+    /// <summary>Role của actor lúc hành động (Admin/Manager/Staff/Customer/System).</summary>
+    public string? ActorRole { get; set; }
+
+    /// <summary>Tên hiển thị actor (denormalized).</summary>
+    public string? ActorDisplay { get; set; }
+
+    /// <summary>Mã lỗi khi <see cref="IsSuccess"/>=false.</summary>
+    public string? ErrorCode { get; set; }
+
+    /// <summary>Event id của parent event (cross-service causation chain).</summary>
+    public Guid? CausationId { get; set; }
+
+    /// <summary>UTC — thời điểm hành động xảy ra (handler set).</summary>
+    public DateTime OccurredAt { get; set; }
+
+    /// <summary>UTC — thời điểm ghi DB (handler set).</summary>
+    public DateTime RecordedAt { get; set; }
 }

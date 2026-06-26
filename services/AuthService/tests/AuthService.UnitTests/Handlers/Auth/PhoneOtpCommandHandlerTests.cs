@@ -109,7 +109,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     {
         var account = WithPhoneOtp();
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
+        var handler = new VerifyPhoneOtpCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -125,7 +125,7 @@ public class VerifyPhoneOtpCommandHandlerTests
         var account = WithPhoneOtp();
         account.PhoneConfirmed = true;
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
+        var handler = new VerifyPhoneOtpCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -137,7 +137,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     {
         var account = WithPhoneOtp(otp: "999999");
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
+        var handler = new VerifyPhoneOtpCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
 
@@ -151,7 +151,7 @@ public class VerifyPhoneOtpCommandHandlerTests
     {
         var account = WithPhoneOtp(expired: DateTime.UtcNow.AddMinutes(-1));
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new VerifyPhoneOtpCommandHandler(uow.Object);
+        var handler = new VerifyPhoneOtpCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 

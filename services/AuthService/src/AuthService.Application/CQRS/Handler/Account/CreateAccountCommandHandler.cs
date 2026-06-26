@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -17,15 +18,18 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
     public CreateAccountCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
-        IMessageProducerService messageProducer)
+        IMessageProducerService messageProducer,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
@@ -105,6 +109,10 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             account.PhoneNumber,
             role.Name,
             CreationSource: "AdminCreate"), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountCreatedByAdmin, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

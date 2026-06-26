@@ -65,6 +65,12 @@ services:
       requests: { cpu: 100m, memory: 192Mi }
       limits:   { cpu: 400m, memory: 384Mi }
 
+  auditaggregatorservice:           # Sprint audit #AUDIT-13
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits:   { cpu: 400m, memory: 384Mi }
+
 postgres:
   maxConnections: 100
   sharedBuffers: 64MB

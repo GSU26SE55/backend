@@ -17,6 +17,7 @@ using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Persistence.Seeders;
+using TicketService.Infrastructure.Realtime;
 using TicketService.Infrastructure.Sagas;
 
 namespace TicketService.Infrastructure.DependencyInjection;
@@ -57,8 +58,16 @@ public static class ManageDependencyInjection
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
+        // Sprint 7 #114 (§5.2) — saga failed-rate report reader.
+        services.AddScoped<TicketService.Application.Interfaces.Services.ISagaReportService,
+            TicketService.Infrastructure.Implements.Services.SagaReportService>();
+        // Sprint 7 #117 — SLA aggregate gauge (cho Grafana "SLA Ops").
+        services.AddSingleton<TicketService.Application.Interfaces.Services.ISlaMetricsRecorder,
+            TicketService.Infrastructure.Observability.SlaMetricsRecorder>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
+        services.AddHostedService<SlaGaugeBackgroundService>();
+        services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -74,6 +83,10 @@ public static class ManageDependencyInjection
         services.AddScoped<TicketCurrentUserService>();
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
         services.AddScoped<ITicketCurrentUserService>(sp => sp.GetRequiredService<TicketCurrentUserService>());
+
+        // Realtime Comment Services
+        services.AddScoped<ICommentAuthorizationService, CommentAuthorizationService>();
+        services.AddScoped<ITicketCommentRealtimeNotifier, SignalRTicketCommentNotifier>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

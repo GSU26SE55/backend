@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -39,7 +39,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
-        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,6 +55,6 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
 
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

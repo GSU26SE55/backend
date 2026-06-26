@@ -72,7 +72,7 @@ public class OutboxRelayBackgroundServiceTests
     {
         var (db, sp, pub) = BuildScopedDeps(nameof(ProcessBatch_PublishesUnprocessed_AndMarksProcessedAt));
 
-        db.OutboxMessages.AddRange(
+        await db.OutboxMessages.AddRangeAsync(
             MakeOutboxMessage(new SendOtpRegisterEvent("a@b.c", "111")),
             MakeOutboxMessage(new SendPhoneOtpEvent("0901", "222")));
         await db.SaveChangesAsync();
@@ -157,7 +157,7 @@ public class OutboxRelayBackgroundServiceTests
         var newer = MakeOutboxMessage(new SendOtpRegisterEvent("new@b.c", "222"));
         newer.OccurredAt = DateTime.UtcNow;
 
-        db.OutboxMessages.AddRange(newer, older);  // insert ngược thứ tự
+        await db.OutboxMessages.AddRangeAsync(newer, older);  // insert ngược thứ tự
         await db.SaveChangesAsync();
 
         var svc = CreateService(sp, new OutboxOptions { BatchSize = 1, PollIntervalSeconds = 2, MaxRetries = 10 });

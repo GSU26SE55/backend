@@ -18,20 +18,30 @@ public static class MockNotificationUnitOfWork
             IEnumerable<DeviceToken>? deviceTokenSeed = null,
             IEnumerable<Notification>? notificationSeed = null)
     {
+        var deviceTokenData = (deviceTokenSeed ?? Array.Empty<DeviceToken>()).ToArray();
         var deviceTokens = new Mock<IGenericRepository<DeviceToken>>();
         deviceTokens.Setup(r => r.GetAllAsync())
-            .Returns((deviceTokenSeed ?? Array.Empty<DeviceToken>()).AsQueryable().BuildMock());
+            .Returns(deviceTokenData.AsQueryable().BuildMock());
+        deviceTokens.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
+            .Returns(deviceTokenData.AsQueryable().BuildMock());
 
+        var notificationData = (notificationSeed ?? Array.Empty<Notification>()).ToArray();
         var notifications = new Mock<IGenericRepository<Notification>>();
         notifications.Setup(r => r.GetAllAsync())
-            .Returns((notificationSeed ?? Array.Empty<Notification>()).AsQueryable().BuildMock());
+            .Returns(notificationData.AsQueryable().BuildMock());
+        notifications.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
+            .Returns(notificationData.AsQueryable().BuildMock());
 
         var preferences = new Mock<IGenericRepository<NotificationPreference>>();
         preferences.Setup(r => r.GetAllAsync())
             .Returns(Array.Empty<NotificationPreference>().AsQueryable().BuildMock());
+        preferences.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
+            .Returns(Array.Empty<NotificationPreference>().AsQueryable().BuildMock());
 
         var templates = new Mock<IGenericRepository<NotificationTemplate>>();
         templates.Setup(r => r.GetAllAsync())
+            .Returns(Array.Empty<NotificationTemplate>().AsQueryable().BuildMock());
+        templates.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
             .Returns(Array.Empty<NotificationTemplate>().AsQueryable().BuildMock());
 
         var uow = new Mock<INotificationUnitOfWork>();

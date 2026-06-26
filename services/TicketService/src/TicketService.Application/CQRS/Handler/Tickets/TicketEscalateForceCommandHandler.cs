@@ -18,17 +18,20 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketEscalateForceCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketEscalateForceCommand request, CancellationToken ct)
@@ -58,6 +61,10 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
 
         // Outbox: Ticket Escalated
         await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.ManagerId, request.ManagerName), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.EscalatedToAdmin, ticket.Id, targetDisplay: ticket.Code, reason: request.Note), ct);
 
         await _uow.SaveChangesAsync(ct);
 

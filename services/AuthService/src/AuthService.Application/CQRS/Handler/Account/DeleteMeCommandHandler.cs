@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -14,11 +15,13 @@ public class DeleteMeCommandHandler : IRequestHandler<DeleteMeCommand, AccountAc
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public DeleteMeCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
+    public DeleteMeCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(DeleteMeCommand request, CancellationToken cancellationToken)
@@ -54,6 +57,10 @@ public class DeleteMeCommandHandler : IRequestHandler<DeleteMeCommand, AccountAc
 
         await _messageProducer.PublishAsync(new AccountDeletedEvent(
             account.Id, account.Email, DeletionSource: "SelfDelete"), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountDeleted, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

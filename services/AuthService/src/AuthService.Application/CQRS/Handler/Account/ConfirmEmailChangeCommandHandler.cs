@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -20,11 +21,13 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IConnectionMultiplexer _redis;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public ConfirmEmailChangeCommandHandler(IAuthUnitOfWork unitOfWork, IConnectionMultiplexer redis)
+    public ConfirmEmailChangeCommandHandler(IAuthUnitOfWork unitOfWork, IConnectionMultiplexer redis, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _redis = redis;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(ConfirmEmailChangeCommand request, CancellationToken cancellationToken)
@@ -92,6 +95,10 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             rt.RevokedReason = "Email changed";
             _unitOfWork.RefreshTokens.UpdateAsync(rt);
         }
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.EmailChangeConfirmed, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

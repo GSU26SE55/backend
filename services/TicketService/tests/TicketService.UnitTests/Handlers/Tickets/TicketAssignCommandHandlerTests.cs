@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -51,7 +51,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -63,7 +63,7 @@ public class TicketAssignCommandHandlerTests
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager A", ActivityActionEnum.StaffAssigned, null, staffId.ToString(), "Please handle this."), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
     #endregion
@@ -90,7 +90,7 @@ public class TicketAssignCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Ticket must be Approved before assignment." });
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -122,7 +122,7 @@ public class TicketAssignCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Only Managers can assign staff." });
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -158,7 +158,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -195,7 +195,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

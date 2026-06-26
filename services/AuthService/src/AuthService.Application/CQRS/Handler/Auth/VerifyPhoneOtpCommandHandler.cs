@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -15,10 +16,12 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
     private const int LockoutDurationMinutes = 15;
 
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public VerifyPhoneOtpCommandHandler(IAuthUnitOfWork unitOfWork)
+    public VerifyPhoneOtpCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(VerifyPhoneOtpCommand request, CancellationToken cancellationToken)
@@ -64,6 +67,11 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
         account.OtpPurpose = null;
         account.FailedLoginAttempts = 0;
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.PhoneVerified, account.Id, true, TargetEmail: account.Email), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<string>

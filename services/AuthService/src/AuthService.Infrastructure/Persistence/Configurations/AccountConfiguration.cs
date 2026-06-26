@@ -7,6 +7,7 @@ namespace AuthService.Infrastructure.Persistence.Configurations;
 
 public class AccountConfiguration : IEntityTypeConfiguration<Account>
 {
+    [Obsolete]
     public void Configure(EntityTypeBuilder<Account> builder)
     {
         builder.ToTable("accounts");

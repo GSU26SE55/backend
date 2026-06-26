@@ -1,10 +1,12 @@
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
@@ -18,19 +20,22 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     private readonly IPriorityCalculator _priorityCalculator;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-27
 
     public TicketAutoCreateFromAlertCommandHandler(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
         IPriorityCalculator priorityCalculator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _priorityCalculator = priorityCalculator;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAutoCreateFromAlertCommand request, CancellationToken ct)
@@ -68,7 +73,12 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             newValue: $"Auto-created from alert {request.OriginAlertId}");
 
         // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedIntegrationEvent(ticket.Id, ticket.Code), ct);
+        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+
+        // #AUDIT-27 — causation_id = OriginAlertId (anomaly event → ticket chain).
+        await _publisher.Publish(TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.AutoCreatedFromAnomaly, ticket.Id, targetDisplay: ticket.Code,
+            causationId: request.OriginAlertId), ct);
 
         await _uow.SaveChangesAsync(ct);
 

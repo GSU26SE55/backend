@@ -1,6 +1,6 @@
 # Sprint audit — Pre-implementation Checklist §B.12
 
-**Status:** Signed off (2026-06-19).
+**Status:** Signed off (2026-06-19). **Amended 2026-06-24** — 6 quyết định kiến trúc chốt (D11–D16, xem section "Architectural Decisions chốt" + Risk).
 **Tham chiếu:** `issue-authservice.md` Phụ lục B §B.12.
 **Scope:** Toàn bộ 45 task `#AUDIT-01..45` (GitHub `#447..#491`).
 
@@ -31,7 +31,7 @@ Phụ lục B §B.12 spec yêu cầu **3 thành viên team** đọc + ký xác n
 - [x] **§A.5** API endpoints (7 endpoint search/eventId/correlation/timeline/stats/export/replay) + §A.5.1.bis Option C policy (5 service có local endpoint, 5 service skip)
 - [x] **§A.6** Owner mapping per phase (sole developer Thắng)
 - [x] **§A.7** Retention policy (source 1 năm / aggregate 6 tháng / Critical+Security vĩnh viễn)
-- [x] **§A.8** Security & PII handling (append-only, GDPR redaction, SecurityOfficer role)
+- [x] **§A.8** Security & PII handling (append-only, GDPR redaction, ~~SecurityOfficer role~~ → gộp `Admin` per D13)
 - [x] **§A.9** Migration zero-downtime (5-step pattern)
 - [x] **§A.10** Testing strategy (unit + integration TestContainers + idempotency + partition + causation chain + perf 1000 ev/s + chaos)
 - [x] **§A.11** Documentation deliverables (7 docs: ADR + contributor guide + action registry + API ref + ops runbook + security + monitoring)
@@ -57,10 +57,10 @@ Phụ lục B §B.12 spec yêu cầu **3 thành viên team** đọc + ký xác n
 - [x] **§B.4** Correlation + causation propagation chi tiết (`CorrelationIdMiddleware` AUTH-77 + manual chain ở consumer)
 - [x] **§B.5** Geo IP enrichment (LRU cache 10k entry TTL 1h, fallback null)
 - [x] **§B.6** API endpoint contract (query params, pagination max 100/page, response shape)
-- [x] **§B.7** Authorization model (SecurityOfficer role mới, permission claim)
+- [x] **§B.7** Authorization model (~~SecurityOfficer role mới~~ → 4 permission `audit.*` gộp `Admin` per D13)
 - [x] **§B.8** Performance SLO (outbox lag p99 < 5s, consumer lag p99 < 10s, search API p95 < 200ms)
 - [x] **§B.9** Zero-downtime migration plan (5-step + rollback)
-- [x] **§B.10** OutboxRelay single-instance enforcement (replicas:1 OR Redis leader)
+- [x] **§B.10** OutboxRelay single-instance enforcement — ✅ chốt **Redis leader election** (D12, không dùng replicas:1)
 - [x] **§B.11** **30 common pitfalls** — đã đọc + hiểu:
   1. DateTime.Now → phải UtcNow
   2. Guid.NewGuid → phải CreateVersion7 cho event_id
@@ -81,13 +81,16 @@ Phụ lục B §B.12 spec yêu cầu **3 thành viên team** đọc + ký xác n
 
 ## Architectural Decisions chốt (tham chiếu ADR-0007)
 
+> **✅ TẤT CẢ user chốt 2026-06-24 (owner Thắng `@Alexdev257`) — đồng bộ `overall.md` §17 Decision Log + `issue-authservice.md` A.9 D11–D16 + ADR-0007 Update log.**
+
 - [x] Hybrid Architecture confirmed (vs Centralized vs Fully Decentralized)
-- [x] Option C policy: 5 service có local endpoint (Auth+Battery+Ticket+File+Alert), 5 service skip (Email+Notification+Sms+AI+Gateway)
-- [x] Geo IP service: **MaxMind GeoLite2 free** (pending user chốt — section 3 trong session 2026-06-19)
-- [x] OutboxRelay: **k8s `replicas: 1`** (pending user chốt)
-- [x] Retention: **source 1 năm / aggregate 6 tháng / Critical+Security vĩnh viễn** (pending user chốt)
-- [x] SecurityOfficer seed: **migration seed Role+permission, KHÔNG seed user** (pending user chốt)
-- [x] AlertAuditLog placement: **embed vào BatteryService DB** (pending user chốt — vì chưa có AlertService độc lập)
+- [x] Option C policy: 5 service có local endpoint (Auth+Battery+Ticket+File+Alert), 5 service skip (Email+Notification+Sms+AI+Gateway) — **confirm (D14: Alert host trong BatteryService)**
+- [x] Geo IP service: **MaxMind GeoLite2 free** — ✅ **CHỐT 2026-06-24 (D11)**
+- [x] OutboxRelay: **Redis leader election** (`IDistributedCache` lease key `audit_outbox_leader`, §B.10 option 1) — ✅ **CHỐT 2026-06-24 (D12)** — thay cho `replicas: 1` ban đầu
+- [x] Retention: **source 1 năm / aggregate 6 tháng / Critical+Security vĩnh viễn** — ✅ **CHỐT 2026-06-24 (D15)**
+- [x] SecurityOfficer: **KHÔNG tạo role mới — GỘP vào `Admin`** (4 permission `audit.*` seed cho Admin) — ✅ **CHỐT 2026-06-24 (D13)** — thay cho "seed Role+permission" ban đầu
+- [x] AlertAuditLog placement: **embed vào BatteryService DB** (route `batteryCluster`, chưa có AlertService độc lập) — ✅ **CHỐT 2026-06-24 (D14)**
+- [x] Owner = Thắng (`@Alexdev257`); gate "ổn định ≥ 2 tuần" **waived** (sole-dev, hard-blocker `#AUTH-15/29/77` đã merge) — ✅ **CHỐT 2026-06-24 (D16)**
 
 ---
 
@@ -110,7 +113,7 @@ Phụ lục B §B.12 spec yêu cầu **3 thành viên team** đọc + ký xác n
 - [x] R-32 Causation chain break (Low×Med) — mitigate E2E test `#AUDIT-27`
 - [x] R-33 Schema event versioning (Med×Med) — mitigate `AuditCreatedEventV1` versioned record
 - [x] R-34 GeoIP rate limit (Low×Low) — mitigate offline DB (MaxMind)
-- [x] R-35 Multi-instance OutboxRelay duplicate (Med×High) — mitigate `replicas: 1`
+- [x] R-35 Multi-instance OutboxRelay duplicate (Med×High) — mitigate **Redis leader election** (D12, thay `replicas: 1`)
 
 ---
 

@@ -171,7 +171,8 @@ Versions tuân theo [SemVer](https://semver.org/spec/v2.0.0.html).
 
 - **P0 pending:** `#AUTH-05` CORS whitelist (Leader chốt domain trước go-live).
 - **P1 defer:** `#AUTH-64` KYC recovery (scope lớn — sprint riêng, mitigate bằng admin-side reset).
-- **P2 skip/defer:** `#AUTH-61` API versioning (single-version đủ), `#AUTH-63` Multi-tenancy (single-tenant scope), `#AUTH-71` HTTPS redirect Docker (cloud-native TLS termination ở reverse proxy — runbook chưa viết), `#AUTH-73` Error code catalog (rollback — FE parse theo HTTP status đủ).
+- **P2 skip/defer:** `#AUTH-63` Multi-tenancy (single-tenant scope), `#AUTH-71` HTTPS redirect Docker (cloud-native TLS termination ở reverse proxy — runbook chưa viết).
+- **Huỷ bỏ hoàn toàn (cancelled 2026-06-23):** `#AUTH-61` API versioning + `#AUTH-73` Error code catalog — xoá task definition (overall.md) + issue GitHub #409/#421. Không nằm trong scope capstone (single-version + FE parse theo HTTP status đủ).
 - **P3 defer:** `#AUTH-56` Notification preferences (cross-service impact, hard-code default đủ cho capstone).
 
 ### Deviations (đã document trong overall.md §69)

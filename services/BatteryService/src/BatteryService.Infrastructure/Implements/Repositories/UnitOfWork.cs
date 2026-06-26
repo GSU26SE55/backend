@@ -30,6 +30,8 @@ public class UnitOfWork : IBatteryUnitOfWork
     public IGenericRepository<SensorReading> SensorReadings => new GenericRepository<SensorReading>(_context);
 
     public IGenericRepository<Alert> Alerts => new GenericRepository<Alert>(_context);
+    public IGenericRepository<BatteryAuditLog> BatteryAuditLogs => new GenericRepository<BatteryAuditLog>(_context);       // #AUDIT-20
+    public IGenericRepository<BatteryAuditOutbox> BatteryAuditOutboxes => new GenericRepository<BatteryAuditOutbox>(_context); // #AUDIT-21
 
     public IGenericRepository<OutboxMessage> OutboxMessages => new GenericRepository<OutboxMessage>(_context);
 

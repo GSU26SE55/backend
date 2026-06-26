@@ -32,7 +32,8 @@ public class GoogleAuthCommandHandlerTests
             Name = "New User",
             Subject = "google-sub-1"
         });
-        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build();
+        var customerRole = new Role { Id = CustomerRoleId, Name = "Customer", NormalizedName = "CUSTOMER", Status = RoleStatusEnum.Active };
+        var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(roleSeed: new[] { customerRole });
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
 
         var resp = await handler.Handle(new GoogleAuthCommand { IdToken = "good-token" }, CancellationToken.None);
@@ -60,7 +61,8 @@ public class GoogleAuthCommandHandlerTests
             Subject = "google-sub-1",
             Picture = "https://lh3.googleusercontent.com/a/avatar"
         });
-        var (uow, _, _, _) = MockUnitOfWork.Build();
+        var customerRole = new Role { Id = CustomerRoleId, Name = "Customer", NormalizedName = "CUSTOMER", Status = RoleStatusEnum.Active };
+        var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { customerRole });
         var accountProfiles = Mock.Get(uow.Object.AccountProfiles);
         var handler = new GoogleAuthCommandHandler(uow.Object, _jwt.Object, _hasher.Object, _google.Object, new Mock<IMessageProducerService>().Object, MockPublisher.NoOp().Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
 
@@ -250,7 +252,7 @@ public class LinkGoogleCommandHandlerTests
             Subject = "g-1"
         });
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
+        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
 
@@ -277,7 +279,7 @@ public class LinkGoogleCommandHandlerTests
             Subject = "g"
         });
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
+        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
 
@@ -311,7 +313,7 @@ public class LinkGoogleCommandHandlerTests
             Subject = "shared-google-id"
         });
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, another });
-        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object);
+        var handler = new LinkGoogleCommandHandler(uow.Object, _google.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new LinkGoogleCommand { AccountId = account.Id, IdToken = "x" }, CancellationToken.None);
 
@@ -335,7 +337,7 @@ public class UnlinkGoogleCommandHandlerTests
             Provider = "Google"
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new UnlinkGoogleCommandHandler(uow.Object);
+        var handler = new UnlinkGoogleCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -357,7 +359,7 @@ public class UnlinkGoogleCommandHandlerTests
             GoogleId = null
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new UnlinkGoogleCommandHandler(uow.Object);
+        var handler = new UnlinkGoogleCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -377,7 +379,7 @@ public class UnlinkGoogleCommandHandlerTests
             GoogleId = "g-1"
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new UnlinkGoogleCommandHandler(uow.Object);
+        var handler = new UnlinkGoogleCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new UnlinkGoogleCommand { AccountId = account.Id }, CancellationToken.None);
 
