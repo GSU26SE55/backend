@@ -2206,3 +2206,57 @@ Verify toàn bộ doc với codebase TicketService. Enums (16/16) và SignalR Hu
 - Bổ sung endpoint `GET /api/knowledge-base/{id}/usage-stats` (Nhóm 8) — đã có trong code (Manager/Admin only) nhưng thiếu trong doc.
 - Gom 3 enum của domain Knowledge Base (`KbArticleStatusEnum`, `KbVersionStatusEnum`, `KbReferenceTypeEnum`) vào mục **Enums** chung đầu tài liệu — bỏ bản liệt kê dạng bullet trùng lặp ở cuối file.
 - Đổi tên các DTO trong doc từ hậu tố `Dto` sang `DTO` (khớp tên class C# thật, ví dụ `KbArticleDTO`, `TicketActionDTO`, `AlertTicketSagaDTO`) — áp dụng cho toàn bộ file, không chỉ phần Knowledge Base.
+
+---
+
+## Nhóm — Audit Logs nội bộ (Option C — Sprint audit)
+
+> Endpoint **dự phòng (fallback resilience)**: query trực tiếp bảng nguồn `ticket_audit_logs` ngay tại TicketService, dùng được kể cả khi `AuditAggregatorService` gặp sự cố. Enum `Severity`/`ActionCategory` dùng chung — xem [docs/api-audit.md](api-audit.md#enums--tập-giá-trị-cố-định).
+>
+> **Lưu ý:** đây là `ticket_audit_logs` (audit forensic), **TÁCH BIỆT** với `TicketActivity` (dòng thời gian hiển thị cho user trên UI).
+>
+> **Auth:** chỉ role `Admin` (`401` thiếu token / `403` sai role).
+
+### `GET /api/admin/ticket/audit-logs`
+
+**Mục đích:** Tra cứu audit log thao tác trên TICKET, có phân trang + lọc.
+
+**Tác dụng:** Điều tra SLA breach / escalation (ai làm gì với ticket, khi nào), compliance, truy trách nhiệm.
+
+**Auth:** Admin.
+
+**Query params (đều optional):**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `action` | `string?` | Không | Mã action (vd `StateTransitioned`). Bỏ trống = tất cả |
+| `ticketId` | `string?` (UUID) | Không | Lọc theo ticket cụ thể (target) |
+| `from` | `DateTime?` | Không | Mốc đầu (UTC) |
+| `to` | `DateTime?` | Không | Mốc cuối (UTC) |
+| `pageNumber` | `int` | Không (mặc định 1) | Số trang |
+| `pageSize` | `int` | Không (mặc định 50, trần 100) | Số item/trang |
+
+**Action codes (ticket, 21):** `TicketCreated` · `StateTransitioned` · `PriorityChanged` · `AssignedToStaff` · `UnassignedFromStaff` · `SlaPaused` · `SlaResumed` · `SlaBreached` · `EscalatedToManager` · `EscalatedToAdmin` · `MaintenanceLogAdded` · `CommentAdded` · `AttachmentUploaded` · `AttachmentDeleted` · `ResolutionAdded` · `ClosedByUser` · `ReopenedByAdmin` · `RejectedByManager` · `FalseAlarmMarked` · `CustomerRated` · `AutoCreatedFromAnomaly`
+
+> `AutoCreatedFromAnomaly` có `causationId = OriginAlertId` (chuỗi nhân-quả anomaly → ticket).
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketAuditLogDto>>` (mới nhất trước).
+
+**`DTO TicketAuditLogDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID bản ghi audit |
+| `eventId` | `string` | Không | Idempotency key |
+| `actionCode` | `string` | Không | Mã hành động |
+| `actionCategory` | `string` | Không | Category |
+| `severity` | `string` | Không | Mức độ |
+| `targetId` | `string?` | Null nếu không gắn | ID ticket (target) |
+| `actorAccountId` | `string?` | Null nếu hệ thống | Account thực hiện |
+| `correlationId` | `string?` | Null nếu không gắn luồng | Id luồng nghiệp vụ |
+| `causationId` | `string?` | Null nếu không có | Id event gây ra (vd OriginAlertId) |
+| `isSuccess` | `bool` | Không | Thành công/thất bại |
+| `reason` | `string?` | Null nếu không có | Lý do/ghi chú |
+| `occurredAt` | `DateTime` | Không | Thời điểm xảy ra (UTC) |
+
+**Lỗi:** `401` / `403`.

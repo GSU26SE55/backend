@@ -136,7 +136,7 @@
 | AuthService permission seed cho Saga (`ticket.saga.view/reprocess`) | 🔴 P0 | §7.5bis, §53.9 | Sprint 5B `#241` |
 | Documentation sync (Swagger/Postman/SRS/CHANGELOG/runbook/Mermaid) | 🔴 P0 | §65, §40.3, §53.2bis | Sprint 5B `#240` |
 | ADR-017 (Energy/CO2 removal) + ADR-018 (Saga orchestration) | 🔴 P0 | §40.1 | Sprint 5B `#233`/`#239` |
-| **`AuditAggregatorService`** (microservice MỚI) + 10 service onboard audit + AuditLog Hybrid Architecture | 🟠 P1 | §17 Sprint audit + §69.11 | **Sprint audit** ~44 dev-day, 7 phase, 45 task `#AUDIT-01..45` / `#447..#491`. Phụ thuộc Sprint additional-auth Phase A ổn định ≥ 2 tuần. ADR-020 cần viết. |
+| **`AuditAggregatorService`** (microservice MỚI) + 10 service onboard audit + AuditLog Hybrid Architecture | 🟠 P1 | §17 Sprint audit + §69.11 | **Sprint audit** ~44 dev-day, 7 phase, 45 task `#AUDIT-01..45` / `#447..#491`. Owner **Thắng (`@Alexdev257`)** (assigned 2026-06-24); gate "ổn định ≥ 2 tuần" **waived** (sole-dev, hard-blocker code đã merge). ADR-0007 ✅ viết xong. Decisions chốt 2026-06-24 — xem §17 Decision Log. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -3944,8 +3944,8 @@ Gateway phải thêm route + cluster `auditAggregatorCluster` cho `AuditAggregat
   "Routes": {
     "audit-aggregator-route": {
       "ClusterId": "auditAggregatorCluster",
-      "Match": { "Path": "/api/audit/{**catch-all}" },
-      "Transforms": [{ "PathPattern": "/api/audit/{**catch-all}" }]
+      "Match": { "Path": "/api/admin/audit/{**catch-all}" },
+      "Transforms": [{ "PathPattern": "/api/admin/audit/{**catch-all}" }]
     },
     "audit-aggregator-swagger-route": {
       "ClusterId": "auditAggregatorCluster",
@@ -3964,12 +3964,12 @@ Gateway phải thêm route + cluster `auditAggregatorCluster` cho `AuditAggregat
 ```
 
 **Lưu ý conflict với local audit endpoint Option C:** 5 service có local endpoint `/api/admin/{service}/audit-logs` — phân biệt:
-- `/api/audit/*` → `auditAggregatorCluster` (Sprint audit cross-service)
+- `/api/admin/audit/*` → `auditAggregatorCluster` (Sprint audit cross-service)
 - `/api/admin/audit-logs` → `authCluster` (AuthService giữ nguyên 2 endpoint hiện tại)
 - `/api/admin/battery/audit-logs` → `batteryCluster` (qua existing wildcard `admin-accounts-route`/`admin-battery-*` pattern hoặc thêm route mới)
 - `/api/admin/ticket/audit-logs` → `ticketCluster`
 - `/api/admin/files/audit-logs` → `fileStorageCluster`
-- `/api/admin/alerts/audit-logs` → cần xác định cluster (Battery hay Alert service riêng — chốt khi `#AUDIT-31`)
+- `/api/admin/alerts/audit-logs` → `batteryCluster` (chốt 2026-06-24 — AlertAuditLog host trong BatteryService, không tách Alert service riêng cho capstone)
 
 ### 10.5. Health & readiness
 ```
@@ -4240,11 +4240,11 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 | Saga `POST /reprocess` (Sprint 5B) | 100ms | 300ms | 500ms |
 | Saga `GET /alert-ticket?state=` (Sprint 5B, page=50) | 80ms | 200ms | 400ms |
 | Alert→Saga Completed end-to-end (happy path, Sprint 5B) | 1.5s | 4s | 8s (mục tiêu, không phải HTTP SLA) |
-| **Aggregator `GET /api/audit/search` (1M rows, Sprint audit)** | 80ms | **200ms** | 400ms |
-| **Aggregator `GET /api/audit/account/{id}/timeline`** | 50ms | 150ms | 300ms |
-| **Aggregator `GET /api/audit/correlation/{id}`** | 50ms | 150ms | 300ms |
-| **Aggregator `GET /api/audit/stats?groupBy=service` (30d range)** | 200ms | 500ms | 1000ms |
-| **Aggregator `GET /api/audit/export?format=csv` (streaming 100k rows)** | — | — | < 30s không OOM |
+| **Aggregator `GET /api/admin/audit/search` (1M rows, Sprint audit)** | 80ms | **200ms** | 400ms |
+| **Aggregator `GET /api/admin/audit/account/{id}/timeline`** | 50ms | 150ms | 300ms |
+| **Aggregator `GET /api/admin/audit/correlation/{id}`** | 50ms | 150ms | 300ms |
+| **Aggregator `GET /api/admin/audit/stats?groupBy=service` (30d range)** | 200ms | 500ms | 1000ms |
+| **Aggregator `GET /api/admin/audit/export?format=csv` (streaming 100k rows)** | — | — | < 30s không OOM |
 | **Local audit endpoint per service (Battery/Ticket/File/Alert)** | 30ms | 100ms | 200ms |
 | **Audit pipeline lag (source commit → aggregator visible)** | 2s | 5s | 10s (mục tiêu, không phải HTTP SLA) |
 
@@ -4595,6 +4595,7 @@ dotnet sln add src/**/*.csproj tests/**/*.csproj
 
 # FileStorage + Alert + Email + Notification + Sms + AI + Gateway (Phase 5)
 # Tương tự pattern trên cho từng service
+# ⚠️ AlertAuditLog (#AUDIT-31) host TRONG BatteryService (chốt 2026-06-24 D14) — scaffold entity/outbox/relay vào BatteryService, route /api/admin/alerts/audit-logs qua batteryCluster
 
 # Integration event publish
 /scaffold-integration-event AuditCreatedEventV1               # SharedContracts — `#AUDIT-01`
@@ -4606,12 +4607,12 @@ dotnet sln add src/**/*.csproj tests/**/*.csproj
 /scaffold-controller BatteryService BatteryAuditLog AdminGetList   # `#AUDIT-23` — GET /api/admin/battery/audit-logs
 /scaffold-controller TicketService TicketAuditLog AdminGetList     # `#AUDIT-28`
 /scaffold-controller FileStorageService FileAuditLog AdminGetList  # `#AUDIT-30`
-/scaffold-controller AlertService AlertAuditLog AdminGetList       # `#AUDIT-32`
+/scaffold-controller BatteryService AlertAuditLog AdminGetList     # `#AUDIT-32` — AlertAuditLog host trong BatteryService (D14), route /api/admin/alerts/audit-logs qua batteryCluster
 
-# Background job per-service
+# Background job per-service — TẤT CẢ *AuditOutboxRelay dùng Redis leader election (D12, §B.10 option 1)
 /scaffold-background-service AuthService AuditOutboxRelay         # `#AUDIT-08`
 /scaffold-background-service BatteryService BatteryAuditOutboxRelay  # `#AUDIT-21`
-# ... (tương tự cho Ticket/File/Alert)
+# ... (tương tự cho Ticket/File; Alert relay nằm trong BatteryService)
 /scaffold-background-service AuditAggregatorService AuditRetention   # `#AUDIT-41`
 
 # Tests
@@ -5279,7 +5280,7 @@ P1 sprint kế tiếp (nếu split): `#AUTH-11..17` + `#AUTH-37`, `#AUTH-42`, `#
 
 P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification preferences), `#AUTH-63` (SKIP permanent multi-tenancy), `#AUTH-71` (DEFER HTTPS Docker). `#AUTH-61` (API versioning) + `#AUTH-73` (error code catalog) đã **huỷ bỏ hoàn toàn 2026-06-23** — xoá task definition + issue #409/#421. KHÔNG còn task defer sang sprint-B vì `#AUTH-47`/`#AUTH-48`/`#AUTH-51` đã implement trong followup 2026-06-19. `#AUTH-40`/`#AUTH-41`/`#AUTH-44`/`#AUTH-55`/`#AUTH-57` đã done ở batch chính.
 
-### Sprint audit (AuditLog Hybrid Architecture — chưa chốt timeline)
+### Sprint audit (AuditLog Hybrid Architecture — owner Thắng `@Alexdev257`, Phase 0 ready 2026-06-24)
 
 **Goal:** Triển khai kiến trúc **Hybrid Audit** toàn hệ thống — decentralized write (mỗi service own audit) + Outbox pattern + centralized read qua `AuditAggregatorService` mới. Sprint này **KHÔNG THUỘC** scope Sprint additional-auth (chỉ overlap nhẹ ở `#AUTH-29` append-only trigger). Đây là sprint **mở rộng** sau khi Sprint additional-auth ổn định, tạo nền tảng audit cross-service cho saga forensic + GDPR compliance + security investigation toàn org.
 
@@ -5289,18 +5290,28 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 
 Đọc Phụ lục A+B đầy đủ + ký xác nhận (B.12 checklist) trước khi start.
 
-**Owner:** Chưa assign — Leader chốt khi `/kltn-sprint` chạy. Khuyến nghị: 1 BE senior (security/distributed systems/MassTransit/PostgreSQL partitioning) + 0.5 FE (Phase 6 Admin Web UI Audit Explorer).
+**Owner:** **Thắng (`@Alexdev257`)** — assigned 2026-06-24 (sole BE dev, kiêm 0.5 FE cho Phase 6 Admin Web UI Audit Explorer). Khuyến nghị gốc: 1 BE senior (security/distributed systems/MassTransit/PostgreSQL partitioning) + 0.5 FE.
 
-**Timeline ước tính:** **~44 dev-day** (≈ 8-9 sprint với 1 BE + 0.5 FE). Chi tiết breakdown ở Phụ lục B §B.19. KHÔNG thể chạy song song Sprint additional-auth — phải đợi Phase A `#AUTH-29` (AuditLog append-only trigger) + `#AUTH-77` (CorrelationIdMiddleware) merge trước. Recommend kick off **sau khi Sprint additional-auth hoàn tất ổn định ≥ 2 tuần**.
+**Timeline ước tính:** **~44 dev-day** (≈ 8-9 sprint với 1 BE + 0.5 FE). Chi tiết breakdown ở Phụ lục B §B.19. Hard-blocker code Phase A (`#AUTH-29` AuditLog append-only trigger + `#AUTH-77` CorrelationIdMiddleware + `#AUTH-15` Outbox) đã merge & verified on disk. **Gate "ổn định ≥ 2 tuần" WAIVED (chốt 2026-06-24, owner Thắng `@Alexdev257`, sole-dev) → kick-off Phase 0 (`#AUDIT-01/02/04`) ngay.** Phase 2 chờ dựng `audit-aggregator-db` + `pg_partman` vào `docker-compose`.
 
 **Dependency:**
-- Sprint additional-auth Phase A đã merge (`#AUTH-29` trigger, `#AUTH-77` CorrelationId, `#AUTH-15` Outbox cho AuthService).
-- RabbitMQ + Postgres staging cluster ready cho `AuditAggregatorService` (DB riêng, không share với 4 service DB hiện tại).
-- ADR `docs/adr/0007-audit-hybrid-architecture.md` viết + sign-off 3 thành viên trước khi code (Phase 0 gate).
-- Geo IP service quyết định (MaxMind GeoLite2 free OR IP2Location) — Leader chốt.
-- Quyết định leader election vs separate worker pod cho OutboxRelay multi-instance (Phụ lục B §B.10).
-- Quyết định retention policy: source 1 năm, aggregate 6 tháng, severity=Critical vĩnh viễn.
-- FE Admin role mới `SecurityOfficer` (khác `Admin`) — chỉ access aggregator API, không access service-local audit.
+- ✅ Sprint additional-auth Phase A đã merge (`#AUTH-29` trigger, `#AUTH-77` CorrelationId, `#AUTH-15` Outbox cho AuthService) — verified trên disk 2026-06-24.
+- ⏳ RabbitMQ + Postgres staging cluster cho `AuditAggregatorService` (DB riêng, không share với 4 service DB hiện tại) — **phải thêm `audit-aggregator-db` + `pg_partman` vào `docker-compose.yml` trước Phase 2** (chưa có, gỡ trong `#AUDIT-13/14`).
+- ✅ ADR `docs/adr/0007-audit-hybrid-architecture.md` viết xong (412 dòng) — sign-off override sole-dev Thắng (capstone scope), GVHD review ở báo cáo final.
+- ✅ Geo IP service — **chốt MaxMind GeoLite2 free** (file `.mmdb` tra local, không rate-limit; enrichment optional, fallback null). Xem `#AUDIT-16`.
+- ✅ OutboxRelay multi-instance — **chốt Leader election qua Redis** (`IDistributedCache` lease key, Phụ lục B §B.10 option 1). Xem `#AUDIT-08`.
+- ✅ Retention policy — **chốt: source 1 năm, aggregate 6 tháng, severity=Critical/Security vĩnh viễn** (đúng ADR-0007). Xem `#AUDIT-41`.
+- ✅ Role `SecurityOfficer` — **chốt GỘP vào `Admin`** cho capstone scope (KHÔNG tạo role thứ 5). Mọi endpoint aggregator + GDPR redact dùng `[Authorize(Roles = "Admin")]`. Xem `#AUDIT-18/42`.
+
+> **📌 Decision Log (2026-06-24, owner Thắng `@Alexdev257`):** Gate "ổn định ≥ 2 tuần" và việc đóng nốt `#AUTH-05/56/63/64/71` được **bỏ qua** (sole-dev, 3 hard-blocker code đã xong → kick-off Phase 0 ngay). Option C policy (5 service local endpoint) + alerts audit-logs cluster = **BatteryService (`batteryCluster`)** đã chốt. Observability (Prometheus/Grafana/SLO/backup) **đã có nền từ Sprint 7** — Sprint audit chỉ bổ sung thêm metric audit-pipeline ở `#AUDIT-44`, không phải dựng mới.
+
+> **📌 Decision Log (2026-06-25, owner Thắng `@Alexdev257`) — DESCOPE Email/AI/Gateway audit:** Bỏ khỏi scope `#AUDIT-33` (EmailService) và phần **AI Module + Gateway** của `#AUDIT-35` (phần Sms vẫn giữ — đã làm xong). Lý do: 3 đối tượng này nằm ở "rìa" audit, **giá trị forensic thấp / trùng lặp** với audit đã có ở core service (Auth/Ticket/Battery/File/Alert), hoặc **sai tầng**: (1) Email = delivery log, hành động nghiệp vụ sinh mail đã audit ở service gốc; (2) AI = repo Python riêng, ML observability thuộc metric/MLflow, kết quả anomaly→ticket đã audit qua `AutoCreatedFromAnomaly`; (3) Gateway `RequestRouted` volume cực lớn làm loãng store, login fail/permission denied đã audit ở Auth. Email + Gateway còn thiếu `.Application`/`.Domain` layer → onboard chỉ để log rìa là over-engineering (Simplicity First). **Hệ quả:** sprint còn **43 task active** (45 kế hoạch − 2 descoped: #AUDIT-33 + phần AI/Gateway của #AUDIT-35). GH issue #479 + #481 closed not-planned. Các mention "45 task" trong tài liệu là số kế hoạch lịch sử — giữ nguyên cho traceability.
+
+> **📌 Decision Log (2026-06-26, owner Thắng `@Alexdev257`) — UX filter Audit Explorer cho admin non-tech (giải pháp A+E):** Param filter tập-đóng của Audit Explorer (`#AUDIT-17`) nhận free-string nên không thân thiện với admin non-tech: gõ sai value/sai hoa-thường → trả `200` **rỗng âm thầm**, dễ hiểu nhầm "không có gì xảy ra" khi điều tra forensic. **Chốt giải pháp A+E** (không làm B/C/D):
+> - **A (FE — chuẩn dropdown):** mọi field tập-đóng (`service` 6, `severity` 4, `category` 9, `targetType` 21, `groupBy`, `format`) → FE render **dropdown/typeahead** từ `as const` enum tĩnh (giá trị canonical đã liệt kê trong `docs/api-audit.md`). Admin **chọn**, không gõ → không thể sai. KHÔNG cần endpoint "lấy enum" (đúng pattern toàn app — không service nào có endpoint này).
+> - **E (BE — validate `.All`):** handler `/search` + controller `/export` validate `severity`/`category` **exact-match** với `Severities.All`/`AuditCategories.All` (SharedContracts.Audit, source-of-truth dùng chung với A) → sai → **`400` + `listErrors[{field,detail}]`** kèm danh sách giá trị đúng. Đồng bộ với endpoint anh em `AuthService /api/admin/audit-logs` (param enum tự validate) + endpoint `redact` (400 + listErrors) + chuẩn `CommonResponse`. `service`/`action` không validate (free / 100+ mã nested không có `.All` phẳng) → chỉ FE dropdown.
+> - **Bỏ B (case-insensitive match):** dropdown FE đã gửi đúng case canonical → B thừa; toàn hệ thống match exact chuỗi canonical, chỉ riêng endpoint này case-insensitive là **lệch chuẩn**. E exact-match đã xử lý luôn lỗi case (sai case → 400 kèm gợi ý đúng). **Bỏ D (facets endpoint)** = over-engineering cho capstone.
+> - **Triển khai:** `AuditSearchValidator` (Application, dùng `.All`) + **8 test PASS** (6 `AuditHandlersUnitTests` cho `/search`/validator + 2 `AdminAuditControllerStatusCodeTests` cho `/export` 400/valid). Doc cập nhật `docs/api-audit.md`. **BE = E đã xong**; **A thuộc Phase 6 FE (`#AUDIT-36..40`)** — filter panel dùng dropdown.
 
 **Owner mapping (per phase, tham chiếu Phụ lục A §A.6 + B.19):**
 
@@ -5311,7 +5322,7 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 | Phase 2 | AuditAggregatorService scaffold + DbContext partitioned + consumer + enrichment + API + auth + test | `#AUDIT-13..19` | 8.5 ngày |
 | Phase 3 | BatteryService onboard — 12 action + outbox + relay + migration + local endpoint Option C | `#AUDIT-20..23` | 3.5 ngày |
 | Phase 4 | TicketService onboard — tách TicketAuditLog + 21 action + causation chain + local endpoint Option C | `#AUDIT-24..28` | 5.5 ngày |
-| Phase 5 | FileStorage + Alert + Email/Notification/Sms/AI/Gateway onboard — 2 local endpoint Option C (File + Alert) | `#AUDIT-29..35` | 5 ngày |
+| Phase 5 | FileStorage + Alert + Notification + Sms onboard — 2 local endpoint Option C (File + Alert). ~~Email/AI/Gateway~~ **DESCOPED 2026-06-25** | `#AUDIT-29..35` | 5 ngày |
 | Phase 6 | FE Admin Web UI Audit Explorer — filter panel + timeline + correlation trace + export + stats dashboard | `#AUDIT-36..40` | 6 ngày |
 | Phase 7 | Hardening — retention + GDPR redaction + perf + monitoring + documentation | `#AUDIT-41..45` | 5 ngày |
 
@@ -5322,14 +5333,14 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 - [ ] **#AUDIT-01** — Tạo `SharedContracts.IntegrationEvents.Audit.AuditCreatedEventV1.cs` event contract: `EventId (Guid v7), ServiceName, ActionCode, ActionCategory, Severity, TargetType, TargetId, TargetDisplay, ActorAccountId, ActorRole, ActorDisplay, ActorIp, ActorUserAgent, IsSuccess, ErrorCode, Reason, MetadataJson, CorrelationId, CausationId, OccurredAt, RecordedAt`. XML doc đầy đủ. **Mức: P1**. — #447
 - [ ] **#AUDIT-02** — Tạo `SharedContracts.Audit.ActionCodes.cs` (centralize ALL action code project sẽ dùng) + `AuditCategories.cs` (9 category fixed) + `Severities.cs` (4 severity: Info/Warning/Critical/Security) + `TargetTypes.cs` (fixed enum). Quy ước Phụ lục B §B.2.1. **Mức: P1**. — #448
 - [x] **#AUDIT-03** — Viết ADR `docs/adr/0007-audit-hybrid-architecture.md` chứa: kiến trúc tổng quan, lý do chọn Hybrid (vs centralized hoặc fully decentralized), Option C policy, schema chuẩn, migration strategy, retention policy, security/PII considerations. Sign-off 3 thành viên team. **Mức: P0 — gate trước khi code Phase 1**. — #449 — **NOTE (2026-06-19):** ADR-0007 đã viết đầy đủ (412 dòng) — Context + Decision + 4 nguyên tắc cốt lõi + so sánh Hybrid vs Centralized/Decentralized + Option C policy + 14 cột schema + migration 5-step + retention asymmetric + Security/PII/GDPR + Performance SLO + Risk R-30..R-35 + Alternatives (ELK/CloudTrail/Event Sourcing rejected) + Sign-off + Consequences + 7-phase roadmap + References. Sign-off override: sole developer Thắng (`@Alexdev257`) ký capstone scope — GVHD review khi báo cáo final.
-- [ ] **#AUDIT-04** — Roslyn analyzer + CI ban: `DateTime.Now` (must use `UtcNow`), `Random` cho event_id (must use `Guid.CreateVersion7()`), `Console.WriteLine` trong production code. Analyzer chạy ở stage `ci-rules` của Makefile. **Mức: P1**. — #450
+- [x] **#AUDIT-04** — Roslyn analyzer + CI ban: `DateTime.Now` (must use `UtcNow`), `Random` cho event_id (must use `Guid.CreateVersion7()`), `Console.WriteLine` trong production code. Analyzer chạy ở stage `ci-rules` của Makefile. **Mức: P1**. — #450 — **DONE (2026-06-25):** 2 tầng. (1) **Build/IDE-time:** `Microsoft.CodeAnalysis.BannedApiAnalyzers` (RS0030) qua root `Directory.Build.props` + `eng/audit/BannedSymbols.txt` (ban `DateTime.Now/Today`, `DateTimeOffset.Now`, `System.Random`, `Console.Write/WriteLine`) — opt-in `-p:EnableAuditBannedApis=true`, smoke-test RS0030 fire OK. (2) **CI gate hard-fail:** thêm Rule 5/6/7 vào `ci/scripts/rule-checks.sh` (stage `ci-rules`) — diff-based, chỉ chặn code MỚI, loại trừ tests/Migrations + Program.cs (startup) → zero breakage cho 48 Console.WriteLine hiện có. **net8 note:** `Guid.CreateVersion7()` là API .NET 9 → helper `SharedContracts.Audit.AuditEventId.New()` (v4 fallback, swap UUIDv7 khi lên net9) + update 3 handler (Auth/Battery/Ticket); Rule 7 ban `eventId = Guid.NewGuid()` ép dùng helper.
 - [ ] **#AUDIT-05** — Setup RabbitMQ topology cho audit pipeline: exchange `audit.events` (topic), queue `aggregator.audit.events` (durable, x-max-length=1M, x-message-ttl=7d), DLQ `aggregator.audit.events.dlq` (durable). Routing key pattern `audit.{service}.{category}.{severity}`. Document trong `docs/audit/rabbitmq-topology.md`. **Mức: P1**. — #451
 
 #### Phase 1 — Refactor AuthService audit (7 ngày)
 
 - [ ] **#AUDIT-06** — Migration `AddAuditLogStandardColumns` thêm 14 cột nullable vào `auth_audit_logs`: `event_id (Guid)`, `service_name (50)`, `action_code (100)`, `action_category (50)`, `severity (20)`, `target_type (50)`, `target_id (Guid)`, `target_display (255)`, `actor_role (50)`, `actor_display (255)`, `error_code (50)`, `causation_id (Guid)`, `occurred_at (TIMESTAMPTZ)`, `recorded_at (TIMESTAMPTZ)`. Backfill SQL cho row cũ (map int enum → string action_code). Set NOT NULL sau backfill + unique index `event_id`. Test rollback PASS. **Mức: P0**. — #452
 - [ ] **#AUDIT-07** — Migration tạo `audit_outbox` table AuthService: `id (Guid)`, `event_id (Guid, unique)`, `event_type (100)`, `payload (jsonb)`, `created_at`, `processed_at`, `retry_count`, `last_error`, `status (Pending/Published/Failed)`. Index `(status, created_at) WHERE status = 'Pending'`. **Mức: P0**. — #453
-- [ ] **#AUDIT-08** — Tạo `AuditOutboxRelayBackgroundService` riêng (KHÔNG dùng `OutboxRelayBackgroundService` chung của AUTH-15 vì schema khác). Poll mỗi 2s, batch 50, `FOR UPDATE SKIP LOCKED`, publish `AuditCreatedEvent` qua MassTransit, mark Published. Honor `CancellationToken`. Single-instance enforce qua Redis leader election HOẶC deployment `replicas: 1`. **Mức: P0**. — #454
+- [ ] **#AUDIT-08** — Tạo `AuditOutboxRelayBackgroundService` riêng (KHÔNG dùng `OutboxRelayBackgroundService` chung của AUTH-15 vì schema khác). Poll mỗi 2s, batch 50, `FOR UPDATE SKIP LOCKED`, publish `AuditCreatedEvent` qua MassTransit, mark Published. Honor `CancellationToken`. **Single-instance enforce qua Redis leader election** (chốt 2026-06-24 — `IDistributedCache` lease key `audit_outbox_leader`, renew 30s, non-leader skip work; Phụ lục B §B.10 option 1). **Mức: P0**. — #454
 - [ ] **#AUDIT-09** — Update `AuditTrailNotificationHandler` set đủ 14 field mới + INSERT row vào `audit_outbox` CÙNG TRANSACTION với INSERT `auth_audit_logs`. Resolve `actor_role/actor_display` từ JWT claims, `event_id` = `Guid.CreateVersion7()`, `recorded_at` = lúc handler chạy, `occurred_at` = từ notification. **Mức: P0**. — #455
 - [ ] **#AUDIT-10** — Upgrade trigger append-only từ AUTH-29 (hiện chặn UPDATE/DELETE tất cả) sang **soft mode** Phụ lục B §B.9: cho phép UPDATE outbox-related fields (`status`, `processed_at`, `retry_count`, `last_error`), CHẶN UPDATE business fields (`action_code`, `actor_account_id`, `target_id`, `occurred_at`). Migration backward compat. **Mức: P0**. — #456
 - [ ] **#AUDIT-11** — Fix 22 handler AuthService chưa publish audit (danh sách Pass 1-4 ở §69.1-69.4 của overall.md + issue-authservice.md): handler nào tạo/thay đổi state quan trọng (account/role/permission/session/refresh-token/OTP/2FA/invite) nhưng chưa raise `AuditTrailNotification` — bổ sung. Test unit từng handler verify notification published. **Mức: P1**. — #457
@@ -5340,17 +5351,18 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 - [ ] **#AUDIT-13** — Scaffold project `services/AuditAggregatorService/` Clean Architecture: `AuditAggregator.Api` + `Application` + `Domain` + `Infrastructure` + `Worker`. Solution add vào `.slnx`. DI setup chuẩn. `Dockerfile` + add vào `docker-compose.yml` + Helm chart template. **Mức: P0**. — #459
 - [ ] **#AUDIT-14** — DbContext `AuditAggregateDbContext` + migration `audit_aggregate` table partitioned by month (pg_partman setup auto-create partition 3 tháng trước). Schema chuẩn (theo `AuditCreatedEventV1` + thêm geo IP fields). GIN index trên `metadata_json`, B-tree index `(occurred_at, service_name)`, `(actor_account_id, occurred_at)`, `(correlation_id)`. **Mức: P0**. — #460
 - [ ] **#AUDIT-15** — `AuditCreatedConsumer : IConsumer<AuditCreatedEvent>` — idempotency check `EXISTS WHERE event_id = ?` trước, INSERT ON CONFLICT (event_id) DO NOTHING. Map event → AuditAggregate entity. Test với 1000 duplicate events → chỉ 1 row insert. **Mức: P0**. — #461
-- [ ] **#AUDIT-16** — Geo IP enrichment: integrate MaxMind GeoLite2 free (hoặc IP2Location nếu Leader chốt khác). LRU cache 10k entry, TTL 1h. Fallback null nếu lookup fail. Performance: cache hit ≥ 80% sau 100 lookup. **Mức: P1**. — #462
+- [ ] **#AUDIT-16** — Geo IP enrichment: **integrate MaxMind GeoLite2 free** (chốt 2026-06-24 — file `.mmdb` tra local, không gọi mạng, không rate-limit). LRU cache 10k entry, TTL 1h. Fallback null nếu lookup fail (enrichment optional — không chặn pipeline). Performance: cache hit ≥ 80% sau 100 lookup. **Mức: P1**. — #462
 - [ ] **#AUDIT-17** — REST API endpoints aggregator (theo Phụ lục A §A.5.2):
-  - `GET /api/audit/search?service=&action=&category=&severity=&actorId=&targetId=&from=&to=&correlationId=&page=&size=` (max page_size = 100)
-  - `GET /api/audit/{eventId}` chi tiết 1 event
-  - `GET /api/audit/correlation/{correlationId}` trace cross-service
-  - `GET /api/audit/account/{accountId}/timeline` timeline 1 user toàn hệ thống
-  - `GET /api/audit/stats?from=&to=&groupBy=service|action|severity`
-  - `GET /api/audit/export?format=csv|json` streaming export max 100k row không OOM
-  - `POST /api/audit/replay?service=&from=&to=` admin replay từ source-of-truth khi read-store hỏng
+  - `GET /api/admin/audit/search?service=&action=&category=&severity=&actorId=&targetId=&from=&to=&correlationId=&page=&size=` (max page_size = 100)
+  - `GET /api/admin/audit/{eventId}` chi tiết 1 event
+  - `GET /api/admin/audit/correlation/{correlationId}` trace cross-service
+  - `GET /api/admin/audit/account/{accountId}/timeline` timeline 1 user toàn hệ thống
+  - `GET /api/admin/audit/stats?from=&to=&groupBy=service|action|severity`
+  - `GET /api/admin/audit/export?format=csv|json` streaming export max 100k row không OOM
+  - `POST /api/admin/audit/replay?service=&from=&to=` admin replay từ source-of-truth khi read-store hỏng
+  - **UX filter cho admin non-tech (giải pháp A+E, 2026-06-26):** filter tập-đóng (`severity`, `category`) được **validate exact-match (phân biệt hoa-thường)** server-side bằng `Severities.All`/`AuditCategories.All` (SharedContracts.Audit) → sai value/sai case trả **`400` + `listErrors[{field,detail}]`** kèm danh sách giá trị đúng, KHÔNG trả `200` rỗng âm thầm (foot-gun forensic). Áp cho cả `/search` lẫn `/export`. `service`/`action` KHÔNG validate (free/100+ mã) → FE render dropdown/typeahead (cách A) từ enum tĩnh. Xem `docs/api-audit.md` + Decision Log.
   Test p95 < 200ms với 1M row. **Mức: P0**. — #463
-- [ ] **#AUDIT-18** — Authorization: thêm role mới `SecurityOfficer` (khác `Admin`) chỉ access aggregator API. JWT permission claim `audit.read`, `audit.export`, `audit.replay`. Rate limit per role (Admin 100 req/min, SecurityOfficer 200 req/min). Health check k8s `/live` `/ready`. **Mức: P0**. — #464
+- [ ] **#AUDIT-18** — Authorization: **GỘP vào role `Admin`** (chốt 2026-06-24 — KHÔNG tạo role thứ 5 `SecurityOfficer` cho capstone scope). Aggregator API + GDPR redact dùng `[Authorize(Roles = "Admin")]`. JWT permission claim `audit.read`, `audit.export`, `audit.replay` gán cho Admin. Rate limit `Admin` 200 req/min. Health check k8s `/live` `/ready`. **Mức: P0**. — #464
 - [ ] **#AUDIT-19** — Integration test với TestContainers (Postgres + RabbitMQ thật): publish event từ AuthService → query aggregator API sau 10s → tìm thấy event. Test idempotency: publish 100 duplicate event → chỉ 1 row. Test partition: insert event qua 3 tháng → partition tự tạo. **Mức: P1**. — #465
 
 #### Phase 3 — BatteryService onboard (3.5 ngày)
@@ -5365,37 +5377,37 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 - [ ] **#AUDIT-24** — Tách `TicketAuditLog` riêng (giữ `TicketActivity` cho UI timeline user-facing — 2 entity khác nhau!). Enum `TicketAuditActionEnum` 21 action: TicketCreated/StateTransitioned/PriorityChanged/AssignedToStaff/UnassignedFromStaff/SlaPaused/SlaResumed/SlaBreached/EscalatedToManager/EscalatedToAdmin/MaintenanceLogAdded/CommentAdded/AttachmentUploaded/AttachmentDeleted/ResolutionAdded/ClosedByUser/ReopenedByAdmin/RejectedByManager/FalseAlarmMarked/CustomerRated/AutoCreatedFromAnomaly. **Mức: P1**. — #470
 - [ ] **#AUDIT-25** — `TicketAuditTrailNotification` + Handler + `audit_outbox` table + `TicketAuditOutboxRelayBackgroundService` + migration + trigger append-only soft mode. **Mức: P1**. — #471
 - [ ] **#AUDIT-26** — Publish audit ở: `TicketStateTransitionCommandHandler`, `TicketAssignmentHandler`, `TicketPriorityOverrideHandler` (safety reason), `TicketSlaTimerService` (pause/resume/breach), `EscalationCommandHandler`, `MaintenanceLogCommandHandler`, `CommentCommandHandler`, `AttachmentCommandHandler`. **Mức: P1**. — #472
-- [ ] **#AUDIT-27** — `causation_id` setup cho ticket auto-tạo từ `BatteryAnomalyDetectedEvent`: khi `CreateTicketFromAlertConsumer` xử lý event X (`event_id=X`) → ticket audit `AutoCreatedFromAnomaly` có `causation_id=X`. Test E2E: anomaly → battery audit có event_id=X → consumer → ticket audit có causation_id=X → aggregator `/api/audit/correlation/X` trả về 2 event link nhau. **Mức: P1**. — #473
+- [ ] **#AUDIT-27** — `causation_id` setup cho ticket auto-tạo từ `BatteryAnomalyDetectedEvent`: khi `CreateTicketFromAlertConsumer` xử lý event X (`event_id=X`) → ticket audit `AutoCreatedFromAnomaly` có `causation_id=X`. Test E2E: anomaly → battery audit có event_id=X → consumer → ticket audit có causation_id=X → aggregator `/api/admin/audit/correlation/X` trả về 2 event link nhau. **Mức: P1**. — #473
 - [ ] **#AUDIT-28** — **Local endpoint Option C** `GET /api/admin/ticket/audit-logs` (filter: `action`, `ticketId`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Query trực tiếp `ticket_audit_logs`. Unit + integration test. ~150 LOC. **Mức: P1**. — #474
 
-#### Phase 5 — FileStorage + Alert + Email/Notification/Sms/AI/Gateway onboard (5 ngày)
+#### Phase 5 — FileStorage + Alert + Notification + Sms onboard (5 ngày) — ~~Email/AI/Gateway~~ DESCOPED 2026-06-25
 
 - [ ] **#AUDIT-29** — FileStorageService: entity `FileAuditLog` + enum `FileAuditActionEnum` (6 action: FileUploaded/FileDownloaded/FileDeleted/AccessDenied/PresignedUrlGenerated/PresignedUrlRevoked). Handler + outbox + relay + migration + trigger. Publish audit ở: `UploadFileCommandHandler`, `DownloadFileEndpoint`, `DeleteFileCommandHandler`, `GeneratePresignedUrlCommandHandler`. **Mức: P1**. — #475
 - [ ] **#AUDIT-30** — **Local endpoint Option C** `GET /api/admin/files/audit-logs` (filter: `action`, `fileId`/`bucketName`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Compliance + GDPR file access investigation. Unit + integration test. ~150 LOC. **Mức: P1**. — #476
-- [ ] **#AUDIT-31** — AlertService: entity `AlertAuditLog` + enum `AlertAuditActionEnum` (5 action: AlertAcknowledged/AlertSuppressed/AlertRuleChanged/AlertSeverityOverridden/AlertManuallyResolved). Handler + outbox + relay + migration + trigger. **Mức: P1**. — #477
-- [ ] **#AUDIT-32** — **Local endpoint Option C** `GET /api/admin/alerts/audit-logs` (filter: `action`, `alertId`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Alert acknowledge/suppress history. Unit + integration test. ~150 LOC. **Mức: P1**. — #478
-- [ ] **#AUDIT-33** — EmailService: entity `EmailAuditLog` + enum `EmailAuditActionEnum` (5 action: EmailSent/EmailFailed/EmailBounced/EmailDeferred/EmailRejected). Handler + outbox + relay + migration. **KHÔNG có local endpoint** per Option C — đi qua Aggregator. **Mức: P2**. — #479
+- [ ] **#AUDIT-31** — AlertService: entity `AlertAuditLog` + enum `AlertAuditActionEnum` (5 action: AlertAcknowledged/AlertSuppressed/AlertRuleChanged/AlertSeverityOverridden/AlertManuallyResolved). Handler + outbox + relay + migration + trigger. **Host trong BatteryService** (chốt 2026-06-24 — không tách Alert service riêng cho capstone). **Mức: P1**. — #477
+- [ ] **#AUDIT-32** — **Local endpoint Option C** `GET /api/admin/alerts/audit-logs` (filter: `action`, `alertId`, `from`, `to`, paging). `[Authorize(Roles = "Admin")]`. Route qua `batteryCluster` (chốt 2026-06-24). Alert acknowledge/suppress history. Unit + integration test. ~150 LOC. **Mức: P1**. — #478
+- [x] ~~**#AUDIT-33** — EmailService: entity `EmailAuditLog` + enum `EmailAuditActionEnum` (5 action).~~ **❌ DESCOPED (2026-06-25)** — bỏ khỏi scope. Lý do: email delivery đã được trace gián tiếp qua audit của service gốc (Auth invite/reset, Ticket/Battery alert); "đã gửi mail" là *delivery log*, không phải *security/forensic audit*. `EmailService` lại thiếu `.Application`/`.Domain` layer → dựng 2 layer chỉ để log gửi mail là over-engineering (vi phạm Simplicity First). GH issue #479 closed not-planned. **Mức: P2 → CANCELLED**. — #479
 - [ ] **#AUDIT-34** — NotificationService: entity `NotificationAuditLog` + enum `NotificationAuditActionEnum` (7 action: PushSent/PushFailed/PushDelivered/PushOpened/InAppCreated/InAppRead/InAppDismissed). Handler + outbox + relay + migration. **KHÔNG có local endpoint** per Option C. **Mức: P2**. — #480
-- [ ] **#AUDIT-35** — SmsService bổ sung 3 action mới (SmsForwarded/SmsRoutingRuleChanged/SmsGatewayHealthCheckFailed) + AI Module 5 action (ModelInferenceCalled/ModelInferenceFailed/AnomalyClassified/TrainingDataIngested/ModelVersionPromoted) + Gateway 3 action (RequestRouted/RateLimitHit/AuthorizationDenied). Handler + outbox + relay cho mỗi service. **KHÔNG có local endpoint** per Option C. **Mức: P2**. — #481
+- [x] **#AUDIT-35** — ~~SmsService +3 action + AI Module 5 action + Gateway 3 action.~~ **PHẦN Sms DONE + PHẦN AI/Gateway DESCOPED (2026-06-25)**. ✅ **Sms (đã làm):** enum `SmsAuditEvent` +3 (`SmsForwarded=8`/`SmsRoutingRuleChanged=9`/`SmsGatewayHealthCheckFailed=10`) + `SmsAuditOutbox` + relay + migration. ❌ **AI Module DESCOPED:** là repo Python FastAPI riêng (không có `services/AIService` trong backend repo); inference/training là *ML observability* (metric/MLflow), kết quả AI quan trọng (anomaly→ticket) đã audit ở TicketService `AutoCreatedFromAnomaly`. ❌ **Gateway DESCOPED:** `ApiGateway` là 1 project YARP đơn (không Domain/Application); `RequestRouted` mỗi request → volume cực lớn làm loãng store (đã có access log/Prometheus); login fail/permission denied đã audit ở AuthService. GH issue #481 closed not-planned. **Mức: P2**. — #481
 
 #### Phase 6 — FE Admin Web UI Audit Explorer (6 ngày — role FE)
 
-- [ ] **#AUDIT-36** — FE Page `/admin/audit` với filter panel: service (multi-select 10 service), action (autocomplete từ ActionCodeRegistry), severity (4-radio), actor (search by email/name), target (type + id), time range (date picker preset 24h/7d/30d/custom), pagination max 100/page. Gọi `GET /api/audit/search`. **Mức: P2**. — #482
-- [ ] **#AUDIT-37** — FE Timeline view `/admin/accounts/{id}/audit-timeline` — gộp event xuyên service theo `actor_account_id` HOẶC `target_account_id`. Visualize timeline vertical với icon service + severity color. Gọi `GET /api/audit/account/{id}/timeline`. **Mức: P2**. — #483
-- [ ] **#AUDIT-38** — FE Correlation trace view `/admin/audit/trace/{correlationId}` — visualize causation chain dạng tree (parent event_id → child causation_id). Highlight cross-service hops. Gọi `GET /api/audit/correlation/{id}`. **Mức: P2**. — #484
-- [ ] **#AUDIT-39** — FE Export feature — button "Export CSV/JSON" trên search view, gọi `GET /api/audit/export?format=csv` streaming download. Confirm dialog khi filter trả về > 10k rows. **Mức: P2**. — #485
-- [ ] **#AUDIT-40** — FE Stats dashboard `/admin/audit/stats` (Recharts): action count by hour line chart, top 10 actors bar chart, severity distribution donut, service activity heatmap. Auto-refresh 30s. Gọi `GET /api/audit/stats`. **Mức: P2**. — #486
+- [ ] **#AUDIT-36** — FE Page `/admin/audit` với filter panel **(cách A của giải pháp A+E — xem Decision Log §17 / D17):** mọi field tập-đóng dùng **dropdown/typeahead từ `as const` enum tĩnh** (giá trị canonical trong `docs/api-audit.md`), admin chọn không gõ: service (multi-select 6 service), action (autocomplete từ ActionCodeRegistry), severity (4-radio), category (dropdown 9), actor (search by email/name), target (type + id), time range (date picker preset 24h/7d/30d/custom), pagination max 100/page. Gọi `GET /api/admin/audit/search`. BE đã validate exact-match severity/category (cách E) → nếu gõ sai vẫn nhận `400`+`listErrors`. **Mức: P2**. — #482
+- [ ] **#AUDIT-37** — FE Timeline view `/admin/accounts/{id}/audit-timeline` — gộp event xuyên service theo `actor_account_id` HOẶC `target_account_id`. Visualize timeline vertical với icon service + severity color. Gọi `GET /api/admin/audit/account/{id}/timeline`. **Mức: P2**. — #483
+- [ ] **#AUDIT-38** — FE Correlation trace view `/admin/audit/trace/{correlationId}` — visualize causation chain dạng tree (parent event_id → child causation_id). Highlight cross-service hops. Gọi `GET /api/admin/audit/correlation/{id}`. **Mức: P2**. — #484
+- [ ] **#AUDIT-39** — FE Export feature — button "Export CSV/JSON" trên search view, gọi `GET /api/admin/audit/export?format=csv` streaming download. Confirm dialog khi filter trả về > 10k rows. **Mức: P2**. — #485
+- [ ] **#AUDIT-40** — FE Stats dashboard `/admin/audit/stats` (Recharts): action count by hour line chart, top 10 actors bar chart, severity distribution donut, service activity heatmap. Auto-refresh 30s. Gọi `GET /api/admin/audit/stats`. **Mức: P2**. — #486
 
 #### Phase 7 — Hardening + Performance (5 ngày)
 
 - [ ] **#AUDIT-41** — Retention `AuditRetentionBackgroundService` ở aggregator: daily 03:00 UTC drop partition `audit_aggregate` cũ hơn 6 tháng EXCEPT `severity = 'Critical' OR 'Security'` (vĩnh viễn). Source-of-truth tables ở từng service retain 1 năm (per service own background job). Document policy `docs/audit/retention-policy.md`. **Mức: P1**. — #487
-- [ ] **#AUDIT-42** — GDPR redaction endpoint `POST /api/audit/redact?accountId={id}` (chỉ SecurityOfficer): redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate` cho 1 account (KHÔNG xóa row — giữ event_id + action_code + timestamp). Source tables KHÔNG redact (giữ raw cho legal hold). Audit log cho hành động redact (meta-audit). **Mức: P1**. — #488
+- [ ] **#AUDIT-42** — GDPR redaction endpoint `POST /api/admin/audit/redact?accountId={id}` (chỉ `Admin` — role `SecurityOfficer` đã gộp Admin, chốt 2026-06-24): redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate` cho 1 account (KHÔNG xóa row — giữ event_id + action_code + timestamp). Source tables KHÔNG redact (giữ raw cho legal hold). Audit log cho hành động redact (meta-audit). **Mức: P1**. — #488
 - [ ] **#AUDIT-43** — Perf test 1000 event/giây không drop trong 5 phút sustained: load test publish 300k event → measure consumer lag p99 < 10s, no DLQ entry, partition tự tạo. Chaos test: kill RabbitMQ giữa chừng → restart → consumer resume + replay outbox. **Mức: P1**. — #489
 - [ ] **#AUDIT-44** — Prometheus metric custom: `audit_events_total{service,action,severity}` counter, `audit_consumer_lag_seconds` histogram, `audit_outbox_pending_total{service}` gauge, `audit_dlq_size_total` gauge. Grafana dashboard `monitoring/grafana/dashboards/audit-pipeline.json`. Alert rules `monitoring/prometheus/alert-rules.yml`: AuditOutboxBacklog (>1000 pending 5min), AuditConsumerLag (p99>30s 5min), AuditDlqGrowing (DLQ > 100). **Mức: P1**. — #490
 - [ ] **#AUDIT-45** — Documentation deliverables: `docs/adr/0007-audit-hybrid-architecture.md` (đã viết Phase 0, finalize), `docs/audit/contributor-guide.md` (cheatsheet 1-page how to add audit cho handler mới), `docs/audit/action-code-registry.md` (auto-gen từ code), `docs/audit/api-reference.md` (Swagger), `docs/audit/operations-runbook.md` (troubleshoot outbox backlog/replay/DLQ), `docs/audit/security-considerations.md` (PII, retention, GDPR), `docs/audit/monitoring-dashboard.md`. **Mức: P1**. — #491
 
 **Definition of Done — Sprint audit:**
-- [ ] Tất cả 45 task `#AUDIT-01..45` close + log review/test trong `logs/AUDIT-{NN}/`.
+- [ ] Tất cả **43 task active** `#AUDIT-01..45` close + log review/test trong `logs/AUDIT-{NN}/` (2 task descoped 2026-06-25: `#AUDIT-33` + phần AI/Gateway của `#AUDIT-35` — xem Decision Log).
 - [ ] `dotnet build` toàn solution PASS (10 service + AuditAggregatorService mới).
 - [ ] Coverage ≥ 80% trên `AuditAggregatorService.Application` + `AuditAggregatorService.Infrastructure` + audit-related code mỗi service.
 - [ ] Phụ lục B §B.0 10 nguyên tắc bất di bất dịch — team ký xác nhận.
@@ -5419,7 +5431,7 @@ Phase 2 — `#AUDIT-13..18` BẮT BUỘC trước Phase 3-5 (aggregator phải u
 
 P1 sprint kế tiếp (nếu split): `#AUDIT-20..28` (Phase 3+4 BatteryService + TicketService — critical service forensic).
 
-P2 có thể defer sang Sprint audit-B: `#AUDIT-33` (EmailService), `#AUDIT-34` (NotificationService), `#AUDIT-35` (Sms/AI/Gateway — volume thấp), Phase 6 FE (`#AUDIT-36..40` — UI nâng cao, BE đủ qua Swagger).
+P2 defer/descope: `#AUDIT-34` (NotificationService — ĐÃ LÀM); `#AUDIT-33` (EmailService) **❌ DESCOPED 2026-06-25**; `#AUDIT-35` phần AI+Gateway **❌ DESCOPED 2026-06-25** (phần Sms đã làm); Phase 6 FE (`#AUDIT-36..40` — repo frontend riêng, BE đủ qua Swagger/Aggregator API). Xem Decision Log §17.
 
 KHÔNG được skip Phase 0 + Phase 1 + Phase 2 — đây là nền tảng infrastructure, skip = phải làm lại từ đầu.
 
@@ -5832,25 +5844,27 @@ public static class PermissionCodes {
     public const string DeviceTokenManage = "notification.device.manage";
     public const string PreferenceManage = "notification.preference.manage";
 
-    // Audit (Sprint audit Phase 2 `#AUDIT-18`) — cấp cho role SecurityOfficer (mới) + selectively cho Admin
-    public const string AuditRead = "audit.read";                      // Aggregator search/by-eventId/correlation/timeline/stats — Admin + SecurityOfficer
-    public const string AuditExport = "audit.export";                  // Aggregator CSV/JSON streaming — SecurityOfficer (Admin có thể nếu cần)
-    public const string AuditReplay = "audit.replay";                  // Replay từ source-of-truth — SecurityOfficer ONLY
-    public const string AuditRedact = "audit.redact";                  // GDPR redaction `audit_aggregate` — SecurityOfficer ONLY (`#AUDIT-42`)
+    // Audit (Sprint audit Phase 2 `#AUDIT-18`) — chốt 2026-06-24: CẢ 4 permission cấp cho role `Admin` (SecurityOfficer gộp Admin, D13)
+    public const string AuditRead = "audit.read";                      // Aggregator search/by-eventId/correlation/timeline/stats — Admin
+    public const string AuditExport = "audit.export";                  // Aggregator CSV/JSON streaming — Admin
+    public const string AuditReplay = "audit.replay";                  // Replay từ source-of-truth — Admin
+    public const string AuditRedact = "audit.redact";                  // GDPR redaction `audit_aggregate` — Admin (`#AUDIT-42`)
     // Local audit endpoint Option C (5 service Auth/Battery/Ticket/File/Alert) chỉ require role Admin, KHÔNG cần permission audit.* riêng
 }
 ```
 
-**Default role → audit permission mapping (Sprint audit seed):**
+> **📌 CHỐT 2026-06-24 (D13):** KHÔNG tạo role thứ 5 `SecurityOfficer` cho capstone scope. **Cả 4 permission `audit.*` seed cho role `Admin`.** Bảng dưới giữ cột `SecurityOfficer` làm tham chiếu thiết kế gốc (nếu sau này tách role ở production), nhưng seed thực tế = cột Admin (đã cập nhật).
 
-| Permission | Admin | Manager | Staff | Customer | **SecurityOfficer** (mới) |
+**Default role → audit permission mapping (Sprint audit seed — chốt 2026-06-24):**
+
+| Permission | Admin | Manager | Staff | Customer | ~~SecurityOfficer~~ (defer) |
 |-----------|:-----:|:-------:|:-----:|:--------:|:-------------------------:|
-| AuditRead | ✅ | — | — | — | ✅ |
-| AuditExport | ✅ | — | — | — | ✅ |
-| AuditReplay | — | — | — | — | ✅ |
-| AuditRedact | — | — | — | — | ✅ |
+| AuditRead | ✅ | — | — | — | (gộp Admin) |
+| AuditExport | ✅ | — | — | — | (gộp Admin) |
+| AuditReplay | ✅ | — | — | — | (gộp Admin) |
+| AuditRedact | ✅ | — | — | — | (gộp Admin) |
 
-> `SecurityOfficer` role mới được seed qua migration AuthService Phase 2 `#AUDIT-18`. Compliance/legal team thường được gán role này; KHÔNG gán cho dev/staff. Audit lại hành động assign/revoke role qua AuthService `AuditTrailNotification` (meta-audit cho permission change).
+> ~~`SecurityOfficer` role mới seed qua migration `#AUDIT-18`~~ → **chốt GỘP vào `Admin`** (D13). Toàn bộ `audit.read/export/replay/redact` gán cho `Admin`. Audit lại hành động assign/revoke role qua AuthService `AuditTrailNotification` (meta-audit cho permission change).
 
 ### Default role → permission mapping (seed)
 
@@ -5954,7 +5968,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
   "UserId": "{accountId}",
   "FullName": "Nguyễn Văn A",
   "Email": "a@example.com",
-  "Role": "3",                                    // 1=Admin, 2=Manager, 3=Staff, 4=Customer, 5=SecurityOfficer (Sprint audit `#AUDIT-18`)
+  "Role": "3",                                    // 1=Admin, 2=Manager, 3=Staff, 4=Customer (role 5=SecurityOfficer KHÔNG triển khai — gộp Admin, chốt 2026-06-24 D13)
   "Permissions": ["ticket.view-own", "ticket.start", "ticket.resolve", ...],
   "session_id": "{sessionId}",
   "iat": 1715500000,
@@ -5972,15 +5986,17 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 | Permission | Role mapping | Endpoint |
 |------------|--------------|----------|
-| `audit.read` | Admin, SecurityOfficer | `GET /api/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats` |
-| `audit.export` | SecurityOfficer (Admin có thể nếu cần) | `GET /api/audit/export?format=csv\|json` |
-| `audit.replay` | SecurityOfficer ONLY | `POST /api/audit/replay?service=&from=&to=` |
-| `audit.redact` | SecurityOfficer ONLY | `POST /api/audit/redact?accountId={id}` (GDPR `#AUDIT-42`) |
+| `audit.read` | Admin | `GET /api/admin/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats` |
+| `audit.export` | Admin | `GET /api/admin/audit/export?format=csv\|json` |
+| `audit.replay` | Admin | `POST /api/admin/audit/replay?service=&from=&to=` |
+| `audit.redact` | Admin | `POST /api/admin/audit/redact?accountId={id}` (GDPR `#AUDIT-42`) |
 
-**Local audit endpoint Option C** (5 service: Auth/Battery/Ticket/File/Alert) chỉ require role `Admin` (không cần `SecurityOfficer`):
+> Role mapping cập nhật 2026-06-24 (D13) — `SecurityOfficer` gộp `Admin`, toàn bộ 4 permission gán cho `Admin`.
+
+**Local audit endpoint Option C** (5 service: Auth/Battery/Ticket/File/Alert) cũng require role `Admin`:
 - `GET /api/admin/audit-logs` (AuthService giữ) + `GET /api/admin/{service}/audit-logs` (4 service mới) — `[Authorize(Roles = "Admin")]`
 
-**Role `SecurityOfficer` rationale (Phụ lục A §A.5.2):** tách quyền investigation cross-service khỏi quyền admin nghiệp vụ. Admin có thể đọc audit service mình quản lý (qua local endpoint), KHÔNG access aggregator API. SecurityOfficer access full aggregator (cross-service search/export/replay/redact) nhưng KHÔNG access business CRUD endpoints. Compliance/legal team typically dùng role này.
+**Role `SecurityOfficer` rationale (Phụ lục A §A.5.2 — thiết kế gốc, defer cho capstone):** tách quyền investigation cross-service khỏi quyền admin nghiệp vụ. **Chốt 2026-06-24 (D13): KHÔNG triển khai cho capstone — gộp toàn bộ quyền vào `Admin`.** Lý do giữ ghi chú: nếu lên production cần separation-of-duties (compliance/legal team), tách lại role này + di chuyển 4 permission `audit.*` sang.
 
 ---
 
@@ -6027,12 +6043,12 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-27 | Mentor (GVHD) không available cho dry-run review post-Sprint 8 | Low | High | Leader confirm GVHD lịch trước Sprint 8 kết thúc, book 2 slot dự phòng (xem §56.14 timeline) | Leader |
 | R-28 | Pivot ESP32 → firmware C++/Arduino là **codebase mới**, team BE thiếu kinh nghiệm embedded → IoT-1 slip | Med | Med | MVP `mock_bms` (data giả) chứng minh flow backend trước, không phụ thuộc firmware; MQTT là P3 optional (HTTPS đủ demo); reuse logic từ `iot.md` v1; pair với đối tác phần cứng (xem §52.10, R-24) | Thắng |
 | R-29 | Mua nhầm BMS không có register map / không đổi được `unitId` → không đọc được data dù pin chạy tốt (multi-drop fail) | Med | High | Checklist mua BMS bắt buộc (RS485/Modbus + register map + đổi unitId + CRC — `overall.iot.md` §A4); test 1 BMS bằng USB-RS485 + Modbus Poll trước khi mua số lượng; ESP32 `mock_bms` fallback cho demo | Thắng |
-| R-30 | **Sprint audit migration `#AUDIT-06` backfill SQL `auth_audit_logs` chậm hơn 5 phút** trên prod data (hàng triệu row) → block deploy | Med | High | Test staging với data clone từ prod trước; chia backfill batch 10k row mỗi loop; có rollback plan §B.9 step 1; chạy off-peak (02:00 UTC); monitor pg lock duration < 1s mỗi batch | TBD |
-| R-31 | **`AuditAggregatorService` SPOF** — service down → admin không xem được cross-service audit + outbox grow uncontrolled ở 10 service | High | High | Local endpoint Option C ở 5 service critical làm fallback (admin vẫn xem được service-local); Outbox retention TTL 7 ngày + DLQ; aggregator deploy `replicas: 2` (consumer scale qua MassTransit fan-out); k8s `/live` `/ready` probe + Prometheus `audit_consumer_lag` alert; replay endpoint từ source-of-truth | TBD |
-| R-32 | **Causation chain bị break** khi consumer recreate event (vd retry → mất parent `event_id`) → trace cross-service sai | Med | Med | Bắt buộc forward `MessageId` upstream + test E2E `#AUDIT-27` (anomaly → ticket causation); Phụ lục B §B.11 pitfall #28 | TBD |
-| R-33 | **Schema event versioning** — thay đổi `AuditCreatedEventV1` không bump version → consumer cũ + mới deserialize lỗi → DLQ overflow | Med | Med | Phụ lục B §B.5 enforce: thay đổi schema = bump version (`V1` → `V2`), giữ `V1` consumer chạy song song 1 sprint trước khi remove; code review checklist | TBD |
-| R-34 | **GeoIP service rate limit** (MaxMind / IP2Location free tier) → consumer chậm + queue lag | Med | Med | LRU cache 10k entry + fallback null nếu lookup fail; Phụ lục B §B.11 pitfall #19; monitor cache hit rate ≥ 80% | TBD |
-| R-35 | **Multi-instance OutboxRelay duplicate publish** — không leader election → cùng event publish 2 lần (vẫn idempotent ở consumer nhưng waste resource) | Low | Low | Single-instance deployment (`replicas: 1`) HOẶC Redis leader election (Phụ lục B §B.10); idempotent consumer là last-line defense | TBD |
+| R-30 | **Sprint audit migration `#AUDIT-06` backfill SQL `auth_audit_logs` chậm hơn 5 phút** trên prod data (hàng triệu row) → block deploy | Med | High | Test staging với data clone từ prod trước; chia backfill batch 10k row mỗi loop; có rollback plan §B.9 step 1; chạy off-peak (02:00 UTC); monitor pg lock duration < 1s mỗi batch | Thắng |
+| R-31 | **`AuditAggregatorService` SPOF** — service down → admin không xem được cross-service audit + outbox grow uncontrolled ở 10 service | High | High | Local endpoint Option C ở 5 service critical làm fallback (admin vẫn xem được service-local); Outbox retention TTL 7 ngày + DLQ; aggregator deploy `replicas: 2` (consumer scale qua MassTransit fan-out); k8s `/live` `/ready` probe + Prometheus `audit_consumer_lag` alert; replay endpoint từ source-of-truth | Thắng |
+| R-32 | **Causation chain bị break** khi consumer recreate event (vd retry → mất parent `event_id`) → trace cross-service sai | Med | Med | Bắt buộc forward `MessageId` upstream + test E2E `#AUDIT-27` (anomaly → ticket causation); Phụ lục B §B.11 pitfall #28 | Thắng |
+| R-33 | **Schema event versioning** — thay đổi `AuditCreatedEventV1` không bump version → consumer cũ + mới deserialize lỗi → DLQ overflow | Med | Med | Phụ lục B §B.5 enforce: thay đổi schema = bump version (`V1` → `V2`), giữ `V1` consumer chạy song song 1 sprint trước khi remove; code review checklist | Thắng |
+| R-34 | **GeoIP service rate limit** (MaxMind / IP2Location free tier) → consumer chậm + queue lag | Med | Med | **Chốt MaxMind GeoLite2 free (`.mmdb` local, không rate-limit, D11)** + LRU cache 10k entry + fallback null nếu lookup fail; Phụ lục B §B.11 pitfall #19; monitor cache hit rate ≥ 80% | Thắng |
+| R-35 | **Multi-instance OutboxRelay duplicate publish** — không leader election → cùng event publish 2 lần (vẫn idempotent ở consumer nhưng waste resource) | Low | Low | **Chốt 2026-06-24: Redis leader election** (`IDistributedCache` lease key `audit_outbox_leader`, Phụ lục B §B.10 option 1, D12); idempotent consumer là last-line defense | Thắng |
 
 ---
 
@@ -6067,7 +6083,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] Ticket create/reuse BR-02 idempotent — §2.7
 - [ ] BatteryService link `Alert.TicketId`, Saga `Completed` — §53
 - [ ] Activity Created BR-08 — §2.3.4
-- [ ] **Sprint audit** — Ticket auto-tạo từ anomaly có `causation_id = BatteryAnomalyDetectedEvent.event_id` → trace cross-service qua Aggregator `GET /api/audit/correlation/{id}` — `#AUDIT-27` (E2E test mandatory)
+- [ ] **Sprint audit** — Ticket auto-tạo từ anomaly có `causation_id = BatteryAnomalyDetectedEvent.event_id` → trace cross-service qua Aggregator `GET /api/admin/audit/correlation/{id}` — `#AUDIT-27` (E2E test mandatory)
 
 ### Phase 4 — Triage & Assignment (MANAGER)
 - [ ] Manager queue query — §2.5
@@ -6191,12 +6207,12 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | **Audit Outbox** | Bảng trung gian per-service (`{service}_audit_outbox`) lưu `AuditCreatedEvent` chờ publish. Atomic với INSERT business + audit row trong cùng DB transaction. `AuditOutboxRelayBackgroundService` poll mỗi 2s + `FOR UPDATE SKIP LOCKED` publish ra RabbitMQ |
 | **Idempotent consumer** | Consumer xử lý cùng 1 event N lần → kết quả như 1 lần. AuditAggregator `INSERT ON CONFLICT (event_id) DO NOTHING`. Mandatory vì RabbitMQ delivery at-least-once |
 | **At-least-once delivery** | RabbitMQ default: event được deliver ít nhất 1 lần, có thể nhiều lần (network retry, consumer crash). Đối lập: exactly-once delivery KHÔNG khả thi trong distributed system — phải dùng idempotent consumer thay |
-| **Replay** | Đọc lại từ source-of-truth → re-publish hoặc re-insert vào read-store (`POST /api/audit/replay?service=&from=&to=`). Dùng khi read-store corrupt hoặc backfill historic data sau onboard service mới |
+| **Replay** | Đọc lại từ source-of-truth → re-publish hoặc re-insert vào read-store (`POST /api/admin/audit/replay?service=&from=&to=`). Dùng khi read-store corrupt hoặc backfill historic data sau onboard service mới |
 | **AuditAggregate** | Entity ở `AuditAggregatorService.Domain` representing 1 row trong materialized view `audit_aggregate`. Schema chuẩn 14 cột + geo IP enrichment fields (`geo_country`, `geo_city`) |
 | **Append-only trigger soft mode** | DB trigger ở source `{service}_audit_logs`: CHO PHÉP UPDATE outbox-related fields (`status`, `processed_at`, `retry_count`, `last_error`), CHẶN UPDATE business fields (`action_code`, `actor_account_id`, `target_id`, `occurred_at`) + CHẶN DELETE. Upgrade từ `#AUTH-29` hard mode qua `#AUDIT-10`. Phụ lục B §B.9 |
 | **Local audit endpoint (Option C)** | 1 endpoint per service `GET /api/admin/{service}/audit-logs` làm fallback resilience + service-specific filter. CHỈ 5 service có (Auth/Battery/Ticket/File/Alert), 5 service skip (Email/Notification/Sms/AI/Gateway — qua Aggregator only). Phụ lục A §A.5.1.bis |
-| **SecurityOfficer** | Role mới (khác `Admin`) chỉ access `AuditAggregatorService` REST API. JWT permission claim `audit.read`/`audit.export`/`audit.replay`/`audit.redact`. Phase 2 `#AUDIT-18` setup |
-| **GDPR redaction (audit)** | Quyền lãng quên user — `POST /api/audit/redact?accountId={id}` redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate`. KHÔNG xóa row (giữ event_id + action_code + timestamp cho audit integrity). Source tables KHÔNG redact (legal hold). Meta-audit log cho hành động redact. `#AUDIT-42` |
+| **SecurityOfficer** | ⚠️ **DEFER cho capstone (chốt 2026-06-24 D13)** — gộp vào `Admin`, KHÔNG tạo role mới. Thiết kế gốc: role riêng access `AuditAggregatorService` REST API với permission `audit.read`/`audit.export`/`audit.replay`/`audit.redact`. Capstone: 4 permission này seed cho `Admin` (`#AUDIT-18`) |
+| **GDPR redaction (audit)** | Quyền lãng quên user — `POST /api/admin/audit/redact?accountId={id}` redact email/phone/fullName/ip thành `[REDACTED]` ở `audit_aggregate`. KHÔNG xóa row (giữ event_id + action_code + timestamp cho audit integrity). Source tables KHÔNG redact (legal hold). Meta-audit log cho hành động redact. `#AUDIT-42` |
 | **Hybrid Audit Architecture** | Kiến trúc Sprint audit: decentralized write (mỗi service own audit + outbox cùng transaction) + centralized read qua AuditAggregator + 7 REST API. ADR-020 + Phụ lục A `issue-authservice.md` |
 
 ### References
@@ -6324,12 +6340,12 @@ services/AuditAggregatorService/
 │   ├── AuditAggregatorService.Api/                  (~12 files)
 │   │   ├── Program.cs                                ← DI + MassTransit consumer registration + health check
 │   │   ├── Controllers/
-│   │   │   ├── AuditSearchController.cs               ← GET /api/audit/search + /{eventId} + /correlation/{id}
-│   │   │   ├── AuditTimelineController.cs             ← GET /api/audit/account/{id}/timeline
-│   │   │   ├── AuditStatsController.cs                ← GET /api/audit/stats
-│   │   │   ├── AuditExportController.cs               ← GET /api/audit/export (streaming CSV/JSON)
-│   │   │   ├── AuditReplayController.cs               ← POST /api/audit/replay
-│   │   │   └── AuditRedactController.cs               ← POST /api/audit/redact (GDPR `#AUDIT-42`)
+│   │   │   ├── AuditSearchController.cs               ← GET /api/admin/audit/search + /{eventId} + /correlation/{id}
+│   │   │   ├── AuditTimelineController.cs             ← GET /api/admin/audit/account/{id}/timeline
+│   │   │   ├── AuditStatsController.cs                ← GET /api/admin/audit/stats
+│   │   │   ├── AuditExportController.cs               ← GET /api/admin/audit/export (streaming CSV/JSON)
+│   │   │   ├── AuditReplayController.cs               ← POST /api/admin/audit/replay
+│   │   │   └── AuditRedactController.cs               ← POST /api/admin/audit/redact (GDPR `#AUDIT-42`)
 │   │   ├── appsettings.json + appsettings.Docker.json
 │   │   └── Dockerfile
 │   ├── AuditAggregatorService.Application/          (~25 files)
@@ -7538,7 +7554,7 @@ DELETE /api/v1/auth/me                                  (Customer)
   - Phone → `09**12345`
   - Password → `[REDACTED]`
 - Audit log không mask ở source-of-truth (cần đầy đủ cho compliance + legal hold).
-- **Sprint audit `audit_aggregate` redaction (GDPR right to erasure):** SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` (`#AUDIT-42`) → PII fields (email/phone/fullName/ip) → `[REDACTED]` ở `audit_aggregate` (read-store). KHÔNG xóa row (giữ `event_id` + `action_code` + `occurred_at` cho audit integrity). Source `{service}_audit_logs` KHÔNG redact (legal hold). Hành động redact được audit lại (meta-audit) để tracking who redacted what. Xem runbook `docs/operations/runbook/15-audit-gdpr-redaction-request.md`.
+- **Sprint audit `audit_aggregate` redaction (GDPR right to erasure):** Admin (role `SecurityOfficer` gộp Admin — D13) gọi `POST /api/admin/audit/redact?accountId={id}` (`#AUDIT-42`) → PII fields (email/phone/fullName/ip) → `[REDACTED]` ở `audit_aggregate` (read-store). KHÔNG xóa row (giữ `event_id` + `action_code` + `occurred_at` cho audit integrity). Source `{service}_audit_logs` KHÔNG redact (legal hold). Hành động redact được audit lại (meta-audit) để tracking who redacted what. Xem runbook `docs/operations/runbook/15-audit-gdpr-redaction-request.md`.
 
 ### 39.5. Cookie consent (FE concern but BE provides)
 - `GET /api/v1/legal/privacy-policy` returns markdown.
@@ -7672,9 +7688,9 @@ Restore Postgres ngụ ý restore cả `alert_ticket_saga_states` + `qrtz_*` tab
 - `10-saga-duplicate-canonical.md` ← Sprint 5B — chọn Ticket canonical khi preflight phát hiện duplicate `OriginAlertId` hoặc duplicate active `(BatteryAssetId, Category)`
 - `11-audit-outbox-backlog.md`     ← Sprint audit, task `#AUDIT-45` — `audit_outbox` table phình do AuditOutboxRelay stuck hoặc RabbitMQ down. Symptom: Prometheus `audit_outbox_pending_total > 1000` 5 phút. Mitigation: restart relay service, check connection RabbitMQ, scale up worker pod.
 - `12-audit-consumer-lag-high.md`  ← Sprint audit — AuditAggregator consumer lag p99 > 30s sustained 5 phút. Symptom: alert `AuditConsumerLag`. Diagnose: check `audit_consumer_lag_seconds` histogram + DB CPU + Geo IP cache hit rate. Mitigation: scale aggregator replica, disable enrichment tạm thời, drop GeoIP fallback null.
-- `13-audit-dlq-drain.md`          ← Sprint audit — DLQ `aggregator.audit.events.dlq` growing > 100 messages. Diagnose: schema version mismatch (xem §B.5), deserialization error, idempotent INSERT conflict. Mitigation: replay từ source-of-truth qua `POST /api/audit/replay?service=&from=&to=`, KHÔNG replay từ DLQ trực tiếp (risk publish lại sai version).
-- `14-audit-replay-from-source.md` ← Sprint audit — read-store `audit_aggregate` corrupt / cluster restore từ backup chậm. Mitigation: chạy `POST /api/audit/replay` để rebuild aggregate từ `{service}_audit_logs` source-of-truth. Test trên 1 service trước, batch 1k row/sec, monitor disk space + lag.
-- `15-audit-gdpr-redaction-request.md` ← Sprint audit — user request quyền lãng quên GDPR. Mitigation: SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` → redact PII ở `audit_aggregate` (KHÔNG xóa row, giữ event_id + action_code + timestamp). Source tables KHÔNG redact (legal hold). Log meta-audit cho hành động redact.
+- `13-audit-dlq-drain.md`          ← Sprint audit — DLQ `aggregator.audit.events.dlq` growing > 100 messages. Diagnose: schema version mismatch (xem §B.5), deserialization error, idempotent INSERT conflict. Mitigation: replay từ source-of-truth qua `POST /api/admin/audit/replay?service=&from=&to=`, KHÔNG replay từ DLQ trực tiếp (risk publish lại sai version).
+- `14-audit-replay-from-source.md` ← Sprint audit — read-store `audit_aggregate` corrupt / cluster restore từ backup chậm. Mitigation: chạy `POST /api/admin/audit/replay` để rebuild aggregate từ `{service}_audit_logs` source-of-truth. Test trên 1 service trước, batch 1k row/sec, monitor disk space + lag.
+- `15-audit-gdpr-redaction-request.md` ← Sprint audit — user request quyền lãng quên GDPR. Mitigation: Admin (SecurityOfficer gộp Admin — D13) gọi `POST /api/admin/audit/redact?accountId={id}` → redact PII ở `audit_aggregate` (KHÔNG xóa row, giữ event_id + action_code + timestamp). Source tables KHÔNG redact (legal hold). Log meta-audit cho hành động redact.
 
 > **IoT device ops (Sprint IoT-1):** Không mint runbook đánh số riêng — quy trình xử lý sự cố device (offline triage, broker down, queue đầy, clock drift, reject spike) đã nằm ở **§52.15 Failure modes** + **§52.6 offline detection**, và setup/hardware runbook ở `newiot.md`/`overall.iot.md`/`wiring-diagram.md`. Nếu pilot phần cứng mở rộng, có thể tách `11-iot-device-offline.md` từ §52.15 (khi đó cập nhật count runbook ở §66/§67).
 
@@ -8499,7 +8515,7 @@ Tách `WebhookDispatcher` thành 1 channel mới (xem §45.1).
 | Sprint 8 | Demo prep + polish | + **ADR/DR/Runbook finalize**, + **Chaos test**, + **AI feedback report**, + **Sprint 5B carryover** (Saga demo script + Mermaid diagram + architecture publish — pass-16 add) | 1.1× (up from giữ nguyên) |
 | **Sprint SMS** | SmsService SMS Forwarder Gateway | + 42 task `#SMS-01..42` / `#293..#334` (10-phase scaffold; xem §17 Sprint SMS + §68) | Standalone — chưa chốt timeline |
 | **Sprint additional-auth** | AuthService security hardening (88 issues from `issue-authservice.md` Phụ lục §1-§5) | + 90 task `#AUTH-01..90` / `#349..#438` chia Phase A-F (P0 security + P1 ops + logic/edge + missing feature + code quality + test gap) | Standalone — ~22 dev-day (10+12 split A+B). KHÔNG chạy song song Sprint 5B-8 vì cùng owner risk |
-| **Sprint audit** | AuditLog Hybrid Architecture (Phụ lục A+B `issue-authservice.md`) | + 45 task `#AUDIT-01..45` / `#447..#491` chia 7 phase (ADR + AuthService refactor + AuditAggregatorService scaffold + 10 service onboard + FE Audit Explorer + hardening) | Standalone — ~44 dev-day, 8-9 sprint. KHÔNG chạy song song Sprint additional-auth — phải đợi `#AUTH-29/77/15` merge ổn định ≥ 2 tuần |
+| **Sprint audit** | AuditLog Hybrid Architecture (Phụ lục A+B `issue-authservice.md`) | + 45 task `#AUDIT-01..45` / `#447..#491` chia 7 phase (ADR + AuthService refactor + AuditAggregatorService scaffold + 10 service onboard + FE Audit Explorer + hardening) | Standalone — ~44 dev-day, 8-9 sprint. Owner Thắng (`@Alexdev257`). `#AUTH-29/77/15` đã merge; gate "ổn định ≥ 2 tuần" **waived 2026-06-24** → Phase 0 ready |
 
 ### ⚠️ Sprint overload mitigation (B1-B11 impact)
 
@@ -8596,7 +8612,7 @@ Thêm vào §18:
      - FileStorage/Alert/Email/Notification/Sms: tương tự pattern trên
      - AuditAggregatorService (new DB): `InitAuditAggregate` + `EnablePgPartman` + monthly partition setup
    - **Background services mới (10):** AuditOutboxRelayBackgroundService per service (8 service onboard publish audit) + AuditCreatedConsumer (Aggregator Worker) + AuditRetentionBackgroundService (Aggregator)
-   - **Permission mới (4):** `audit.read`, `audit.export`, `audit.replay`, `audit.redact` — seed cho role `SecurityOfficer` (mới) qua AuthService Phase 2 `#AUDIT-18`
+   - **Permission mới (4):** `audit.read`, `audit.export`, `audit.replay`, `audit.redact` — seed cho role `Admin` qua AuthService Phase 2 `#AUDIT-18` (role `SecurityOfficer` gộp Admin — chốt 2026-06-24 D13)
    - **Local Option C endpoint mới (4):** `GET /api/admin/{battery|ticket|files|alerts}/audit-logs` (AuthService giữ nguyên 2 endpoint hiện tại)
    - Add persistent Saga scheduler configuration; current RabbitMQ image does not include delayed-message plugin.
    - **(IoT P3)** Add MQTT broker (EMQX/Mosquitto) qua `infra/mqtt/docker-compose.yml` + TLS 8883 + credential/ACL per-device — chỉ khi triển khai MQTT realtime (§52.14).
@@ -11351,8 +11367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Saga failure/recovery trace demonstrable without duplicate Ticket
 - [ ] GDPR export demo
 - [ ] Postmortem template ready (if incident happens during demo, recover gracefully)
-- [ ] **Cross-service audit trace demo (Sprint audit)** — show 1 anomaly event xuyên 3 service: BatteryService `BatteryAnomalyDetectedEvent` (event_id=X) → TicketService `TicketAutoCreatedFromAnomaly` (causation_id=X) → NotificationService `PushNotificationSent` (causation_id=ticket_audit.event_id) → trace tất cả qua `GET /api/audit/correlation/{correlation_id}` ở AuditAggregator. Hội đồng KLTN ấn tượng vì đây là pattern enterprise-grade audit forensic
-- [ ] **GDPR redaction audit demo (Sprint audit `#AUDIT-42`)** — SecurityOfficer gọi `POST /api/audit/redact?accountId={id}` → PII fields → `[REDACTED]` ở `audit_aggregate` nhưng `event_id` + `action_code` + `occurred_at` vẫn integrity. Source `{service}_audit_logs` KHÔNG redact (legal hold)
+- [ ] **Cross-service audit trace demo (Sprint audit)** — show 1 anomaly event xuyên 3 service: BatteryService `BatteryAnomalyDetectedEvent` (event_id=X) → TicketService `TicketAutoCreatedFromAnomaly` (causation_id=X) → NotificationService `PushNotificationSent` (causation_id=ticket_audit.event_id) → trace tất cả qua `GET /api/admin/audit/correlation/{correlation_id}` ở AuditAggregator. Hội đồng KLTN ấn tượng vì đây là pattern enterprise-grade audit forensic
+- [ ] **GDPR redaction audit demo (Sprint audit `#AUDIT-42`)** — Admin (SecurityOfficer gộp Admin — D13) gọi `POST /api/admin/audit/redact?accountId={id}` → PII fields → `[REDACTED]` ở `audit_aggregate` nhưng `event_id` + `action_code` + `occurred_at` vẫn integrity. Source `{service}_audit_logs` KHÔNG redact (legal hold)
 - [ ] **AuditAggregator Web UI demo (Sprint audit Phase 6)** — search/timeline/correlation trace/stats dashboard hoạt động với 10k+ event seed data (live filter response < 200ms)
 
 ---
@@ -15092,8 +15108,8 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 |------------|-------|
 | **Decentralized write** | Mỗi service own `{service}_audit_logs` table, INSERT cùng transaction với business data (Outbox pattern đảm bảo at-least-once) |
 | **`AuditAggregatorService` (MỚI)** | Microservice mới scaffold Clean Architecture, consume `AuditCreatedEvent` qua RabbitMQ, materialized view `audit_aggregate` (PostgreSQL partitioned by month + GIN index JSON), Geo IP enrichment |
-| **Centralized read API** | 7 REST endpoint: `/api/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats`, `/export`, `/replay` |
-| **Option C local endpoint policy** | 5 service có 1 local endpoint mỗi service làm fallback + service-specific filter: AuthService (giữ 2 endpoint hiện tại) + Battery + Ticket + File + Alert (build mới). 5 service skip qua Aggregator: Email + Notification + Sms + AI + Gateway |
+| **Centralized read API** | 7 REST endpoint: `/api/admin/audit/search`, `/{eventId}`, `/correlation/{id}`, `/account/{id}/timeline`, `/stats`, `/export`, `/replay` |
+| **Option C local endpoint policy** | 5 service có 1 local endpoint mỗi service làm fallback + service-specific filter: AuthService (giữ 2 endpoint hiện tại) + Battery + Ticket + File + Alert (build mới; Alert host trong BatteryService — D14). 5 service skip qua Aggregator: Email + Notification + Sms + AI + Gateway |
 | **10 service onboard audit** | ~89 action cross-service: AuthService 22 handler (fix Phase 1), BatteryService 12 action (scratch), TicketService 21 action (tách `TicketActivity` UI khỏi `TicketAuditLog`), File/Alert/Email/Notification/Sms/AI/Gateway 34 action |
 | **CorrelationId + CausationId** | Trace 1 user request xuyên 10 service + causation chain (ticket auto-tạo từ `BatteryAnomalyDetectedEvent` có `causation_id` ngược về `event_id` của anomaly) |
 
@@ -15123,7 +15139,7 @@ if (raw is Map<String, dynamic> && raw.containsKey('isSuccess')) {
 - `#AUTH-77` (CorrelationIdMiddleware) → tận dụng cho `correlation_id` propagation
 - `#AUTH-15` (Outbox pattern AuthService) → Phase 1 `#AUDIT-08` schema khác — tạo `AuditOutboxRelayBackgroundService` riêng, KHÔNG share với outbox business event
 
-**Timeline:** KHÔNG chạy song song Sprint additional-auth. Recommend kick off Sprint audit **sau khi Sprint additional-auth hoàn tất ổn định ≥ 2 tuần**.
+**Timeline:** `#AUTH-29/77/15` hard-blocker đã merge. Gate "ổn định ≥ 2 tuần" **WAIVED (chốt 2026-06-24, owner Thắng `@Alexdev257`, sole-dev)** → kick-off Phase 0 (`#AUDIT-01/02/04`) ngay; Phase 2 chờ dựng `audit-aggregator-db` + `pg_partman`.
 
 ---
 

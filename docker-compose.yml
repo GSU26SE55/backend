@@ -80,6 +80,8 @@ services:
       TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
       NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
       SMS_DB_NAME: ${SMS_DB_NAME:-sms_db}
+      # Sprint audit #AUDIT-13/14 — read-store AuditAggregatorService (logical DB chung postgres).
+      AUDIT_AGGREGATOR_DB_NAME: ${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -261,6 +263,11 @@ services:
       ObjectStorage__SecretKey: minioadmin
       # FileStorageService chỉ dùng database riêng của FileStorage.
       ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      # Sprint audit #AUDIT-29 — thêm Redis (leader election) + RabbitMQ (MassTransit audit relay).
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
     ports:
       - "4005:8080"
     depends_on:
@@ -269,6 +276,10 @@ services:
       postgres-init:
         condition: service_completed_successfully
       minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
@@ -418,6 +429,37 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  # Sprint audit #AUDIT-13 — AuditAggregatorService: consume AuditCreatedEventV1 → read-store audit_aggregate.
+  auditaggregatorservice:
+    container_name: solar-auditaggregatorservice
+    build:
+      context: .
+      dockerfile: services/AuditAggregatorService/src/AuditAggregatorService.Api/Dockerfile
+    env_file:
+      - .env.Docker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      # Logical DB audit_aggregate trong postgres CHUNG (tạo bởi postgres-init). KHÔNG dùng container DB riêng.
+      ConnectionStrings__AuditAggregatorDb: "Host=postgres;Port=5432;Database=${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
+      ConnectionStrings__Redis: redis:6379
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "4010:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
   # ---------- Gateway (HTTP only — production dùng reverse proxy ngoài cho HTTPS) ----------
   apigateway:
     container_name: solar-apigateway
@@ -440,6 +482,7 @@ services:
       - batteryservice
       - ticketservice
       - notificationservice
+      - auditaggregatorservice   # Sprint audit — gateway route /api/admin/audit/* → auditAggregatorCluster
     networks: [solar-net]
     restart: unless-stopped
 

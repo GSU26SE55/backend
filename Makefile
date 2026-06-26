@@ -116,7 +116,7 @@ ci-test: ## [stage 4] Unit tests (exclude IntegrationTests + Performance)
 		--logger "trx" \
 		--results-directory ./TestResults
 
-ci-rules: ## [stage 5] Project rule checks (await void / AuditableEntity) — diff vs BASE_REF
+ci-rules: ## [stage 5] Project rule checks (await void / AuditableEntity / audit conventions #AUDIT-04) — diff vs BASE_REF
 	@printf '\n\033[1;34m[5/6] Project rule checks (BASE_REF=$(BASE_REF))\033[0m\n'
 	@BASE_REF=$(BASE_REF) ./ci/scripts/rule-checks.sh
 

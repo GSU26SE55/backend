@@ -22,17 +22,20 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
     private readonly IActivityLogger _activityLogger;
     private readonly ITicketCommentRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<CommentAddCommandHandler> _logger;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public CommentAddCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         ITicketCommentRealtimeNotifier realtimeNotifier,
-        ILogger<CommentAddCommandHandler> logger)
+        ILogger<CommentAddCommandHandler> logger,
+        IPublisher publisher)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(CommentAddCommand request, CancellationToken ct)
@@ -87,6 +90,10 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             null,
             request.IsInternal ? "[Nội bộ]" : "[Công khai]",
             $"Đã thêm bình luận: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.CommentAdded, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 

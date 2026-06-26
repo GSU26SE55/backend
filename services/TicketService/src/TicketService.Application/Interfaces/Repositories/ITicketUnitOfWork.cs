@@ -6,6 +6,8 @@ namespace TicketService.Application.Interfaces.Repositories;
 public interface ITicketUnitOfWork : IUnitOfWork
 {
     IGenericRepository<Ticket> Tickets { get; }
+    IGenericRepository<TicketAuditLog> TicketAuditLogs { get; }       // Sprint audit #AUDIT-24
+    IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes { get; } // Sprint audit #AUDIT-25
     IGenericRepository<TicketActivity> TicketActivities { get; }
     IGenericRepository<TicketComment> TicketComments { get; }
     IGenericRepository<TicketAttachment> TicketAttachments { get; }

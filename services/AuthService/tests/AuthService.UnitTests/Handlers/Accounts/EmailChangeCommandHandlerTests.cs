@@ -29,7 +29,7 @@ public class ChangeEmailCommandHandlerTests
         _hasher.Setup(h => h.Verify("right-password", "old-hash")).Returns(true);
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand
         {
             AccountId = account.Id,
@@ -59,7 +59,7 @@ public class ChangeEmailCommandHandlerTests
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "new@example.com", CurrentPassword = "wrong" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(401);
@@ -80,7 +80,7 @@ public class ChangeEmailCommandHandlerTests
         _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(true);
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "U@Example.com", CurrentPassword = "p" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(422);
@@ -109,7 +109,7 @@ public class ChangeEmailCommandHandlerTests
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, taken });
         accounts.Setup(r => r.GetByIdAsync(account.Id)).ReturnsAsync(account);
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "new@example.com", CurrentPassword = "p" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(409);
@@ -121,7 +121,7 @@ public class ChangeEmailCommandHandlerTests
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
 
-        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance);
+        var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = Guid.NewGuid(), NewEmail = "x@e.com", CurrentPassword = "p" }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(404);
@@ -158,7 +158,7 @@ public class ConfirmEmailChangeCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -179,7 +179,7 @@ public class ConfirmEmailChangeCommandHandlerTests
         account.PendingEmail = null;
         account.OtpPurpose = OtpPurposeEnum.Register;
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -191,7 +191,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     {
         var account = WithPending(expired: DateTime.UtcNow.AddMinutes(-1));
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -203,7 +203,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     {
         var account = WithPending(otp: "999999");
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
 
@@ -224,7 +224,7 @@ public class ConfirmEmailChangeCommandHandlerTests
             Status = AccountStatusEnum.Active
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account, stealer });
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
@@ -238,7 +238,7 @@ public class ConfirmEmailChangeCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object);
+        var handler = new ConfirmEmailChangeCommandHandler(uow.Object, StubRedis.Build().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = Guid.NewGuid(), Otp = "123456" }, CancellationToken.None);
 

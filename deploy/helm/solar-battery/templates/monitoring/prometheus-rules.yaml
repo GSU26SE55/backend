@@ -272,4 +272,32 @@ spec:
       annotations:
         summary: "Env incident detection latency p95 {{`{{ $value }}`}}s"
         description: "Environmental incident detection slow (p95 > 5min). Check report/ingest pipeline."
+
+  # ---- Sprint audit #AUDIT-44 — audit pipeline (mirror monitoring/prometheus/alert-rules.yml group audit-pipeline) ----
+  - name: audit-pipeline
+    interval: 30s
+    rules:
+    - alert: AuditOutboxBacklog
+      expr: audit_outbox_pending_total > 1000
+      for: 5m
+      labels: { severity: warning, domain: audit }
+      annotations:
+        summary: "Audit outbox backlog on {{`{{ $labels.service }}`}} ({{`{{ $value }}`}} pending)"
+        description: "audit_outbox_pending_total > 1000 trong 5 phút. Check relay running / RabbitMQ healthy / Redis leader key. Runbook: docs/audit/operations-runbook.md."
+
+    - alert: AuditConsumerLag
+      expr: histogram_quantile(0.99, sum(rate(audit_consumer_lag_seconds_bucket[5m])) by (le)) > 30
+      for: 5m
+      labels: { severity: warning, domain: audit }
+      annotations:
+        summary: "Audit consumer lag p99 > 30s ({{`{{ $value | humanize }}`}}s)"
+        description: "Aggregator ingest lag p99 vượt 30s (SLO < 10s). Scale aggregator pod / check audit_aggregate index."
+
+    - alert: AuditDlqGrowing
+      expr: audit_dlq_size_total > 100
+      for: 5m
+      labels: { severity: critical, domain: audit }
+      annotations:
+        summary: "Audit DLQ growing ({{`{{ $value }}`}} messages)"
+        description: "aggregator.audit.events.dlq > 100. Inspect poison message, fix consumer, shovel DLQ → main queue. Runbook: docs/audit/operations-runbook.md."
 {{- end }}

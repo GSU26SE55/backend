@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    Sprint audit #AUDIT-04 — Roslyn banned-API analyzer cho audit correctness.
+    Ban: DateTime.Now (phải UtcNow), System.Random cho event_id (phải Guid v7), Console.WriteLine (phải ILogger).
+
+    Thiết kế OFF-BY-DEFAULT: chỉ active khi build với -p:EnableAuditBannedApis=true (CI stage `ci-rules` của Makefile).
+    Lý do: tránh phá build thường + tránh noise warning trên code legacy 8 service. Rollout dần lên error sau.
+
+    Rule data: eng/audit/BannedSymbols.txt. Severity set ở .editorconfig (search "AUDIT-04").
+  -->
+
+  <ItemGroup Condition="'$(EnableAuditBannedApis)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)eng/audit/BannedSymbols.txt" />
+  </ItemGroup>
+
+</Project>

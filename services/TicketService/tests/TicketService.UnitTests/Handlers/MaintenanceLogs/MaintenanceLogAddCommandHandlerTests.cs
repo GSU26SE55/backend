@@ -49,7 +49,7 @@ public class MaintenanceLogAddCommandHandlerTests
             }
         };
 
-        var handler = new MaintenanceLogAddCommandHandler(uow.Object, _logger.Object);
+        var handler = new MaintenanceLogAddCommandHandler(uow.Object, _logger.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

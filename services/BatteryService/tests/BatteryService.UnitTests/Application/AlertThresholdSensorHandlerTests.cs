@@ -145,7 +145,7 @@ public class AlertThresholdSensorHandlerTests
     public async Task Upsert_BatteryTypeMissing_404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
+        var r = await new UpsertThresholdConfigCommandHandler(b.Build(), Moq.Mock.Of<MediatR.IPublisher>()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = Guid.NewGuid(),
             VoltageMin = 10,
@@ -163,7 +163,7 @@ public class AlertThresholdSensorHandlerTests
     {
         var t = new BatteryType { Id = Guid.NewGuid(), Name = "T", NominalCapacityAh = 1, NominalVoltage = 1, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithBatteryTypes(t);
-        var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
+        var r = await new UpsertThresholdConfigCommandHandler(b.Build(), Moq.Mock.Of<MediatR.IPublisher>()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = t.Id,
             VoltageMin = 10,
@@ -186,7 +186,7 @@ public class AlertThresholdSensorHandlerTests
         var t = new BatteryType { Id = Guid.NewGuid(), Name = "T", NominalCapacityAh = 1, NominalVoltage = 1, CreatedAt = DateTime.UtcNow };
         var existing = new ThresholdConfig { Id = Guid.NewGuid(), BatteryTypeId = t.Id, BatteryType = t, IsActive = true, VoltageMin = 5, VoltageMax = 8, TemperatureMin = -5, TemperatureMax = 30, SocWarningThreshold = 25, SocCriticalThreshold = 5, EffectiveFromUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithBatteryTypes(t).WithThresholdConfigs(existing);
-        var r = await new UpsertThresholdConfigCommandHandler(b.Build()).Handle(new UpsertThresholdConfigCommand
+        var r = await new UpsertThresholdConfigCommandHandler(b.Build(), Moq.Mock.Of<MediatR.IPublisher>()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = t.Id,
             VoltageMin = 11,

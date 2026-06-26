@@ -109,4 +109,79 @@ else
   echo "PASS: no Energy/CO2 scope creep (ADR-017)"
 fi
 
+# ---------------------------------------------------------------------
+# Sprint audit #AUDIT-04 — audit convention bans. Đây là GATE hard-fail của CI,
+# mirror build-time Roslyn analyzer 'Microsoft.CodeAnalysis.BannedApiAnalyzers'
+# (root Directory.Build.props + eng/audit/BannedSymbols.txt, opt-in IDE/local qua
+# -p:EnableAuditBannedApis=true). Diff-based: chỉ chặn code MỚI (dòng '+'), KHÔNG
+# fail code cũ. Production only — loại trừ tests/Migrations; rule Console loại trừ
+# Program.cs (startup bootstrap trước khi ILogger sẵn sàng).
+# ---------------------------------------------------------------------
+
+# Danh sách file .cs production thay đổi (loại file bị xóa).
+CHANGED_CS="$(git diff "${BASE_REF}...HEAD" --name-only --diff-filter=d -- '*.cs' 2>/dev/null \
+            || git diff 'HEAD~1...HEAD' --name-only --diff-filter=d -- '*.cs' 2>/dev/null \
+            || true)"
+
+# Added lines ('+', bỏ header '+++') của 1 file giữa BASE_REF..HEAD.
+added_lines() {
+  git diff "${BASE_REF}...HEAD" -- "$1" 2>/dev/null \
+    || git diff 'HEAD~1...HEAD' -- "$1" 2>/dev/null \
+    || true
+}
+
+DT_HITS=""; CONSOLE_HITS=""; EVENTID_HITS=""
+for f in $CHANGED_CS; do
+  # Production only.
+  case "$f" in
+    */tests/*|*Tests.cs|*Test.cs|*/Migrations/*) continue;;
+  esac
+  ADDED="$(added_lines "$f" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+  [ -z "$ADDED" ] && continue
+
+  # Rule 5 / AUDIT001 — DateTime.Now / DateTime.Today / DateTimeOffset.Now.
+  hit="$(echo "$ADDED" | grep -E '\b(DateTime|DateTimeOffset)\.(Now|Today)\b' || true)"
+  [ -n "$hit" ] && DT_HITS="${DT_HITS}${f}:
+${hit}
+"
+
+  # Rule 7 / AUDIT002 — Guid.NewGuid() gán cho eventId.
+  hit="$(echo "$ADDED" | grep -iE 'eventId[[:space:]]*=[[:space:]]*Guid\.NewGuid[[:space:]]*\(' || true)"
+  [ -n "$hit" ] && EVENTID_HITS="${EVENTID_HITS}${f}:
+${hit}
+"
+
+  # Rule 6 / AUDIT003 — Console.Write* (trừ Program.cs).
+  case "$f" in *Program.cs) ;; *)
+    hit="$(echo "$ADDED" | grep -E '\bConsole\.(Write|WriteLine|Error|Out)\b' || true)"
+    [ -n "$hit" ] && CONSOLE_HITS="${CONSOLE_HITS}${f}:
+${hit}
+" ;;
+  esac
+done
+
+if [ -n "$DT_HITS" ]; then
+  echo "FAIL: AUDIT001 — dùng UtcNow thay cho DateTime.Now/Today/DateTimeOffset.Now (audit timestamp phải UTC):"
+  printf '%s' "$DT_HITS"
+  FAILED=1
+else
+  echo "PASS: AUDIT001 no new DateTime.Now/Today"
+fi
+
+if [ -n "$EVENTID_HITS" ]; then
+  echo "FAIL: AUDIT002 — dùng AuditEventId.New() thay cho Guid.NewGuid() khi tạo event_id:"
+  printf '%s' "$EVENTID_HITS"
+  FAILED=1
+else
+  echo "PASS: AUDIT002 no new Guid.NewGuid() for event_id"
+fi
+
+if [ -n "$CONSOLE_HITS" ]; then
+  echo "FAIL: AUDIT003 — dùng ILogger thay cho Console.Write* trong production code (trừ Program.cs):"
+  printf '%s' "$CONSOLE_HITS"
+  FAILED=1
+else
+  echo "PASS: AUDIT003 no new Console.Write* (outside Program.cs)"
+fi
+
 exit "$FAILED"

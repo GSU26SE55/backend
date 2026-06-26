@@ -17,11 +17,13 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIntegrationEventOutboxWriter _outbox;
+    private readonly MediatR.IPublisher _publisher;   // Sprint audit #AUDIT-22
 
-    public CreateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, IIntegrationEventOutboxWriter outbox)
+    public CreateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, IIntegrationEventOutboxWriter outbox, MediatR.IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _outbox = outbox;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<BatteryAssetDto>> Handle(CreateBatteryAssetCommand request, CancellationToken cancellationToken)
@@ -122,6 +124,11 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             BatteryTypeId: entity.BatteryTypeId,
             SerialNumber: entity.SerialNumber,
             CreatedAt: DateTime.UtcNow), cancellationToken);
+
+        // #AUDIT-22
+        await _publisher.Publish(BatteryService.Application.CQRS.Notification.Audit.BatteryAuditTrailNotification.For(
+            BatteryService.Domain.Enums.BatteryAuditActionEnum.BatteryCreated, entity.Id,
+            targetDisplay: entity.SerialNumber), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

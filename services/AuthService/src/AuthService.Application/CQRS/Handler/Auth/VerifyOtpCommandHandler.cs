@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
@@ -19,13 +20,16 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
     public VerifyOtpCommandHandler(
         IAuthUnitOfWork unitOfWork,
-        IMessageProducerService messageProducer)
+        IMessageProducerService messageProducer,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
@@ -110,6 +114,10 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             account.PhoneNumber,
             roleName,
             CreationSource: "SelfRegister"), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.OtpVerifySuccess, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

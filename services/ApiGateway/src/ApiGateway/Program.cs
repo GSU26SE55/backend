@@ -40,6 +40,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
     c.SwaggerDoc("notification", new OpenApiInfo { Title = "Notification Service API", Version = "v1" });
     c.SwaggerDoc("sms", new OpenApiInfo { Title = "SMS Service API", Version = "v1" });
+    c.SwaggerDoc("auditaggregator", new OpenApiInfo { Title = "Audit Aggregator Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -93,6 +94,7 @@ if (!app.Environment.IsProduction())
         options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
         options.SwaggerEndpoint("/notification-service/swagger/v1/swagger.json", "Notification Service API");
         options.SwaggerEndpoint("/sms-service/swagger/v1/swagger.json", "SMS Service API");
+        options.SwaggerEndpoint("/audit-aggregator-service/swagger/v1/swagger.json", "Audit Aggregator Service API");
     });
 }
 

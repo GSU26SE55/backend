@@ -78,6 +78,32 @@ scrape_configs:
           service: batteryservice
           tier: backend
 
+  - job_name: ticketservice
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ticketservice:8080"]
+        labels:
+          service: ticketservice
+          tier: backend
+
+  - job_name: notificationservice
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["notificationservice:8080"]
+        labels:
+          service: notificationservice
+          tier: backend
+
+  # Sprint audit #AUDIT-44 — audit pipeline metrics (audit_events_total, audit_consumer_lag_seconds,
+  # audit_outbox_pending_total, audit_dlq_size_total). Cần cho Grafana audit-pipeline + alert rules audit.
+  - job_name: auditaggregatorservice
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["auditaggregatorservice:8080"]
+        labels:
+          service: auditaggregatorservice
+          tier: backend
+
   # ---------- Infrastructure exporters ----------
   - job_name: node-exporter
     static_configs:

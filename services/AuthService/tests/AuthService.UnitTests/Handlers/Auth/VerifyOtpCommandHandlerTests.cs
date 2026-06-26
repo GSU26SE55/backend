@@ -36,7 +36,7 @@ public class VerifyOtpCommandHandlerTests
         var (uow, accounts, refreshTokens, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { customerRole });
         var producer = new Mock<IMessageProducerService>();
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, producer.Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -68,7 +68,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount(roleId: staffRoleId);
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -85,7 +85,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount(otp: "999999");
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -106,7 +106,7 @@ public class VerifyOtpCommandHandlerTests
         account.FailedLoginAttempts = 4;
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -125,7 +125,7 @@ public class VerifyOtpCommandHandlerTests
         var account = PendingAccount(otpExpired: DateTime.UtcNow.AddMinutes(-1));
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -143,7 +143,7 @@ public class VerifyOtpCommandHandlerTests
         account.Status = AccountStatusEnum.Active;
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "pending@example.com",
@@ -159,7 +159,7 @@ public class VerifyOtpCommandHandlerTests
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
 
-        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new VerifyOtpCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
         var response = await handler.Handle(new VerifyOtpCommand
         {
             Email = "ghost@example.com",

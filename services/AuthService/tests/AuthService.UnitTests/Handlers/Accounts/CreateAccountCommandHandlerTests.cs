@@ -27,7 +27,7 @@ public class CreateAccountCommandHandlerTests
             Status = RoleStatusEnum.Active
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -59,7 +59,7 @@ public class CreateAccountCommandHandlerTests
             FullName = "U"
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -84,7 +84,7 @@ public class CreateAccountCommandHandlerTests
             PhoneNumber = "+84900111"
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new CreateAccountCommand
         {
@@ -102,7 +102,7 @@ public class CreateAccountCommandHandlerTests
     public async Task Create_WithMissingRole_Returns400()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new CreateAccountCommand
         {

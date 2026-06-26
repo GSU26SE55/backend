@@ -3802,16 +3802,27 @@ Base route: `/api/admin/audit-logs`
 
 | Param | Type | Mô tả |
 |---|---|---|
-| `pageNumber` | `int` | Trang |
-| `pageSize` | `int` | Số item/trang |
+| `pageNumber` | `int` | Trang (mặc định 1; ≤0 tự về 1) |
+| `pageSize` | `int` | Số item/trang (mặc định 20, trần 100; ≤0 tự về 10) |
 | `action` | `AuditActionEnum?` | Lọc theo loại hành động |
 | `targetAccountId` | `Guid?` | Xem tất cả hành động liên quan đến account này |
 | `actorAccountId` | `Guid?` | Xem tất cả hành động actor này thực hiện |
 | `isSuccess` | `bool?` | Lọc theo kết quả thành công/thất bại |
-| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive) |
-| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive) |
+| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive — `CreatedAt >= fromUtc`) |
+| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive — `CreatedAt < toUtc`) |
 
-**Response:** `PaginationResponse<AuditLogDto>`
+**Response:** `PaginationResponse<AuditLogDto>` (sort `CreatedAt` giảm dần — mới nhất trước).
+
+**Status code:**
+
+| Code | Khi nào |
+|---|---|
+| `200` | Lấy danh sách thành công (kể cả rỗng) |
+| `422` | `fromUtc >= toUtc` — `message = "FromUtc phải nhỏ hơn ToUtc."`, `listErrors = null` |
+| `401` | Chưa đăng nhập / token hết hạn |
+| `403` | Không có role Admin |
+
+> ⚠️ Annotation `[ProducesResponseType(400)]` trên controller chỉ là metadata Swagger; runtime handler thực tế trả **`422`** cho lỗi khoảng thời gian.
 
 **Chi tiết `AuditLogDto`:**
 
