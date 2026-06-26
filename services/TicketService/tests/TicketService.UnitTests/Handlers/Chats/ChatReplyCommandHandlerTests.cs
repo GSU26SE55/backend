@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Moq;
 using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
@@ -5,6 +6,7 @@ using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -17,13 +19,15 @@ public class ChatReplyCommandHandlerTests
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<ChatReplyCommandHandler>> _logger = new();
 
     private ChatReplyCommandHandler CreateHandler()
     {
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object);
+        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id) => new()

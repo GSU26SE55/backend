@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
@@ -24,19 +25,28 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
     private readonly IChatAuthorizationService _chatAuthorizationService;
     private readonly ChatOptions _chatOptions;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly IChatCacheService _chatCache;
+    private readonly ILogger<ChatDeleteCommandHandler> _logger;
 
     public ChatDeleteCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         IChatAuthorizationService chatAuthorizationService,
         IOptions<ChatOptions> chatOptions,
-        IIntegrationEventOutboxWriter outboxWriter)
+        IIntegrationEventOutboxWriter outboxWriter,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        IChatCacheService chatCache,
+        ILogger<ChatDeleteCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
         _chatOptions = chatOptions.Value;
         _outboxWriter = outboxWriter;
+        _realtimeNotifier = realtimeNotifier;
+        _chatCache = chatCache;
+        _logger = logger;
     }
 
     public async Task<TicketActionResponse> Handle(ChatDeleteCommand request, CancellationToken ct)
@@ -101,6 +111,17 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             (int)request.UserRole), ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        await _chatCache.InvalidateAsync(ticket.Id, ct);
+
+        try
+        {
+            await _realtimeNotifier.NotifyChatDeletedAsync(ticket.Id, chat.Id, request.UserDisplayName, chat.IsInternal, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ChatDelete] Failed to broadcast ChatDeleted SignalR event for ticket {TicketId}", ticket.Id);
+        }
 
         return new TicketActionResponse
         {

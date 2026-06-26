@@ -13,6 +13,7 @@ using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.BackgroundServices;
+using TicketService.Infrastructure.Caching;
 using TicketService.Infrastructure.Implements.Helpers;
 using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Implements.Services;
@@ -93,6 +94,15 @@ public static class ManageDependencyInjection
 
         // Group mention resolver (#537)
         services.AddScoped<IGroupMentionResolverService, LocalGroupMentionResolver>();
+
+        // #557 — User connection tracker (Singleton vì in-memory, stateful across requests)
+        services.AddSingleton<IUserConnectionTracker, InMemoryUserConnectionTracker>();
+
+        // #552 — Chat cache service
+        services.AddScoped<IChatCacheService, ChatCacheService>();
+
+        // #547 — Template renderer
+        services.AddScoped<ITemplateRenderer, TemplateRendererService>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

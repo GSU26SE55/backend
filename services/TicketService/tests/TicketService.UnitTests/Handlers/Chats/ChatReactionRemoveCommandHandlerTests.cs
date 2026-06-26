@@ -1,9 +1,12 @@
+using Microsoft.Extensions.Logging;
+using Moq;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Command.ChatReactionRemove;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -13,6 +16,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 public class ChatReactionRemoveCommandHandlerTests
 {
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<ChatReactionRemoveCommandHandler>> _logger = new();
 
     private static TicketChat MakeChat(Guid ticketId, Guid id, Guid authorId) => new()
     {
@@ -54,7 +59,7 @@ public class ChatReactionRemoveCommandHandlerTests
         };
 
         var (uow, reactionsRepo) = BuildUow(chat, new List<TicketChatReaction> { existing });
-        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object);
+        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
 
         var command = new ChatReactionRemoveCommand
         {
@@ -85,7 +90,7 @@ public class ChatReactionRemoveCommandHandlerTests
         var chat = MakeChat(ticketId, Guid.NewGuid(), authorId);
 
         var (uow, _) = BuildUow(chat, new List<TicketChatReaction>());
-        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object);
+        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
 
         var command = new ChatReactionRemoveCommand
         {
@@ -116,7 +121,7 @@ public class ChatReactionRemoveCommandHandlerTests
         uow.SetupGet(u => u.TicketChats).Returns(chatsRepo.Object);
         uow.SetupReactions(new List<TicketChatReaction>());
 
-        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object);
+        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
 
         var command = new ChatReactionRemoveCommand
         {
@@ -144,7 +149,7 @@ public class ChatReactionRemoveCommandHandlerTests
         chat.Ticket!.AssignedStaffId = Guid.NewGuid();
 
         var (uow, _) = BuildUow(chat, new List<TicketChatReaction>());
-        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object);
+        var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
 
         var command = new ChatReactionRemoveCommand
         {

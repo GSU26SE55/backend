@@ -7,6 +7,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.ParticipantRemove;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Participants;
@@ -15,15 +16,18 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IMessageProducerService _producer;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<ParticipantRemoveCommandHandler> _logger;
 
     public ParticipantRemoveCommandHandler(
         ITicketUnitOfWork uow,
         IMessageProducerService producer,
+        ITicketChatRealtimeNotifier realtimeNotifier,
         ILogger<ParticipantRemoveCommandHandler> logger)
     {
         _uow = uow;
         _producer = producer;
+        _realtimeNotifier = realtimeNotifier;
         _logger = logger;
     }
 
@@ -72,6 +76,15 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
             participant.UserId,
             request.ActorUserId,
             request.RemoveReason ?? string.Empty), ct);
+
+        try
+        {
+            await _realtimeNotifier.ForceDisconnectFromTicketAsync(request.TicketId, participant.UserId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ParticipantRemove] Failed to force disconnect user {UserId} from ticket {TicketId}", participant.UserId, request.TicketId);
+        }
 
         return new ParticipantActionResponse
         {

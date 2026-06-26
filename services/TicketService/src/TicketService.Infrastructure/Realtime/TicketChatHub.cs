@@ -13,12 +13,33 @@ namespace TicketService.Infrastructure.Realtime;
 public class TicketChatHub : Hub
 {
     private readonly IChatAuthorizationService _authService;
+    private readonly IUserConnectionTracker _connectionTracker;
     private readonly ILogger<TicketChatHub> _logger;
 
-    public TicketChatHub(IChatAuthorizationService authService, ILogger<TicketChatHub> logger)
+    public TicketChatHub(
+        IChatAuthorizationService authService,
+        IUserConnectionTracker connectionTracker,
+        ILogger<TicketChatHub> logger)
     {
         _authService = authService;
+        _connectionTracker = connectionTracker;
         _logger = logger;
+    }
+
+    public override Task OnConnectedAsync()
+    {
+        var userId = GetCurrentUserId();
+        if (userId.HasValue)
+            _connectionTracker.Track(userId.Value, Context.ConnectionId);
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        var userId = GetCurrentUserId();
+        if (userId.HasValue)
+            _connectionTracker.Untrack(userId.Value, Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
     }
 
     public static string PublicGroup(Guid ticketId) => $"ticket:{ticketId}:public";

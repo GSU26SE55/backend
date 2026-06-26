@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using SharedContracts.Interfaces;
@@ -28,6 +29,9 @@ public class ChatEditCommandHandlerTests
     private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly IOptions<ChatOptions> _chatOptions = Options.Create(new ChatOptions());
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ILogger<ChatEditCommandHandler>> _logger = new();
 
     public ChatEditCommandHandlerTests()
     {
@@ -45,7 +49,7 @@ public class ChatEditCommandHandlerTests
         return new ChatEditCommandHandler(
             _uow.Object, _activityLogger.Object, _markdownRenderer.Object,
             chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions,
-            _outboxWriter.Object);
+            _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()

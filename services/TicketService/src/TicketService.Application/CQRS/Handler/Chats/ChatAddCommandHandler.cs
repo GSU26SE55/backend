@@ -37,6 +37,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly ILogger<ChatAddCommandHandler> _logger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IGroupMentionResolverService _groupMentionResolver;
+    private readonly IChatCacheService _chatCache;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -50,7 +51,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IOptions<ChatOptions> chatOptions,
         ILogger<ChatAddCommandHandler> logger,
         IIntegrationEventOutboxWriter outboxWriter,
-        IGroupMentionResolverService groupMentionResolver)
+        IGroupMentionResolverService groupMentionResolver,
+        IChatCacheService chatCache)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -64,6 +66,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _logger = logger;
         _outboxWriter = outboxWriter;
         _groupMentionResolver = groupMentionResolver;
+        _chatCache = chatCache;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
@@ -278,6 +281,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
 
         await _uow.SaveChangesAsync(ct);
 
+        // Invalidate cache page 1 (#552)
+        await _chatCache.InvalidateAsync(ticket.Id, ct);
+
         // Broadcast chat via SignalR
         try
         {
@@ -305,6 +311,12 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 }).ToList()
             };
             await _realtimeNotifier.NotifyChatAddedAsync(chatDto, ct);
+
+            foreach (var mention in createdMentions)
+            {
+                if (mention.MentionedUserId != request.UserId)
+                    await _realtimeNotifier.NotifyMentionReceivedAsync(mention.MentionedUserId, chatDto, ct);
+            }
         }
         catch (Exception ex)
         {

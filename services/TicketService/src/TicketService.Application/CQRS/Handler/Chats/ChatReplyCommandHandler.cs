@@ -1,4 +1,8 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
@@ -6,6 +10,7 @@ using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -16,15 +21,21 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<ChatReplyCommandHandler> _logger;
 
     public ChatReplyCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
-        IIntegrationEventOutboxWriter outboxWriter)
+        IIntegrationEventOutboxWriter outboxWriter,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        ILogger<ChatReplyCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _outboxWriter = outboxWriter;
+        _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
     }
 
     public async Task<TicketActionResponse> Handle(ChatReplyCommand request, CancellationToken ct)
@@ -88,6 +99,27 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             ticket.AssignedStaffId), ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        try
+        {
+            await _realtimeNotifier.NotifyChatAddedAsync(new TicketChatDTO
+            {
+                Id = reply.Id.ToString(),
+                TicketId = reply.TicketId.ToString(),
+                AuthorUserId = reply.AuthorUserId.ToString(),
+                AuthorRole = reply.AuthorRole,
+                AuthorDisplayName = reply.AuthorDisplayName,
+                Body = reply.Body,
+                IsInternal = reply.IsInternal,
+                ParentChatId = reply.ParentChatId?.ToString(),
+                ThreadRootId = reply.ThreadRootId?.ToString(),
+                CreatedAt = reply.CreatedAt
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ChatReply] Failed to broadcast ChatAdded SignalR event for ticket {TicketId}", ticket.Id);
+        }
 
         return new TicketActionResponse
         {

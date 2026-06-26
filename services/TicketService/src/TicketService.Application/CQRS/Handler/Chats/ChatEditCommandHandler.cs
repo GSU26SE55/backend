@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
@@ -28,6 +29,9 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     private readonly IPiiDetector _piiDetector;
     private readonly ChatOptions _chatOptions;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly IChatCacheService _chatCache;
+    private readonly ILogger<ChatEditCommandHandler> _logger;
 
     public ChatEditCommandHandler(
         ITicketUnitOfWork uow,
@@ -37,7 +41,10 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         IProfanityFilter profanityFilter,
         IPiiDetector piiDetector,
         IOptions<ChatOptions> chatOptions,
-        IIntegrationEventOutboxWriter outboxWriter)
+        IIntegrationEventOutboxWriter outboxWriter,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        IChatCacheService chatCache,
+        ILogger<ChatEditCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -47,6 +54,9 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         _piiDetector = piiDetector;
         _chatOptions = chatOptions.Value;
         _outboxWriter = outboxWriter;
+        _realtimeNotifier = realtimeNotifier;
+        _chatCache = chatCache;
+        _logger = logger;
     }
 
     public async Task<TicketActionResponse> Handle(ChatEditCommand request, CancellationToken ct)
@@ -151,6 +161,31 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             request.EditReason ?? string.Empty), ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        await _chatCache.InvalidateAsync(ticket.Id, ct);
+
+        try
+        {
+            await _realtimeNotifier.NotifyChatEditedAsync(new TicketChatDTO
+            {
+                Id = chat.Id.ToString(),
+                TicketId = chat.TicketId.ToString(),
+                AuthorUserId = chat.AuthorUserId.ToString(),
+                AuthorRole = chat.AuthorRole,
+                AuthorDisplayName = chat.AuthorDisplayName,
+                Body = chat.Body,
+                BodyHtml = chat.BodyHtml,
+                BodyFormat = chat.BodyFormat,
+                IsInternal = chat.IsInternal,
+                EditedAt = chat.EditedAt,
+                EditCount = chat.EditCount,
+                CreatedAt = chat.CreatedAt
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ChatEdit] Failed to broadcast ChatEdited SignalR event for ticket {TicketId}", ticket.Id);
+        }
 
         return new TicketActionResponse
         {

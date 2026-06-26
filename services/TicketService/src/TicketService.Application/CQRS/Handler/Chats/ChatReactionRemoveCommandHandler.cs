@@ -1,5 +1,9 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
@@ -7,6 +11,7 @@ using TicketService.Application.CQRS.Command.ChatReactionRemove;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -14,11 +19,19 @@ public class ChatReactionRemoveCommandHandler : IRequestHandler<ChatReactionRemo
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<ChatReactionRemoveCommandHandler> _logger;
 
-    public ChatReactionRemoveCommandHandler(ITicketUnitOfWork uow, IIntegrationEventOutboxWriter outboxWriter)
+    public ChatReactionRemoveCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        ILogger<ChatReactionRemoveCommandHandler> logger)
     {
         _uow = uow;
         _outboxWriter = outboxWriter;
+        _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
     }
 
     public async Task<ChatReactionActionResponse> Handle(ChatReactionRemoveCommand request, CancellationToken ct)
@@ -68,12 +81,26 @@ public class ChatReactionRemoveCommandHandler : IRequestHandler<ChatReactionRemo
             .Where(r => r.ChatId == request.ChatId && !r.IsDeleted)
             .ToListAsync(ct);
 
+        var aggregate = ChatReactionAggregateHelper.Build(allReactions);
+
+        if (existing != null)
+        {
+            try
+            {
+                await _realtimeNotifier.NotifyReactionChangedAsync(chat.TicketId, chat.Id, chat.IsInternal, aggregate, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ChatReactionRemove] Failed to broadcast ReactionChanged SignalR event for chat {ChatId}", chat.Id);
+            }
+        }
+
         return new ChatReactionActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
             Message = "Xóa reaction thành công.",
-            Data = ChatReactionAggregateHelper.Build(allReactions)
+            Data = aggregate
         };
     }
 

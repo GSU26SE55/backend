@@ -3,6 +3,7 @@ using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.UnitTests.Helpers;
 
@@ -49,6 +50,20 @@ public static class MockChatExtraRepos
         repo.Setup(r => r.GetAllAsync()).Returns(() => seed.AsQueryable().BuildMock());
         repo.Setup(r => r.AddAsync(It.IsAny<TicketChatRead>())).Returns((TicketChatRead r) => { seed.Add(r); return Task.CompletedTask; });
         uow.SetupGet(u => u.TicketChatReads).Returns(repo.Object);
+        return repo;
+    }
+
+    public static Mock<IGenericRepository<ChatTemplate>> SetupChatTemplates(
+        this Mock<ITicketUnitOfWork> uow, List<ChatTemplate>? seed = null)
+    {
+        seed ??= new List<ChatTemplate>();
+        var repo = new Mock<IGenericRepository<ChatTemplate>>();
+        repo.Setup(r => r.GetAllAsync()).Returns(() => seed.AsQueryable().BuildMock());
+        repo.Setup(r => r.GetByIdAsync(It.IsAny<object>())).ReturnsAsync((object id) => seed.FirstOrDefault(x => x.Id == (Guid)id));
+        repo.Setup(r => r.AddAsync(It.IsAny<ChatTemplate>())).Returns((ChatTemplate t) => { seed.Add(t); return Task.CompletedTask; });
+        repo.Setup(r => r.UpdateAsync(It.IsAny<ChatTemplate>())).Callback((ChatTemplate _) => { });
+        repo.Setup(r => r.DeleteAsync(It.IsAny<ChatTemplate>())).Callback((ChatTemplate t) => { t.IsDeleted = true; });
+        uow.SetupGet(u => u.ChatTemplates).Returns(repo.Object);
         return repo;
     }
 }

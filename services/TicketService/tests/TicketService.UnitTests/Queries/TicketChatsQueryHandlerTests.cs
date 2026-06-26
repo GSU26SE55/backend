@@ -1,7 +1,9 @@
+using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -16,6 +18,7 @@ public class TicketChatsQueryHandlerTests
     private readonly Mock<IGenericRepository<TicketParticipant>> _participantsRepo = new();
     private readonly Mock<IGenericRepository<TicketChatMention>> _mentionsRepo = new();
     private readonly Mock<IGenericRepository<TicketChatReaction>> _reactionsRepo = new();
+    private readonly Mock<IChatCacheService> _chatCache = new();
     private readonly TicketChatsQueryHandler _handler;
 
     public TicketChatsQueryHandlerTests()
@@ -27,7 +30,7 @@ public class TicketChatsQueryHandlerTests
         _mockUow.Setup(x => x.TicketChatReactions).Returns(_reactionsRepo.Object);
         _mentionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatMention>(new List<TicketChatMention>()));
         _reactionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatReaction>(new List<TicketChatReaction>()));
-        _handler = new TicketChatsQueryHandler(_mockUow.Object);
+        _handler = new TicketChatsQueryHandler(_mockUow.Object, _chatCache.Object);
     }
 
     private static Ticket MakeTicket(Guid id, Guid customerId) => new()

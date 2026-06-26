@@ -11,6 +11,7 @@ using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatFromTemplate;
 using TicketService.Application.CQRS.Command.ChatMarkAsRead;
 using TicketService.Application.CQRS.Command.ChatOverrideAdd;
 using TicketService.Application.CQRS.Command.ChatOverrideDelete;
@@ -324,8 +325,7 @@ public class TicketChatsController : ControllerBase
     /// - Nếu là Staff/Manager/Admin: Xem được tất cả bình luận bao gồm cả nội bộ.
     /// </remarks>
     /// <param name="ticketId">ID của Ticket.</param>
-    /// <param name="page">Số trang (mặc định 1).</param>
-    /// <param name="pageSize">Kích thước trang (mặc định 10).</param>
+    /// <param name="query">Filter params: page, pageSize, search, authorRole, isInternal, ...</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Lấy danh sách thành công.</response>
     /// <response code="403">Không có quyền truy cập ticket.</response>
@@ -336,22 +336,18 @@ public class TicketChatsController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChats(
         Guid ticketId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
+        [FromQuery] TicketChatsQuery query,
         CancellationToken ct = default)
     {
         var actorId = GetCurrentUserId();
         if (!actorId.HasValue)
             return Unauthorized();
 
-        var result = await _mediator.Send(new TicketChatsQuery
-        {
-            TicketId = ticketId,
-            ActorUserId = actorId.Value,
-            ActorRoles = GetCurrentRoles(),
-            PageNumber = page,
-            PageSize = pageSize
-        }, ct);
+        query.TicketId = ticketId;
+        query.ActorUserId = actorId.Value;
+        query.ActorRoles = GetCurrentRoles();
+
+        var result = await _mediator.Send(query, ct);
 
         // Auto mark-read trang hiện tại (#541) — Command riêng, không ảnh hưởng response của Query.
         var chatIds = result.Data?.Items?
@@ -852,6 +848,71 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ActorUserId = actorId.Value,
             ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Gửi chat từ template — render nội dung template với variables tùy chọn.
+    /// </summary>
+    [HttpPost("from-template/{templateId}")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SendFromTemplate(
+        Guid ticketId,
+        Guid templateId,
+        [FromBody] ChatFromTemplateCommand command,
+        CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.TemplateId = templateId;
+        command.ActorUserId = actorId.Value;
+        command.ActorDisplayName = _currentUser.FullName ?? "Unknown";
+        command.ActorRole = ResolveActorRole(_currentUser.Role);
+        command.ActorRoles = GetCurrentRoles();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Cursor-based pagination cho chat — không có offset, phù hợp load-more infinite scroll.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="cursor">Opaque cursor từ NextCursor của trang trước. Bỏ trống để lấy trang đầu.</param>
+    /// <param name="limit">Số lượng chat mỗi trang (mặc định 20, tối đa 100).</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpGet("cursor")]
+    [ProducesResponseType(typeof(CommonResponse<CursorPaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatsCursor(
+        Guid ticketId,
+        [FromQuery] string? cursor = null,
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new TicketChatsCursorQuery
+        {
+            TicketId = ticketId,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles(),
+            Cursor = cursor,
+            Limit = limit
         }, ct);
 
         return StatusCode(result.StatusCode, result);

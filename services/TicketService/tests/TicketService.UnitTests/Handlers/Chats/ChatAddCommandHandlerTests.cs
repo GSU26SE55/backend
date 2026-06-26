@@ -45,10 +45,12 @@ public class ChatAddCommandHandlerTests
             .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
     }
 
+    private readonly Mock<IChatCacheService> _chatCache = new();
+
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
-            _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object);
+            _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()

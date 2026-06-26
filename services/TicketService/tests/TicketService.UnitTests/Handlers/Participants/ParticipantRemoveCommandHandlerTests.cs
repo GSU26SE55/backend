@@ -3,6 +3,7 @@ using Moq;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.ParticipantRemove;
 using TicketService.Application.CQRS.Handler.Participants;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;
@@ -56,7 +57,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Manager
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -90,7 +91,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Manager
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -118,7 +119,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Admin
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -147,7 +148,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Admin
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -175,7 +176,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Staff
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -199,7 +200,7 @@ public class ParticipantRemoveCommandHandlerTests
             ActorRole = ActorRoleEnum.Manager
         };
 
-        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, _logger.Object);
+        var handler = new ParticipantRemoveCommandHandler(uow.Object, _producer.Object, Mock.Of<ITicketChatRealtimeNotifier>(), _logger.Object);
 
         var result = await handler.Handle(command, CancellationToken.None);
 

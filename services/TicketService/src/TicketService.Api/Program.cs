@@ -40,7 +40,7 @@ builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AutoCloseBackgroundService>();
 builder.Services.AddChatRateLimiting();
 
-builder.Services.AddSignalR(options =>
+var signalRBuilder = builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
@@ -51,6 +51,16 @@ builder.Services.AddSignalR(options =>
     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
+
+// Redis backplane cho SignalR scale-out (multi-instance). Fallback gracefully nếu Redis chưa config.
+var signalRRedisConn = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(signalRRedisConn))
+{
+    signalRBuilder.AddStackExchangeRedis(signalRRedisConn, o =>
+    {
+        o.Configuration.ChannelPrefix = new StackExchange.Redis.RedisChannel("TicketChat", StackExchange.Redis.RedisChannel.PatternMode.Literal);
+    });
+}
 
 builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
 {
