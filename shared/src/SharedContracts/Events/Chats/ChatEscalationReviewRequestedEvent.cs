@@ -9,6 +9,7 @@ namespace SharedContracts.Events.Chats;
 public record ChatEscalationReviewRequestedEvent(
     Guid ChatId,
     Guid TicketId,
+    string TicketCode,
     Guid ManagerUserId,
     string EscalationReason
 ) : IntegrationEvent;

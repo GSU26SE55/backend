@@ -7,10 +7,14 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.ChatAttachKbReference;
 using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
+using TicketService.Application.CQRS.Command.ChatConvertToKbDraft;
 using TicketService.Application.CQRS.Command.ChatDelete;
 using TicketService.Application.CQRS.Command.ChatEdit;
+using TicketService.Application.CQRS.Command.ChatEscalationReviewAck;
+using TicketService.Application.CQRS.Command.ChatExportPdf;
 using TicketService.Application.CQRS.Command.ChatFromTemplate;
 using TicketService.Application.CQRS.Command.ChatMarkAsRead;
 using TicketService.Application.CQRS.Command.ChatOverrideAdd;
@@ -25,11 +29,13 @@ using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
 using TicketService.Application.CQRS.Query.ChatHistory;
+using TicketService.Application.CQRS.Query.ChatKbSuggestions;
 using TicketService.Application.CQRS.Query.ChatReactions;
 using TicketService.Application.CQRS.Query.ChatReaders;
 using TicketService.Application.CQRS.Query.ChatReplies;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.CQRS.Query.TicketUnreadCount;
+using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Enums;
@@ -915,6 +921,118 @@ public class TicketChatsController : ControllerBase
             Limit = limit
         }, ct);
 
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Gắn bài viết KB vào 1 chat — Staff/Manager/Admin. Tham chiếu được lưu kèm ChatId.
+    /// </summary>
+    [HttpPost("{id}/attach-kb")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AttachKbToChat(Guid ticketId, Guid id, [FromBody] ChatAttachKbReferenceCommand command, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.CurrentUserId = actorId.Value;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Chuyển nội dung chat thành KB Draft — Staff/Manager/Admin. Tạo bài viết KB với Status=Draft.
+    /// </summary>
+    [HttpPost("{id}/to-kb-draft")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ConvertChatToKbDraft(Guid ticketId, Guid id, [FromBody] ChatConvertToKbDraftCommand command, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.ChatId = id;
+        command.CurrentUserId = actorId.Value;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Gợi ý KB articles dựa trên nội dung chat (full-text match theo category + keywords).
+    /// </summary>
+    [HttpGet("{id}/kb-suggestions")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(CommonResponse<List<KbArticleSuggestDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatKbSuggestions(
+        Guid ticketId,
+        Guid id,
+        [FromQuery] int topN = 3,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new ChatKbSuggestionsQuery
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            TopN = topN
+        }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Export chat history of a ticket to PDF. Customer view excludes internal chats. #568.</summary>
+    [HttpGet("export-pdf")]
+    [Authorize(Roles = "Manager,Admin,Staff")]
+    public async Task<IActionResult> ExportChatPdf(Guid ticketId, CancellationToken ct)
+    {
+        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        var viewerRole = ResolveActorRole(roleStr);
+
+        Stream pdfStream;
+        try
+        {
+            pdfStream = await _mediator.Send(new ChatExportPdfCommand
+            {
+                TicketId = ticketId,
+                ViewerRole = viewerRole
+            }, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { isSuccess = false, message = ex.Message });
+        }
+
+        return File(pdfStream, "application/pdf", $"ticket-{ticketId}-chats.pdf");
+    }
+
+    /// <summary>Manager ACK escalation review — transitions saga Pending → Reviewed. #566.</summary>
+    [HttpPost("{id}/escalation-review/ack")]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<IActionResult> AckEscalationReview(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized();
+
+        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        var result = await _mediator.Send(new ChatEscalationReviewAckCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            CurrentUserId = userId.Value,
+            CurrentUserRole = ResolveActorRole(roleStr)
+        }, ct);
         return StatusCode(result.StatusCode, result);
     }
 

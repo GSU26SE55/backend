@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedInfrastructure.Persistence.Interceptors;
 using TicketService.Domain.Entities;
 using TicketService.Infrastructure.Sagas;
+using TicketService.Infrastructure.Sagas.ChatEscalationReview;
 
 namespace TicketService.Infrastructure.Persistence;
 
@@ -37,6 +38,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<ChatAiSuggestion> ChatAiSuggestions { get; set; }
     public virtual DbSet<TicketChatTranslation> TicketChatTranslations { get; set; }
     public virtual DbSet<ChatMetricsDaily> ChatMetricsDailies { get; set; }
+    public virtual DbSet<ChatEscalationReviewSagaState> ChatEscalationReviewSagaStates { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -51,6 +53,12 @@ public class TicketDbContext : DbContext
         {
             // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
             modelBuilder.Entity<AlertTicketSagaState>()
+                .Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<ChatEscalationReviewSagaState>()
                 .Property<uint>("xmin")
                 .HasColumnType("xid")
                 .ValueGeneratedOnAddOrUpdate()

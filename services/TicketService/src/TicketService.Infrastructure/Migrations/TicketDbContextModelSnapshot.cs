@@ -1330,6 +1330,12 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_pinned");
 
+                    b.Property<bool>("IsRedacted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_redacted");
+
                     b.Property<Guid?>("LastEditedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("last_edited_by_user_id");
@@ -1350,6 +1356,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid?>("PinnedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("pinned_by_user_id");
+
+                    b.Property<DateTime?>("RedactedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redacted_at");
 
                     b.Property<int>("ReplyCount")
                         .ValueGeneratedOnAdd()
@@ -1693,6 +1703,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ChatId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1741,8 +1755,14 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ChatId", "KbArticleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ticket_kb_references_chat_kb_unique")
+                        .HasFilter("chat_id IS NOT NULL");
+
                     b.HasIndex("TicketId", "KbArticleId", "ReferenceType")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("chat_id IS NULL");
 
                     b.ToTable("ticket_kb_references", (string)null);
                 });
@@ -1982,6 +2002,74 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDatabaseName("ix_alert_ticket_saga_states_ticket_id");
 
                     b.ToTable("alert_ticket_saga_states", (string)null);
+                });
+
+            modelBuilder.Entity("TicketService.Infrastructure.Sagas.ChatEscalationReview.ChatEscalationReviewSagaState", b =>
+                {
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("CurrentState")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("current_state");
+
+                    b.Property<string>("EscalationReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("escalation_reason");
+
+                    b.Property<Guid>("ManagerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manager_user_id");
+
+                    b.Property<Guid?>("PendingTimeoutTokenId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_timeout_token_id");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("TicketCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("ticket_code");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("CorrelationId");
+
+                    b.HasIndex("CurrentState")
+                        .HasDatabaseName("ix_chat_escalation_review_saga_states_current_state");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_chat_escalation_review_saga_states_started_at");
+
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_chat_escalation_review_saga_states_ticket_id");
+
+                    b.ToTable("chat_escalation_review_saga_states", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.ChatAiSuggestion", b =>

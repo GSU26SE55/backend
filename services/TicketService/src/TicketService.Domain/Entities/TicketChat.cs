@@ -25,6 +25,10 @@ public class TicketChat : AuditableEntity
     public Guid? PinnedByUserId { get; set; }
     public string? OriginalLanguage { get; set; }
 
+    // GDPR — #569
+    public bool IsRedacted { get; set; } = false;
+    public DateTime? RedactedAt { get; set; }
+
     public required Ticket Ticket { get; set; }
     public TicketChat? ParentChat { get; set; }
 }

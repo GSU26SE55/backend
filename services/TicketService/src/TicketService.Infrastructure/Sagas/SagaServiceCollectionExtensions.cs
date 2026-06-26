@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
 using TicketService.Infrastructure.Persistence;
+using TicketService.Infrastructure.Sagas.ChatEscalationReview;
 
 namespace TicketService.Infrastructure.Sagas;
 
@@ -69,5 +70,19 @@ public static class SagaServiceCollectionExtensions
 
         // Quartz scheduler endpoint cho persistent timeout (xem #237).
         x.AddPublishMessageScheduler();
+    }
+
+    /// <summary>
+    /// Đăng ký ChatEscalationReview saga (#566). Reuse Quartz scheduler đã có.
+    /// </summary>
+    public static void ConfigureChatEscalationReviewSaga(IBusRegistrationConfigurator x)
+    {
+        x.AddSagaStateMachine<ChatEscalationReviewSagaStateMachine, ChatEscalationReviewSagaState>()
+            .EntityFrameworkRepository(r =>
+            {
+                r.ConcurrencyMode = ConcurrencyMode.Optimistic;
+                r.ExistingDbContext<TicketDbContext>();
+                r.UsePostgres();
+            });
     }
 }

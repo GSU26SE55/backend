@@ -40,10 +40,14 @@ public static class ManageDependencyInjection
         // Sprint 5B #237 — Quartz cluster persistent store (cho Saga timeout).
         services.AddAlertTicketSaga(configuration);
 
-        // Sprint 5B #237/#238 — add Saga + consumers vào MassTransit bus.
+        // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
         services.AddMessageBus(
             configuration,
-            configure: SagaServiceCollectionExtensions.ConfigureAlertTicketSaga,
+            configure: bus =>
+            {
+                SagaServiceCollectionExtensions.ConfigureAlertTicketSaga(bus);
+                SagaServiceCollectionExtensions.ConfigureChatEscalationReviewSaga(bus);
+            },
             typeof(ManageDependencyInjection).Assembly,
             typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
 
@@ -66,6 +70,9 @@ public static class ManageDependencyInjection
         // Read receipt — channel-based bulk writer (#541/#542)
         services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();
         services.AddHostedService<ChatReadReceiptBulkWriter>();
+
+        // #569 — GDPR retention: daily archive chats older than Chat:Retention:ArchiveAfterYears
+        services.AddHostedService<ChatRetentionService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -103,6 +110,12 @@ public static class ManageDependencyInjection
 
         // #547 — Template renderer
         services.AddScoped<ITemplateRenderer, TemplateRendererService>();
+
+        // #564 — KB suggestion service
+        services.AddScoped<IKbSuggestionService, KbSuggestionService>();
+
+        // #568 — PDF exporter
+        services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

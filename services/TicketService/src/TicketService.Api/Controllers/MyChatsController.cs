@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
+using TicketService.Application.CQRS.Command.ChatEraseUserData;
 using TicketService.Application.CQRS.Query.MyChats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -49,6 +50,19 @@ public class MyChatsController : ControllerBase
             PageSize = pageSize
         }, ct);
 
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// GDPR right-to-erasure: redact tất cả tin nhắn chat do user hiện tại viết. #569.
+    /// </summary>
+    [HttpPost("erase-my-data")]
+    public async Task<IActionResult> EraseMyData(CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_currentUser.UserId) || !Guid.TryParse(_currentUser.UserId, out var actorId))
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatEraseUserDataCommand { RequestingUserId = actorId }, ct);
         return StatusCode(result.StatusCode, result);
     }
 }

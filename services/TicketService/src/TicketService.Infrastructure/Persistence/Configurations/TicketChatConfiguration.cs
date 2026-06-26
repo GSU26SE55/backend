@@ -100,6 +100,14 @@ public class TicketChatConfiguration : IEntityTypeConfiguration<TicketChat>
         builder.Property(e => e.DeletedAt)
             .HasColumnName("deleted_at");
 
+        builder.Property(e => e.IsRedacted)
+            .HasColumnName("is_redacted")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(e => e.RedactedAt)
+            .HasColumnName("redacted_at");
+
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.AuthorUserId);
         builder.HasIndex(e => e.ParentChatId)

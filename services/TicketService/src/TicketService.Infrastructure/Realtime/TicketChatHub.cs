@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using SharedInfrastructure.Metrics;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Infrastructure.Realtime;
@@ -81,6 +82,7 @@ public class TicketChatHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
         }
 
+        AppMetrics.SignalRConnectedUsersTotal.WithLabels(ticketId.ToString()).Inc();
         _logger.LogInformation("[TicketChatHub] User {UserId} connected to ticket {TicketId} (ConnId: {ConnId})", actorUserId, ticketId, Context.ConnectionId);
     }
 
@@ -97,6 +99,7 @@ public class TicketChatHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, PublicGroup(ticketId));
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
 
+        AppMetrics.SignalRConnectedUsersTotal.WithLabels(ticketId.ToString()).Dec();
         _logger.LogInformation("[TicketChatHub] User {UserId} disconnected from ticket {TicketId} (ConnId: {ConnId})", GetCurrentUserId(), ticketId, Context.ConnectionId);
     }
 

@@ -94,7 +94,7 @@ public class ChatEventsSerializationTests
     public void ChatEscalationReviewRequestedEvent_RoundTrips()
     {
         var evt = new ChatEscalationReviewRequestedEvent(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Mention Manager on P1 ticket");
+            Guid.NewGuid(), Guid.NewGuid(), "TK-001", Guid.NewGuid(), "Mention Manager on P1 ticket");
 
         var result = JsonSerializer.Deserialize<ChatEscalationReviewRequestedEvent>(JsonSerializer.Serialize(evt));
 

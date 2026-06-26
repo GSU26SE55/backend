@@ -115,4 +115,44 @@ public static class AppMetrics
         "auth_refresh_token_total",
         "Total refresh token rotation outcomes.",
         new CounterConfiguration { LabelNames = new[] { "result" } });
+
+    // ===== Chat Hub Metrics (#572) =====
+
+    /// <summary>Total chat events (add/edit/delete/react/pin) per ticket. Labels: ticket_id, event_type.</summary>
+    public static readonly Counter ChatEventsTotal = Prometheus.Metrics.CreateCounter(
+        "chat_events_total",
+        "Total chat events processed.",
+        new CounterConfiguration { LabelNames = new[] { "ticket_id", "event_type" } });
+
+    /// <summary>Total @mention events by role. Labels: role (Staff/Manager/Admin/Customer).</summary>
+    public static readonly Counter ChatMentionCountTotal = Prometheus.Metrics.CreateCounter(
+        "chat_mention_count_total",
+        "Total mention events.",
+        new CounterConfiguration { LabelNames = new[] { "role" } });
+
+    /// <summary>Total reaction add/remove events by emoji. Labels: reaction_type.</summary>
+    public static readonly Counter ChatReactionCountTotal = Prometheus.Metrics.CreateCounter(
+        "chat_reaction_count_total",
+        "Total reaction events.",
+        new CounterConfiguration { LabelNames = new[] { "reaction_type" } });
+
+    /// <summary>Current connected SignalR users per ticket. Labels: ticket_id.</summary>
+    public static readonly Gauge SignalRConnectedUsersTotal = Prometheus.Metrics.CreateGauge(
+        "signalr_connected_users_total",
+        "Current connected SignalR users per ticket.",
+        new GaugeConfiguration { LabelNames = new[] { "ticket_id" } });
+
+    /// <summary>Pending outbox messages for chat events.</summary>
+    public static readonly Gauge ChatOutboxPendingTotal = Prometheus.Metrics.CreateGauge(
+        "chat_outbox_pending_total",
+        "Current count of chat-related outbox messages pending publish.");
+
+    /// <summary>Latency histogram for AI KB suggestion calls.</summary>
+    public static readonly Histogram ChatAiSuggestLatencySeconds = Prometheus.Metrics.CreateHistogram(
+        "chat_ai_suggest_latency_seconds",
+        "Latency for AI/KB suggestion endpoint calls.",
+        new HistogramConfiguration
+        {
+            Buckets = new double[] { 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0 }
+        });
 }

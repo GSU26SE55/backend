@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatAdd;
@@ -251,6 +252,26 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 displayName ?? string.Empty,
                 request.UserId,
                 true), ct);
+        }
+
+        // #572 — Metrics
+        AppMetrics.ChatEventsTotal.WithLabels(ticket.Id.ToString(), "add").Inc();
+        foreach (var m in createdMentions)
+            AppMetrics.ChatMentionCountTotal.WithLabels(m.MentionedUserRole.ToString()).Inc();
+
+        // #566 — Trigger escalation saga nếu Manager được mention trên ticket P1 Critical
+        if (ticket.Priority == TicketPriorityEnum.P1Critical && createdMentions.Count > 0)
+        {
+            var managerMention = createdMentions.FirstOrDefault(m => m.MentionedUserRole == ActorRoleEnum.Manager);
+            if (managerMention != null)
+            {
+                await _outboxWriter.WriteAsync(new ChatEscalationReviewRequestedEvent(
+                    chat.Id,
+                    ticket.Id,
+                    ticket.Code,
+                    managerMention.MentionedUserId,
+                    $"Manager được mention trên ticket P1 Critical #{ticket.Code}."), ct);
+            }
         }
 
         await _activityLogger.LogAsync(
