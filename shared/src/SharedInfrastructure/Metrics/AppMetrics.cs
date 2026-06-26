@@ -115,4 +115,29 @@ public static class AppMetrics
         "auth_refresh_token_total",
         "Total refresh token rotation outcomes.",
         new CounterConfiguration { LabelNames = new[] { "result" } });
+
+    // ============== Sprint audit #AUDIT-44: Hybrid Audit pipeline metrics ==============
+
+    /// <summary>Tổng audit event đã ingest vào audit_aggregate (label service/action/severity).</summary>
+    public static readonly Counter AuditEventsTotal = Prometheus.Metrics.CreateCounter(
+        "audit_events_total",
+        "Total audit events ingested into audit_aggregate read-store.",
+        new CounterConfiguration { LabelNames = new[] { "service", "action", "severity" } });
+
+    /// <summary>Lag (giây) từ lúc action xảy ra (occurred_at) đến lúc aggregator consume. SLO p99 &lt; 10s.</summary>
+    public static readonly Histogram AuditConsumerLagSeconds = Prometheus.Metrics.CreateHistogram(
+        "audit_consumer_lag_seconds",
+        "Lag from action occurred_at to aggregator ingest (seconds).",
+        new HistogramConfiguration { Buckets = Histogram.ExponentialBuckets(0.1, 2, 12) });
+
+    /// <summary>Số entry audit_outbox đang Pending mỗi service (relay set mỗi tick). Alert nếu &gt; 1000.</summary>
+    public static readonly Gauge AuditOutboxPending = Prometheus.Metrics.CreateGauge(
+        "audit_outbox_pending_total",
+        "Current count of pending audit_outbox entries per service.",
+        new GaugeConfiguration { LabelNames = new[] { "service" } });
+
+    /// <summary>Số message trong audit DLQ (aggregator.audit.events.dlq). Alert nếu &gt; 100.</summary>
+    public static readonly Gauge AuditDlqSize = Prometheus.Metrics.CreateGauge(
+        "audit_dlq_size_total",
+        "Current size of the audit dead-letter queue.");
 }

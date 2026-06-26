@@ -49,7 +49,7 @@ public class CommentAddCommandHandlerTests
             }
         };
 
-        var handler = new CommentAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object);
+        var handler = new CommentAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _loggerMock.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

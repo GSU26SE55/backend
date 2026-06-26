@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Enums;
@@ -19,17 +20,20 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketResolveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResolveCommand request, CancellationToken ct)
@@ -82,6 +86,10 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
         await _producer.PublishAsync(new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.ResolutionAdded, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 

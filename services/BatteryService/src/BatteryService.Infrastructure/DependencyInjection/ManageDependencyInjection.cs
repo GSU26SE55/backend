@@ -86,6 +86,7 @@ public static class ManageDependencyInjection
         services.AddHostedService<ThresholdCheckBackgroundService>();
         services.AddHostedService<AlertEscalationBackgroundService>();
         services.AddHostedService<AlertAutoResolveBackgroundService>();
+        services.AddHostedService<BatteryService.Infrastructure.BackgroundJobs.BatteryAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-21
         services.AddHostedService<OutboxRelayBackgroundService>();
 
         // Sprint 7 B4 (§31.7) — recompute cascade risk mỗi 5 phút.

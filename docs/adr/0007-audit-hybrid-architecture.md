@@ -1,8 +1,16 @@
 # ADR 0007: Hybrid Audit Architecture toàn hệ thống
 
-**Status:** Accepted (Sprint audit Phase 0 — 2026-06-19).
+**Status:** Accepted (Sprint audit Phase 0 — 2026-06-19). **Amended 2026-06-24** (xem Update log dưới).
 **Tham chiếu:** `issue-authservice.md` Phụ lục A (§A.1..A.12) + Phụ lục B (§B.0..B.19). Sprint audit `#AUDIT-01..45` (GitHub `#447..#491`).
 **Author:** Thắng (`@Alexdev257`) — sole BE developer Sprint audit.
+
+> **📌 Update log 2026-06-24 (owner Thắng `@Alexdev257`) — 6 quyết định gỡ block, đồng bộ với `overall.md` §17 Decision Log + `issue-authservice.md` A.9 D11–D16:**
+> - **D11 Geo IP** = MaxMind GeoLite2 free *(ADR đã chọn sẵn — confirm)*.
+> - **D12 OutboxRelay** = **Redis leader election** (thay `replicas: 1` ban đầu trong R-35).
+> - **D13 SecurityOfficer** = **GỘP vào `Admin`** (KHÔNG tạo role mới cho capstone) — đã cập nhật §Access control + GDPR + diagram + schema comment.
+> - **D14 AlertAuditLog** = **host trong BatteryService** (route `batteryCluster`), không tách Alert service riêng.
+> - **D15 Retention** = source 1 năm / aggregate 6 tháng / Critical+Security vĩnh viễn *(ADR đã ghi — confirm)*.
+> - **D16 Owner** = Thắng; gate "ổn định ≥ 2 tuần" waived (sole-dev, hard-blocker code đã merge).
 
 ---
 
@@ -75,14 +83,14 @@ Triển khai **Hybrid Audit Architecture** — **decentralized write** (mỗi se
                   │           ▲              │
                   │  ┌────────┴───────────┐  │
                   │  │ Search / Stats /   │  │   ← Admin Web UI (Phase 6)
-                  │  │ Correlation API    │  │     SecurityOfficer access
+                  │  │ Correlation API    │  │     Admin access (D13)
                   │  └────────────────────┘  │
                   └──────────────────────────┘
 ```
 
 ### 4 nguyên tắc cốt lõi
 
-1. **Source of truth = mỗi service local table.** Aggregator chỉ là **materialized view** (read-store), KHÔNG phải nguồn duy nhất. Nếu aggregator hỏng/mất data → replay từ source (`POST /api/audit/replay`).
+1. **Source of truth = mỗi service local table.** Aggregator chỉ là **materialized view** (read-store), KHÔNG phải nguồn duy nhất. Nếu aggregator hỏng/mất data → replay từ source (`POST /api/admin/audit/replay`).
 2. **Write = atomic per service.** Handler insert vào `auth_audit_logs` + `audit_outbox` **CÙNG transaction** với business write. Relay background service publish event **SAU commit** (đảm bảo no orphan event).
 3. **Read = centralized, partitioned.** `audit_aggregate` partitioned by month qua `pg_partman` (auto-create 3 tháng trước). Retention: drop partition cũ hơn 6 tháng EXCEPT `severity ∈ {Critical, Security}` (vĩnh viễn).
 4. **Idempotency = `event_id` Guid v7.** Consumer `INSERT ON CONFLICT (event_id) DO NOTHING` → duplicate event (RabbitMQ at-least-once) chỉ 1 row insert.
@@ -136,7 +144,7 @@ Mỗi service quyết định **có expose local audit endpoint** hay KHÔNG, d�
 | **BatteryService** | ✅ build mới (`#AUDIT-23`) | `/api/admin/battery/audit-logs` | Filter `batteryId` + `assignmentId` + threshold change |
 | **TicketService** | ✅ build mới (`#AUDIT-28`) | `/api/admin/ticket/audit-logs` | Filter `ticketId` + SLA breach history + state transition |
 | **FileStorageService** | ✅ build mới (`#AUDIT-30`) | `/api/admin/files/audit-logs` | GDPR file access investigation, filter `fileId`/`bucketName` |
-| **AlertService** | ✅ build mới (`#AUDIT-32`) | `/api/admin/alerts/audit-logs` | Acknowledge/suppress history, filter `alertId` |
+| **AlertService** → host trong **BatteryService** (D14) | ✅ build mới (`#AUDIT-32`, route `batteryCluster`) | `/api/admin/alerts/audit-logs` | Acknowledge/suppress history, filter `alertId`. Chốt 2026-06-24: KHÔNG tách Alert service riêng cho capstone |
 | EmailService | ❌ qua Aggregator | — | Volume thấp, generic filter đủ |
 | NotificationService | ❌ qua Aggregator | — | Volume thấp |
 | SmsService | ❌ qua Aggregator | — | Volume thấp |
@@ -164,7 +172,7 @@ target_display    VARCHAR(255)                   -- Email hoặc display name (P
 
 -- Actor
 actor_account_id  UUID                           -- Null nếu anonymous (login fail) hoặc system action
-actor_role        VARCHAR(50)                    -- "Admin", "Manager", "Staff", "Customer", "SecurityOfficer", "System"
+actor_role        VARCHAR(50)                    -- "Admin", "Manager", "Staff", "Customer", "System" (role "SecurityOfficer" defer — gộp Admin, D13)
 actor_display     VARCHAR(255)                   -- Email hoặc display name
 actor_ip          VARCHAR(45)                    -- IPv4/IPv6, normalized
 actor_user_agent  VARCHAR(512)
@@ -263,7 +271,7 @@ Step 5 — Set NOT NULL constraint + unique index event_id (sau backfill 100%)
 
 | Field | Stored where | Redaction policy |
 |---|---|---|
-| Email | source + aggregate | Plain text (cần cho search); GDPR redact `email='[REDACTED]'` qua `POST /api/audit/redact` (SecurityOfficer only) |
+| Email | source + aggregate | Plain text (cần cho search); GDPR redact `email='[REDACTED]'` qua `POST /api/admin/audit/redact` (Admin only — D13) |
 | Phone | source + aggregate | Plain text; GDPR redactable |
 | Full name | source + aggregate | Plain text; GDPR redactable |
 | IP address | source + aggregate | Plain text (Critical for forensic); GDPR redactable |
@@ -273,7 +281,7 @@ Step 5 — Set NOT NULL constraint + unique index event_id (sau backfill 100%)
 
 ### 3. GDPR right-to-be-forgotten
 
-- Endpoint `POST /api/audit/redact?accountId={id}` — chỉ SecurityOfficer role.
+- Endpoint `POST /api/admin/audit/redact?accountId={id}` — chỉ `Admin` role (role `SecurityOfficer` gộp Admin — D13, 2026-06-24).
 - Action: UPDATE `audit_aggregate` SET `target_display='[REDACTED]'`, `actor_display='[REDACTED]'`, `actor_ip='[REDACTED]'` WHERE involves `accountId`.
 - **KHÔNG xóa row** — giữ `event_id` + `action_code` + `timestamp` cho audit trail.
 - Source tables **KHÔNG redact** — giữ raw cho legal hold (yêu cầu của regulator).
@@ -281,13 +289,14 @@ Step 5 — Set NOT NULL constraint + unique index event_id (sau backfill 100%)
 
 ### 4. Access control
 
-- **SecurityOfficer** (role mới, seed qua `#AUDIT-18` migration) — full access aggregator API (`audit.read`, `audit.export`, `audit.replay`, `audit.redact`).
-- **Admin** — chỉ `audit.read` + `audit.export` (KHÔNG redact, KHÔNG replay).
-- Rate limit: Admin 100 req/min, SecurityOfficer 200 req/min.
+> **📌 UPDATE 2026-06-24 (D13):** KHÔNG tạo role `SecurityOfficer` cho capstone scope — **gộp toàn bộ quyền vào `Admin`**. Bản gốc dưới đây giữ làm thiết kế production (separation-of-duties); nếu lên production thì tách `SecurityOfficer` ra + di chuyển `audit.replay`/`audit.redact` sang.
+
+- **Admin** (capstone) — full access aggregator API: `audit.read`, `audit.export`, `audit.replay`, `audit.redact`. Rate limit 200 req/min.
+- ~~**SecurityOfficer** (role mới, seed qua `#AUDIT-18` migration) — full access; Admin chỉ read+export~~ → **DEFER cho production (D13)**.
 
 ### 5. Idempotency-Key chống replay attack
 
-- `POST /api/audit/replay?service=&from=&to=` (admin tool replay khi aggregator hỏng) — yêu cầu `Idempotency-Key` header để chống double-replay.
+- `POST /api/admin/audit/replay?service=&from=&to=` (admin tool replay khi aggregator hỏng) — yêu cầu `Idempotency-Key` header để chống double-replay.
 
 ---
 
@@ -297,8 +306,8 @@ Step 5 — Set NOT NULL constraint + unique index event_id (sau backfill 100%)
 |---|---|
 | Outbox lag p99 (write → published) | < 5s |
 | Consumer lag p99 (published → aggregate inserted) | < 10s |
-| `GET /api/audit/search` p95 với 1M row | < 200ms |
-| `GET /api/audit/correlation/{id}` p95 | < 100ms |
+| `GET /api/admin/audit/search` p95 với 1M row | < 200ms |
+| `GET /api/admin/audit/correlation/{id}` p95 | < 100ms |
 | Sustained throughput | 1000 event/sec sustained 5 phút, no DLQ entry (`#AUDIT-43` perf test) |
 
 ---
@@ -314,7 +323,7 @@ Step 5 — Set NOT NULL constraint + unique index event_id (sau backfill 100%)
 | R-32 Causation chain break | Low × Med | E2E test `#AUDIT-27` verify chain anomaly → ticket |
 | R-33 Schema event versioning | Med × Med | `AuditCreatedEventV1` (versioned record), backward-compat khi V2 |
 | R-34 GeoIP rate limit | Low × Low | MaxMind GeoLite2 free offline DB → no API limit |
-| R-35 Multi-instance OutboxRelay duplicate | Med × High | Single-instance enforce qua k8s `replicas: 1` (chốt ADR này) |
+| R-35 Multi-instance OutboxRelay duplicate | Med × High | **Redis leader election** (`IDistributedCache` lease key `audit_outbox_leader`, renew 30s, non-leader skip) — chốt 2026-06-24 (D12, §B.10 option 1), thay cho `replicas: 1` ban đầu; idempotent consumer là last-line defense |
 
 ---
 

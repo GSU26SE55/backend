@@ -33,6 +33,7 @@ public class SmsDbContext : DbContext
     public virtual DbSet<SmsGatewayDevice> SmsGatewayDevices => Set<SmsGatewayDevice>();
     public virtual DbSet<SmsAuditLog> SmsAuditLogs => Set<SmsAuditLog>();
     public virtual DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public virtual DbSet<SmsAuditOutbox> SmsAuditOutboxes => Set<SmsAuditOutbox>(); // Sprint audit #AUDIT-35
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

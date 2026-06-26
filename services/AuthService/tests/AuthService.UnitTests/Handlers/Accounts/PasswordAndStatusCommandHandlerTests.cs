@@ -114,7 +114,7 @@ public class DeleteAccountCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
 
@@ -129,7 +129,7 @@ public class DeleteAccountCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeleteAccountCommand { Id = Guid.NewGuid() }, CancellationToken.None);
 

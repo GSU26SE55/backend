@@ -18,6 +18,8 @@ public class UnitOfWork : ITicketUnitOfWork
     }
 
     public IGenericRepository<Ticket> Tickets => new GenericRepository<Ticket>(_context);
+    public IGenericRepository<TicketAuditLog> TicketAuditLogs => new GenericRepository<TicketAuditLog>(_context);       // #AUDIT-24
+    public IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes => new GenericRepository<TicketAuditOutbox>(_context); // #AUDIT-25
     public IGenericRepository<TicketActivity> TicketActivities => new GenericRepository<TicketActivity>(_context);
     public IGenericRepository<TicketComment> TicketComments => new GenericRepository<TicketComment>(_context);
     public IGenericRepository<TicketAttachment> TicketAttachments => new GenericRepository<TicketAttachment>(_context);

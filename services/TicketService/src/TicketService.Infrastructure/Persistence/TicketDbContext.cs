@@ -23,6 +23,8 @@ public class TicketDbContext : DbContext
     public virtual DbSet<SlaPauseEvent> SlaPauseEvents { get; set; }
     public virtual DbSet<MaintenanceLog> MaintenanceLogs { get; set; }
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
+    public virtual DbSet<TicketAuditLog> TicketAuditLogs { get; set; }       // Sprint audit #AUDIT-24
+    public virtual DbSet<TicketAuditOutbox> TicketAuditOutboxes { get; set; } // Sprint audit #AUDIT-25
     public virtual DbSet<CustomerAccount> CustomerAccounts { get; set; }
     public virtual DbSet<StaffAccount> StaffAccounts { get; set; }
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }

@@ -38,7 +38,7 @@ public class TicketCreateCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(customerSeed: customers);
 
-        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object);
+        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

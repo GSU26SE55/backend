@@ -56,6 +56,13 @@
     <Project Path="services\TicketService\tests\TicketService.IntergrationTests\TicketService.IntergrationTests.csproj" Type="Classic C#" />
     <Project Path="services\TicketService\tests\TicketService.UnitTests\TicketService.UnitTests.csproj" Type="Classic C#" />
   </Folder>
+  <Folder Name="/Services/AuditAggregatorService/">
+    <Project Path="services/AuditAggregatorService/src/AuditAggregatorService.Api/AuditAggregatorService.Api.csproj" />
+    <Project Path="services/AuditAggregatorService/src/AuditAggregatorService.Application/AuditAggregatorService.Application.csproj" />
+    <Project Path="services/AuditAggregatorService/src/AuditAggregatorService.Domain/AuditAggregatorService.Domain.csproj" />
+    <Project Path="services/AuditAggregatorService/src/AuditAggregatorService.Infrastructure/AuditAggregatorService.Infrastructure.csproj" />
+    <Project Path="services/AuditAggregatorService/tests/AuditAggregatorService.IntegrationTests/AuditAggregatorService.IntegrationTests.csproj" />
+  </Folder>
   <Folder Name="/Shared/">
     <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />
     <Project Path="shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />

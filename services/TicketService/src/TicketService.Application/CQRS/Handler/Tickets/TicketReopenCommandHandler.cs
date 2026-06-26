@@ -18,17 +18,20 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketReopenCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketReopenCommand request, CancellationToken ct)
@@ -84,6 +87,10 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
                 await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
             }
         }
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.ReopenedByAdmin, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 

@@ -67,6 +67,7 @@ public static class ManageDependencyInjection
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
         services.AddHostedService<SlaGaugeBackgroundService>();
+        services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
     }
 
     private static void AddHelpers(this IServiceCollection services)

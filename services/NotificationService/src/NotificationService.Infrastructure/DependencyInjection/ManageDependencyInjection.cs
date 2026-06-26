@@ -30,6 +30,8 @@ public static class ManageDependencyInjection
         services.AddScoped<NotificationDataSeeder>();
         services.AddNotificationChannels();
 
+        services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
+
         return services;
     }
 

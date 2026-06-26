@@ -3,7 +3,10 @@ using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
+using AuthService.Domain.Enums;
 using MediatR;
+using SharedContracts.Audit;
+using SharedContracts.Events.Audit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using SharedInfrastructure.Middleware;
@@ -55,6 +58,12 @@ public class AuditTrailNotificationHandler : INotificationHandler<AuditTrailNoti
             if (notification.Metadata != null && notification.Metadata.Count > 0)
                 metadataJson = JsonSerializer.Serialize(notification.Metadata);
 
+            // #AUDIT-09 — chuẩn hóa 14 cột Hybrid Audit.
+            var (actionCode, category, severity) = AuditActionClassifier.Classify(notification.Action, notification.IsSuccess);
+            var eventId = AuditEventId.New();    // #AUDIT-04 — helper tập trung (net8 v4 → swap UUIDv7 khi lên .NET 9).
+            var now = DateTime.UtcNow;
+            Guid.TryParse(correlationId, out var correlationGuid);
+
             var entry = new AuditLog
             {
                 Id = Guid.NewGuid(),
@@ -68,10 +77,55 @@ public class AuditTrailNotificationHandler : INotificationHandler<AuditTrailNoti
                 IpAddress = ip,
                 UserAgent = Truncate(userAgent, MaxUserAgentLength),
                 DeviceId = deviceId,
-                CorrelationId = correlationId
+                CorrelationId = correlationId,
+                // 14 cột chuẩn:
+                EventId = eventId,
+                ServiceName = "AuthService",
+                ActionCode = actionCode,
+                ActionCategory = category,
+                Severity = severity,
+                TargetType = TargetTypes.Account,
+                TargetId = notification.TargetAccountId,
+                TargetDisplay = Truncate(notification.TargetEmail, 255),
+                ErrorCode = notification.IsSuccess ? null : actionCode,
+                OccurredAt = now,
+                RecordedAt = now,
             };
 
             await _unitOfWork.AuditLogs.AddAsync(entry);
+
+            // #AUDIT-09 — ghi audit_outbox CÙNG transaction (command handler SaveChanges atomic) → relay publish (#AUDIT-08).
+            var integrationEvent = new AuditCreatedEventV1(
+                EventId: eventId,
+                ServiceName: "AuthService",
+                ActionCode: actionCode,
+                ActionCategory: category,
+                Severity: severity,
+                TargetType: TargetTypes.Account,
+                TargetId: notification.TargetAccountId,
+                TargetDisplay: Truncate(notification.TargetEmail, 255),
+                ActorAccountId: actor,
+                ActorRole: null,
+                ActorDisplay: null,
+                ActorIp: ip,
+                ActorUserAgent: Truncate(userAgent, MaxUserAgentLength),
+                IsSuccess: notification.IsSuccess,
+                ErrorCode: notification.IsSuccess ? null : actionCode,
+                Reason: Truncate(notification.Reason, MaxReasonLength),
+                MetadataJson: metadataJson,
+                CorrelationId: correlationGuid == Guid.Empty ? null : correlationGuid,
+                CausationId: null,
+                OccurredAt: now,
+                RecordedAt: now);
+
+            await _unitOfWork.AuditOutboxes.AddAsync(new AuditOutbox
+            {
+                Id = Guid.NewGuid(),
+                EventId = eventId,
+                EventType = nameof(AuditCreatedEventV1),
+                Payload = JsonSerializer.Serialize(integrationEvent),
+                Status = AuditOutboxStatusEnum.Pending,
+            });
         }
         catch (Exception ex)
         {

@@ -36,6 +36,7 @@ public static class ManageDependencyInjection
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
         services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
         services.AddHostedService<OutboxRelayBackgroundService>();
+        services.AddHostedService<AuditOutboxRelayBackgroundService>();   // Sprint audit #AUDIT-08
 
         // #AUTH-31: dọn PendingEmail "treo" 24h sau khi OTP expire.
         services.AddHostedService<PendingEmailCleanupBackgroundService>();

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -29,19 +30,22 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
     private readonly IMessageProducerService _messageProducer;
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<ChangeEmailCommandHandler> _logger;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
     public ChangeEmailCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
         IMessageProducerService messageProducer,
         IConnectionMultiplexer redis,
-        ILogger<ChangeEmailCommandHandler> logger)
+        ILogger<ChangeEmailCommandHandler> logger,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _messageProducer = messageProducer;
         _redis = redis;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(ChangeEmailCommand request, CancellationToken cancellationToken)
@@ -93,6 +97,10 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
 
         // Outbox: publish TRƯỚC SaveChanges để event atomic với Account update.
         await _messageProducer.PublishAsync(new SendEmailChangeOtpEvent(newEmail, otp), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.EmailChangeRequested, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

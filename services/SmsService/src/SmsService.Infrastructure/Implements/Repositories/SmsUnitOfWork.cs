@@ -21,6 +21,7 @@ public class SmsUnitOfWork : ISmsUnitOfWork
     }
 
     public IGenericRepository<SmsMessage> SmsMessages => new GenericRepository<SmsMessage>(_context);
+    public IGenericRepository<SmsAuditOutbox> SmsAuditOutboxes => new GenericRepository<SmsAuditOutbox>(_context); // #AUDIT-35
     public IGenericRepository<SmsGatewayDevice> SmsGatewayDevices => new GenericRepository<SmsGatewayDevice>(_context);
     public IGenericRepository<SmsAuditLog> SmsAuditLogs => new GenericRepository<SmsAuditLog>(_context);
     public IGenericRepository<OutboxMessage> OutboxMessages => new GenericRepository<OutboxMessage>(_context);

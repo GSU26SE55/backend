@@ -1,6 +1,8 @@
 using AuthService.Application.CQRS.Command.Role;
 using AuthService.Application.DTOs.Response.Role;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -10,10 +12,12 @@ namespace AuthService.Application.CQRS.Handler.Role;
 public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public UpdateRoleCommandHandler(IAuthUnitOfWork unitOfWork)
+    public UpdateRoleCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<RoleActionResponse> Handle(UpdateRoleCommand request, CancellationToken cancellationToken)
@@ -62,6 +66,12 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
         role.Description = request.Description?.Trim();
 
         _unitOfWork.Roles.UpdateAsync(role);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.RoleUpdated, null, true,
+            Metadata: new Dictionary<string, object?> { ["roleId"] = role.Id, ["roleName"] = role.Name }), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new RoleActionResponse

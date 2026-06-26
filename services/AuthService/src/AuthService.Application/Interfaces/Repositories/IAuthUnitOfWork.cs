@@ -9,6 +9,7 @@ public interface IAuthUnitOfWork : IUnitOfWork
     IGenericRepository<RefreshToken> RefreshTokens { get; }
     IGenericRepository<Role> Roles { get; }
     IGenericRepository<AuditLog> AuditLogs { get; }
+    IGenericRepository<AuditOutbox> AuditOutboxes { get; }   // Sprint audit #AUDIT-07
     IGenericRepository<LoginAttempt> LoginAttempts { get; }
     IGenericRepository<Permission> Permissions { get; }
     IGenericRepository<RolePermission> RolePermissions { get; }

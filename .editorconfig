@@ -94,3 +94,9 @@ dotnet_diagnostic.CA2200.severity = error
 # Lý do: ASP.NET Controller convention KHÔNG bắt buộc suffix "Async" cho action method
 # (Microsoft sample, eShopOnContainers, etc đều bỏ suffix). Bật rule này gây 80+ noise.
 dotnet_diagnostic.VSTHRD200.severity = none
+
+# #AUDIT-04 — Banned-API analyzer (BannedApiAnalyzers RS0030) cho audit correctness.
+# Ban DateTime.Now / System.Random (event_id) / Console.WriteLine — rule data: eng/audit/BannedSymbols.txt.
+# Severity = warning (rollout dần). Chỉ active khi build -p:EnableAuditBannedApis=true (CI stage ci-rules).
+# Escalate lên error ở CI sau khi code sạch warning.
+dotnet_diagnostic.RS0030.severity = warning

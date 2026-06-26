@@ -19,17 +19,20 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketStartCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketStartCommand request, CancellationToken ct)
@@ -85,6 +88,11 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
 
         // Outbox: Status Changed
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Assigned, TicketStatusEnum.InProgress), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.StateTransitioned, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["to"] = "InProgress" }), ct);
 
         await _uow.SaveChangesAsync(ct);
 

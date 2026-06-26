@@ -2727,3 +2727,68 @@ Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` 
 | GET | `/api/reports/ambient-trend` | Báo cáo xu hướng môi trường theo site (Sprint 7) | Admin/Manager/Staff/Customer |
 
 > **Reports (Sprint 7):** mọi endpoint `/api/reports/*` hỗ trợ `?format=csv\|xlsx` để export file; không có `format` → JSON.
+
+---
+
+## Nhóm — Audit Logs nội bộ (Option C — Sprint audit)
+
+> Endpoint **dự phòng (fallback resilience)**: query trực tiếp bảng nguồn `battery_audit_logs` ngay tại BatteryService, dùng được kể cả khi `AuditAggregatorService` (read-store hợp nhất) gặp sự cố. Enum `Severity`/`ActionCategory` dùng chung — xem [docs/api-audit.md](api-audit.md#enums--tập-giá-trị-cố-định).
+>
+> **Auth chung:** chỉ role `Admin` (`401` thiếu token / `403` sai role).
+
+### `DTO BatteryAuditLogDto` (dùng cho cả 2 endpoint dưới)
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID bản ghi audit |
+| `eventId` | `string` | Không | Idempotency key của audit event |
+| `actionCode` | `string` | Không | Mã hành động (xem bảng action bên dưới) |
+| `actionCategory` | `string` | Không | Category (vd `DataModification`, `Configuration`) |
+| `severity` | `string` | Không | Mức độ (`Info`/`Warning`/`Critical`/`Security`) |
+| `targetId` | `string?` | Null nếu không gắn đối tượng | ID đối tượng (pin/cảnh báo) bị tác động |
+| `targetDisplay` | `string?` | Null / `[REDACTED]` sau GDPR | Tên hiển thị đối tượng |
+| `actorAccountId` | `string?` | Null nếu hệ thống | Account thực hiện |
+| `isSuccess` | `bool` | Không | Thành công/thất bại |
+| `reason` | `string?` | Null nếu không có | Lý do/ghi chú |
+| `occurredAt` | `DateTime` | Không | Thời điểm xảy ra (UTC) |
+
+### `GET /api/admin/battery/audit-logs`
+
+**Mục đích:** Tra cứu audit log thao tác trên PIN (battery), có phân trang + lọc.
+
+**Tác dụng:** Điều tra forensic IoT (ai tạo/sửa/xoá/gán pin, đổi ngưỡng, đổi trạng thái, hiệu chỉnh sensor), dùng khi Aggregator tạm ngừng.
+
+**Auth:** Admin.
+
+**Query params (đều optional):**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `action` | `string?` | Không | Mã action (vd `BatteryCreated`). Bỏ trống = tất cả |
+| `batteryId` | `string?` (UUID) | Không | Lọc theo pin cụ thể (target) |
+| `from` | `DateTime?` | Không | Mốc đầu (UTC) |
+| `to` | `DateTime?` | Không | Mốc cuối (UTC) |
+| `pageNumber` | `int` | Không (mặc định 1) | Số trang |
+| `pageSize` | `int` | Không (mặc định 50, trần 100) | Số item/trang |
+
+**Action codes (battery):** `BatteryCreated` · `BatteryUpdated` · `BatteryDeleted` · `AssignedToCustomer` · `UnassignedFromCustomer` · `ThresholdConfigChanged` · `SensorReadingEdited` · `StatusChanged` · `MaintenanceLogged` · `CalibrationApplied`
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<BatteryAuditLogDto>>` (mới nhất trước).
+
+**Lỗi:** `401` / `403`.
+
+### `GET /api/admin/alerts/audit-logs`
+
+**Mục đích:** Tra cứu audit log thao tác trên CẢNH BÁO (alert). Alert audit host trong BatteryService (quyết định D14, route qua `batteryCluster`).
+
+**Tác dụng:** Lịch sử xử lý cảnh báo (ai ack/suppress/đổi rule/override severity/resolve), truy trách nhiệm.
+
+**Auth:** Admin.
+
+**Query params:** giống endpoint trên nhưng thay `batteryId` bằng `alertId` (`string?` UUID — lọc theo cảnh báo cụ thể).
+
+**Action codes (alert):** `AlertAcknowledged` · `AlertSuppressed` · `AlertRuleChanged` · `AlertSeverityOverridden` · `AlertManuallyResolved`
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<BatteryAuditLogDto>>` (lọc `actionCode` bắt đầu bằng `Alert`).
+
+**Lỗi:** `401` / `403`.

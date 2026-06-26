@@ -9,10 +9,12 @@ namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
 public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAssetCommand, CommonResponse<object>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly MediatR.IPublisher _publisher;   // Sprint audit #AUDIT-22
 
-    public DeleteBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork)
+    public DeleteBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, MediatR.IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<object>> Handle(DeleteBatteryAssetCommand request, CancellationToken cancellationToken)
@@ -25,6 +27,12 @@ public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAss
             return NotFound();
 
         _unitOfWork.BatteryAssets.DeleteAsync(entity);
+
+        // #AUDIT-22
+        await _publisher.Publish(BatteryService.Application.CQRS.Notification.Audit.BatteryAuditTrailNotification.For(
+            BatteryService.Domain.Enums.BatteryAuditActionEnum.BatteryDeleted, entity.Id,
+            targetDisplay: entity.SerialNumber), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<object>
