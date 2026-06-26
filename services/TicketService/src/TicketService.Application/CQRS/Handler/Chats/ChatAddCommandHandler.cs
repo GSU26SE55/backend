@@ -38,6 +38,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IGroupMentionResolverService _groupMentionResolver;
     private readonly IChatCacheService _chatCache;
+    private readonly ISlaService _slaService;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -52,7 +53,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         ILogger<ChatAddCommandHandler> logger,
         IIntegrationEventOutboxWriter outboxWriter,
         IGroupMentionResolverService groupMentionResolver,
-        IChatCacheService chatCache)
+        IChatCacheService chatCache,
+        ISlaService slaService)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -67,6 +69,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _outboxWriter = outboxWriter;
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
+        _slaService = slaService;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
@@ -278,6 +281,17 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             chat.AttachmentFileIds,
             ticket.CustomerId,
             ticket.AssignedStaffId), ct);
+
+        if (request.RequestCustomerInfo &&
+            request.UserRole is ActorRoleEnum.Staff or ActorRoleEnum.Manager or ActorRoleEnum.Admin)
+        {
+            await _slaService.PauseForCustomerInfoAsync(ticket.Id, chat.Id, request.UserId, ct);
+        }
+
+        if (request.UserRole == ActorRoleEnum.Customer)
+        {
+            await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, ct);
+        }
 
         await _uow.SaveChangesAsync(ct);
 

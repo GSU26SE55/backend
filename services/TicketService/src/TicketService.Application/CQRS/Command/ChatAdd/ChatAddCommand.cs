@@ -30,6 +30,7 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
 
     public required string Body { get; set; }
     public bool IsInternal { get; set; }
+    public bool RequestCustomerInfo { get; set; }
     public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
     public List<ChatAttachmentInput>? Attachments { get; set; }
     public List<ChatMentionInput>? Mentions { get; set; }

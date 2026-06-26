@@ -46,11 +46,13 @@ public class ChatAddCommandHandlerTests
     }
 
     private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ISlaService> _slaService = new();
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
-            _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object);
+            _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
+            _slaService.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -778,5 +780,66 @@ public class ChatAddCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(e => e.Field == "GroupMentions[0].GroupIdentifier");
+    }
+
+    // ─── SLA integration tests (#563) ────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_StaffWithRequestCustomerInfo_PausesSla()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket });
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff",
+            Body = "Cần thêm thông tin từ khách hàng",
+            RequestCustomerInfo = true,
+            UserPermissions = PublicCreatePermission
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _slaService.Verify(s => s.PauseForCustomerInfoAsync(
+            ticketId, It.IsAny<Guid>(), userId, It.IsAny<CancellationToken>()), Times.Once);
+        _slaService.Verify(s => s.ResumeOnCustomerReplyAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_CustomerReply_ResumesSla()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket });
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Customer,
+            UserDisplayName = "Customer",
+            Body = "Đây là thông tin bạn cần",
+            UserPermissions = PublicCreatePermission
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _slaService.Verify(s => s.ResumeOnCustomerReplyAsync(
+            ticketId, userId, It.IsAny<CancellationToken>()), Times.Once);
+        _slaService.Verify(s => s.PauseForCustomerInfoAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
