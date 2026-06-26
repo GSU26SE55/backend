@@ -34,6 +34,10 @@ public class ChatAddCommandHandlerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<IGroupMentionResolverService> _groupMentionResolver = new();
 
+    private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ISlaService> _slaService = new();
+    private readonly Mock<IChatTextAiClient> _aiClient = new();
+
     public ChatAddCommandHandlerTests()
     {
         _spamDetector.Setup(x => x.IsSpamAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -43,16 +47,15 @@ public class ChatAddCommandHandlerTests
         _groupMentionResolver
             .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
+        _aiClient.Setup(x => x.DetectLanguageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("vi");
     }
-
-    private readonly Mock<IChatCacheService> _chatCache = new();
-    private readonly Mock<ISlaService> _slaService = new();
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object);
+            _slaService.Object, _aiClient.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()

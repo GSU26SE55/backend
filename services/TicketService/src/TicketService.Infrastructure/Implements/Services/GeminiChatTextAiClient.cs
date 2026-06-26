@@ -67,6 +67,58 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         return ExtractText(json).Trim();
     }
 
+    public async Task<string> TranslateAsync(string text, string targetLanguage, CancellationToken ct = default)
+    {
+        var apiKey = _opts.Ai.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Gemini API key is not configured.");
+
+        var prompt = BuildTranslatePrompt(text, targetLanguage);
+        var url = $"{_opts.Ai.SuggestModelEndpoint}?key={apiKey}";
+
+        var requestBody = new
+        {
+            contents = new[] { new { parts = new[] { new { text = prompt } } } }
+        };
+
+        using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return ExtractText(json).Trim();
+    }
+
+    public async Task<string> DetectLanguageAsync(string text, CancellationToken ct = default)
+    {
+        var apiKey = _opts.Ai.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Gemini API key is not configured.");
+
+        var prompt = BuildDetectLanguagePrompt(text);
+        var url = $"{_opts.Ai.SuggestModelEndpoint}?key={apiKey}";
+
+        var requestBody = new
+        {
+            contents = new[] { new { parts = new[] { new { text = prompt } } } }
+        };
+
+        using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var rawText = ExtractText(json).Trim();
+
+        try
+        {
+            using var langJson = JsonDocument.Parse(rawText);
+            return langJson.RootElement.GetProperty("lang").GetString() ?? "en";
+        }
+        catch
+        {
+            return "en";
+        }
+    }
+
     private static string ExtractText(JsonElement json)
         => json
             .GetProperty("candidates")[0]
@@ -96,5 +148,22 @@ public class GeminiChatTextAiClient : IChatTextAiClient
             Chỉ trả về danh sách bullet, không thêm tiêu đề hay giải thích.
 
             {{context}}
+            """;
+
+    private static string BuildTranslatePrompt(string text, string targetLanguage)
+        => $$"""
+            Dịch đoạn văn bản dưới đây sang ngôn ngữ có mã ISO 639-1 là "{{targetLanguage}}".
+            Chỉ trả về bản dịch, không thêm giải thích, ghi chú, hay tiêu đề.
+
+            {{text}}
+            """;
+
+    private static string BuildDetectLanguagePrompt(string text)
+        => $$"""
+            Xác định ngôn ngữ của đoạn văn bản dưới đây và trả về mã ISO 639-1 (ví dụ: "vi", "en", "fr", "ja").
+            Trả về JSON theo định dạng chính xác: {"lang": "<code>"}
+            Chỉ trả về JSON, không thêm bất kỳ văn bản nào khác.
+
+            {{text}}
             """;
 }

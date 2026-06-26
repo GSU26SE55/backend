@@ -40,6 +40,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IGroupMentionResolverService _groupMentionResolver;
     private readonly IChatCacheService _chatCache;
     private readonly ISlaService _slaService;
+    private readonly IChatTextAiClient _aiClient;
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -55,7 +56,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IIntegrationEventOutboxWriter outboxWriter,
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
-        ISlaService slaService)
+        ISlaService slaService,
+        IChatTextAiClient aiClient)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -71,6 +73,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
         _slaService = slaService;
+        _aiClient = aiClient;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
@@ -312,6 +315,16 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         if (request.UserRole == ActorRoleEnum.Customer)
         {
             await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, ct);
+        }
+
+        // Best-effort language detection — không block nếu AI lỗi
+        try
+        {
+            chat.OriginalLanguage = await _aiClient.DetectLanguageAsync(chat.Body, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ChatAdd] Language detection failed for chat {ChatId} — OriginalLanguage will be null", chat.Id);
         }
 
         await _uow.SaveChangesAsync(ct);

@@ -13,4 +13,16 @@ public interface IChatTextAiClient
     /// Throw exception nếu AI service không phản hồi.
     /// </summary>
     Task<string> SummarizeAsync(string chatContext, int linesCount, CancellationToken ct = default);
+
+    /// <summary>
+    /// Dịch <paramref name="text"/> sang <paramref name="targetLanguage"/> (ISO 639-1, ví dụ "en", "vi").
+    /// Trả về bản dịch. Throw exception nếu AI service không phản hồi.
+    /// </summary>
+    Task<string> TranslateAsync(string text, string targetLanguage, CancellationToken ct = default);
+
+    /// <summary>
+    /// Detect ngôn ngữ của <paramref name="text"/> và trả về ISO 639-1 code (ví dụ "vi", "en").
+    /// Throw exception nếu AI service không phản hồi.
+    /// </summary>
+    Task<string> DetectLanguageAsync(string text, CancellationToken ct = default);
 }

@@ -28,6 +28,7 @@ using TicketService.Application.CQRS.Command.ChatRestore;
 using TicketService.Application.CQRS.Command.ChatSentimentCheck;
 using TicketService.Application.CQRS.Command.ChatSuggest;
 using TicketService.Application.CQRS.Command.ChatSummarize;
+using TicketService.Application.CQRS.Command.ChatTranslate;
 using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentDownload;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
@@ -1122,6 +1123,33 @@ public class TicketChatsController : ControllerBase
         {
             TicketId = ticketId,
             CurrentUserId = actorId.Value
+        }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Dịch nội dung chat sang ngôn ngữ target (#562). Cache 2 lớp: Redis (30 ngày) → DB → Gemini AI.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="id">ID của Chat cần dịch.</param>
+    /// <param name="to">Mã ngôn ngữ đích theo ISO 639-1 (ví dụ: "en", "vi", "fr").</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpPost("{id}/translate")]
+    [ProducesResponseType(typeof(ChatTranslateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TranslateChat(Guid ticketId, Guid id, [FromQuery] string? to, CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            CurrentUserId = actorId.Value,
+            TargetLanguage = to ?? string.Empty
         }, ct);
         return StatusCode(result.StatusCode, result);
     }
