@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;
+using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 
 namespace NotificationService.UnitTests.Helpers;
@@ -15,8 +16,10 @@ namespace NotificationService.UnitTests.Helpers;
 ///
 /// GH-604: đăng ký thêm mock <see cref="IRecipientResolver"/>. Mặc định resolve về 1 recipient
 /// (<see cref="DefaultRecipient"/>) cho mọi role; truyền <paramref name="recipients"/> = danh sách rỗng
-/// để test nhánh "không có recipient → skip". Consumer không dùng resolver (recipient trực tiếp)
-/// vẫn chạy bình thường vì registration thừa là vô hại.
+/// để test nhánh "không có recipient → skip".
+///
+/// <see cref="ICacheService"/> mặc định: <c>GetAsync</c> trả <c>null</c> (message chưa thấy → cho qua).
+/// Truyền <paramref name="cache"/> để test nhánh debounce (duplicate message → skip).
 /// </summary>
 public static class ConsumerTestHarness
 {
@@ -24,7 +27,8 @@ public static class ConsumerTestHarness
     public static readonly Guid DefaultRecipient = Guid.Parse("aaaaaaaa-1111-2222-3333-444444444444");
 
     public static async Task<(ITestHarness harness, List<Notification> written, Mock<INotificationUnitOfWork> uow)> StartAsync<TConsumer>(
-        IReadOnlyList<Guid>? recipients = null)
+        IReadOnlyList<Guid>? recipients = null,
+        ICacheService? cache = null)
         where TConsumer : class, IConsumer
     {
         var written = new List<Notification>();
@@ -47,11 +51,35 @@ public static class ConsumerTestHarness
             .AddMassTransitTestHarness(x => x.AddConsumer<TConsumer>())
             .AddSingleton(uow.Object)
             .AddSingleton(resolver.Object)
+            .AddSingleton(cache ?? ProceedCache())
             .AddLogging()
             .BuildServiceProvider(true);
 
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
         return (harness, written, uow);
+    }
+
+    /// <summary>
+    /// Cache mock mặc định: <c>GetAsync</c> trả <c>null</c> → message chưa thấy → debounce cho qua.
+    /// </summary>
+    public static ICacheService ProceedCache()
+    {
+        var c = new Mock<ICacheService>();
+        c.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        return c.Object;
+    }
+
+    /// <summary>
+    /// Cache mock debounce: <c>GetAsync</c> trả giá trị có sẵn → message đã xử lý → consumer skip.
+    /// Dùng để test nhánh duplicate message (MassTransit retry scenario).
+    /// </summary>
+    public static ICacheService AlreadySeenCache()
+    {
+        var c = new Mock<ICacheService>();
+        c.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("1");
+        return c.Object;
     }
 }

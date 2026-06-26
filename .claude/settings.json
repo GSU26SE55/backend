@@ -1,6 +1,4 @@
 {
-  "enabledMcpjsonServers": ["context7"],
-
   "permissions": {
     "allow": [
       "WebSearch",
@@ -28,12 +26,15 @@
       "Bash(ruff:*)",
       "Bash(uvicorn:*)",
       "Bash(pytest:*)",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "PowerShell(dotnet build \"d:\\\\FPT\\\\SEM9\\\\GSU25SE55\\\\backend\\\\services\\\\BatteryService\\\\src\\\\BatteryService.Infrastructure\\\\BatteryService.Infrastructure.csproj\" --no-restore -v q 2>&1)",
+      "PowerShell(dotnet build \"d:\\\\FPT\\\\SEM9\\\\GSU25SE55\\\\backend\\\\services\\\\TicketService\\\\src\\\\TicketService.Infrastructure\\\\TicketService.Infrastructure.csproj\" --no-restore -v q 2>&1)"
     ]
   },
-
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
   "hooks": {
-
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -64,7 +65,6 @@
         ]
       }
     ],
-
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -132,7 +132,6 @@
         ]
       }
     ],
-
     "SessionStart": [
       {
         "matcher": "*",
@@ -145,7 +144,6 @@
         ]
       }
     ],
-
     "Stop": [
       {
         "matcher": "*",
@@ -158,6 +156,5 @@
         ]
       }
     ]
-
   }
 }

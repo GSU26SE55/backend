@@ -5,6 +5,7 @@ using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.Consumers;
 
@@ -18,20 +19,30 @@ public class TicketEscalatedConsumer : IConsumer<TicketEscalatedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly IRecipientResolver _recipientResolver;
+    private readonly ICacheService _cache;
     private readonly ILogger<TicketEscalatedConsumer> _logger;
 
     public TicketEscalatedConsumer(
         INotificationUnitOfWork unitOfWork,
         IRecipientResolver recipientResolver,
+        ICacheService cache,
         ILogger<TicketEscalatedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _recipientResolver = recipientResolver;
+        _cache = cache;
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<TicketEscalatedEvent> context)
     {
+        var messageId = context.MessageId ?? Guid.Empty;
+        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        {
+            _logger.LogInformation("Debounce: skip duplicate TicketEscalated message={MessageId}", messageId);
+            return;
+        }
+
         var evt = context.Message;
 
         var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");

@@ -1,8 +1,10 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.Consumers;
 
@@ -13,11 +15,28 @@ namespace NotificationService.Application.Consumers;
 public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
+    private readonly ICacheService _cache;
+    private readonly ILogger<AccountActivatedConsumer> _logger;
 
-    public AccountActivatedConsumer(INotificationUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+    public AccountActivatedConsumer(
+        INotificationUnitOfWork unitOfWork,
+        ICacheService cache,
+        ILogger<AccountActivatedConsumer> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _cache = cache;
+        _logger = logger;
+    }
 
     public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
     {
+        var messageId = context.MessageId ?? Guid.Empty;
+        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        {
+            _logger.LogInformation("Debounce: skip duplicate AccountActivated message={MessageId}", messageId);
+            return;
+        }
+
         var evt = context.Message;
 
         var recipientIds = new[] { evt.AccountId };

@@ -62,8 +62,10 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
                     .Distinct()
                     .CountAsync(cancellationToken);
 
-            if (siblingAnomalies >= 1) score += 0.2m;
-            if (siblingAnomalies >= 3) score += 0.2m;  // cumulative
+            if (siblingAnomalies >= 1)
+                score += 0.2m;
+            if (siblingAnomalies >= 3)
+                score += 0.2m;  // cumulative
         }
 
         // Rule 3: Thermal runaway — overheat Critical Open lây lan nhiệt.
@@ -74,7 +76,8 @@ public class CascadeRiskCalculator : ICascadeRiskCalculator
                 && a.Severity == AlertSeverityEnum.Critical
                 && a.Status == AlertStatusEnum.Open)
             .AnyAsync(cancellationToken);
-        if (hasThermalRunaway) score += 0.3m;
+        if (hasThermalRunaway)
+            score += 0.3m;
 
         return Math.Min(1.0m, score);  // clamp
     }

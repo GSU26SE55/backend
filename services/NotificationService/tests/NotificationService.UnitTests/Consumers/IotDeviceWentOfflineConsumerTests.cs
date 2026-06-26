@@ -8,7 +8,9 @@ using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
+using NotificationService.UnitTests.Helpers;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.UnitTests.Consumers;
 
@@ -18,7 +20,7 @@ namespace NotificationService.UnitTests.Consumers;
 /// </summary>
 public class IotDeviceWentOfflineConsumerTests
 {
-    private static async Task<ITestHarness> StartHarness(IMediator mediator, IReadOnlyList<Guid>? recipients = null)
+    private static async Task<ITestHarness> StartHarness(IMediator mediator, IReadOnlyList<Guid>? recipients = null, ICacheService? cache = null)
     {
         var resolver = new Mock<IRecipientResolver>();
         resolver.Setup(x => x.GetActiveByRoleAsync(It.IsAny<CancellationToken>(), It.IsAny<string[]>()))
@@ -28,6 +30,7 @@ public class IotDeviceWentOfflineConsumerTests
             .AddMassTransitTestHarness(x => x.AddConsumer<IotDeviceWentOfflineConsumer>())
             .AddSingleton(mediator)
             .AddSingleton(resolver.Object)
+            .AddSingleton(cache ?? ConsumerTestHarness.ProceedCache())
             .AddSingleton(NullLogger<IotDeviceWentOfflineConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();

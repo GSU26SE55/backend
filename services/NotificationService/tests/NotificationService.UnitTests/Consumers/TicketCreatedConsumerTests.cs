@@ -3,6 +3,7 @@ using NotificationService.Application.Consumers;
 using NotificationService.Domain.Enums;
 using NotificationService.UnitTests.Helpers;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.UnitTests.Consumers;
 
@@ -48,6 +49,50 @@ public class TicketCreatedConsumerTests
 
         written.Should().BeEmpty();
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task TicketCreated_DuplicateMessage_MassTransitRetry_ShouldSkip()
+    {
+        // Simulate MassTransit retry: cache đã có key cho MessageId → consumer bỏ qua, không ghi DB.
+        var (harness, written, uow) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>(
+            cache: ConsumerTestHarness.AlreadySeenCache());
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-003");
+
+        await harness.Bus.Publish(evt);
+        (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
+
+        written.Should().BeEmpty();
+        uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task TicketCreated_FirstMessage_ShouldSetDebounceKey_30Min()
+    {
+        var cache = new Mock<ICacheService>();
+        cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>(
+            cache: cache.Object);
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-004");
+
+        await harness.Bus.Publish(evt);
+        (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
+
+        // Notification ghi ra bình thường
+        written.Should().HaveCount(2);
+
+        // SetAsync phải được gọi với window 30 phút (MessageWindow)
+        cache.Verify(x => x.SetAsync(
+            It.Is<string>(k => k.StartsWith("notif_msg:")),
+            It.IsAny<string>(),
+            It.Is<TimeSpan?>(t => t == TimeSpan.FromMinutes(30)),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         await harness.Stop();
     }

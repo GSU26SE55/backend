@@ -6,6 +6,7 @@ using NotificationService.Application.CQRS.Command.Notification;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.Consumers;
 
@@ -18,20 +19,30 @@ public class IotDeviceWentOfflineConsumer : IConsumer<IotDeviceWentOfflineEvent>
 {
     private readonly IMediator _mediator;
     private readonly IRecipientResolver _recipientResolver;
+    private readonly ICacheService _cache;
     private readonly ILogger<IotDeviceWentOfflineConsumer> _logger;
 
     public IotDeviceWentOfflineConsumer(
         IMediator mediator,
         IRecipientResolver recipientResolver,
+        ICacheService cache,
         ILogger<IotDeviceWentOfflineConsumer> logger)
     {
         _mediator = mediator;
         _recipientResolver = recipientResolver;
+        _cache = cache;
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<IotDeviceWentOfflineEvent> context)
     {
+        var messageId = context.MessageId ?? Guid.Empty;
+        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        {
+            _logger.LogInformation("Debounce: skip duplicate IotDeviceWentOffline message={MessageId}", messageId);
+            return;
+        }
+
         var evt = context.Message;
 
         var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");

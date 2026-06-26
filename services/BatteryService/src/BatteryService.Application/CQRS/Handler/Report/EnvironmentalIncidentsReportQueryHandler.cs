@@ -17,10 +17,14 @@ public class EnvironmentalIncidentsReportQueryHandler
         EnvironmentalIncidentsReportQuery request, CancellationToken ct)
     {
         var q = _uow.EnvironmentalIncidents.GetAllAsync().AsNoTracking().Where(i => !i.IsDeleted);
-        if (request.From.HasValue) q = q.Where(i => i.DetectedAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(i => i.DetectedAt <= request.To.Value);
-        if (request.SiteId.HasValue) q = q.Where(i => i.SiteId == request.SiteId.Value);
-        if (request.Type.HasValue) q = q.Where(i => (int)i.IncidentType == request.Type.Value);
+        if (request.From.HasValue)
+            q = q.Where(i => i.DetectedAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(i => i.DetectedAt <= request.To.Value);
+        if (request.SiteId.HasValue)
+            q = q.Where(i => i.SiteId == request.SiteId.Value);
+        if (request.Type.HasValue)
+            q = q.Where(i => (int)i.IncidentType == request.Type.Value);
 
         var incidents = await q
             .Select(i => new
