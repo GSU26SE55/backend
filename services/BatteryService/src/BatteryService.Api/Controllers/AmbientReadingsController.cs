@@ -1,7 +1,9 @@
+using BatteryService.Api.Authentication;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Query.Ambient;
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -56,7 +58,11 @@ public class AmbientReadingsController : ControllerBase
     [HttpPost("readings/batch")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [Authorize(AuthenticationSchemes = "ApiKey", Policy = "EnvironmentalIngest")]
+    // Trước: [Authorize(..., Policy = "EnvironmentalIngest")] — named policy KHÔNG được đăng ký
+    // ở đâu → ASP.NET ném InvalidOperationException "policy not found" → 500. Đổi sang đúng
+    // pattern attribute như SensorReadings/IotDevices (scope check qua IotApiKeyScopeRequirement).
+    [Authorize(AuthenticationSchemes = ApiKeyAuthenticationHandler.SchemeName)]
+    [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.EnvironmentalIngest)]
     public async Task<IActionResult> BatchIngest([FromBody] BatchIngestAmbientReadingsCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);
