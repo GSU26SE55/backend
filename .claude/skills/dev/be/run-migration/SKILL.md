@@ -7,7 +7,7 @@ allowed-tools: Bash, Read
 
 # Run EF Core Migration `$ARGUMENTS`
 
-Usage: `/run-migration ServiceName MigrationName`
+Usage: `/run-migration ServiceName MigrationName`  
 Example: `/run-migration BatteryService AddBattery`
 
 ## Generate Migration

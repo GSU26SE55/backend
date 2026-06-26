@@ -48,7 +48,7 @@ public class EnvironmentalIncidentHandlersTests
         var (uow, incRepo, aleRepo) = BuildUow(new List<IncidentEntity>());
         var outbox = new Mock<IIntegrationEventOutboxWriter>();
 
-        var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object);
+        var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var result = await handler.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = Guid.NewGuid(),
@@ -88,7 +88,7 @@ public class EnvironmentalIncidentHandlersTests
         var (uow, incRepo, aleRepo) = BuildUow(new List<IncidentEntity> { existing });
         var outbox = new Mock<IIntegrationEventOutboxWriter>();
 
-        var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object);
+        var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var result = await handler.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = siteId,

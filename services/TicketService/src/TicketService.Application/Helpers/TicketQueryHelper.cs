@@ -5,7 +5,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.Helpers;
 
-internal static class TicketQueryHelper
+public static class TicketQueryHelper
 {
     internal static TicketDTO MapToTicketDTO(Ticket t) => new()
     {
@@ -52,7 +52,7 @@ internal static class TicketQueryHelper
         };
     }
 
-    internal static bool CanAccessTicket(
+    public static bool CanAccessTicket(
         Guid customerId,
         Guid? assignedStaffId,
         Guid? actorUserId,
@@ -67,7 +67,7 @@ internal static class TicketQueryHelper
         return HasRole(actorRoles, "Staff") && assignedStaffId == actorUserId.Value;
     }
 
-    internal static bool CanViewInternalComments(IReadOnlyCollection<string> actorRoles)
+    public static bool CanViewInternalComments(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
 
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)

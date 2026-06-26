@@ -7,7 +7,7 @@ allowed-tools: Write, Read, Edit
 
 # Scaffold Integration Event `$ARGUMENTS`
 
-Usage: `/scaffold-integration-event EventName`
+Usage: `/scaffold-integration-event EventName`  
 Example: `/scaffold-integration-event BatteryAnomalyDetectedEvent`
 
 ## File: `shared/SharedContracts/EventModels/{EventName}.cs`

@@ -22,19 +22,22 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
     private readonly IActivityLogger _activityLogger;
     private readonly ISlaService _slaService;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketResumeCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         ISlaService slaService,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _slaService = slaService;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResumeCommand request, CancellationToken ct)
@@ -72,6 +75,10 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
         // Outbox: Status Changed & Ticket Resumed
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), ct);
         await _producer.PublishAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.SlaResumed, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 

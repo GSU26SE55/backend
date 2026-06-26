@@ -120,7 +120,7 @@ public class AuthDataSeederTests : IDisposable
         // Cả TECHNICIAN cũ và STAFF mới cùng tồn tại → TECHNICIAN bị soft-delete + Deprecated.
         var techId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
-        _ctx.Roles.AddRange(
+        await _ctx.Roles.AddRangeAsync(
             new Role
             {
                 Id = techId,

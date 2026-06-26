@@ -23,6 +23,9 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<DeviceToken> DeviceTokens { get; set; }
     public virtual DbSet<NotificationPreference> NotificationPreferences { get; set; }
     public virtual DbSet<NotificationTemplate> NotificationTemplates { get; set; }
+    public virtual DbSet<AccountReadModel> AccountReadModels { get; set; }
+    public virtual DbSet<NotificationAuditLog> NotificationAuditLogs { get; set; }       // Sprint audit #AUDIT-34
+    public virtual DbSet<NotificationAuditOutbox> NotificationAuditOutboxes { get; set; } // Sprint audit #AUDIT-34
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

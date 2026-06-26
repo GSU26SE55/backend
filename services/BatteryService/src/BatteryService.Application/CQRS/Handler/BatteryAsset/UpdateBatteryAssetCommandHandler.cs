@@ -12,10 +12,12 @@ namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
 public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAssetCommand, CommonResponse<BatteryAssetDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly MediatR.IPublisher _publisher;   // Sprint audit #AUDIT-22
 
-    public UpdateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork)
+    public UpdateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, MediatR.IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<BatteryAssetDto>> Handle(UpdateBatteryAssetCommand request, CancellationToken cancellationToken)
@@ -110,6 +112,12 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
         entity.Notes = request.Notes?.Trim();
 
         _unitOfWork.BatteryAssets.UpdateAsync(entity);
+
+        // #AUDIT-22
+        await _publisher.Publish(BatteryService.Application.CQRS.Notification.Audit.BatteryAuditTrailNotification.For(
+            BatteryService.Domain.Enums.BatteryAuditActionEnum.BatteryUpdated, entity.Id,
+            targetDisplay: entity.SerialNumber), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<BatteryAssetDto>

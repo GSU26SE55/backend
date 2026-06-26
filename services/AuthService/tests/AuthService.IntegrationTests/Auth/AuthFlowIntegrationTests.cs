@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
+using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,49 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         var evt = (SendOtpRegisterEvent)_factory.Producer.Published[0];
         evt.ToEmail.Should().Be("alice@example.com");
         evt.Otp.Should().Be(acc.OtpCode);
+    }
+
+    /// <summary>
+    /// Regression cho lỗi 500 register: AuthDataSeeder seed Customer role bằng Guid.NewGuid()
+    /// (không còn GUID cố định 4444). Test này thay role Customer bằng 1 GUID NGẪU NHIÊN ≠ 4444 —
+    /// tái hiện đúng môi trường thật. Handler PHẢI resolve role theo NormalizedName="CUSTOMER",
+    /// không hardcode 4444; nếu hardcode sẽ FK violation → 500.
+    /// </summary>
+    [Fact]
+    public async Task Register_WhenCustomerRoleHasNonLegacyGuid_Succeeds_AndAssignsResolvedRole()
+    {
+        var randomCustomerRoleId = Guid.NewGuid();
+        using (var db = _factory.CreateDbContext())
+        {
+            // Hard-delete (raw SQL bỏ qua soft-delete interceptor — unique index normalized_name
+            // KHÔNG filter is_deleted nên soft-delete vẫn giữ tên). Accounts đã trống sau reset → không vướng FK.
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM roles");
+            db.Roles.Add(new Role
+            {
+                Id = randomCustomerRoleId,
+                Name = "Customer",
+                NormalizedName = "CUSTOMER",
+                Status = RoleStatusEnum.Active,
+                IsSystemRole = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await _client.PostAsJsonAsync("/api/auth/register", new
+        {
+            Email = "randomrole@example.com",
+            Password = "Strong1Pass!",
+            FullName = "Random Role"
+        });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var verifyDb = _factory.CreateDbContext();
+        var acc = await verifyDb.Users.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.Email == "randomrole@example.com");
+        acc.Should().NotBeNull();
+        // Bằng chứng resolve theo NAME: RoleId = GUID ngẫu nhiên vừa seed, KHÔNG phải 4444 hardcode.
+        acc!.RoleId.Should().Be(randomCustomerRoleId);
     }
 
     [Fact]

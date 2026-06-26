@@ -4,8 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.Persistence;
@@ -89,7 +89,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             await db.Entry(timer).ReloadAsync();
             var updatedTimer = await db.SlaTimers.FindAsync(timer.Id);
             updatedTimer!.WarningSentAt.Should().NotBeNull();
-            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaWarningIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()), Times.Once);
 
             // 4. Advance time past breach (another 1h)
             _timeProvider.Advance(TimeSpan.FromHours(1));
@@ -101,7 +101,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             updatedTimer!.Status.Should().Be(SlaTimerStatusEnum.Breached);
 
             // Verify Breached Event Published
-            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaBreachedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }

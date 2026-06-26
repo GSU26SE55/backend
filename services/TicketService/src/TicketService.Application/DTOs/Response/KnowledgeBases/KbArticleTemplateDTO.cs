@@ -1,8 +1,10 @@
+using TicketService.Domain.Enums;
+
 namespace TicketService.Application.DTOs.Response.KnowledgeBases;
 
 public class KbArticleTemplateDTO
 {
-    public int Category { get; set; }
+    public TicketCategoryEnum Category { get; set; }
     public string Symptoms { get; set; } = string.Empty;
     public string DiagnosisSteps { get; set; } = string.Empty;
     public string SolutionSteps { get; set; } = string.Empty;

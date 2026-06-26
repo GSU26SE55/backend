@@ -1,7 +1,9 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -14,11 +16,13 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public UpdateAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
+    public UpdateAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(UpdateAccountCommand request, CancellationToken cancellationToken)
@@ -77,6 +81,10 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
             account.FullName,
             account.PhoneNumber,
             account.AvatarUrl), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountUpdated, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

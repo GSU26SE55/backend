@@ -19,8 +19,11 @@ public class UnitOfWork : INotificationUnitOfWork
 
     public IGenericRepository<Notification> Notifications => new GenericRepository<Notification>(_context);
     public IGenericRepository<DeviceToken> DeviceTokens => new GenericRepository<DeviceToken>(_context);
+    public IGenericRepository<NotificationAuditLog> NotificationAuditLogs => new GenericRepository<NotificationAuditLog>(_context);       // #AUDIT-34
+    public IGenericRepository<NotificationAuditOutbox> NotificationAuditOutboxes => new GenericRepository<NotificationAuditOutbox>(_context); // #AUDIT-34
     public IGenericRepository<NotificationPreference> NotificationPreferences => new GenericRepository<NotificationPreference>(_context);
     public IGenericRepository<NotificationTemplate> NotificationTemplates => new GenericRepository<NotificationTemplate>(_context);
+    public IGenericRepository<AccountReadModel> Accounts => new GenericRepository<AccountReadModel>(_context);
 
     public async Task BeginTransactionAsync()
     {

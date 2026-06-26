@@ -30,7 +30,7 @@ public class KnowledgeBaseController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Các tham số lọc:
-    /// - <c>Category</c>: Lọc theo danh mục bài viết.
+    /// - <c>Category</c>: Lọc theo danh mục bài viết (Charging, Overheat, NoPower, Performance, Other, Repair).
     /// - <c>Status</c>: Lọc theo trạng thái (Draft, PendingReview, Published, Archived).
     /// - <c>Tag</c>: Lọc theo thẻ.
     /// - <c>Q</c>: Từ khóa tìm kiếm trong tiêu đề và nội dung triệu chứng.
@@ -101,6 +101,24 @@ public class KnowledgeBaseController : ControllerBase
     {
         var command = new MarkHelpfulCommand { ArticleId = id };
         var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy thống kê số lần bài viết được sử dụng làm tài liệu tham khảo trong các Ticket.
+    /// </summary>
+    /// <param name="id">ID của bài viết Knowledge Base.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Thống kê thành công.</response>
+    /// <response code="404">Không tìm thấy bài viết.</response>
+    [HttpGet("{id:guid}/usage-stats")]
+    [Authorize(Roles = "Manager,Admin")]
+    [ProducesResponseType(typeof(CommonResponse<KbUsageStatsDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUsageStats(Guid id, CancellationToken ct)
+    {
+        var query = new GetKbUsageStatsQuery { KbArticleId = id };
+        var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
 }

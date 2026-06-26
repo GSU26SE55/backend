@@ -45,7 +45,7 @@ public class TicketReopenCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -95,7 +95,7 @@ public class TicketReopenCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -141,7 +141,7 @@ public class TicketReopenCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

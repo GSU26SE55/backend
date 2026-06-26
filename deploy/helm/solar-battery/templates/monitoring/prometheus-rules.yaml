@@ -247,4 +247,57 @@ spec:
       labels: { severity: warning }
       annotations:
         summary: "Postgres connections > 80% of limit"
+
+  # ---- Sprint 7 #118 — Environmental incident monitoring ----
+  # Metrics: environmental_incident_detected_total{type,severity},
+  #          environmental_incident_detection_latency_seconds_bucket.
+  - name: environmental-monitoring
+    interval: 30s
+    rules:
+    - alert: EnvironmentalIncidentCriticalDetected
+      expr: increase(environmental_incident_detected_total{severity="Critical"}[5m]) > 0
+      for: 0m
+      labels: { severity: critical }
+      annotations:
+        summary: "Critical environmental incident detected ({{`{{ $labels.type }}`}})"
+        description: "{{`{{ $value }}`}} Critical incident (type={{`{{ $labels.type }}`}}) in 5m. Page Manager + Admin."
+
+    - alert: EnvironmentalIncidentDetectionLatencyHigh
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(environmental_incident_detection_latency_seconds_bucket[15m])) by (le)
+        ) > 300
+      for: 10m
+      labels: { severity: warning }
+      annotations:
+        summary: "Env incident detection latency p95 {{`{{ $value }}`}}s"
+        description: "Environmental incident detection slow (p95 > 5min). Check report/ingest pipeline."
+
+  # ---- Sprint audit #AUDIT-44 — audit pipeline (mirror monitoring/prometheus/alert-rules.yml group audit-pipeline) ----
+  - name: audit-pipeline
+    interval: 30s
+    rules:
+    - alert: AuditOutboxBacklog
+      expr: audit_outbox_pending_total > 1000
+      for: 5m
+      labels: { severity: warning, domain: audit }
+      annotations:
+        summary: "Audit outbox backlog on {{`{{ $labels.service }}`}} ({{`{{ $value }}`}} pending)"
+        description: "audit_outbox_pending_total > 1000 trong 5 phút. Check relay running / RabbitMQ healthy / Redis leader key. Runbook: docs/audit/operations-runbook.md."
+
+    - alert: AuditConsumerLag
+      expr: histogram_quantile(0.99, sum(rate(audit_consumer_lag_seconds_bucket[5m])) by (le)) > 30
+      for: 5m
+      labels: { severity: warning, domain: audit }
+      annotations:
+        summary: "Audit consumer lag p99 > 30s ({{`{{ $value | humanize }}`}}s)"
+        description: "Aggregator ingest lag p99 vượt 30s (SLO < 10s). Scale aggregator pod / check audit_aggregate index."
+
+    - alert: AuditDlqGrowing
+      expr: audit_dlq_size_total > 100
+      for: 5m
+      labels: { severity: critical, domain: audit }
+      annotations:
+        summary: "Audit DLQ growing ({{`{{ $value }}`}} messages)"
+        description: "aggregator.audit.events.dlq > 100. Inspect poison message, fix consumer, shovel DLQ → main queue. Runbook: docs/audit/operations-runbook.md."
 {{- end }}

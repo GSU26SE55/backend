@@ -42,11 +42,23 @@ public static class ManageDependencyInjection
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddScoped<SharedContracts.Interfaces.IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
 
+        // Sprint 7 B4 (§31.7) — cascade risk assessment (rule-based).
+        services.AddScoped<BatteryService.Application.Services.ICascadeRiskCalculator, BatteryService.Application.Services.CascadeRiskCalculator>();
+        services.AddScoped<BatteryService.Application.Services.ICascadeRiskService, BatteryService.Application.Services.CascadeRiskService>();
+
         // Sprint IoT-1 (#243) — per-device API key.
         services.AddScoped<IIotApiKeyService, IotApiKeyService>();
 
         // Sprint IoT-2 #IoT2-38 — Prometheus IoT metrics recorder.
         services.AddSingleton<IIotMetricsRecorder, BatteryService.Infrastructure.Observability.IotMetricsRecorder>();
+
+        // Sprint 7 #118 — environmental incident metrics (cho AlertManager rule env-monitoring).
+        services.AddSingleton<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder,
+            BatteryService.Infrastructure.Observability.EnvironmentalMetricsRecorder>();
+
+        // Sprint 7 #117 — battery health aggregate gauge (cho Grafana "Battery Health").
+        services.AddSingleton<BatteryService.Application.Interfaces.IBatteryHealthMetricsRecorder,
+            BatteryService.Infrastructure.Observability.BatteryHealthMetricsRecorder>();
 
         // Sprint IoT-2 #IoT2-28 — Cross-source validation (Bms vs IoT mismatch).
         services.AddScoped<BatteryService.Application.Services.ICrossSourceValidationService, BatteryService.Application.Services.CrossSourceValidationService>();
@@ -74,7 +86,14 @@ public static class ManageDependencyInjection
         services.AddHostedService<ThresholdCheckBackgroundService>();
         services.AddHostedService<AlertEscalationBackgroundService>();
         services.AddHostedService<AlertAutoResolveBackgroundService>();
+        services.AddHostedService<BatteryService.Infrastructure.BackgroundJobs.BatteryAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-21
         services.AddHostedService<OutboxRelayBackgroundService>();
+
+        // Sprint 7 B4 (§31.7) — recompute cascade risk mỗi 5 phút.
+        services.AddHostedService<CascadeRiskBackgroundService>();
+
+        // Sprint 7 #117 — refresh battery health gauge mỗi 60s.
+        services.AddHostedService<BatteryHealthGaugeBackgroundService>();
 
         // Sprint 5B #90/#92 — Open-Meteo client + WeatherSync.
         services.Configure<WeatherSyncOptions>(configuration.GetSection(WeatherSyncOptions.SectionName));

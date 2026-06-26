@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Session;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -12,11 +13,13 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public RevokeSessionCommandHandler(IAuthUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+    public RevokeSessionCommandHandler(IAuthUnitOfWork unitOfWork, ICurrentUserService currentUserService, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _publisher = publisher;
     }
 
     public async Task<SessionActionResponse> Handle(RevokeSessionCommand request, CancellationToken cancellationToken)
@@ -70,6 +73,12 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
         session.RevokedAt = DateTime.UtcNow;
         session.RevokedReason = "User revoked";
         _unitOfWork.RefreshTokens.UpdateAsync(session);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.SessionRevoked, session.AccountId, true,
+            Metadata: new Dictionary<string, object?> { ["sessionId"] = session.Id }), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new SessionActionResponse

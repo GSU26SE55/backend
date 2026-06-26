@@ -1,4 +1,5 @@
 using BatteryService.Application.CQRS.Command.ThresholdConfig;
+using BatteryService.Application.CQRS.Notification.Audit;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
@@ -12,10 +13,12 @@ namespace BatteryService.Application.CQRS.Handler.ThresholdConfig;
 public class UpsertThresholdConfigCommandHandler : IRequestHandler<UpsertThresholdConfigCommand, CommonResponse<ThresholdConfigDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-22
 
-    public UpsertThresholdConfigCommandHandler(IBatteryUnitOfWork unitOfWork)
+    public UpsertThresholdConfigCommandHandler(IBatteryUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<ThresholdConfigDto>> Handle(UpsertThresholdConfigCommand request, CancellationToken cancellationToken)
@@ -73,6 +76,12 @@ public class UpsertThresholdConfigCommandHandler : IRequestHandler<UpsertThresho
 
         if (!isNew)
             _unitOfWork.ThresholdConfigs.UpdateAsync(entity);
+
+        // #AUDIT-22 — publish audit TRƯỚC SaveChanges (handler ghi BatteryAuditLog + outbox cùng transaction).
+        await _publisher.Publish(BatteryAuditTrailNotification.For(
+            Domain.Enums.BatteryAuditActionEnum.ThresholdConfigChanged, entity.Id,
+            targetDisplay: $"ThresholdConfig {entity.Id}"), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         entity.BatteryType = batteryType;

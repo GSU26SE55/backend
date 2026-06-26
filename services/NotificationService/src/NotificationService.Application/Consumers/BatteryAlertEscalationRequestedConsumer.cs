@@ -3,8 +3,11 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Services;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.Consumers;
 
@@ -12,21 +15,30 @@ namespace NotificationService.Application.Consumers;
 /// Consumer cho <see cref="BatteryAlertEscalationRequestedEvent"/>:
 /// push notification + email cho Manager + Admin khi Critical Alert chưa-ack > 5 phút.
 ///
-/// Notification debounce 5 phút per AlertId (xem overall.md §49.2) — handled
-/// bởi NotificationDispatcher trước khi send.
+/// GH-593 — Notification debounce 5 phút per AlertId (overall.md §49.2): bỏ qua event trùng
+/// AlertId trong 5 phút (qua <see cref="NotificationDebounce"/> + ICacheService).
 ///
 /// Sprint 5B #238 (xem overall.md §3.4, §15 template catalog).
 /// </summary>
 public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEscalationRequestedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly ITemplateRenderer _templateRenderer;
+    private readonly ICacheService _cache;
+    private readonly IRecipientResolver _recipientResolver;
     private readonly ILogger<BatteryAlertEscalationRequestedConsumer> _logger;
 
     public BatteryAlertEscalationRequestedConsumer(
         IMediator mediator,
+        ITemplateRenderer templateRenderer,
+        ICacheService cache,
+        IRecipientResolver recipientResolver,
         ILogger<BatteryAlertEscalationRequestedConsumer> logger)
     {
         _mediator = mediator;
+        _templateRenderer = templateRenderer;
+        _cache = cache;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -34,14 +46,37 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
     {
         var evt = context.Message;
 
-        // TODO #238: query Manager/Admin user IDs by CustomerId + Site permissions.
-        // Placeholder: emit for AdminBroadcast user — actual recipient resolution
-        // sẽ map qua AccountSyncReadModel khi Sprint 6 NotificationService finalize.
-        var recipientIds = new[] { Guid.Empty };
+        // GH-593 — debounce 5 phút per AlertId: bỏ qua event trùng trong cửa sổ.
+        if (!await NotificationDebounce.TryBeginAsync(_cache, evt.AlertId, context.CancellationToken))
+        {
+            _logger.LogInformation(
+                "Debounce: skip duplicate escalation notification AlertId={AlertId}", evt.AlertId);
+            return;
+        }
+
+        // GH-604: recipient resolve qua read-model (broadcast Manager + Admin).
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+        if (recipientIds.Count == 0)
+        {
+            _logger.LogWarning("No Manager/Admin recipient resolved for BatteryAlertEscalation AlertId={AlertId} — skip.", evt.AlertId);
+            return;
+        }
 
         var title = $"[Escalation] Alert chưa ack {evt.MinutesSinceDetection} phút — {evt.AssetSerialNumber}";
-        var body = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +
-                   $"Value: {evt.ActualValue} {evt.Unit}.";
+        var plainBody = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +
+                        $"Value: {evt.ActualValue} {evt.Unit}.";
+
+        var htmlBody = _templateRenderer.Render("battery-alert-escalation-pending", new
+        {
+            AlertId = evt.AlertId,
+            AssetSerialNumber = evt.AssetSerialNumber,
+            AnomalyType = evt.AnomalyType.ToString(),
+            Severity = evt.Severity.ToString(),
+            DetectedAt = evt.DetectedAt.ToString("dd/MM/yyyy HH:mm:ss"),
+            ActualValue = evt.ActualValue,
+            Unit = evt.Unit,
+            MinutesSinceDetection = evt.MinutesSinceDetection
+        });
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -54,7 +89,7 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
 
         foreach (var userId in recipientIds)
         {
-            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.InApp })
+            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.InApp })
             {
                 var cmd = new CreateNotificationCommand
                 {
@@ -62,7 +97,7 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
                     Type = NotificationTypeEnum.BatteryAlertEscalationPending,
                     Channel = channel,
                     Title = title,
-                    Body = body,
+                    Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
                     PayloadJson = payload,
                     EntityType = "Alert",
                     EntityId = evt.AlertId

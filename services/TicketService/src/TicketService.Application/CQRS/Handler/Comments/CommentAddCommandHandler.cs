@@ -1,9 +1,16 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.CommentAdd;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -13,11 +20,22 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
+    private readonly ITicketCommentRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<CommentAddCommandHandler> _logger;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
-    public CommentAddCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
+    public CommentAddCommandHandler(
+        ITicketUnitOfWork uow,
+        IActivityLogger activityLogger,
+        ITicketCommentRealtimeNotifier realtimeNotifier,
+        ILogger<CommentAddCommandHandler> logger,
+        IPublisher publisher)
     {
         _uow = uow;
         _activityLogger = activityLogger;
+        _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(CommentAddCommand request, CancellationToken ct)
@@ -73,7 +91,33 @@ public class CommentAddCommandHandler : IRequestHandler<CommentAddCommand, Ticke
             request.IsInternal ? "[Nội bộ]" : "[Công khai]",
             $"Đã thêm bình luận: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.CommentAdded, ticket.Id, targetDisplay: ticket.Code), ct);
+
         await _uow.SaveChangesAsync(ct);
+
+        // Broadcast comment via SignalR
+        try
+        {
+            var commentDto = new TicketCommentDTO
+            {
+                Id = comment.Id.ToString(),
+                TicketId = comment.TicketId.ToString(),
+                AuthorUserId = comment.AuthorUserId.ToString(),
+                AuthorRole = comment.AuthorRole,
+                AuthorDisplayName = comment.AuthorDisplayName,
+                Body = comment.Body,
+                IsInternal = comment.IsInternal,
+                AttachmentFileIds = comment.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+                CreatedAt = comment.CreatedAt
+            };
+            await _realtimeNotifier.NotifyCommentAddedAsync(commentDto, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CommentAdd] Failed to broadcast CommentAdded SignalR event for ticket {TicketId}", ticket.Id);
+        }
 
         return new TicketActionResponse
         {

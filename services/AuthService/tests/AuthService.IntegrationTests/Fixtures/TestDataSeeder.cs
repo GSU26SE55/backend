@@ -23,7 +23,7 @@ public static class TestDataSeeder
         if (existed)
             return;
 
-        db.Roles.AddRange(
+        await db.Roles.AddRangeAsync(
             new global::AuthService.Domain.Entities.Role { Id = AdminRoleId, Name = "Admin", NormalizedName = "ADMIN", Status = RoleStatusEnum.Active, IsSystemRole = true, CreatedAt = DateTime.UtcNow },
             new global::AuthService.Domain.Entities.Role { Id = CustomerRoleId, Name = "Customer", NormalizedName = "CUSTOMER", Status = RoleStatusEnum.Active, IsSystemRole = true, CreatedAt = DateTime.UtcNow }
         );

@@ -66,9 +66,62 @@ public class TicketTriageRejectCommandHandlerTests
         ticket.Reason.Should().Be("Invalid ticket description");
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(
+            It.Is<TicketStatusChangedIntegrationEvent>(e =>
+                e.OldStatus == TicketStatusEnum.Open && e.NewStatus == TicketStatusEnum.ClosedRejected),
+            It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager Test", ActivityActionEnum.Rejected, null, "ClosedRejected", "Invalid ticket description"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_RejectFromEscalated_PublishesEventWithEscalatedOldStatus()
+    {
+        // Arrange — reject hợp lệ từ Escalated (không chỉ Open). OldStatus của event phải là Escalated, không hardcode Open.
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var command = new TicketTriageRejectCommand
+        {
+            TicketId = ticketId,
+            Reason = "Ngoài scope dịch vụ",
+            ManagerId = managerId,
+            ManagerName = "Manager Test"
+        };
+
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-002",
+            Status = TicketStatusEnum.Escalated,
+            Title = "Test",
+            Description = "Test"
+        };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+
+        _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager, managerId))
+            .Returns(new TransitionResult { IsAllowed = true });
+
+        _stateMachine.Setup(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()))
+            .Callback<Ticket, TicketStatusEnum, TransitionContext, CancellationToken>((t, s, ctx, ct) =>
+            {
+                t.Status = s;
+                t.Reason = (string?)ctx.Payload["Reason"];
+            })
+            .ReturnsAsync(new TransitionResult { IsAllowed = true });
+
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        ticket.Status.Should().Be(TicketStatusEnum.ClosedRejected);
+        _producer.Verify(x => x.PublishAsync(
+            It.Is<TicketStatusChangedIntegrationEvent>(e =>
+                e.OldStatus == TicketStatusEnum.Escalated && e.NewStatus == TicketStatusEnum.ClosedRejected),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

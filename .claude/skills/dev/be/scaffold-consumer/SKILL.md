@@ -7,7 +7,7 @@ allowed-tools: Write, Read, Edit
 
 # Scaffold Consumer `$ARGUMENTS`
 
-Usage: `/scaffold-consumer ServiceName EventName`
+Usage: `/scaffold-consumer ServiceName EventName`  
 Example: `/scaffold-consumer TicketService BatteryAnomalyDetectedEvent`
 
 ## File: `Infrastructure/Consumers/{EventName}Consumer.cs`

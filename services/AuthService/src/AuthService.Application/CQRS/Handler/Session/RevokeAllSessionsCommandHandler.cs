@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Session;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.RefreshToken;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -13,11 +14,13 @@ public class RevokeAllSessionsCommandHandler : IRequestHandler<RevokeAllSessions
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public RevokeAllSessionsCommandHandler(IAuthUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+    public RevokeAllSessionsCommandHandler(IAuthUnitOfWork unitOfWork, ICurrentUserService currentUserService, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _publisher = publisher;
     }
 
     public async Task<SessionActionResponse> Handle(RevokeAllSessionsCommand request, CancellationToken cancellationToken)
@@ -52,6 +55,11 @@ public class RevokeAllSessionsCommandHandler : IRequestHandler<RevokeAllSessions
             session.RevokedReason = "Revoke all sessions";
             _unitOfWork.RefreshTokens.UpdateAsync(session);
         }
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AllSessionsRevoked, userId, true,
+            Metadata: new Dictionary<string, object?> { ["count"] = sessions.Count }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

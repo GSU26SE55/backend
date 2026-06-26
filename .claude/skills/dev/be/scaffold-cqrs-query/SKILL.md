@@ -7,7 +7,7 @@ allowed-tools: Write, Read, Edit
 
 # Scaffold Query `$ARGUMENTS`
 
-Usage: `/scaffold-cqrs-query ServiceName EntityName GetList`
+Usage: `/scaffold-cqrs-query ServiceName EntityName GetList`  
        `/scaffold-cqrs-query ServiceName EntityName GetById`
 
 ---

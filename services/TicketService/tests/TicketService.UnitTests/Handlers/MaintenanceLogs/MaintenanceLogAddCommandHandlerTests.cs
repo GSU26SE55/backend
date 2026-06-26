@@ -27,7 +27,7 @@ public class MaintenanceLogAddCommandHandlerTests
             Description = "Test Description"
         };
 
-        var (uow, _, _, _, _, _, _, _, attachments, logs, _, _) = MockTicketUnitOfWork.BuildExtended(
+        var (uow, _, _, _, _, _, _, _, attachments, logs, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket }
         );
 
@@ -49,7 +49,7 @@ public class MaintenanceLogAddCommandHandlerTests
             }
         };
 
-        var handler = new MaintenanceLogAddCommandHandler(uow.Object, _logger.Object);
+        var handler = new MaintenanceLogAddCommandHandler(uow.Object, _logger.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
@@ -16,17 +17,19 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
 {
     private const int MaxFailedAttempts = 5;
     private const int LockoutDurationMinutes = 15;
-    private static readonly Guid CustomerRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
     public VerifyOtpCommandHandler(
         IAuthUnitOfWork unitOfWork,
-        IMessageProducerService messageProducer)
+        IMessageProducerService messageProducer,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
@@ -87,15 +90,21 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
 
         // #AUTH-69: RoleId giờ nullable (Guid?). Self-register: chưa gán role → default Customer.
         // Check cả null lẫn Guid.Empty cho backward-compat với row legacy có RoleId=Empty.
+        // Resolve Customer role theo NormalizedName tại runtime — KHÔNG hardcode GUID (xem SystemRoleResolver).
+        Guid? assignedCustomerRoleId = null;
         if (!account.RoleId.HasValue || account.RoleId.Value == Guid.Empty)
         {
-            account.RoleId = CustomerRoleId;
+            assignedCustomerRoleId = await SystemRoleResolver.ResolveCustomerRoleIdAsync(_unitOfWork, cancellationToken);
+            if (assignedCustomerRoleId is null)
+                return Fail(500, "Xác thực thất bại do lỗi hệ thống. Vui lòng thử lại.");
+
+            account.RoleId = assignedCustomerRoleId.Value;
             account.RoleAssignedAt = DateTime.UtcNow;
         }
         _unitOfWork.Accounts.UpdateAsync(account);
 
         var roleName = account.Role?.Name
-                       ?? (account.RoleId == CustomerRoleId ? "Customer" : string.Empty);
+                       ?? (assignedCustomerRoleId.HasValue ? "Customer" : string.Empty);
 
         // Outbox: publish AccountActivatedEvent TRƯỚC SaveChanges để event đi cùng transaction.
         await _messageProducer.PublishAsync(new AccountActivatedEvent(
@@ -105,6 +114,10 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             account.PhoneNumber,
             roleName,
             CreationSource: "SelfRegister"), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.OtpVerifySuccess, account.Id, true, TargetEmail: account.Email), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

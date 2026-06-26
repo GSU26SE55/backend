@@ -1,0 +1,11 @@
+# Sprint audit #AUDIT-04 — Banned APIs cho audit correctness.
+# Enforced bởi Microsoft.CodeAnalysis.BannedApiAnalyzers (RS0030) khi build với -p:EnableAuditBannedApis=true (CI stage ci-rules).
+# Format: <symbol-id>;<message>
+#   P: property | T: type | M: method
+
+P:System.DateTime.Now;Audit phải dùng DateTime.UtcNow (timestamp UTC, tránh lệch timezone)
+P:System.DateTime.Today;Audit phải dùng DateTime.UtcNow.Date
+P:System.DateTimeOffset.Now;Audit phải dùng DateTimeOffset.UtcNow
+T:System.Random;Không dùng Random cho event_id — dùng Guid v7 helper (time-sortable, không collide)
+M:System.Console.WriteLine;Dùng ILogger structured logging, không Console.WriteLine trong production code
+M:System.Console.Write;Dùng ILogger structured logging, không Console.Write trong production code

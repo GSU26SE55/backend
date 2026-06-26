@@ -1,6 +1,3 @@
-using FluentAssertions;
-using Moq;
-using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Handler.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.Interfaces.Services;

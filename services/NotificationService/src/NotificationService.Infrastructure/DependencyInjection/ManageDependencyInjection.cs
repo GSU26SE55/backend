@@ -2,10 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Application.Services;
+using NotificationService.Application.Templates;
 using NotificationService.Infrastructure.Channels;
 using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
 using NotificationService.Infrastructure.Persistence.Seeders;
+using NotificationService.Infrastructure.Services;
 using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
@@ -26,6 +29,8 @@ public static class ManageDependencyInjection
 
         services.AddScoped<NotificationDataSeeder>();
         services.AddNotificationChannels();
+
+        services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
 
         return services;
     }
@@ -52,6 +57,9 @@ public static class ManageDependencyInjection
     private static void AddScopedInterface(this IServiceCollection services)
     {
         services.AddScoped<INotificationUnitOfWork, UnitOfWork>();
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddScoped<IRecipientResolver, RecipientResolver>();
+        services.AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>();
         services.AddHttpContextAccessor();
     }
 
@@ -63,9 +71,9 @@ public static class ManageDependencyInjection
                     3,
                     attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))));
 
-        services.AddScoped<ExpoPushChannel>();
-        services.AddScoped<EmailBusChannel>();
-        services.AddScoped<SmsBusChannel>();
-        services.AddScoped<InAppChannel>();
+        services.AddScoped<INotificationChannel, ExpoPushChannel>();
+        services.AddScoped<INotificationChannel, EmailBusChannel>();
+        services.AddScoped<INotificationChannel, SmsBusChannel>();
+        services.AddScoped<INotificationChannel, InAppChannel>();
     }
 }
