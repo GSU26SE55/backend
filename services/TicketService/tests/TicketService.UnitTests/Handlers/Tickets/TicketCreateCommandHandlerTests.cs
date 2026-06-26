@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using SharedContracts.Events;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
