@@ -54,5 +54,14 @@ public class ChatOptions
 
         /// <summary>TTL cache mask map PII trong Redis (giờ).</summary>
         public int PiiMaskTtlHours { get; set; } = 1;
+
+        /// <summary>Ngưỡng sentiment score để alert Manager (#560). Âm = tiêu cực; default -0.7.</summary>
+        public double SentimentAlertThreshold { get; set; } = -0.7;
+
+        /// <summary>Số dòng tóm tắt cho summarize endpoint (#560).</summary>
+        public int SummarizeLinesCount { get; set; } = 5;
+
+        /// <summary>Số chat Customer gần nhất để phân tích sentiment (#560).</summary>
+        public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
 }

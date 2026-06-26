@@ -25,7 +25,9 @@ using TicketService.Application.CQRS.Command.ChatReactionAdd;
 using TicketService.Application.CQRS.Command.ChatReactionRemove;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Command.ChatRestore;
+using TicketService.Application.CQRS.Command.ChatSentimentCheck;
 using TicketService.Application.CQRS.Command.ChatSuggest;
+using TicketService.Application.CQRS.Command.ChatSummarize;
 using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
@@ -1036,6 +1038,53 @@ public class TicketChatsController : ControllerBase
         }
 
         return File(pdfStream, "application/pdf", $"ticket-{ticketId}-chats.pdf");
+    }
+
+    /// <summary>
+    /// Phân tích tone Customer chats và alert Manager via SignalR nếu score &lt; -0.7 (#560).
+    /// Trả về sentiment score [-1,1], label (Positive/Neutral/Negative/Critical), và IsAlertSent.
+    /// </summary>
+    [HttpPost("sentiment-check")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(ChatSentimentCheckResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SentimentCheck(Guid ticketId, CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatSentimentCheckCommand
+        {
+            TicketId = ticketId,
+            CurrentUserId = actorId.Value
+        }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Tóm tắt toàn bộ chat thread thành 5 dòng bullet cho Staff Tier 3 mới tiếp nhận (#560).
+    /// </summary>
+    [HttpPost("summarize")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(ChatSummarizeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Summarize(Guid ticketId, CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatSummarizeCommand
+        {
+            TicketId = ticketId,
+            CurrentUserId = actorId.Value
+        }, ct);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>Manager ACK escalation review — transitions saga Pending → Reviewed. #566.</summary>

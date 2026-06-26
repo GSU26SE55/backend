@@ -1,0 +1,68 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using TicketService.Application.Common.Models;
+using TicketService.Application.CQRS.Command.ChatSummarize;
+using TicketService.Application.DTOs.Response.Chats;
+using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
+
+namespace TicketService.Application.CQRS.Handler.ChatAi;
+
+public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand, ChatSummarizeResponse>
+{
+    private readonly ITicketUnitOfWork _uow;
+    private readonly IChatTextAiClient _aiClient;
+    private readonly ChatOptions _opts;
+
+    public ChatSummarizeCommandHandler(
+        ITicketUnitOfWork uow,
+        IChatTextAiClient aiClient,
+        IOptions<ChatOptions> opts)
+    {
+        _uow = uow;
+        _aiClient = aiClient;
+        _opts = opts.Value;
+    }
+
+    public async Task<ChatSummarizeResponse> Handle(ChatSummarizeCommand request, CancellationToken ct)
+    {
+        var ticket = await _uow.Tickets
+            .GetAllAsync()
+            .Where(t => !t.IsDeleted && t.Id == request.TicketId)
+            .FirstOrDefaultAsync(ct);
+
+        if (ticket == null)
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 200, Message = "Ticket not found" };
+
+        var chats = await _uow.TicketChats
+            .GetAllAsync()
+            .Where(c => !c.IsDeleted && c.TicketId == request.TicketId)
+            .OrderBy(c => c.CreatedAt)
+            .Select(c => new { c.CreatedAt, c.Body, c.AuthorRole, c.AuthorDisplayName })
+            .ToListAsync(ct);
+
+        if (chats.Count == 0)
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 200, Message = "No chats to summarize" };
+
+        var context = string.Join("\n", chats.Select(c =>
+            $"[{c.CreatedAt:HH:mm}] [{c.AuthorRole}] {c.AuthorDisplayName}: {c.Body}"));
+
+        string summary;
+        try
+        {
+            summary = await _aiClient.SummarizeAsync(context, _opts.Ai.SummarizeLinesCount, ct);
+        }
+        catch (Exception)
+        {
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 200, Message = "AI service unavailable" };
+        }
+
+        return new ChatSummarizeResponse
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Data = new ChatSummarizeDTO { Summary = summary }
+        };
+    }
+}

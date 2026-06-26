@@ -124,6 +124,13 @@ public static class ManageDependencyInjection
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
             http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
         });
+
+        // #560 — Gemini AI text client cho sentiment + summarize
+        services.AddHttpClient<IChatTextAiClient, GeminiChatTextAiClient>((sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
+        });
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)
