@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
@@ -97,7 +98,7 @@ public static class ManageDependencyInjection
         // Chat Authorization + Validation (#518/#519)
         services.AddScoped<ISpamDetector, SpamDetector>();
         services.AddScoped<IProfanityFilter, ProfanityFilter>();
-        services.AddScoped<IPiiDetector, PiiDetector>();
+        services.AddScoped<IPiiDetector, PiiDetector>();  // PiiDetector giờ inject ICacheService (#559)
 
         // Group mention resolver (#537)
         services.AddScoped<IGroupMentionResolverService, LocalGroupMentionResolver>();
@@ -116,6 +117,13 @@ public static class ManageDependencyInjection
 
         // #568 — PDF exporter
         services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
+
+        // #559 — Gemini AI suggest client (typed HttpClient, timeout từ Chat:Ai:TimeoutSeconds)
+        services.AddHttpClient<IChatAiSuggestionClient, GeminiChatAiClient>((sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
+        });
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

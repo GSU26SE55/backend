@@ -24,4 +24,5 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<TicketChatReaction> TicketChatReactions { get; }
     IGenericRepository<TicketChatRead> TicketChatReads { get; }
     IGenericRepository<ChatTemplate> ChatTemplates { get; }
+    IGenericRepository<ChatAiSuggestion> ChatAiSuggestions { get; }
 }

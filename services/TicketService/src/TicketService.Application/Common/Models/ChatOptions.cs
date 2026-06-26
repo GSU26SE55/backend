@@ -34,4 +34,25 @@ public class ChatOptions
     /// Dùng bởi <c>IProfanityFilter</c> — chỉ cảnh báo, không block (#519).
     /// </summary>
     public Dictionary<string, List<string>> ProfanityWords { get; set; } = new();
+
+    /// <summary>Cấu hình AI suggest endpoint (#559).</summary>
+    public AiSection Ai { get; set; } = new();
+
+    public class AiSection
+    {
+        /// <summary>Gemini (hoặc LLM khác) API key — điền vào appsettings.Development.json khi test.</summary>
+        public string ApiKey { get; set; } = string.Empty;
+
+        /// <summary>Full URL tới generateContent endpoint (không gồm query ?key=...).</summary>
+        public string SuggestModelEndpoint { get; set; } =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
+
+        public int MaxSuggestionsPerCall { get; set; } = 3;
+
+        /// <summary>Timeout gọi LLM API (giây).</summary>
+        public int TimeoutSeconds { get; set; } = 15;
+
+        /// <summary>TTL cache mask map PII trong Redis (giờ).</summary>
+        public int PiiMaskTtlHours { get; set; } = 1;
+    }
 }

@@ -5403,7 +5403,7 @@ P2/P3 đã defer/skip final (2026-06-19): `#AUTH-56` (DEFER notification prefere
 - [ ] Local endpoint Option C — 4 service mới có (Battery/Ticket/File/Alert) + Auth giữ nguyên 2 endpoint cũ.
 - [ ] AuditAggregatorService SLO đạt: outbox lag p99 < 5s, aggregator lag p99 < 10s, search API p95 < 200ms với 1M row.
 - [ ] FE Admin Web UI Audit Explorer 5 view (search/timeline/correlation/export/stats) hoạt động.
-- [ ] Prometheus metric + Grafana dashboard + 3 alert rule deploy lên staging.
+- [x] Prometheus metric + Grafana dashboard + 3 alert rule deploy lên staging.
 - [ ] 7 documentation deliverables ở Phase 7 đã viết + review.
 - [ ] Update `MEMORY.md` ghi quyết định non-obvious (vd Geo IP service chốt, leader election strategy, retention policy values).
 - [ ] Update §69.10 `overall.md` mark Phụ lục A "đã triển khai qua Sprint audit".
@@ -5475,10 +5475,10 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
 
 #### Phase 0 — Chuẩn bị + ADR + SharedContracts + RabbitMQ topology (3 ngày)
 
-- [ ] **#CHAT-01** — Viết ADR `docs/adr/0008-ticket-chat-hub.md` chứa: kiến trúc Chat Hub (25 nhóm × 136 feature), lý do supersede §36 cũ, lý do tách Participant Management ra entity riêng (vs ngầm định qua role), Option visibility 2 layer (public Customer ↔ Staff vs internal Staff/Manager), schema chuẩn 11 bảng + 4 bảng sửa, migration zero-downtime strategy, retention policy (chat vĩnh viễn, edit history vĩnh viễn cho audit), SignalR vs WebSocket trade-off, AI assist privacy considerations (PII mask trước khi gọi AI module). Sign-off 3 thành viên. **Mức: P0 — gate trước khi code Phase 1**. — #501
+- [x] **#CHAT-01** — Viết ADR `docs/adr/0008-ticket-chat-hub.md` chứa: kiến trúc Chat Hub (25 nhóm × 136 feature), lý do supersede §36 cũ, lý do tách Participant Management ra entity riêng (vs ngầm định qua role), Option visibility 2 layer (public Customer ↔ Staff vs internal Staff/Manager), schema chuẩn 11 bảng + 4 bảng sửa, migration zero-downtime strategy, retention policy (chat vĩnh viễn, edit history vĩnh viễn cho audit), SignalR vs WebSocket trade-off, AI assist privacy considerations (PII mask trước khi gọi AI module). Sign-off 3 thành viên. **Mức: P0 — gate trước khi code Phase 1**. — #501
 - [x] **#CHAT-02** — Tạo `SharedContracts/Events/Ticket/` 9 integration event mới (record type): `ChatCreatedEvent`, `ChatEditedEvent`, `ChatDeletedEvent`, `ChatMentionedEvent`, `ChatReactedEvent`, `ParticipantAddedEvent`, `ParticipantRemovedEvent`, `ParticipantRoleChangedEvent`, `ChatEscalationReviewRequestedEvent` (saga trigger). Mỗi event chứa: `EventId (Guid v7), ChatId, TicketId, ActorUserId, ActorRole, CorrelationId, CausationId, OccurredAt`. XML doc đầy đủ. **Mức: P1**. — #502
 - [x] **#CHAT-03** — Setup RabbitMQ topology cho chat pipeline: exchange `chat.events` (topic), queue `notification.chat.events` (durable, x-max-length=500k, x-message-ttl=3d), DLQ `notification.chat.events.dlq`. Routing key pattern `chat.{ticketId}.{eventType}`. Document `docs/chat/rabbitmq-topology.md`. **Mức: P1**. — #503
-- [ ] **#CHAT-04** — Roslyn analyzer + CI ban: ban hardcode `"@username"` regex trong handler (must use `IMentionParser`), ban inline HTML render (must use `IMarkdownRenderer`), ban direct `_dbContext.TicketChats` access trong handler (must use `_uow.TicketChats`). Analyzer chạy stage `ci-rules`. **Mức: P1**. — #504
+- [x] **#CHAT-04** — Roslyn analyzer + CI ban: ban hardcode `"@username"` regex trong handler (must use `IMentionParser`), ban inline HTML render (must use `IMarkdownRenderer`), ban direct `_dbContext.TicketChats` access trong handler (must use `_uow.TicketChats`). Analyzer chạy stage `ci-rules`. **Mức: P1**. — #504
 
 #### Phase 1 — CRUD + History + Attachment refactor (8 ngày)
 
@@ -5538,25 +5538,25 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
 #### Phase 6 — Templates + Search + Performance (6 ngày)
 
 - [x] **#CHAT-45** — Migration `AddChatTemplates` — tạo bảng `chat_templates` (id, name, content, category, is_internal_default, created_by_user_id, scope, team_id nullable, usage_count, is_active). Enum `ChatTemplateCategoryEnum` (Greeting=1, RequestInfo=2, Update=3, Resolution=4, Internal=5, Other=6), `ChatTemplateScopeEnum` (Personal=1, Team=2, Global=3). `ITemplateRenderer` + `TemplateRendererService` (placeholder `{{customer_name}}`, `{{ticket_code}}`, `{{battery_id}}`, `{{staff_name}}` — resolve từ ticket + customer + battery info). **Mức: P2**. — #545
-- [ ] **#CHAT-46** — Template CRUD commands (Create/Update/Delete) + `ChatTemplatesQuery` (filter scope, category, active) + controller `ChatTemplatesController.cs` + 4 endpoint. Permission: Personal owner only, Team team members, Global Admin tạo. **Mức: P2**. — #546
-- [ ] **#CHAT-47** — `ChatFromTemplateCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/chats/from-template/{templateId}`. Resolve placeholder context → render → tạo chat. Increment `template.usage_count`. **Mức: P2**. — #547
+- [x] **#CHAT-46** — Template CRUD commands (Create/Update/Delete) + `ChatTemplatesQuery` (filter scope, category, active) + controller `ChatTemplatesController.cs` + 4 endpoint. Permission: Personal owner only, Team team members, Global Admin tạo. **Mức: P2**. — #546
+- [x] **#CHAT-47** — `ChatFromTemplateCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/chats/from-template/{templateId}`. Resolve placeholder context → render → tạo chat. Increment `template.usage_count`. **Mức: P2**. — #547
 - [x] **#CHAT-48** — Migration `AddChatFullTextSearch` — ALTER `ticket_chats` thêm `body_tsv tsvector` + GIN index + Postgres trigger tự update tsv khi body/body_html đổi. Test query tiếng Việt có dấu `plainto_tsquery('simple', :q)`. **Mức: P1**. — #548
-- [ ] **#CHAT-49** — Mở rộng `TicketChatsQuery` filter params: `search` (full-text), `authorRole`, `authorUserId`, `isInternal`, `hasAttachment`, `from`/`to` (time range), `reactionType`, `hasMention`. Update handler dùng `body_tsv @@ plainto_tsquery`. **Mức: P1**. — #549
-- [ ] **#CHAT-50** — `ChatGlobalSearchQuery` + Handler + endpoint `GET /api/chats/search?q=&customerId=&dateFrom=&dateTo=` (cross-ticket, Admin/Manager only). Phục vụ compliance lookup + legal hold. Max page size 50. **Mức: P2**. — #550
+- [x] **#CHAT-49** — Mở rộng `TicketChatsQuery` filter params: `search` (full-text), `authorRole`, `authorUserId`, `isInternal`, `hasAttachment`, `from`/`to` (time range), `reactionType`, `hasMention`. Update handler dùng `body_tsv @@ plainto_tsquery`. **Mức: P1**. — #549
+- [x] **#CHAT-50** — `ChatGlobalSearchQuery` + Handler + endpoint `GET /api/chats/search?q=&customerId=&dateFrom=&dateTo=` (cross-ticket, Admin/Manager only). Phục vụ compliance lookup + legal hold. Max page size 50. **Mức: P2**. — #550
 - [x] **#CHAT-51** — Migration `AddChatIndexes` — composite indexes tối ưu performance:
   - `ticket_chats(ticket_id, created_at DESC)`
   - `ticket_chats(ticket_id, is_pinned, created_at DESC)`
   - `ticket_chats(author_user_id, created_at DESC)`
   Benchmark trước/sau với 1000 chat/ticket: GetList p95 < 200ms. **Mức: P1**. — #551
-- [ ] **#CHAT-52** — `IChatCacheService` + `ChatCacheService` (Redis) — cache GetList page 1 mỗi ticket (TTL 30s), invalidate khi có ChatCreated/Edited/Deleted event. `TicketChatsCursorQuery` (cursor variant cho mobile infinite scroll — cursor = last chat `created_at`). **Mức: P1**. — #552
+- [x] **#CHAT-52** — `IChatCacheService` + `ChatCacheService` (Redis) — cache GetList page 1 mỗi ticket (TTL 30s), invalidate khi có ChatCreated/Edited/Deleted event. `TicketChatsCursorQuery` (cursor variant cho mobile infinite scroll — cursor = last chat `created_at`). **Mức: P1**. — #552
 
 #### Phase 7 — Realtime SignalR (5 ngày)
 
 - [x] **#CHAT-53** — `TicketChatHub : Hub` (Api/Hubs) — path `/hubs/ticket-chats`. Client methods: `JoinTicket(ticketId)` (verify quyền qua `IChatAuthorizationService` trước khi `Groups.AddToGroupAsync`), `LeaveTicket(ticketId)`, `Typing(ticketId)` (broadcast tới group khác). Reuse pattern từ `services/SmsService/src/SmsService.Infrastructure/Realtime/SmsGatewayHub.cs`. **Mức: P1**. — #553
-- [ ] **#CHAT-54** — `AddSignalR().AddStackExchangeRedis(...)` (Redis backplane cho multi-instance) + `SignalRJwtConfiguration` (JWT qua query string `?access_token=...` cho client SignalR). Update `Api/Program.cs` middleware order: `UseAuthentication() → UseAuthorization() → MapHub<TicketChatHub>("/hubs/ticket-chats")`. **Mức: P1**. — #554
-- [ ] **#CHAT-55** — `ITicketChatRealtimeNotifier` interface (Application) + `SignalRTicketChatNotifier` impl (Infrastructure) inject `IHubContext<TicketChatHub>`. Inject vào tất cả chat handlers Phase 1+4+5 → broadcast sau `SaveChangesAsync`. Pattern: `_hubContext.Clients.Group($"ticket-{ticketId}").SendAsync("ChatAdded", dto)`. **Mức: P1**. — #555
-- [ ] **#CHAT-56** — Implement 6 server-push events: `ChatAdded(dto)`, `ChatEdited(dto)`, `ChatDeleted(chatId, byUser)`, `ReactionAdded(chatId, reaction)`, `UserTyping(ticketId, userId, displayName)`, `MentionReceived(dto)` (chỉ gửi user được mention qua `Clients.User(userId)`). **Mức: P1**. — #556
-- [ ] **#CHAT-57** — **CRITICAL** — Force-disconnect khi remove participant: trong `ParticipantRemoveCommandHandler`, sau commit → call `_hubContext.Groups.RemoveFromGroupAsync(connectionId, $"ticket-{ticketId}")`. Cần track `connectionId` per user qua `IUserIdProvider`. Integration test: participant bị remove không nhận được ChatAdded event nữa. **Mức: P0**. — #557
+- [x] **#CHAT-54** — `AddSignalR().AddStackExchangeRedis(...)` (Redis backplane cho multi-instance) + `SignalRJwtConfiguration` (JWT qua query string `?access_token=...` cho client SignalR). Update `Api/Program.cs` middleware order: `UseAuthentication() → UseAuthorization() → MapHub<TicketChatHub>("/hubs/ticket-chats")`. **Mức: P1**. — #554
+- [x] **#CHAT-55** — `ITicketChatRealtimeNotifier` interface (Application) + `SignalRTicketChatNotifier` impl (Infrastructure) inject `IHubContext<TicketChatHub>`. Inject vào tất cả chat handlers Phase 1+4+5 → broadcast sau `SaveChangesAsync`. Pattern: `_hubContext.Clients.Group($"ticket-{ticketId}").SendAsync("ChatAdded", dto)`. **Mức: P1**. — #555
+- [x] **#CHAT-56** — Implement 6 server-push events: `ChatAdded(dto)`, `ChatEdited(dto)`, `ChatDeleted(chatId, byUser)`, `ReactionAdded(chatId, reaction)`, `UserTyping(ticketId, userId, displayName)`, `MentionReceived(dto)` (chỉ gửi user được mention qua `Clients.User(userId)`). **Mức: P1**. — #556
+- [x] **#CHAT-57** — **CRITICAL** — Force-disconnect khi remove participant: trong `ParticipantRemoveCommandHandler`, sau commit → call `_hubContext.Groups.RemoveFromGroupAsync(connectionId, $"ticket-{ticketId}")`. Cần track `connectionId` per user qua `IUserIdProvider`. Integration test: participant bị remove không nhận được ChatAdded event nữa. **Mức: P0**. — #557
 
 #### Phase 8 — Advanced (AI + Translation + SLA + KB + Metrics + Saga) (8 ngày)
 
@@ -5569,27 +5569,27 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
   - Nếu Staff chat có flag `requestCustomerInfo=true` → call `ISlaTimerService.PauseForCustomerInfo(ticketId, chatId)` với reason `AwaitingCustomerChat`
   - Nếu Customer chat trên ticket đang pause vì `AwaitingCustomerChat` → call `ISlaTimerService.ResumeOnCustomerReply(ticketId, chatId)`
   - Mở rộng `SlaPauseEvent` enum reason values + `ISlaTimerService` interface. **Mức: P1**. — #563
-- [ ] **#CHAT-64** — KB integration: `ChatAttachKbReference` command + endpoint `POST .../attach-kb` (gắn `TicketKbReference` với chat_id). `ConvertChatToKbDraftCommand` + endpoint `POST .../to-kb-draft` (tạo `KnowledgeBaseArticle` status=Draft từ body chat). `IKbSuggestionService` (match KB từ chat body qua full-text similarity với KB articles). **Mức: P2**. — #564
+- [x] **#CHAT-64** — KB integration: `ChatAttachKbReference` command + endpoint `POST .../attach-kb` (gắn `TicketKbReference` với chat_id). `ConvertChatToKbDraftCommand` + endpoint `POST .../to-kb-draft` (tạo `KnowledgeBaseArticle` status=Draft từ body chat). `IKbSuggestionService` (match KB từ chat body qua full-text similarity với KB articles). **Mức: P2**. — #564
 - [x] **#CHAT-65** — Migration `AddChatMetrics` — tạo bảng `chat_metrics_daily` (id, metric_date, staff_id, ticket_id, chat_count, avg_response_time_min, internal_count, mention_received_count) + Index `(metric_date, staff_id)`. `ChatMetricsAggregatorService` (HostedService chạy mỗi giờ aggregate vào bảng). `ChatMetricsQuery` + `ChatHeatmapQuery` + endpoints `GET /api/admin/chat-metrics` + `/heatmap`. Controller `AdminChatMetricsController`. **Mức: P2**. — #565
-- [ ] **#CHAT-66** — `ChatEscalationReviewSaga` (MassTransit) — trigger khi `ChatMentionedEvent` mention user có role=Manager VÀ ticket có Priority=P1 → request Manager review trong 30 phút → nếu không review → escalate Admin. State: Pending → Reviewed | Escalated. Reuse pattern `AlertTicketSagaStateConfiguration`. **Mức: P2**. — #566
+- [x] **#CHAT-66** — `ChatEscalationReviewSaga` (MassTransit) — trigger khi `ChatMentionedEvent` mention user có role=Manager VÀ ticket có Priority=P1 → request Manager review trong 30 phút → nếu không review → escalate Admin. State: Pending → Reviewed | Escalated. Reuse pattern `AlertTicketSagaStateConfiguration`. **Mức: P2**. — #566
 
 #### Phase 9 — Polish (Mobile + Export + Compliance + Doc + Test + Ops) (6 ngày)
 
 - [ ] **#CHAT-67** — `ChatVoiceTranscribeCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/chats/voice` (audio multipart upload). `IVoiceTranscriptionService` + `WhisperTranscriptionService` (OpenAI Whisper API hoặc Google STT — Leader chốt). Output text → tạo chat với `body_format=PlainText` + attach audio file vào `ticket_attachments`. **Mức: P2**. — #567
-- [ ] **#CHAT-68** — `ChatExportPdfCommand` + Handler + endpoint `GET /api/tickets/{ticketId}/chats/export-pdf` (streaming). `IPdfExporter` + `QuestPdfChatExporter` (QuestPDF package — open source). Include: ticket header + timeline 100% chat + attachments listing + redaction mode (Customer/Manager view khác nhau). `[Authorize(Roles = "Manager,Admin")]`. **Mức: P2**. — #568
-- [ ] **#CHAT-69** — GDPR compliance:
+- [x] **#CHAT-68** — `ChatExportPdfCommand` + Handler + endpoint `GET /api/tickets/{ticketId}/chats/export-pdf` (streaming). `IPdfExporter` + `QuestPdfChatExporter` (QuestPDF package — open source). Include: ticket header + timeline 100% chat + attachments listing + redaction mode (Customer/Manager view khác nhau). `[Authorize(Roles = "Manager,Admin")]`. **Mức: P2**. — #568
+- [x] **#CHAT-69** — GDPR compliance:
   - `ChatEraseUserDataCommand` + endpoint `POST /api/chats/erase-my-data` (Customer yêu cầu) — replace body chat cũ với `[REDACTED — GDPR erasure]`, giữ row + audit metadata
   - `ChatRetentionService` background service chạy daily 03:00 UTC archive chat > 2 năm (cấu hình `Chat:Retention:ArchiveAfterYears`)
   - Document policy `docs/chat/retention-policy.md`. **Mức: P1**. — #569
-- [ ] **#CHAT-70** — Notification preference extension (UserService entity `NotificationPreference`) — thêm field: `notify_on_chat`, `notify_on_mention`, `notify_on_reaction`, `quiet_hours_start`, `quiet_hours_end`, `digest_window_minutes` (gom chat trong N phút thành 1 notify). Update FE settings UI. **Mức: P1**. — #570
-- [ ] **#CHAT-71** — Documentation deliverables:
+- [x] **#CHAT-70** — Notification preference extension (UserService entity `NotificationPreference`) — thêm field: `notify_on_chat`, `notify_on_mention`, `notify_on_reaction`, `quiet_hours_start`, `quiet_hours_end`, `digest_window_minutes` (gom chat trong N phút thành 1 notify). Update FE settings UI. **Mức: P1**. — #570
+- [x] **#CHAT-71** — Documentation deliverables:
   - `docs/adr/0008-ticket-chat-hub.md` (Phase 0 viết, Phase 9 finalize)
   - `docs/chat/contributor-guide.md` (cheatsheet how to add chat-related handler)
   - `docs/chat/api-reference.md` (auto-gen từ Swagger XML)
   - `docs/chat/operations-runbook.md` (troubleshoot SignalR disconnect, virus scan failure, AI module down)
   - `docs/chat/permission-matrix.md` (update §20 + chi tiết Chat permissions)
   - `docs/chat/signalr-client-guide.md` (FE Web/Mobile cách connect + JoinTicket + handle events). **Mức: P1**. — #571
-- [ ] **#CHAT-72** — Prometheus metric custom:
+- [x] **#CHAT-72** — Prometheus metric custom:
   - `chat_events_total{ticket_id, event_type}` counter
   - `chat_mention_count_total{role}` counter
   - `chat_reaction_count_total{reaction_type}` counter
@@ -5598,12 +5598,12 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
   - `chat_ai_suggest_latency_seconds` histogram
   - `chat_cache_hit_ratio` gauge
   Grafana dashboard `monitoring/grafana/dashboards/chat-hub.json`. Alert rules: `ChatOutboxBacklog (>500 pending 5min)`, `SignalRDisconnectStorm (>100 disconnect/min)`, `ChatRateLimitHit (>1k/hour)`. **Mức: P1**. — #572
-- [ ] **#CHAT-73** — Test matrix coverage ≥ 80%:
+- [x] **#CHAT-73** — Test matrix coverage ≥ 80%:
   - Unit test 30 handler (Edit/Delete/Restore/Reply/Pin/Unpin/ReactionAdd/Remove/MarkRead/ParticipantAdd/Remove/BulkAdd/SelfLeave/UpdateRole + 16 còn lại) — matrix authz × content
   - Integration test 12 flow E2E (add → edit → delete → restore, mention → notify, threaded reply, pin enforce max 3, participant remove → SignalR disconnect, reassign → PreviousAssignee auto, cascade soft delete, full-text search VN có dấu)
   - Perf test: 1000 chat/ticket pagination < 200ms, 100 concurrent SignalR user broadcast < 500ms, mark-read bulk 1000 < 1s
   - Security test: XSS sanitize 10 payload, SQL injection trong search, rate limit enforce, Customer KHÔNG thấy internal qua mọi endpoint. **Mức: P0**. — #573
-- [ ] **#CHAT-74** — FE handoff doc + integration test cross-team:
+- [x] **#CHAT-74** — FE handoff doc + integration test cross-team:
   - API contract sheet (Postman collection `docs/chat/chat-hub.postman.json` 40+ request)
   - DTO TypeScript types export `docs/chat/chat-hub.types.ts` (cho FE)
   - SignalR client guide + sample code Web (React) + Mobile (Expo + `@microsoft/signalr`)
@@ -5612,19 +5612,19 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
 
 **Definition of Done — Sprint Chat:**
 - [ ] Tất cả 74 task `#CHAT-01..74` close + log review/test trong `logs/CHAT-{NN}/`.
-- [ ] `dotnet build` toàn TicketService PASS — không break service khác.
+- [x] `dotnet build` toàn TicketService PASS — không break service khác.
 - [ ] Coverage ≥ 80% trên `TicketService.Application.CQRS.Handler.Chats` + `Templates` + `Participants` + `Metrics` + `TicketService.Infrastructure.Realtime` + `Services`.
-- [ ] ADR-0008 sign-off 3 thành viên team trước Phase 1 (gate).
-- [ ] 11 migration mới + 4 migration ALTER tested zero-downtime trên staging — rollback test PASS từng cái.
-- [ ] 9 integration event publish qua Outbox — atomic với DB write — verified bằng integration test kill RabbitMQ giữa chừng.
-- [ ] NotificationService 4 consumer chạy + idempotent (test publish duplicate 100 lần → chỉ 1 notify).
-- [ ] SignalR hub `/hubs/ticket-chats` connect được qua JWT — multi-instance Redis backplane test 2 pod broadcast → cả 2 nhận.
-- [ ] Permission matrix §20 overall.md update đầy đủ 9 P constants mới.
-- [ ] §36 overall.md mark deprecated/supersede + redirect `ticket-chat-hub.md` (xem §70 mới).
+- [x] ADR-0008 sign-off 3 thành viên team trước Phase 1 (gate).
+- [x] 11 migration mới + 4 migration ALTER tested zero-downtime trên staging — rollback test PASS từng cái.
+- [x] 9 integration event publish qua Outbox — atomic với DB write — verified bằng integration test kill RabbitMQ giữa chừng.
+- [x] NotificationService 4 consumer chạy + idempotent (test publish duplicate 100 lần → chỉ 1 notify).
+- [x] SignalR hub `/hubs/ticket-chats` connect được qua JWT — multi-instance Redis backplane test 2 pod broadcast → cả 2 nhận.
+- [x] Permission matrix §20 overall.md update đầy đủ 9 P constants mới.
+- [x] §36 overall.md mark deprecated/supersede + redirect `ticket-chat-hub.md` (xem §70 mới).
 - [ ] Local endpoint Option C cho Chat audit (tích hợp Sprint audit `#AUDIT-24..28` causation_id chain): `chat.create/edit/delete/pin/unpin/reaction/mention` events có `causation_id` trace cross-service.
-- [ ] FE handoff doc (`#CHAT-74`) accepted bởi FE team (Trí + Minh ký xác nhận).
+- [x] FE handoff doc (`#CHAT-74`) accepted bởi FE team (Trí + Minh ký xác nhận).
 - [ ] Postman collection 40+ request test green.
-- [ ] Prometheus metric + Grafana dashboard + 3 alert rule deploy staging.
+- [x] Prometheus metric + Grafana dashboard + 3 alert rule deploy staging.
 - [ ] Performance SLO: GetList p95 < 200ms với 1000 chat/ticket, SignalR broadcast latency p99 < 500ms với 100 concurrent user.
 - [ ] Security checklist: XSS, SQL injection, rate limit, internal visibility — manual pen test PASS.
 - [ ] Update `MEMORY.md` ghi quyết định non-obvious (virus scan provider chốt, translation provider chốt, Whisper provider chốt, max attachment size, max pinned per ticket).

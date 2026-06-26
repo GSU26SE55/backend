@@ -25,6 +25,7 @@ using TicketService.Application.CQRS.Command.ChatReactionAdd;
 using TicketService.Application.CQRS.Command.ChatReactionRemove;
 using TicketService.Application.CQRS.Command.ChatReply;
 using TicketService.Application.CQRS.Command.ChatRestore;
+using TicketService.Application.CQRS.Command.ChatSuggest;
 using TicketService.Application.CQRS.Command.ChatUnpin;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
@@ -35,6 +36,7 @@ using TicketService.Application.CQRS.Query.ChatReaders;
 using TicketService.Application.CQRS.Query.ChatReplies;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.CQRS.Query.TicketUnreadCount;
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -988,6 +990,26 @@ public class TicketChatsController : ControllerBase
             ChatId = id,
             TopN = topN
         }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>AI-generated chat suggestions với PII mask (#559). Trả 3 gợi ý theo intent được chọn.</summary>
+    [HttpPost("suggest")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [ProducesResponseType(typeof(ChatSuggestResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SuggestChat(
+        Guid ticketId,
+        [FromBody] ChatSuggestCommand command,
+        CancellationToken ct = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        command.TicketId = ticketId;
+        command.CurrentUserId = actorId.Value;
+
+        var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 

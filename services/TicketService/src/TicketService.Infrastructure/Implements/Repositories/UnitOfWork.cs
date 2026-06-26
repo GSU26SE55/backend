@@ -36,6 +36,7 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<TicketChatReaction> TicketChatReactions => new GenericRepository<TicketChatReaction>(_context);
     public IGenericRepository<TicketChatRead> TicketChatReads => new GenericRepository<TicketChatRead>(_context);
     public IGenericRepository<ChatTemplate> ChatTemplates => new GenericRepository<ChatTemplate>(_context);
+    public IGenericRepository<ChatAiSuggestion> ChatAiSuggestions => new GenericRepository<ChatAiSuggestion>(_context);
 
     public async Task BeginTransactionAsync()
     {
