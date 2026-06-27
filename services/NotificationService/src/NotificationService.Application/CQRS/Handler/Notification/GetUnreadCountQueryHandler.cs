@@ -20,7 +20,10 @@ public class GetUnreadCountQueryHandler : IRequestHandler<GetUnreadCountQuery, N
     {
         // Read-only → no-tracking.
         var count = await _unitOfWork.Notifications.GetAllAsync(false)
-            .Where(n => n.UserId == request.UserId && !n.IsDeleted && n.Status != NotificationStatusEnum.Read)
+            .Where(n => n.UserId == request.UserId
+                && !n.IsDeleted
+                && n.Status != NotificationStatusEnum.Read
+                && n.Channel == NotificationChannelEnum.InApp)
             .CountAsync(cancellationToken);
 
         return new NotificationCountResponse
