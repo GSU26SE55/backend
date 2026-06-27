@@ -150,6 +150,19 @@ public static class ManageDependencyInjection
             http.BaseAddress = new Uri(opts.VirusScan.FileStorageBaseUrl);
             http.Timeout = TimeSpan.FromSeconds(30);
         });
+
+        // #567 — Gemini voice transcription client (multimodal, timeout từ Chat:Voice:TranscribeTimeoutSeconds)
+        services.AddHttpClient<IVoiceTranscriptionService, GeminiVoiceTranscriptionService>((sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(15, opts.Voice.TranscribeTimeoutSeconds));
+        });
+
+        // #567 — FileStorageService upload client (dùng Bearer token forwarded từ original request)
+        services.AddHttpClient<IFileUploadClient, FileStorageApiClient>((_, http) =>
+        {
+            http.Timeout = TimeSpan.FromSeconds(60);
+        });
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

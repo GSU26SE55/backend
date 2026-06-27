@@ -30,6 +30,7 @@ using TicketService.Application.CQRS.Command.ChatSuggest;
 using TicketService.Application.CQRS.Command.ChatSummarize;
 using TicketService.Application.CQRS.Command.ChatTranslate;
 using TicketService.Application.CQRS.Command.ChatUnpin;
+using TicketService.Application.CQRS.Command.ChatVoiceTranscribe;
 using TicketService.Application.CQRS.Query.ChatAttachmentDownload;
 using TicketService.Application.CQRS.Query.ChatAttachmentList;
 using TicketService.Application.CQRS.Query.ChatGetById;
@@ -1171,6 +1172,36 @@ public class TicketChatsController : ControllerBase
             CurrentUserId = userId.Value,
             CurrentUserRole = ResolveActorRole(roleStr)
         }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Upload audio và transcribe sang text — tạo chat với nội dung transcribed + đính kèm audio vào ticket_attachments (#567).
+    /// Sử dụng Google Gemini 1.5 Flash multimodal. Hỗ trợ: mp3, wav, ogg, webm, m4a, flac. Giới hạn: 20MB.
+    /// </summary>
+    [HttpPost("voice")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> VoiceTranscribe(
+        Guid ticketId,
+        IFormFile audioFile,
+        CancellationToken ct)
+    {
+        var command = new ChatVoiceTranscribeCommand
+        {
+            TicketId = ticketId,
+            AudioFile = audioFile,
+            AuthorizationHeader = Request.Headers.Authorization.ToString(),
+            UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty,
+            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value),
+            UserPermissions = _currentUser.Permissions.ToList()
+        };
+
+        var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 

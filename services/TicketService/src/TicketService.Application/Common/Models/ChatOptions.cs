@@ -93,4 +93,24 @@ public class ChatOptions
         /// <summary>Số chat Customer gần nhất để phân tích sentiment (#560).</summary>
         public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
+
+    /// <summary>Cấu hình voice-to-text (Gemini multimodal, #567).</summary>
+    public VoiceSection Voice { get; set; } = new();
+
+    public class VoiceSection
+    {
+        public List<string> AllowedAudioMimeTypes { get; set; } = new()
+        {
+            "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/flac"
+        };
+
+        /// <summary>Gemini model endpoint hỗ trợ multimodal audio.</summary>
+        public string TranscribeModelEndpoint { get; set; } =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+
+        /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
+        public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";
+
+        public int TranscribeTimeoutSeconds { get; set; } = 30;
+    }
 }
