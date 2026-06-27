@@ -26,8 +26,9 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
         if (request.Type.HasValue)
             query = query.Where(n => n.Type == request.Type.Value);
 
-        if (request.Channel.HasValue)
-            query = query.Where(n => n.Channel == request.Channel.Value);
+        // Default InApp-only so Push records (used only for device delivery) don't appear in the list.
+        var effectiveChannel = request.Channel ?? NotificationChannelEnum.InApp;
+        query = query.Where(n => n.Channel == effectiveChannel);
 
         if (request.Status.HasValue)
             query = query.Where(n => n.Status == request.Status.Value);
