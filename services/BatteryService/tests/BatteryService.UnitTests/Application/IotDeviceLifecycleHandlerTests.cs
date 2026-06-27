@@ -98,7 +98,7 @@ public class IotDeviceLifecycleHandlerTests
         var assetId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-1", IsDeleted = false });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
         {
@@ -135,7 +135,7 @@ public class IotDeviceLifecycleHandlerTests
                 Unit = "V",
                 CalibratedAt = DateTime.UtcNow.AddDays(-1)
             });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var captured = new List<SensorReading>();
         uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))

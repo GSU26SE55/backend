@@ -33,6 +33,24 @@ public static class AddJwtAuthenticationAuthorization
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    // Sprint BE-IoT-Realtime — SSE: EventSource native không set được header Authorization.
+                    // Cho phép token qua query ?access_token= CHỈ cho endpoint stream (path chứa "/stream").
+                    OnMessageReceived = context =>
+                    {
+                        if (string.IsNullOrEmpty(context.Token))
+                        {
+                            var accessToken = context.Request.Query["access_token"].ToString();
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken)
+                                && path.HasValue
+                                && path.Value!.Contains("/stream", StringComparison.OrdinalIgnoreCase))
+                            {
+                                context.Token = accessToken;
+                            }
+                        }
+                        return Task.CompletedTask;
+                    },
+
                     OnAuthenticationFailed = context =>
                     {
                         if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
