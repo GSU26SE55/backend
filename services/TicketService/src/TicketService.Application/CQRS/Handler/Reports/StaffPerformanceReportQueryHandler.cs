@@ -37,14 +37,7 @@ public class StaffPerformanceReportQueryHandler
             .Select(s => new { s.Id, s.AccountId, s.FullName }).ToListAsync(ct);
         var names = new Dictionary<Guid, string>();
         foreach (var s in staff)
-<<<<<<< HEAD
-        {
-            names[s.Id] = s.FullName;
-            names[s.AccountId] = s.FullName;
-        }
-=======
         { names[s.Id] = s.FullName; names[s.AccountId] = s.FullName; }
->>>>>>> 86174650b710f709794126352a88437567dd4f88
 
         var rows = data.GroupBy(x => x.StaffId).Select(g =>
         {
