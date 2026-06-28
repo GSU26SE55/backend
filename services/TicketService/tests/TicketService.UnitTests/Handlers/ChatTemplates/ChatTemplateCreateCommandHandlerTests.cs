@@ -1,6 +1,6 @@
 using Moq;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.ChatTemplateCreate;
+using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.CQRS.Handler.ChatTemplates;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;

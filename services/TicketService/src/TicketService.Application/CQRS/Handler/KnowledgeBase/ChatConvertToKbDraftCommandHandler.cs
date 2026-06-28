@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatConvertToKbDraft;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

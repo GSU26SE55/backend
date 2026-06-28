@@ -1,7 +1,7 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Helpers;
-using TicketService.Application.CQRS.Command.ChatUnpin;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

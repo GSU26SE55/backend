@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using TicketService.Application.CQRS.Command.ChatAdd;
-using TicketService.Application.CQRS.Command.ChatOverrideAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Services;

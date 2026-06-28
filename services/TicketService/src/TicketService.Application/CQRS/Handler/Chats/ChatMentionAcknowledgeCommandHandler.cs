@@ -1,5 +1,5 @@
 using MediatR;
-using TicketService.Application.CQRS.Command.ChatMentionAcknowledge;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;

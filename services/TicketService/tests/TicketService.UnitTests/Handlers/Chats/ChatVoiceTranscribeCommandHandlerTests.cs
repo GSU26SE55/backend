@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Moq;
-using TicketService.Application.CQRS.Command.ChatVoiceTranscribe;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

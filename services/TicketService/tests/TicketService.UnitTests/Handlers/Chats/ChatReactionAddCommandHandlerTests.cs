@@ -3,7 +3,7 @@ using Moq;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.ChatReactionAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

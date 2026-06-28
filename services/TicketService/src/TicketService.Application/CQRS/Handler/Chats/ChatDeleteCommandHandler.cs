@@ -9,7 +9,7 @@ using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatDelete;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

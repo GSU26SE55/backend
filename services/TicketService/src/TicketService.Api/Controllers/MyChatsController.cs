@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatEraseUserData;
-using TicketService.Application.CQRS.Query.MyChats;
+using TicketService.Application.CQRS.Command.Chats;
+using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 

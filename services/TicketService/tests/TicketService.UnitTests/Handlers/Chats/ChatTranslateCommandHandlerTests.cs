@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using MockQueryable.Moq;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.ChatTranslate;
+using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.CQRS.Handler.ChatAi;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

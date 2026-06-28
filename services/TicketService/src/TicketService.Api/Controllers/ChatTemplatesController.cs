@@ -5,10 +5,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatTemplateCreate;
-using TicketService.Application.CQRS.Command.ChatTemplateDelete;
-using TicketService.Application.CQRS.Command.ChatTemplateUpdate;
-using TicketService.Application.CQRS.Query.ChatTemplate;
+using TicketService.Application.CQRS.Command.ChatTemplates;
+using TicketService.Application.CQRS.Query.ChatTemplates;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 

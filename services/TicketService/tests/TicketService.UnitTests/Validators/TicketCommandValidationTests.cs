@@ -1,5 +1,5 @@
 using FluentAssertions;
-using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;

@@ -4,7 +4,7 @@ using MockQueryable.Moq;
 using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatSummarize;
+using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.CQRS.Handler.ChatAi;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

@@ -1,5 +1,5 @@
 using Moq;
-using TicketService.Application.CQRS.Command.ChatOverrideDelete;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;

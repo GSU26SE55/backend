@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ChatFromTemplate;
+using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;

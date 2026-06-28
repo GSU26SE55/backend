@@ -1,6 +1,6 @@
 using Moq;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.ChatRestore;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

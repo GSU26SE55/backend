@@ -1,6 +1,6 @@
 using MediatR;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;

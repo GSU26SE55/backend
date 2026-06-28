@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatAttachmentAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;

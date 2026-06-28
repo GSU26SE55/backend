@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ChatEscalationReviewAck;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 

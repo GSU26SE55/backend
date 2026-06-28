@@ -1,5 +1,5 @@
 using TicketService.Application.CQRS.Handler.Chats;
-using TicketService.Application.CQRS.Query.MyMentions;
+using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;

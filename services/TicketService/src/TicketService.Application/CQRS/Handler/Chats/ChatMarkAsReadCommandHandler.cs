@@ -1,6 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using TicketService.Application.CQRS.Command.ChatMarkAsRead;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;

@@ -1,4 +1,4 @@
-using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 

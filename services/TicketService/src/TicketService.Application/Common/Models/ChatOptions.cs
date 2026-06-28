@@ -73,7 +73,7 @@ public class ChatOptions
         public int IntervalSeconds { get; set; } = 30;
 
         /// <summary>Base URL của FileStorageService để download file trước khi scan.</summary>
-        public string FileStorageBaseUrl { get; set; } = "http://file-storage-service";
+        public string FileStorageBaseUrl { get; set; } = "http://filestorageservice:8080";
     }
 
     public class AiSection

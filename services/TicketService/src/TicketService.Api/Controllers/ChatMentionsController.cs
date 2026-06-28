@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TicketService.Application.CQRS.Command.ChatMentionAcknowledge;
-using TicketService.Application.CQRS.Query.MyMentions;
+using TicketService.Application.CQRS.Command.Chats;
+using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
 

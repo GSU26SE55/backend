@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ChatReply;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

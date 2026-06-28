@@ -1,5 +1,5 @@
 using TicketService.Application.CQRS.Handler.Chats;
-using TicketService.Application.CQRS.Query.TicketUnreadCount;
+using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Helpers;

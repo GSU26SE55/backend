@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TicketService.Application.CQRS.Command.ChatTranslate;
+using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

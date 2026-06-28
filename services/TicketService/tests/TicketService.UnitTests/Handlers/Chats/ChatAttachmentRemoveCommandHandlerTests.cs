@@ -1,5 +1,5 @@
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.ChatAttachmentRemove;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;

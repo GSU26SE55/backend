@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Query.ChatTemplate;
+using TicketService.Application.CQRS.Query.ChatTemplates;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;

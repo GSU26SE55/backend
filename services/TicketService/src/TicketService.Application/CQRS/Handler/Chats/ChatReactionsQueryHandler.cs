@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Helpers;
-using TicketService.Application.CQRS.Query.ChatReactions;
+using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;

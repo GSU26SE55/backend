@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatEraseUserData;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.Chats;

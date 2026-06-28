@@ -1,4 +1,4 @@
-using TicketService.Application.CQRS.Command.ChatMarkAsRead;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;

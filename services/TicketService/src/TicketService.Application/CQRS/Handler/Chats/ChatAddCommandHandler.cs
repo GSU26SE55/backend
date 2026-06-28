@@ -13,7 +13,7 @@ using SharedContracts.Interfaces;
 using SharedInfrastructure.Metrics;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Helpers;

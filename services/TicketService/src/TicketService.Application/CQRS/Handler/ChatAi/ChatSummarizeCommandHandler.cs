@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
-using TicketService.Application.CQRS.Command.ChatSummarize;
+using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

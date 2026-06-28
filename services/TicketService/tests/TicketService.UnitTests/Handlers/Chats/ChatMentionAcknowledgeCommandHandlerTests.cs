@@ -1,4 +1,4 @@
-using TicketService.Application.CQRS.Command.ChatMentionAcknowledge;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;

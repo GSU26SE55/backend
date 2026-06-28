@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using SharedContracts.Common.Responses;
-using TicketService.Application.CQRS.Command.ChatTemplateDelete;
+using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.ChatTemplates;

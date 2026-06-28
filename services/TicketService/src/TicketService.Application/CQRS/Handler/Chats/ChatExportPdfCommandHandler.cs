@@ -1,5 +1,5 @@
 using MediatR;
-using TicketService.Application.CQRS.Command.ChatExportPdf;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
