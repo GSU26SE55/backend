@@ -8,13 +8,22 @@ namespace TicketService.Application.CQRS.Command.ChatAttachKbReference;
 
 public class ChatAttachKbReferenceCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 
+    /// <summary>
+    /// ID của bài viết Knowledge Base.
+    /// </summary>
     public Guid KbArticleId { get; set; }
     public KbReferenceTypeEnum ReferenceType { get; set; }
     public string? Note { get; set; }

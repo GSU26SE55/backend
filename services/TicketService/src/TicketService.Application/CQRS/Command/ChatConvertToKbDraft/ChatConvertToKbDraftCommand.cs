@@ -9,13 +9,22 @@ namespace TicketService.Application.CQRS.Command.ChatConvertToKbDraft;
 
 public class ChatConvertToKbDraftCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 
+    /// <summary>
+    /// Tiêu đề.
+    /// </summary>
     public string? Title { get; set; }
     public TicketCategoryEnum? Category { get; set; }
 

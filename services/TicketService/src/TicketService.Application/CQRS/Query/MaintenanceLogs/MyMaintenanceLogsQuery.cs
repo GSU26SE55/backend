@@ -5,6 +5,9 @@ namespace TicketService.Application.CQRS.Query.MaintenanceLogs;
 
 public class MyMaintenanceLogsQuery : IRequest<List<StaffMaintenanceLogGroupDTO>>
 {
+    /// <summary>
+    /// Staff id.
+    /// </summary>
     public Guid StaffId { get; set; }
 
     public MyMaintenanceLogsQuery(Guid staffId)

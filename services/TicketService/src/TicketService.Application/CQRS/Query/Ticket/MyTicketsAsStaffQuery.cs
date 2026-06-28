@@ -8,5 +8,8 @@ namespace TicketService.Application.CQRS.Query.Ticket;
 
 public class MyTicketsAsStaffQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<TicketDTO>>>
 {
+    /// <summary>
+    /// Trạng thái.
+    /// </summary>
     public TicketStatusEnum? Status { get; set; }
 }

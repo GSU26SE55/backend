@@ -9,13 +9,22 @@ namespace TicketService.Application.CQRS.Command.ParticipantBulkAdd;
 
 public class ParticipantBulkAddCommand : IRequest<ParticipantBulkActionResponse>, IValidatable<ParticipantBulkActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Participants.
+    /// </summary>
     public List<ParticipantBulkAddItem> Participants { get; set; } = new();
 
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+    /// <summary>
+    /// Actor role.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
 

@@ -8,6 +8,9 @@ namespace TicketService.Application.CQRS.Command.ChatMentionAcknowledge;
 
 public class ChatMentionAcknowledgeCommand : IRequest<ChatMentionActionResponse>, IValidatable<ChatMentionActionResponse>
 {
+    /// <summary>
+    /// Mention id.
+    /// </summary>
     [JsonIgnore]
     public Guid MentionId { get; set; }
     [JsonIgnore]

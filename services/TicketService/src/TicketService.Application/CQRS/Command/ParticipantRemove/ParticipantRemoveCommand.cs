@@ -9,15 +9,24 @@ namespace TicketService.Application.CQRS.Command.ParticipantRemove;
 
 public class ParticipantRemoveCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
 
+    /// <summary>
+    /// Remove reason.
+    /// </summary>
     public string? RemoveReason { get; set; }
 
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+    /// <summary>
+    /// Actor role.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
 

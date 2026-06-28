@@ -10,9 +10,15 @@ namespace TicketService.Application.CQRS.Command.ChatTemplateCreate;
 
 public class ChatTemplateCreateCommand : IRequest<CommonResponse<ChatTemplateDTO>>, IValidatable<CommonResponse<ChatTemplateDTO>>
 {
+    /// <summary>
+    /// ID của người thực hiện yêu cầu.
+    /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
 
+    /// <summary>
+    /// Danh sách vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string[] ActorRoles { get; set; } = Array.Empty<string>();
 

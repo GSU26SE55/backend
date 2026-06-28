@@ -9,17 +9,29 @@ namespace TicketService.Application.CQRS.Command.ChatReactionRemove;
 
 public class ChatReactionRemoveCommand : IRequest<ChatReactionActionResponse>, IValidatable<ChatReactionActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
+    /// <summary>
+    /// Danh sách vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string[] ActorRoles { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Reaction type.
+    /// </summary>
     public ReactionTypeEnum ReactionType { get; set; }
 
     public Task<ChatReactionActionResponse> ValidateAsync()

@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
@@ -48,17 +49,20 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIotMetricsRecorder _metrics;
     private readonly IIotCalibrationCache _calibrationCache;
+    private readonly ITelemetryPublisher _telemetryPublisher;
     private readonly ILogger<BatchIngestSensorReadingsCommandHandler> _logger;
 
     public BatchIngestSensorReadingsCommandHandler(
         IBatteryUnitOfWork unitOfWork,
         IIotMetricsRecorder metrics,
         IIotCalibrationCache calibrationCache,
+        ITelemetryPublisher telemetryPublisher,
         ILogger<BatchIngestSensorReadingsCommandHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _metrics = metrics;
         _calibrationCache = calibrationCache;
+        _telemetryPublisher = telemetryPublisher;
         _logger = logger;
     }
 
@@ -228,6 +232,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         var inserted = 0;
         var skipped = 0;
         var rejectedOutliers = 0;
+        var liveReadings = new List<LiveReadingDto>(request.Items.Count);
         foreach (var item in request.Items)
         {
             if (!assets.TryGetValue(item.BatteryAssetId, out var asset))
@@ -276,6 +281,29 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
 
             _unitOfWork.BatteryAssets.UpdateAsync(asset);
             inserted++;
+
+            // Sprint BE-IoT-Realtime (#616) — gom reading ĐÃ SẠCH (calibrate + loại outlier) để stream SSE sau commit.
+            liveReadings.Add(new LiveReadingDto
+            {
+                BatteryAssetId = item.BatteryAssetId,
+                CustomerId = asset.CustomerId,
+                SiteId = asset.SiteId,
+                BatteryTypeId = asset.BatteryTypeId,
+                Time = readingTime,
+                Voltage = voltage,
+                Current = current,
+                Temperature = temperature,
+                SocPercent = item.SocPercent,
+                SohPercent = item.SohPercent,
+                CycleCount = item.CycleCount,
+                ChargingState = (int?)item.ChargingState,
+                InternalResistanceMilliohm = item.InternalResistanceMilliohm,
+                CellVoltageDeltaMv = item.CellVoltageDeltaMv,
+                BmsErrorCode = item.BmsErrorCode?.Trim(),
+                SourceDeviceId = item.SourceDeviceId?.Trim(),
+                SourceType = (int)item.SourceType,
+                SensorSourceCode = item.SensorSourceCode?.Trim()
+            });
         }
 
         // ─── Device-level housekeeping ───
@@ -365,6 +393,14 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Sprint BE-IoT-Realtime (#616) — soft-dependency: publish SAU commit, lỗi KHÔNG chặn ingest.
+        if (liveReadings.Count > 0)
+        {
+            try
+            { await _telemetryPublisher.PublishAsync(liveReadings, cancellationToken); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Telemetry realtime publish thất bại — bỏ qua."); }
+        }
 
         return new CommonResponse<SensorReadingBatchIngestResult>
         {

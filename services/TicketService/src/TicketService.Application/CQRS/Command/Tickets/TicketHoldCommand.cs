@@ -9,13 +9,22 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketHoldCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     public PauseReasonEnum Reason { get; set; }
+    /// <summary>
+    /// Note.
+    /// </summary>
     public string? Note { get; set; }
 
     [JsonIgnore]
     public Guid StaffId { get; set; }
+    /// <summary>
+    /// Staff name.
+    /// </summary>
     [JsonIgnore]
     public string? StaffName { get; set; }
 

@@ -4631,7 +4631,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Chat
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -5506,7 +5506,7 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
 - [x] **#CHAT-11** — `MyChatsQuery` + Handler + endpoint `GET /api/chats/me?page=&pageSize=`. List chat của user hiện tại trên mọi ticket họ tham gia. Customer mobile cần endpoint này. **Mức: P2**. — #511
 - [x] **#CHAT-12** — Migration `LinkAttachmentToChat` + `AddChatAttachmentEnhancements` — ALTER `ticket_attachments` thêm `chat_id FK nullable ON DELETE SET NULL`, `thumbnail_url varchar(1000)`, `is_inline bool`, `download_count int default 0`, `virus_scan_status int default 1`. Tạo `VirusScanStatusEnum` (Pending=1, Clean=2, Infected=3, Failed=4). Index `IX_ticket_attachments_chat`. **Mức: P0**. — #512
 - [x] **#CHAT-13** — `ChatAttachmentAdd/Remove/List` commands + queries + handlers + 3 endpoint (POST/DELETE/GET) trên path `/api/tickets/{ticketId}/chats/{id}/attachments`. Constraint: max 10 attachment/chat, max 50MB/file, MIME whitelist (image/*, application/pdf, video/mp4, text/plain). Validate file size + type tại middleware. **Mức: P1**. — #513
-- [ ] **#CHAT-14** — `VirusScanWorker` background service — poll attachment status=Pending → gọi ClamAV (HTTP REST `/scan` endpoint) → update `virus_scan_status`. Block download API nếu status=Infected (return 451 Unavailable For Legal Reasons). Documented trong `docs/chat/virus-scan-setup.md` (ClamAV deploy guide). **Mức: P1 (có thể defer cho phase production)**. — #514
+- [x] **#CHAT-14** — `VirusScanWorker` background service — poll attachment status=Pending → gọi ClamAV (HTTP REST `/scan` endpoint) → update `virus_scan_status`. Block download API nếu status=Infected (return 451 Unavailable For Legal Reasons). Documented trong `docs/chat/virus-scan-setup.md` (ClamAV deploy guide). **Mức: P1 (có thể defer cho phase production)**. — #514
 
 #### Phase 2 — Authorization + Validation + Security (5 ngày)
 
@@ -5590,7 +5590,7 @@ Cross-ref: thay thế & supersede §36 (Chat / MaintenanceLog advanced — P1) c
 
 #### Phase 9 — Polish (Mobile + Export + Compliance + Doc + Test + Ops) (6 ngày)
 
-- [ ] **#CHAT-67** — `ChatVoiceTranscribeCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/chats/voice` (audio multipart upload). `IVoiceTranscriptionService` + `WhisperTranscriptionService` (OpenAI Whisper API hoặc Google STT — Leader chốt). Output text → tạo chat với `body_format=PlainText` + attach audio file vào `ticket_attachments`. **Mức: P2**. — #567
+- [x] **#CHAT-67** — `ChatVoiceTranscribeCommand` + Handler + endpoint `POST /api/tickets/{ticketId}/chats/voice` (audio multipart upload). `IVoiceTranscriptionService` + `WhisperTranscriptionService` (OpenAI Whisper API hoặc Google STT — Leader chốt). Output text → tạo chat với `body_format=PlainText` + attach audio file vào `ticket_attachments`. **Mức: P2**. — #567
 - [x] **#CHAT-68** — `ChatExportPdfCommand` + Handler + endpoint `GET /api/tickets/{ticketId}/chats/export-pdf` (streaming). `IPdfExporter` + `QuestPdfChatExporter` (QuestPDF package — open source). Include: ticket header + timeline 100% chat + attachments listing + redaction mode (Customer/Manager view khác nhau). `[Authorize(Roles = "Manager,Admin")]`. **Mức: P2**. — #568
 - [x] **#CHAT-69** — GDPR compliance:
   - `ChatEraseUserDataCommand` + endpoint `POST /api/chats/erase-my-data` (Customer yêu cầu) — replace body chat cũ với `[REDACTED — GDPR erasure]`, giữ row + audit metadata
@@ -5686,6 +5686,34 @@ KHÔNG được skip:
 - **R-40 (Sprint Chat):** AI suggest có thể leak PII nếu mask service fail. Mitigation: PII mask service có unit test 50+ pattern, fallback "AI unavailable" thay vì gửi raw nếu mask service throw exception.
 
 **Cross-reference:** Toàn bộ chi tiết kỹ thuật ở `ticket-chat-hub.md` (10 phần, 2010 dòng) — Sprint này là **task tracking layer**, design + DDL + endpoint signature ở doc kia là **source of truth**.
+
+---
+
+### Sprint BE-IoT-Realtime (Telemetry SSE lên FE/Mobile — chưa chốt timeline)
+
+**Goal:** Sau khi ingest đã **làm sạch** (calibration + loại outlier), đẩy **realtime** sensor reading lên **FE Web** (Manager/Admin tracking nhiều pin theo site) và **Mobile** (Customer xem **1 hoặc nhiều pin** của mình) qua **SSE** — đồng bộ quyết định §34 (KHÔNG dùng SignalR/WebSocket). Telemetry host trong **BatteryService**, Redis pub/sub backplane, **soft-dependency không chặn ingest**.
+
+**Owner:** đề xuất BE (gán khi `/kltn-sprint`). **Issue numbers:** do `/kltn-sprint` gán — KHÔNG tự gán để tránh trùng. **Phụ thuộc:** ingest + làm sạch đã DONE (Sprint IoT-2 `#IoT2-14..17`); SSE business-event (§34.1–34.9) độc lập, không đụng.
+
+**Design source of truth:** §34.10 (SSE telemetry) + `aibeiotrealtime.md` (Sprint BE-IoT). Sprint này là **task tracking layer**.
+
+**Tasks:**
+- [ ] **BEIOT-RT-01** — SSE endpoint `GET /api/sensor-readings/stream?scope=asset|customer|site:{id}` trong `BatteryService.Api` (`IAsyncEnumerable<SseEvent>` + `Content-Type: text/event-stream`, heartbeat `ping` 30s, `Last-Event-ID` resume). Xem §34.10.4. → #614
+- [ ] **BEIOT-RT-02** — Redis pub/sub backplane: channel `telemetry:{scope}` + subscriber per-instance (fan-out N instance — §34.6/§34.10.2). Test 2 instance: client nối instance A nhận reading ingest ở instance B. → #615
+- [ ] **BEIOT-RT-03** — Tap ingest: trong `BatchIngestSensorReadingsCommandHandler` **SAU** `SaveChangesAsync`, publish reading **đã insert** (đã calibrate + loại outlier) lên Redis theo asset/customer/site. **Soft-dependency** (`try/catch`, flag `Realtime:Enabled`) — lỗi KHÔNG chặn ingest. Xem §34.10.3/34.10.8. → #616
+- [ ] **BEIOT-RT-04** — Scope + RBAC: authorize lúc mở stream (Customer chỉ `asset:{pin mình}`+`customer:{mình}`; Manager/Admin `site:{thuộc quyền}`). Token qua **query param** `?access_token=` (EventSource không set header). Test: Customer A không nhận data Customer B. Xem §34.10.6/34.10.7. → #617
+- [ ] **BEIOT-RT-05** — 2 cấp event: `reading` (scope asset) + `summary` (gom latest/pin, throttle 3–5s, scope customer/site). **Cả hai mang đầy đủ field `LiveReadingDto`** (summary KHÔNG rút gọn — parity reading). Coalescer ưu tiên source `primary` mỗi pin (tránh số liệu một phần của redundant/external-temp). Xem §34.10.5. → #618
+- [ ] **BEIOT-RT-06** — FE Web: hook `useBatteryTelemetry(assetId)` (fetch-based SSE) + `useSiteTelemetry(siteId)`; backfill REST `/latest`/`/history`/`/aggregate` khi mở màn/reconnect; chart cập nhật realtime. **Render: scope 1 pin → chart đa-metric; scope nhiều pin (`summary`) → fleet view mỗi pin 1 đường, push TẤT CẢ `items` (xem §34.10.11)**. → #619
+- [ ] **BEIOT-RT-07** — FE Mobile (RN/Expo): hook cùng endpoint (`rn-eventsource`/fetch), token từ `expo-secure-store`; Customer xem 1 pin (`asset`) + nhiều pin (`customer`). **Nhiều pin → fleet view (mỗi pin 1 đường), không chỉ pin đầu (§34.10.11)**. → #620
+- [ ] **BEIOT-RT-08** — ApiGateway: SSE passthrough cho `/api/sensor-readings/stream`. **Verify:** YARP 2.3 stream SSE **mặc định, KHÔNG buffer** (đã test qua gateway `4001` — event tới realtime đúng 5s); chỉ đảm bảo KHÔNG bật response compression / output caching trên gateway. → #621
+- [ ] **BEIOT-RT-09** — Observability: metric `sse_active_connections`, `sse_events_pushed_total{scope}` + document flag `Realtime:Enabled`. → #622
+- [ ] **BEIOT-RT-10** — Tests: SSE e2e (mở stream → POST batch → nhận `reading` <1s), reconnect Last-Event-ID, auth isolation (Customer A≠B), throttle summary (≤1 msg/3–5s/scope), outlier KHÔNG lên stream. → #623
+
+**Acceptance:**
+- Customer mở app → chart 1 pin chạy realtime; Customer nhiều pin → dashboard mỗi card nhảy số.
+- Manager/Admin mở web → tracking nhiều pin theo site.
+- Data lên FE **đã loại outlier** (rác không hiện).
+- Tắt `Realtime:Enabled` → ingest vẫn chạy bình thường, chỉ không stream.
 
 ---
 
@@ -7264,6 +7292,133 @@ GET    /api/v1/realtime/topics                          (list available topics)
 - SSE end-to-end test: connect → publish event → assert received within 1s
 - Reconnect test với Last-Event-ID
 - Auth test: Customer A không nhận event của Customer B
+
+### 34.10. Sensor telemetry live stream — BatteryService SSE (BE-IoT)
+
+> **Phân biệt với §34.1–34.9:** phần trên là SSE **business event** (alert/ticket/sla) host trong NotificationService qua MassTransit. Mục này là SSE **telemetry pin tần suất cao** (~5s/pin) host **trong BatteryService**, tap thẳng ingest — KHÔNG đẩy qua event bus (tránh quá tải MassTransit/NotificationService). Triển khai qua **Sprint BE-IoT-Realtime** ở §17.
+
+#### 34.10.1. Lý do
+- Customer (mobile) xem chart voltage/current/temperature/SOC realtime của **1 hoặc nhiều pin mình sở hữu**.
+- Manager/Admin (web) tracking nhiều pin theo site.
+- Telemetry 5s/pin × N pin quá nặng nếu route qua MassTransit → giữ trong BatteryService.
+
+#### 34.10.2. Quyết định technical
+- **Transport: SSE** (đồng bộ §34.2 — một chiều server→client là đủ cho telemetry, không cần WebSocket/SignalR).
+- **Host: `BatteryService.Api`** (không phải NotificationService) — gần nguồn data, tap ingest trực tiếp.
+- **Backplane: Redis pub/sub** (như §34.6) — channel `telemetry:{scope}` fan-out giữa N instance BatteryService.
+- **Qua ApiGateway:** client nối SSE qua gateway `/api/sensor-readings/stream` — **YARP stream mặc định, KHÔNG buffer** (đã verify). FE/Mobile đi gateway như mọi request khác.
+
+#### 34.10.3. Nguyên tắc — stream SAU khi đã làm sạch
+Thứ tự trong `BatchIngestSensorReadingsCommandHandler`: reject clock skew → `ApplyCalibration` (`raw*scale+offset`) → `IsOutlier`→`continue` (loại nhiễu) → INSERT hypertable → `SaveChangesAsync` → ★ publish lên Redis. ⇒ Reading lên FE **đã calibrate + đã loại outlier**; rác bị `continue` không bao giờ lên stream.
+> ⚠️ Anomaly/noise-suppression (~60s, ThresholdCheck) KHÔNG phải lọc reading — chỉ sinh Alert. Đừng đợi nó mới stream (sẽ trễ 60s).
+
+#### 34.10.4. Endpoint
+```
+GET /api/sensor-readings/stream?scope=<scope>     · Accept: text/event-stream
+Các giá trị scope:
+  asset:{id}            1 pin            → event reading (đầy đủ, vẽ chart)
+  assets:{id1,id2,...}  nhiều pin tùy ý  → event summary  (≤ 50 id)
+  customer:{id}         pin của 1 khách  → event summary
+  site:{id}             pin trong 1 site → event summary
+  sites:{id1,id2,...}   nhiều site       → event summary  (≤ 50 id)
+  type:{id}             theo BatteryTypeId (loại pin)  → event summary
+  all                   TOÀN hệ thống    → event summary  (Admin/Manager)
+  site:none             pin không thuộc site nào (SiteId=null) → event summary (Admin/Manager)
+```
+> Chỉ **`asset:{1 id}`** trả event `reading` đầy đủ. Mọi scope còn lại (gồm `assets:` nhiều pin) → `summary` gom + throttle để chống flood.
+Server response:
+```
+event: reading
+data: {"batteryAssetId":"...","customerId":"...","siteId":"...","time":"2026-...Z",
+       "voltage":12.6,"current":-5.2,"temperature":35.4,"socPercent":78.5,
+       "sourceType":1,"sensorSourceCode":"primary"}
+
+event: summary
+data: {"scopeType":"customer","items":[{"batteryAssetId":"...","customerId":"...","siteId":"...",
+       "batteryTypeId":"...","time":"...","voltage":12.6,"current":-5.2,"temperature":35.4,
+       "socPercent":78.5,"sohPercent":94.2,"cycleCount":120,"chargingState":3,
+       "internalResistanceMilliohm":null,"cellVoltageDeltaMv":null,"bmsErrorCode":null,
+       "sourceDeviceId":"...","sourceType":1,"sensorSourceCode":"primary"}]}
+
+event: ping
+data: {}
+```
+> Mỗi item của `summary` là **`LiveReadingDto` đầy đủ** (parity với event `reading`) — KHÔNG rút gọn. Coalescer ưu tiên giữ source `primary` (BMS) mỗi pin để các field BMS-only (current, chargingState, bmsErrorCode, cycleCount…) luôn có giá trị thật thay vì 0 của `redundant`/`external-temp`.
+
+#### 34.10.5. Hai cấp event (chống flood khi nhiều pin)
+| Event | Scope | Nội dung | Nhịp |
+|-------|-------|----------|------|
+| `reading` | **`asset:{1 id}`** (1 pin đơn) | reading đầy đủ (vẽ chart) | mỗi reading ~5s |
+| `summary` | mọi scope còn lại (`assets`/`customer`/`site`/`sites`/`type`/`all`/`site:none`) | gom **mỗi pin 1 item — đầy đủ field y hệt `reading`** (ưu tiên source `primary`) | throttle ~3–5s |
+
+> **Khác biệt 2 cấp chỉ là NHỊP + GOM, KHÔNG phải số lượng field.** Cả `reading` và `summary` đều mang trọn bộ field của `LiveReadingDto`. `summary` chỉ throttle (~4s) + coalesce latest-per-pin để chống flood khi nhiều pin; mỗi item vẫn đủ thông số để FE hiển thị chi tiết bất kỳ pin nào mà không cần mở thêm stream `asset:`. Multi-source: coalescer giữ `primary` (BMS) → tránh số liệu một phần.
+
+**Fan-out (publisher):** mỗi reading được publish lên các channel `telemetry:asset:{id}` + `telemetry:customer:{id}` + `telemetry:site:{id}` (hoặc `telemetry:site:none`) + `telemetry:type:{typeId}` + `telemetry:all`. Scope chọn channel(s) tương ứng để subscribe (multi-asset/site → nhiều channel/1 kết nối). `LiveReadingDto` mang thêm `BatteryTypeId` để định tuyến scope `type`.
+
+**Đa nguồn mỗi pin:** firmware gửi 3 reading/pin (`primary` BMS / `redundant` INA226 / `external-temp` DS18B20). Stream đẩy đủ (có `sensorSourceCode`), **FE mặc định vẽ `primary`**; redundant/external-temp để đối chiếu. Mọi message mang `batteryAssetId` (+ `customerId`/`siteId`) để route đúng pin.
+
+#### 34.10.6. Scope → RBAC
+| Role | Được subscribe |
+|------|----------------|
+| Customer | `asset:`/`assets:` (chỉ pin MÌNH sở hữu — kiểm **mọi** id), `customer:{chính mình}` |
+| **Staff** | `asset:`/`assets:` (**bất kỳ pin** — xem chi tiết pin đang xử lý ticket/bảo trì). KHÔNG `customer`/`site(s)`/`type`/`all`/`site:none` |
+| Manager/Admin | tất cả: `asset(s)`, `customer`, `site(s)`, `type`, `all`, `site:none` |
+
+- Scope rộng/xuyên khách (`customer`, `site(s)`, `type`, `all`, `site:none`) → **chỉ Admin/Manager**.
+- **Staff (MVP):** xem chi tiết **bất kỳ pin** (`asset`/`assets`) phục vụ xử lý ticket/bảo trì — KHÔNG xem dashboard tổng (site/all). Chưa enforce "chỉ pin của ticket được giao" → **hardening sau** (cần liên kết Ticket↔Asset từ TicketService).
+- `assets:` của Customer → backend kiểm **tất cả** id phải thuộc về họ (1 id lạ → 403 toàn bộ).
+- Authorize lúc mở stream — **Customer A KHÔNG nhận data Customer B** (giống §34.9 auth test).
+
+#### 34.10.7. Auth qua SSE (gotcha)
+Native `EventSource` (browser) **KHÔNG set được header `Authorization`** → dùng **token qua query param** `?access_token=` HOẶC client SSE dạng fetch (web: `fetch-event-source`; RN: `rn-eventsource`/fetch). Mobile lấy token từ `expo-secure-store`.
+
+#### 34.10.8. Soft dependency
+Publish lên Redis **SAU** `SaveChangesAsync`, bọc `try/catch` — SSE/Redis lỗi **KHÔNG** được chặn/làm fail ingest. Flag `Realtime:Enabled` để bật/tắt độc lập (tắt → ingest vẫn chạy, chỉ không stream).
+
+#### 34.10.9. Fallback & resume
+- Reconnect tự động + `Last-Event-ID` resume (như §34.6); heartbeat `ping` 30s giữ kết nối.
+- Mở màn/reconnect: FE backfill bằng REST `/latest` `/history` `/aggregate`, SSE chỉ đẩy delta.
+- **Backfill áp dụng cho CẢ scope 1 pin lẫn nhiều pin (fleet):**
+  - 1 pin (`asset`) → backfill `/history` của pin đó.
+  - Nhiều pin (`assets`/`customer`/`site`/`sites`/`type`/`all`/`site:none`) → backfill `/history` **mỗi pin** trong scope (song song, **cap số pin** để tránh flood — vd ≤ 12 ở tool test, log rõ phần bị cắt). Không có backfill thì chart fleet phải chờ vài tick `summary` (~mỗi 5s) mới đủ ≥2 điểm/pin để vẽ.
+  - `/history` trả **DESC** (mới nhất trước) → client lấy `N` điểm mới nhất rồi **đảo về tăng dần** (cũ→mới) để vẽ trái→phải, khớp hướng SSE append. Ghép history + điểm live đã tới trong lúc backfill (dedup theo `time`).
+  - Resolve pin của scope `customer`/`site`/`type`/`all`/`site:none` từ danh sách asset đã tải (client) — `assets:`/`sites:` thì id tường minh sẵn.
+
+#### 34.10.10. Tests
+- E2E: mở stream → POST batch → nhận `reading` < 1s.
+- Auth isolation: Customer A không nhận pin của Customer B.
+- Throttle: `summary` ≤ 1 message / 3–5s / scope dù N pin.
+- Reconnect Last-Event-ID; outlier KHÔNG xuất hiện trên stream.
+
+#### 34.10.11. Client rendering — 1 pin (đa metric) vs nhiều pin (fleet)
+Vì `summary` mang **mỗi pin 1 item đầy đủ field** (§34.10.5), client PHẢI render **TẤT CẢ** pin trong `items`, KHÔNG chỉ `items[0]`:
+
+| Scope | Chế độ chart | Cách vẽ |
+|-------|--------------|---------|
+| `asset:{1 id}` (event `reading`) | **single — đa metric** | 1 pin, nhiều đường = nhiều metric (voltage/current/temperature/soc/soh/cycle/DCIR/cellΔ), mỗi đường co giãn theo thang riêng |
+| còn lại (event `summary`) | **fleet — đa pin** | **mỗi pin 1 đường**, chọn **1 metric** (dropdown); chuẩn hoá chung 1 thang để so sánh; căn phải (điểm mới nhất ở mép phải) |
+
+- **State:** giữ **1 chuỗi điểm cho MỖI pin** (`Map<assetId, point[]>`), cap ~60 điểm/pin. Mỗi `summary` tick → push điểm cho **mọi** pin trong `items` (không bỏ pin nào). Mỗi `reading` tick → push cho đúng pin đó.
+- **Backfill khi mở stream (cả single lẫn fleet):** nạp `/history` để chart hiện NGAY. Fleet → backfill **mỗi pin trong scope** (song song, cap số pin), `/history` DESC → đảo về tăng dần, ghép với điểm live (dedup `time`). Chi tiết §34.10.9.
+- **Không** vẽ "N pin × 8 metric" cùng lúc (N×8 đường → rối, không đọc nổi). Fleet view chọn 1 metric, N đường — đây là cách chuẩn so sánh nhiều pin.
+- Bảng "latest/pin" + panel "tất cả field" cập nhật từ cùng `items` (mỗi pin 1 dòng).
+- ⚠️ **Bug điển hình (đã gặp & fix ở tool test):** chart chỉ bám `items[0]` → chỉ pin đầu tiên nhảy, các pin khác đứng im. Phải lặp **toàn bộ** `items`, mỗi pin 1 chuỗi.
+
+> **Hiện thực mẫu:** `backend/sse-telemetry-test.html` — tự chuyển `single`/`fleet` theo scope, dropdown chọn metric cho fleet. FE Web (BEIOT-RT-06) + Mobile (BEIOT-RT-07) theo đúng pattern này.
+
+#### 34.10.12. Contract lỗi (non-2xx) — `/stream` · `/latest` · `/history` · `/aggregate`
+Mọi response **non-2xx** của 4 endpoint này dùng **`CommonResponse`** (đồng nhất toàn dự án). Hai dạng lỗi tách bạch:
+
+| Dạng lỗi | `statusCode` | `listErrors` | `message` |
+|----------|--------------|--------------|-----------|
+| **Field-level validation** (sai/thiếu field) | **400** | `[{ field, detail }]` — ghi rõ field gây lỗi + mô tả | tổng quát `"Dữ liệu không hợp lệ."` |
+| **Cross-field** (vd `from` > `to`) | **422** | `[{ field, detail }]` (field bị vi phạm) | `"Dữ liệu không hợp lệ."` |
+| **Lỗi khác** (auth/forbidden/not-found/nghiệp vụ) | 401/403/404/… | **`null`** | mô tả lỗi ở `message` |
+
+- `listErrors` rỗng được `ErrorsListJsonConverter` tự serialize thành **`null`** (không phải `[]`) → client phân biệt "có field error" vs "lỗi chung" bằng `listErrors !== null`.
+- **SSE `/stream`:** lỗi xảy ra **TRƯỚC khi mở stream** (status 4xx thật, body `CommonResponse`); sau khi đã `200 text/event-stream` thì không còn CommonResponse — lỗi báo qua đóng kết nối. Status 4xx phải thật (KHÔNG "200 + isSuccess=false") vì `EventSource`/client phân nhánh theo status.
+- Ví dụ field-level scope sai: `400 { isSuccess:false, message:"Dữ liệu không hợp lệ.", listErrors:[{field:"scope", detail:"..."}] }`. Auth: `403 { message:"Không có quyền với scope này.", listErrors:null }`.
+- Helper: `SharedInfrastructure.Middleware.CommonResponseWriter.WriteAsync(...)` (stream) / `IValidatable.ValidateAsync()` qua `ValidationBehavior` (latest/history/aggregate). Đã verify live 6 case (400 scope / 403 staff / 400 Limit / 400 Interval / 422 from>to / 404 latest).
 
 ---
 

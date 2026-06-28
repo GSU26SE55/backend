@@ -9,12 +9,21 @@ namespace TicketService.Application.CQRS.Command.ChatTemplateUpdate;
 
 public class ChatTemplateUpdateCommand : IRequest<CommonResponse<ChatTemplateDTO>>
 {
+    /// <summary>
+    /// ID của mẫu phản hồi/chat.
+    /// </summary>
     [JsonIgnore]
     public Guid TemplateId { get; set; }
 
+    /// <summary>
+    /// ID của người thực hiện yêu cầu.
+    /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
 
+    /// <summary>
+    /// Danh sách vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string[] ActorRoles { get; set; } = Array.Empty<string>();
 

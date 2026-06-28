@@ -8,10 +8,16 @@ namespace TicketService.Application.CQRS.Command.TicketDeclareIncident;
 
 public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Incident description.
+    /// </summary>
     public string? IncidentDescription { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()

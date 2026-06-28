@@ -8,5 +8,8 @@ namespace TicketService.Application.CQRS.Query.Reports;
 public class CategoryBreakdownReportQuery : IRequest<CommonResponse<List<CategoryBreakdownRow>>>
 {
     public DateTime? From { get; set; }
+    /// <summary>
+    /// Thời gian kết thúc lọc (UTC).
+    /// </summary>
     public DateTime? To { get; set; }
 }

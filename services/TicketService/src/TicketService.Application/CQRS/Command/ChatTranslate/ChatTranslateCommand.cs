@@ -6,15 +6,27 @@ namespace TicketService.Application.CQRS.Command.ChatTranslate;
 
 public class ChatTranslateCommand : IRequest<ChatTranslateResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// ID của Chat/Bình luận.
+    /// </summary>
     [JsonIgnore]
     public Guid ChatId { get; set; }
 
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 
+    /// <summary>
+    /// Mã ngôn ngữ đích cần dịch sang (ví dụ: "en", "vi").
+    /// </summary>
     [JsonIgnore]
     public string TargetLanguage { get; set; } = string.Empty;
 }

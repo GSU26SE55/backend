@@ -9,19 +9,31 @@ namespace TicketService.Application.CQRS.Command.ChatDelete;
 
 public class ChatDeleteCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
+    /// <summary>
+    /// Tên hiển thị của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
     [JsonIgnore]
     public List<string> UserPermissions { get; set; } = new();
 
+    /// <summary>
+    /// Lý do xóa.
+    /// </summary>
     public string? DeleteReason { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()

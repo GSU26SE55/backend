@@ -9,14 +9,23 @@ namespace TicketService.Application.CQRS.Command.ChatAttachmentRemove;
 
 public class ChatAttachmentRemoveCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của file đính kèm.
+    /// </summary>
     [JsonIgnore]
     public Guid AttachmentId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
 

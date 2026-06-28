@@ -10,6 +10,9 @@ namespace TicketService.Application.CQRS.Command.ChatVoiceTranscribe;
 
 public class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// Max audio file size default.
+    /// </summary>
     public const long MaxAudioFileSizeDefault = 20_971_520; // 20MB — Gemini inline limit
 
     private static readonly HashSet<string> AllowedAudioMimeTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -28,24 +31,45 @@ public class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValid
         "audio/flac", "audio/x-flac",
     };
 
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
 
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
 
+    /// <summary>
+    /// Tên hiển thị của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Danh sách quyền hạn của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public List<string> UserPermissions { get; set; } = new();
 
+    /// <summary>
+    /// Tệp tin âm thanh tải lên.
+    /// </summary>
     [JsonIgnore]
     public IFormFile? AudioFile { get; set; }
 
+    /// <summary>
+    /// Header Authorization (JWT token) đi kèm.
+    /// </summary>
     [JsonIgnore]
     public string AuthorizationHeader { get; set; } = string.Empty;
 

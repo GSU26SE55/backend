@@ -9,15 +9,24 @@ namespace TicketService.Application.CQRS.Command.ChatMarkAsRead;
 
 public class ChatMarkAsReadCommand : IRequest<ChatMarkAsReadResponse>, IValidatable<ChatMarkAsReadResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string[] ActorRoles { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Chat ids.
+    /// </summary>
     public List<Guid> ChatIds { get; set; } = new();
 
     public Task<ChatMarkAsReadResponse> ValidateAsync()

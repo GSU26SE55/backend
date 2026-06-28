@@ -67,12 +67,13 @@ public class FileAuthorizationServiceTests
     [Theory]
     [InlineData(FilePurposeEnum.TicketAttachment)]
     [InlineData(FilePurposeEnum.MaintenancePhoto)]
-    public void CanRead_Customer_OtherUserFile_TicketRelatedPurpose_ReturnsFalse(FilePurposeEnum purpose)
+    public void CanRead_Customer_OtherUserFile_TicketRelatedPurpose_ReturnsTrue(FilePurposeEnum purpose)
     {
         var service = BuildService("Customer");
         var file = BuildFile(purpose, createdBy: OtherUserId);
 
-        service.CanRead(file).Should().BeFalse();
+        // TicketAttachment/MaintenancePhoto đọc được bởi mọi user đã đăng nhập (không giới hạn owner).
+        service.CanRead(file).Should().BeTrue();
     }
 
     [Theory]

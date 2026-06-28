@@ -17,23 +17,41 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         "^[\\s\\u2600-\\u27BF\\u2190-\\u21FF\\u2B00-\\u2BFF\\uD83C-\\uDBFF\\uDC00-\\uDFFF\\uFE0F\\u200D]*$",
         RegexOptions.Compiled);
 
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
+    /// <summary>
+    /// Danh sách quyền hạn của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public List<string> UserPermissions { get; set; } = new();
 
+    /// <summary>
+    /// Nội dung chi tiết.
+    /// </summary>
     public required string Body { get; set; }
     public bool IsInternal { get; set; }
     public bool RequestCustomerInfo { get; set; }
+    /// <summary>
+    /// Body format.
+    /// </summary>
     public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
     public List<ChatAttachmentInput>? Attachments { get; set; }
     public List<ChatMentionInput>? Mentions { get; set; }
+    /// <summary>
+    /// Danh sách nhóm hoặc bộ phận được nhắc tên.
+    /// </summary>
     public List<GroupMentionInput>? GroupMentions { get; set; }
 
     private static readonly HashSet<string> ValidRoleIdentifiers = new(StringComparer.OrdinalIgnoreCase)

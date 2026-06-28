@@ -46,7 +46,7 @@ public class ChatAttachmentDownloadQueryHandlerTests
             Id = id,
             TicketId = ticketId,
             ChatId = chatId,
-            FileId = Guid.NewGuid(),
+            FileId = id,
             FileName = "file.pdf",
             ContentType = "application/pdf",
             SizeBytes = 1024,

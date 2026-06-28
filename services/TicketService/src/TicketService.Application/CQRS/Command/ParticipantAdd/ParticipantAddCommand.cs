@@ -9,15 +9,27 @@ namespace TicketService.Application.CQRS.Command.ParticipantAdd;
 
 public class ParticipantAddCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     public Guid UserId { get; set; }
     public ActorRoleEnum UserRole { get; set; }
     public ParticipantTypeEnum ParticipantType { get; set; }
+    /// <summary>
+    /// Can post.
+    /// </summary>
     public bool CanPost { get; set; } = true;
     public bool CanViewInternal { get; set; }
 
+    /// <summary>
+    /// ID của người thực hiện yêu cầu.
+    /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
     [JsonIgnore]

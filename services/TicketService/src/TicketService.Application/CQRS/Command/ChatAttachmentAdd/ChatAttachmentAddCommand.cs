@@ -9,18 +9,30 @@ namespace TicketService.Application.CQRS.Command.ChatAttachmentAdd;
 
 public class ChatAttachmentAddCommand : IRequest<CommonResponse<TicketAttachmentDTO>>, IValidatable<CommonResponse<TicketAttachmentDTO>>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
 
+    /// <summary>
+    /// ID tham chiếu của file trong hệ thống lưu trữ.
+    /// </summary>
     public required Guid FileId { get; set; }
     public required string FileName { get; set; }
     public required string ContentType { get; set; }
+    /// <summary>
+    /// Kích thước file tính bằng byte.
+    /// </summary>
     public long SizeBytes { get; set; }
 
     public Task<CommonResponse<TicketAttachmentDTO>> ValidateAsync()

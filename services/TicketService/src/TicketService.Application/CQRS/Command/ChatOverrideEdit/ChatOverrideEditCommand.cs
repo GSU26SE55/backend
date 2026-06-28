@@ -15,15 +15,24 @@ public class ChatOverrideEditCommand : IRequest<TicketActionResponse>, IValidata
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
+    /// <summary>
+    /// ID của Chat/Bình luận.
+    /// </summary>
     [JsonIgnore]
     public Guid ChatId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Nội dung chi tiết.
+    /// </summary>
     public required string Body { get; set; }
     public required string OverrideReason { get; set; }
 

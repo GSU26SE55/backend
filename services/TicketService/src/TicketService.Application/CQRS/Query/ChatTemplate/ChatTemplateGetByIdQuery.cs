@@ -7,6 +7,9 @@ namespace TicketService.Application.CQRS.Query.ChatTemplate;
 
 public class ChatTemplateGetByIdQuery : IRequest<CommonResponse<ChatTemplateDTO>>
 {
+    /// <summary>
+    /// ID của mẫu phản hồi/chat.
+    /// </summary>
     public Guid TemplateId { get; set; }
     public Guid ActorUserId { get; set; }
     public string[] ActorRoles { get; set; } = Array.Empty<string>();

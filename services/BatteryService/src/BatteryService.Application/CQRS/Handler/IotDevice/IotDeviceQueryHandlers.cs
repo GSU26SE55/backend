@@ -79,3 +79,31 @@ public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuer
         };
     }
 }
+
+public class GetIotDeviceByCodeQueryHandler : IRequestHandler<GetIotDeviceByCodeQuery, CommonResponse<IotDeviceDto>>
+{
+    private readonly IBatteryUnitOfWork _unitOfWork;
+    public GetIotDeviceByCodeQueryHandler(IBatteryUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+
+    public async Task<CommonResponse<IotDeviceDto>> Handle(GetIotDeviceByCodeQuery request, CancellationToken ct)
+    {
+        // Chuẩn hoá giống lúc Create lưu (Trim().ToUpperInvariant()) — khớp unique index idx_iot_devices_device_code.
+        var code = (request.DeviceCode ?? string.Empty).Trim().ToUpperInvariant();
+        if (code.Length == 0)
+            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+
+        var entity = await _unitOfWork.IotDevices.GetAllAsync()
+            .Include(d => d.Site)
+            .Include(d => d.TargetFirmwareRelease)
+            .FirstOrDefaultAsync(d => d.DeviceCode == code && !d.IsDeleted, ct);
+        if (entity is null)
+            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+
+        return new CommonResponse<IotDeviceDto>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Data = IotDeviceMapper.ToDto(entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version)
+        };
+    }
+}

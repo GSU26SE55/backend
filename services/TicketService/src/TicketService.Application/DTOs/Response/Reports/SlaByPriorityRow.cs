@@ -4,8 +4,14 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class SlaByPriorityRow
 {
     public string Priority { get; set; } = string.Empty;
+    /// <summary>
+    /// Met.
+    /// </summary>
     public int Met { get; set; }
     public int Breached { get; set; }
     public int Total { get; set; }
+    /// <summary>
+    /// Compliance rate.
+    /// </summary>
     public decimal ComplianceRate { get; set; }
 }

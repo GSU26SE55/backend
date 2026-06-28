@@ -9,15 +9,24 @@ namespace TicketService.Application.CQRS.Command.ParticipantUpdateRole;
 
 public class ParticipantUpdateRoleCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
 
+    /// <summary>
+    /// Participant type.
+    /// </summary>
     public ParticipantTypeEnum ParticipantType { get; set; }
     public bool? CanPost { get; set; }
     public bool? CanViewInternal { get; set; }
 
+    /// <summary>
+    /// ID của người thực hiện yêu cầu.
+    /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
     [JsonIgnore]

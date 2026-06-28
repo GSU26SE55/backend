@@ -7,9 +7,15 @@ namespace TicketService.Application.CQRS.Command.ChatSuggest;
 
 public class ChatSuggestCommand : IRequest<ChatSuggestResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 

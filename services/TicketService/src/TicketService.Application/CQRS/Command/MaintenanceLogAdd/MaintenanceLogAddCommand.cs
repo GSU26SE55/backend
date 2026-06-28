@@ -9,26 +9,47 @@ namespace TicketService.Application.CQRS.Command.MaintenanceLogAdd;
 
 public class MaintenanceLogAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid StaffId { get; set; }
 
+    /// <summary>
+    /// Log type.
+    /// </summary>
     public MaintenanceLogTypeEnum LogType { get; set; }
     public required string Summary { get; set; }
     public string? DiagnosisDetails { get; set; }
+    /// <summary>
+    /// Actions taken.
+    /// </summary>
     public string? ActionsTaken { get; set; }
     public int DurationMinutes { get; set; }
     public string? ResolutionNote { get; set; }
+    /// <summary>
+    /// Started at.
+    /// </summary>
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? PartsUsed { get; set; }
+    /// <summary>
+    /// Danh sách các tệp đính kèm.
+    /// </summary>
     public List<MaintenanceAttachmentInput>? Attachments { get; set; }
     public List<MaintenanceAttachmentInput>? BeforePhotos { get; set; }
     public List<MaintenanceAttachmentInput>? AfterPhotos { get; set; }
+    /// <summary>
+    /// Related kb article ids.
+    /// </summary>
     public List<Guid>? RelatedKbArticleIds { get; set; }
     public decimal? CheckInLatitude { get; set; }
     public decimal? CheckInLongitude { get; set; }
+    /// <summary>
+    /// Check in at.
+    /// </summary>
     public DateTime? CheckInAt { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()

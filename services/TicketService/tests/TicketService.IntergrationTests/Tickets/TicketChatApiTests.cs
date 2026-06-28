@@ -480,7 +480,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         await _db.SaveChangesAsync();
 
         // Act — request không gửi TestAuthHandler.RolesHeader nên giữ default đủ cả 4 role (gồm Admin)
-        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+        var response = await _client.PatchAsync($"/api/admin/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -529,7 +529,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         await _db.SaveChangesAsync();
 
         // Act
-        var response = await _client.PatchAsync($"/api/tickets/{closedTicketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+        var response = await _client.PatchAsync($"/api/admin/tickets/{closedTicketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -558,7 +558,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         await _db.SaveChangesAsync();
 
         // Act
-        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+        var response = await _client.PatchAsync($"/api/admin/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -602,7 +602,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         await _db.SaveChangesAsync();
 
         // Act — gọi qua route của _ticketId, không phải otherTicketId
-        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
+        var response = await _client.PatchAsync($"/api/admin/tickets/{_ticketId}/chats/{chat.Id}/restore", new StringContent(string.Empty));
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -615,7 +615,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
     public async Task RestoreChat_ChatNotFound_Returns404NotFound()
     {
         // Act
-        var response = await _client.PatchAsync($"/api/tickets/{_ticketId}/chats/{Guid.NewGuid()}/restore", new StringContent(string.Empty));
+        var response = await _client.PatchAsync($"/api/admin/tickets/{_ticketId}/chats/{Guid.NewGuid()}/restore", new StringContent(string.Empty));
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -642,7 +642,7 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         await _db.SaveChangesAsync();
 
         // Act — override role claim qua TestAuthHandler.RolesHeader, bỏ Admin → [Authorize(Roles="Admin")] phải chặn
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/tickets/{_ticketId}/chats/{chat.Id}/restore")
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/tickets/{_ticketId}/chats/{chat.Id}/restore")
         {
             Content = new StringContent(string.Empty)
         };

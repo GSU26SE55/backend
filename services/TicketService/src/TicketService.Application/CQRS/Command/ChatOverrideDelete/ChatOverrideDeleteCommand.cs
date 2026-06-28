@@ -15,15 +15,24 @@ public class ChatOverrideDeleteCommand : IRequest<TicketActionResponse>, IValida
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
+    /// <summary>
+    /// ID của Chat/Bình luận.
+    /// </summary>
     [JsonIgnore]
     public Guid ChatId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+    /// <summary>
+    /// Vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Override reason.
+    /// </summary>
     public required string OverrideReason { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()

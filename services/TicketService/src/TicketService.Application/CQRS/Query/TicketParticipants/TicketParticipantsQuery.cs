@@ -7,14 +7,23 @@ namespace TicketService.Application.CQRS.Query.TicketParticipants;
 
 public class TicketParticipantsQuery : IRequest<TicketParticipantsResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     [BindNever]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// ID của người thực hiện yêu cầu.
+    /// </summary>
     [JsonIgnore]
     [BindNever]
     public Guid ActorUserId { get; set; }
 
+    /// <summary>
+    /// Danh sách vai trò của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     [BindNever]
     public string[] ActorRoles { get; set; } = Array.Empty<string>();

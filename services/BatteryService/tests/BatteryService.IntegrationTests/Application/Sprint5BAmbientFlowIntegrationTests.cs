@@ -4,6 +4,7 @@ using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Handler.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Query.Ambient;
+using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
@@ -143,7 +144,7 @@ public class Sprint5BAmbientFlowIntegrationTests
                 outboxMessages.Add((nameof(EnvironmentalIncidentResolvedEvent), e)))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var reportResult = await report.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,
@@ -203,7 +204,7 @@ public class Sprint5BAmbientFlowIntegrationTests
         outbox.Setup(o => o.WriteAsync(It.IsAny<EnvironmentalIncidentResolvedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var reportResult = await report.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,
@@ -243,7 +244,7 @@ public class Sprint5BAmbientFlowIntegrationTests
         outbox.Setup(o => o.WriteAsync(It.IsAny<EnvironmentalIncidentDetectedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var cmd = new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,

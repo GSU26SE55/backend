@@ -8,9 +8,15 @@ namespace TicketService.Application.CQRS.Command.ParticipantSelfLeave;
 
 public class ParticipantSelfLeaveCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Leave reason.
+    /// </summary>
     public string? LeaveReason { get; set; }
 
     [JsonIgnore]

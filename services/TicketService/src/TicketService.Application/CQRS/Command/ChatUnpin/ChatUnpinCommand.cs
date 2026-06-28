@@ -9,14 +9,23 @@ namespace TicketService.Application.CQRS.Command.ChatUnpin;
 
 public class ChatUnpinCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid ChatId { get; set; }
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
+    /// <summary>
+    /// Tên hiển thị của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
     [JsonIgnore]

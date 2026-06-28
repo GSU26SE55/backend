@@ -16,16 +16,28 @@ public class ChatOverrideAddCommand : IRequest<TicketActionResponse>, IValidatab
 {
     [JsonIgnore]
     public Guid TicketId { get; set; }
+    /// <summary>
+    /// ID của người dùng.
+    /// </summary>
     [JsonIgnore]
     public Guid UserId { get; set; }
     [JsonIgnore]
     public ActorRoleEnum UserRole { get; set; }
+    /// <summary>
+    /// Tên hiển thị của người thực hiện.
+    /// </summary>
     [JsonIgnore]
     public string UserDisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Nội dung chi tiết.
+    /// </summary>
     public required string Body { get; set; }
     public bool IsInternal { get; set; }
     public ChatBodyFormatEnum BodyFormat { get; set; } = ChatBodyFormatEnum.PlainText;
+    /// <summary>
+    /// Danh sách các tệp đính kèm.
+    /// </summary>
     public List<ChatAttachmentInput>? Attachments { get; set; }
     public required string OverrideReason { get; set; }
 

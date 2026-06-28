@@ -11,20 +11,35 @@ namespace TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
 
 public class MaintenanceLogUpdateCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của nhật ký bảo trì.
+    /// </summary>
     [JsonIgnore]
     public Guid LogId { get; set; }
     [JsonIgnore]
     public Guid StaffId { get; set; }
 
+    /// <summary>
+    /// Log type.
+    /// </summary>
     public MaintenanceLogTypeEnum? LogType { get; set; }
     public string? Summary { get; set; }
     public string? DiagnosisDetails { get; set; }
+    /// <summary>
+    /// Actions taken.
+    /// </summary>
     public string? ActionsTaken { get; set; }
     public int? DurationMinutes { get; set; }
     public string? ResolutionNote { get; set; }
+    /// <summary>
+    /// Parts used.
+    /// </summary>
     public string? PartsUsed { get; set; }
     public List<MaintenanceAttachmentInput>? Attachments { get; set; }
     public List<MaintenanceAttachmentInput>? BeforePhotos { get; set; }
+    /// <summary>
+    /// After photos.
+    /// </summary>
     public List<MaintenanceAttachmentInput>? AfterPhotos { get; set; }
     public List<Guid>? RelatedKbArticleIds { get; set; }
 

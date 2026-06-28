@@ -8,13 +8,22 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketTriageRejectCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Lý do thực hiện hành động.
+    /// </summary>
     public required string Reason { get; set; }
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+    /// <summary>
+    /// Tên của Manager.
+    /// </summary>
     [JsonIgnore]
     public string? ManagerName { get; set; }
 
