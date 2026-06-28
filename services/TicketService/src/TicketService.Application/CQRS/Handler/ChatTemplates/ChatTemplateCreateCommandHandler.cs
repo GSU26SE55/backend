@@ -29,7 +29,6 @@ public class ChatTemplateCreateCommandHandler : IRequestHandler<ChatTemplateCrea
             Category = request.Category,
             IsInternalDefault = request.IsInternalDefault,
             Scope = request.Scope,
-            TeamId = request.TeamId,
             CreatedByUserId = request.ActorUserId,
             IsActive = true,
             UsageCount = 0
@@ -55,7 +54,6 @@ public class ChatTemplateCreateCommandHandler : IRequestHandler<ChatTemplateCrea
         IsInternalDefault = t.IsInternalDefault,
         CreatedByUserId = t.CreatedByUserId.ToString(),
         Scope = t.Scope,
-        TeamId = t.TeamId?.ToString(),
         UsageCount = t.UsageCount,
         IsActive = t.IsActive,
         CreatedAt = t.CreatedAt,

@@ -12,4 +12,5 @@ public class TicketChatTranslation : AuditableEntity
     public DateTime TranslatedAt { get; set; }
 
     public required TicketChat Chat { get; set; }
+    public ICollection<TicketChatTranslationUser> Users { get; set; } = new List<TicketChatTranslationUser>();
 }

@@ -46,6 +46,25 @@ public class ChatTemplatesController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy chi tiết chat template theo ID.
+    /// </summary>
+    [HttpGet("{id}")]
+    [ProducesResponseType(typeof(CommonResponse<ChatTemplateDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetTemplateById(Guid id)
+    {
+        var result = await _mediator.Send(new ChatTemplateGetByIdQuery
+        {
+            TemplateId = id,
+            ActorUserId = GetActorUserId(),
+            ActorRoles = GetCurrentRoles()
+        });
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Tạo chat template mới.
     /// </summary>
     [HttpPost]

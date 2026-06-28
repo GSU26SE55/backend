@@ -41,8 +41,17 @@ public class ChatOptions
     /// <summary>ClamAV virus scan config (#514).</summary>
     public VirusScanSection VirusScan { get; set; } = new();
 
+    /// <summary>
+    /// Provider cho AI text/suggestion clients: "Gemini" (default) hoặc "DeepSeek".
+    /// Voice transcription luôn dùng Gemini — DeepSeek không hỗ trợ audio.
+    /// </summary>
+    public string Provider { get; set; } = "Gemini";
+
     /// <summary>Cấu hình AI suggest endpoint (#559).</summary>
     public AiSection Ai { get; set; } = new();
+
+    /// <summary>Cấu hình DeepSeek Chat Completions API.</summary>
+    public DeepSeekSection DeepSeek { get; set; } = new();
 
     public class FeaturesSection
     {
@@ -69,12 +78,15 @@ public class ChatOptions
 
     public class AiSection
     {
-        /// <summary>Gemini (hoặc LLM khác) API key — điền vào appsettings.Development.json khi test.</summary>
+        /// <summary>Gemini API key.</summary>
         public string ApiKey { get; set; } = string.Empty;
 
-        /// <summary>Full URL tới generateContent endpoint (không gồm query ?key=...).</summary>
-        public string SuggestModelEndpoint { get; set; } =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
+        /// <summary>Tên model Gemini — ví dụ: "gemini-2.0-flash-lite", "gemini-2.5-flash". Code tự build URL.</summary>
+        public string ModelName { get; set; } = "gemini-2.0-flash-lite";
+
+        /// <summary>Full generateContent endpoint được tính từ ModelName.</summary>
+        public string SuggestModelEndpoint =>
+            $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent";
 
         public int MaxSuggestionsPerCall { get; set; } = 3;
 
@@ -94,6 +106,22 @@ public class ChatOptions
         public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
 
+    public class DeepSeekSection
+    {
+        public string ApiKey { get; set; } = string.Empty;
+
+        /// <summary>Base URL của DeepSeek API, không trailing slash. Code tự append /v1/chat/completions.</summary>
+        public string BaseUrl { get; set; } = "https://api.deepseek.com";
+
+        /// <summary>Model name — ví dụ: "deepseek-chat", "deepseek-v4-flash", "deepseek-reasoner".</summary>
+        public string Model { get; set; } = "deepseek-chat";
+
+        public int TimeoutSeconds { get; set; } = 15;
+
+        /// <summary>Full chat completions endpoint được tính từ BaseUrl.</summary>
+        public string ChatEndpoint => $"{BaseUrl.TrimEnd('/')}/v1/chat/completions";
+    }
+
     /// <summary>Cấu hình voice-to-text (Gemini multimodal, #567).</summary>
     public VoiceSection Voice { get; set; } = new();
 
@@ -104,9 +132,8 @@ public class ChatOptions
             "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/flac"
         };
 
-        /// <summary>Gemini model endpoint hỗ trợ multimodal audio.</summary>
-        public string TranscribeModelEndpoint { get; set; } =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        /// <summary>Tên model Gemini multimodal cho audio — ví dụ: "gemini-2.5-flash".</summary>
+        public string ModelName { get; set; } = "gemini-1.5-flash";
 
         /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
         public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";

@@ -347,6 +347,11 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         {
             await _unitOfWork.SensorIngestIdempotencyRecords.AddAsync(new SensorIngestIdempotencyRecord
             {
+                // PK `id` cấu hình ValueGeneratedNever() → app PHẢI cấp Id (khớp convention
+                // các handler khác). Thiếu dòng này → Id = Guid.Empty → insert thứ 2 trở đi
+                // trùng PK "PK_sensor_ingest_idempotency_records" → 500 (chặn toàn bộ ingest
+                // có Idempotency-Key, gồm cả firmware ESP32 thật).
+                Id = Guid.NewGuid(),
                 DeviceCode = request.DeviceCode!,
                 IdempotencyKey = request.IdempotencyKey!,
                 Inserted = inserted,

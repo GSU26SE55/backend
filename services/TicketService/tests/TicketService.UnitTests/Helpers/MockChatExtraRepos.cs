@@ -77,4 +77,15 @@ public static class MockChatExtraRepos
         uow.SetupGet(u => u.TicketChatTranslations).Returns(repo.Object);
         return repo;
     }
+
+    public static Mock<IGenericRepository<TicketChatTranslationUser>> SetupChatTranslationUsers(
+        this Mock<ITicketUnitOfWork> uow, List<TicketChatTranslationUser>? seed = null)
+    {
+        seed ??= new List<TicketChatTranslationUser>();
+        var repo = new Mock<IGenericRepository<TicketChatTranslationUser>>();
+        repo.Setup(r => r.GetAllAsync()).Returns(() => seed.AsQueryable().BuildMock());
+        repo.Setup(r => r.AddAsync(It.IsAny<TicketChatTranslationUser>())).Returns((TicketChatTranslationUser u) => { seed.Add(u); return Task.CompletedTask; });
+        uow.SetupGet(u => u.ChatTranslationUsers).Returns(repo.Object);
+        return repo;
+    }
 }

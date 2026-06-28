@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Implements.Services;
 
@@ -14,6 +15,8 @@ public class GeminiChatTextAiClient : IChatTextAiClient
 {
     private readonly HttpClient _http;
     private readonly ChatOptions _opts;
+
+    public TranslationProviderEnum TranslationProvider => TranslationProviderEnum.GeminiAi;
 
     public GeminiChatTextAiClient(HttpClient http, IOptions<ChatOptions> opts)
     {
@@ -36,7 +39,7 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         };
 
         using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        EnsureGeminiSuccess(response);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var rawText = ExtractText(json);
@@ -61,7 +64,7 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         };
 
         using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        EnsureGeminiSuccess(response);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         return ExtractText(json).Trim();
@@ -82,7 +85,7 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         };
 
         using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        EnsureGeminiSuccess(response);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         return ExtractText(json).Trim();
@@ -103,7 +106,7 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         };
 
         using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        EnsureGeminiSuccess(response);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var rawText = ExtractText(json).Trim();
@@ -117,6 +120,13 @@ public class GeminiChatTextAiClient : IChatTextAiClient
         {
             return "en";
         }
+    }
+
+    private static void EnsureGeminiSuccess(HttpResponseMessage response)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            throw new InvalidOperationException("RATE_LIMITED");
+        response.EnsureSuccessStatusCode();
     }
 
     private static string ExtractText(JsonElement json)

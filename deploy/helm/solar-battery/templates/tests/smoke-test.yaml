@@ -1,0 +1,40 @@
+{{- /*
+  Sprint 7 #596 — Helm smoke test. Chạy bằng `helm test <release>`.
+  Curl /health của mọi ASP.NET service (qua in-cluster DNS) — fail nếu service nào không 200.
+*/ -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-smoke-test
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: curlimages/curl:8.10.1
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          fail=0
+          check() {
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" || echo 000)
+            if [ "$code" = "200" ]; then echo "OK   $1 ($code)"; else echo "FAIL $1 ($code)"; fail=1; fi
+          }
+          echo "== Smoke test: /health các service =="
+          check http://apigateway:80/health
+          check http://authservice:80/health
+          check http://batteryservice:80/api/battery/health
+          check http://ticketservice:80/api/ticket/health
+          check http://notificationservice:80/health
+          check http://filestorageservice:80/health
+          check http://smsservice:80/health
+          {{- if .Values.tempo.enabled }}
+          check http://tempo:3200/ready
+          {{- end }}
+          echo "== Done (fail=$fail) =="
+          exit $fail

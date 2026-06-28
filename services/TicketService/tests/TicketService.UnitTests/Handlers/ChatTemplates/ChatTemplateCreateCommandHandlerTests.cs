@@ -71,24 +71,4 @@ public class ChatTemplateCreateCommandHandlerTests
         _templatesRepo.Verify(r => r.AddAsync(It.Is<ChatTemplate>(t => t.Name == "Padded Name")), Times.Once);
     }
 
-    [Fact]
-    public async Task Handle_TeamScope_SetsTeamId()
-    {
-        var teamId = Guid.NewGuid();
-        var command = new ChatTemplateCreateCommand
-        {
-            ActorUserId = Guid.NewGuid(),
-            Name = "Team Template",
-            Content = "Team content",
-            Scope = ChatTemplateScopeEnum.Team,
-            TeamId = teamId
-        };
-
-        _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-
-        var result = await CreateHandler().Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Data!.TeamId.Should().Be(teamId.ToString());
-    }
 }

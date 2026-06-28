@@ -188,7 +188,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new DeactivateMeCommandHandler(uow.Object);
+        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeactivateMeCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -218,7 +218,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -232,7 +232,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeactivateMeCommandHandler(uow.Object);
+        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeactivateMeCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
 
@@ -244,7 +244,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object);
+        var handler = new DeleteMeCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         var resp = await handler.Handle(new DeleteMeCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
 

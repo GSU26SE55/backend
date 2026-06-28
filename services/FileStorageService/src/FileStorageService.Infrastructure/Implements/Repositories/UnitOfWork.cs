@@ -18,6 +18,8 @@ public class UnitOfWork : IFileStorageUnitOfWork
     }
 
     public IGenericRepository<UploadedFile> UploadedFiles => new GenericRepository<UploadedFile>(_context);
+    public IGenericRepository<FileAuditLog> FileAuditLogs => new GenericRepository<FileAuditLog>(_context);       // #AUDIT-29
+    public IGenericRepository<FileAuditOutbox> FileAuditOutboxes => new GenericRepository<FileAuditOutbox>(_context); // #AUDIT-29
 
     public async Task BeginTransactionAsync()
     {

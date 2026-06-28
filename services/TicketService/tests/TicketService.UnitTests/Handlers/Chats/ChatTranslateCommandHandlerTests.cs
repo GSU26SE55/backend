@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using MockQueryable.Moq;
-using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Command.ChatTranslate;
 using TicketService.Application.CQRS.Handler.ChatAi;
-using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
@@ -17,10 +15,9 @@ public class ChatTranslateCommandHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IChatTextAiClient> _aiClient = new();
-    private readonly Mock<ICacheService> _cache = new();
 
     private ChatTranslateCommandHandler CreateHandler() =>
-        new(_uow.Object, _aiClient.Object, _cache.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
+        new(_uow.Object, _aiClient.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
 
     private static Ticket BuildTicket(Guid id) => new()
     {
@@ -134,77 +131,90 @@ public class ChatTranslateCommandHandlerTests
 
     #endregion
 
-    #region Cache Hit
+    #region DB Hit — reuse existing translation
 
     [Fact]
-    public async Task Handle_RedisCacheHit_ReturnsCachedResult_NoAiCall()
+    public async Task Handle_DbHit_UserNotLinked_AddsUserLink_NoAiCall()
     {
         var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var chat = BuildChat(ticketId);
-        SetupTickets(BuildTicket(ticketId));
-        SetupChats(chat);
-        _uow.SetupChatTranslations();
-
-        var cached = new ChatTranslateDTO
-        {
-            TranslatedBody = "Hello",
-            TargetLanguage = "en",
-            OriginalLanguage = "vi",
-            Provider = "GeminiAi",
-            FromCache = false,
-        };
-        _cache.Setup(c => c.GetAsync<ChatTranslateDTO>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(cached);
-
-        var result = await CreateHandler().Handle(new ChatTranslateCommand
-        {
-            TicketId = ticketId,
-            ChatId = chat.Id,
-            CurrentUserId = Guid.NewGuid(),
-            TargetLanguage = "en"
-        }, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Data!.FromCache.Should().BeTrue();
-        result.Data.TranslatedBody.Should().Be("Hello");
-        _aiClient.Verify(c => c.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Handle_DbHit_BackfillsRedisAndReturns()
-    {
-        var ticketId = Guid.NewGuid();
-        var chat = BuildChat(ticketId, "Xin chào");
         SetupTickets(BuildTicket(ticketId));
         SetupChats(chat);
 
         var existingTranslation = new TicketChatTranslation
         {
+            Id = Guid.NewGuid(),
             ChatId = chat.Id,
             TargetLanguage = "en",
             TranslatedBody = "Hello",
-            Provider = TranslationProviderEnum.GeminiAi,
+            Provider = TranslationProviderEnum.DeepSeekAi,
             TranslatedAt = DateTime.UtcNow,
             Chat = chat,
         };
         _uow.SetupChatTranslations(new List<TicketChatTranslation> { existingTranslation });
 
-        _cache.Setup(c => c.GetAsync<ChatTranslateDTO>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ChatTranslateDTO?)null);
+        var userLinkRepo = _uow.SetupChatTranslationUsers();
+        _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
+        _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
 
         var result = await CreateHandler().Handle(new ChatTranslateCommand
         {
             TicketId = ticketId,
             ChatId = chat.Id,
-            CurrentUserId = Guid.NewGuid(),
+            CurrentUserId = userId,
             TargetLanguage = "en"
         }, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.TranslatedBody.Should().Be("Hello");
-        result.Data.FromCache.Should().BeFalse();
         _aiClient.Verify(c => c.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _cache.Verify(c => c.SetAsync(It.IsAny<string>(), It.IsAny<ChatTranslateDTO>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()), Times.Once);
+        userLinkRepo.Verify(r => r.AddAsync(It.Is<TicketChatTranslationUser>(u =>
+            u.TranslationId == existingTranslation.Id && u.UserId == userId)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_DbHit_UserAlreadyLinked_NoNewLink_NoAiCall()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var chat = BuildChat(ticketId);
+        SetupTickets(BuildTicket(ticketId));
+        SetupChats(chat);
+
+        var translationId = Guid.NewGuid();
+        var existingTranslation = new TicketChatTranslation
+        {
+            Id = translationId,
+            ChatId = chat.Id,
+            TargetLanguage = "en",
+            TranslatedBody = "Hello",
+            Provider = TranslationProviderEnum.DeepSeekAi,
+            TranslatedAt = DateTime.UtcNow,
+            Chat = chat,
+        };
+        _uow.SetupChatTranslations(new List<TicketChatTranslation> { existingTranslation });
+
+        var existingLink = new TicketChatTranslationUser
+        {
+            Id = Guid.NewGuid(),
+            TranslationId = translationId,
+            UserId = userId,
+        };
+        var userLinkRepo = _uow.SetupChatTranslationUsers(new List<TicketChatTranslationUser> { existingLink });
+
+        var result = await CreateHandler().Handle(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = chat.Id,
+            CurrentUserId = userId,
+            TargetLanguage = "en"
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.TranslatedBody.Should().Be("Hello");
+        _aiClient.Verify(c => c.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        userLinkRepo.Verify(r => r.AddAsync(It.IsAny<TicketChatTranslationUser>()), Times.Never);
     }
 
     #endregion
@@ -212,20 +222,20 @@ public class ChatTranslateCommandHandlerTests
     #region Happy Path — AI Translate
 
     [Fact]
-    public async Task Handle_AiTranslate_PersistsToDbAndCachesRedis()
+    public async Task Handle_AiTranslate_PersistsTranslationAndUserLink()
     {
         var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var chat = BuildChat(ticketId, "Xin chào");
         SetupTickets(BuildTicket(ticketId));
         SetupChats(chat);
 
         var translations = new List<TicketChatTranslation>();
         _uow.SetupChatTranslations(translations);
+
+        var userLinkRepo = _uow.SetupChatTranslationUsers();
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
-
-        _cache.Setup(c => c.GetAsync<ChatTranslateDTO>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ChatTranslateDTO?)null);
 
         _aiClient.Setup(c => c.TranslateAsync("Xin chào", "en", It.IsAny<CancellationToken>()))
                  .ReturnsAsync("Hello");
@@ -234,23 +244,21 @@ public class ChatTranslateCommandHandlerTests
         {
             TicketId = ticketId,
             ChatId = chat.Id,
-            CurrentUserId = Guid.NewGuid(),
+            CurrentUserId = userId,
             TargetLanguage = "en"
         }, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.TranslatedBody.Should().Be("Hello");
         result.Data.TargetLanguage.Should().Be("en");
-        result.Data.Provider.Should().Be("GeminiAi");
         result.Data.FromCache.Should().BeFalse();
 
         translations.Should().ContainSingle(t =>
             t.TranslatedBody == "Hello" &&
-            t.TargetLanguage == "en" &&
-            t.Provider == TranslationProviderEnum.GeminiAi);
+            t.TargetLanguage == "en");
 
-        _cache.Verify(c => c.SetAsync(It.IsAny<string>(), It.IsAny<ChatTranslateDTO>(),
-            TimeSpan.FromDays(30), It.IsAny<CancellationToken>()), Times.Once);
+        userLinkRepo.Verify(r => r.AddAsync(It.Is<TicketChatTranslationUser>(u =>
+            u.UserId == userId)), Times.Once);
     }
 
     [Fact]
@@ -263,11 +271,9 @@ public class ChatTranslateCommandHandlerTests
 
         var translations = new List<TicketChatTranslation>();
         _uow.SetupChatTranslations(translations);
+        _uow.SetupChatTranslationUsers();
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
-
-        _cache.Setup(c => c.GetAsync<ChatTranslateDTO>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ChatTranslateDTO?)null);
 
         _aiClient.Setup(c => c.TranslateAsync(It.IsAny<string>(), "en", It.IsAny<CancellationToken>()))
                  .ReturnsAsync("Hello");
@@ -289,6 +295,31 @@ public class ChatTranslateCommandHandlerTests
     #region AI Error
 
     [Fact]
+    public async Task Handle_AiRateLimited_Returns429()
+    {
+        var ticketId = Guid.NewGuid();
+        var chat = BuildChat(ticketId);
+        SetupTickets(BuildTicket(ticketId));
+        SetupChats(chat);
+        _uow.SetupChatTranslations();
+        _uow.SetupChatTranslationUsers();
+
+        _aiClient.Setup(c => c.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                 .ThrowsAsync(new InvalidOperationException("RATE_LIMITED"));
+
+        var result = await CreateHandler().Handle(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = chat.Id,
+            CurrentUserId = Guid.NewGuid(),
+            TargetLanguage = "en"
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(429);
+    }
+
+    [Fact]
     public async Task Handle_AiClientThrows_ReturnsTranslationUnavailable()
     {
         var ticketId = Guid.NewGuid();
@@ -296,12 +327,10 @@ public class ChatTranslateCommandHandlerTests
         SetupTickets(BuildTicket(ticketId));
         SetupChats(chat);
         _uow.SetupChatTranslations();
-
-        _cache.Setup(c => c.GetAsync<ChatTranslateDTO>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ChatTranslateDTO?)null);
+        _uow.SetupChatTranslationUsers();
 
         _aiClient.Setup(c => c.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                 .ThrowsAsync(new HttpRequestException("Gemini down"));
+                 .ThrowsAsync(new HttpRequestException("DeepSeek down"));
 
         var result = await CreateHandler().Handle(new ChatTranslateCommand
         {
@@ -313,7 +342,6 @@ public class ChatTranslateCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.Message.Should().Be("Translation service unavailable.");
-        _cache.Verify(c => c.SetAsync(It.IsAny<string>(), It.IsAny<ChatTranslateDTO>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #endregion

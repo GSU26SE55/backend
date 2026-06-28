@@ -139,6 +139,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         var chatIds = rawChats.Select(c => c.Id).ToList();
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
         var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, chatIds, cancellationToken);
+        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_unitOfWork, chatIds, request.ActorUserId, cancellationToken);
 
         var items = rawChats.Select(c => new TicketChatDTO
         {
@@ -160,7 +161,8 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             PinnedAt = c.PinnedAt,
             PinnedByUserId = c.PinnedByUserId?.ToString(),
             Mentions = mentionsByChat.TryGetValue(c.Id, out var m) ? m : new(),
-            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()
+            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO(),
+            ActiveTranslation = translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null,
         }).ToList();
 
         if (isDefaultQuery)

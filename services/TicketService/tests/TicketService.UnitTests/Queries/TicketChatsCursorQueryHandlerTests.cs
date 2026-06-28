@@ -25,6 +25,7 @@ public class TicketChatsCursorQueryHandlerTests
         _uow.SetupGet(u => u.TicketParticipants).Returns(_participantsRepo.Object);
         _uow.SetupMentions();
         _uow.SetupReactions();
+        _uow.SetupChatTranslationUsers();
 
         _participantsRepo.Setup(r => r.GetAllAsync())
             .Returns(() => new TestAsyncEnumerable<TicketParticipant>(new List<TicketParticipant>()));

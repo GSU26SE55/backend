@@ -1,0 +1,22 @@
+# Sprint 7 #116 — Auto-provision Tempo datasource cho Grafana (xem distributed trace).
+# Grafana đọc khi container start (volume /etc/grafana/provisioning/datasources/).
+
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    uid: tempo                    # PIN UID — nhất quán, dashboard/trace-to-logs reference "tempo".
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      httpMethod: GET
+      # Trace → Logs: từ span jump sang log Loki cùng correlation id (span enrich tag correlation_id = AlertId).
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: false
+        filterBySpanID: false
+        tags:
+          - key: correlation_id
+            value: CorrelationId

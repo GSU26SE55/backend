@@ -38,9 +38,6 @@ public class ChatTemplateConfiguration : IEntityTypeConfiguration<ChatTemplate>
             .HasColumnName("scope")
             .HasConversion<int>();
 
-        builder.Property(e => e.TeamId)
-            .HasColumnName("team_id");
-
         builder.Property(e => e.UsageCount)
             .HasColumnName("usage_count")
             .HasDefaultValue(0);
@@ -66,8 +63,5 @@ public class ChatTemplateConfiguration : IEntityTypeConfiguration<ChatTemplate>
 
         builder.HasIndex(e => e.Scope)
             .HasDatabaseName("ix_chat_templates_scope");
-
-        builder.HasIndex(e => e.TeamId)
-            .HasDatabaseName("ix_chat_templates_team_id");
     }
 }

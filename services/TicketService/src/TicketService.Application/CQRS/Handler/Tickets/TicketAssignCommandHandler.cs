@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Helpers;
@@ -20,17 +21,20 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketAssignCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAssignCommand request, CancellationToken ct)
@@ -106,6 +110,11 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             reason: request.Notes);
 
         await _producer.PublishAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.StaffId, ticket.Priority.ToString()!), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["staffId"] = request.StaffId }), ct);
 
         await _uow.SaveChangesAsync(ct);
 

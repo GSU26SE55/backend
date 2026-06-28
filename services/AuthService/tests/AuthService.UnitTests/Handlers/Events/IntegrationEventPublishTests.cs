@@ -38,7 +38,7 @@ public class IntegrationEventPublishTests
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
-        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object);
+        var handler = new CreateAccountCommandHandler(uow.Object, _hasher.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new CreateAccountCommand
         {
             Email = "staff@example.com",
@@ -73,7 +73,7 @@ public class IntegrationEventPublishTests
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new UpdateAccountCommand
         {
             Id = account.Id,
@@ -105,7 +105,7 @@ public class IntegrationEventPublishTests
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new DeleteAccountCommandHandler(uow.Object, _producer.Object);
+        var handler = new DeleteAccountCommandHandler(uow.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         await handler.Handle(new DeleteAccountCommand { Id = account.Id }, CancellationToken.None);
 
         _producer.Verify(p => p.PublishAsync(
@@ -129,7 +129,7 @@ public class IntegrationEventPublishTests
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
 
-        var handler = new DeleteMeCommandHandler(uow.Object, _producer.Object);
+        var handler = new DeleteMeCommandHandler(uow.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         await handler.Handle(new DeleteMeCommand { AccountId = account.Id }, CancellationToken.None);
 
         _producer.Verify(p => p.PublishAsync(
@@ -144,7 +144,7 @@ public class IntegrationEventPublishTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object);
+        var handler = new UpdateAccountCommandHandler(uow.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new UpdateAccountCommand
         {

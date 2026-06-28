@@ -143,7 +143,7 @@ public class Sprint5BAmbientFlowIntegrationTests
                 outboxMessages.Add((nameof(EnvironmentalIncidentResolvedEvent), e)))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
         var reportResult = await report.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,
@@ -203,7 +203,7 @@ public class Sprint5BAmbientFlowIntegrationTests
         outbox.Setup(o => o.WriteAsync(It.IsAny<EnvironmentalIncidentResolvedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
         var reportResult = await report.Handle(new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,
@@ -243,7 +243,7 @@ public class Sprint5BAmbientFlowIntegrationTests
         outbox.Setup(o => o.WriteAsync(It.IsAny<EnvironmentalIncidentDetectedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object);
+        var report = new ReportEnvironmentalIncidentCommandHandler(new UnitOfWork(db), outbox.Object, new Mock<BatteryService.Application.Interfaces.IEnvironmentalMetricsRecorder>().Object);
         var cmd = new ReportEnvironmentalIncidentCommand
         {
             SiteId = SiteId,

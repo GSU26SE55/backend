@@ -173,4 +173,43 @@ public class IngestHeaderCaptureTests
         captured[0].SourceType.Should().Be(SensorReadingSourceTypeEnum.Bms);
         captured[1].SourceType.Should().Be(SensorReadingSourceTypeEnum.External);
     }
+
+    [Fact]
+    public async Task BatchIngest_IdempotencyRecord_HasGeneratedId()
+    {
+        // Regression (fix): `SensorIngestIdempotencyRecord.id` cấu hình ValueGeneratedNever()
+        // → handler PHẢI tự set Id. Thiếu → Id = Guid.Empty → request thứ 2 (key khác) vẫn
+        // trùng PK "PK_sensor_ingest_idempotency_records" → 500, chặn toàn bộ ingest có
+        // Idempotency-Key (gồm firmware ESP32 thật). Test này khoá hồi quy ở mức handler.
+        var deviceId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var device = MakeDevice(deviceId);
+        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-IDEM", SiteId = device.SiteId };
+
+        var uow = new MockUnitOfWorkBuilder()
+            .WithIotDevices(device)
+            .WithBatteryAssets(asset);
+        var captured = new List<SensorIngestIdempotencyRecord>();
+        uow.SensorIngestIdempotencyRecords
+           .Setup(r => r.AddAsync(It.IsAny<SensorIngestIdempotencyRecord>()))
+           .Callback<SensorIngestIdempotencyRecord>(captured.Add)
+           .Returns(Task.CompletedTask);
+
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+
+        await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            AuthenticatedDeviceId = deviceId,
+            DeviceCode = "ESP-HDR",
+            IdempotencyKey = "idem-regression-1",
+            Items = new()
+            {
+                new() { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 3.7m, Current = 1m, Temperature = 25m, SocPercent = 50m }
+            }
+        }, default);
+
+        captured.Should().HaveCount(1, "phải persist idempotency record khi có DeviceCode + IdempotencyKey");
+        captured[0].Id.Should().NotBe(Guid.Empty,
+            "Id phải được sinh (PK ValueGeneratedNever) — nếu Guid.Empty thì request sau trùng PK → 500.");
+    }
 }

@@ -14,7 +14,18 @@ public class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValid
 
     private static readonly HashSet<string> AllowedAudioMimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/flac"
+        // MP3
+        "audio/mpeg", "audio/mp3",
+        // WAV
+        "audio/wav", "audio/x-wav", "audio/wave",
+        // OGG
+        "audio/ogg",
+        // WebM — browser đôi khi gửi video/webm cho file .webm audio
+        "audio/webm", "video/webm",
+        // M4A / AAC
+        "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac",
+        // FLAC
+        "audio/flac", "audio/x-flac",
     };
 
     [JsonIgnore]
@@ -57,7 +68,7 @@ public class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValid
             response.ListErrors.Add(new Errors
             {
                 Field = "audioFile",
-                Detail = $"Định dạng audio không hợp lệ. Chấp nhận: {string.Join(", ", AllowedAudioMimeTypes)}."
+                Detail = $"Định dạng audio không hợp lệ (nhận được: {AudioFile.ContentType}). Chấp nhận: mp3, wav, ogg, webm, m4a, flac."
             });
         }
 

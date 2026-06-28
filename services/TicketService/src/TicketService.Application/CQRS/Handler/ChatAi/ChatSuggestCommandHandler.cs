@@ -38,7 +38,7 @@ public class ChatSuggestCommandHandler : IRequestHandler<ChatSuggestCommand, Cha
             .FirstOrDefaultAsync(ct);
 
         if (ticket == null)
-            return new ChatSuggestResponse { IsSuccess = false, Message = "Ticket not found" };
+            return new ChatSuggestResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found" };
 
         var recentChats = ticket.Chats
             .Where(c => !c.IsDeleted)
@@ -64,14 +64,15 @@ public class ChatSuggestCommandHandler : IRequestHandler<ChatSuggestCommand, Cha
         }
         catch (Exception)
         {
-            return new ChatSuggestResponse { IsSuccess = false, Message = "AI service unavailable" };
+            return new ChatSuggestResponse { IsSuccess = false, StatusCode = 200, Message = "AI service unavailable" };
         }
 
         if (suggestions.Count == 0)
-            return new ChatSuggestResponse { IsSuccess = false, Message = "AI service unavailable" };
+            return new ChatSuggestResponse { IsSuccess = false, StatusCode = 200, Message = "AI service unavailable" };
 
         var entity = new ChatAiSuggestion
         {
+            Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Ticket = ticket,
             SuggestedAt = DateTime.UtcNow,
@@ -88,12 +89,13 @@ public class ChatSuggestCommandHandler : IRequestHandler<ChatSuggestCommand, Cha
         catch (Exception)
         {
             await _uow.RollbackTransactionAsync();
-            return new ChatSuggestResponse { IsSuccess = false, Message = "Failed to save suggestion" };
+            return new ChatSuggestResponse { IsSuccess = false, StatusCode = 200, Message = "Failed to save suggestion" };
         }
 
         return new ChatSuggestResponse
         {
             IsSuccess = true,
+            StatusCode = 200,
             Data = new ChatSuggestDTO
             {
                 SuggestionId = entity.Id.ToString(),

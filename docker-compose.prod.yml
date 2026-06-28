@@ -28,6 +28,7 @@ volumes:
   grafana-data:
   alertmanager-data:
   loki-data:
+  tempo-data:        # Sprint 7 #116 — Tempo trace storage.
   # GH-295 — ASP.NET Data Protection keys cho encrypt 2FA TwoFactorSecret.
   # ⚠️ MẤT VOLUME = MẤT ALL 2FA. Backup cùng schedule với postgres-data.
   auth-dataprotection-keys:
@@ -79,6 +80,8 @@ services:
       TICKET_DB_NAME: ${TICKET_DB_NAME:-ticket_db}
       NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
       SMS_DB_NAME: ${SMS_DB_NAME:-sms_db}
+      # Sprint audit #AUDIT-13/14 — read-store AuditAggregatorService (logical DB chung postgres).
+      AUDIT_AGGREGATOR_DB_NAME: ${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db}
     volumes:
       - ./docker/postgres/create-service-databases.sh:/scripts/create-service-databases.sh:ro
     command: ["/bin/sh", "/scripts/create-service-databases.sh"]
@@ -421,6 +424,40 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  # Sprint audit #AUDIT-13 — AuditAggregatorService: consume AuditCreatedEventV1 → read-store audit_aggregate.
+  # Redis/RabbitMQ/JwtSettings lấy từ env_file (/opt/solar/.env.prod). DB = logical DB trong postgres CHUNG.
+  auditaggregatorservice:
+    image: ghcr.io/gsu26se55/auditaggregatorservice:${IMAGE_TAG:-staging}
+    container_name: solar-auditaggregatorservice
+    mem_limit: 384m
+    cpus: "0.40"
+    env_file:
+      - /opt/solar/.env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      DOTNET_gcServer: "0"
+      DisableHttpsRedirection: "true"
+      # Logical DB audit_aggregate trong postgres CHUNG (tạo bởi postgres-init). KHÔNG dùng container DB riêng.
+      ConnectionStrings__AuditAggregatorDb: "Host=postgres;Port=5432;Database=${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+    ports:
+      - "4010:8080"
+    # Geo enrichment (#AUDIT-16) tùy chọn: GeoIp__DbPath đã có trong .env.prod — bỏ comment dòng mount
+    # dưới nếu đặt file GeoLite2-City.mmdb tại /opt/solar/geoip/ (thiếu file → fallback null, không crash).
+    # volumes:
+    #   - /opt/solar/geoip/GeoLite2-City.mmdb:/app/geoip/GeoLite2-City.mmdb:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
   apigateway:
     image: ghcr.io/gsu26se55/apigateway:${IMAGE_TAG:-staging}
     container_name: solar-apigateway
@@ -443,6 +480,7 @@ services:
       - batteryservice
       - ticketservice
       - notificationservice
+      - auditaggregatorservice   # Sprint audit — gateway route /api/admin/audit/* → auditAggregatorCluster
     networks: [solar-net]
     restart: unless-stopped
 
@@ -487,6 +525,21 @@ services:
       - "3001:3000"
     depends_on:
       - prometheus
+      - tempo
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # Sprint 7 #116 — Distributed tracing backend. Service export OTLP về tempo:4317.
+  tempo:
+    image: grafana/tempo:latest
+    container_name: solar-tempo
+    profiles: ["monitoring"]
+    mem_limit: 384m
+    cpus: "0.30"
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
     networks: [solar-net]
     restart: unless-stopped
 

@@ -1,5 +1,7 @@
+using ApiGateway.Extensions;
 using Microsoft.OpenApi.Models;
 using Prometheus;
+using SharedInfrastructure.DependencyInjection.Extensions;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Middleware;
 
@@ -18,8 +20,16 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Sprint 7 #115 — validate JWT tại gateway (cùng JwtSettings với downstream) + forward claim.
+builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddAuthorization();
+
+// Sprint 7 #115 — rate limiting (fixed-window theo userId/IP).
+builder.Services.AddGatewayRateLimiting(builder.Configuration);
+
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddGatewayClaimForwarding();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -30,6 +40,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("ticket", new OpenApiInfo { Title = "Ticket Service API", Version = "v1" });
     c.SwaggerDoc("notification", new OpenApiInfo { Title = "Notification Service API", Version = "v1" });
     c.SwaggerDoc("sms", new OpenApiInfo { Title = "SMS Service API", Version = "v1" });
+    c.SwaggerDoc("auditaggregator", new OpenApiInfo { Title = "Audit Aggregator Service API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -83,6 +94,7 @@ if (!app.Environment.IsProduction())
         options.SwaggerEndpoint("/ticket-service/swagger/v1/swagger.json", "Ticket Service API");
         options.SwaggerEndpoint("/notification-service/swagger/v1/swagger.json", "Notification Service API");
         options.SwaggerEndpoint("/sms-service/swagger/v1/swagger.json", "SMS Service API");
+        options.SwaggerEndpoint("/audit-aggregator-service/swagger/v1/swagger.json", "Audit Aggregator Service API");
     });
 }
 
@@ -100,6 +112,13 @@ if (!app.Environment.IsEnvironment("Docker")
 app.UseWebSockets();
 
 app.UseCors("AllowAll");
+
+// Sprint 7 #115 — validate JWT (populate HttpContext.User cho claim forwarding + rate-limit partition).
+// KHÔNG RequireAuthorization trên proxy route → request ẩn danh vẫn pass (downstream tự authorize);
+// gateway chỉ parse token nếu có để forward claim.
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 
 // Bọc mọi response status-only (404/401/403/405/...) thành CommonResponse để client luôn parse cùng schema.
 // Phải đặt TRƯỚC MapReverseProxy/MapMetrics để bắt được cả 404 do YARP không match route lẫn 404 do controller.

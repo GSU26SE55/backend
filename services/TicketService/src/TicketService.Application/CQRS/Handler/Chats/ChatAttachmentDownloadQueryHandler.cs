@@ -37,7 +37,7 @@ public class ChatAttachmentDownloadQueryHandler : IRequestHandler<ChatAttachment
 
         var attachment = await _unitOfWork.TicketAttachments.GetAllAsync()
             .AsNoTracking()
-            .Where(a => a.Id == request.AttachmentId
+            .Where(a => a.FileId == request.AttachmentId
                      && a.ChatId == request.ChatId
                      && a.TicketId == request.TicketId
                      && !a.IsDeleted)

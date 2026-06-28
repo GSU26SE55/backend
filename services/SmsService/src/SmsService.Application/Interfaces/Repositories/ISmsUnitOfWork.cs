@@ -10,6 +10,7 @@ namespace SmsService.Application.Interfaces.Repositories;
 public interface ISmsUnitOfWork : IUnitOfWork
 {
     IGenericRepository<SmsMessage> SmsMessages { get; }
+    IGenericRepository<SmsAuditOutbox> SmsAuditOutboxes { get; } // Sprint audit #AUDIT-35
     IGenericRepository<SmsGatewayDevice> SmsGatewayDevices { get; }
     IGenericRepository<SmsAuditLog> SmsAuditLogs { get; }
     IGenericRepository<OutboxMessage> OutboxMessages { get; }

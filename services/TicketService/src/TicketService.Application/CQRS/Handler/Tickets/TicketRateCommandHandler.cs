@@ -18,17 +18,20 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketRateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketRateCommand request, CancellationToken ct)
@@ -60,6 +63,11 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
 
         // Outbox: Ticket Rated
         await _producer.PublishAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.CustomerRated, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["rating"] = request.Rating }), ct);
 
         await _uow.SaveChangesAsync(ct);
 

@@ -65,6 +65,12 @@ public static class ManageDependencyInjection
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
+        // Sprint 7 #114 (§5.2) — saga failed-rate report reader.
+        services.AddScoped<TicketService.Application.Interfaces.Services.ISagaReportService,
+            TicketService.Infrastructure.Implements.Services.SagaReportService>();
+        // Sprint 7 #117 — SLA aggregate gauge (cho Grafana "SLA Ops").
+        services.AddSingleton<TicketService.Application.Interfaces.Services.ISlaMetricsRecorder,
+            TicketService.Infrastructure.Observability.SlaMetricsRecorder>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
 
@@ -77,6 +83,8 @@ public static class ManageDependencyInjection
 
         // #514 — VirusScan worker (disabled by default via Chat:Features:EnableVirusScan=false)
         services.AddHostedService<VirusScanWorker>();
+        services.AddHostedService<SlaGaugeBackgroundService>();
+        services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -121,18 +129,41 @@ public static class ManageDependencyInjection
         // #568 — PDF exporter
         services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
 
-        // #559 — Gemini AI suggest client (typed HttpClient, timeout từ Chat:Ai:TimeoutSeconds)
-        services.AddHttpClient<IChatAiSuggestionClient, GeminiChatAiClient>((sp, http) =>
+        // #559/#560 — Gemini implementations (luôn đăng ký, dùng khi Chat:Provider = "Gemini")
+        services.AddHttpClient<GeminiChatAiClient>((sp, http) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
+        });
+        services.AddHttpClient<GeminiChatTextAiClient>((sp, http) =>
         {
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
             http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
         });
 
-        // #560 — Gemini AI text client cho sentiment + summarize
-        services.AddHttpClient<IChatTextAiClient, GeminiChatTextAiClient>((sp, http) =>
+        // #559/#560 — DeepSeek implementations (luôn đăng ký, dùng khi Chat:Provider = "DeepSeek")
+        services.AddHttpClient<DeepSeekChatAiClient>((sp, http) =>
         {
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.DeepSeek.TimeoutSeconds));
+        });
+        // DeepSeekChatTextAiClient tái sử dụng HttpClient của DeepSeekChatAiClient qua inner client
+        services.AddTransient<DeepSeekChatTextAiClient>();
+
+        // Factory chọn provider dựa theo Chat:Provider — đổi provider chỉ cần sửa appsettings
+        services.AddScoped<IChatAiSuggestionClient>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            return opts.Provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase)
+                ? sp.GetRequiredService<DeepSeekChatAiClient>()
+                : sp.GetRequiredService<GeminiChatAiClient>();
+        });
+        services.AddScoped<IChatTextAiClient>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+            return opts.Provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase)
+                ? sp.GetRequiredService<DeepSeekChatTextAiClient>()
+                : sp.GetRequiredService<GeminiChatTextAiClient>();
         });
 
         // #514 — ClamAV REST client (typed HttpClient)

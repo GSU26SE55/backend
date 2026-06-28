@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Interfaces.Services;
@@ -14,15 +15,18 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly ITwoFactorChallengeStore _challengeStore;
     private readonly ITokenRevocationStore _revocationStore;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
     public LogoutCommandHandler(
         IAuthUnitOfWork unitOfWork,
         ITwoFactorChallengeStore challengeStore,
-        ITokenRevocationStore revocationStore)
+        ITokenRevocationStore revocationStore,
+        IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _challengeStore = challengeStore;
         _revocationStore = revocationStore;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(LogoutCommand request, CancellationToken cancellationToken)
@@ -70,6 +74,10 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
         // #AUTH-54: bulk revoke access token đã cấp trước thời điểm logout (cutoff = now).
         // TTL = max access token life (1h) — sau đó tự dọn vì token đã expire tự nhiên.
         await _revocationStore.RevokeAllByAccountAsync(existing.AccountId, TimeSpan.FromHours(1), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.Logout, existing.AccountId, true), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -1,5 +1,12 @@
 <Project>
 
+  <!-- Import root Directory.Build.props (Sprint audit #AUDIT-04 banned-API gate) — MSBuild dừng ở file gần nhất nên phải import thủ công.
+       Conditional qua property trung gian: bỏ qua nếu không tìm thấy (vd Docker build context KHÔNG copy root props) → tránh vỡ build. -->
+  <PropertyGroup>
+    <_RootBuildPropsPath>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))</_RootBuildPropsPath>
+  </PropertyGroup>
+  <Import Project="$(_RootBuildPropsPath)" Condition="'$(_RootBuildPropsPath)' != ''" />
+
   <!--
     #AUTH-81 — Async/await anti-pattern enforcement cho AuthService.
     Apply cho TẤT CẢ project con (Api/Application/Domain/Infrastructure + Tests).

@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Account;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -16,11 +17,13 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
+    private readonly MediatR.IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public DeleteAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
+    public DeleteAccountCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer, MediatR.IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _messageProducer = messageProducer;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(DeleteAccountCommand request, CancellationToken cancellationToken)
@@ -121,6 +124,10 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
         // dedupe trước khi service cũng anonymize. Sau khi consume xong, downstream phải tự dọn PII.
         await _messageProducer.PublishAsync(new AccountDeletedEvent(
             account.Id, originalEmail, DeletionSource: "AdminDelete"), cancellationToken);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountDeleted, account.Id, true, TargetEmail: originalEmail), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

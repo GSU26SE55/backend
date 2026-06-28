@@ -60,6 +60,11 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
             transcribedText = await transcribeTask;
             (fileId, downloadUrl) = await uploadTask;
         }
+        catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
+        {
+            _logger.LogWarning("[ChatVoiceTranscribe] Gemini rate limit hit for ticket {TicketId}", request.TicketId);
+            return Fail(429, "AI service đang bận, vui lòng thử lại sau ít giây.");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[ChatVoiceTranscribe] Failed for ticket {TicketId}", request.TicketId);
@@ -78,6 +83,7 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
         {
             var chat = new TicketChat
             {
+                Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
                 AuthorUserId = request.UserId,
                 AuthorRole = request.UserRole,
@@ -92,6 +98,7 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
 
             var attachment = new TicketAttachment
             {
+                Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
                 ChatId = chat.Id,
                 UploadedByUserId = request.UserId,

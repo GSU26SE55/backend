@@ -40,3 +40,5 @@ create_database "${BATTERY_DB_NAME:-battery_db}"
 create_database "${TICKET_DB_NAME:-ticket_db}"
 create_database "${NOTIFICATION_DB_NAME:-notification_db}"
 create_database "${SMS_DB_NAME:-sms_db}"
+# Sprint audit #AUDIT-13/14 — read-store của AuditAggregatorService (logical DB chung postgres instance).
+create_database "${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db}"

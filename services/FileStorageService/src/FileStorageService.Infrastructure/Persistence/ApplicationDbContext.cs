@@ -20,6 +20,8 @@ public class ApplicationDbContext : DbContext
     }
 
     public virtual DbSet<UploadedFile> UploadedFiles { get; set; }
+    public virtual DbSet<FileAuditLog> FileAuditLogs { get; set; }       // Sprint audit #AUDIT-29
+    public virtual DbSet<FileAuditOutbox> FileAuditOutboxes { get; set; } // Sprint audit #AUDIT-29
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

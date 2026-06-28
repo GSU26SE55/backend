@@ -43,6 +43,9 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot reject ticket at this stage.");
 
+        // Capture trạng thái cũ TRƯỚC khi ExecuteAsync mutate ticket.Status (reject hợp lệ từ Open hoặc Escalated).
+        var oldStatus = ticket.Status;
+
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, new TransitionContext
         {
             ActorUserId = request.ManagerId,
@@ -61,7 +64,7 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
             newValue: "ClosedRejected");
 
         // We can use a general status changed event or a specific reject event
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Open, TicketStatusEnum.ClosedRejected), ct);
+        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.ClosedRejected), ct);
 
         await _uow.SaveChangesAsync(ct);
 

@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
@@ -16,10 +17,12 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
     private static readonly TimeSpan ReactivationWindow = TimeSpan.FromDays(90);
 
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public ReactivateVerifyCommandHandler(IAuthUnitOfWork unitOfWork)
+    public ReactivateVerifyCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(ReactivateVerifyCommand request, CancellationToken cancellationToken)
@@ -57,6 +60,11 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
         account.FailedLoginAttempts = 0;
         account.LockoutEndAt = null;
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.AccountStatusChanged, account.Id, true, TargetEmail: account.Email,
+            Metadata: new Dictionary<string, object?> { ["newStatus"] = "Active", ["reason"] = "Reactivated" }), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

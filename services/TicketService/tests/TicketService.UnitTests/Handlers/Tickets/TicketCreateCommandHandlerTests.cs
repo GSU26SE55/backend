@@ -38,7 +38,7 @@ public class TicketCreateCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
         var (uow, tickets, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
 
-        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object);
+        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -51,6 +51,7 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
+        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
             p.UserId == customerId && p.ParticipantType == ParticipantTypeEnum.Owner)), Times.Once);
         _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);

@@ -32,4 +32,7 @@ public class TicketChatDTO
 
     public List<TicketChatMentionDTO> Mentions { get; set; } = new();
     public TicketChatReactionsAggregateDTO Reactions { get; set; } = new();
+
+    /// <summary>Bản dịch user hiện tại đã yêu cầu — null nếu chưa dịch.</summary>
+    public ChatTranslateDTO? ActiveTranslation { get; set; }
 }

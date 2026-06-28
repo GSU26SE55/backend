@@ -30,6 +30,7 @@ public class TicketChatsQueryHandlerTests
         _mockUow.Setup(x => x.TicketChatReactions).Returns(_reactionsRepo.Object);
         _mentionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatMention>(new List<TicketChatMention>()));
         _reactionsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketChatReaction>(new List<TicketChatReaction>()));
+        _mockUow.SetupChatTranslationUsers();
         _handler = new TicketChatsQueryHandler(_mockUow.Object, _chatCache.Object);
     }
 

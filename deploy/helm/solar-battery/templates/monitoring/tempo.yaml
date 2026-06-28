@@ -1,0 +1,87 @@
+{{- /*
+  Sprint 7 #116 — Grafana Tempo (monolithic) cho distributed tracing trong K8s.
+  Service export OTLP về tempo:4317 (OpenTelemetry__OtlpEndpoint auto-wire qua configmap).
+  Config tối thiểu canonical (server + distributor + storage) — khớp grafana/tempo v3.x strict-parse.
+*/ -}}
+{{- if .Values.tempo.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+data:
+  tempo.yml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+    storage:
+      trace:
+        backend: local
+        wal:
+          path: /var/tempo/wal
+        local:
+          path: /var/tempo/blocks
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    app: tempo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      containers:
+        - name: tempo
+          image: {{ .Values.tempo.image | quote }}
+          args: ["-config.file=/etc/tempo/tempo.yml"]
+          ports:
+            - { name: query, containerPort: 3200 }
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+          volumeMounts:
+            - { name: config, mountPath: /etc/tempo }
+            - { name: data, mountPath: /var/tempo }
+          resources:
+            {{- toYaml .Values.tempo.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /ready, port: 3200 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap: { name: tempo-config }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    app: tempo
+spec:
+  selector:
+    app: tempo
+  ports:
+    - { name: query, port: 3200, targetPort: 3200 }
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+{{- end }}

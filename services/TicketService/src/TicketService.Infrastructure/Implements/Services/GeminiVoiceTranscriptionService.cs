@@ -31,7 +31,7 @@ public class GeminiVoiceTranscriptionService : IVoiceTranscriptionService
         var audioBytes = await ReadAllBytesAsync(audioStream, ct);
         var base64Audio = Convert.ToBase64String(audioBytes);
 
-        var url = $"{_opts.Voice.TranscribeModelEndpoint}?key={apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_opts.Voice.ModelName}:generateContent?key={apiKey}";
         var requestBody = new
         {
             contents = new[]
@@ -48,6 +48,10 @@ public class GeminiVoiceTranscriptionService : IVoiceTranscriptionService
         };
 
         using var response = await _http.PostAsJsonAsync(url, requestBody, ct);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            throw new InvalidOperationException("RATE_LIMITED");
+
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);

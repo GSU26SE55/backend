@@ -1,4 +1,5 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
@@ -16,11 +17,13 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IGoogleOAuthHelper _googleOAuthHelper;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public LinkGoogleCommandHandler(IAuthUnitOfWork unitOfWork, IGoogleOAuthHelper googleOAuthHelper)
+    public LinkGoogleCommandHandler(IAuthUnitOfWork unitOfWork, IGoogleOAuthHelper googleOAuthHelper, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
         _googleOAuthHelper = googleOAuthHelper;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(LinkGoogleCommand request, CancellationToken cancellationToken)
@@ -52,6 +55,11 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         await UpsertGoogleAvatarProfileAsync(account, googleUser.Picture);
 
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.GoogleLinked, account.Id, true, TargetEmail: account.Email), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse

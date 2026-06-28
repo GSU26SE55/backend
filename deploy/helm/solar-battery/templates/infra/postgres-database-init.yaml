@@ -46,6 +46,8 @@ spec:
           value: {{ .Values.postgres.notificationDatabase | quote }}
         - name: SMS_DB_NAME
           value: {{ .Values.postgres.smsDatabase | quote }}
+        - name: AUDIT_AGGREGATOR_DB_NAME
+          value: {{ .Values.postgres.auditAggregatorDatabase | quote }}
         command:
         - sh
         - -c
@@ -81,4 +83,5 @@ spec:
           create_database "$TICKET_DB_NAME"
           create_database "$NOTIFICATION_DB_NAME"
           create_database "$SMS_DB_NAME"
+          create_database "$AUDIT_AGGREGATOR_DB_NAME"
 {{- end }}

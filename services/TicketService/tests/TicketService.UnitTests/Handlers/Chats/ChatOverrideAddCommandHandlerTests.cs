@@ -17,6 +17,7 @@ public class ChatOverrideAddCommandHandlerTests
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
     private readonly Mock<IMarkdownRenderer> _markdownRenderer = new();
     private readonly Mock<ILogger<ChatOverrideAddCommandHandler>> _loggerMock = new();
+    private readonly Mock<MediatR.IPublisher> _publisherMock = new();
 
     [Fact]
     public async Task Handle_AdminWithReason_SucceedsEvenWhenTicketClosed()
@@ -34,7 +35,7 @@ public class ChatOverrideAddCommandHandlerTests
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
 
-        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object, _publisherMock.Object);
         var command = new ChatOverrideAddCommand
         {
             TicketId = ticketId,
@@ -75,7 +76,7 @@ public class ChatOverrideAddCommandHandlerTests
 
         _markdownRenderer.Setup(r => r.RenderToHtml("**override**", It.IsAny<IEnumerable<Guid>>())).Returns("<p><strong>override</strong></p>");
 
-        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object, _publisherMock.Object);
         var command = new ChatOverrideAddCommand
         {
             TicketId = ticketId,
@@ -106,7 +107,7 @@ public class ChatOverrideAddCommandHandlerTests
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
 
-        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object, _publisherMock.Object);
         var command = new ChatOverrideAddCommand
         {
             TicketId = ticketId,
@@ -129,7 +130,7 @@ public class ChatOverrideAddCommandHandlerTests
     {
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
 
-        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object);
+        var handler = new ChatOverrideAddCommandHandler(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object, _loggerMock.Object, _publisherMock.Object);
         var command = new ChatOverrideAddCommand
         {
             TicketId = Guid.NewGuid(),

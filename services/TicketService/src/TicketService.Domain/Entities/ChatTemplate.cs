@@ -11,7 +11,6 @@ public class ChatTemplate : AuditableEntity
     public bool IsInternalDefault { get; set; }
     public Guid CreatedByUserId { get; set; }
     public ChatTemplateScopeEnum Scope { get; set; }
-    public Guid? TeamId { get; set; }
     public int UsageCount { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 }

@@ -18,17 +18,20 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketRejectCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IMessageProducerService producer,
+        IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(TicketRejectCommand request, CancellationToken ct)
@@ -55,6 +58,10 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Rejected, reason: request.Reason);
 
         await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.AssignedStaffId ?? Guid.Empty, request.Reason), ct);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketAuditActionEnum.RejectedByManager, ticket.Id, targetDisplay: ticket.Code, reason: request.Reason), ct);
 
         await _uow.SaveChangesAsync(ct);
 

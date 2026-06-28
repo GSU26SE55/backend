@@ -2581,7 +2581,7 @@ Header: `Authorization: Bearer {accessToken}`
 - Sau khi login thành công → FE gọi 1 lần để cache `Permissions` vào client state (Zustand/TanStack Query) → dùng cho mọi check `checkPermission(user, P.X)` toàn app.
 - Khi cần verify FE migration: đảm bảo `P.*` constants trong code khớp với DB.
 - Khi admin vừa thay đổi permission của role → FE re-fetch endpoint này (thay vì đợi refresh token) để áp permission mới ngay lập tức.
-- Khác với `GET /api/admin/permissions` (Admin-only, trả **catalog** tất cả permission trong hệ thống) — endpoint này trả **subset** thuộc về role của user hiện tại.
+- Khác với catalog endpoints — `GET /api/permissions` (public, mọi role) và `GET /api/admin/permissions` (Admin-only) đều trả **catalog** tất cả permission trong hệ thống; endpoint này trả **subset** thuộc về role của user hiện tại.
 
 **Auth:** Bắt buộc (mọi role — Admin / Manager / Staff / Customer đều gọi được, chỉ cần JWT hợp lệ)
 
@@ -3563,7 +3563,73 @@ Base route: `/api/admin/roles`
 
 ---
 
-## Nhóm 8 — Admin: Permissions
+## Nhóm 8 — Permissions
+
+Module này có **2 lớp endpoint** chia sẻ cùng DTO `PermissionDto` nhưng khác nhau ở quyền truy cập:
+
+| Endpoint | Controller | Auth | Mục đích |
+|---|---|---|---|
+| `GET /api/permissions` | `PermissionsController` | `[Authorize]` — **mọi role** | FE/Mobile load catalog đầy đủ để build picker / đối chiếu `P.*` constant, **không cần quyền admin** |
+| `GET /api/admin/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Catalog + thao tác gán role↔permission (admin panel) |
+| `GET /api/admin/roles/{roleId}/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Permission đang gán cho 1 role |
+| `PUT /api/admin/roles/{roleId}/permissions` | `AdminPermissionsController` | `[Authorize(Roles = "Admin")]` | Set toàn bộ permission cho role (replace) |
+
+> **Phân biệt 3 endpoint trả permission** (dễ nhầm):
+> - `GET /api/permissions` — **catalog public** (mọi role), trả TẤT CẢ permission trong hệ thống.
+> - `GET /api/admin/permissions` — **catalog admin-only**, cùng data nhưng yêu cầu role Admin (dùng cho admin gán permission).
+> - `GET /api/auth/me/permissions` ([Nhóm 3](#get-apiauthmepermissions)) — trả **subset** permission của role mà user hiện tại đang được gán (dùng build feature-gate).
+
+---
+
+### `GET /api/permissions`
+
+**Mục đích:** Lấy **catalog toàn bộ permission** trong hệ thống. Endpoint dùng chung — chỉ cần access token hợp lệ, **KHÔNG phân quyền theo role** (không có slug/role `admin`).
+
+**Tác dụng & khi nào dùng:**
+
+- FE/Mobile cần load danh mục permission đầy đủ (build picker, đối chiếu `P.*` constant, hiển thị mô tả) mà **không cần quyền admin**.
+- Khác với `GET /api/admin/permissions` ở chỗ **không yêu cầu role Admin** — Manager/Staff/Customer đã đăng nhập đều gọi được.
+- Khác với `GET /api/auth/me/permissions` ở chỗ trả **toàn bộ catalog** (không phải subset theo role của user).
+
+**Auth:** Bắt buộc (mọi role — Admin / Manager / Staff / Customer đều gọi được, chỉ cần JWT hợp lệ)
+
+**Headers:**
+
+```
+Authorization: Bearer {accessToken}
+```
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `module` | `string?` | Lọc theo module (e.g., `Battery`, `Ticket`). Để trống = trả tất cả |
+
+**Response:** `PermissionListResponse` — flat list `PermissionDto`, sort theo `Module` rồi `Code`.
+
+**Chi tiết `PermissionDto`** (cùng shape với `GET /api/admin/permissions`):
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | ID permission |
+| `code` | `string` | Không | Code dạng `module.action` (e.g., `battery.view`) — match với `P.*` constant ở FE |
+| `module` | `string` | Không | Module thuộc về |
+| `description` | `string?` | Null nếu không có | Mô tả tiếng Việt |
+| `isSystemPermission` | `bool` | Không | `true` = không cho admin xóa |
+| `createdAt` | `DateTime` | Không | Thời điểm tạo |
+
+**Response codes:**
+
+| Status | Trường hợp |
+|---|---|
+| 200 | Lấy danh sách permission thành công |
+| 401 | Chưa đăng nhập / token hết hạn |
+
+> **Lưu ý:** Endpoint này **KHÔNG** trả `403` — vì chỉ gắn `[Authorize]` (không filter role). Mọi user đã đăng nhập đều truy cập được. Catalog system permissions (43 permission) xem bảng đầy đủ ở [`GET /api/admin/permissions`](#get-apiadminpermissions) bên dưới.
+
+---
+
+## Nhóm 8b — Admin: Permissions
 
 Base route: `/api/admin/permissions`
 **Auth:** Admin
@@ -3736,16 +3802,27 @@ Base route: `/api/admin/audit-logs`
 
 | Param | Type | Mô tả |
 |---|---|---|
-| `pageNumber` | `int` | Trang |
-| `pageSize` | `int` | Số item/trang |
+| `pageNumber` | `int` | Trang (mặc định 1; ≤0 tự về 1) |
+| `pageSize` | `int` | Số item/trang (mặc định 20, trần 100; ≤0 tự về 10) |
 | `action` | `AuditActionEnum?` | Lọc theo loại hành động |
 | `targetAccountId` | `Guid?` | Xem tất cả hành động liên quan đến account này |
 | `actorAccountId` | `Guid?` | Xem tất cả hành động actor này thực hiện |
 | `isSuccess` | `bool?` | Lọc theo kết quả thành công/thất bại |
-| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive) |
-| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive) |
+| `fromUtc` | `DateTime?` | Từ thời điểm (UTC inclusive — `CreatedAt >= fromUtc`) |
+| `toUtc` | `DateTime?` | Đến thời điểm (UTC exclusive — `CreatedAt < toUtc`) |
 
-**Response:** `PaginationResponse<AuditLogDto>`
+**Response:** `PaginationResponse<AuditLogDto>` (sort `CreatedAt` giảm dần — mới nhất trước).
+
+**Status code:**
+
+| Code | Khi nào |
+|---|---|
+| `200` | Lấy danh sách thành công (kể cả rỗng) |
+| `422` | `fromUtc >= toUtc` — `message = "FromUtc phải nhỏ hơn ToUtc."`, `listErrors = null` |
+| `401` | Chưa đăng nhập / token hết hạn |
+| `403` | Không có role Admin |
+
+> ⚠️ Annotation `[ProducesResponseType(400)]` trên controller chỉ là metadata Swagger; runtime handler thực tế trả **`422`** cho lỗi khoảng thời gian.
 
 **Chi tiết `AuditLogDto`:**
 

@@ -15,6 +15,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.DocInclusionPredicate((_, _) => true);
+
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
@@ -25,6 +27,12 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddFileStorageApplication();
 builder.Services.AddFileStorageInfrastructure(builder.Configuration);
 builder.Services.AddSharedInfrastructure(builder.Configuration, "FileStorageService.Application", "File Storage Service API");
+
+// Sprint audit #AUDIT-29 — thêm MassTransit (FileStorage chưa có) cho audit pipeline + relay.
+SharedInfrastructure.Bus.MassTransitExtensions.AddMessageBus(
+    builder.Services, builder.Configuration,
+    typeof(FileStorageService.Infrastructure.BackgroundJobs.FileAuditOutboxRelayBackgroundService).Assembly);
+builder.Services.AddHostedService<FileStorageService.Infrastructure.BackgroundJobs.FileAuditOutboxRelayBackgroundService>();
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())

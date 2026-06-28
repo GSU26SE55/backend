@@ -5,5 +5,6 @@ public enum TranslationProviderEnum
     GoogleTranslate = 1,
     DeepL = 2,
     Manual = 3,
-    GeminiAi = 4
+    GeminiAi = 4,
+    DeepSeekAi = 5
 }

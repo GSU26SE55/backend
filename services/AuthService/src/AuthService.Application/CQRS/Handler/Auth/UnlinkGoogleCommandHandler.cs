@@ -1,6 +1,8 @@
 using AuthService.Application.CQRS.Command.Auth;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -10,10 +12,12 @@ namespace AuthService.Application.CQRS.Handler.Auth;
 public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public UnlinkGoogleCommandHandler(IAuthUnitOfWork unitOfWork)
+    public UnlinkGoogleCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<AccountActionResponse> Handle(UnlinkGoogleCommand request, CancellationToken cancellationToken)
@@ -33,6 +37,11 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
         account.GoogleId = null;
         account.Provider = null;
         _unitOfWork.Accounts.UpdateAsync(account);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.GoogleUnlinked, account.Id, true, TargetEmail: account.Email), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse

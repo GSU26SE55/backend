@@ -1,7 +1,12 @@
+using TicketService.Domain.Enums;
+
 namespace TicketService.Application.Interfaces.Services;
 
 public interface IChatTextAiClient
 {
+    /// <summary>Provider enum dùng để ghi vào DB — mỗi implementation tự khai báo.</summary>
+    TranslationProviderEnum TranslationProvider { get; }
+
     /// <summary>
     /// Phân tích tone của <paramref name="chatContext"/> và trả về score ∈ [-1.0, 1.0].
     /// Âm = tiêu cực, dương = tích cực. Throw exception nếu AI service không phản hồi.

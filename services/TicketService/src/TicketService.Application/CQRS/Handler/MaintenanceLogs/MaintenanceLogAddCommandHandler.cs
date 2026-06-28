@@ -15,11 +15,13 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
-    public MaintenanceLogAddCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
+    public MaintenanceLogAddCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IPublisher publisher)
     {
         _uow = uow;
         _activityLogger = activityLogger;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(MaintenanceLogAddCommand request, CancellationToken ct)
@@ -90,6 +92,10 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
             null,
             $"[{request.LogType}] {request.Summary}",
             "Đã thêm nhật ký bảo trì.");
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.MaintenanceLogAdded, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 

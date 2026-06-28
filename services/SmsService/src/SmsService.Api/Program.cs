@@ -111,6 +111,7 @@ builder.Services.AddRateLimiter(o =>
 // ── 10. Background workers (StaleReaper + Redactor) ───────────────────────
 builder.Services.AddHostedService<StaleSmsReaperBackgroundService>();
 builder.Services.AddHostedService<SmsMessageRedactorBackgroundService>();
+builder.Services.AddHostedService<SmsService.Infrastructure.BackgroundJobs.SmsAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-35
 
 // ── 11. Controllers + Swagger ─────────────────────────────────────────────
 builder.Services.AddControllers();

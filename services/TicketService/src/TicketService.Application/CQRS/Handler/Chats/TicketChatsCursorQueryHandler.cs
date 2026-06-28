@@ -74,6 +74,7 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         var chatIds = rawChats.Select(c => c.Id).ToList();
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_uow, chatIds, ct);
         var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_uow, chatIds, ct);
+        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_uow, chatIds, request.ActorUserId, ct);
 
         var items = rawChats.Select(c => new TicketChatDTO
         {
@@ -96,7 +97,8 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
             ThreadRootId = c.ThreadRootId?.ToString(),
             ReplyCount = c.ReplyCount,
             Mentions = mentionsByChat.TryGetValue(c.Id, out var m) ? m : new(),
-            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()
+            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO(),
+            ActiveTranslation = translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null,
         }).ToList();
 
         var nextCursor = hasMore ? EncodeCursor(rawChats.Last().Id, rawChats.Last().CreatedAt) : null;

@@ -394,9 +394,35 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action");
 
+                    b.Property<string>("ActionCategory")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("action_category");
+
+                    b.Property<string>("ActionCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action_code");
+
                     b.Property<Guid?>("ActorAccountId")
                         .HasColumnType("uuid")
                         .HasColumnName("actor_account_id");
+
+                    b.Property<string>("ActorDisplay")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("actor_display");
+
+                    b.Property<string>("ActorRole")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("actor_role");
+
+                    b.Property<Guid?>("CausationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("causation_id");
 
                     b.Property<string>("CorrelationId")
                         .HasMaxLength(64)
@@ -420,6 +446,15 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("device_id");
 
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("error_code");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)")
@@ -439,19 +474,53 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("metadata_json");
 
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("occurred_at");
+
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("reason");
 
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<string>("ServiceName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("service_name");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("severity");
+
                     b.Property<Guid?>("TargetAccountId")
                         .HasColumnType("uuid")
                         .HasColumnName("target_account_id");
+
+                    b.Property<string>("TargetDisplay")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("target_display");
 
                     b.Property<string>("TargetEmail")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("target_email");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("target_type");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -473,6 +542,10 @@ namespace AuthService.Infrastructure.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_audit_logs_created_at");
 
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_audit_logs_event_id");
+
                     b.HasIndex("TargetAccountId")
                         .HasDatabaseName("ix_audit_logs_target_account_id");
 
@@ -480,6 +553,80 @@ namespace AuthService.Infrastructure.Migrations
                         .HasDatabaseName("ix_audit_logs_target_created_at");
 
                     b.ToTable("audit_logs", (string)null);
+                });
+
+            modelBuilder.Entity("AuthService.Domain.Entities.AuditOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("event_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("processed_at");
+
+                    b.Property<int>("RetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("retry_count");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_audit_outbox_event_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_audit_outbox_pending")
+                        .HasFilter("status = 1");
+
+                    b.ToTable("audit_outbox", (string)null);
                 });
 
             modelBuilder.Entity("AuthService.Domain.Entities.BackupCode", b =>

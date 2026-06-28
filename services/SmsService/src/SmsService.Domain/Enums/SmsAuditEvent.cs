@@ -12,5 +12,9 @@ public enum SmsAuditEvent
     Retry = 4,
     Cancelled = 5,
     Reaped = 6,
-    Redacted = 7
+    Redacted = 7,
+    // Sprint audit #AUDIT-35 — 3 action mới cho cross-service Hybrid audit.
+    SmsForwarded = 8,
+    SmsRoutingRuleChanged = 9,
+    SmsGatewayHealthCheckFailed = 10
 }

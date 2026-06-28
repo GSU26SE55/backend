@@ -31,6 +31,7 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<BackupCode> BackupCodes { get; set; }
     public virtual DbSet<TrustedDevice> TrustedDevices { get; set; }
     public virtual DbSet<AccountMergeLog> AccountMergeLogs { get; set; }
+    public virtual DbSet<AuditOutbox> AuditOutboxes { get; set; }   // Sprint audit #AUDIT-07
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (_auditableEntityInterceptor is not null)

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.ChatSummarize;
@@ -14,15 +15,18 @@ public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatTextAiClient _aiClient;
     private readonly ChatOptions _opts;
+    private readonly ILogger<ChatSummarizeCommandHandler> _logger;
 
     public ChatSummarizeCommandHandler(
         ITicketUnitOfWork uow,
         IChatTextAiClient aiClient,
-        IOptions<ChatOptions> opts)
+        IOptions<ChatOptions> opts,
+        ILogger<ChatSummarizeCommandHandler> logger)
     {
         _uow = uow;
         _aiClient = aiClient;
         _opts = opts.Value;
+        _logger = logger;
     }
 
     public async Task<ChatSummarizeResponse> Handle(ChatSummarizeCommand request, CancellationToken ct)
@@ -53,8 +57,14 @@ public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand,
         {
             summary = await _aiClient.SummarizeAsync(context, _opts.Ai.SummarizeLinesCount, ct);
         }
-        catch (Exception)
+        catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
         {
+            _logger.LogWarning("[ChatSummarize] AI rate limit hit for ticket {TicketId}", request.TicketId);
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 429, Message = "AI service đang bận, vui lòng thử lại sau ít giây." };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ChatSummarize] AI call failed for ticket {TicketId}", request.TicketId);
             return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 200, Message = "AI service unavailable" };
         }
 

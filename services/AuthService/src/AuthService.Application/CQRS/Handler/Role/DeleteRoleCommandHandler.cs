@@ -1,6 +1,8 @@
 using AuthService.Application.CQRS.Command.Role;
+using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +11,12 @@ namespace AuthService.Application.CQRS.Handler.Role;
 public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
 
-    public DeleteRoleCommandHandler(IAuthUnitOfWork unitOfWork)
+    public DeleteRoleCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
     {
         _unitOfWork = unitOfWork;
+        _publisher = publisher;
     }
 
     public async Task<RoleActionResponse> Handle(DeleteRoleCommand request, CancellationToken cancellationToken)
@@ -55,6 +59,12 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
         }
 
         _unitOfWork.Roles.DeleteAsync(role);
+
+        // #AUDIT-11
+        await _publisher.Publish(new AuditTrailNotification(
+            AuditActionEnum.RoleDeleted, null, true,
+            Metadata: new Dictionary<string, object?> { ["roleId"] = role.Id, ["roleName"] = role.Name }), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new RoleActionResponse

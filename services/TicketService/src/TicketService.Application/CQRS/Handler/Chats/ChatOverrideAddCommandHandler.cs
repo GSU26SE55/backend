@@ -28,19 +28,22 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IMarkdownRenderer _markdownRenderer;
     private readonly ILogger<ChatOverrideAddCommandHandler> _logger;
+    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public ChatOverrideAddCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         ITicketChatRealtimeNotifier realtimeNotifier,
         IMarkdownRenderer markdownRenderer,
-        ILogger<ChatOverrideAddCommandHandler> logger)
+        ILogger<ChatOverrideAddCommandHandler> logger,
+        IPublisher publisher)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
         _markdownRenderer = markdownRenderer;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(ChatOverrideAddCommand request, CancellationToken ct)
@@ -100,6 +103,10 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
             null,
             request.IsInternal ? "[Nội bộ — Admin override]" : "[Công khai — Admin override]",
             request.OverrideReason);
+
+        // #AUDIT-26
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.CommentAdded, ticket.Id, targetDisplay: ticket.Code), ct);
 
         await _uow.SaveChangesAsync(ct);
 
