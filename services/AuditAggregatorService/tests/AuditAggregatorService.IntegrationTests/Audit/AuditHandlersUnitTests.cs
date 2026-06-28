@@ -184,7 +184,8 @@ public class AuditHandlersUnitTests
             .Handle(new AuditExportQuery { Severity = "Critical" }, CancellationToken.None);
 
         var rows = new List<string>();
-        await foreach (var dto in stream) rows.Add(dto.Severity);
+        await foreach (var dto in stream)
+            rows.Add(dto.Severity);
         rows.Should().OnlyContain(s => s == "Critical");
         rows.Should().HaveCount(1);
     }

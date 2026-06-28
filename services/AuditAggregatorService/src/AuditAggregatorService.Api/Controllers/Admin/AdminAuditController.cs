@@ -316,7 +316,8 @@ public class AdminAuditController : ControllerBase
             var first = true;
             await foreach (var dto in stream.WithCancellation(ct))
             {
-                if (!first) await writer.WriteAsync(",");
+                if (!first)
+                    await writer.WriteAsync(",");
                 await writer.WriteAsync(JsonSerializer.Serialize(dto));
                 first = false;
             }

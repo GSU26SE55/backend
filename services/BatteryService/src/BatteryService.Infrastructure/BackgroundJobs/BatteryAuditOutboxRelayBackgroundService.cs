@@ -45,7 +45,8 @@ public class BatteryAuditOutboxRelayBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
+            try
+            { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
             catch (OperationCanceledException) { break; }
 
             try
@@ -92,11 +93,13 @@ public class BatteryAuditOutboxRelayBackgroundService : BackgroundService
         var totalPending = await db.BatteryAuditOutboxes.CountAsync(o => o.Status == AuditOutboxStatusEnum.Pending, ct);
         AppMetrics.AuditOutboxPending.WithLabels("BatteryService").Set(totalPending);
 
-        if (pending.Count == 0) return;
+        if (pending.Count == 0)
+            return;
 
         foreach (var msg in pending)
         {
-            if (ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested)
+                break;
             try
             {
                 var evt = JsonSerializer.Deserialize<AuditCreatedEventV1>(msg.Payload);
@@ -117,7 +120,8 @@ public class BatteryAuditOutboxRelayBackgroundService : BackgroundService
             {
                 msg.RetryCount += 1;
                 msg.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-                if (msg.RetryCount >= MaxRetries) msg.Status = AuditOutboxStatusEnum.Failed;
+                if (msg.RetryCount >= MaxRetries)
+                    msg.Status = AuditOutboxStatusEnum.Failed;
                 _logger.LogWarning(ex, "BatteryAuditOutboxRelay publish fail {Id} (retry {Retry}).", msg.Id, msg.RetryCount);
             }
         }

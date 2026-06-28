@@ -50,11 +50,14 @@ public class RedisTelemetryStream : ITelemetryStream
 
         void Handler(RedisChannel _, RedisValue val)
         {
-            if (!val.HasValue) return;
+            if (!val.HasValue)
+                return;
             LiveReadingDto? dto;
-            try { dto = JsonSerializer.Deserialize<LiveReadingDto>(val!, RedisTelemetryPublisher.JsonOptions); }
+            try
+            { dto = JsonSerializer.Deserialize<LiveReadingDto>(val!, RedisTelemetryPublisher.JsonOptions); }
             catch { return; }
-            if (dto is null) return;
+            if (dto is null)
+                return;
 
             if (isAsset)
             {
@@ -91,7 +94,9 @@ public class RedisTelemetryStream : ITelemetryStream
                 await sub.UnsubscribeAsync(ch, Handler);
             RealtimeMetrics.ActiveConnections.WithLabels(scopeLabel).Dec();
             output.Writer.TryComplete();
-            try { await pump; } catch { /* shutdown */ }
+            try
+            { await pump; }
+            catch { /* shutdown */ }
         }
     }
 
