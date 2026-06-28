@@ -7,7 +7,7 @@ namespace SharedContracts.Audit;
 /// <para>Retention: <see cref="Critical"/> và <see cref="Security"/> giữ <b>vĩnh viễn</b> ở read-store
 /// (KHÔNG drop partition — D15/<c>#AUDIT-41</c>); Info/Warning drop sau 6 tháng.</para>
 /// </summary>
-/// 
+///
 public static class Severities
 {
     /// <summary>Hành động bình thường, thành công (vd Login OK, BatteryCreated).</summary>
