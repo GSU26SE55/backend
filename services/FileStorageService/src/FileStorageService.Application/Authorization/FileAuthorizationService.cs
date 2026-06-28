@@ -58,7 +58,7 @@ public class FileAuthorizationService : IFileAuthorizationService
             FilePurposeEnum.KbImage => true,
             FilePurposeEnum.Firmware => false,
             FilePurposeEnum.TicketAttachment or FilePurposeEnum.MaintenancePhoto => true,
-                // => HasAnyRole(ManagerRole, StaffRole) || file.CreatedBy == CurrentUserId,
+            // => HasAnyRole(ManagerRole, StaffRole) || file.CreatedBy == CurrentUserId,
             _ => file.CreatedBy == CurrentUserId
         };
     }

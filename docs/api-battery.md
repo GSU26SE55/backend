@@ -2048,6 +2048,23 @@ Base route: `/api/iot-devices` (cùng prefix với 11A nhưng auth bằng JWT ro
 
 > POST/DELETE tự invalidate Redis cache `iot:calibration:{deviceId}`.
 
+#### `GET /api/iot-devices/by-code/{deviceCode}`
+
+**Mục đích:** Tra cứu device theo `deviceCode` (mã in trên thân thiết bị, vd `ESP32-SIM-001`) để lấy `id` (GUID). Các route calibration bên dưới đều keyed theo `{deviceId}` = GUID, trong khi Staff cầm thiết bị chỉ đọc được `deviceCode` — endpoint này là cầu nối `deviceCode → deviceId` cho Staff/Manager (list admin `GET /api/admin/iot-devices` yêu cầu role `Admin` nên Staff không gọi được).
+
+**Auth:** Bắt buộc (Admin/Manager/Staff)
+
+**Route params:** `deviceCode` (`string`) — chuẩn hoá `Trim().ToUpperInvariant()` rồi match exact trên unique index `idx_iot_devices_device_code`, nên **case-insensitive** và bỏ qua khoảng trắng thừa.
+
+**Response thành công `200`:** `CommonResponse<IotDeviceDto>` (xem shape `IotDeviceDto` ở §11C — gồm `id` GUID, `deviceCode`, `displayName`, `status`, `siteName`...).
+
+**Lỗi thường gặp:**
+- `404` — Không có device khớp `deviceCode` (hoặc đã decommission / soft-delete)
+
+> Luồng mobile (GH-56): đọc `deviceCode` trên thiết bị → gọi endpoint này lấy `id` → dùng `id` cho `GET/POST/DELETE .../calibrations`.
+
+---
+
 **`IotDeviceCalibrationDto`:**
 
 | Field | Type | Nullable | Mô tả |
@@ -2698,6 +2715,7 @@ Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` 
 | POST | `/api/iot-devices/heartbeat` | Heartbeat health định kỳ | API Key (scope DeviceHeartbeat) |
 | GET | `/api/iot-devices/firmware-check` | Device poll firmware mới | API Key (scope FirmwareCheck) |
 | PUT | `/api/iot-devices/firmware-update-log/{id}` | Device báo cáo progress OTA | API Key (scope FirmwareCheck) |
+| GET | `/api/iot-devices/by-code/{deviceCode}` | Tra cứu device theo deviceCode → lấy id GUID | Admin/Manager/Staff |
 | GET | `/api/iot-devices/{deviceId}/calibrations` | List calibration của device | Admin/Manager/Staff |
 | POST | `/api/iot-devices/{deviceId}/calibrations` | Tạo calibration | Admin/Staff |
 | DELETE | `/api/iot-devices/{deviceId}/calibrations/{calibrationId}` | Xóa calibration | Admin/Staff |

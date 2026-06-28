@@ -47,7 +47,8 @@ public class BatteryAuditTrailNotificationHandler : INotificationHandler<Battery
             Guid.TryParse(correlationStr, out var correlationGuid);
 
             Guid? actor = null;
-            if (Guid.TryParse(_currentUserService.UserId, out var resolvedActor)) actor = resolvedActor;
+            if (Guid.TryParse(_currentUserService.UserId, out var resolvedActor))
+                actor = resolvedActor;
 
             string? metadataJson = n.Metadata is { Count: > 0 } ? JsonSerializer.Serialize(n.Metadata) : null;
             var eventId = AuditEventId.New();    // #AUDIT-04 — helper tập trung event_id.

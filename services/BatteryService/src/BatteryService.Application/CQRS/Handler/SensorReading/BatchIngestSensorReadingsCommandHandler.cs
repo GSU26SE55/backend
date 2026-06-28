@@ -397,7 +397,8 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         // Sprint BE-IoT-Realtime (#616) — soft-dependency: publish SAU commit, lỗi KHÔNG chặn ingest.
         if (liveReadings.Count > 0)
         {
-            try { await _telemetryPublisher.PublishAsync(liveReadings, cancellationToken); }
+            try
+            { await _telemetryPublisher.PublishAsync(liveReadings, cancellationToken); }
             catch (Exception ex) { _logger.LogWarning(ex, "Telemetry realtime publish thất bại — bỏ qua."); }
         }
 

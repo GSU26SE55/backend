@@ -31,14 +31,16 @@ public class AuditRetentionBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
+            try
+            { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
             catch (OperationCanceledException) { break; }
 
             try
             {
                 var now = DateTime.UtcNow;
                 // Chỉ chạy quanh 03:00 UTC (CheckInterval 6h đảm bảo trúng cửa sổ này 1 lần/ngày).
-                if (now.Hour is < 3 or > 4) continue;
+                if (now.Hour is < 3 or > 4)
+                    continue;
 
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var uow = scope.ServiceProvider.GetRequiredService<IAuditAggregatorUnitOfWork>();

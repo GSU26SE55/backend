@@ -71,13 +71,32 @@ public readonly record struct TelemetryScope(TelemetryScopeType Kind, IReadOnlyL
         bool allowMulti;
         switch (prefix)
         {
-            case "asset": kind = TelemetryScopeType.Asset; allowMulti = false; break;
-            case "assets": kind = TelemetryScopeType.Asset; allowMulti = true; break;
-            case "customer": kind = TelemetryScopeType.Customer; allowMulti = false; break;
-            case "site": kind = TelemetryScopeType.Site; allowMulti = false; break;
-            case "sites": kind = TelemetryScopeType.Site; allowMulti = true; break;
-            case "type": kind = TelemetryScopeType.BatteryType; allowMulti = false; break;
-            default: return null;
+            case "asset":
+                kind = TelemetryScopeType.Asset;
+                allowMulti = false;
+                break;
+            case "assets":
+                kind = TelemetryScopeType.Asset;
+                allowMulti = true;
+                break;
+            case "customer":
+                kind = TelemetryScopeType.Customer;
+                allowMulti = false;
+                break;
+            case "site":
+                kind = TelemetryScopeType.Site;
+                allowMulti = false;
+                break;
+            case "sites":
+                kind = TelemetryScopeType.Site;
+                allowMulti = true;
+                break;
+            case "type":
+                kind = TelemetryScopeType.BatteryType;
+                allowMulti = false;
+                break;
+            default:
+                return null;
         }
 
         var ids = new List<Guid>();

@@ -23,16 +23,20 @@ public static class BatteryRealtimeAuthorizationHelper
     /// </summary>
     public static bool CanAccessAsset(Guid assetCustomerId, Guid actorUserId, IReadOnlyCollection<string> roles)
     {
-        if (IsManagerOrAdmin(roles)) return true;
-        if (HasRole(roles, "Staff")) return true;   // MVP: Staff xem chi tiết bất kỳ pin
-        if (HasRole(roles, "Customer")) return assetCustomerId == actorUserId;
+        if (IsManagerOrAdmin(roles))
+            return true;
+        if (HasRole(roles, "Staff"))
+            return true;   // MVP: Staff xem chi tiết bất kỳ pin
+        if (HasRole(roles, "Customer"))
+            return assetCustomerId == actorUserId;
         return false;
     }
 
     /// <summary>Customer scope: Admin/Manager OK; Customer chỉ chính mình (CustomerId == actor).</summary>
     public static bool CanAccessCustomer(Guid customerId, Guid actorUserId, IReadOnlyCollection<string> roles)
     {
-        if (IsManagerOrAdmin(roles)) return true;
+        if (IsManagerOrAdmin(roles))
+            return true;
         return HasRole(roles, "Customer") && customerId == actorUserId;
     }
 
