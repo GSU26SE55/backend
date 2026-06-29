@@ -1,10 +1,8 @@
 using FluentAssertions;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
-using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
+using TicketService.Application.CQRS.Command.MaintenanceLogs;
 using TicketService.Application.CQRS.Command.Sagas;
-using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Domain.Enums;

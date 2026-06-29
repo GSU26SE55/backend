@@ -4,30 +4,34 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 
-namespace TicketService.Application.CQRS.Command.ParticipantSelfLeave;
+namespace TicketService.Application.CQRS.Command.Tickets;
 
-public class ParticipantSelfLeaveCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
+public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     /// <summary>
     /// ID của Ticket liên quan.
     /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
-
-    /// <summary>
-    /// Leave reason.
-    /// </summary>
-    public string? LeaveReason { get; set; }
-
     [JsonIgnore]
-    public Guid ActorUserId { get; set; }
+    public Guid UserId { get; set; }
+    /// <summary>
+    /// Incident description.
+    /// </summary>
+    public string? IncidentDescription { get; set; }
 
-    public Task<ParticipantActionResponse> ValidateAsync()
+    public Task<TicketActionResponse> ValidateAsync()
     {
-        var response = new ParticipantActionResponse();
+        var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+
+        if (UserId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+
+        if (string.IsNullOrWhiteSpace(IncidentDescription))
+            response.ListErrors.Add(new Errors { Field = "IncidentDescription", Detail = "Mô tả sự cố không được để trống." });
 
         if (response.ListErrors.Count > 0)
         {

@@ -1,6 +1,6 @@
 using Moq;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ParticipantBulkAdd;
+using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.CQRS.Handler.Participants;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;

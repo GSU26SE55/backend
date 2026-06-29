@@ -1,6 +1,6 @@
 using SharedContracts.Interfaces;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Command.TicketDeclareIncident;
+using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;

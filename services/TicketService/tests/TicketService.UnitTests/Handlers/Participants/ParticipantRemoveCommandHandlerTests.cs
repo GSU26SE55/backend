@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ParticipantRemove;
+using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.CQRS.Handler.Participants;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;

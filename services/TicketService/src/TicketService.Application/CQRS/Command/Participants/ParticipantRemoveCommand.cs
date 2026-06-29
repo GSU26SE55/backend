@@ -5,42 +5,30 @@ using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Command.ParticipantAdd;
+namespace TicketService.Application.CQRS.Command.Participants;
 
-public class ParticipantAddCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
+public class ParticipantRemoveCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {
     /// <summary>
     /// ID của Ticket liên quan.
     /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
-
-    /// <summary>
-    /// ID của người dùng.
-    /// </summary>
+    [JsonIgnore]
     public Guid UserId { get; set; }
-    public ActorRoleEnum UserRole { get; set; }
-    public ParticipantTypeEnum ParticipantType { get; set; }
-    /// <summary>
-    /// Can post.
-    /// </summary>
-    public bool CanPost { get; set; } = true;
-    public bool CanViewInternal { get; set; }
 
     /// <summary>
-    /// ID của người thực hiện yêu cầu.
+    /// Remove reason.
     /// </summary>
+    public string? RemoveReason { get; set; }
+
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+    /// <summary>
+    /// Actor role.
+    /// </summary>
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
-
-    private static readonly ParticipantTypeEnum[] ManuallyAssignableTypes =
-    {
-        ParticipantTypeEnum.Collaborator,
-        ParticipantTypeEnum.Watcher,
-        ParticipantTypeEnum.Delegate
-    };
 
     public Task<ParticipantActionResponse> ValidateAsync()
     {
@@ -51,9 +39,6 @@ public class ParticipantAddCommand : IRequest<ParticipantActionResponse>, IValid
 
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
-
-        if (!ManuallyAssignableTypes.Contains(ParticipantType))
-            response.ListErrors.Add(new Errors { Field = "ParticipantType", Detail = "ParticipantType chỉ được là Collaborator, Watcher hoặc Delegate khi thêm thủ công." });
 
         if (response.ListErrors.Count > 0)
         {

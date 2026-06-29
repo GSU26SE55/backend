@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Moq;
-using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
+using TicketService.Application.CQRS.Command.MaintenanceLogs;
 using TicketService.Application.CQRS.Handler.MaintenanceLogs;
 using TicketService.Application.Interfaces.Helpers;
 using TicketService.Domain.Entities;

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ParticipantRemove;
+using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

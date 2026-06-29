@@ -5,7 +5,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Command.ParticipantUpdateRole;
+namespace TicketService.Application.CQRS.Command.Participants;
 
 public class ParticipantUpdateRoleCommand : IRequest<ParticipantActionResponse>, IValidatable<ParticipantActionResponse>
 {

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.ParticipantAdd;
+using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
