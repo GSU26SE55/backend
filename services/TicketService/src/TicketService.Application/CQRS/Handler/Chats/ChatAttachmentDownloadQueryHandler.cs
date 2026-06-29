@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Models;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
-using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 

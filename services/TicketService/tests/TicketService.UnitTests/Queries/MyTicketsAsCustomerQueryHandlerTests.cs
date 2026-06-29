@@ -1,11 +1,11 @@
 using SharedInfrastructure.Services;
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Handler.MyTicketsAsCustomer;
+using TicketService.Application.CQRS.Handler.Ticket;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Queries;
 

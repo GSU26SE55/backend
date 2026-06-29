@@ -6,8 +6,8 @@ using Moq;
 using SharedContracts.Events;
 using SharedKernels.Interfaces;
 using TicketService.Application.Consumers;
-using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 

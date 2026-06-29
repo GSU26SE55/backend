@@ -2,10 +2,10 @@ using FluentAssertions;
 using Moq;
 using TicketService.Application.CQRS.Command.MaintenanceLogs;
 using TicketService.Application.CQRS.Handler.MaintenanceLogs;
-using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.MaintenanceLogs;
 

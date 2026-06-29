@@ -6,7 +6,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Queries;
 

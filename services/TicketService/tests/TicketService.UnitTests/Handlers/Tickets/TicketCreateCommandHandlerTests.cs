@@ -4,10 +4,10 @@ using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Tickets;
 

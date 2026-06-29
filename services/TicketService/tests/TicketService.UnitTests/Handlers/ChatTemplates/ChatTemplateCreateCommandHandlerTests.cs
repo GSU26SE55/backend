@@ -5,7 +5,7 @@ using TicketService.Application.CQRS.Handler.ChatTemplates;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.ChatTemplates;
 

@@ -1,16 +1,11 @@
-using System;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Helpers;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
-using TicketService.Application.Helpers;
 using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
