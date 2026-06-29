@@ -8,5 +8,8 @@ namespace TicketService.Application.CQRS.Query.Reports;
 public class ResolutionTimeHistogramReportQuery : IRequest<CommonResponse<List<HistogramBucketRow>>>
 {
     public DateTime? From { get; set; }
+    /// <summary>
+    /// Thời gian kết thúc lọc (UTC).
+    /// </summary>
     public DateTime? To { get; set; }
 }

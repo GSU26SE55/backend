@@ -66,4 +66,15 @@ public static class PermissionCodes
     // Alert–Ticket Saga ops (ticket.saga.*) — Sprint 5B #241
     public const string TicketSagaView = "ticket.saga.view";
     public const string TicketSagaReprocess = "ticket.saga.reprocess";
+
+    // Chat (chat.*) — Sprint Chat Phase 2 #516
+    public const string ChatCreatePublic = "chat.create.public";
+    public const string ChatCreateInternal = "chat.create.internal";
+    public const string ChatEditOwn = "chat.edit.own";
+    public const string ChatEditAny = "chat.edit.any";
+    public const string ChatDeleteOwn = "chat.delete.own";
+    public const string ChatDeleteAny = "chat.delete.any";
+    public const string ChatPin = "chat.pin";
+    public const string ChatViewInternal = "chat.view.internal";
+    public const string ChatTemplateCreateGlobal = "chat.template.create.global";
 }

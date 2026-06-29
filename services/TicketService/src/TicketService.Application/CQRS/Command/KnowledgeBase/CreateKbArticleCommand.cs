@@ -9,16 +9,28 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
     [JsonIgnore]
     public string CurrentUserRole { get; set; } = string.Empty;
+    /// <summary>
+    /// Danh mục phân loại.
+    /// </summary>
     public TicketCategoryEnum Category { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Symptoms { get; set; } = string.Empty;
+    /// <summary>
+    /// Diagnosis steps.
+    /// </summary>
     public string DiagnosisSteps { get; set; } = string.Empty;
     public string SolutionSteps { get; set; } = string.Empty;
     public List<string>? RecommendedParts { get; set; }
+    /// <summary>
+    /// Tags.
+    /// </summary>
     public List<string> Tags { get; set; } = new();
     public bool IsInternalOnly { get; set; }
 

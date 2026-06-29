@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedInfrastructure.Persistence.Interceptors;
 using TicketService.Domain.Entities;
 using TicketService.Infrastructure.Sagas;
+using TicketService.Infrastructure.Sagas.ChatEscalationReview;
 
 namespace TicketService.Infrastructure.Persistence;
 
@@ -17,7 +18,8 @@ public class TicketDbContext : DbContext
 
     public virtual DbSet<Ticket> Tickets { get; set; }
     public virtual DbSet<TicketActivity> TicketActivities { get; set; }
-    public virtual DbSet<TicketComment> TicketComments { get; set; }
+    public virtual DbSet<TicketChat> TicketChats { get; set; }
+    public virtual DbSet<TicketChatEdit> TicketChatEdits { get; set; }
     public virtual DbSet<TicketAttachment> TicketAttachments { get; set; }
     public virtual DbSet<SlaTimer> SlaTimers { get; set; }
     public virtual DbSet<SlaPauseEvent> SlaPauseEvents { get; set; }
@@ -30,6 +32,16 @@ public class TicketDbContext : DbContext
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
+    public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
+    public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }
+    public virtual DbSet<TicketChatReaction> TicketChatReactions { get; set; }
+    public virtual DbSet<TicketChatRead> TicketChatReads { get; set; }
+    public virtual DbSet<ChatTemplate> ChatTemplates { get; set; }
+    public virtual DbSet<ChatAiSuggestion> ChatAiSuggestions { get; set; }
+    public virtual DbSet<TicketChatTranslation> TicketChatTranslations { get; set; }
+    public virtual DbSet<TicketChatTranslationUser> TicketChatTranslationUsers { get; set; }
+    public virtual DbSet<ChatMetricsDaily> ChatMetricsDailies { get; set; }
+    public virtual DbSet<ChatEscalationReviewSagaState> ChatEscalationReviewSagaStates { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -44,6 +56,12 @@ public class TicketDbContext : DbContext
         {
             // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
             modelBuilder.Entity<AlertTicketSagaState>()
+                .Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<ChatEscalationReviewSagaState>()
                 .Property<uint>("xmin")
                 .HasColumnType("xid")
                 .ValueGeneratedOnAddOrUpdate()

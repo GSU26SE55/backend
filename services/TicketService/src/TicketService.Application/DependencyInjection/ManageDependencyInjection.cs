@@ -12,6 +12,7 @@ public static class ManageDependencyInjection
     {
         // Options
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
+        services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
 
         // Register MediatR handlers
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ManageDependencyInjection).Assembly));

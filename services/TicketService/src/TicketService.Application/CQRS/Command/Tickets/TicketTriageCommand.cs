@@ -9,15 +9,27 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketTriageCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Mức độ tác động (1-4).
+    /// </summary>
     public ImpactScopeEnum Impact { get; set; }
     public UrgencyLevelEnum Urgency { get; set; }
     public TicketPriorityEnum? ManualPriority { get; set; }
+    /// <summary>
+    /// Priority override reason.
+    /// </summary>
     public string? PriorityOverrideReason { get; set; }
     public string? ManagerComment { get; set; }
 
+    /// <summary>
+    /// ID của Manager.
+    /// </summary>
     [JsonIgnore]
     public Guid ManagerId { get; set; }
     [JsonIgnore]

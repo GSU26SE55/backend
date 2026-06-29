@@ -7,9 +7,10 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
-using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -75,6 +76,21 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
 
         var oldStaffId = ticket.AssignedStaffId;
         ticket.AssignedStaffId = request.StaffId;
+
+        // Auto-tạo participant PrimaryAssignee cho Staff được gán (#528)
+        await _uow.TicketParticipants.AddAsync(new TicketParticipant
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Ticket = ticket,
+            UserId = request.StaffId,
+            UserRole = ActorRoleEnum.Staff,
+            ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
+            CanPost = true,
+            CanViewInternal = true,
+            AddedByUserId = request.ManagerId,
+            AddedAt = DateTime.UtcNow
+        });
 
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
         {

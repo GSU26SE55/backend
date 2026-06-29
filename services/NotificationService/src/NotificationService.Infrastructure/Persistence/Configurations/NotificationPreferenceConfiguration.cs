@@ -28,6 +28,12 @@ public class NotificationPreferenceConfiguration : IEntityTypeConfiguration<Noti
             .HasColumnName("frequency").HasConversion<int>()
             .HasDefaultValue(NotificationFrequencyEnum.Immediate);
 
+        // Chat-specific preferences (#570)
+        builder.Property(x => x.NotifyOnChat).HasColumnName("notify_on_chat").HasDefaultValue(true);
+        builder.Property(x => x.NotifyOnMention).HasColumnName("notify_on_mention").HasDefaultValue(true);
+        builder.Property(x => x.NotifyOnReaction).HasColumnName("notify_on_reaction").HasDefaultValue(false);
+        builder.Property(x => x.DigestWindowMinutes).HasColumnName("digest_window_minutes");
+
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

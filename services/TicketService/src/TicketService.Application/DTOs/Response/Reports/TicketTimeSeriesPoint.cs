@@ -4,5 +4,8 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class TicketTimeSeriesPoint
 {
     public DateTime Date { get; set; }
+    /// <summary>
+    /// Count.
+    /// </summary>
     public int Count { get; set; }
 }

@@ -2,11 +2,11 @@ using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
-using TicketService.Application.CQRS.Command.TicketDeclareIncident;
+using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
-using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 

@@ -8,6 +8,9 @@ namespace TicketService.Application.CQRS.Query.Reports;
 public class TicketVolumeReportQuery : IRequest<CommonResponse<List<TicketTimeSeriesPoint>>>
 {
     public DateTime? From { get; set; }
+    /// <summary>
+    /// Thời gian kết thúc lọc (UTC).
+    /// </summary>
     public DateTime? To { get; set; }
     public string Granularity { get; set; } = "day";
 }

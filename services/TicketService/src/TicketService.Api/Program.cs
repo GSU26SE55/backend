@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using TicketService.Api.Extensions;
 using TicketService.Application.DependencyInjection;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
@@ -37,8 +38,9 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AutoCloseBackgroundService>();
+builder.Services.AddChatRateLimiting();
 
-builder.Services.AddSignalR(options =>
+var signalRBuilder = builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
@@ -49,6 +51,16 @@ builder.Services.AddSignalR(options =>
     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
+
+// Redis backplane cho SignalR scale-out (multi-instance). Fallback gracefully nếu Redis chưa config.
+var signalRRedisConn = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(signalRRedisConn))
+{
+    signalRBuilder.AddStackExchangeRedis(signalRRedisConn, o =>
+    {
+        o.Configuration.ChannelPrefix = new StackExchange.Redis.RedisChannel("TicketChat", StackExchange.Redis.RedisChannel.PatternMode.Literal);
+    });
+}
 
 builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
 {
@@ -62,7 +74,7 @@ builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSch
 
         var accessToken = context.Request.Query["access_token"];
         var path = context.HttpContext.Request.Path;
-        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket-comments"))
+        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket-chats"))
         {
             context.Token = accessToken;
         }
@@ -134,9 +146,10 @@ if (!app.Environment.IsEnvironment("Docker"))
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
-app.MapHub<TicketCommentHub>("/hubs/ticket-comments");
+app.MapHub<TicketChatHub>("/hubs/ticket-chats").RequireAuthorization();
 app.MapMetrics();
 app.MapHealthChecks("/health");
 

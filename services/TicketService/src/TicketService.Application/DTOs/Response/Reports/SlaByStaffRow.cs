@@ -4,9 +4,15 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class SlaByStaffRow
 {
     public string StaffId { get; set; } = string.Empty;
+    /// <summary>
+    /// Name.
+    /// </summary>
     public string? Name { get; set; }
     public int TotalAssigned { get; set; }
     public int Met { get; set; }
+    /// <summary>
+    /// Breached.
+    /// </summary>
     public int Breached { get; set; }
     public decimal ComplianceRate { get; set; }   // %
 }

@@ -1,21 +1,17 @@
-using FluentAssertions;
 using MassTransit;
 using MassTransit.Testing;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using MockQueryable.Moq;
-using Moq;
 using SharedContracts.Common.Responses;
 using SharedContracts.Saga.AlertTicket;
 using SharedKernels.Interfaces;
-using TicketService.Application.Consumers;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Consumers;
 
 namespace TicketService.UnitTests.Sagas;
 

@@ -7,6 +7,9 @@ namespace TicketService.Application.CQRS.Query.KnowledgeBase;
 
 public class GetKbArticleByIdQuery : IRequest<CommonResponse<KbArticleDTO>>
 {
+    /// <summary>
+    /// Article id.
+    /// </summary>
     [BindNever]
     public Guid ArticleId { get; set; }
 }

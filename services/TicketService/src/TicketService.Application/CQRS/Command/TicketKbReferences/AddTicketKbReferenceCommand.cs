@@ -9,9 +9,15 @@ namespace TicketService.Application.CQRS.Command.TicketKbReferences;
 
 public class AddTicketKbReferenceCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     public Guid TicketId { get; set; }
     public Guid KbArticleId { get; set; }
     public KbReferenceTypeEnum ReferenceType { get; set; }
+    /// <summary>
+    /// Note.
+    /// </summary>
     public string? Note { get; set; }
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }

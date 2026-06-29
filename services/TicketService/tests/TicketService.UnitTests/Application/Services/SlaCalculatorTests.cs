@@ -1,6 +1,6 @@
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.Infrastructure.Implements.Helpers;
+using TicketService.Infrastructure.Implements.Utils;
 
 namespace TicketService.UnitTests.Application.Services;
 

@@ -34,6 +34,10 @@ public class GetNotificationPreferenceQueryHandler
                 QuietHoursStart = pref.QuietHoursStart?.ToString("HH:mm"),
                 QuietHoursEnd = pref.QuietHoursEnd?.ToString("HH:mm"),
                 TimeZone = pref.TimeZone,
+                NotifyOnChat = pref.NotifyOnChat,
+                NotifyOnMention = pref.NotifyOnMention,
+                NotifyOnReaction = pref.NotifyOnReaction,
+                DigestWindowMinutes = pref.DigestWindowMinutes,
             }
             : new NotificationPreferenceDto
             {
@@ -42,6 +46,10 @@ public class GetNotificationPreferenceQueryHandler
                 SmsEnabled = false,
                 InAppEnabled = true,
                 TimeZone = "Asia/Ho_Chi_Minh",
+                NotifyOnChat = true,
+                NotifyOnMention = true,
+                NotifyOnReaction = false,
+                DigestWindowMinutes = null,
             };
 
         return new NotificationPreferenceResponse { IsSuccess = true, Data = dto };

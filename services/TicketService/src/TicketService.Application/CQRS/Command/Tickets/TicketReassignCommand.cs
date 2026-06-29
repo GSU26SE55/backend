@@ -8,13 +8,22 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     public Guid NewStaffId { get; set; }
+    /// <summary>
+    /// Lý do thực hiện hành động.
+    /// </summary>
     public string Reason { get; set; } = string.Empty;
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+    /// <summary>
+    /// Tên của Manager.
+    /// </summary>
     [JsonIgnore]
     public string? ManagerName { get; set; }
 

@@ -8,15 +8,27 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketRateCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Rating.
+    /// </summary>
     public short Rating { get; set; }
     public string? RatingComment { get; set; }
 
+    /// <summary>
+    /// Customer id.
+    /// </summary>
     [JsonIgnore]
     public Guid CustomerId { get; set; }
 
+    /// <summary>
+    /// Customer name.
+    /// </summary>
     [JsonIgnore]
     public string? CustomerName { get; set; }
 

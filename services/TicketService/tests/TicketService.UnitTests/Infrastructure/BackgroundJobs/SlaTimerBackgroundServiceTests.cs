@@ -5,11 +5,11 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
-using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.BackgroundJobs;
-using TicketService.Infrastructure.Implements.Helpers;
+using TicketService.Infrastructure.Implements.Utils;
 using TicketService.Infrastructure.Persistence;
 
 namespace TicketService.UnitTests.Infrastructure.BackgroundJobs;

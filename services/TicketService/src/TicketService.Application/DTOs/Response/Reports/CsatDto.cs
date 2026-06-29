@@ -4,6 +4,9 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class CsatDto
 {
     public decimal AvgRating { get; set; }
+    /// <summary>
+    /// Total rated.
+    /// </summary>
     public int TotalRated { get; set; }
     public Dictionary<int, int> RatingDistribution { get; set; } = new();   // 1..5 → count
 }

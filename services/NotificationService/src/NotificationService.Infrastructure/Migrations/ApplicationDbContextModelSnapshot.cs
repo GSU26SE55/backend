@@ -484,6 +484,10 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<int?>("DigestWindowMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("digest_window_minutes");
+
                     b.Property<bool>("EmailEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -507,6 +511,24 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<bool>("NotifyOnChat")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("notify_on_chat");
+
+                    b.Property<bool>("NotifyOnMention")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("notify_on_mention");
+
+                    b.Property<bool>("NotifyOnReaction")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("notify_on_reaction");
 
                     b.Property<bool>("PushEnabled")
                         .ValueGeneratedOnAdd()

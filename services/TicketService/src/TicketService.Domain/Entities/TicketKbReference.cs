@@ -11,4 +11,5 @@ public class TicketKbReference : AuditableEntity
     public Guid ReferencedByUserId { get; set; }
     public KbReferenceTypeEnum ReferenceType { get; set; }
     public string? Note { get; set; }
+    public Guid? ChatId { get; set; }
 }

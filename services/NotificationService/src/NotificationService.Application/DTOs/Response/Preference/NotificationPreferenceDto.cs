@@ -9,4 +9,10 @@ public class NotificationPreferenceDto
     public string? QuietHoursStart { get; set; }  // "HH:mm" or null
     public string? QuietHoursEnd { get; set; }    // "HH:mm" or null
     public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
+
+    // Chat-specific preferences (#570)
+    public bool NotifyOnChat { get; set; }
+    public bool NotifyOnMention { get; set; }
+    public bool NotifyOnReaction { get; set; }
+    public int? DigestWindowMinutes { get; set; }
 }

@@ -116,7 +116,7 @@ pipeline {
       steps {
         script {
           def baseRef = env.CHANGE_TARGET ?: 'dev'
-          sh """
+                    sh """
             set -eu
             git fetch origin ${baseRef}:refs/remotes/origin/${baseRef} 2>/dev/null || true
 

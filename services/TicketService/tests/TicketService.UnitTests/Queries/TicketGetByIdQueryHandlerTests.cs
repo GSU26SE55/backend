@@ -1,10 +1,10 @@
 using SharedKernels.Interfaces;
-using TicketService.Application.CQRS.Handler.TicketGetById;
+using TicketService.Application.CQRS.Handler.Ticket;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -12,11 +12,14 @@ public class TicketGetByIdQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockRepo = new();
+    private readonly Mock<IGenericRepository<TicketParticipant>> _mockParticipantRepo = new();
     private readonly TicketGetByIdQueryHandler _handler;
 
     public TicketGetByIdQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
+        _mockParticipantRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketParticipant>([]));
+        _mockUow.Setup(x => x.TicketParticipants).Returns(_mockParticipantRepo.Object);
         _handler = new TicketGetByIdQueryHandler(_mockUow.Object);
     }
 
@@ -34,7 +37,7 @@ public class TicketGetByIdQueryHandlerTests
         Origin = TicketOriginEnum.ManualByCustomer,
         CreatedAt = DateTime.UtcNow,
         Activities = new List<TicketActivity>(),
-        Comments = new List<TicketComment>(),
+        Chats = new List<TicketChat>(),
         MaintenanceLogs = new List<MaintenanceLog>()
     };
 
@@ -163,11 +166,11 @@ public class TicketGetByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_InternalCommentsHiddenFromCustomer()
+    public async Task Handle_InternalChatsHiddenFromCustomer()
     {
         var customerId = Guid.NewGuid();
         var ticket = MakeTicket(customerId: customerId);
-        ticket.Comments = new List<TicketComment>
+        ticket.Chats = new List<TicketChat>
         {
             new() { Id = Guid.NewGuid(), TicketId = ticket.Id, Ticket = ticket, AuthorUserId = Guid.NewGuid(),
                     AuthorRole = ActorRoleEnum.Staff, Body = "Internal note", IsInternal = true,
@@ -185,7 +188,7 @@ public class TicketGetByIdQueryHandlerTests
             ActorRoles = ["Customer"]
         }, default);
 
-        result.Data!.Comments.Should().HaveCount(1);
-        result.Data.Comments[0].IsInternal.Should().BeFalse();
+        result.Data!.Chats.Should().HaveCount(1);
+        result.Data.Chats[0].IsInternal.Should().BeFalse();
     }
 }
