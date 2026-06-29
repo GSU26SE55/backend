@@ -8,6 +8,9 @@ namespace TicketService.Application.CQRS.Command.TicketKbReferences;
 
 public class RemoveTicketKbReferenceCommand : IRequest<CommonResponse<object>>, IValidatable<CommonResponse<object>>
 {
+    /// <summary>
+    /// Reference id.
+    /// </summary>
     [JsonIgnore]
     public Guid ReferenceId { get; set; }
 

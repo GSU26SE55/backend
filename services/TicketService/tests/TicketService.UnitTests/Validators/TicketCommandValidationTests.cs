@@ -1,10 +1,8 @@
 using FluentAssertions;
-using TicketService.Application.CQRS.Command.CommentAdd;
+using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
-using TicketService.Application.CQRS.Command.MaintenanceLogAdd;
-using TicketService.Application.CQRS.Command.MaintenanceLogUpdate;
+using TicketService.Application.CQRS.Command.MaintenanceLogs;
 using TicketService.Application.CQRS.Command.Sagas;
-using TicketService.Application.CQRS.Command.TicketDeclareIncident;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Domain.Enums;
@@ -332,14 +330,14 @@ public class TicketCommandValidationTests
 
     #region CommentAdd Commands
     [Fact]
-    public async Task CommentAddCommand_InvalidData_ReturnsErrors()
+    public async Task ChatAddCommand_InvalidData_ReturnsErrors()
     {
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             TicketId = Guid.Empty,
             UserId = Guid.Empty,
             Body = "",
-            Attachments = new List<CommentAttachmentInput>
+            Attachments = new List<ChatAttachmentInput>
             {
                 new(Guid.Empty, "", "", -1)
             }
@@ -355,14 +353,14 @@ public class TicketCommandValidationTests
     }
 
     [Fact]
-    public async Task CommentAddCommand_ValidData_ReturnsSuccess()
+    public async Task ChatAddCommand_ValidData_ReturnsSuccess()
     {
-        var command = new CommentAddCommand
+        var command = new ChatAddCommand
         {
             TicketId = Guid.NewGuid(),
             UserId = Guid.NewGuid(),
             Body = "Valid Body comment",
-            Attachments = new List<CommentAttachmentInput>
+            Attachments = new List<ChatAttachmentInput>
             {
                 new(Guid.NewGuid(), "test.jpg", "image/jpeg", 2048)
             }

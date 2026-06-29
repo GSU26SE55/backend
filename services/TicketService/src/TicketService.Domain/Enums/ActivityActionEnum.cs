@@ -15,8 +15,8 @@ public enum ActivityActionEnum
     StaffAssigned = 4,
     /// <summary>Đã điều chuyển nhân viên xử lý.</summary>
     StaffReassigned = 5,
-    /// <summary>Đã thêm bình luận.</summary>
-    Commented = 6,
+    /// <summary>Đã thêm tin nhắn chat.</summary>
+    Chatted = 6,
     /// <summary>Đã thêm nhật ký bảo trì.</summary>
     MaintenanceLogged = 7,
     /// <summary>Đã đính kèm tệp.</summary>
@@ -52,5 +52,19 @@ public enum ActivityActionEnum
     /// <summary>Nhân viên cấp cao giải quyết.</summary>
     ResolvedByEscalatedStaff = 23,
     /// <summary>Phê duyệt triage.</summary>
-    TriageApproved = 24
+    TriageApproved = 24,
+    /// <summary>Đã chỉnh sửa tin nhắn chat.</summary>
+    ChatEdited = 26,
+    /// <summary>Đã xóa tin nhắn chat.</summary>
+    ChatDeleted = 27,
+    /// <summary>Đã khôi phục tin nhắn chat.</summary>
+    ChatRestored = 28,
+    /// <summary>Đã trả lời tin nhắn chat.</summary>
+    ChatReplied = 29,
+    /// <summary>Đã pin tin nhắn chat.</summary>
+    ChatPinned = 30,
+    /// <summary>Đã unpin tin nhắn chat.</summary>
+    ChatUnpinned = 31,
+    /// <summary>Chat bị flag bởi spam/profanity/PII filter (audit trail, không chặn post trừ spam).</summary>
+    ChatFlagged = 32
 }

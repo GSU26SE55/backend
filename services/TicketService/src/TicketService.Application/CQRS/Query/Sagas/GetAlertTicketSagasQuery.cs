@@ -15,15 +15,27 @@ public class GetAlertTicketSagasQuery : IRequest<AlertTicketSagaListResponse>
     public string? State { get; set; }
 
     public Guid? AlertId { get; set; }
+    /// <summary>
+    /// ID của thiết bị pin.
+    /// </summary>
     public Guid? BatteryAssetId { get; set; }
     public Guid? CustomerId { get; set; }
 
+    /// <summary>
+    /// Started from.
+    /// </summary>
     public DateTime? StartedFrom { get; set; }
     public DateTime? StartedTo { get; set; }
 
+    /// <summary>
+    /// Is failed.
+    /// </summary>
     public bool? IsFailed { get; set; }
 
     public int PageNumber { get; set; } = 1;
+    /// <summary>
+    /// Kích thước trang (số lượng bản ghi trên một trang).
+    /// </summary>
     public int PageSize { get; set; } = 50;
     public bool IsDescending { get; set; } = true;
 }

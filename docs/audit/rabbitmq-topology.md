@@ -23,7 +23,7 @@
         │
         ▼
   [AuditAggregatorService]  AuditCreatedConsumer (#AUDIT-15)
-        │  fail sau retry → 
+        │  fail sau retry →
         ▼
   exchange  audit.events.dlx  (fanout, durable) → queue  aggregator.audit.events.dlq  (durable)
 ```

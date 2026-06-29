@@ -1,6 +1,8 @@
+using BatteryService.Api.Authentication;
 using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Query.EnvironmentalIncident;
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -66,7 +68,10 @@ public class EnvironmentalIncidentsController : ControllerBase
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [Authorize(AuthenticationSchemes = "ApiKey", Policy = "EnvironmentalIngest")]
+    // Trước: [Authorize(..., Policy = "EnvironmentalIngest")] — named policy chưa đăng ký → 500.
+    // Đổi sang attribute scope-check chuẩn (giống SensorReadings/IotDevices/Ambient).
+    [Authorize(AuthenticationSchemes = ApiKeyAuthenticationHandler.SchemeName)]
+    [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.EnvironmentalIngest)]
     public async Task<IActionResult> Report([FromBody] ReportEnvironmentalIncidentCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);

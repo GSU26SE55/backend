@@ -12,6 +12,7 @@ using NotificationService.Infrastructure.Services;
 using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
+using SharedInfrastructure.Idempotency;
 
 namespace NotificationService.Infrastructure.DependencyInjection;
 
@@ -29,6 +30,7 @@ public static class ManageDependencyInjection
 
         services.AddScoped<NotificationDataSeeder>();
         services.AddNotificationChannels();
+        services.AddInboxIdempotency(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
 

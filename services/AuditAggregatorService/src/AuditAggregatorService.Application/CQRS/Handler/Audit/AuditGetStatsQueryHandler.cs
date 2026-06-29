@@ -17,8 +17,10 @@ public class AuditGetStatsQueryHandler
     public async Task<CommonResponse<List<AuditStatsItemDto>>> Handle(AuditGetStatsQuery request, CancellationToken ct)
     {
         var q = _unitOfWork.AuditAggregates.GetAllAsync(tracking: false);
-        if (request.From.HasValue) q = q.Where(x => x.OccurredAt >= request.From.Value);
-        if (request.To.HasValue) q = q.Where(x => x.OccurredAt <= request.To.Value);
+        if (request.From.HasValue)
+            q = q.Where(x => x.OccurredAt >= request.From.Value);
+        if (request.To.HasValue)
+            q = q.Where(x => x.OccurredAt <= request.To.Value);
 
         IQueryable<IGrouping<string, AuditAggregate>> grouped = request.GroupBy?.ToLowerInvariant() switch
         {

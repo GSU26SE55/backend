@@ -5,10 +5,10 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
-using SharedContracts.Audit;
-using SharedContracts.Events.Audit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using SharedContracts.Audit;
+using SharedContracts.Events.Audit;
 using SharedInfrastructure.Middleware;
 using SharedInfrastructure.Services;
 

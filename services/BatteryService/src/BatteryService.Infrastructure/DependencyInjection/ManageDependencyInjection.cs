@@ -111,6 +111,12 @@ public static class ManageDependencyInjection
         // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.
         services.AddHostedService<NoiseBreachRetentionBackgroundService>();
 
+        // Sprint BE-IoT-Realtime (#614..#623) — SSE telemetry (§34.10). Redis pub/sub, soft-dependency.
+        services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.SectionName));
+        services.AddSingleton<ITelemetryPublisher, BatteryService.Infrastructure.Realtime.RedisTelemetryPublisher>();
+        services.AddSingleton<ITelemetryStream, BatteryService.Infrastructure.Realtime.RedisTelemetryStream>();
+        services.AddScoped<IBatteryRealtimeAuthorizationService, BatteryService.Infrastructure.Implements.Services.BatteryRealtimeAuthorizationService>();
+
         return services;
     }
 

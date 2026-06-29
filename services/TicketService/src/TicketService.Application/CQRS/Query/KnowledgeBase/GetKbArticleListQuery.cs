@@ -8,8 +8,14 @@ namespace TicketService.Application.CQRS.Query.KnowledgeBase;
 
 public class GetKbArticleListQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<KbArticleListItemDTO>>>
 {
+    /// <summary>
+    /// Danh mục phân loại.
+    /// </summary>
     public TicketCategoryEnum? Category { get; set; }
     public KbArticleStatusEnum? Status { get; set; }
     public string? Tag { get; set; }
+    /// <summary>
+    /// Từ khóa tìm kiếm.
+    /// </summary>
     public string? Q { get; set; }
 }

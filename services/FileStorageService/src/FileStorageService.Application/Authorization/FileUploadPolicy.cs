@@ -16,7 +16,7 @@ public static class FileUploadPolicy
                 ".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt", ".csv"
             ],
             [FilePurposeEnum.Avatar] = [".jpg", ".jpeg", ".png", ".webp"],
-            [FilePurposeEnum.TicketAttachment] = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"],
+            [FilePurposeEnum.TicketAttachment] = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx", ".mp3", ".wav", ".ogg", ".webm", ".m4a", ".flac"],
             [FilePurposeEnum.MaintenancePhoto] = [".jpg", ".jpeg", ".png"],
             [FilePurposeEnum.KbImage] = [".jpg", ".jpeg", ".png", ".webp", ".gif"],
             [FilePurposeEnum.Firmware] = [".bin", ".hex", ".fw"]

@@ -93,7 +93,8 @@ public class AuditPipelineIntegrationTests
             using var verifyScope = _factory.Services.CreateScope();
             var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             processed = await verifyDb.AuditOutboxes.AsNoTracking().FirstOrDefaultAsync(o => o.EventId == eventId);
-            if (processed?.Status == AuditOutboxStatusEnum.Published) break;
+            if (processed?.Status == AuditOutboxStatusEnum.Published)
+                break;
         }
 
         processed.Should().NotBeNull();

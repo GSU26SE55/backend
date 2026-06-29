@@ -4519,7 +4519,7 @@ where TRequest : IRequest<TResponse>
 ```
 Request → ValidationBehavior:
   ├─ Request implements IValidatable<TResponse>?
-  │   ├─ Yes: call ValidateAsync() → 
+  │   ├─ Yes: call ValidateAsync() →
   │   │     ├─ result.IsSuccess = false → SHORT-CIRCUIT, return result. Handler không chạy.
   │   │     └─ result.IsSuccess = true → tiếp tục pipeline.
   │   └─ No: skip validation, tiếp tục pipeline.

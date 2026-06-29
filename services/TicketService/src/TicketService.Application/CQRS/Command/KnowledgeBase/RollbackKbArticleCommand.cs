@@ -8,9 +8,15 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class RollbackKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
+    /// <summary>
+    /// Article id.
+    /// </summary>
     [JsonIgnore]
     public Guid ArticleId { get; set; }
     public Guid ToVersionId { get; set; }
+    /// <summary>
+    /// ID của người dùng hiện tại thực hiện hành động.
+    /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
 

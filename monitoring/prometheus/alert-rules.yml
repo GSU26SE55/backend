@@ -475,3 +475,42 @@ groups:
         annotations:
           summary: "Audit DLQ growing ({{ $value }} messages)"
           description: "aggregator.audit.events.dlq > 100. Inspect poison message, fix consumer, shovel DLQ → main queue. Runbook: docs/audit/operations-runbook.md."
+
+
+  # ===================================================================
+  # Chat Hub Alerts (#572)
+  # ===================================================================
+  - name: chat_hub_alerts
+    rules:
+      # 1. Chat outbox backlog > 500 for 5m
+      - alert: ChatOutboxBacklog
+        expr: chat_outbox_pending_total > 500
+        for: 5m
+        labels:
+          severity: warning
+          domain: chat
+        annotations:
+          summary: "Chat outbox backlog > 500 ({{ $value }})"
+          description: "Chat outbox messages are accumulating — check RabbitMQ connectivity and OutboxRelayBackgroundService."
+
+      # 2. SignalR disconnect storm: > 100 disconnects/min
+      - alert: SignalRDisconnectStorm
+        expr: sum(delta(signalr_connected_users_total[1m])) < -100
+        for: 1m
+        labels:
+          severity: critical
+          domain: chat
+        annotations:
+          summary: "SignalR disconnect storm detected"
+          description: "More than 100 SignalR disconnects per minute — possible hub restart or network issue."
+
+      # 3. Chat rate limit hits > 1000/hour
+      - alert: ChatRateLimitHit
+        expr: sum(rate(chat_events_total{event_type="rate_limit"}[1h])) * 3600 > 1000
+        for: 5m
+        labels:
+          severity: warning
+          domain: chat
+        annotations:
+          summary: "Chat rate limit hit > 1000/hour"
+          description: "High rate-limit trigger count suggests abuse or misconfigured client. Check spam filter."

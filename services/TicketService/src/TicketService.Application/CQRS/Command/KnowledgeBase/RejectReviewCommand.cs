@@ -8,6 +8,9 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class RejectReviewCommand : IRequest<CommonResponse<KbArticleActionDTO>>, IValidatable<CommonResponse<KbArticleActionDTO>>
 {
+    /// <summary>
+    /// Article id.
+    /// </summary>
     [JsonIgnore]
     public Guid ArticleId { get; set; }
     public string? Reason { get; set; }

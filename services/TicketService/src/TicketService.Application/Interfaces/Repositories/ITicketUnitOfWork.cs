@@ -9,7 +9,8 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<TicketAuditLog> TicketAuditLogs { get; }       // Sprint audit #AUDIT-24
     IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes { get; } // Sprint audit #AUDIT-25
     IGenericRepository<TicketActivity> TicketActivities { get; }
-    IGenericRepository<TicketComment> TicketComments { get; }
+    IGenericRepository<TicketChat> TicketChats { get; }
+    IGenericRepository<TicketChatEdit> TicketChatEdits { get; }
     IGenericRepository<TicketAttachment> TicketAttachments { get; }
     IGenericRepository<SlaTimer> SlaTimers { get; }
     IGenericRepository<SlaPauseEvent> SlaPauseEvents { get; }
@@ -20,4 +21,12 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<KnowledgeBaseArticle> KnowledgeBaseArticles { get; }
     IGenericRepository<KbArticleVersion> KbArticleVersions { get; }
     IGenericRepository<TicketKbReference> TicketKbReferences { get; }
+    IGenericRepository<TicketParticipant> TicketParticipants { get; }
+    IGenericRepository<TicketChatMention> TicketChatMentions { get; }
+    IGenericRepository<TicketChatReaction> TicketChatReactions { get; }
+    IGenericRepository<TicketChatRead> TicketChatReads { get; }
+    IGenericRepository<ChatTemplate> ChatTemplates { get; }
+    IGenericRepository<ChatAiSuggestion> ChatAiSuggestions { get; }
+    IGenericRepository<TicketChatTranslation> TicketChatTranslations { get; }
+    IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers { get; }
 }

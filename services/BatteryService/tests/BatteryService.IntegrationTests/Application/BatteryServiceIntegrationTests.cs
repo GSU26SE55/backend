@@ -65,7 +65,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance);
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>());
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {
@@ -94,7 +94,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance);
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>());
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {
@@ -125,6 +125,7 @@ public class BatteryServiceIntegrationTests
             new UnitOfWork(dbContext),
             new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(),
             new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(),
+            new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
         var firstReadingAt = new DateTime(2026, 1, 15, 1, 0, 0, DateTimeKind.Utc);
         var latestReadingAt = new DateTime(2026, 1, 15, 1, 5, 0, DateTimeKind.Utc);

@@ -6,9 +6,10 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
-using TicketService.Application.Interfaces.Helpers;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -49,6 +50,51 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
 
         var oldStaffId = ticket.AssignedStaffId;
         ticket.AssignedStaffId = request.NewStaffId;
+
+        // Auto-chuyển participant của Staff cũ sang PreviousAssignee + tạo PrimaryAssignee mới (#528)
+        if (oldStaffId.HasValue)
+        {
+            var oldParticipant = await _uow.TicketParticipants.GetAllAsync()
+                .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == oldStaffId.Value
+                    && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee && p.RemovedAt == null && !p.IsDeleted, ct);
+
+            if (oldParticipant != null)
+            {
+                oldParticipant.ParticipantType = ParticipantTypeEnum.PreviousAssignee;
+                oldParticipant.CanPost = false;
+                oldParticipant.CanViewInternal = true;
+                _uow.TicketParticipants.UpdateAsync(oldParticipant);
+            }
+        }
+
+        // Nếu NewStaffId đã có active row (vd PreviousAssignee từ lượt reassign trước) → update thay vì insert trùng
+        var newStaffParticipant = await _uow.TicketParticipants.GetAllAsync()
+            .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == request.NewStaffId
+                && p.RemovedAt == null && !p.IsDeleted, ct);
+
+        if (newStaffParticipant != null)
+        {
+            newStaffParticipant.ParticipantType = ParticipantTypeEnum.PrimaryAssignee;
+            newStaffParticipant.CanPost = true;
+            newStaffParticipant.CanViewInternal = true;
+            _uow.TicketParticipants.UpdateAsync(newStaffParticipant);
+        }
+        else
+        {
+            await _uow.TicketParticipants.AddAsync(new TicketParticipant
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                Ticket = ticket,
+                UserId = request.NewStaffId,
+                UserRole = ActorRoleEnum.Staff,
+                ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
+                CanPost = true,
+                CanViewInternal = true,
+                AddedByUserId = request.ManagerId,
+                AddedAt = DateTime.UtcNow
+            });
+        }
 
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
         {

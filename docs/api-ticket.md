@@ -287,6 +287,34 @@ Dùng khi gán bài viết Knowledge Base vào Ticket (Nhóm 11).
 | `ProvidedToCustomer` | 2 | Cung cấp cho khách hàng |
 | `GeneratedAfterResolve` | 3 | Tạo ra sau khi xử lý xong |
 
+### `ChatBodyFormatEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `PlainText` | 1 | Văn bản thường |
+| `Markdown` | 2 | Markdown — BE tự render sang HTML lưu vào `bodyHtml` |
+
+### `ReactionTypeEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `ThumbsUp` | 1 | 👍 |
+| `Acknowledged` | 2 | ✅ Đã biết |
+| `Resolved` | 3 | 🔧 Đã giải quyết |
+| `NeedMoreInfo` | 4 | ❓ Cần thêm thông tin |
+| `Disagree` | 5 | ❌ Không đồng ý |
+
+### `ChatAiIntentEnum`
+
+Phong cách gợi ý AI cho endpoint `POST /chats/suggest`.
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `RequestInfo` | 1 | Yêu cầu thêm thông tin từ Customer |
+| `TechnicalAnswer` | 2 | Trả lời kỹ thuật (mặc định) |
+| `Resolution` | 3 | Đề xuất giải pháp xử lý |
+| `FollowUp` | 4 | Theo dõi tiến độ |
+
 ---
 
 ## DTOs
@@ -334,7 +362,7 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `escalationReason` | `EscalationReasonEnum?` | **Nullable** — trả về `null` khi ticket chưa escalate (KHÔNG phải `0`). | Lý do chuyển cấp |
 | `originAlertId` | `string?` | Null nếu không từ alert | ID cảnh báo nguồn (khi `origin = AutoFromAlert`) |
 | `activities` | `TicketActivityDTO[]` | Không (default `[]`) | Lịch sử hành động (timeline) |
-| `comments` | `TicketCommentDTO[]` | Không (default `[]`) | Danh sách bình luận |
+| `chats` | `TicketChatDTO[]` | Không (default `[]`) | Danh sách chat — thay thế `comments` từ v2. Xem mục `TicketChatDTO` bên dưới |
 | `maintenanceLogs` | `MaintenanceLogDTO[]` | Không (default `[]`) | Nhật ký bảo trì |
 | `attachmentFileIds` | `string[]` | Không (default `[]`) | **Mảng FileId (string)** của file đính kèm — KHÔNG phải mảng `TicketAttachmentDTO`. Field thực tế tên `attachmentFileIds` |
 
@@ -368,19 +396,76 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `reason` | `string?` | Null | Lý do thực hiện |
 | `createdAt` | `string` | Không | Thời điểm ghi nhận (UTC) |
 
-### `TicketCommentDTO`
+### `TicketCommentDTO` ~~(Deprecated)~~
+
+> **⚠️ DEPRECATED — đã thay thế bởi `TicketChatDTO`.** Controller `TicketCommentsController` đã bị xóa. Endpoint `GET/POST /api/tickets/{ticketId}/comments` không còn tồn tại. Dùng `GET/POST /api/tickets/{ticketId}/chats` thay thế. `TicketDetailDTO.chats` trả về `TicketChatDTO[]` (không còn `comments`).
+
+### `TicketChatDTO`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `string` | Không | ID comment |
+| `id` | `string` | Không | ID chat |
 | `ticketId` | `string` | Không | ID ticket |
-| `authorUserId` | `string` | Không (default `""`) | ID người viết — BE trả chuỗi rỗng (không phải `null`) nếu không xác định |
+| `authorUserId` | `string` | Không (default `""`) | ID người viết |
 | `authorRole` | `ActorRoleEnum` | Không | Role của người viết |
 | `authorDisplayName` | `string?` | Null | Tên hiển thị |
-| `body` | `string` | Không | Nội dung bình luận |
-| `isInternal` | `bool` | Không | `true` = chỉ Staff/Manager xem được, ẩn với Customer |
-| `attachmentFileIds` | `string[]` | Không (default `[]`) | Danh sách FileId đính kèm — luôn là mảng (rỗng nếu không có), không bao giờ `null` |
+| `body` | `string` | Không | Nội dung chat |
+| `isInternal` | `bool` | Không | `true` = chỉ Staff/Manager/Admin xem được, ẩn với Customer |
+| `attachmentFileIds` | `string[]` | Không (default `[]`) | FileId đính kèm — luôn là mảng, không bao giờ `null` |
 | `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
+| `editedAt` | `string?` | Null nếu chưa sửa | Thời điểm sửa gần nhất |
+| `editCount` | `int` | Không | Số lần đã sửa |
+| `lastEditedByUserId` | `string?` | Null | ID người sửa gần nhất |
+| `bodyFormat` | `ChatBodyFormatEnum` | Không | Định dạng body (`PlainText` hoặc `Markdown`) |
+| `bodyHtml` | `string?` | Null khi PlainText | HTML đã render (chỉ khi `bodyFormat=Markdown`) |
+| `parentChatId` | `string?` | Null nếu không phải reply | ID chat cha (thread) |
+| `threadRootId` | `string?` | Null nếu không thuộc thread | ID chat gốc của thread |
+| `replyCount` | `int` | Không | Số reply của chat này |
+| `isPinned` | `bool` | Không | Đang được pin không |
+| `pinnedAt` | `string?` | Null | Thời điểm pin |
+| `pinnedByUserId` | `string?` | Null | ID người pin |
+| `attachments` | `TicketAttachmentDTO[]?` | Null trong GetList, có trong GetById | Danh sách attachment đầy đủ (chỉ khi GetById) |
+| `mentions` | `TicketChatMentionDTO[]` | Không (default `[]`) | Danh sách mention trong chat này |
+| `reactions` | `TicketChatReactionsAggregateDTO` | Không | Tổng hợp reaction theo loại |
+
+**`TicketChatReactionsAggregateDTO`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `thumbsUp` | `ChatReactionGroupDTO` | 👍 |
+| `acknowledged` | `ChatReactionGroupDTO` | ✅ Đã biết |
+| `resolved` | `ChatReactionGroupDTO` | 🔧 Đã giải quyết |
+| `needMoreInfo` | `ChatReactionGroupDTO` | ❓ Cần thêm thông tin |
+| `disagree` | `ChatReactionGroupDTO` | ❌ Không đồng ý |
+
+**`ChatReactionGroupDTO`:** `count: int`, `users: [{ userId: string, role: ActorRoleEnum }]`
+
+**`TicketChatMentionDTO`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `string` | ID mention |
+| `chatId` | `string` | ID chat chứa mention |
+| `ticketId` | `string?` | ID ticket |
+| `mentionedUserId` | `string` | ID người được mention |
+| `mentionedUserRole` | `ActorRoleEnum` | Role người được mention |
+| `mentionedDisplayName` | `string?` | Tên hiển thị |
+| `isAcknowledged` | `bool` | Đã xem/xác nhận |
+| `acknowledgedAt` | `string?` | Thời điểm xác nhận |
+| `createdAt` | `string` | Thời điểm tạo |
+
+**`ChatEditHistoryDTO`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `string` | ID bản ghi lịch sử sửa |
+| `chatId` | `string` | ID chat |
+| `oldBody` | `string` | Nội dung cũ |
+| `newBody` | `string` | Nội dung mới |
+| `editedAt` | `string` | Thời điểm sửa |
+| `editedByUserId` | `string` | ID người sửa |
+| `editedByRole` | `ActorRoleEnum` | Role người sửa |
+| `editReason` | `string?` | Lý do sửa (bắt buộc khi Manager/Admin sửa chat của người khác) |
 
 ### `MaintenanceLogDTO`
 
@@ -496,64 +581,9 @@ Base path: `/api/tickets`
 
 ---
 
-### `GET /api/tickets/{ticketId}/comments`
+### ~~`GET /api/tickets/{ticketId}/comments`~~ ~~`POST /api/tickets/{ticketId}/comments`~~ (Removed)
 
-**Mục đích:** Lấy danh sách bình luận của Ticket (có phân trang).
-
-**Auth:** Bắt buộc (mọi role)
-
-**Quyền hạn:**
-- Customer: Chỉ xem được bình luận công khai (`IsInternal = false`).
-- Staff/Manager/Admin: Xem được tất cả bao gồm bình luận nội bộ.
-
-**Path param:** `ticketId` — UUID của ticket.
-
-**Query params:**
-
-| Param | Type | Mô tả |
-|---|---|---|
-| `page` | `int` | Số trang (mặc định 1) |
-| `pageSize` | `int` | Kích thước trang (mặc định 10) |
-
-**Response thành công `200`:** `CommonResponse<PaginationResponse<TicketCommentDTO>>`
-
----
-
-### `POST /api/tickets/{ticketId}/comments`
-
-**Mục đích:** Thêm bình luận vào ticket. Áp dụng cho cả Customer và Staff.
-
-**Auth:** Bắt buộc (mọi role)
-
-**Path param:** `ticketId` — UUID của ticket.
-
-**Request body:**
-
-| Field | Type | Bắt buộc | Validation | Mô tả |
-|---|---|---|---|---|
-| `body` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | Nội dung bình luận |
-| `isInternal` | `bool` | Không (mặc định `false`) | — | `true` = chỉ Staff/Manager/Admin xem được (ẩn với Customer) |
-| `attachments` | `CommentAttachmentInput[]?` | Không | — | Danh sách file đính kèm |
-
-**`CommentAttachmentInput`:**
-
-| Field | Type | Bắt buộc | Validation | Mô tả |
-|---|---|---|---|---|
-| `fileId` | `Guid` | **Bắt buộc** | Khác `Guid.Empty` (`400` nếu thiếu) | FileId từ FileStorageService |
-| `fileName` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | Tên file gốc |
-| `contentType` | `string` | **Bắt buộc** | Không rỗng/whitespace (`400` nếu thiếu) | MIME type |
-| `sizeBytes` | `int64` | Không | — | Kích thước file (bytes) |
-
-> ⚠️ Khác với `MaintenanceAttachmentInput` (chỉ `fileId` bắt buộc) — `CommentAttachmentInput` validate **cả 3 field** `fileId`/`fileName`/`contentType`, thiếu field nào cũng trả `400` với lỗi field riêng (`Attachments[i].FileName`, …).
-
-**Response thành công `201`:** `TicketActionResponse`
-
-**Hành động phụ — Realtime:** Sau khi lưu DB thành công, server phát event `CommentAdded` qua SignalR hub `/hubs/ticket-comments` tới các client đã `JoinTicket` ticket này — xem mục **Realtime — SignalR Hub** ngay dưới Nhóm 1. Lỗi broadcast (vd hub crash) được **catch nội bộ và log**, KHÔNG làm fail request — comment vẫn được lưu và trả `201` bình thường dù real-time push thất bại.
-
-**Lỗi thường gặp:**
-- `400` — Thiếu `body`, hoặc `attachments[i]` thiếu `fileId`/`fileName`/`contentType`
-- `401` — Chưa đăng nhập
-- `404` — Không tìm thấy ticket
+> **⚠️ REMOVED — Controller `TicketCommentsController` đã bị xóa.** Không còn endpoint `GET/POST /api/tickets/{ticketId}/comments`. Dùng `GET/POST /api/tickets/{ticketId}/chats` thay thế (xem mục **Nhóm — Ticket Chats** bên dưới).
 
 ---
 
@@ -608,19 +638,19 @@ Một ticket chỉ được có **1 log đang mở** (`CompletedAt = null`) tạ
 
 ---
 
-## Realtime — SignalR Hub `/hubs/ticket-comments`
+## Realtime — SignalR Hub `/hubs/ticket-chats`
 
-**Mục đích:** Push realtime bình luận mới (`CommentAdded`) + typing indicator (`UserTyping`) cho ticket detail screen — thay thế polling `GET /api/tickets/{ticketId}/comments`.
+**Mục đích:** Push realtime chat mới (`ChatAdded`) + typing indicator (`UserTyping`) cho ticket detail screen — thay thế polling `GET /api/tickets/{ticketId}/chats`.
 
-**Endpoint:** `/hubs/ticket-comments` (gắn ở root, **KHÔNG** có prefix `/api` — vd `http://localhost:{port}/hubs/ticket-comments`)
+**Endpoint:** `/hubs/ticket-chats` (gắn ở root, **KHÔNG** có prefix `/api` — vd `http://localhost:{port}/hubs/ticket-chats`)
 **Transport:** WebSockets (SignalR tự fallback sang ServerSentEvents/LongPolling nếu WS bị chặn)
 **Auth:** Cùng JWT access token với REST (`[Authorize]` trên Hub), nhưng SignalR JS client **không gửi header** lúc bắt tay WS — phải truyền qua query string `access_token`:
 
 ```
-ws://localhost:{port}/hubs/ticket-comments?access_token=<accessToken>
+ws://localhost:{port}/hubs/ticket-chats?access_token=<accessToken>
 ```
 
-> Server tự nhận diện: `Program.cs` override `JwtBearerEvents.OnMessageReceived` — nếu path bắt đầu `/hubs/ticket-comments` và có query `access_token`, server lấy token từ query string thay vì header `Authorization`. Dùng `accessTokenFactory` của `@microsoft/signalr` thì KHÔNG cần tự ghép query string — client lib tự làm điều này.
+> Server tự nhận diện: `Program.cs` override `JwtBearerEvents.OnMessageReceived` — nếu path bắt đầu `/hubs/ticket-chats` và có query `access_token`, server lấy token từ query string thay vì header `Authorization`. Dùng `accessTokenFactory` của `@microsoft/signalr` thì KHÔNG cần tự ghép query string — client lib tự làm điều này.
 
 ### Client → Server methods
 
@@ -631,7 +661,7 @@ Bắt buộc gọi **sau khi connect** để nhận event của 1 ticket cụ th
 - Validate `ticketId` là Guid hợp lệ — sai format → `HubException("Invalid ticket ID format.")`
 - Check quyền truy cập ticket — **cùng rule với REST** (`TicketQueryHelper.CanAccessTicket`: Admin/Manager luôn được; Customer phải là chủ ticket; Staff phải đang `AssignedStaffId`) — không có quyền → `HubException("Forbidden: No access to this ticket.")`
 - Join group `ticket:{ticketId}:public` (mọi role hợp lệ)
-- Nếu role ∈ `Admin`/`Manager`/`Staff` → join thêm group `ticket:{ticketId}:internal` (nhận cả comment `isInternal=true`)
+- Nếu role ∈ `Admin`/`Manager`/`Staff` → join thêm group `ticket:{ticketId}:internal` (nhận cả chat `isInternal=true`)
 
 #### `LeaveTicket(ticketId: string)`
 
@@ -643,15 +673,15 @@ Broadcast cho người khác đang xem ticket biết mình đang gõ bình luậ
 
 ### Server → Client events
 
-#### `CommentAdded`
+#### `ChatAdded`
 
-Push khi `POST /api/tickets/{ticketId}/comments` tạo bình luận thành công (xem Nhóm 1).
+Push khi `POST /api/tickets/{ticketId}/chats` tạo chat thành công (xem Nhóm — Ticket Chats).
 
-**Payload:** `TicketCommentDTO` (xem bảng field ở mục DTOs đầu tài liệu) — y nguyên DTO trả về từ REST, camelCase, enum dạng chuỗi.
+**Payload:** `TicketChatDTO` (xem bảng field ở mục DTOs đầu tài liệu) — y nguyên DTO trả về từ REST, camelCase, enum dạng chuỗi.
 
-**Group routing (xem `SignalRTicketCommentNotifier.cs`):**
-- `comment.isInternal == true` → chỉ push tới group `ticket:{ticketId}:internal` (Staff/Manager/Admin đã join)
-- `comment.isInternal == false` → push tới group `ticket:{ticketId}:public` (mọi role đã join, bao gồm Customer)
+**Group routing (xem `SignalRTicketChatNotifier.cs`):**
+- `chat.isInternal == true` → chỉ push tới group `ticket:{ticketId}:internal` (Staff/Manager/Admin đã join)
+- `chat.isInternal == false` → push tới group `ticket:{ticketId}:public` (mọi role đã join, bao gồm Customer)
 
 #### `UserTyping(ticketId: string, userId: string, displayName: string)`
 
@@ -670,7 +700,7 @@ Push tới **người khác** (không phải chính người gõ) trong group `t
 | `KeepAliveInterval` | 15 giây | Server ping client để giữ WS sống |
 | `ClientTimeoutInterval` | 60 giây | Server đánh dấu disconnect nếu im lặng quá 60s |
 | `EnableDetailedErrors` | `true` (Development), `false` (Production) | Chi tiết exception trả client khi `HubException` |
-| JSON protocol | camelCase + `JsonStringEnumConverter` | Khớp định dạng JSON với REST response (`TicketCommentDTO`) |
+| JSON protocol | camelCase + `JsonStringEnumConverter` | Khớp định dạng JSON với REST response (`TicketChatDTO`) |
 
 ### Test nhanh (FE / tay)
 
@@ -683,14 +713,14 @@ Cách nhanh nhất — dán đoạn dưới vào DevTools Console của bất k�
   const ticketId = "<dán 1 ticketId có thật>";
 
   const connection = new signalR.HubConnectionBuilder()
-    .withUrl("http://localhost:{port}/hubs/ticket-comments", {
+    .withUrl("http://localhost:{port}/hubs/ticket-chats", {
       accessTokenFactory: () => accessToken,
     })
     .withAutomaticReconnect()
     .configureLogging(signalR.LogLevel.Information)
     .build();
 
-  connection.on("CommentAdded", (comment) => console.log("[CommentAdded]", comment));
+  connection.on("ChatAdded", (chat) => console.log("[ChatAdded]", chat));
   connection.on("UserTyping", (tId, userId, displayName) => console.log("[UserTyping]", displayName));
 
   connection
@@ -699,12 +729,499 @@ Cách nhanh nhất — dán đoạn dưới vào DevTools Console của bất k�
     .then(() => console.log("Joined ticket", ticketId))
     .catch((err) => console.error(err));
 
-  // Test: mở tab khác / Postman gọi POST /api/tickets/{ticketId}/comments
-  // → console phải in ra "[CommentAdded]" gần như ngay lập tức.
+  // Test: mở tab khác / Postman gọi POST /api/tickets/{ticketId}/chats
+  // → console phải in ra "[ChatAdded]" gần như ngay lập tức.
 </script>
 ```
 
 > Thay `{port}` bằng port thật của TicketService (`http://localhost:{port}`, không qua API Gateway nếu gateway chưa proxy WebSocket). `accessToken` lấy từ response `POST /api/auth/login` (AuthService, xem `docs/api-auth.md`) — dùng đúng tài khoản có quyền xem `ticketId` đó (Customer chủ ticket, Staff được assign, hoặc Admin/Manager).
+> **ApiGateway route:** `/hubs/ticket-chats` đã được proxy trong YARP config (`ticket-chats-hub-route`, `ticket-chats-hub-root-route`) → ticketCluster.
+
+---
+
+## Nhóm — Ticket Chats
+
+Base path: `/api/tickets/{ticketId}/chats`
+**Auth:** Bắt buộc — mọi role đã đăng nhập (`[Authorize]` trên controller)
+**Hub:** `/hubs/ticket-chats` — xem mục **Realtime** bên trên
+
+> Thay thế toàn bộ hệ thống Comments cũ. `POST` và `PUT` áp dụng rate limit (`ChatWritePolicy`).
+
+### Tóm tắt endpoints
+
+| Method | Path | Auth | Mô tả |
+|---|---|---|---|
+| `GET` | `/api/tickets/{ticketId}/chats` | Mọi role | Danh sách chat (phân trang, offset) |
+| `GET` | `/api/tickets/{ticketId}/chats/cursor` | Mọi role | Danh sách chat (cursor — infinite scroll) |
+| `POST` | `/api/tickets/{ticketId}/chats` | Mọi role | Thêm chat mới |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}` | Mọi role | Lấy chi tiết 1 chat |
+| `PUT` | `/api/tickets/{ticketId}/chats/{id}` | Mọi role | Sửa chat |
+| `DELETE` | `/api/tickets/{ticketId}/chats/{id}` | Mọi role | Xóa (soft-delete) chat |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/history` | Mọi role | Lịch sử sửa chat |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/replies` | Mọi role | Trả lời chat (thread, tối đa 1 cấp) |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/replies` | Mọi role | Danh sách reply |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/attachments` | Mọi role | Thêm attachment vào chat |
+| `DELETE` | `/api/tickets/{ticketId}/chats/{id}/attachments/{attachmentId}` | Mọi role | Xóa attachment |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/attachments` | Mọi role | Danh sách attachment của chat |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/attachments/{attachmentId}/download` | Mọi role | URL download attachment |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/pin` | Staff/Manager/Admin | Pin chat (tối đa 3/ticket) |
+| `DELETE` | `/api/tickets/{ticketId}/chats/{id}/pin` | Staff/Manager/Admin | Unpin chat |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/reactions` | Mọi role | Thêm reaction |
+| `DELETE` | `/api/tickets/{ticketId}/chats/{id}/reactions` | Mọi role | Xóa reaction |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/reactions` | Mọi role | Lấy reaction aggregate |
+| `POST` | `/api/tickets/{ticketId}/chats/mark-read` | Mọi role | Mark-read nhiều chat (bulk) |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/readers` | Staff/Manager/Admin | Danh sách user đã đọc chat |
+| `GET` | `/api/tickets/{ticketId}/chats/unread-count` | Mọi role | Số chat chưa đọc |
+| `POST` | `/api/tickets/{ticketId}/chats/from-template/{templateId}` | Staff/Manager/Admin | Gửi chat từ template |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/attach-kb` | Staff/Manager/Admin | Gắn KB article vào chat |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/to-kb-draft` | Staff/Manager/Admin | Chuyển chat thành KB Draft |
+| `GET` | `/api/tickets/{ticketId}/chats/{id}/kb-suggestions` | Staff/Manager/Admin | Gợi ý KB articles |
+| `POST` | `/api/tickets/{ticketId}/chats/suggest` | Staff/Manager/Admin | AI gợi ý nội dung chat |
+| `POST` | `/api/tickets/{ticketId}/chats/sentiment-check` | Staff/Manager/Admin | AI phân tích tone Customer |
+| `POST` | `/api/tickets/{ticketId}/chats/summarize` | Staff/Manager/Admin | AI tóm tắt thread |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/translate` | Mọi role | Dịch nội dung chat |
+| `POST` | `/api/tickets/{ticketId}/chats/voice` | Mọi role | Upload audio → transcribe → tạo chat |
+| `GET` | `/api/tickets/{ticketId}/chats/export-pdf` | Staff/Manager/Admin | Export PDF toàn bộ chat |
+| `POST` | `/api/tickets/{ticketId}/chats/{id}/escalation-review/ack` | Manager/Admin | ACK escalation review |
+
+---
+
+### `GET /api/tickets/{ticketId}/chats`
+
+**Mục đích:** Danh sách chat của ticket (offset pagination, sort ASC theo `CreatedAt`). Auto mark-read trang hiện tại.
+
+**Query params:**
+
+| Param | Type | Mặc định | Mô tả |
+|---|---|---|---|
+| `pageNumber` | `int` | 1 | Số trang |
+| `pageSize` | `int` | 10 | Số item/trang |
+| `search` | `string?` | — | Tìm full-text trong `body` |
+| `authorUserId` | `Guid?` | — | Lọc theo tác giả |
+| `authorRole` | `ActorRoleEnum?` | — | Lọc theo role tác giả |
+| `isInternal` | `bool?` | — | Lọc chat nội bộ/công khai |
+| `isPinned` | `bool?` | — | Chỉ chat đã pin |
+| `hasAttachments` | `bool?` | — | Chỉ chat có file đính kèm |
+| `mentionedMe` | `bool?` | — | Chỉ chat mention user hiện tại |
+| `dateFrom` | `DateTime?` | — | Lọc từ ngày (UTC) |
+| `dateTo` | `DateTime?` | — | Lọc đến ngày (UTC) |
+
+**Quyền hạn:**
+- Customer: Chỉ thấy chat `isInternal=false`
+- Staff/Manager/Admin: Thấy tất cả bao gồm `isInternal=true`
+
+**Response `200`:** `CommonResponse<PaginationResponse<TicketChatDTO>>`
+
+---
+
+### `GET /api/tickets/{ticketId}/chats/cursor`
+
+**Mục đích:** Cursor-based pagination — phù hợp load-more / infinite scroll. Không dùng offset.
+
+**Query params:**
+
+| Param | Type | Mặc định | Mô tả |
+|---|---|---|---|
+| `cursor` | `string?` | — | Opaque cursor từ `nextCursor` trang trước. Bỏ trống = trang đầu |
+| `limit` | `int` | 20 | Số chat/trang (tối đa 100) |
+
+**Response `200`:** `CommonResponse<CursorPaginationResponse<TicketChatDTO>>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "items": [...],
+    "nextCursor": "opaque-string",
+    "hasMore": true
+  }
+}
+```
+
+---
+
+### `POST /api/tickets/{ticketId}/chats`
+
+**Mục đích:** Thêm chat vào ticket. Áp dụng cho mọi role. Rate-limited.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `body` | `string` | **Bắt buộc** | Nội dung chat (1–10 000 ký tự) |
+| `isInternal` | `bool` | Không (mặc định `false`) | `true` = ẩn với Customer |
+| `bodyFormat` | `ChatBodyFormatEnum` | Không (mặc định `PlainText`) | Định dạng body |
+| `attachments` | `ChatAttachmentInput[]?` | Không | Danh sách file đính kèm |
+
+**`ChatAttachmentInput`:** `fileId` (Guid, bắt buộc) · `fileName` (string, bắt buộc) · `contentType` (string, bắt buộc) · `sizeBytes` (int64, tùy chọn)
+
+**Response `201`:** `TicketActionResponse`
+
+**Realtime:** Phát event `ChatAdded` qua SignalR hub `/hubs/ticket-chats` — routing theo `isInternal` (internal group / public group).
+
+**Lỗi:**
+- `400` — `body` rỗng, hoặc attachment thiếu `fileId`/`fileName`/`contentType`
+- `401` — Chưa đăng nhập
+- `404` — Không tìm thấy ticket
+
+---
+
+### `PUT /api/tickets/{ticketId}/chats/{id}`
+
+**Mục đích:** Sửa nội dung chat.
+
+**Quyền:**
+- Author: Sửa trong 15 phút kể từ lúc tạo (window configurable `Chat:EditWindowMinutes`)
+- Manager/Admin: Sửa bất cứ lúc nào nhưng phải có `editReason`
+- Blocked khi ticket `Closed`
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `body` | `string` | **Bắt buộc** | Nội dung mới |
+| `editReason` | `string?` | Bắt buộc khi Manager/Admin sửa của người khác | Lý do sửa |
+
+**Response `200`:** `TicketActionResponse`
+
+**Lỗi:** `400` (đã quá window/ticket closed) · `403` (không có quyền) · `404`
+
+---
+
+### `DELETE /api/tickets/{ticketId}/chats/{id}`
+
+**Mục đích:** Soft-delete chat.
+
+**Quyền:**
+- Author: Xóa của mình bất kỳ lúc nào
+- Manager/Admin: Xóa của ai cũng được, phải có `deleteReason`
+- Blocked khi ticket `Closed`
+
+**Request body (tùy chọn):** `{ "deleteReason": "string?" }`
+
+**Response `200`:** `TicketActionResponse`
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/{id}/pin` / `DELETE .../pin`
+
+**Mục đích:** Pin / Unpin chat. Tối đa 3 chat pin/ticket.
+**Auth:** Staff/Manager/Admin
+
+**Response `200`:** `TicketActionResponse`
+
+**Lỗi `400`:** Pin: đã pin hoặc đạt giới hạn 3. Unpin: chưa pin.
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/{id}/reactions`
+
+**Mục đích:** Thêm reaction — idempotent nếu đã react cùng loại.
+
+**Request body:** `{ "reactionType": "ThumbsUp" }` (xem `ReactionTypeEnum`)
+
+**Response `200`:** `CommonResponse<TicketChatReactionsAggregateDTO>`
+
+---
+
+### `DELETE /api/tickets/{ticketId}/chats/{id}/reactions`
+
+**Mục đích:** Xóa reaction — no-op nếu chưa react loại này.
+
+**Query param:** `type` — `ReactionTypeEnum` (vd `?type=ThumbsUp`)
+
+**Response `200`:** `CommonResponse<TicketChatReactionsAggregateDTO>`
+
+---
+
+### `GET /api/tickets/{ticketId}/chats/{id}/attachments/{attachmentId}/download`
+
+**Mục đích:** Lấy URL download sau khi kiểm tra virus scan.
+
+**Response:**
+- `200` — URL download
+- `202` — File đang scan, thử lại sau
+- `451` — File bị nhiễm virus, không thể tải
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/suggest` (AI)
+
+**Mục đích:** AI gợi ý 3 nội dung chat theo intent — dành cho Staff. PII được mask trước khi gửi Gemini.
+**Auth:** Staff/Manager/Admin
+
+**Request body:**
+
+| Field | Type | Mặc định | Mô tả |
+|---|---|---|---|
+| `intent` | `ChatAiIntentEnum` | `TechnicalAnswer` | Phong cách gợi ý |
+
+**Response `200`:** `CommonResponse<ChatSuggestDTO>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "suggestionId": "guid",
+    "suggestions": ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]
+  }
+}
+```
+
+**Rate limit (Gemini):** Trả `isSuccess: false, message: "AI service đang bận, vui lòng thử lại sau ít giây."` khi Gemini 429.
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/sentiment-check` (AI)
+
+**Mục đích:** Phân tích tone cảm xúc Customer trong ticket. Nếu score < -0.7 → gửi SignalR alert tới Manager.
+**Auth:** Staff/Manager/Admin
+
+**Request body:** Không cần (ticketId lấy từ path)
+
+**Response `200`:** `CommonResponse<ChatSentimentCheckDTO>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "score": -0.85,
+    "label": "Critical",
+    "isAlertSent": true
+  }
+}
+```
+
+**Label values:** `Positive` (score > 0.3) · `Neutral` (-0.3 ≤ score ≤ 0.3) · `Negative` (-0.7 < score < -0.3) · `Critical` (score ≤ -0.7)
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/summarize` (AI)
+
+**Mục đích:** Tóm tắt toàn bộ thread thành 5 dòng bullet — cho Staff mới tiếp nhận ticket sau escalation.
+**Auth:** Staff/Manager/Admin
+
+**Response `200`:** `CommonResponse<ChatSummarizeDTO>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "summary": "- Vấn đề: pin không sạc được\n- Đã kiểm tra cáp: bình thường\n- ..."
+  }
+}
+```
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/{id}/translate` (AI)
+
+**Mục đích:** Dịch nội dung chat sang ngôn ngữ đích. Cache 2 lớp: Redis (30 ngày) → DB → Gemini AI.
+**Auth:** Mọi role
+
+**Query param:** `to` — mã ISO 639-1 (vd `en`, `vi`, `fr`, `ja`)
+
+**Response `200`:** `CommonResponse<ChatTranslateDTO>`
+
+```json
+{
+  "isSuccess": true,
+  "data": {
+    "translatedBody": "Battery cannot charge",
+    "targetLanguage": "en",
+    "originalLanguage": "vi",
+    "provider": "GeminiAi",
+    "fromCache": false
+  }
+}
+```
+
+**Validation:** `to` bắt buộc, tối đa 5 ký tự. Rate limit Gemini → `isSuccess: false`.
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/voice` (AI)
+
+**Mục đích:** Upload file audio → Gemini transcribe → tạo chat với nội dung transcribed + đính kèm audio trong `ticket_attachments`.
+**Auth:** Mọi role
+**Content-Type:** `multipart/form-data`
+
+**Form field:** `audioFile` — file âm thanh
+
+**MIME types hỗ trợ** (từ `Chat:Voice:AllowedAudioMimeTypes`):
+`audio/mpeg` · `audio/wav` · `audio/ogg` · `audio/webm` · `audio/mp4` · `audio/flac`
+
+**Giới hạn:** 20MB / file
+
+**Response `201`:** `TicketActionResponse`
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 201,
+  "message": "Voice transcription thành công.",
+  "data": {
+    "id": "guid-of-new-chat",
+    "ticketId": "guid",
+    "code": "TKT-2606-0001",
+    "status": "InProgress"
+  }
+}
+```
+
+**Lỗi:**
+- `400` — MIME không hỗ trợ hoặc file quá lớn
+- `404` — Không tìm thấy ticket
+- `422` — Transcription trả kết quả rỗng
+- `429` (wrap trong `isSuccess:false`) — Gemini rate limit
+
+---
+
+### `GET /api/tickets/{ticketId}/chats/export-pdf`
+
+**Mục đích:** Export PDF toàn bộ chat thread của ticket. Customer chat nội bộ bị ẩn.
+**Auth:** Staff/Manager/Admin
+
+**Response:** `application/pdf` — file `ticket-{ticketId}-chats.pdf`
+
+**Lỗi `404`:** Ticket không tồn tại hoặc không có chat.
+
+---
+
+### `GET /api/tickets/{ticketId}/chats/unread-count`
+
+**Mục đích:** Số chat chưa đọc của user hiện tại trên ticket này.
+
+**Response `200`:** `CommonResponse<{ unreadCount: int }>`
+
+---
+
+### `POST /api/tickets/{ticketId}/chats/mark-read`
+
+**Mục đích:** Mark-read nhiều chat (bulk) — cũng được gọi tự động khi `GET /chats`.
+
+**Request body:** `{ "chatIds": ["guid", "guid"] }`
+
+**Response `200`:** `CommonResponse<{ markedCount: int }>`
+
+---
+
+## Nhóm — Admin Ticket Chats
+
+Base path: `/api/admin/tickets/{ticketId}/chats`
+**Auth:** Bắt buộc — **Admin only** (`[Authorize(Roles = "Admin")]`)
+
+> Cho phép Admin thêm/sửa/xóa chat trên ticket đã **Closed** — vượt qua giới hạn bình thường. Bắt buộc kèm `overrideReason` mọi thao tác.
+
+### Tóm tắt endpoints
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `POST` | `/api/admin/tickets/{ticketId}/chats/closed-override` | Thêm chat vào ticket đã closed |
+| `PUT` | `/api/admin/tickets/{ticketId}/chats/{id}/closed-override` | Sửa chat trên ticket đã closed |
+| `DELETE` | `/api/admin/tickets/{ticketId}/chats/{id}/closed-override` | Xóa chat trên ticket đã closed |
+| `PATCH` | `/api/admin/tickets/{ticketId}/chats/{id}/restore` | Khôi phục chat đã soft-delete |
+
+---
+
+### `POST /api/admin/tickets/{ticketId}/chats/closed-override`
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `body` | `string` | **Bắt buộc** | Nội dung chat |
+| `isInternal` | `bool` | Không (mặc định `false`) | Chat nội bộ |
+| `bodyFormat` | `ChatBodyFormatEnum` | Không (mặc định `PlainText`) | Định dạng |
+| `overrideReason` | `string` | **Bắt buộc** | Lý do override |
+
+**Response `201`:** `TicketActionResponse`
+
+---
+
+### `PUT /api/admin/tickets/{ticketId}/chats/{id}/closed-override`
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `body` | `string` | **Bắt buộc** | Nội dung mới |
+| `overrideReason` | `string` | **Bắt buộc** | Lý do override |
+
+**Response `200`:** `TicketActionResponse`
+
+---
+
+### `DELETE /api/admin/tickets/{ticketId}/chats/{id}/closed-override`
+
+**Request body:** `{ "overrideReason": "string" }` (bắt buộc)
+
+**Response `200`:** `TicketActionResponse`
+
+---
+
+### `PATCH /api/admin/tickets/{ticketId}/chats/{id}/restore`
+
+**Mục đích:** Khôi phục chat đã bị soft-delete — `IsDeleted=false`.
+
+**Request body:** Không cần
+
+**Response `200`:** `TicketActionResponse`
+
+---
+
+## Nhóm — Chats Utilities
+
+Các endpoint cross-ticket — không gắn với 1 ticket cụ thể.
+
+---
+
+### `GET /api/chats/me`
+
+**Mục đích:** Lấy tất cả chat của user hiện tại trên toàn bộ tickets (phân trang).
+**Auth:** Mọi role
+
+**Response `200`:** `CommonResponse<PaginationResponse<TicketChatDTO>>`
+
+---
+
+### `POST /api/chats/erase-my-data`
+
+**Mục đích:** GDPR — xóa nội dung toàn bộ chat của user hiện tại (`body` được overwrite bằng `[ERASED]`).
+**Auth:** Mọi role
+
+**Response `200`:** `CommonResponse<{ erasedCount: int }>`
+
+---
+
+### `GET /api/chats/search`
+
+**Mục đích:** Tìm kiếm chat toàn hệ thống (Admin/Manager).
+**Auth:** Manager hoặc Admin
+
+**Query params:** `q` (full-text), `ticketId`, `authorUserId`, `from`, `to`, `page`, `pageSize`
+
+**Response `200`:** `CommonResponse<PaginationResponse<TicketChatDTO>>`
+
+---
+
+### `GET /api/chats/mentions/me`
+
+**Mục đích:** Danh sách mention của user hiện tại trên mọi ticket.
+**Auth:** Mọi role
+
+**Query params:** `unreadOnly` (bool), `page`, `pageSize`
+
+**Response `200`:** `CommonResponse<PaginationResponse<TicketChatMentionDTO>>`
+
+---
+
+### `PATCH /api/chats/mentions/{id}/acknowledge`
+
+**Mục đích:** Xác nhận đã xem 1 mention.
+**Auth:** Mọi role
+
+**Response `200`:** `CommonResponse<object>`
 
 ---
 
@@ -2199,6 +2716,32 @@ Verify toàn bộ doc với codebase TicketService. Enums (16/16) và SignalR Hu
 
 - **Thêm mục "Realtime — SignalR Hub `/hubs/ticket-comments`"** (sau Nhóm 1) — endpoint, auth qua query `access_token`, 3 method `JoinTicket`/`LeaveTicket`/`Typing`, 2 event `CommentAdded`/`UserTyping`, group routing theo `isInternal`, và snippet test nhanh bằng `@microsoft/signalr` CDN cho FE dán vào console.
 - **Sửa `POST /api/tickets/{ticketId}/comments`:** `CommentAttachmentInput.fileName`/`.contentType` trước đây ghi "Không bắt buộc" — **SAI**, `ValidateAsync` thực tế reject `400` nếu rỗng. Đã sửa thành bắt buộc, thêm so sánh với `MaintenanceAttachmentInput` (không validate field-level). Bổ sung `400` vào "Lỗi thường gặp" (trước đó thiếu) và note hành động phụ phát SignalR event sau khi tạo comment.
+
+### 2026-06-27 — Ticket Chats system: thay thế Comments + bổ sung AI endpoints
+
+**Breaking changes:**
+- `GET/POST /api/tickets/{ticketId}/comments` — **REMOVED**. Controller `TicketCommentsController` đã bị xóa.
+- `TicketDetailDTO.comments` (kiểu `TicketCommentDTO[]`) → `TicketDetailDTO.chats` (kiểu `TicketChatDTO[]`).
+- SignalR Hub path: `/hubs/ticket-comments` → `/hubs/ticket-chats`.
+- SignalR event: `CommentAdded` → `ChatAdded`. Payload: `TicketCommentDTO` → `TicketChatDTO`.
+- Hub notifier class: `SignalRTicketCommentNotifier` → `SignalRTicketChatNotifier`.
+
+**Endpoints mới (TicketChatsController — `/api/tickets/{ticketId}/chats`):**
+32 endpoints thay thế và mở rộng hệ thống comment cũ: CRUD + reply thread + pin + reaction + mark-read + readers + unread-count + template + KB integration + AI (suggest/sentiment-check/summarize/translate/voice) + export PDF + escalation-review ACK.
+
+**Endpoints mới (AdminTicketChatsController — `/api/admin/tickets/{ticketId}/chats`):**
+4 endpoints Admin-only override cho ticket đã Closed: `closed-override` POST/PUT/DELETE, `restore` PATCH.
+
+**Endpoints mới (Chats Utilities — `/api/chats/...`):**
+`GET /api/chats/me`, `POST /api/chats/erase-my-data` (GDPR), `GET /api/chats/search` (Manager/Admin), `GET /api/chats/mentions/me`, `PATCH /api/chats/mentions/{id}/acknowledge`.
+
+**ApiGateway:** Không cần thay đổi — các catch-all routes (`/api/tickets/{**catch-all}`, `/api/admin/tickets/{**catch-all}`, `/api/chats/{**catch-all}`, `/hubs/ticket-chats`) đã cover toàn bộ.
+
+**Enums mới:** `ChatBodyFormatEnum`, `ReactionTypeEnum`, `ChatAiIntentEnum`.
+
+**DTOs mới:** `TicketChatDTO`, `TicketChatReactionsAggregateDTO`, `ChatReactionGroupDTO`, `TicketChatMentionDTO`, `ChatEditHistoryDTO`, `ChatSuggestDTO`, `ChatSentimentCheckDTO`, `ChatSummarizeDTO`, `ChatTranslateDTO`.
+
+---
 
 ### 2026-06-22 — Fix Knowledge Base enum bị khai sai kiểu `int`
 

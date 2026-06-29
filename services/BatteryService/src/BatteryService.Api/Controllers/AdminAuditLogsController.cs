@@ -119,11 +119,16 @@ public class AdminAuditLogsController : ControllerBase
         pageNumber = pageNumber <= 0 ? 1 : pageNumber;
 
         var q = _unitOfWork.BatteryAuditLogs.GetAllAsync().Where(x => !x.IsDeleted);
-        if (alertOnly) q = q.Where(x => x.ActionCode.StartsWith("Alert"));
-        if (!string.IsNullOrWhiteSpace(action)) q = q.Where(x => x.ActionCode == action);
-        if (targetId.HasValue) q = q.Where(x => x.TargetId == targetId);
-        if (from.HasValue) q = q.Where(x => x.OccurredAt >= from.Value);
-        if (to.HasValue) q = q.Where(x => x.OccurredAt <= to.Value);
+        if (alertOnly)
+            q = q.Where(x => x.ActionCode.StartsWith("Alert"));
+        if (!string.IsNullOrWhiteSpace(action))
+            q = q.Where(x => x.ActionCode == action);
+        if (targetId.HasValue)
+            q = q.Where(x => x.TargetId == targetId);
+        if (from.HasValue)
+            q = q.Where(x => x.OccurredAt >= from.Value);
+        if (to.HasValue)
+            q = q.Where(x => x.OccurredAt <= to.Value);
 
         var total = await q.CountAsync(ct);
         var items = await q.OrderByDescending(x => x.OccurredAt)
@@ -147,7 +152,10 @@ public class AdminAuditLogsController : ControllerBase
         {
             Data = new PaginationResponse<BatteryAuditLogDto>
             {
-                Items = items, TotalItems = total, PageNumber = pageNumber, PageSize = pageSize,
+                Items = items,
+                TotalItems = total,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
             },
         });
     }

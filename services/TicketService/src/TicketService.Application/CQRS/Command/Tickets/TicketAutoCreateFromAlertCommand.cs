@@ -7,9 +7,15 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// Origin alert id.
+    /// </summary>
     public Guid OriginAlertId { get; set; }
     public string AnomalyCategory { get; set; } = string.Empty;
     public Guid BatteryAssetId { get; set; }
+    /// <summary>
+    /// Customer id.
+    /// </summary>
     public Guid CustomerId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;

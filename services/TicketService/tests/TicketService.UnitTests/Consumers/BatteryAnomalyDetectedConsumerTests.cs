@@ -1,19 +1,15 @@
 #pragma warning disable CS0618 // Disable obsolete warnings for testing deprecated class
 
-using FluentAssertions;
 using MassTransit;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using MockQueryable.Moq;
-using Moq;
 using SharedContracts.Events;
 using SharedKernels.Interfaces;
-using TicketService.Application.Consumers;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Consumers;
 
 namespace TicketService.UnitTests.Consumers;
 

@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events.Audit;
+using SharedInfrastructure.Metrics;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
-using SharedInfrastructure.Metrics;
 
 namespace TicketService.Infrastructure.BackgroundJobs;
 
@@ -41,7 +41,8 @@ public class TicketAuditOutboxRelayBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
+            try
+            { if (!await timer.WaitForNextTickAsync(stoppingToken)) break; }
             catch (OperationCanceledException) { break; }
 
             try
@@ -88,11 +89,13 @@ public class TicketAuditOutboxRelayBackgroundService : BackgroundService
         var totalPending = await db.TicketAuditOutboxes.CountAsync(o => o.Status == AuditOutboxStatusEnum.Pending, ct);
         AppMetrics.AuditOutboxPending.WithLabels("TicketService").Set(totalPending);
 
-        if (pending.Count == 0) return;
+        if (pending.Count == 0)
+            return;
 
         foreach (var msg in pending)
         {
-            if (ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested)
+                break;
             try
             {
                 var evt = JsonSerializer.Deserialize<AuditCreatedEventV1>(msg.Payload);
@@ -113,7 +116,8 @@ public class TicketAuditOutboxRelayBackgroundService : BackgroundService
             {
                 msg.RetryCount += 1;
                 msg.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-                if (msg.RetryCount >= MaxRetries) msg.Status = AuditOutboxStatusEnum.Failed;
+                if (msg.RetryCount >= MaxRetries)
+                    msg.Status = AuditOutboxStatusEnum.Failed;
                 _logger.LogWarning(ex, "TicketAuditOutboxRelay publish fail {Id} (retry {Retry}).", msg.Id, msg.RetryCount);
             }
         }

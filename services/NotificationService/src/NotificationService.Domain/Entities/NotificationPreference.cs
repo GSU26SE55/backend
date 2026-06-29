@@ -24,4 +24,12 @@ public class NotificationPreference : AuditableEntity
     public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
 
     public NotificationFrequencyEnum Frequency { get; set; } = NotificationFrequencyEnum.Immediate;
+
+    // Chat-specific notification preferences (#570)
+    public bool NotifyOnChat { get; set; } = true;
+    public bool NotifyOnMention { get; set; } = true;
+    public bool NotifyOnReaction { get; set; } = false;
+
+    /// <summary>Null = immediate; 5/15/30 = digest window in minutes.</summary>
+    public int? DigestWindowMinutes { get; set; }
 }

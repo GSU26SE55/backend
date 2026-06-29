@@ -4,5 +4,8 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class CategoryBreakdownRow
 {
     public string Category { get; set; } = string.Empty;
+    /// <summary>
+    /// Count.
+    /// </summary>
     public int Count { get; set; }
 }

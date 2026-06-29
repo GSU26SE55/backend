@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -38,6 +39,26 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
             .HasColumnName("source")
             .HasConversion<int>();
 
+        builder.Property(e => e.ChatId)
+            .HasColumnName("chat_id");
+
+        builder.Property(e => e.ThumbnailUrl)
+            .HasColumnName("thumbnail_url")
+            .HasMaxLength(1000);
+
+        builder.Property(e => e.IsInline)
+            .HasColumnName("is_inline")
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.DownloadCount)
+            .HasColumnName("download_count")
+            .HasDefaultValue(0);
+
+        builder.Property(e => e.VirusScanStatus)
+            .HasColumnName("virus_scan_status")
+            .HasConversion<int>()
+            .HasDefaultValue(VirusScanStatusEnum.Pending);
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -55,10 +76,16 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
 
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.FileId);
+        builder.HasIndex(e => e.ChatId);
 
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Attachments)
             .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(e => e.Chat)
+            .WithMany()
+            .HasForeignKey(e => e.ChatId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

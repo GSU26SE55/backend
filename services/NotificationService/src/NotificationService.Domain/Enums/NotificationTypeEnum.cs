@@ -36,5 +36,23 @@ public enum NotificationTypeEnum
     /// <summary>Sprint IoT-1 (#249) — IoT edge device mất heartbeat &gt; 5 phút.</summary>
     IotDeviceWentOffline = 18,
 
+    /// <summary>Sprint Chat Wave 4 (#544) — chat mới (public) trên ticket.</summary>
+    ChatCreated = 19,
+
+    /// <summary>Sprint Chat Wave 4 (#544) — user được mention trong chat.</summary>
+    ChatMentioned = 20,
+
+    /// <summary>Sprint Chat Wave 4 (#544) — chat của user nhận được reaction.</summary>
+    ChatReacted = 21,
+
+    /// <summary>Sprint Chat Wave 4 (#544) — user được thêm làm participant ticket (welcome).</summary>
+    ParticipantAdded = 22,
+
+    /// <summary>Sprint Chat Wave 4 (#544) — user bị xóa khỏi participant ticket (farewell).</summary>
+    ParticipantRemoved = 23,
+
+    /// <summary>Sprint Chat Wave 4 (#544) — role/type của participant trên ticket bị đổi.</summary>
+    ParticipantRoleChanged = 24,
+
     System = 99
 }

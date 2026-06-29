@@ -1,6 +1,6 @@
 using AuthService.Application.CQRS.Command.Role;
-using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.CQRS.Notification.Audit;
+using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
