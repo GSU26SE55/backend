@@ -67,10 +67,14 @@ public class AdminAuditLogsController : ControllerBase
         pageNumber = pageNumber <= 0 ? 1 : pageNumber;
 
         var q = _unitOfWork.FileAuditLogs.GetAllAsync().Where(x => !x.IsDeleted);
-        if (!string.IsNullOrWhiteSpace(action)) q = q.Where(x => x.ActionCode == action);
-        if (fileId.HasValue) q = q.Where(x => x.TargetId == fileId);
-        if (from.HasValue) q = q.Where(x => x.OccurredAt >= from.Value);
-        if (to.HasValue) q = q.Where(x => x.OccurredAt <= to.Value);
+        if (!string.IsNullOrWhiteSpace(action))
+            q = q.Where(x => x.ActionCode == action);
+        if (fileId.HasValue)
+            q = q.Where(x => x.TargetId == fileId);
+        if (from.HasValue)
+            q = q.Where(x => x.OccurredAt >= from.Value);
+        if (to.HasValue)
+            q = q.Where(x => x.OccurredAt <= to.Value);
 
         var total = await q.CountAsync(ct);
         var items = await q.OrderByDescending(x => x.OccurredAt)
@@ -93,7 +97,10 @@ public class AdminAuditLogsController : ControllerBase
         {
             Data = new PaginationResponse<FileAuditLogDto>
             {
-                Items = items, TotalItems = total, PageNumber = pageNumber, PageSize = pageSize,
+                Items = items,
+                TotalItems = total,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
             },
         });
     }

@@ -47,6 +47,10 @@ public class UpdateNotificationPreferenceCommandHandler
                 QuietHoursStart = start,
                 QuietHoursEnd = end,
                 TimeZone = request.TimeZone,
+                NotifyOnChat = request.NotifyOnChat,
+                NotifyOnMention = request.NotifyOnMention,
+                NotifyOnReaction = request.NotifyOnReaction,
+                DigestWindowMinutes = request.DigestWindowMinutes,
             };
             await _unitOfWork.NotificationPreferences.AddAsync(existing);
         }
@@ -59,6 +63,10 @@ public class UpdateNotificationPreferenceCommandHandler
             existing.QuietHoursStart = start;
             existing.QuietHoursEnd = end;
             existing.TimeZone = request.TimeZone;
+            existing.NotifyOnChat = request.NotifyOnChat;
+            existing.NotifyOnMention = request.NotifyOnMention;
+            existing.NotifyOnReaction = request.NotifyOnReaction;
+            existing.DigestWindowMinutes = request.DigestWindowMinutes;
             _unitOfWork.NotificationPreferences.UpdateAsync(existing);
         }
 
@@ -76,6 +84,10 @@ public class UpdateNotificationPreferenceCommandHandler
             QuietHoursStart = existing.QuietHoursStart?.ToString("HH:mm"),
             QuietHoursEnd = existing.QuietHoursEnd?.ToString("HH:mm"),
             TimeZone = existing.TimeZone,
+            NotifyOnChat = existing.NotifyOnChat,
+            NotifyOnMention = existing.NotifyOnMention,
+            NotifyOnReaction = existing.NotifyOnReaction,
+            DigestWindowMinutes = existing.DigestWindowMinutes,
         };
 
         return new NotificationPreferenceResponse { IsSuccess = true, Data = dto };

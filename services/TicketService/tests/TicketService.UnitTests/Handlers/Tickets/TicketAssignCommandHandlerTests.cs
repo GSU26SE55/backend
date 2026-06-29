@@ -4,11 +4,11 @@ using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
-using TicketService.Application.Interfaces.Helpers;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Tickets;
 
@@ -65,6 +65,42 @@ public class TicketAssignCommandHandlerTests
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager A", ActivityActionEnum.StaffAssigned, null, staffId.ToString(), "Please handle this."), Times.Once);
         _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_ApprovedTicket_CreatesPrimaryAssigneeParticipant()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description"
+        };
+
+        var staff = new List<StaffAccount>
+        {
+            new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+        };
+
+        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = managerId, ManagerName = "Manager A" };
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
+            p.UserId == staffId && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee)), Times.Once);
     }
     #endregion
 

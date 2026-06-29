@@ -386,6 +386,7 @@ services:
       # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
       AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
       AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
+      # AI features — config loaded directly from .env.Docker via env_file (no substitution needed)
     ports:
       - "4007:8080"
     depends_on:

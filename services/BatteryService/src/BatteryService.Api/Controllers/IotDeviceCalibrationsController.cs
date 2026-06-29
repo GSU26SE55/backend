@@ -40,6 +40,41 @@ public class IotDeviceCalibrationsController : ControllerBase
     public IotDeviceCalibrationsController(IMediator mediator) => _mediator = mediator;
 
     /// <summary>
+    /// Tra cứu device theo <c>deviceCode</c> (mã in trên thân thiết bị) — trả về <see cref="IotDeviceDto"/> gồm <c>id</c> (GUID).
+    /// </summary>
+    /// <remarks>
+    /// Lý do tồn tại:
+    /// <list type="bullet">
+    ///   <item><description>Các route calibration (<c>{deviceId:guid}/calibrations</c>) keyed theo GUID <c>Id</c>, nhưng Staff cầm thiết bị chỉ đọc được <c>deviceCode</c> (vd <c>"ESP32-SIM-001"</c>) — không có nguồn GUID nào khác (list admin là <c>[Authorize(Admin)]</c>).</description></item>
+    ///   <item><description>Endpoint này là cầu nối <c>deviceCode → device.Id</c> cho Staff/Manager, mở khoá luồng calibration trên mobile.</description></item>
+    /// </list>
+    ///
+    /// Cách hoạt động:
+    /// <list type="bullet">
+    ///   <item><description><c>deviceCode</c> được chuẩn hoá <c>Trim().ToUpperInvariant()</c> (khớp cách Create lưu) rồi match exact trên unique index <c>idx_iot_devices_device_code</c>.</description></item>
+    ///   <item><description>Chỉ trả device <c>!IsDeleted</c> — device đã decommission trả 404.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="deviceCode">Mã device in trên thân thiết bị (case-insensitive).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="IotDeviceDto"/>.</returns>
+    /// <response code="200">Tìm thấy device.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
+    /// <response code="404">Không có device khớp <c>deviceCode</c> (hoặc đã decommission).</response>
+    [HttpGet("by-code/{deviceCode}")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetByCode(string deviceCode, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetIotDeviceByCodeQuery { DeviceCode = deviceCode }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Lấy danh sách calibration profiles của 1 device — Admin/Manager/Staff đều xem được.
     /// </summary>
     /// <remarks>

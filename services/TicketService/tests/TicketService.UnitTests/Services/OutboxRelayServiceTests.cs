@@ -11,7 +11,7 @@ using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Infrastructure.Implements.Services;
-using TicketService.UnitTests.Helpers;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Services;
 

@@ -3,11 +3,11 @@ using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
-using TicketService.Application.Interfaces.Helpers;
-using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 

@@ -9,13 +9,22 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketEscalateForceCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     public EscalationReasonEnum Reason { get; set; }
+    /// <summary>
+    /// Note.
+    /// </summary>
     public string? Note { get; set; }
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+    /// <summary>
+    /// Tên của Manager.
+    /// </summary>
     [JsonIgnore]
     public string? ManagerName { get; set; }
 

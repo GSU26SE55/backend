@@ -49,7 +49,8 @@ public static class GatewayClaimForwardingExtensions
     {
         if (!string.IsNullOrEmpty(value))
         {
-            context.ProxyRequest.Headers.TryAddWithoutValidation(name, value);
+            var safeValue = System.Net.WebUtility.UrlEncode(value);
+            context.ProxyRequest.Headers.TryAddWithoutValidation(name, safeValue);
         }
     }
 }

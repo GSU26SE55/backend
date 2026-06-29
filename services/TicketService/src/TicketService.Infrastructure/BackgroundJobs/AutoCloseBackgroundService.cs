@@ -66,6 +66,7 @@ public class AutoCloseBackgroundService : BackgroundService
 
                     var activity = new TicketActivity
                     {
+                        Id = Guid.NewGuid(),
                         TicketId = ticket.Id,
                         Action = ActivityActionEnum.AutoClosed,
                         ActorRole = ActorRoleEnum.System,

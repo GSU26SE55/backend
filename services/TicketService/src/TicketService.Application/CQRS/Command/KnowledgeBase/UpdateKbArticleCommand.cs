@@ -9,19 +9,34 @@ namespace TicketService.Application.CQRS.Command.KnowledgeBase;
 
 public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IValidatable<CommonResponse<KbArticleDTO>>
 {
+    /// <summary>
+    /// Article id.
+    /// </summary>
     [JsonIgnore]
     public Guid ArticleId { get; set; }
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
+    /// <summary>
+    /// Vai trò của người dùng hiện tại.
+    /// </summary>
     [JsonIgnore]
     public string CurrentUserRole { get; set; } = string.Empty;
     public TicketCategoryEnum Category { get; set; }
+    /// <summary>
+    /// Tiêu đề.
+    /// </summary>
     public string Title { get; set; } = string.Empty;
     public string Symptoms { get; set; } = string.Empty;
     public string DiagnosisSteps { get; set; } = string.Empty;
+    /// <summary>
+    /// Solution steps.
+    /// </summary>
     public string SolutionSteps { get; set; } = string.Empty;
     public List<string>? RecommendedParts { get; set; }
     public List<string> Tags { get; set; } = new();
+    /// <summary>
+    /// Is internal only.
+    /// </summary>
     public bool IsInternalOnly { get; set; }
     public string? ChangeDescription { get; set; }
 

@@ -22,6 +22,12 @@ public class UpdateNotificationPreferenceCommand : IRequest<NotificationPreferen
 
     public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
 
+    // Chat-specific preferences (#570)
+    public bool NotifyOnChat { get; set; } = true;
+    public bool NotifyOnMention { get; set; } = true;
+    public bool NotifyOnReaction { get; set; } = false;
+    public int? DigestWindowMinutes { get; set; }
+
     public Task<NotificationPreferenceResponse> ValidateAsync()
     {
         var response = new NotificationPreferenceResponse();

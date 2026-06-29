@@ -30,3 +30,16 @@ public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDto>>
     [BindNever]
     public Guid Id { get; set; }
 }
+
+/// <summary>
+/// Tra cứu IoT device theo <c>DeviceCode</c> (mã in trên thân thiết bị, vd "ESP32-SIM-001").
+/// Dùng cho Staff/Manager resolve <c>deviceCode → device.Id (GUID)</c> trước khi gọi calibration API
+/// (các route calibration keyed theo GUID — Staff không có nguồn GUID nào khác).
+/// </summary>
+public class GetIotDeviceByCodeQuery : IRequest<CommonResponse<IotDeviceDto>>
+{
+    /// <summary>Lấy từ route — query string + body không bind để tránh nhầm lẫn nguồn.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public string DeviceCode { get; set; } = string.Empty;
+}

@@ -35,6 +35,9 @@ public class TicketKbReferenceConfiguration : IEntityTypeConfiguration<TicketKbR
         builder.Property(e => e.Note)
             .HasColumnName("note");
 
+        builder.Property(e => e.ChatId)
+            .HasColumnName("chat_id");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -50,7 +53,14 @@ public class TicketKbReferenceConfiguration : IEntityTypeConfiguration<TicketKbR
         builder.Property(e => e.DeletedAt)
             .HasColumnName("deleted_at");
 
-        builder.HasIndex(e => new { e.TicketId, e.KbArticleId, e.ReferenceType }).IsUnique();
+        builder.HasIndex(e => new { e.TicketId, e.KbArticleId, e.ReferenceType })
+            .IsUnique()
+            .HasFilter("chat_id IS NULL");
+
+        builder.HasIndex(e => new { e.ChatId, e.KbArticleId })
+            .IsUnique()
+            .HasFilter("chat_id IS NOT NULL")
+            .HasDatabaseName("ix_ticket_kb_references_chat_kb_unique");
 
         builder.HasOne<Ticket>()
             .WithMany(e => e.KbReferences)

@@ -8,14 +8,23 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketReopenCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
 
+    /// <summary>
+    /// Reopen reason.
+    /// </summary>
     public string ReopenReason { get; set; } = string.Empty;
 
     [JsonIgnore]
     public Guid CustomerId { get; set; }
 
+    /// <summary>
+    /// Customer name.
+    /// </summary>
     [JsonIgnore]
     public string? CustomerName { get; set; }
 

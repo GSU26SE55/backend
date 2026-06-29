@@ -8,10 +8,16 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketApproveCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// ID của Ticket liên quan.
+    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
     public string? ManagerComment { get; set; }
 
+    /// <summary>
+    /// ID của Manager.
+    /// </summary>
     [JsonIgnore]
     public Guid ManagerId { get; set; }
     [JsonIgnore]

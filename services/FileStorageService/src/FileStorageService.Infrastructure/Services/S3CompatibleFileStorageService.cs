@@ -52,7 +52,7 @@ public class S3CompatibleFileStorageService : IObjectStorageService
             AutoCloseStream = false
         };
 
-        request.Metadata.Add("original-file-name", originalFileName);
+        request.Metadata.Add("original-file-name", System.Uri.EscapeDataString(originalFileName));
 
         await _s3Client.PutObjectAsync(request, cancellationToken);
 

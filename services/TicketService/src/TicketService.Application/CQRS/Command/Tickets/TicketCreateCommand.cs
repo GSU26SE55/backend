@@ -9,10 +9,16 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
+    /// <summary>
+    /// Tiêu đề.
+    /// </summary>
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public TicketCategoryEnum Category { get; set; }
 
+    /// <summary>
+    /// ID của thiết bị pin.
+    /// </summary>
     public Guid? BatteryAssetId { get; set; }
 
     [JsonIgnore]

@@ -4,9 +4,15 @@ namespace TicketService.Application.DTOs.Response.Reports;
 public class SagaFailedRatePoint
 {
     public DateTime Date { get; set; }
+    /// <summary>
+    /// Started.
+    /// </summary>
     public int Started { get; set; }
     public int Completed { get; set; }
     public int Failed { get; set; }
+    /// <summary>
+    /// Failed rate.
+    /// </summary>
     public decimal FailedRate { get; set; }       // %
     public decimal P95DurationSec { get; set; }
 }
