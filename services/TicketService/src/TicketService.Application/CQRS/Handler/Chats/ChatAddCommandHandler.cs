@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -40,7 +35,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IGroupMentionResolverService _groupMentionResolver;
     private readonly IChatCacheService _chatCache;
     private readonly ISlaService _slaService;
-    private readonly IChatTextAiClient _aiClient;
+
 
     public ChatAddCommandHandler(
         ITicketUnitOfWork uow,
@@ -56,8 +51,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IIntegrationEventOutboxWriter outboxWriter,
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
-        ISlaService slaService,
-        IChatTextAiClient aiClient)
+        ISlaService slaService)
     {
         _uow = uow;
         _activityLogger = activityLogger;
@@ -73,10 +67,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
         _slaService = slaService;
-        _aiClient = aiClient;
     }
 
-    public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken ct)
+    public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken cancellationToken)
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
@@ -88,14 +81,14 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             return Fail(400, blockReason);
 
         if (!_chatAuthorizationService.CanCreateChat(request.IsInternal, request.UserPermissions))
-            return Fail(403, request.IsInternal ? "Không có quyền tạo bình luận nội bộ." : "Không có quyền tạo bình luận.");
+            return Fail(403, request.IsInternal ? "Không có quyền tạo tin nhắn nội bộ." : "Không có quyền tạo tin nhắn.");
 
-        if (await _spamDetector.IsSpamAsync(request.TicketId, request.UserId, request.Body, ct))
+        if (await _spamDetector.IsSpamAsync(request.TicketId, request.UserId, request.Body, cancellationToken))
         {
             await _activityLogger.LogAsync(
                 ticket.Id, request.UserId, request.UserRole, request.UserDisplayName,
                 ActivityActionEnum.ChatFlagged, null, null, "Spam detected — cùng nội dung lặp ≥3 lần trong 5 phút.");
-            await _uow.SaveChangesAsync(ct);
+            await _uow.SaveChangesAsync(cancellationToken);
             return Fail(400, "Phát hiện spam — cùng nội dung đã được gửi lặp lại nhiều lần trong thời gian ngắn.");
         }
 
@@ -114,7 +107,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             activeParticipants = await _uow.TicketParticipants.GetAllAsync()
                 .AsNoTracking()
                 .Where(p => p.TicketId == ticket.Id && p.RemovedAt == null && !p.IsDeleted)
-                .ToListAsync(ct);
+                .ToListAsync(cancellationToken);
         }
 
         if (request.Mentions != null && request.Mentions.Any())
@@ -149,7 +142,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
 
             foreach (var gm in request.GroupMentions)
             {
-                var resolved = await _groupMentionResolver.ResolveAsync(gm, activeParticipants, ct);
+                var resolved = await _groupMentionResolver.ResolveAsync(gm, activeParticipants, cancellationToken);
                 foreach (var user in resolved)
                 {
                     if (seenUserIds.Add(user.UserId))
@@ -227,7 +220,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     (int)participant.UserRole,
                     mentionInput.DisplayName,
                     request.UserId,
-                    false), ct);
+                    false), cancellationToken);
             }
         }
 
@@ -254,7 +247,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 (int)role,
                 displayName ?? string.Empty,
                 request.UserId,
-                true), ct);
+                true), cancellationToken);
         }
 
         // #572 — Metrics
@@ -273,7 +266,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     ticket.Id,
                     ticket.Code,
                     managerMention.MentionedUserId,
-                    $"Manager được mention trên ticket P1 Critical #{ticket.Code}."), ct);
+                    $"Manager được mention trên ticket P1 Critical #{ticket.Code}."), cancellationToken);
             }
         }
 
@@ -304,33 +297,23 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             chat.IsInternal,
             chat.AttachmentFileIds,
             ticket.CustomerId,
-            ticket.AssignedStaffId), ct);
+            ticket.AssignedStaffId), cancellationToken);
 
         if (request.RequestCustomerInfo &&
             request.UserRole is ActorRoleEnum.Staff or ActorRoleEnum.Manager or ActorRoleEnum.Admin)
         {
-            await _slaService.PauseForCustomerInfoAsync(ticket.Id, chat.Id, request.UserId, ct);
+            await _slaService.PauseForCustomerInfoAsync(ticket.Id, chat.Id, request.UserId, cancellationToken);
         }
 
         if (request.UserRole == ActorRoleEnum.Customer)
         {
-            await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, ct);
+            await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, cancellationToken);
         }
 
-        // Best-effort language detection — không block nếu AI lỗi
-        try
-        {
-            chat.OriginalLanguage = await _aiClient.DetectLanguageAsync(chat.Body, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[ChatAdd] Language detection failed for chat {ChatId} — OriginalLanguage will be null", chat.Id);
-        }
-
-        await _uow.SaveChangesAsync(ct);
+        await _uow.SaveChangesAsync(cancellationToken);
 
         // Invalidate cache page 1 (#552)
-        await _chatCache.InvalidateAsync(ticket.Id, ct);
+        await _chatCache.InvalidateAsync(ticket.Id, cancellationToken);
 
         // Broadcast chat via SignalR
         try
@@ -358,12 +341,12 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     CreatedAt = m.CreatedAt
                 }).ToList()
             };
-            await _realtimeNotifier.NotifyChatAddedAsync(chatDto, ct);
+            await _realtimeNotifier.NotifyChatAddedAsync(chatDto, cancellationToken);
 
             foreach (var mention in createdMentions)
             {
                 if (mention.MentionedUserId != request.UserId)
-                    await _realtimeNotifier.NotifyMentionReceivedAsync(mention.MentionedUserId, chatDto, ct);
+                    await _realtimeNotifier.NotifyMentionReceivedAsync(mention.MentionedUserId, chatDto, cancellationToken);
             }
         }
         catch (Exception ex)

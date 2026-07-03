@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
@@ -31,6 +33,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IChatCacheService _chatCache;
+    private readonly ICacheService _cache;
     private readonly ILogger<ChatEditCommandHandler> _logger;
 
     public ChatEditCommandHandler(
@@ -44,6 +47,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
         IChatCacheService chatCache,
+        ICacheService cache,
         ILogger<ChatEditCommandHandler> logger)
     {
         _uow = uow;
@@ -56,6 +60,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
         _chatCache = chatCache;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -160,7 +165,24 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             request.Body,
             request.EditReason ?? string.Empty), ct);
 
+        // #633 — Soft-delete stale translations atomically with the chat edit save
+        var translations = await _uow.TicketChatTranslations
+            .GetAllAsync()
+            .Where(t => !t.IsDeleted && t.ChatId == chat.Id)
+            .ToListAsync(ct);
+
+        foreach (var t in translations)
+        {
+            t.IsDeleted = true;
+            t.DeletedAt = DateTime.UtcNow;
+            _uow.TicketChatTranslations.UpdateAsync(t);
+        }
+
         await _uow.SaveChangesAsync(ct);
+
+        // Clear Redis only after DB is committed
+        foreach (var t in translations)
+            await _cache.RemoveAsync($"chat-translation:{chat.Id}:{t.TargetLanguage}", ct);
 
         await _chatCache.InvalidateAsync(ticket.Id, ct);
 

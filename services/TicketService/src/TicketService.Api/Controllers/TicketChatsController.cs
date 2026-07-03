@@ -1024,7 +1024,8 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             CurrentUserId = actorId.Value,
-            TargetLanguage = to ?? string.Empty
+            TargetLanguage = to ?? string.Empty,
+            CurrentUserRoles = GetCurrentRoles()
         }, ct);
         return StatusCode(result.StatusCode, result);
     }

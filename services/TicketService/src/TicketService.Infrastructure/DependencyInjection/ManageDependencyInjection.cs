@@ -117,6 +117,9 @@ public static class ManageDependencyInjection
         // #557 — User connection tracker (Singleton vì in-memory, stateful across requests)
         services.AddSingleton<IUserConnectionTracker, InMemoryUserConnectionTracker>();
 
+        // #633 — Local language detector (Singleton: Lingua models loaded once per process)
+        services.AddSingleton<ILanguageDetectionService, LinguaLanguageDetectionService>();
+
         // #552 — Chat cache service
         services.AddScoped<IChatCacheService, ChatCacheService>();
 
@@ -135,12 +138,6 @@ public static class ManageDependencyInjection
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
             http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
         });
-        services.AddHttpClient<GeminiChatTextAiClient>((sp, http) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
-        });
-
         // #559/#560 — DeepSeek implementations (luôn đăng ký, dùng khi Chat:Provider = "DeepSeek")
         services.AddHttpClient<DeepSeekChatAiClient>((sp, http) =>
         {
@@ -150,21 +147,9 @@ public static class ManageDependencyInjection
         // DeepSeekChatTextAiClient tái sử dụng HttpClient của DeepSeekChatAiClient qua inner client
         services.AddTransient<DeepSeekChatTextAiClient>();
 
-        // Factory chọn provider dựa theo Chat:Provider — đổi provider chỉ cần sửa appsettings
-        services.AddScoped<IChatAiSuggestionClient>(sp =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            return opts.Provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase)
-                ? sp.GetRequiredService<DeepSeekChatAiClient>()
-                : sp.GetRequiredService<GeminiChatAiClient>();
-        });
-        services.AddScoped<IChatTextAiClient>(sp =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            return opts.Provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase)
-                ? sp.GetRequiredService<DeepSeekChatTextAiClient>()
-                : sp.GetRequiredService<GeminiChatTextAiClient>();
-        });
+        // #633 — DeepSeek is the sole text AI provider (Gemini removed); voice uses GeminiVoiceTranscriptionService
+        services.AddScoped<IChatAiSuggestionClient>(sp => sp.GetRequiredService<DeepSeekChatAiClient>());
+        services.AddScoped<IChatTextAiClient>(sp => sp.GetRequiredService<DeepSeekChatTextAiClient>());
 
         // #514 — ClamAV REST client (typed HttpClient)
         services.AddHttpClient<IClamAvClient, ClamAvHttpClient>((sp, http) =>

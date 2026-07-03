@@ -12,6 +12,7 @@ using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
@@ -25,6 +26,7 @@ public class ChatDeleteCommandHandlerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
     private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<ILogger<ChatDeleteCommandHandler>> _logger = new();
 
     private ChatDeleteCommandHandler CreateHandler()
@@ -32,8 +34,9 @@ public class ChatDeleteCommandHandlerTests
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _uow.SetupChatTranslations();
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
-        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _logger.Object);
+        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
