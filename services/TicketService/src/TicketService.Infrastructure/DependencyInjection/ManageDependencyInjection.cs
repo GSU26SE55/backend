@@ -132,13 +132,7 @@ public static class ManageDependencyInjection
         // #568 — PDF exporter
         services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
 
-        // #559/#560 — Gemini implementations (luôn đăng ký, dùng khi Chat:Provider = "Gemini")
-        services.AddHttpClient<GeminiChatAiClient>((sp, http) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.Timeout = TimeSpan.FromSeconds(Math.Max(5, opts.Ai.TimeoutSeconds));
-        });
-        // #559/#560 — DeepSeek implementations (luôn đăng ký, dùng khi Chat:Provider = "DeepSeek")
+        // #559/#560 — DeepSeek implementations
         services.AddHttpClient<DeepSeekChatAiClient>((sp, http) =>
         {
             var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;

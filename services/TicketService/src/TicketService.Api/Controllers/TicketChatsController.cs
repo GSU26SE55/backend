@@ -1030,6 +1030,34 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Xóa nhiều chat của chính author trong 1 request — partial success (skip chat không thuộc author).
+    /// Tối đa 50 ChatIds/request.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="command">Danh sách ChatId cần xóa.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Trả về số lượng đã xóa và danh sách bị skip.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc ticket đã đóng.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpDelete("bulk")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(ChatBulkDeleteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> BulkDeleteChats(Guid ticketId, [FromBody] ChatBulkDeleteCommand command, CancellationToken ct)
+    {
+        command.TicketId = ticketId;
+        command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserRole = ResolveActorRole(_currentUser.Role);
+        command.UserPermissions = _currentUser.Permissions.ToList();
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     /// <summary>Manager ACK escalation review — transitions saga Pending → Reviewed. #566.</summary>
     [HttpPost("{id}/escalation-review/ack")]
     [Authorize(Roles = "Manager,Admin")]
