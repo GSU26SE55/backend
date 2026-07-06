@@ -70,9 +70,6 @@ public class ChatAuthorizationService : IChatAuthorizationService
                 : ChatAuthorizationResult.Allowed;
         }
 
-        if (actorPermissions.Contains(ChatPermissionCodes.ChatEditAny))
-            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
-
         return ChatAuthorizationResult.Forbidden;
     }
 
@@ -84,9 +81,6 @@ public class ChatAuthorizationService : IChatAuthorizationService
     {
         if (chat.AuthorUserId == actorUserId)
             return ChatAuthorizationResult.Allowed;
-
-        if (actorPermissions.Contains(ChatPermissionCodes.ChatDeleteAny))
-            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
 
         return ChatAuthorizationResult.Forbidden;
     }

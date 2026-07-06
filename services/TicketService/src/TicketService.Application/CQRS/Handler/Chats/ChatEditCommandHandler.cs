@@ -125,7 +125,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             EditedAt = DateTime.UtcNow,
             EditedByUserId = request.UserId,
             EditedByRole = request.UserRole,
-            EditReason = request.EditReason
+            EditReason = null
         };
         await _uow.TicketChatEdits.AddAsync(chatEdit);
 

@@ -108,7 +108,7 @@ public class ChatEditCommandHandlerTests
         chat.LastEditedByUserId.Should().Be(authorId);
 
         _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e =>
-            e.ChatId == chatId && e.OldBody == "Original body" && e.NewBody == "Edited body")), Times.Once);
+            e.ChatId == chatId && e.OldBody == "Original body" && e.NewBody == "Edited body" && e.EditReason == null)), Times.Once);
 
         _activityLogger.Verify(x => x.LogAsync(
             ticketId, authorId, ActorRoleEnum.Customer, "Author",
@@ -180,39 +180,7 @@ public class ChatEditCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ManagerEditWithoutReason_ReturnsValidationError()
-    {
-        var ticketId = Guid.NewGuid();
-        var chatId = Guid.NewGuid();
-        var authorId = Guid.NewGuid();
-        var managerId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId);
-        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-60), ticket);
-
-        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
-        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
-
-        var handler = CreateHandler();
-        var command = new ChatEditCommand
-        {
-            TicketId = ticketId,
-            ChatId = chatId,
-            UserId = managerId,
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            Body = "Edited by manager",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
-        };
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
-        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
-    }
-
-    [Fact]
-    public async Task Handle_ManagerEditWithReason_Succeeds()
+    public async Task Handle_ManagerEditOthersChat_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -234,14 +202,14 @@ public class ChatEditCommandHandlerTests
             UserDisplayName = "Manager",
             Body = "Edited by manager",
             EditReason = "Redact PII",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        chat.Body.Should().Be("Edited by manager");
-        _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e => e.EditReason == "Redact PII")), Times.Once);
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        chat.Body.Should().Be("Original body");
     }
 
     [Fact]

@@ -96,39 +96,7 @@ public class ChatDeleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ManagerDeleteWithoutReason_ReturnsValidationError()
-    {
-        var ticketId = Guid.NewGuid();
-        var chatId = Guid.NewGuid();
-        var authorId = Guid.NewGuid();
-        var managerId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId);
-        var chat = MakeChat(chatId, ticketId, authorId, ticket);
-
-        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
-        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
-
-        var handler = CreateHandler();
-        var command = new ChatDeleteCommand
-        {
-            TicketId = ticketId,
-            ChatId = chatId,
-            UserId = managerId,
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
-        };
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
-        result.ListErrors.Should().Contain(e => e.Field == "DeleteReason");
-        chat.IsDeleted.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Handle_ManagerDeleteWithReason_Succeeds()
+    public async Task Handle_ManagerDeleteOthersChat_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -149,21 +117,18 @@ public class ChatDeleteCommandHandlerTests
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
             DeleteReason = "Spam content",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        chat.IsDeleted.Should().BeTrue();
-
-        _activityLogger.Verify(x => x.LogAsync(
-            ticketId, managerId, ActorRoleEnum.Manager, "Manager",
-            ActivityActionEnum.ChatDeleted, It.IsAny<string>(), null, "Spam content"), Times.Once);
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Handle_AdminDeleteWithReason_Succeeds()
+    public async Task Handle_AdminDeleteOthersChat_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -184,13 +149,14 @@ public class ChatDeleteCommandHandlerTests
             UserRole = ActorRoleEnum.Admin,
             UserDisplayName = "Admin",
             DeleteReason = "Policy violation",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        chat.IsDeleted.Should().BeTrue();
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]

@@ -195,15 +195,13 @@ public class ChatAuthorizationServiceTests
         ["Manager"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
-            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
-            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
             ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
         },
         ["Admin"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
-            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
-            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
             ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
         }
     };
@@ -248,14 +246,13 @@ public class ChatAuthorizationServiceTests
 
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void CanEditChat_AsNonAuthorWithReason_AllowedOnlyWithEditAnyPermission(string role)
+    public void CanEditChat_AsNonAuthor_AlwaysForbidden(string role)
     {
         var (service, chat) = MakeServiceAndOthersChat();
-        var hasEditAny = RolePermissions[role].Contains(ChatPermissionCodes.ChatEditAny);
 
         var result = service.CanEditChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true, editWindowMinutes: 15);
 
-        result.Should().Be(hasEditAny ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.Forbidden);
+        result.Should().Be(ChatAuthorizationResult.Forbidden);
     }
 
     [Theory]
@@ -272,14 +269,13 @@ public class ChatAuthorizationServiceTests
 
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void CanDeleteChat_AsNonAuthorWithReason_AllowedOnlyWithDeleteAnyPermission(string role)
+    public void CanDeleteChat_AsNonAuthor_AlwaysForbidden(string role)
     {
         var (service, chat) = MakeServiceAndOthersChat();
-        var hasDeleteAny = RolePermissions[role].Contains(ChatPermissionCodes.ChatDeleteAny);
 
         var result = service.CanDeleteChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true);
 
-        result.Should().Be(hasDeleteAny ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.Forbidden);
+        result.Should().Be(ChatAuthorizationResult.Forbidden);
     }
 
     [Theory]
