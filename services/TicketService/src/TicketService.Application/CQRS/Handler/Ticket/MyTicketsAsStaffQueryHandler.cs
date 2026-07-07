@@ -40,8 +40,15 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
 
-        // Sort by SLA urgency: P1 first, then by remaining time
-        query = query.OrderBy(t => t.Priority).ThenByDescending(t => t.CreatedAt);
+        // Bảng SLA Monitor: chỉ lấy ticket đang trong vòng theo dõi SLA (server-side, không cap theo pageSize)
+        if (request.SlaOpen == true)
+            query = query.Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status) && t.SlaTimer != null);
+
+        // sortBy=slaRemaining: DueAt tăng dần ≙ thời gian SLA còn lại tăng dần (gần breach lên đầu);
+        // ticket không có timer xếp cuối (MaxValue thay cho NULL để tường minh trên mọi provider).
+        query = string.Equals(request.SortBy, "slaRemaining", StringComparison.OrdinalIgnoreCase)
+            ? query.OrderBy(t => t.SlaTimer == null ? DateTime.MaxValue : t.SlaTimer.DueAt).ThenBy(t => t.Priority)
+            : query.OrderBy(t => t.Priority).ThenByDescending(t => t.CreatedAt);
 
         var total = await query.CountAsync(cancellationToken);
         var rawItems = await query

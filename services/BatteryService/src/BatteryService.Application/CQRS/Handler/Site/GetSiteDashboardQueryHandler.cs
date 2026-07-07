@@ -1,3 +1,4 @@
+using BatteryService.Application.Common;
 using BatteryService.Application.CQRS.Query.Site;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
@@ -70,9 +71,7 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
 
         var totalAssets = assets.Count;
         var activeAssets = assets.Count(asset => asset.Status == BatteryStatusEnum.Active);
-        var inactivePenalty = totalAssets == 0 ? 0 : (totalAssets - activeAssets) * 5;
-        var alertPenalty = activeAlertAssetIds.Count * 10;
-        var healthScore = Math.Clamp(100 - inactivePenalty - alertPenalty, 0, 100);
+        var healthScore = SiteHealthCalculator.Compute(totalAssets, activeAssets, activeAlertAssetIds.Count);
 
         return new CommonResponse<SiteDashboardDto>
         {

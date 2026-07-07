@@ -6,6 +6,8 @@ public class AccountResponse : CommonResponse<AccountDto> { }
 
 public class AccountListResponse : CommonResponse<PaginationResponse<AccountDto>> { }
 
+public class AccountStatsResponse : CommonResponse<AccountStatsDto> { }
+
 public class AccountActionResponse : CommonResponse<Guid> { }
 
 public class StaffAssignmentProfileResponse : CommonResponse<StaffAssignmentProfileDto> { }

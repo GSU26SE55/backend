@@ -14,7 +14,7 @@
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
