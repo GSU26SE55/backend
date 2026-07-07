@@ -14,17 +14,20 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
     private readonly ITicketUnitOfWork _uow;
     private readonly IVoiceTranscriptionService _voiceService;
     private readonly IFileUploadClient _fileUploadClient;
+    private readonly IAudioTranscoder _audioTranscoder;
     private readonly ILogger<ChatVoiceTranscribeCommandHandler> _logger;
 
     public ChatVoiceTranscribeCommandHandler(
         ITicketUnitOfWork uow,
         IVoiceTranscriptionService voiceService,
         IFileUploadClient fileUploadClient,
+        IAudioTranscoder audioTranscoder,
         ILogger<ChatVoiceTranscribeCommandHandler> logger)
     {
         _uow = uow;
         _voiceService = voiceService;
         _fileUploadClient = fileUploadClient;
+        _audioTranscoder = audioTranscoder;
         _logger = logger;
     }
 
@@ -41,13 +44,30 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
         await audioFile.CopyToAsync(rawMs, ct);
         var audioBytes = rawMs.ToArray();
 
-        // Each task gets its own MemoryStream — no shared state, no race condition
+        // Transcribe dùng bytes GỐC — Gemini nhận webm/opus tốt, không cần transcode cho AI.
         var transcribeTask = _voiceService.TranscribeAsync(
             new MemoryStream(audioBytes, writable: false), audioFile.ContentType, ct);
 
+        // Chuẩn hóa file LƯU về m4a (AAC) để iOS phát được — web ghi .webm mà iOS không decode.
+        // Transcode lỗi (thiếu ffmpeg / file hỏng) → fallback giữ file gốc: không chặn gửi voice.
+        var uploadBytes = audioBytes;
+        var uploadContentType = audioFile.ContentType;
+        var uploadFileName = audioFile.FileName;
+        try
+        {
+            (uploadBytes, uploadContentType, uploadFileName) = await _audioTranscoder.ToM4aAsync(
+                audioBytes, audioFile.ContentType, audioFile.FileName, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[ChatVoiceTranscribe] Transcode → m4a thất bại cho ticket {TicketId}, dùng file gốc ({ContentType}).",
+                request.TicketId, audioFile.ContentType);
+        }
+
         var uploadTask = _fileUploadClient.UploadAsync(
-            new MemoryStream(audioBytes, writable: false),
-            audioFile.FileName, audioFile.ContentType, audioFile.Length,
+            new MemoryStream(uploadBytes, writable: false),
+            uploadFileName, uploadContentType, uploadBytes.Length,
             request.AuthorizationHeader, ct);
 
         string transcribedText;
@@ -103,9 +123,9 @@ public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTransc
                 ChatId = chat.Id,
                 UploadedByUserId = request.UserId,
                 FileId = fileId,
-                FileName = audioFile.FileName,
-                ContentType = audioFile.ContentType,
-                SizeBytes = audioFile.Length,
+                FileName = uploadFileName,
+                ContentType = uploadContentType,
+                SizeBytes = uploadBytes.Length,
                 Source = source,
                 VirusScanStatus = VirusScanStatusEnum.Pending,
                 Ticket = ticket,
