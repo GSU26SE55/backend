@@ -16,7 +16,6 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatTextAiClient _aiClient;
     private readonly ICacheService _cache;
-    private readonly ILanguageDetectionService _langDetector;
     private readonly IChatAuthorizationService _chatAuth;
     private readonly IPiiDetector _piiDetector;
     private readonly ILogger<ChatTranslateCommandHandler> _logger;
@@ -30,7 +29,6 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         ITicketUnitOfWork uow,
         IChatTextAiClient aiClient,
         ICacheService cache,
-        ILanguageDetectionService langDetector,
         IChatAuthorizationService chatAuth,
         IPiiDetector piiDetector,
         ILogger<ChatTranslateCommandHandler> logger)
@@ -38,7 +36,6 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         _uow = uow;
         _aiClient = aiClient;
         _cache = cache;
-        _langDetector = langDetector;
         _chatAuth = chatAuth;
         _piiDetector = piiDetector;
         _logger = logger;
@@ -119,11 +116,8 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
             return OkResponse(existing, chat.OriginalLanguage, fromCache: false);
         }
 
-        // --- 6. Mask PII + Lingua: skip AI if source == target ---
-        var (maskedBody, maskKey) = await _piiDetector.MaskAsync(chat.Body, ct);
-
-        var detectedLocal = _langDetector.Detect(maskedBody);
-        if (detectedLocal != "und" && detectedLocal == targetLang)
+        // --- 6. Skip AI if OriginalLanguage (set by consumer) == target ---
+        if (!string.IsNullOrEmpty(chat.OriginalLanguage) && chat.OriginalLanguage == targetLang)
         {
             return new ChatTranslateResponse
             {
@@ -133,14 +127,17 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
                 {
                     TranslatedBody = chat.Body,
                     TargetLanguage = targetLang,
-                    OriginalLanguage = detectedLocal,
+                    OriginalLanguage = chat.OriginalLanguage,
                     Provider = "None",
                     FromCache = false,
                 }
             };
         }
 
-        // --- 7. Mutex Lock (soft lock via Redis) ---
+        // --- 7. Mask PII ---
+        var (maskedBody, maskKey) = await _piiDetector.MaskAsync(chat.Body, ct);
+
+        // --- 8. Mutex Lock (soft lock via Redis) ---
         var lockKey = $"{LockKeyPrefix}:{request.ChatId}:{targetLang}";
         var lockHeld = await _cache.GetAsync<string>(lockKey, ct);
         if (lockHeld != null)
@@ -162,12 +159,10 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
 
         await _cache.SetAsync(lockKey, "1", LockTtl, ct);
 
-        // --- 8. AI: translate masked body (Lingua result if known, fallback to OriginalLanguage, else AI detects) ---
-        var knownSource = detectedLocal != "und"
-            ? detectedLocal
-            : !string.IsNullOrEmpty(chat.OriginalLanguage) && chat.OriginalLanguage != "und"
-                ? chat.OriginalLanguage
-                : null;
+        // --- 9. AI: translate masked body (OriginalLanguage set by consumer if available, else AI detects) ---
+        var knownSource = !string.IsNullOrEmpty(chat.OriginalLanguage) && chat.OriginalLanguage != "und"
+            ? chat.OriginalLanguage
+            : null;
 
         string translatedBody;
         string detectedLang;
@@ -189,7 +184,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
             return Fail("Translation service unavailable.");
         }
 
-        // --- 9. Save DB + user link ---
+        // --- 10. Save DB + user link ---
         var translation = new TicketChatTranslation
         {
             Id = Guid.NewGuid(),
@@ -242,7 +237,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
             return Fail("Failed to save translation.");
         }
 
-        // --- 10. Cache + release lock ---
+        // --- 11. Cache + release lock ---
         await _cache.SetAsync(cacheKey, translatedBody, CacheTtl, ct);
         await _cache.RemoveAsync(lockKey, ct);
 

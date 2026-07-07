@@ -17,7 +17,6 @@ public class ChatTranslateCommandHandlerTests
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IChatTextAiClient> _aiClient = new();
     private readonly Mock<ICacheService> _cache = new();
-    private readonly Mock<ILanguageDetectionService> _langDetector = new();
     private readonly Mock<IChatAuthorizationService> _chatAuth = new();
     private readonly Mock<IPiiDetector> _piiDetector = new();
 
@@ -36,9 +35,6 @@ public class ChatTranslateCommandHandlerTests
             .Setup(c => c.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
 
-        // Default: lang detector returns "vi" (different from "en" target → AI will be called)
-        _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("vi");
-
         // Cache write operations are no-ops
         _cache
             .Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
@@ -55,7 +51,7 @@ public class ChatTranslateCommandHandlerTests
             .Setup(p => p.UnmaskAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string text, string _, CancellationToken _) => text);
 
-        return new(_uow.Object, _aiClient.Object, _cache.Object, _langDetector.Object, _chatAuth.Object,
+        return new(_uow.Object, _aiClient.Object, _cache.Object, _chatAuth.Object,
             _piiDetector.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
     }
 
@@ -423,23 +419,27 @@ public class ChatTranslateCommandHandlerTests
 
     #endregion
 
-    #region Lingua — source == target skip
+    #region OriginalLanguage — source == target skip / knownSource
 
     [Fact]
-    public async Task Handle_SourceEqualsTarget_ReturnsOriginalBody_NoAiCall()
+    public async Task Handle_OriginalLanguageMatchesTarget_ReturnsOriginalBody_NoAiCall()
     {
         var ticketId = Guid.NewGuid();
-        var chat = BuildChat(ticketId, "Hello there");
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Ticket = BuildTicket(ticketId),
+            Body = "Hello there",
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Customer",
+            OriginalLanguage = "en",  // consumer already set this
+        };
         SetupTickets(BuildTicket(ticketId));
         SetupChats(chat);
-        _uow.SetupChatTranslations(); // no existing translation
+        _uow.SetupChatTranslations();
 
-        var handler = CreateHandler();
-
-        // Override default "vi" with "en" to match the target (must be after CreateHandler)
-        _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
-
-        var result = await handler.Handle(new ChatTranslateCommand
+        var result = await CreateHandler().Handle(new ChatTranslateCommand
         {
             TicketId = ticketId,
             ChatId = chat.Id,
@@ -455,10 +455,11 @@ public class ChatTranslateCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_LinguaReturnsUnd_ProceedsToAiCall()
+    public async Task Handle_OriginalLanguageSet_UsedAsKnownSourceForAi()
     {
+        // OriginalLanguage already set by consumer → passed as knownSource to AI
         var ticketId = Guid.NewGuid();
-        var chat = BuildChat(ticketId, "???");
+        var chat = BuildChat(ticketId, "Xin chào");  // OriginalLanguage = "vi"
         SetupTickets(BuildTicket(ticketId));
         SetupChats(chat);
         _uow.SetupChatTranslations();
@@ -466,13 +467,9 @@ public class ChatTranslateCommandHandlerTests
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
 
-        // Lingua cannot determine language
-        _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("und");
-
-        // detectedLocal="und" → fallback to chat.OriginalLanguage="vi" → knownSource="vi"
         _aiClient
             .Setup(c => c.TranslateWithDetectAsync(It.IsAny<string>(), "en", "vi", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(("Translated", "vi"));
+            .ReturnsAsync(("Hello", "vi"));
 
         var result = await CreateHandler().Handle(new ChatTranslateCommand
         {
@@ -484,6 +481,44 @@ public class ChatTranslateCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _aiClient.Verify(c => c.TranslateWithDetectAsync(It.IsAny<string>(), "en", "vi", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_OriginalLanguageNull_PassesNullKnownSourceToAi()
+    {
+        // Consumer hasn't run yet (race) → OriginalLanguage null → AI detects itself
+        var ticketId = Guid.NewGuid();
+        var chat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Ticket = BuildTicket(ticketId),
+            Body = "Xin chào",
+            AuthorRole = ActorRoleEnum.Customer,
+            AuthorDisplayName = "Customer",
+            OriginalLanguage = null,
+        };
+        SetupTickets(BuildTicket(ticketId));
+        SetupChats(chat);
+        _uow.SetupChatTranslations();
+        _uow.SetupChatTranslationUsers();
+        _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
+        _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
+
+        _aiClient
+            .Setup(c => c.TranslateWithDetectAsync(It.IsAny<string>(), "en", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(("Hello", "vi"));
+
+        var result = await CreateHandler().Handle(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = chat.Id,
+            CurrentUserId = Guid.NewGuid(),
+            TargetLanguage = "en"
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _aiClient.Verify(c => c.TranslateWithDetectAsync(It.IsAny<string>(), "en", null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion
