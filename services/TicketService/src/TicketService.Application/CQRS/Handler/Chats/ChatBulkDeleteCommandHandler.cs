@@ -11,6 +11,7 @@ using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
@@ -68,12 +69,14 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
             .Select(id => id.ToString())
             .ToList();
         var deletedChats = new List<(Guid Id, bool IsInternal)>();
+        var chatsToHide = new List<Guid>();
 
         foreach (var chat in chats)
         {
             if (chat.AuthorUserId != request.UserId)
             {
-                skippedIds.Add(chat.Id.ToString());
+                // Non-owner: queue for per-user hide instead of skipping
+                chatsToHide.Add(chat.Id);
                 continue;
             }
 
@@ -83,7 +86,7 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
             deletedChats.Add((chat.Id, chat.IsInternal));
         }
 
-        if (deletedChats.Count == 0)
+        if (deletedChats.Count == 0 && chatsToHide.Count == 0)
         {
             return new ChatBulkDeleteResponse
             {
@@ -129,6 +132,25 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
         {
             _logger.LogError(ex, "[ChatBulkDelete] Failed to persist bulk delete for ticket {TicketId}", ticket.Id);
             return Fail(500, "Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
+        }
+
+        // Hide non-owner chats for the caller (idempotent)
+        if (chatsToHide.Count > 0)
+        {
+            var existingHideIds = await _uow.TicketChatHides.GetAllAsync()
+                .Where(h => h.UserId == request.UserId && chatsToHide.Contains(h.ChatId) && !h.IsDeleted)
+                .Select(h => h.ChatId)
+                .ToListAsync(ct);
+
+            foreach (var chatId in chatsToHide.Where(id => !existingHideIds.Contains(id)))
+                await _uow.TicketChatHides.AddAsync(new TicketChatHide { ChatId = chatId, UserId = request.UserId });
+
+            if (chatsToHide.Count > existingHideIds.Count)
+            {
+                try
+                { await _uow.SaveChangesAsync(ct); }
+                catch (Exception ex) { _logger.LogWarning(ex, "[ChatBulkDelete] Hide save failed for user {UserId}, non-critical", request.UserId); }
+            }
         }
 
         foreach (var t in translations)

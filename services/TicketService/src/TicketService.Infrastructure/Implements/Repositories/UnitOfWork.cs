@@ -37,6 +37,7 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<TicketChatMention> TicketChatMentions => new GenericRepository<TicketChatMention>(_context);
     public IGenericRepository<TicketChatReaction> TicketChatReactions => new GenericRepository<TicketChatReaction>(_context);
     public IGenericRepository<TicketChatRead> TicketChatReads => new GenericRepository<TicketChatRead>(_context);
+    public IGenericRepository<TicketChatHide> TicketChatHides => new GenericRepository<TicketChatHide>(_context);
     public IGenericRepository<ChatTemplate> ChatTemplates => new GenericRepository<ChatTemplate>(_context);
     public IGenericRepository<ChatAiSuggestion> ChatAiSuggestions => new GenericRepository<ChatAiSuggestion>(_context);
     public IGenericRepository<TicketChatTranslation> TicketChatTranslations => new GenericRepository<TicketChatTranslation>(_context);
