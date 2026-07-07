@@ -46,8 +46,16 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
+        // Load hidden chat IDs for the current user (per-user hide)
+        var hiddenChatIds = await _unitOfWork.TicketChatHides.GetAllAsync()
+            .AsNoTracking()
+            .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
+            .Select(h => h.ChatId)
+            .ToListAsync(cancellationToken);
+
         // Cache hit — chỉ khi page 1, pageSize default (10), không có filter nào.
         // canViewInternalChats phải vào key để tránh Customer thấy internal chats từ cache của Staff.
+        // Skip cache khi user có hidden chats (cache là shared, không per-user).
         var isDefaultQuery = request.PageNumber == 1
             && request.PageSize == 10
             && string.IsNullOrWhiteSpace(request.Search)
@@ -58,7 +66,8 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             && request.HasAttachments == null
             && request.MentionedMe == null
             && request.DateFrom == null
-            && request.DateTo == null;
+            && request.DateTo == null
+            && hiddenChatIds.Count == 0;
 
         if (isDefaultQuery)
         {
@@ -89,9 +98,13 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (!canViewInternalChats)
             query = query.Where(c => !c.IsInternal);
 
-        // #549 — Extended filters
+        // 5. Ẩn chat mà user đã chọn hide
+        if (hiddenChatIds.Count > 0)
+            query = query.Where(c => !hiddenChatIds.Contains(c.Id));
+
+        // #549 — Extended filters (deleted messages are excluded from filtered views; they appear only in unfiltered timeline)
         if (!string.IsNullOrWhiteSpace(request.Search))
-            query = query.Where(c => c.IsDeleted || c.Body.Contains(request.Search));
+            query = query.Where(c => !c.IsDeleted && c.Body.Contains(request.Search));
 
         if (request.AuthorUserId.HasValue)
             query = query.Where(c => c.AuthorUserId == request.AuthorUserId.Value);
@@ -108,8 +121,8 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (request.HasAttachments.HasValue)
         {
             query = request.HasAttachments.Value
-                ? query.Where(c => c.IsDeleted || (c.AttachmentFileIds != null && c.AttachmentFileIds.Count > 0))
-                : query.Where(c => c.IsDeleted || (c.AttachmentFileIds == null || c.AttachmentFileIds.Count == 0));
+                ? query.Where(c => !c.IsDeleted && c.AttachmentFileIds != null && c.AttachmentFileIds.Count > 0)
+                : query.Where(c => !c.IsDeleted && (c.AttachmentFileIds == null || c.AttachmentFileIds.Count == 0));
         }
 
         if (request.MentionedMe == true)
@@ -118,7 +131,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
                 .AsNoTracking()
                 .Where(m => m.MentionedUserId == request.ActorUserId && !m.IsDeleted)
                 .Select(m => m.ChatId);
-            query = query.Where(c => c.IsDeleted || mentionedChatIds.Contains(c.Id));
+            query = query.Where(c => !c.IsDeleted && mentionedChatIds.Contains(c.Id));
         }
 
         if (request.DateFrom.HasValue)

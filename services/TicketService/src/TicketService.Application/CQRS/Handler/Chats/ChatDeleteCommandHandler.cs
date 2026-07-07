@@ -14,6 +14,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
@@ -76,7 +77,33 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             request.UserPermissions);
 
         if (authResult == ChatAuthorizationResult.Forbidden)
-            return Fail(403, "Không có quyền xóa bình luận này.");
+        {
+            // Non-owner: hide for caller only instead of true delete
+            var alreadyHidden = await _uow.TicketChatHides
+                .AnyAsync(h => h.ChatId == chat.Id && h.UserId == request.UserId && !h.IsDeleted);
+            if (!alreadyHidden)
+            {
+                await _uow.TicketChatHides.AddAsync(new TicketChatHide
+                {
+                    ChatId = chat.Id,
+                    UserId = request.UserId
+                });
+                await _uow.SaveChangesAsync(ct);
+            }
+            return new TicketActionResponse
+            {
+                IsSuccess = true,
+                StatusCode = 200,
+                Message = "Đã ẩn bình luận.",
+                Data = new TicketActionDTO
+                {
+                    Id = chat.Id.ToString(),
+                    TicketId = ticket.Id.ToString(),
+                    Code = ticket.Code,
+                    Status = ticket.Status
+                }
+            };
+        }
 
         var oldBody = chat.Body;
 
