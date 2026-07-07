@@ -18,6 +18,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
     private readonly ICacheService _cache;
     private readonly IChatAuthorizationService _chatAuth;
     private readonly IPiiDetector _piiDetector;
+    private readonly ITechnicalTermMasker _termMasker;
     private readonly ILogger<ChatTranslateCommandHandler> _logger;
 
     private const string CacheKeyPrefix = "chat-translation";
@@ -31,6 +32,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         ICacheService cache,
         IChatAuthorizationService chatAuth,
         IPiiDetector piiDetector,
+        ITechnicalTermMasker termMasker,
         ILogger<ChatTranslateCommandHandler> logger)
     {
         _uow = uow;
@@ -38,6 +40,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         _cache = cache;
         _chatAuth = chatAuth;
         _piiDetector = piiDetector;
+        _termMasker = termMasker;
         _logger = logger;
     }
 
@@ -137,6 +140,9 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         // --- 7. Mask PII ---
         var (maskedBody, maskKey) = await _piiDetector.MaskAsync(chat.Body, ct);
 
+        // --- 7.5. Mask technical terms (SOH, SLA, BMS...) — prevent AI from translating/mangling them ---
+        var (termMaskedBody, termMap) = _termMasker.Mask(maskedBody);
+
         // --- 8. Mutex Lock (soft lock via Redis) ---
         var lockKey = $"{LockKeyPrefix}:{request.ChatId}:{targetLang}";
         var lockHeld = await _cache.GetAsync<string>(lockKey, ct);
@@ -168,8 +174,9 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         string detectedLang;
         try
         {
-            (translatedBody, detectedLang) = await _aiClient.TranslateWithDetectAsync(maskedBody, targetLang, knownSource, ct);
+            (translatedBody, detectedLang) = await _aiClient.TranslateWithDetectAsync(termMaskedBody, targetLang, knownSource, ct);
             translatedBody = await _piiDetector.UnmaskAsync(translatedBody, maskKey, ct);
+            translatedBody = _termMasker.Unmask(translatedBody, termMap);
         }
         catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
         {

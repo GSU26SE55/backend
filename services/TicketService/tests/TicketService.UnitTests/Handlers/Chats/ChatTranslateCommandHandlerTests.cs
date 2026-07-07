@@ -19,6 +19,7 @@ public class ChatTranslateCommandHandlerTests
     private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<IChatAuthorizationService> _chatAuth = new();
     private readonly Mock<IPiiDetector> _piiDetector = new();
+    private readonly Mock<ITechnicalTermMasker> _termMasker = new();
 
     private ChatTranslateCommandHandler CreateHandler()
     {
@@ -51,8 +52,16 @@ public class ChatTranslateCommandHandlerTests
             .Setup(p => p.UnmaskAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string text, string _, CancellationToken _) => text);
 
+        // Default: term masker is a pass-through (no terms in default test bodies)
+        _termMasker
+            .Setup(m => m.Mask(It.IsAny<string>()))
+            .Returns((string text) => (text, (IReadOnlyDictionary<string, string>)new Dictionary<string, string>()));
+        _termMasker
+            .Setup(m => m.Unmask(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>()))
+            .Returns((string text, IReadOnlyDictionary<string, string> _) => text);
+
         return new(_uow.Object, _aiClient.Object, _cache.Object, _chatAuth.Object,
-            _piiDetector.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
+            _piiDetector.Object, _termMasker.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
     }
 
     private static Ticket BuildTicket(Guid id) => new()
@@ -697,6 +706,64 @@ public class ChatTranslateCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.TranslatedBody.Should().Be("Hello (race winner)");
+    }
+
+    #endregion
+
+    #region Technical Term Masking
+
+    [Fact]
+    public async Task Handle_AiTranslate_CallsTermMaskerMaskOnPiiMaskedBodyAndUnmaskOnAiResult()
+    {
+        // Verify mask() is called with the PII-masked chat body,
+        // and unmask() is called after AI translates. Exact roundtrip tested in TechnicalTermMaskerTests.
+        var ticketId = Guid.NewGuid();
+        var chat = BuildChat(ticketId, "Xin chào");
+        SetupTickets(BuildTicket(ticketId));
+        SetupChats(chat);
+        _uow.SetupChatTranslations();
+        _uow.SetupChatTranslationUsers();
+        _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
+        _uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
+
+        _aiClient
+            .Setup(c => c.TranslateWithDetectAsync(It.IsAny<string>(), "en", "vi", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(("Hello", "vi"));
+
+        await CreateHandler().Handle(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = chat.Id,
+            CurrentUserId = Guid.NewGuid(),
+            TargetLanguage = "en"
+        }, CancellationToken.None);
+
+        // Mask called once with the (PII-masked) body
+        _termMasker.Verify(m => m.Mask("Xin chào"), Times.Once);
+        // Unmask called once after AI returns
+        _termMasker.Verify(m => m.Unmask(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_OriginalLanguageMatchesTarget_TermMaskerNotCalled()
+    {
+        // When source == target, AI is skipped — term masker must NOT be called
+        var ticketId = Guid.NewGuid();
+        var chat = BuildChat(ticketId, "Xin chào");  // OriginalLanguage = "vi"
+        SetupTickets(BuildTicket(ticketId));
+        SetupChats(chat);
+        _uow.SetupChatTranslations();
+
+        await CreateHandler().Handle(new ChatTranslateCommand
+        {
+            TicketId = ticketId,
+            ChatId = chat.Id,
+            CurrentUserId = Guid.NewGuid(),
+            TargetLanguage = "vi"  // same as OriginalLanguage
+        }, CancellationToken.None);
+
+        _termMasker.Verify(m => m.Mask(It.IsAny<string>()), Times.Never);
+        _termMasker.Verify(m => m.Unmask(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>()), Times.Never);
     }
 
     #endregion

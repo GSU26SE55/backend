@@ -110,6 +110,7 @@ public static class ManageDependencyInjection
         services.AddScoped<ISpamDetector, SpamDetector>();
         services.AddScoped<IProfanityFilter, ProfanityFilter>();
         services.AddScoped<IPiiDetector, PiiDetector>();  // PiiDetector giờ inject ICacheService (#559)
+        services.AddSingleton<ITechnicalTermMasker, TechnicalTermMasker>();
 
         // Group mention resolver (#537)
         services.AddScoped<IGroupMentionResolverService, LocalGroupMentionResolver>();

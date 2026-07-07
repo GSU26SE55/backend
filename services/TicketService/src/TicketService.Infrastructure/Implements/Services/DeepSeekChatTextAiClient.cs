@@ -121,22 +121,7 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
 
             Rules:
             - Use domain-appropriate technical equivalents — do NOT translate word-by-word.
-            - Preserve these abbreviations unchanged in all languages: SOH, SLA, P1, P2, P3, BMS, MPPT, kWh, kWp, DC, AC, Li-ion, V, A, °C.
-            - Technical term glossary (vi ↔ en):
-              • State of Health ↔ Trạng thái sức khỏe pin
-              • Anomaly / Anomaly detected ↔ Dị thường / Phát hiện dị thường
-              • Degrading ↔ Suy giảm hiệu suất
-              • Alert threshold / Threshold ↔ Ngưỡng cảnh báo
-              • Maintenance log ↔ Nhật ký bảo trì
-              • Escalate / Escalation ↔ Chuyển cấp xử lý
-              • Resolution ↔ Kết quả xử lý
-              • Ticket ↔ Ticket (keep as-is in all languages)
-              • Overheat ↔ Quá nhiệt
-              • Overvoltage / Undervoltage ↔ Quá áp / Thấp áp
-              • Cell imbalance ↔ Mất cân bằng cell
-              • Short circuit ↔ Ngắn mạch
-              • Charging cycle ↔ Chu kỳ sạc
-              • Capacity fade ↔ Suy giảm dung lượng
+            - Preserve text inside double-bracket placeholders [[term_N]] exactly as-is — they will be substituted after translation.
             - Preserve the original tone exactly (formal stays formal, urgent stays urgent).
             - Return ONLY the translated text — no labels, no explanations, no extra formatting.
 
@@ -151,22 +136,7 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
 
             Rules:
             - Use domain-appropriate technical equivalents — do NOT translate word-by-word.
-            - Preserve these abbreviations unchanged in all languages: SOH, SLA, P1, P2, P3, BMS, MPPT, kWh, kWp, DC, AC, Li-ion, V, A, °C.
-            - Technical term glossary (vi ↔ en):
-              • State of Health ↔ Trạng thái sức khỏe pin
-              • Anomaly / Anomaly detected ↔ Dị thường / Phát hiện dị thường
-              • Degrading ↔ Suy giảm hiệu suất
-              • Alert threshold / Threshold ↔ Ngưỡng cảnh báo
-              • Maintenance log ↔ Nhật ký bảo trì
-              • Escalate / Escalation ↔ Chuyển cấp xử lý
-              • Resolution ↔ Kết quả xử lý
-              • Ticket ↔ Ticket (keep as-is in all languages)
-              • Overheat ↔ Quá nhiệt
-              • Overvoltage / Undervoltage ↔ Quá áp / Thấp áp
-              • Cell imbalance ↔ Mất cân bằng cell
-              • Short circuit ↔ Ngắn mạch
-              • Charging cycle ↔ Chu kỳ sạc
-              • Capacity fade ↔ Suy giảm dung lượng
+            - Preserve text inside double-bracket placeholders [[term_N]] exactly as-is — they will be substituted after translation.
             - Preserve the original tone exactly (formal stays formal, urgent stays urgent).
             - If the source language is already "{{targetLanguage}}", set "translated" to the original text unchanged.
 
