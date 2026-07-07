@@ -7,8 +7,8 @@ using TicketService.Application.Interfaces.Services;
 namespace TicketService.Infrastructure.Implements.Services;
 
 /// <summary>
-/// Transcribe audio bằng Gemini 1.5 Flash multimodal (inline base64, max 20MB).
-/// API key dùng chung với GeminiChatTextAiClient từ Chat:Ai:ApiKey (#567).
+/// Transcribe audio bằng Gemini multimodal (inline base64, max 20MB).
+/// Config: Chat:Ai:ApiKey (Gemini), Chat:Voice:ModelName.
 /// </summary>
 public class GeminiVoiceTranscriptionService : IVoiceTranscriptionService
 {

@@ -9,7 +9,7 @@ namespace TicketService.Infrastructure.Implements.Services;
 /// <summary>
 /// Gọi DeepSeek Chat Completions API (OpenAI-compatible) để phân tích sentiment,
 /// tóm tắt, dịch và phát hiện ngôn ngữ.
-/// Chọn provider bằng Chat:Provider = "DeepSeek" trong appsettings.
+/// Config: Chat:DeepSeek:ApiKey, Chat:DeepSeek:Model, Chat:DeepSeek:BaseUrl.
 /// </summary>
 public class DeepSeekChatTextAiClient : IChatTextAiClient
 {

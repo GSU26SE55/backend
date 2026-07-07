@@ -61,6 +61,52 @@ public class TicketChatsQueryHandlerTests
     private void SetupParticipants(List<TicketParticipant> participants) => _participantsRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketParticipant>(participants));
 
     [Fact]
+    public async Task Handle_DeletedChat_IncludedWithPlaceholderBody()
+    {
+        var ticketId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId, customerId);
+        var now = DateTime.UtcNow;
+
+        var deletedChat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            AuthorUserId = customerId,
+            AuthorRole = ActorRoleEnum.Customer,
+            Body = "Original content",
+            CreatedAt = now,
+            IsDeleted = true,
+            Ticket = ticket,
+            AttachmentFileIds = new List<Guid>()
+        };
+        var normalChat = MakeChat(Guid.NewGuid(), ticketId, ticket, now.AddMinutes(-1));
+
+        SetupTickets([ticket]);
+        SetupChats([deletedChat, normalChat]);
+        SetupParticipants([]);
+
+        var result = await _handler.Handle(new TicketChatsQuery
+        {
+            TicketId = ticketId,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"]
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Items.Should().HaveCount(2);
+
+        var deleted = result.Data.Items.Single(c => c.IsDeleted);
+        deleted.Body.Should().Be("Tin nhắn này đã bị xóa.");
+        deleted.AttachmentFileIds.Should().BeEmpty();
+        deleted.Mentions.Should().BeEmpty();
+        deleted.ActiveTranslation.Should().BeNull();
+
+        var normal = result.Data.Items.Single(c => !c.IsDeleted);
+        normal.Body.Should().Be("Hello");
+    }
+
+    [Fact]
     public async Task Handle_PinnedChatsSortedFirst_RegardlessOfCreatedAt()
     {
         var ticketId = Guid.NewGuid();

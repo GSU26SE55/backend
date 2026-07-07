@@ -52,6 +52,21 @@ public class ProfanityFilterTests
         matched.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("Giá trị nguyên thủy của pin")]
+    [InlineData("Nguyên nhân sự cố là gì?")]
+    [InlineData("nguồn điện bị ngắt")]
+    public void ContainsProfanity_WordContainingProfanityAsSubstring_ReturnsFalse(string text)
+    {
+        // "ngu" is in the list but must NOT match inside "nguyên", "nguồn", "nguyên"
+        var filter = CreateFilter();
+
+        var result = filter.ContainsProfanity(text, out var matched);
+
+        result.Should().BeFalse();
+        matched.Should().BeEmpty();
+    }
+
     [Fact]
     public void ContainsProfanity_EmptyBody_ReturnsFalse()
     {

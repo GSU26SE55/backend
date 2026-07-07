@@ -59,7 +59,6 @@ public class ChatAuthorizationService : IChatAuthorizationService
         TicketChat chat,
         Guid actorUserId,
         IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided,
         int editWindowMinutes)
     {
         if (chat.AuthorUserId == actorUserId)
@@ -76,8 +75,7 @@ public class ChatAuthorizationService : IChatAuthorizationService
     public ChatAuthorizationResult CanDeleteChat(
         TicketChat chat,
         Guid actorUserId,
-        IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided)
+        IReadOnlyCollection<string> actorPermissions)
     {
         if (chat.AuthorUserId == actorUserId)
             return ChatAuthorizationResult.Allowed;

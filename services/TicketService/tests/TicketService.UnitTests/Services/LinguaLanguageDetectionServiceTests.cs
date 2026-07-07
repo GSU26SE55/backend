@@ -29,11 +29,24 @@ public class LinguaLanguageDetectionServiceTests
         result.Should().Be("vi");
     }
 
-    [Fact]
-    public void Detect_AmbiguousShortText_ReturnsUndOrKnownLang()
+    [Theory]
+    [InlineData("ok")]
+    [InlineData("nguyên")]
+    [InlineData("hello")]
+    [InlineData("cảnh báo")]
+    public void Detect_ShortText_ReturnsUnd(string text)
     {
-        // Single word — Lingua may return "und"; result must be one of the 3 valid values
-        var result = _sut.Detect("ok");
-        result.Should().BeOneOf("en", "vi", "und");
+        // Under MinWordCount (4) — always "und" regardless of language
+        _sut.Detect(text).Should().Be("und");
+    }
+
+    [Fact]
+    public void Detect_NonEnViText_ReturnsEnOrUnd()
+    {
+        // Lingua only loads EN + VI — Latin-based languages (French, Spanish...) may be
+        // classified as "en" since it's the closest model. The key protection is MinWordCount
+        // for short texts; non-EN/VI long text may leak through as "en" which is acceptable.
+        var result = _sut.Detect("Le système de gestion de batterie détecte une anomalie.");
+        result.Should().BeOneOf("en", "und");
     }
 }

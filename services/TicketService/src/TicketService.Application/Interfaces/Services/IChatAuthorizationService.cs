@@ -7,15 +7,13 @@ using TicketService.Domain.Entities;
 namespace TicketService.Application.Interfaces.Services;
 
 /// <summary>
-/// Kết quả check quyền cho hành động edit/delete chat — tách riêng "không có quyền" (Forbidden),
-/// "có quyền nhưng thiếu reason bắt buộc" (ReasonRequired) và "author nhưng hết edit window"
-/// (EditWindowExpired) để handler giữ đúng status code/message hiện có (#515).
+/// Kết quả check quyền cho hành động edit/delete chat — tách riêng "không có quyền" (Forbidden)
+/// và "author nhưng hết edit window" (EditWindowExpired) để handler giữ đúng status code/message (#515).
 /// </summary>
 public enum ChatAuthorizationResult
 {
     Allowed,
     Forbidden,
-    ReasonRequired,
     EditWindowExpired
 }
 
@@ -28,25 +26,21 @@ public interface IChatAuthorizationService
     Task<bool> CanViewInternalChatsAsync(Guid ticketId, Guid actorUserId, IReadOnlyCollection<string> actorRoles, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Permission-aware (#515/#516) — Author trong <paramref name="editWindowMinutes"/> hoặc actor có
-    /// permission <c>chat.edit.any</c> (kèm <paramref name="reasonProvided"/>) thì được edit.
+    /// Author trong <paramref name="editWindowMinutes"/> thì được edit; hết window → EditWindowExpired.
     /// </summary>
     ChatAuthorizationResult CanEditChat(
         TicketChat chat,
         Guid actorUserId,
         IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided,
         int editWindowMinutes);
 
     /// <summary>
-    /// Permission-aware (#515/#516) — Author được xóa của mình bất cứ lúc nào; actor có permission
-    /// <c>chat.delete.any</c> (kèm <paramref name="reasonProvided"/>) được xóa của người khác.
+    /// Author được xóa của mình bất cứ lúc nào; người khác → Forbidden.
     /// </summary>
     ChatAuthorizationResult CanDeleteChat(
         TicketChat chat,
         Guid actorUserId,
-        IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided);
+        IReadOnlyCollection<string> actorPermissions);
 
     /// <summary>
     /// Permission-aware (#515/#516) — yêu cầu permission <c>chat.create.internal</c> khi

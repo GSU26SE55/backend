@@ -80,8 +80,7 @@ public class TicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Sửa nội dung bình luận đã tồn tại — Author sửa được trong 15 phút kể từ lúc tạo;
-    /// Manager/Admin sửa được bất cứ lúc nào nhưng phải kèm <c>EditReason</c>.
+    /// Sửa nội dung bình luận đã tồn tại — chỉ Author sửa được trong 15 phút kể từ lúc tạo.
     /// </summary>
     /// <remarks>
     /// - Block khi ticket đã <c>Closed</c>.
@@ -89,7 +88,7 @@ public class TicketChatsController : ControllerBase
     /// </remarks>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần sửa.</param>
-    /// <param name="command">Nội dung mới và lý do sửa (nếu không phải Author).</param>
+    /// <param name="command">Nội dung mới.</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Sửa bình luận thành công.</response>
     /// <response code="400">Dữ liệu không hợp lệ hoặc ticket đã đóng.</response>
@@ -126,8 +125,7 @@ public class TicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa (soft-delete) bình luận — Author xóa được của mình bất cứ lúc nào;
-    /// Manager/Admin xóa được của bất kỳ ai nhưng phải kèm <c>DeleteReason</c>.
+    /// Xóa (soft-delete) bình luận — chỉ Author xóa được của mình.
     /// </summary>
     /// <remarks>
     /// - Block khi ticket đã <c>Closed</c>.
@@ -135,7 +133,7 @@ public class TicketChatsController : ControllerBase
     /// </remarks>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần xóa.</param>
-    /// <param name="command">Lý do xóa (bắt buộc nếu không phải Author).</param>
+    /// <param name="command">Request body (không cần thiết, có thể bỏ qua).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Xóa bình luận thành công.</response>
     /// <response code="400">Dữ liệu không hợp lệ hoặc ticket đã đóng.</response>
@@ -416,6 +414,35 @@ public class TicketChatsController : ControllerBase
         {
             TicketId = ticketId,
             ChatId = id,
+            ActorUserId = actorId.Value,
+            ActorRoles = GetCurrentRoles()
+        }, ct);
+
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Tổng hợp toàn bộ files đã gửi qua chat trong ticket — Customer chỉ thấy files từ chat IsInternal=false.
+    /// </summary>
+    /// <param name="ticketId">ID của Ticket.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách thành công.</response>
+    /// <response code="403">Không có quyền truy cập ticket.</response>
+    /// <response code="404">Không tìm thấy ticket.</response>
+    [HttpGet("files")]
+    [ProducesResponseType(typeof(CommonResponse<List<TicketAttachmentDTO>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatFiles(Guid ticketId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ChatFileSummaryQuery
+        {
+            TicketId = ticketId,
             ActorUserId = actorId.Value,
             ActorRoles = GetCurrentRoles()
         }, ct);

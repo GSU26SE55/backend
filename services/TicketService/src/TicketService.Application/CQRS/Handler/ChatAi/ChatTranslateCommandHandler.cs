@@ -18,6 +18,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
     private readonly ICacheService _cache;
     private readonly ILanguageDetectionService _langDetector;
     private readonly IChatAuthorizationService _chatAuth;
+    private readonly IPiiDetector _piiDetector;
     private readonly ILogger<ChatTranslateCommandHandler> _logger;
 
     private const string CacheKeyPrefix = "chat-translation";
@@ -31,6 +32,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         ICacheService cache,
         ILanguageDetectionService langDetector,
         IChatAuthorizationService chatAuth,
+        IPiiDetector piiDetector,
         ILogger<ChatTranslateCommandHandler> logger)
     {
         _uow = uow;
@@ -38,6 +40,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         _cache = cache;
         _langDetector = langDetector;
         _chatAuth = chatAuth;
+        _piiDetector = piiDetector;
         _logger = logger;
     }
 
@@ -116,8 +119,10 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
             return OkResponse(existing, chat.OriginalLanguage, fromCache: false);
         }
 
-        // --- 6. Lingua: skip AI if source == target ---
-        var detectedLocal = _langDetector.Detect(chat.Body);
+        // --- 6. Mask PII + Lingua: skip AI if source == target ---
+        var (maskedBody, maskKey) = await _piiDetector.MaskAsync(chat.Body, ct);
+
+        var detectedLocal = _langDetector.Detect(maskedBody);
         if (detectedLocal != "und" && detectedLocal == targetLang)
         {
             return new ChatTranslateResponse
@@ -157,7 +162,7 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
 
         await _cache.SetAsync(lockKey, "1", LockTtl, ct);
 
-        // --- 8. AI: translate (Lingua result if known, fallback to OriginalLanguage, else AI detects) ---
+        // --- 8. AI: translate masked body (Lingua result if known, fallback to OriginalLanguage, else AI detects) ---
         var knownSource = detectedLocal != "und"
             ? detectedLocal
             : !string.IsNullOrEmpty(chat.OriginalLanguage) && chat.OriginalLanguage != "und"
@@ -168,7 +173,8 @@ public class ChatTranslateCommandHandler : IRequestHandler<ChatTranslateCommand,
         string detectedLang;
         try
         {
-            (translatedBody, detectedLang) = await _aiClient.TranslateWithDetectAsync(chat.Body, targetLang, knownSource, ct);
+            (translatedBody, detectedLang) = await _aiClient.TranslateWithDetectAsync(maskedBody, targetLang, knownSource, ct);
+            translatedBody = await _piiDetector.UnmaskAsync(translatedBody, maskKey, ct);
         }
         catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
         {

@@ -86,23 +86,10 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             chat,
             request.UserId,
             request.UserPermissions,
-            !string.IsNullOrWhiteSpace(request.EditReason),
             _chatOptions.EditWindowMinutes);
 
         if (authResult == ChatAuthorizationResult.EditWindowExpired)
             return Fail(403, $"Đã quá thời gian cho phép chỉnh sửa ({_chatOptions.EditWindowMinutes} phút).");
-
-        if (authResult == ChatAuthorizationResult.ReasonRequired)
-        {
-            var response = new TicketActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Dữ liệu đầu vào không hợp lệ."
-            };
-            response.ListErrors.Add(new Errors { Field = "EditReason", Detail = "Bắt buộc nhập lý do khi sửa bình luận của người khác." });
-            return response;
-        }
 
         if (authResult == ChatAuthorizationResult.Forbidden)
             return Fail(403, "Không có quyền sửa bình luận này.");
@@ -147,7 +134,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             ActivityActionEnum.ChatEdited,
             ChatTextHelper.Truncate(oldBody),
             ChatTextHelper.Truncate(request.Body),
-            request.EditReason);
+            null);
 
         if (warnings.Count > 0)
         {
@@ -163,7 +150,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             (int)request.UserRole,
             oldBody,
             request.Body,
-            request.EditReason ?? string.Empty), ct);
+            string.Empty), ct);
 
         // #633 — Soft-delete stale translations atomically with the chat edit save
         var translations = await _uow.TicketChatTranslations

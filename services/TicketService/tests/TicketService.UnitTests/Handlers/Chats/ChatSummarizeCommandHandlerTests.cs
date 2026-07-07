@@ -17,10 +17,16 @@ public class ChatSummarizeCommandHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IChatTextAiClient> _aiClient = new();
+    private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly IOptions<ChatOptions> _opts = Options.Create(new ChatOptions());
 
-    private ChatSummarizeCommandHandler CreateHandler() =>
-        new(_uow.Object, _aiClient.Object, _opts, NullLogger<ChatSummarizeCommandHandler>.Instance);
+    private ChatSummarizeCommandHandler CreateHandler()
+    {
+        _piiDetector
+            .Setup(p => p.MaskAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, CancellationToken _) => (text, string.Empty));
+        return new(_uow.Object, _aiClient.Object, _piiDetector.Object, _opts, NullLogger<ChatSummarizeCommandHandler>.Instance);
+    }
 
     private static Ticket BuildTicket(Guid id) => new()
     {
@@ -145,7 +151,7 @@ public class ChatSummarizeCommandHandlerTests
         {
             Ai = new ChatOptions.AiSection { SummarizeLinesCount = 3 }
         });
-        var handler = new ChatSummarizeCommandHandler(_uow.Object, _aiClient.Object, opts, NullLogger<ChatSummarizeCommandHandler>.Instance);
+        var handler = new ChatSummarizeCommandHandler(_uow.Object, _aiClient.Object, _piiDetector.Object, opts, NullLogger<ChatSummarizeCommandHandler>.Instance);
 
         _aiClient.Setup(c => c.SummarizeAsync(It.IsAny<string>(), 3, It.IsAny<CancellationToken>()))
                  .ReturnsAsync("- ý 1\n- ý 2\n- ý 3");

@@ -239,7 +239,7 @@ public class ChatAuthorizationServiceTests
         var actorId = Guid.NewGuid();
         var (service, chat) = MakeServiceAndOwnChat(actorId);
 
-        var result = service.CanEditChat(chat, actorId, RolePermissions[role], reasonProvided: false, editWindowMinutes: 15);
+        var result = service.CanEditChat(chat, actorId, RolePermissions[role], editWindowMinutes: 15);
 
         result.Should().Be(ChatAuthorizationResult.Allowed);
     }
@@ -250,7 +250,7 @@ public class ChatAuthorizationServiceTests
     {
         var (service, chat) = MakeServiceAndOthersChat();
 
-        var result = service.CanEditChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true, editWindowMinutes: 15);
+        var result = service.CanEditChat(chat, Guid.NewGuid(), RolePermissions[role], editWindowMinutes: 15);
 
         result.Should().Be(ChatAuthorizationResult.Forbidden);
     }
@@ -262,7 +262,7 @@ public class ChatAuthorizationServiceTests
         var actorId = Guid.NewGuid();
         var (service, chat) = MakeServiceAndOwnChat(actorId);
 
-        var result = service.CanDeleteChat(chat, actorId, RolePermissions[role], reasonProvided: false);
+        var result = service.CanDeleteChat(chat, actorId, RolePermissions[role]);
 
         result.Should().Be(ChatAuthorizationResult.Allowed);
     }
@@ -273,7 +273,7 @@ public class ChatAuthorizationServiceTests
     {
         var (service, chat) = MakeServiceAndOthersChat();
 
-        var result = service.CanDeleteChat(chat, Guid.NewGuid(), RolePermissions[role], reasonProvided: true);
+        var result = service.CanDeleteChat(chat, Guid.NewGuid(), RolePermissions[role]);
 
         result.Should().Be(ChatAuthorizationResult.Forbidden);
     }

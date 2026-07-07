@@ -16,11 +16,17 @@ public class ChatSentimentCheckCommandHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _uow = new();
     private readonly Mock<IChatTextAiClient> _aiClient = new();
+    private readonly Mock<IPiiDetector> _piiDetector = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _notifier = new();
     private readonly IOptions<ChatOptions> _opts = Options.Create(new ChatOptions());
 
-    private ChatSentimentCheckCommandHandler CreateHandler() =>
-        new(_uow.Object, _aiClient.Object, _notifier.Object, _opts);
+    private ChatSentimentCheckCommandHandler CreateHandler()
+    {
+        _piiDetector
+            .Setup(p => p.MaskAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, CancellationToken _) => (text, string.Empty));
+        return new(_uow.Object, _aiClient.Object, _piiDetector.Object, _notifier.Object, _opts);
+    }
 
     private static Ticket BuildTicket(Guid id) => new()
     {

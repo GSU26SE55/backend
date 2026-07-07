@@ -57,6 +57,21 @@ public class PiiDetector : IPiiDetector
         return (masked, maskKey);
     }
 
+    public async Task<string> UnmaskAsync(string text, string maskKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(maskKey) || string.IsNullOrEmpty(text))
+            return text;
+
+        var maskMap = await _cache.GetAsync<Dictionary<string, string>>(maskKey, ct);
+        if (maskMap == null)
+            return text;
+
+        foreach (var (placeholder, original) in maskMap)
+            text = text.Replace(placeholder, original, StringComparison.OrdinalIgnoreCase);
+
+        return text;
+    }
+
     private static string ReplaceMatches(string text, Regex regex, string label, Dictionary<string, string> maskMap)
     {
         var counter = maskMap.Count(kv => kv.Key.StartsWith($"[{label}-"));

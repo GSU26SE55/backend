@@ -19,6 +19,7 @@ public class ChatTranslateCommandHandlerTests
     private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<ILanguageDetectionService> _langDetector = new();
     private readonly Mock<IChatAuthorizationService> _chatAuth = new();
+    private readonly Mock<IPiiDetector> _piiDetector = new();
 
     private ChatTranslateCommandHandler CreateHandler()
     {
@@ -46,8 +47,16 @@ public class ChatTranslateCommandHandlerTests
             .Setup(c => c.RemoveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        // Default: PII detector is a pass-through (no PII in test bodies)
+        _piiDetector
+            .Setup(p => p.MaskAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, CancellationToken _) => (text, string.Empty));
+        _piiDetector
+            .Setup(p => p.UnmaskAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, string _, CancellationToken _) => text);
+
         return new(_uow.Object, _aiClient.Object, _cache.Object, _langDetector.Object, _chatAuth.Object,
-            NullLogger<ChatTranslateCommandHandler>.Instance);
+            _piiDetector.Object, NullLogger<ChatTranslateCommandHandler>.Instance);
     }
 
     private static Ticket BuildTicket(Guid id) => new()

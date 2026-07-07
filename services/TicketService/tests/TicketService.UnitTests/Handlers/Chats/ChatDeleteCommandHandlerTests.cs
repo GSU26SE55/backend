@@ -116,7 +116,6 @@ public class ChatDeleteCommandHandlerTests
             UserId = managerId,
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
-            DeleteReason = "Spam content",
             UserPermissions = new List<string>()
         };
 
@@ -148,7 +147,6 @@ public class ChatDeleteCommandHandlerTests
             UserId = adminId,
             UserRole = ActorRoleEnum.Admin,
             UserDisplayName = "Admin",
-            DeleteReason = "Policy violation",
             UserPermissions = new List<string>()
         };
 
@@ -354,25 +352,6 @@ public class ChatDeleteCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(404);
         chat.IsDeleted.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Validate_DeleteReasonTooLong_ReturnsError()
-    {
-        var command = new ChatDeleteCommand
-        {
-            TicketId = Guid.NewGuid(),
-            ChatId = Guid.NewGuid(),
-            UserId = Guid.NewGuid(),
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            DeleteReason = new string('a', 1001)
-        };
-
-        var result = await command.ValidateAsync();
-
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(e => e.Field == "DeleteReason");
     }
 
     [Fact]

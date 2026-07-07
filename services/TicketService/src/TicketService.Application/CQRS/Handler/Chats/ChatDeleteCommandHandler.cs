@@ -5,7 +5,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -74,20 +73,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         var authResult = _chatAuthorizationService.CanDeleteChat(
             chat,
             request.UserId,
-            request.UserPermissions,
-            !string.IsNullOrWhiteSpace(request.DeleteReason));
-
-        if (authResult == ChatAuthorizationResult.ReasonRequired)
-        {
-            var response = new TicketActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Dữ liệu đầu vào không hợp lệ."
-            };
-            response.ListErrors.Add(new Errors { Field = "DeleteReason", Detail = "Bắt buộc nhập lý do khi xóa bình luận của người khác." });
-            return response;
-        }
+            request.UserPermissions);
 
         if (authResult == ChatAuthorizationResult.Forbidden)
             return Fail(403, "Không có quyền xóa bình luận này.");
@@ -106,7 +92,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             ActivityActionEnum.ChatDeleted,
             ChatTextHelper.Truncate(oldBody),
             null,
-            request.DeleteReason);
+            null);
 
         await _outboxWriter.WriteAsync(new ChatDeletedEvent(
             chat.Id,

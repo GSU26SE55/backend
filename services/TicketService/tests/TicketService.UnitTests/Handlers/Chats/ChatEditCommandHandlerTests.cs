@@ -201,7 +201,6 @@ public class ChatEditCommandHandlerTests
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
             Body = "Edited by manager",
-            EditReason = "Redact PII",
             UserPermissions = new List<string>()
         };
 
@@ -424,23 +423,4 @@ public class ChatEditCommandHandlerTests
         result.ListErrors.Should().Contain(e => e.Field == "Body");
     }
 
-    [Fact]
-    public async Task Validate_EditReasonTooLong_ReturnsError()
-    {
-        var command = new ChatEditCommand
-        {
-            TicketId = Guid.NewGuid(),
-            ChatId = Guid.NewGuid(),
-            UserId = Guid.NewGuid(),
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            Body = "Edited body",
-            EditReason = new string('a', 1001)
-        };
-
-        var result = await command.ValidateAsync();
-
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
-    }
 }
