@@ -101,4 +101,62 @@ public class MyTicketsAsStaffQueryHandlerTests
         result.Data!.Items[0].Code.Should().Be("P1");
         result.Data.Items[1].Code.Should().Be("P3");
     }
+
+    private static Ticket WithTimer(Ticket ticket, DateTime dueAt)
+    {
+        ticket.SlaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            Status = SlaTimerStatusEnum.Running,
+            StartedAt = DateTime.UtcNow.AddHours(-1),
+            DueAt = dueAt
+        };
+        return ticket;
+    }
+
+    [Fact]
+    public async Task Handle_SlaOpenFilter_ReturnsOnlyMonitoredWithTimer()
+    {
+        var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
+        SetupMock([
+            WithTimer(MakeTicket(myId, TicketStatusEnum.InProgress, code: "KEEP"), DateTime.UtcNow.AddHours(2)),
+            MakeTicket(myId, TicketStatusEnum.InProgress, code: "NO-TIMER"),
+            WithTimer(MakeTicket(myId, TicketStatusEnum.New, code: "NOT-MONITORED"), DateTime.UtcNow.AddHours(2)),
+            WithTimer(MakeTicket(myId, TicketStatusEnum.Resolved, code: "RESOLVED"), DateTime.UtcNow.AddHours(2))
+        ]);
+
+        var result = await _handler.Handle(new MyTicketsAsStaffQuery
+        {
+            SlaOpen = true,
+            PageNumber = 1,
+            PageSize = 10
+        }, default);
+
+        result.Data!.TotalItems.Should().Be(1);
+        result.Data.Items[0].Code.Should().Be("KEEP");
+    }
+
+    [Fact]
+    public async Task Handle_SortBySlaRemaining_NearestDueFirst_NoTimerLast()
+    {
+        var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
+        SetupMock([
+            WithTimer(MakeTicket(myId, code: "FAR"), DateTime.UtcNow.AddHours(10)),
+            WithTimer(MakeTicket(myId, code: "NEAR"), DateTime.UtcNow.AddHours(1)),
+            MakeTicket(myId, code: "NO-TIMER")
+        ]);
+
+        var result = await _handler.Handle(new MyTicketsAsStaffQuery
+        {
+            SortBy = "slaRemaining",
+            PageNumber = 1,
+            PageSize = 10
+        }, default);
+
+        result.Data!.Items[0].Code.Should().Be("NEAR");
+        result.Data.Items[1].Code.Should().Be("FAR");
+        result.Data.Items[2].Code.Should().Be("NO-TIMER");
+    }
 }

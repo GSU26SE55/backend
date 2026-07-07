@@ -1312,6 +1312,7 @@ POST   /api/environmental-incidents/{id}/false-alarm  (Admin/Manager)
 
 # Dashboard
 GET    /api/battery/dashboard/stats                   (Admin/Manager)
+GET    /api/sites/dashboard/stats                     (Admin/Manager) — snapshot toàn bộ site: total/active, tổng pin, avg health, at-risk <80 (2026-07-07, xem docs/api-battery.md)
 
 # Health
 GET    /api/battery/health                            (Internal — for k8s probes)
@@ -2219,8 +2220,9 @@ POST   /api/v1/tickets/{id}/attachments                  (Customer/Staff)
 DELETE /api/v1/attachments/{id}                          (uploader / Admin)
 
 # Dashboard
-GET    /api/v1/ticket/dashboard/stats                    (Admin/Manager)
-GET    /api/v1/ticket/dashboard/sla-trend                (Admin/Manager)
+GET    /api/tickets/dashboard/stats                      (Admin/Manager) — ĐÃ IMPLEMENT 2026-07-07; route thực tế KHÔNG có prefix v1 (spec cũ: /api/v1/ticket/dashboard/stats). Xem docs/api-ticket.md
+GET    /api/staff/tickets/dashboard/stats                (Staff) — snapshot KPI per-staff từ JWT (2026-07-07, xem docs/api-ticket.md)
+GET    /api/v1/ticket/dashboard/sla-trend                (Admin/Manager) — chưa implement; nhu cầu time-series đã được thay bằng nhóm GET /api/reports/*
 
 # Health
 GET    /api/v1/ticket/health

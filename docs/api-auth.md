@@ -14,7 +14,7 @@
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -347,6 +347,7 @@ Các DTO bên dưới được tham chiếu bởi nhiều endpoint (`GET /api/au
 | `emailConfirmed` | `bool` | Không | Email đã verify chưa |
 | `phoneConfirmed` | `bool` | Không | Phone đã verify chưa (chỉ true sau khi user verify OTP SMS) |
 | `twoFactorEnabled` | `bool` | Không | 2FA đang bật không |
+| `isGoogleLinked` | `bool` | Không | `true` nếu account đã liên kết đăng nhập Google (`Account.GoogleId != null`). Màn Cài đặt dùng field này để hiện nút "Liên kết" / "Hủy liên kết" Google (`POST /api/accounts/me/link-google` / `unlink-google`). **Không expose `googleId`** — chỉ trả cờ bool |
 | `status` | `AccountStatusEnum` | Không | Trạng thái account — int (`0` = PendingVerification, …) |
 | `lastLoginAt` | `DateTime?` | Null nếu chưa từng login | Lần login cuối UTC |
 | `createdAt` | `DateTime` | Không | Account tạo lúc nào UTC |
@@ -2528,6 +2529,8 @@ Header: `Authorization: Bearer {accessToken}`
 
 **Response thành công `200`:** `data` là `AccountDto`, gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
 
+> **2026-07-07:** `AccountDto` bổ sung field `isGoogleLinked` (bool) — FE màn Cài đặt dùng để toggle nút "Liên kết Google"/"Hủy liên kết" thay cho hardcode `isLinked={false}`.
+
 ---
 
 ### `PUT /api/auth/me/profile`
@@ -2673,7 +2676,7 @@ Authorization: Bearer {accessToken}
         "createdAt": "2026-05-11T14:05:53.000Z"
       }
     ],
-    "listErrors": []
+    "listErrors": null
   }
 }
 ```
@@ -2690,7 +2693,7 @@ Authorization: Bearer {accessToken}
     "roleName": "Staff",
     "permissions": []
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -2711,7 +2714,7 @@ Authorization: Bearer {accessToken}
   "statusCode": 403,
   "message": "Tài khoản chưa được gán role.",
   "data": null,
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -2954,6 +2957,42 @@ Base route: `/api/admin/accounts`
 
 ---
 
+### `GET /api/admin/accounts/stats`
+
+**Mục đích:** Snapshot thống kê account — donut "Người dùng theo vai trò" trên Dashboard Admin. Thay cho việc FE tự đếm role trên 1 trang list (cap 200 → sai số khi vượt pageSize).
+
+**Auth:** Admin hoặc Manager
+
+**Query params:** Không có — endpoint snapshot, **không nhận from/to**. FE nên cache ~1 phút (staleTime).
+
+**Response thành công `200`:** `CommonResponse<AccountStatsDto>`
+
+```json
+{
+  "isSuccess": true, "statusCode": 200, "message": "",
+  "data": {
+    "total": 87,
+    "countByRole": { "Admin": 2, "Manager": 4, "Staff": 18, "Customer": 62 }
+  },
+  "listErrors": null
+}
+```
+
+**Chi tiết `AccountStatsDto`** — mọi field đều **không null** (`data` chỉ null khi lỗi):
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `total` | `int` | Tổng account chưa xóa mềm (mọi status, kể cả PendingVerification/Locked) |
+| `countByRole` | `Dictionary<string,int>` | Số account theo **tên role** — key lấy từ bảng Roles (`"Admin"`, `"Manager"`, `"Staff"`, `"Customer"`), **zero-fill đủ mọi role đang tồn tại** trong hệ thống (role chưa có account = `0`) |
+
+> **Lưu ý:** account **chưa gán role** (`roleId = null`) chỉ được tính vào `total`, không xuất hiện trong `countByRole` — vì vậy tổng các value của `countByRole` có thể **nhỏ hơn** `total`. FE vẽ donut theo `countByRole`; nếu muốn hiện phần "chưa gán role" thì tính `total − sum(countByRole)`.
+
+**Lỗi thường gặp:**
+- `401` — Token không hợp lệ hoặc hết hạn
+- `403` — Không có role Admin/Manager
+
+---
+
 ### `GET /api/admin/accounts/{id}`
 
 **Mục đích:** Xem chi tiết một tài khoản.
@@ -3032,7 +3071,7 @@ Base route: `/api/admin/accounts`
   "statusCode": 201,
   "message": "Đã gửi email invite. User cần accept để kích hoạt tài khoản.",
   "data": "ab67cb7c-e960-4d2d-ac45-bc1393581ca6",
-  "listErrors": []
+  "listErrors": null
 }
 ```
 

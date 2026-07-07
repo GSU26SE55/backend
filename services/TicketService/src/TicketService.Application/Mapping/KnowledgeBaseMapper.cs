@@ -59,7 +59,8 @@ public static class KnowledgeBaseMapper
             Title = a.Title,
             Symptoms = a.Symptoms,
             HelpfulCount = a.HelpfulCount,
-            ViewCount = a.ViewCount
+            ViewCount = a.ViewCount,
+            IsInternalOnly = a.IsInternalOnly
         };
     }
 

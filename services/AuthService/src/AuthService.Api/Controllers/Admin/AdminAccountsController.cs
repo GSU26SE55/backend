@@ -95,6 +95,33 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
+    /// Snapshot thống kê account (total + count theo role) — donut "Người dùng theo vai trò" trên Dashboard Admin.
+    /// </summary>
+    /// <remarks>
+    /// Thay cho việc FE tự đếm role trên 1 trang list (bị cap theo pageSize).
+    ///
+    /// Cách hoạt động:
+    /// - <c>Total</c>: tổng account chưa xóa — có thể lớn hơn tổng <c>CountByRole</c> nếu có account chưa gán role.
+    /// - <c>CountByRole</c>: đếm theo tên role, zero-fill đủ mọi role đang có trong hệ thống.
+    /// - Snapshot hiện tại — KHÔNG nhận from/to. FE nên cache ~1 phút (staleTime).
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
+    /// <returns>Thống kê account.</returns>
+    /// <response code="200">Lấy thống kê thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin hoặc Manager.</response>
+    [HttpGet("stats")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountStatsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStats(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAccountStatsQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Admin lấy chi tiết 1 account theo Id — trả full profile bao gồm role assignments, 2FA status, ProviderLinks, audit trail counts.
     /// </summary>
     /// <remarks>

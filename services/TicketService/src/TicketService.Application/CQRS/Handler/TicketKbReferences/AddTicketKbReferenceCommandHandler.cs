@@ -47,18 +47,28 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
             }
         }
 
-        // KIỂM TRA LOCK LOGIC: Không cho gán bài viết khi đã báo Resolved hoặc đã Closed
-        if (ticket.Status == TicketStatusEnum.Resolved ||
-            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
-            ticket.Status == TicketStatusEnum.Closed)
+        // KIỂM TRA LOCK LOGIC: Không cho gán bài viết khi đã báo Resolved hoặc đã Closed.
+        // Ngoại lệ: 2 type "after-resolve" (GeneratedAfterResolve, ProvidedToCustomer) về ngữ nghĩa
+        // xảy ra lúc/sau khi Resolved nên vẫn cho gán ở state Resolved; từ ClosedPendingRate trở đi chặn tất cả.
+        var isAfterResolveType = command.ReferenceType == KbReferenceTypeEnum.GeneratedAfterResolve ||
+                                 command.ReferenceType == KbReferenceTypeEnum.ProvidedToCustomer;
+        if (ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+            ticket.Status == TicketStatusEnum.Closed ||
+            (ticket.Status == TicketStatusEnum.Resolved && !isAfterResolveType))
         {
-            return Fail(403, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể gán thêm tài liệu tham khảo.");
+            // 409: xung đột với trạng thái hiện tại của ticket (không phải lỗi quyền)
+            return Fail(409, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể gán thêm tài liệu tham khảo.");
         }
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.KbArticleId, ct);
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
+
+        // HÀNG RÀO NGHIỆP VỤ: bài viết nội bộ (IsInternalOnly) không được cung cấp cho khách hàng.
+        // 422: request đúng format nhưng dữ liệu vi phạm rule nghiệp vụ (không phải lỗi quyền/field).
+        if (command.ReferenceType == KbReferenceTypeEnum.ProvidedToCustomer && article.IsInternalOnly)
+            return Fail(422, "Bài viết nội bộ không thể gán với loại tham chiếu 'Cung cấp cho khách hàng'.");
 
         var existing = await _uow.TicketKbReferences.GetAllAsync()
             .IgnoreQueryFilters()

@@ -15,9 +15,11 @@
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
+
+> `listErrors` chỉ là mảng `[{ "field": "...", "detail": "..." }]` khi có lỗi validation field-level; mọi trường hợp khác (thành công, lỗi nghiệp vụ/quyền — chỉ có `message`) BE serialize thành **`null`** (`ErrorsListJsonConverter`), không bao giờ trả `[]`.
 
 **Pagination response:**
 ```json
@@ -1084,6 +1086,50 @@ Nếu site không có asset nào, healthScore = 100.
 
 ---
 
+### `GET /api/sites/dashboard/stats`
+
+**Mục đích:** Snapshot tổng hợp **TOÀN BỘ site** cho Dashboard Admin/Manager (KPI "Sites → N hoạt động", "Trung bình X% sức khỏe site", "Sites cần chú ý <80%") — khác `GET /api/sites/{id}/dashboard` là dashboard của **một** site. Thay cho việc FE tự tính trung bình health trên 1 trang list (cap 100 → sai số khi vượt pageSize).
+
+**Auth:** Bắt buộc (Admin hoặc Manager) — cùng quyền với `GET /api/sites`.
+
+**Query params:** Không có — endpoint snapshot, **không nhận from/to**. FE nên cache ~1 phút (staleTime).
+
+**Response thành công `200`:** `CommonResponse<SiteDashboardStatsDto>`
+
+```json
+{
+  "isSuccess": true, "statusCode": 200, "message": "",
+  "data": {
+    "total": 12,
+    "activeCount": 10,
+    "totalBatteries": 480,
+    "activeBatteries": 452,
+    "avgHealth": 88.42,
+    "atRiskCount": 2
+  },
+  "listErrors": null
+}
+```
+
+**Chi tiết `SiteDashboardStatsDto`** — mọi field đều **không null** (`data` chỉ null khi lỗi):
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `total` | `int` | Tổng số site (không tính đã xóa mềm) |
+| `activeCount` | `int` | Số site có `status = Active` (không tính `UnderMaintenance`/`Decommissioned`) |
+| `totalBatteries` | `int` | Tổng battery asset **toàn hệ thống** — gồm cả asset **chưa gán site** — cố ý **khớp `totalAssets`** của `GET /api/battery/dashboard/stats` để 2 dashboard không vênh số |
+| `activeBatteries` | `int` | Số asset đang `Active` toàn hệ thống — khớp `activeAssets` của battery stats |
+| `avgHealth` | `number` | Trung bình `healthScore` của các site, làm tròn 2 chữ số. Health từng site tính **cùng công thức** với `GET /api/sites/{id}/dashboard` (100 − inactive×5 − alertAssets×10, clamp [0,100]; site chưa có asset = 100). `= 0` khi chưa có site nào |
+| `atRiskCount` | `int` | Số site có `healthScore < 80` — khớp ngưỡng màu "Tốt" ở bảng trên |
+
+> **Lưu ý:** asset chưa gán site được tính vào `totalBatteries`/`activeBatteries` nhưng **không** ảnh hưởng health của site nào. `assetsWithActiveAlerts` dùng cùng định nghĩa alert active (`Open`/`Acknowledged`, distinct theo asset, loại alert/asset đã xóa) với endpoint per-site.
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `403` — Không có role Admin/Manager
+
+---
+
 ### `GET /api/sites/{siteId}/assets`
 
 **Mục đích:** Danh sách battery asset thuộc một site.
@@ -1280,6 +1326,8 @@ Base route: `/api/thresholds`
 ## Nhóm 7 — Dashboard
 
 Base route: `/api/battery/dashboard`
+
+> Liên quan: `GET /api/sites/dashboard/stats` (snapshot tổng hợp toàn bộ site — Nhóm 5) dùng cùng mục đích dashboard nhưng nằm dưới route `api/sites`.
 
 ---
 
@@ -2688,6 +2736,7 @@ Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` 
 | GET | `/api/sites/me` | Site của customer | Customer |
 | GET | `/api/sites/{id}` | Chi tiết site | Mọi role |
 | GET | `/api/sites/{id}/dashboard` | Dashboard site | Mọi role |
+| GET | `/api/sites/dashboard/stats` | Snapshot tổng hợp toàn bộ site (avg health, at-risk) | Admin/Manager |
 | GET | `/api/sites/{siteId}/assets` | Pin tại site | Mọi role |
 | POST | `/api/admin/sites` | Tạo site | Admin |
 | PUT | `/api/admin/sites/{id}` | Cập nhật site | Admin |

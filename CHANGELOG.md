@@ -3,6 +3,24 @@
 Tuân theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 Versions tuân theo [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+> **Dashboard aggregate endpoints** theo yêu cầu FE (FE đang tự đếm KPI trên 1 trang list → sai số khi vượt pageSize). Docs chi tiết: `docs/api-ticket.md` / `docs/api-battery.md` / `docs/api-auth.md` (changelog 2026-07-07). Issue/PR number gán khi ship.
+
+### Added
+
+- `GET /api/tickets/dashboard/stats` (Manager/Admin) — snapshot KPI ticket toàn hệ thống: total/open, SLA summary + compliance, countByStatus (zero-fill 14 status), countByPriority, trend tạo mới 7 ngày (UTC), workload theo staff.
+- `GET /api/staff/tickets/dashboard/stats` (Staff) — snapshot KPI per-staff từ JWT: open/resolved, near-breach ≤25% / breached / paused / slaMonitored, slaRisk, countByStatus, trend 7 ngày.
+- `GET /api/sites/dashboard/stats` (Admin/Manager) — snapshot toàn bộ site: total/active, tổng pin (khớp battery stats), avg health (công thức dùng chung `SiteHealthCalculator` với per-site dashboard), at-risk < 80.
+- `GET /api/admin/accounts/stats` (Admin/Manager) — total account + countByRole (zero-fill theo bảng Roles).
+- `GET /api/staff/tickets/me`: thêm query param `SlaOpen` (filter server-side nhóm ticket đang theo dõi SLA — bảng SLA Monitor hết cap 100) + `SortBy=slaRemaining` (sort theo dueAt tăng dần, ticket không timer xếp cuối).
+- `AccountDto.isGoogleLinked` (bool) — `GET /api/auth/me` và mọi endpoint trả AccountDto; FE màn Cài đặt toggle nút Liên kết Google.
+- `KbArticleSuggestDTO.isInternalOnly` (bool).
+
+### Changed
+
+- `POST /api/knowledge-base/references`: nới guard trạng thái — state `Resolved` cho phép gán 2 type after-resolve (`GeneratedAfterResolve`, `ProvidedToCustomer`); chặn bài `isInternalOnly` với type `ProvidedToCustomer` (`422`); chuẩn hóa status code — state lock đổi `403` → **`409`**, `403` chỉ còn cho lỗi quyền. ⚠️ **Breaking cho FE** nào đang bắt riêng mã `403` của state lock.
+
 ## [1.6.0] — 2026-06-18 (Sprint additional-auth)
 
 > Sprint **AuthService Security Hardening** — 76/90 task `#AUTH-01..90` (`#349..#438`) merged qua PR #446 + #441. 14 task defer/skip có ghi rõ ở §69 `overall.md`. Reference: `issue-authservice.md` 88 issue audit gốc.

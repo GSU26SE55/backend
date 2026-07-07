@@ -43,13 +43,19 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = sla.Status == SlaTimerStatusEnum.Running
-                ? (sla.DueAt != sla.StartedAt
-                    ? Math.Max(0, (sla.DueAt - DateTime.UtcNow).TotalMinutes /
-                        (sla.DueAt - sla.StartedAt).TotalMinutes * 100)
-                    : 0d)
-                : 0d
+            RemainingPercent = ComputeRemainingPercent(sla.Status, sla.StartedAt, sla.DueAt, DateTime.UtcNow)
         };
+    }
+
+    /// <summary>
+    /// % SLA còn lại tại thời điểm <paramref name="atUtc"/> — 0 nếu timer không ở trạng thái Running hoặc đã quá hạn.
+    /// Dùng chung cho SlaTimerDTO và dashboard stats để hai nơi không lệch công thức.
+    /// </summary>
+    public static double ComputeRemainingPercent(SlaTimerStatusEnum status, DateTime startedAt, DateTime dueAt, DateTime atUtc)
+    {
+        if (status != SlaTimerStatusEnum.Running || dueAt == startedAt)
+            return 0d;
+        return Math.Max(0, (dueAt - atUtc).TotalMinutes / (dueAt - startedAt).TotalMinutes * 100);
     }
 
     public static bool CanAccessTicket(
