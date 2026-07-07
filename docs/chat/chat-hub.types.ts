@@ -95,9 +95,15 @@ export interface KbArticleSuggestDTO {
   id: string;
   code: string;
   title: string;
-  category: string;
+  /** DTO thực tế trả `symptoms` (triệu chứng) — không phải `category` (fix drift 2026-07-07). */
+  symptoms: string;
   helpfulCount: number;
   viewCount: number;
+  /**
+   * true = bài nội bộ — KHÔNG gán được với referenceType ProvidedToCustomer (BE trả 422).
+   * Suggest endpoints lọc sẵn bài nội bộ nên thường luôn false (2026-07-07).
+   */
+  isInternalOnly: boolean;
 }
 
 export interface ChatAttachKbReferencePayload {

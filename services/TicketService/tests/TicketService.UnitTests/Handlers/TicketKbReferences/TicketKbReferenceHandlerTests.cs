@@ -25,7 +25,7 @@ public class TicketKbReferenceHandlerTests
             AssignedStaffId = assignedStaffId
         };
 
-    private static KnowledgeBaseArticle BuildArticle()
+    private static KnowledgeBaseArticle BuildArticle(bool isInternalOnly = false)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -35,7 +35,8 @@ public class TicketKbReferenceHandlerTests
             Symptoms = "s",
             DiagnosisSteps = "d",
             SolutionSteps = "sol",
-            Status = KbArticleStatusEnum.Published
+            Status = KbArticleStatusEnum.Published,
+            IsInternalOnly = isInternalOnly
         };
 
     // ────────────────────────────────────────────────
@@ -146,6 +147,159 @@ public class TicketKbReferenceHandlerTests
             x => x.TicketId == ticket.Id &&
                  x.KbArticleId == article.Id &&
                  x.KbArticleCode == article.Code)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Add_InternalOnlyArticle_ProvidedToCustomer_Returns422()
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket();
+        var article = BuildArticle(isInternalOnly: true);
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(422); // vi phạm rule nghiệp vụ — không phải lỗi quyền
+        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Never);
+        kbRefs.Verify(r => r.UpdateAsync(It.IsAny<TicketKbReference>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Add_InternalOnlyArticle_ConsultedDuringResolve_Returns200()
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket();
+        var article = BuildArticle(isInternalOnly: true);
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ConsultedDuringResolve,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(KbReferenceTypeEnum.GeneratedAfterResolve)]
+    [InlineData(KbReferenceTypeEnum.ProvidedToCustomer)]
+    public async Task Add_ResolvedTicket_AfterResolveTypes_Returns200(KbReferenceTypeEnum referenceType)
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket(TicketStatusEnum.Resolved);
+        var article = BuildArticle();
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = referenceType,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Add_ResolvedTicket_ConsultedDuringResolve_Returns409()
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket(TicketStatusEnum.Resolved);
+        var article = BuildArticle();
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ConsultedDuringResolve,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(409); // xung đột trạng thái ticket — không phải lỗi quyền
+    }
+
+    [Theory]
+    [InlineData(TicketStatusEnum.ClosedPendingRate)]
+    [InlineData(TicketStatusEnum.Closed)]
+    public async Task Add_ClosedTicket_AfterResolveTypes_StillReturns409(TicketStatusEnum status)
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket(status);
+        var article = BuildArticle();
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.GeneratedAfterResolve,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(409); // từ ClosedPendingRate trở đi chặn mọi type — xung đột trạng thái
+    }
+
+    [Fact]
+    public async Task Add_ResolvedTicket_ProvidedToCustomer_InternalOnlyArticle_StillReturns422()
+    {
+        _currentUserMock.Setup(s => s.Role).Returns("Admin");
+        var ticket = BuildTicket(TicketStatusEnum.Resolved);
+        var article = BuildArticle(isInternalOnly: true);
+
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket },
+            kbSeed: new[] { article });
+        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
+
+        var result = await handler.Handle(new AddTicketKbReferenceCommand
+        {
+            TicketId = ticket.Id,
+            KbArticleId = article.Id,
+            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(422); // guard nghiệp vụ internal-only vẫn thắng dù state Resolved cho phép type này
+        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Never);
     }
 
     [Fact]

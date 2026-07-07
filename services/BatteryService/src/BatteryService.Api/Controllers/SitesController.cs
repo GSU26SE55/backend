@@ -208,4 +208,31 @@ public class SitesController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Snapshot tổng hợp TOÀN BỘ site (total/active, tổng pin, avg health, số site at-risk &lt;80%) — UI Dashboard Admin/Manager.
+    /// </summary>
+    /// <remarks>
+    /// Khác <c>GET /{id}/dashboard</c> (dashboard của MỘT site) — endpoint này gộp system-wide,
+    /// thay cho việc FE tự tính trung bình health trên 1 trang list (bị cap theo pageSize).
+    ///
+    /// Cách hoạt động:
+    /// - Health từng site tính cùng công thức với <c>GET /{id}/dashboard</c> (100 − inactive×5 − alertAssets×10, clamp [0,100]).
+    /// - <c>TotalBatteries</c>/<c>ActiveBatteries</c> đếm toàn hệ thống (gồm cả asset chưa gán site) — khớp số của <c>/api/battery/dashboard/stats</c>.
+    /// - Snapshot hiện tại — KHÔNG nhận from/to. FE nên cache ~1 phút (staleTime).
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Trả thống kê thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin/Manager.</response>
+    [HttpGet("dashboard/stats")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(typeof(CommonResponse<SiteDashboardStatsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetDashboardStats(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSiteDashboardStatsQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
 }

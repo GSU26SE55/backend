@@ -14,6 +14,10 @@ public class AccountDto
     public bool EmailConfirmed { get; set; }
     public bool PhoneConfirmed { get; set; }
     public bool TwoFactorEnabled { get; set; }
+
+    /// <summary>true nếu account đã liên kết đăng nhập Google (GoogleId != null) — màn Cài đặt FE dùng để hiện "Liên kết"/"Hủy liên kết".</summary>
+    public bool IsGoogleLinked { get; set; }
+
     public AccountStatusEnum Status { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }

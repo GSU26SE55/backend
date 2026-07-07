@@ -21,6 +21,7 @@ public static class AccountProfileMapper
             EmailConfirmed = account.EmailConfirmed,
             PhoneConfirmed = account.PhoneConfirmed,
             TwoFactorEnabled = account.TwoFactorEnabled,
+            IsGoogleLinked = account.GoogleId != null,
             Status = account.Status,
             LastLoginAt = account.LastLoginAt,
             CreatedAt = account.CreatedAt,

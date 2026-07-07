@@ -32,7 +32,7 @@ REST API hiện tại phơi 3 nhóm endpoint:
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -204,7 +204,7 @@ Authorization: Bearer eyJ...
     "pageNumber": 1,
     "pageSize": 20
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -295,7 +295,7 @@ Content-Type: application/json
   "statusCode": 201,
   "message": "Tạo notification thành công.",
   "data": "9f8e7d6c-5b4a-3210-fedc-ba9876543210",
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -373,7 +373,7 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
   "statusCode": 201,
   "message": "Đăng ký thiết bị thành công.",
   "data": "3c2b1a09-8d7e-6f5a-4b3c-2d1e0f9a8b7c",
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -427,7 +427,7 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
       "createdAt": "2026-06-01T08:00:00Z"
     }
   ],
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -477,7 +477,7 @@ Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Emai
     "quietHoursEnd": "07:00",
     "timeZone": "Asia/Ho_Chi_Minh"
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 

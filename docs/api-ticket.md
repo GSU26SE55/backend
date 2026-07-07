@@ -15,7 +15,7 @@
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -25,7 +25,7 @@
 | `statusCode` | `int` | HTTP status code |
 | `message` | `string?` | Thông báo tóm tắt kết quả |
 | `data` | `T?` | Dữ liệu trả về, `null` khi thất bại |
-| `listErrors` | `Errors[]` | Danh sách lỗi validation — mỗi phần tử có `field` và `detail` |
+| `listErrors` | `Errors[] \| null` | Lỗi validation field-level — mỗi phần tử có `field` và `detail`. **`null`** khi thành công hoặc khi lỗi không thuộc field-level (lỗi nghiệp vụ/quyền chỉ có `message`) — BE serialize list rỗng thành `null` (`ErrorsListJsonConverter`), không bao giờ trả `[]` |
 
 **Lỗi HTTP chung:**
 - `400` — Validation hoặc input không hợp lệ
@@ -48,7 +48,7 @@ Wrapper **riêng biệt** (không phải `CommonResponse<T>`) dành cho các hà
     "code": "TKT-2606-0001",
     "status": "InProgress"
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -281,11 +281,13 @@ Trạng thái của một bản ghi lịch sử (`KbArticleVersion`) — khác v
 
 Dùng khi gán bài viết Knowledge Base vào Ticket (Nhóm 11).
 
-| Giá trị | Int | Ý nghĩa |
-|---|---|---|
-| `ConsultedDuringResolve` | 1 | Tham khảo khi xử lý |
-| `ProvidedToCustomer` | 2 | Cung cấp cho khách hàng |
-| `GeneratedAfterResolve` | 3 | Tạo ra sau khi xử lý xong |
+| Giá trị | Int | Ý nghĩa | Ràng buộc |
+|---|---|---|---|
+| `ConsultedDuringResolve` | 1 | Tham khảo khi xử lý | Chỉ gán được **trước** khi ticket `Resolved` |
+| `ProvidedToCustomer` | 2 | Cung cấp cho khách hàng | Gán được đến hết state `Resolved`; **không** gán được bài `isInternalOnly` (→ `422`) |
+| `GeneratedAfterResolve` | 3 | Tạo ra sau khi xử lý xong | Gán được đến hết state `Resolved` |
+
+> Từ `ClosedPendingRate` trở đi, **mọi type** đều bị chặn (`409`). Chi tiết bảng quy tắc: xem `POST /api/knowledge-base/references` (Nhóm 11).
 
 ### `ChatBodyFormatEnum`
 
@@ -1348,15 +1350,101 @@ Base path: `/api/staff/tickets`
 | Param | Type | Mô tả |
 |---|---|---|
 | `Status` | `TicketStatusEnum?` | Lọc theo trạng thái |
+| `SlaOpen` | `bool?` | `true` = chỉ lấy ticket **đang trong vòng theo dõi SLA**: status ∈ {`Assigned`, `InProgress`, `WaitingCustomer`, `WaitingParts`, `WaitingOnsiteSchedule`, `Escalated`} **và** có `slaTimer != null`. Dùng cho bảng **SLA Monitor** — filter server-side, không bị cap theo pageSize. Bỏ trống/`false` → không filter |
+| `SortBy` | `string?` | `"slaRemaining"` (không phân biệt hoa thường) = sort theo hạn SLA (`slaTimer.dueAt`) **tăng dần** — ticket gần breach lên đầu; ticket không có timer xếp cuối; 2 ticket cùng hạn thì tie-break theo `Priority` tăng dần. Giá trị khác/bỏ trống → sort mặc định: `Priority` tăng dần (P1 trước) rồi `CreatedAt` giảm dần |
 | `PageNumber` | `int` | Trang (mặc định 1; giá trị ≤ 0 → tự về 1) |
 | `PageSize` | `int` | Số item/trang (mặc định 10; max 100; ≤ 0 → về 10) |
 
 > **Internal param:** BE expose thêm `ActorStaffId` (uuid) dùng nội bộ để BE đọc từ JWT. FE **không gửi** param này.
 
+**Ví dụ — bảng SLA Monitor (thay cho việc FE tự lọc client-side trên 1 trang):**
+```
+GET /api/staff/tickets/me?slaOpen=true&sortBy=slaRemaining&pageNumber=1&pageSize=20
+```
+
 **Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
 
 **Lỗi thường gặp:**
 - `401` — Chưa đăng nhập
+
+---
+
+### `GET /api/staff/tickets/dashboard/stats`
+
+**Mục đích:** Snapshot KPI dashboard cho **chính Staff đang đăng nhập** — thay cho việc FE tự đếm trên 1 trang list (bị cap 100 → sai số khi vượt pageSize). Phục vụ Staff Dashboard (KPI đang phụ trách / sắp breach / quá hạn / đã xử lý, gauge SLA, donut trạng thái, donut rủi ro SLA, chart 7 ngày) và các KPI của trang SLA Monitor.
+
+**Auth:** Bắt buộc (Staff). Scope tự động theo `assignedStaffId` từ JWT.
+
+**Query params:** Không có — endpoint snapshot, **không nhận from/to** (báo cáo time-series dùng `GET /api/reports/*`). FE nên cache ~1 phút (staleTime).
+
+**Response thành công `200`:** `CommonResponse<StaffTicketDashboardStatsDto>`
+
+```json
+{
+  "isSuccess": true, "statusCode": 200, "message": "",
+  "data": {
+    "openCount": 5,
+    "resolvedCount": 12,
+    "nearBreachCount": 1,
+    "breachedCount": 1,
+    "pausedCount": 1,
+    "slaMonitoredCount": 5,
+    "sla": { "met": 10, "breached": 2, "running": 4, "paused": 1, "compliancePercent": 83.33 },
+    "countByStatus": {
+      "New": 0, "Open": 0, "Assigned": 2, "InProgress": 2,
+      "WaitingCustomer": 0, "WaitingParts": 1, "WaitingOnsiteSchedule": 0,
+      "Resolved": 3, "Escalated": 0, "ClosedPendingRate": 2, "Closed": 7,
+      "ClosedRejected": 1, "Incident": 0, "Approved": 0
+    },
+    "slaRisk": { "healthy": 3, "near": 1, "breached": 1 },
+    "createdTrend7Days": [
+      { "date": "2026-07-01", "count": 0 },
+      { "date": "2026-07-02", "count": 1 },
+      { "date": "2026-07-03", "count": 0 },
+      { "date": "2026-07-04", "count": 2 },
+      { "date": "2026-07-05", "count": 0 },
+      { "date": "2026-07-06", "count": 1 },
+      { "date": "2026-07-07", "count": 2 }
+    ]
+  },
+  "listErrors": null
+}
+```
+
+**`StaffTicketDashboardStatsDto`** — mọi field đều **không null** (list/dict/object luôn được khởi tạo; `data` chỉ null khi lỗi):
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `openCount` | `int` | Số ticket đang phụ trách — status **không** thuộc {`Resolved`, `ClosedPendingRate`, `Closed`, `ClosedRejected`} |
+| `resolvedCount` | `int` | Số ticket đã xử lý — status ∈ {`Resolved`, `ClosedPendingRate`, `Closed`} (**không** gồm `ClosedRejected` — bị từ chối, không phải hoàn tất) |
+| `nearBreachCount` | `int` | Trong nhóm monitored: timer `Running` còn **≤ 25%** thời gian (`remainingPercent ≤ 25`) |
+| `breachedCount` | `int` | Trong nhóm monitored: timer đã `Breached` |
+| `pausedCount` | `int` | Trong nhóm monitored: timer đang `Paused` |
+| `slaMonitoredCount` | `int` | Tổng ticket "đang theo dõi SLA" — status ∈ {`Assigned`, `InProgress`, `WaitingCustomer`, `WaitingParts`, `WaitingOnsiteSchedule`, `Escalated`} **và** có SLA timer (đúng bộ lọc `slaOpen=true` của `GET /me`) |
+| `sla` | `SlaSummaryDto` | Tổng hợp **toàn bộ** SLA timer của ticket được gán cho staff (kể cả ticket đã đóng) — xem bảng dưới |
+| `countByStatus` | `Dictionary<string,int>` | Số ticket theo từng status — **luôn đủ 14 key** (`TicketStatusEnum`, key PascalCase), status không có ticket = `0` |
+| `slaRisk` | `SlaRiskDto` | Phân bố rủi ro trên nhóm monitored: `healthy` + `near` + `breached` = `slaMonitoredCount`. `healthy` = còn > 25% thời gian **hoặc đang Paused** |
+| `createdTrend7Days` | `DailyCountPointDto[]` | Số ticket (được gán cho staff) tạo mới theo ngày — **luôn đúng 7 phần tử** (6 ngày trước + hôm nay), bucket theo **UTC**, ngày trống = `0` |
+
+**`SlaSummaryDto`:**
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `met` | `int` | Số timer `Met` (hoàn thành đúng hạn) |
+| `breached` | `int` | Số timer `Breached` |
+| `running` | `int` | Số timer `Running` |
+| `paused` | `int` | Số timer `Paused` |
+| `compliancePercent` | `number` | `met / (met + breached) × 100`, làm tròn 2 chữ số. **= 100 khi chưa có timer nào kết thúc** (met + breached = 0) — tránh dashboard hiện 0% khi chưa có data |
+
+**`SlaRiskDto`:** `healthy` (`int`) · `near` (`int`) · `breached` (`int`) — như mô tả ở bảng trên.
+
+**`DailyCountPointDto`:** `date` (`string`, dạng `"2026-07-07"` — ngày UTC) · `count` (`int`).
+
+> ⚠️ **Timezone:** trend bucket theo **ngày UTC** — FE vẽ chart theo giờ VN (UTC+7) cần lưu ý ranh giới ngày.
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập / không đọc được userId từ token
+- `403` — Không phải role Staff
 
 ---
 
@@ -1716,6 +1804,70 @@ Base path: `/api/admin/tickets`
 
 ---
 
+### `GET /api/tickets/dashboard/stats`
+
+> **Lưu ý route:** endpoint này nằm ở `/api/tickets/dashboard/stats` (KHÔNG phải `/api/admin/tickets/...`) nhưng thuộc nhóm Admin/Manager về mặt quyền — cùng pattern với `GET /api/battery/dashboard/stats` bên BatteryService.
+
+**Mục đích:** Snapshot KPI ticket **toàn hệ thống** cho Dashboard Admin/Manager — thay cho việc FE tự đếm trên 1 trang list (cap 200 → sai số khi vượt pageSize). Phục vụ: KPI tickets mở/tổng, gauge tuân thủ SLA, pipeline 6 giai đoạn, chart "Ticket mới · 7 ngày", widget "Tải nhân sự" (workload theo staff).
+
+**Auth:** Bắt buộc (Manager hoặc Admin).
+
+**Query params:** Không có — endpoint snapshot, **không nhận from/to** (báo cáo time-series dùng `GET /api/reports/*`). FE nên cache ~1 phút (staleTime).
+
+**Response thành công `200`:** `CommonResponse<TicketDashboardStatsDto>`
+
+```json
+{
+  "isSuccess": true, "statusCode": 200, "message": "",
+  "data": {
+    "total": 128,
+    "openCount": 38,
+    "sla": { "met": 70, "breached": 12, "running": 30, "paused": 4, "compliancePercent": 85.37 },
+    "countByStatus": {
+      "New": 3, "Open": 8, "Assigned": 6, "InProgress": 12,
+      "WaitingCustomer": 2, "WaitingParts": 3, "WaitingOnsiteSchedule": 1,
+      "Resolved": 9, "Escalated": 2, "ClosedPendingRate": 5, "Closed": 70,
+      "ClosedRejected": 6, "Incident": 0, "Approved": 1
+    },
+    "countByPriority": { "P1Critical": 9, "P2High": 34, "P3Normal": 77 },
+    "createdTrend7Days": [
+      { "date": "2026-07-01", "count": 4 },
+      { "date": "2026-07-02", "count": 6 },
+      { "date": "2026-07-03", "count": 2 },
+      { "date": "2026-07-04", "count": 0 },
+      { "date": "2026-07-05", "count": 5 },
+      { "date": "2026-07-06", "count": 3 },
+      { "date": "2026-07-07", "count": 7 }
+    ],
+    "openCountByStaff": [
+      { "staffId": "3f2a4f35-...", "activeCount": 8 },
+      { "staffId": "7a3bbc97-...", "activeCount": 5 }
+    ]
+  },
+  "listErrors": null
+}
+```
+
+**`TicketDashboardStatsDto`** — mọi field đều **không null** (list/dict/object luôn được khởi tạo; `data` chỉ null khi lỗi):
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `total` | `int` | Tổng số ticket toàn hệ thống (không tính đã xóa mềm) |
+| `openCount` | `int` | Số ticket mở — status **không** thuộc {`Resolved`, `ClosedPendingRate`, `Closed`, `ClosedRejected`} |
+| `sla` | `SlaSummaryDto` | Tổng hợp SLA timer toàn hệ thống (met/breached/running/paused + `compliancePercent`) — cấu trúc giống endpoint staff, xem `GET /api/staff/tickets/dashboard/stats` |
+| `countByStatus` | `Dictionary<string,int>` | Số ticket theo từng status — **luôn đủ 14 key** (`TicketStatusEnum`, key PascalCase), status không có = `0`. FE tự nhóm pipeline — **không gộp `ClosedRejected` vào "Hoàn tất"** (bị từ chối ≠ hoàn tất) |
+| `countByPriority` | `Dictionary<string,int>` | Số ticket theo priority — luôn đủ 3 key `P1Critical`/`P2High`/`P3Normal`. **Ticket chưa triage (priority null) không được tính** — vì vậy tổng 3 key có thể nhỏ hơn `total` |
+| `createdTrend7Days` | `DailyCountPointDto[]` | Số ticket tạo mới theo ngày — **luôn đúng 7 phần tử** (6 ngày trước + hôm nay), bucket theo **ngày UTC**, ngày trống = `0` |
+| `openCountByStaff` | `StaffOpenCountDto[]` | Số ticket mở theo từng staff, **sort giảm dần theo `activeCount`** — chỉ tính ticket mở có `assignedStaffId != null`. Staff không có ticket mở sẽ **không xuất hiện** trong list (FE join với danh sách staff để hiện 0) |
+
+**`StaffOpenCountDto`:** `staffId` (`string` — Guid dạng chuỗi) · `activeCount` (`int`).
+
+**Lỗi thường gặp:**
+- `401` — Chưa đăng nhập
+- `403` — Không có role Manager/Admin
+
+---
+
 ## Nhóm 5 — Maintenance Logs (Nhật ký bảo trì)
 
 Cơ chế quản lý nhật ký bảo trì được tích hợp chặt chẽ với vòng đời của Ticket.
@@ -2023,6 +2175,8 @@ Base path: `/api/ticket/health`
 | `403` | `Ticket` | Quá hạn 7 ngày để mở lại ticket |
 | `403` | `Ticket` | Không đủ thẩm quyền xử lý ticket đã Escalated |
 | `404` | `Ticket` | Không tìm thấy ticket yêu cầu |
+| `409` | `Ticket` | Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành — không thể gán thêm tài liệu tham khảo KB (xem bảng quy tắc Nhóm 11) |
+| `422` | `KbArticle` | Bài viết nội bộ không thể gán với loại tham chiếu "Cung cấp cho khách hàng" (`ProvidedToCustomer`) |
 
 ---
 
@@ -2078,7 +2232,7 @@ Base path: `/api/knowledge-base`
 
 ### `GET /api/knowledge-base/suggest`
 
-**Mục đích:** Gợi ý các bài viết liên quan **theo Ticket** (cùng `Category`, ưu tiên `HelpfulCount`/`ViewCount` cao). Trả tối đa 5 bài đã `Published`.
+**Mục đích:** Gợi ý các bài viết liên quan **theo Ticket** (cùng `Category`, ưu tiên `HelpfulCount`/`ViewCount` cao). Trả tối đa 5 bài đã `Published` và **không phải bài nội bộ** (`isInternalOnly = true` bị lọc khỏi kết quả — áp dụng cho cả endpoint kb-suggestions của chat) — vì vậy `isInternalOnly` trong response thường luôn `false`.
 
 **Auth:** Bắt buộc (mọi role đã đăng nhập).
 
@@ -2397,11 +2551,28 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `referenceType` | `KbReferenceTypeEnum` | ✅ | Loại tham chiếu |
 | `note` | `string?` | ❌ | Ghi chú |
 
-**Response thành công `200`:** `CommonResponse<object>`
+**Response thành công `200`:** `CommonResponse<object>` (idempotent theo cặp ticket+bài viết: nếu tham chiếu đã tồn tại — kể cả đã xóa mềm — sẽ được khôi phục và cập nhật `referenceType`/`note` mới).
 
-**Lỗi thường gặp:**
-- `403` — Ticket đang ở `Resolved` / `ClosedPendingRate` / `Closed` (không cho gán thêm)
-- `404` — Không tìm thấy Ticket hoặc Bài viết
+**Quy tắc trạng thái ticket (theo `referenceType`):**
+
+| Trạng thái ticket | `ConsultedDuringResolve` | `GeneratedAfterResolve` / `ProvidedToCustomer` |
+|---|---|---|
+| Trước `Resolved` (New → Escalated) | ✅ Gán được | ✅ Gán được |
+| `Resolved` | ❌ `409` | ✅ Gán được — 2 type này về ngữ nghĩa xảy ra **lúc/sau khi resolve** |
+| `ClosedPendingRate` / `Closed` | ❌ `409` | ❌ `409` |
+
+**Quy tắc bài viết nội bộ:** bài có `isInternalOnly = true` **không thể** gán với `referenceType = ProvidedToCustomer` (không được cung cấp tài liệu nội bộ cho khách hàng) → `422`. Các type khác vẫn gán được bài nội bộ bình thường.
+
+**Bảng status code:**
+
+| Status | Trường hợp | `listErrors` |
+|---|---|---|
+| `400` | Lỗi field: `ticketId`/`kbArticleId` = Guid rỗng, `referenceType` không phải giá trị enum hợp lệ | Có — từng phần tử ghi rõ `field` + `detail` |
+| `401` | Chưa đăng nhập | `null` |
+| `403` | **Lỗi quyền:** Staff không phải người được phân công xử lý ticket (`assignedStaffId` khác), hoặc role không hợp lệ | `null` |
+| `404` | Không tìm thấy Ticket hoặc Bài viết trong DB | `null` |
+| `409` | **Xung đột trạng thái:** ticket đã chờ phê duyệt/hoàn thành theo bảng quy tắc trên | `null` |
+| `422` | **Vi phạm rule nghiệp vụ:** bài nội bộ + `ProvidedToCustomer` | `null` |
 
 ---
 
@@ -2667,6 +2838,7 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 | `symptoms` | `string` | Triệu chứng |
 | `helpfulCount` | `int` | Lượt hữu ích |
 | `viewCount` | `int` | Lượt xem |
+| `isInternalOnly` | `bool` | `true` = bài nội bộ, **không được** gán vào ticket với `referenceType = ProvidedToCustomer` (BE chặn `422` — xem Nhóm 11). ⚠️ Các endpoint suggest hiện **lọc sẵn** bài nội bộ khỏi kết quả nên giá trị thường là `false` — field tồn tại để FE cảnh báo/ẩn nếu nguồn danh sách bài thay đổi (vd chọn từ KB list đầy đủ của Staff) |
 
 ### `KbArticleActionDTO`
 
@@ -2695,6 +2867,13 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 ---
 
 ## Changelog
+
+### 2026-07-07 — Dashboard aggregate stats + SLA filter + KB reference rules
+- **Thêm `GET /api/tickets/dashboard/stats`** (Nhóm 4, Manager/Admin) — snapshot KPI toàn hệ thống: total/openCount, SLA summary + compliancePercent, countByStatus (zero-fill 14 status), countByPriority, createdTrend7Days (UTC), openCountByStaff. Thay cho FE tự đếm trên 1 trang list.
+- **Thêm `GET /api/staff/tickets/dashboard/stats`** (Nhóm 3, Staff) — snapshot KPI per-staff từ JWT: open/resolved, nearBreach (≤25%)/breached/paused/slaMonitored, slaRisk, countByStatus, trend 7 ngày.
+- **`GET /api/staff/tickets/me`:** thêm query param `SlaOpen` (filter server-side nhóm ticket đang theo dõi SLA — bảng SLA Monitor hết bị cap theo pageSize) và `SortBy=slaRemaining` (sort theo dueAt tăng dần, ticket không timer xếp cuối).
+- **`POST /api/knowledge-base/references`:** (1) nới quy tắc trạng thái — state `Resolved` cho phép gán 2 type after-resolve (`GeneratedAfterResolve`, `ProvidedToCustomer`); (2) chặn bài `isInternalOnly` với type `ProvidedToCustomer`; (3) chuẩn hóa status code: state lock đổi `403` → **`409`** (xung đột trạng thái), rule nội bộ trả **`422`**, `403` chỉ còn cho lỗi quyền. ⚠️ FE đang bắt riêng 403 cho state lock cần đổi theo.
+- **`KbArticleSuggestDTO`:** thêm field `isInternalOnly` (bool).
 
 ### 2026-06-24 — Sprint 7 #114: bổ sung Nhóm 12 — Reports (9 endpoint)
 - Thêm 9 endpoint `GET /api/reports/*`: `sla-by-staff`, `sla-by-priority`, `ticket-volume`, `top-reopen-issues`, `staff-performance`, `csat`, `resolution-time-histogram`, `category-breakdown`, `saga-failed-rate`.
