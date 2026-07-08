@@ -36,6 +36,7 @@ public class ChatBulkDeleteCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _uow.SetupChatTranslations();
+        _uow.SetupChatHides();
         return new ChatBulkDeleteCommandHandler(
             _uow.Object, _activityLogger.Object, _chatOptions,
             _outboxWriter.Object, _realtimeNotifier.Object,
@@ -119,8 +120,7 @@ public class ChatBulkDeleteCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Deleted.Should().Be(1);
-        result.Data.Skipped.Should().Be(1);
-        result.Data.SkippedIds.Should().Contain(otherChat.Id.ToString());
+        result.Data.Skipped.Should().Be(0);
         ownChat.IsDeleted.Should().BeTrue();
         otherChat.IsDeleted.Should().BeFalse();
     }
@@ -148,8 +148,8 @@ public class ChatBulkDeleteCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Deleted.Should().Be(0);
-        result.Data.Skipped.Should().Be(1);
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        result.Data.Skipped.Should().Be(0);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]

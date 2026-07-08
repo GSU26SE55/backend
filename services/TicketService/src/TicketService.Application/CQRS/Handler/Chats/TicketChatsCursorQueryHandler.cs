@@ -42,23 +42,16 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternal = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
-        // Load hidden chat IDs for the current user
-        var hiddenChatIds = await _uow.TicketChatHides.GetAllAsync()
-            .AsNoTracking()
+        var hiddenChatIdsQuery = _uow.TicketChatHides.GetAllAsync()
             .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
-            .Select(h => h.ChatId)
-            .ToListAsync(ct);
+            .Select(h => h.ChatId);
 
         var query = _uow.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(c => c.TicketId == request.TicketId);
+            .Where(c => c.TicketId == request.TicketId && !hiddenChatIdsQuery.Contains(c.Id));
 
         if (!canViewInternal)
             query = query.Where(c => !c.IsInternal);
-
-        // Ẩn chat mà user đã chọn hide
-        if (hiddenChatIds.Count > 0)
-            query = query.Where(c => !hiddenChatIds.Contains(c.Id));
 
         // Cursor composite: base64("{chatId}:{createdAtTicks}") — không cần extra DB round-trip
         if (!string.IsNullOrEmpty(request.Cursor) && TryDecodeCursor(request.Cursor, out var cursorChatId, out var cursorCreatedAt))

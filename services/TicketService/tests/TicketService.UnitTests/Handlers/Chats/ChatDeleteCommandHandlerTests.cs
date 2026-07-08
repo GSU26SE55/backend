@@ -35,6 +35,7 @@ public class ChatDeleteCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _uow.SetupChatTranslations();
+        _uow.SetupChatHides();
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
         return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object);
     }
@@ -96,7 +97,7 @@ public class ChatDeleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ManagerDeleteOthersChat_ReturnsForbidden()
+    public async Task Handle_ManagerDeleteOthersChat_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -121,13 +122,14 @@ public class ChatDeleteCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
         chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Handle_AdminDeleteOthersChat_ReturnsForbidden()
+    public async Task Handle_AdminDeleteOthersChat_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -152,13 +154,14 @@ public class ChatDeleteCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
         chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Handle_NonAuthorWithoutDeleteAnyPermission_ReturnsForbidden()
+    public async Task Handle_NonAuthorWithoutDeleteAnyPermission_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -182,8 +185,9 @@ public class ChatDeleteCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
         chat.IsDeleted.Should().BeFalse();
     }
 

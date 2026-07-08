@@ -46,16 +46,12 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
-        // Load hidden chat IDs for the current user (per-user hide)
-        var hiddenChatIds = await _unitOfWork.TicketChatHides.GetAllAsync()
-            .AsNoTracking()
-            .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
-            .Select(h => h.ChatId)
-            .ToListAsync(cancellationToken);
+        // Skip cache khi user có hidden chats (cache là shared, không per-user).
+        var hasHiddenChats = await _unitOfWork.TicketChatHides.AnyAsync(
+            h => h.UserId == request.ActorUserId && !h.IsDeleted);
 
         // Cache hit — chỉ khi page 1, pageSize default (10), không có filter nào.
         // canViewInternalChats phải vào key để tránh Customer thấy internal chats từ cache của Staff.
-        // Skip cache khi user có hidden chats (cache là shared, không per-user).
         var isDefaultQuery = request.PageNumber == 1
             && request.PageSize == 10
             && string.IsNullOrWhiteSpace(request.Search)
@@ -67,7 +63,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             && request.MentionedMe == null
             && request.DateFrom == null
             && request.DateTo == null
-            && hiddenChatIds.Count == 0;
+            && !hasHiddenChats;
 
         if (isDefaultQuery)
         {
@@ -98,9 +94,14 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (!canViewInternalChats)
             query = query.Where(c => !c.IsInternal);
 
-        // 5. Ẩn chat mà user đã chọn hide
-        if (hiddenChatIds.Count > 0)
-            query = query.Where(c => !hiddenChatIds.Contains(c.Id));
+        // 5. Ẩn chat mà user đã chọn hide (anti-join subquery → NOT EXISTS)
+        if (hasHiddenChats)
+        {
+            var hiddenChatIdsQuery = _unitOfWork.TicketChatHides.GetAllAsync()
+                .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
+                .Select(h => h.ChatId);
+            query = query.Where(c => !hiddenChatIdsQuery.Contains(c.Id));
+        }
 
         // #549 — Extended filters (deleted messages are excluded from filtered views; they appear only in unfiltered timeline)
         if (!string.IsNullOrWhiteSpace(request.Search))
