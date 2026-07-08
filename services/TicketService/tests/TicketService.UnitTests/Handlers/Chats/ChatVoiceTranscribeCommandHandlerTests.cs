@@ -15,6 +15,7 @@ public class ChatVoiceTranscribeCommandHandlerTests
 {
     private readonly Mock<IVoiceTranscriptionService> _voiceService = new();
     private readonly Mock<IFileUploadClient> _fileUploadClient = new();
+    private readonly Mock<IAudioTranscoder> _audioTranscoder = new();
     private readonly Mock<ILogger<ChatVoiceTranscribeCommandHandler>> _logger = new();
 
     private static readonly Guid TicketId = Guid.NewGuid();
@@ -53,7 +54,7 @@ public class ChatVoiceTranscribeCommandHandlerTests
     }
 
     private ChatVoiceTranscribeCommandHandler BuildHandler(ITicketUnitOfWork uow)
-        => new(uow, _voiceService.Object, _fileUploadClient.Object, _logger.Object);
+        => new(uow, _voiceService.Object, _fileUploadClient.Object, _audioTranscoder.Object, _logger.Object);
 
     // ── Happy path ───────────────────────────────────────────────────────────
 
