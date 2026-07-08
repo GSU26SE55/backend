@@ -42,9 +42,13 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternal = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
+        var hiddenChatIdsQuery = _uow.TicketChatHides.GetAllAsync()
+            .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
+            .Select(h => h.ChatId);
+
         var query = _uow.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(c => c.TicketId == request.TicketId && !c.IsDeleted);
+            .Where(c => c.TicketId == request.TicketId && !hiddenChatIdsQuery.Contains(c.Id));
 
         if (!canViewInternal)
             query = query.Where(c => !c.IsInternal);
@@ -66,10 +70,10 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         if (hasMore)
             rawChats.RemoveAt(rawChats.Count - 1);
 
-        var chatIds = rawChats.Select(c => c.Id).ToList();
-        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_uow, chatIds, ct);
-        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_uow, chatIds, ct);
-        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_uow, chatIds, request.ActorUserId, ct);
+        var nonDeletedIds = rawChats.Where(c => !c.IsDeleted).Select(c => c.Id).ToList();
+        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_uow, nonDeletedIds, ct);
+        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_uow, nonDeletedIds, ct);
+        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_uow, nonDeletedIds, request.ActorUserId, ct);
 
         var items = rawChats.Select(c => new TicketChatDTO
         {
@@ -78,22 +82,25 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
             AuthorUserId = c.AuthorUserId.ToString(),
             AuthorRole = c.AuthorRole,
             AuthorDisplayName = c.AuthorDisplayName,
-            Body = c.Body,
-            BodyHtml = c.BodyHtml,
-            BodyFormat = c.BodyFormat,
             IsInternal = c.IsInternal,
-            AttachmentFileIds = c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
             CreatedAt = c.CreatedAt,
-            EditedAt = c.EditedAt,
             IsPinned = c.IsPinned,
             PinnedAt = c.PinnedAt,
             PinnedByUserId = c.PinnedByUserId?.ToString(),
             ParentChatId = c.ParentChatId?.ToString(),
             ThreadRootId = c.ThreadRootId?.ToString(),
             ReplyCount = c.ReplyCount,
-            Mentions = mentionsByChat.TryGetValue(c.Id, out var m) ? m : new(),
-            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO(),
-            ActiveTranslation = translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null,
+            IsDeleted = c.IsDeleted,
+            Body = c.IsDeleted ? "Tin nhắn này đã bị xóa." : c.Body,
+            BodyHtml = c.IsDeleted ? null : c.BodyHtml,
+            BodyFormat = c.IsDeleted ? default : c.BodyFormat,
+            AttachmentFileIds = c.IsDeleted ? [] : c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+            EditedAt = c.IsDeleted ? null : c.EditedAt,
+            EditCount = c.IsDeleted ? 0 : c.EditCount,
+            LastEditedByUserId = c.IsDeleted ? null : c.LastEditedByUserId?.ToString(),
+            Mentions = c.IsDeleted ? [] : (mentionsByChat.TryGetValue(c.Id, out var m) ? m : []),
+            Reactions = c.IsDeleted ? new() : (reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()),
+            ActiveTranslation = c.IsDeleted ? null : (translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null),
         }).ToList();
 
         var nextCursor = hasMore ? EncodeCursor(rawChats.Last().Id, rawChats.Last().CreatedAt) : null;

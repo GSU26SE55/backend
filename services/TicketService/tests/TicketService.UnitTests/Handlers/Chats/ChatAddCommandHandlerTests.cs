@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Moq;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -36,7 +35,6 @@ public class ChatAddCommandHandlerTests
 
     private readonly Mock<IChatCacheService> _chatCache = new();
     private readonly Mock<ISlaService> _slaService = new();
-    private readonly Mock<IChatTextAiClient> _aiClient = new();
 
     public ChatAddCommandHandlerTests()
     {
@@ -47,15 +45,13 @@ public class ChatAddCommandHandlerTests
         _groupMentionResolver
             .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
-        _aiClient.Setup(x => x.DetectLanguageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("vi");
     }
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object, _aiClient.Object);
+            _slaService.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()

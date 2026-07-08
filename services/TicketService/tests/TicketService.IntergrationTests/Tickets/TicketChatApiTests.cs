@@ -332,9 +332,10 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
     }
 
     [Fact]
-    public async Task DeleteChat_NonAuthor_Returns403Forbidden()
+    public async Task DeleteChat_NonAuthor_HidesChatForCallerAndReturns200()
     {
-        // Arrange — chat thuộc người khác, test user (resolve role Customer) không phải Manager/Admin
+        // Arrange — chat thuộc người khác, test user không phải Manager/Admin
+        // Non-owner delete tạo TicketChatHide thay vì xóa thật
         var otherAuthorId = Guid.NewGuid();
         var chat = new TicketChat
         {
@@ -354,11 +355,16 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
         // Act
         var response = await _client.DeleteAsync($"/api/tickets/{_ticketId}/chats/{chat.Id}");
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        // Assert — 200 OK, chat không bị xóa thật, TicketChatHide được tạo
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var updated = await _db.TicketChats.FindAsync(chat.Id);
         updated!.IsDeleted.Should().BeFalse();
+
+        var userId = Guid.Parse(TestAuthHandler.UserId);
+        var hide = await _db.TicketChatHides
+            .FirstOrDefaultAsync(h => h.ChatId == chat.Id && h.UserId == userId && !h.IsDeleted);
+        hide.Should().NotBeNull();
     }
 
     [Fact]

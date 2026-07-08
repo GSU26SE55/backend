@@ -46,6 +46,10 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
+        // Skip cache khi user có hidden chats (cache là shared, không per-user).
+        var hasHiddenChats = await _unitOfWork.TicketChatHides.AnyAsync(
+            h => h.UserId == request.ActorUserId && !h.IsDeleted);
+
         // Cache hit — chỉ khi page 1, pageSize default (10), không có filter nào.
         // canViewInternalChats phải vào key để tránh Customer thấy internal chats từ cache của Staff.
         var isDefaultQuery = request.PageNumber == 1
@@ -58,7 +62,8 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             && request.HasAttachments == null
             && request.MentionedMe == null
             && request.DateFrom == null
-            && request.DateTo == null;
+            && request.DateTo == null
+            && !hasHiddenChats;
 
         if (isDefaultQuery)
         {
@@ -80,18 +85,27 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             }
         }
 
-        // 3. Query chats
+        // 3. Query chats — include soft-deleted (returned with placeholder body)
         var query = _unitOfWork.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(c => c.TicketId == request.TicketId && !c.IsDeleted);
+            .Where(c => c.TicketId == request.TicketId);
 
         // 4. Lọc chat nội bộ nếu là Customer
         if (!canViewInternalChats)
             query = query.Where(c => !c.IsInternal);
 
-        // #549 — Extended filters
+        // 5. Ẩn chat mà user đã chọn hide (anti-join subquery → NOT EXISTS)
+        if (hasHiddenChats)
+        {
+            var hiddenChatIdsQuery = _unitOfWork.TicketChatHides.GetAllAsync()
+                .Where(h => h.UserId == request.ActorUserId && !h.IsDeleted)
+                .Select(h => h.ChatId);
+            query = query.Where(c => !hiddenChatIdsQuery.Contains(c.Id));
+        }
+
+        // #549 — Extended filters (deleted messages are excluded from filtered views; they appear only in unfiltered timeline)
         if (!string.IsNullOrWhiteSpace(request.Search))
-            query = query.Where(c => c.Body.Contains(request.Search));
+            query = query.Where(c => !c.IsDeleted && c.Body.Contains(request.Search));
 
         if (request.AuthorUserId.HasValue)
             query = query.Where(c => c.AuthorUserId == request.AuthorUserId.Value);
@@ -108,8 +122,8 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (request.HasAttachments.HasValue)
         {
             query = request.HasAttachments.Value
-                ? query.Where(c => c.AttachmentFileIds != null && c.AttachmentFileIds.Count > 0)
-                : query.Where(c => c.AttachmentFileIds == null || c.AttachmentFileIds.Count == 0);
+                ? query.Where(c => !c.IsDeleted && c.AttachmentFileIds != null && c.AttachmentFileIds.Count > 0)
+                : query.Where(c => !c.IsDeleted && (c.AttachmentFileIds == null || c.AttachmentFileIds.Count == 0));
         }
 
         if (request.MentionedMe == true)
@@ -118,7 +132,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
                 .AsNoTracking()
                 .Where(m => m.MentionedUserId == request.ActorUserId && !m.IsDeleted)
                 .Select(m => m.ChatId);
-            query = query.Where(c => mentionedChatIds.Contains(c.Id));
+            query = query.Where(c => !c.IsDeleted && mentionedChatIds.Contains(c.Id));
         }
 
         if (request.DateFrom.HasValue)
@@ -135,10 +149,10 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        var chatIds = rawChats.Select(c => c.Id).ToList();
-        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
-        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, chatIds, cancellationToken);
-        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_unitOfWork, chatIds, request.ActorUserId, cancellationToken);
+        var nonDeletedIds = rawChats.Where(c => !c.IsDeleted).Select(c => c.Id).ToList();
+        var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, nonDeletedIds, cancellationToken);
+        var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, nonDeletedIds, cancellationToken);
+        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_unitOfWork, nonDeletedIds, request.ActorUserId, cancellationToken);
 
         var items = rawChats.Select(c => new TicketChatDTO
         {
@@ -147,21 +161,25 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             AuthorUserId = c.AuthorUserId.ToString(),
             AuthorRole = c.AuthorRole,
             AuthorDisplayName = c.AuthorDisplayName,
-            Body = c.Body,
             IsInternal = c.IsInternal,
-            AttachmentFileIds = c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
             CreatedAt = c.CreatedAt,
-            BodyFormat = c.BodyFormat,
-            BodyHtml = c.BodyHtml,
             ParentChatId = c.ParentChatId?.ToString(),
             ThreadRootId = c.ThreadRootId?.ToString(),
             ReplyCount = c.ReplyCount,
             IsPinned = c.IsPinned,
             PinnedAt = c.PinnedAt,
             PinnedByUserId = c.PinnedByUserId?.ToString(),
-            Mentions = mentionsByChat.TryGetValue(c.Id, out var m) ? m : new(),
-            Reactions = reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO(),
-            ActiveTranslation = translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null,
+            IsDeleted = c.IsDeleted,
+            Body = c.IsDeleted ? "Tin nhắn này đã bị xóa." : c.Body,
+            BodyHtml = c.IsDeleted ? null : c.BodyHtml,
+            BodyFormat = c.IsDeleted ? default : c.BodyFormat,
+            AttachmentFileIds = c.IsDeleted ? [] : c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+            EditedAt = c.IsDeleted ? null : c.EditedAt,
+            EditCount = c.IsDeleted ? 0 : c.EditCount,
+            LastEditedByUserId = c.IsDeleted ? null : c.LastEditedByUserId?.ToString(),
+            Mentions = c.IsDeleted ? [] : (mentionsByChat.TryGetValue(c.Id, out var m) ? m : []),
+            Reactions = c.IsDeleted ? new() : (reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()),
+            ActiveTranslation = c.IsDeleted ? null : (translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null),
         }).ToList();
 
         if (isDefaultQuery)

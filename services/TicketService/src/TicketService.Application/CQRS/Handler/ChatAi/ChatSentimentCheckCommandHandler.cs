@@ -14,17 +14,20 @@ public class ChatSentimentCheckCommandHandler : IRequestHandler<ChatSentimentChe
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatTextAiClient _aiClient;
+    private readonly IPiiDetector _piiDetector;
     private readonly ITicketChatRealtimeNotifier _notifier;
     private readonly ChatOptions _opts;
 
     public ChatSentimentCheckCommandHandler(
         ITicketUnitOfWork uow,
         IChatTextAiClient aiClient,
+        IPiiDetector piiDetector,
         ITicketChatRealtimeNotifier notifier,
         IOptions<ChatOptions> opts)
     {
         _uow = uow;
         _aiClient = aiClient;
+        _piiDetector = piiDetector;
         _notifier = notifier;
         _opts = opts.Value;
     }
@@ -52,14 +55,16 @@ public class ChatSentimentCheckCommandHandler : IRequestHandler<ChatSentimentChe
         if (customerChats.Count == 0)
             return new ChatSentimentCheckResponse { IsSuccess = false, StatusCode = 200, Message = "No customer chats to analyze" };
 
-        var context = string.Join("\n", customerChats
+        var rawContext = string.Join("\n", customerChats
             .OrderBy(c => c.CreatedAt)
             .Select(c => $"[{c.CreatedAt:HH:mm}] {c.Body}"));
+
+        var (maskedContext, _) = await _piiDetector.MaskAsync(rawContext, ct);
 
         double score;
         try
         {
-            score = await _aiClient.AnalyzeSentimentAsync(context, ct);
+            score = await _aiClient.AnalyzeSentimentAsync(maskedContext, ct);
         }
         catch (Exception)
         {

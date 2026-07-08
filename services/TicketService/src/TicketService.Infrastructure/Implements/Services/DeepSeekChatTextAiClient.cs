@@ -9,7 +9,7 @@ namespace TicketService.Infrastructure.Implements.Services;
 /// <summary>
 /// Gọi DeepSeek Chat Completions API (OpenAI-compatible) để phân tích sentiment,
 /// tóm tắt, dịch và phát hiện ngôn ngữ.
-/// Chọn provider bằng Chat:Provider = "DeepSeek" trong appsettings.
+/// Config: Chat:DeepSeek:ApiKey, Chat:DeepSeek:Model, Chat:DeepSeek:BaseUrl.
 /// </summary>
 public class DeepSeekChatTextAiClient : IChatTextAiClient
 {
@@ -40,25 +40,39 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
         return (await _inner.CallAsync(_opts.DeepSeek.ApiKey, BuildSummarizePrompt(chatContext, linesCount), temperature: 0.3, ct)).Trim();
     }
 
-    public async Task<string> TranslateAsync(string text, string targetLanguage, CancellationToken ct = default)
+    public async Task<(string TranslatedBody, string DetectedLanguage)> TranslateWithDetectAsync(
+        string text, string targetLanguage, string? knownSourceLanguage = null, CancellationToken ct = default)
     {
         EnsureApiKey();
-        return (await _inner.CallAsync(_opts.DeepSeek.ApiKey, BuildTranslatePrompt(text, targetLanguage), temperature: 0.1, ct)).Trim();
-    }
 
-    public async Task<string> DetectLanguageAsync(string text, CancellationToken ct = default)
-    {
-        EnsureApiKey();
-        var rawText = (await _inner.CallAsync(_opts.DeepSeek.ApiKey, BuildDetectLanguagePrompt(text), temperature: 0.1, ct)).Trim();
+        // Source language known (from Lingua or chat.OriginalLanguage) — translate only, skip detection
+        if (knownSourceLanguage != null && knownSourceLanguage != "und")
+        {
+            var translated = (await _inner.CallAsync(
+                _opts.DeepSeek.ApiKey,
+                BuildTranslateOnlyPrompt(text, knownSourceLanguage, targetLanguage),
+                temperature: 0.1,
+                ct)).Trim();
+            return (translated, knownSourceLanguage);
+        }
+
+        // Source unknown — detect + translate in one call
+        var rawText = (await _inner.CallAsync(
+            _opts.DeepSeek.ApiKey,
+            BuildTranslateWithDetectPrompt(text, targetLanguage),
+            temperature: 0.1,
+            ct)).Trim();
 
         try
         {
             using var doc = JsonDocument.Parse(rawText);
-            return doc.RootElement.GetProperty("lang").GetString() ?? "en";
+            var translated = doc.RootElement.GetProperty("translated").GetString() ?? text;
+            var sourceLang = doc.RootElement.GetProperty("source_lang").GetString() ?? "und";
+            return (translated, sourceLang);
         }
         catch
         {
-            return "en";
+            return (rawText, "und");
         }
     }
 
@@ -70,41 +84,66 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
 
     private static string BuildSentimentPrompt(string context)
         => $$"""
-            Phân tích tone cảm xúc của các tin nhắn từ Customer dưới đây trong ngữ cảnh hỗ trợ kỹ thuật bảo trì pin lithium-ion.
-            Trả về JSON theo định dạng chính xác: {"score": <float>}
-            Trong đó <float> là số thực trong khoảng [-1.0, 1.0]:
-            - 1.0: rất tích cực / hài lòng
-            - 0.0: trung tính
-            - -1.0: rất tiêu cực / tức giận / thất vọng
-            Chỉ trả về JSON, không thêm bất kỳ văn bản nào khác.
+            You are a sentiment analysis assistant for a solar lithium-ion battery maintenance support system.
+            Analyze the emotional tone of the customer messages below and return a sentiment score.
+
+            Return ONLY valid JSON in this exact format: {"score": <float>}
+            Where <float> is a number in the range [-1.0, 1.0]:
+            - 1.0 = very positive / highly satisfied
+            - 0.0 = neutral
+            - -1.0 = very negative / angry / frustrated
+
+            Return ONLY the JSON object — no explanations, no extra text.
 
             {{context}}
             """;
 
     private static string BuildSummarizePrompt(string context, int linesCount)
         => $$"""
-            Tóm tắt nội dung cuộc hội thoại hỗ trợ kỹ thuật bảo trì pin lithium-ion dưới đây thành đúng {{linesCount}} dòng bullet ngắn gọn.
-            Mỗi dòng bắt đầu bằng "- " và mô tả 1 ý chính (vấn đề, hành động đã thực hiện, kết quả, hoặc bước tiếp theo).
-            Viết bằng tiếng Việt, súc tích, dễ đọc cho kỹ thuật viên mới tiếp nhận ticket.
-            Chỉ trả về danh sách bullet, không thêm tiêu đề hay giải thích.
+            You are a technical summarization assistant for a solar lithium-ion battery maintenance support system (ITIL-based service desk).
+            Summarize the support conversation below into exactly {{linesCount}} concise bullet points.
+
+            Rules:
+            - Each bullet starts with "- " and describes one key point: the issue, action taken, outcome, or next step.
+            - Write in Vietnamese (vi) — the summary is for a technician taking over the ticket.
+            - Keep technical terms and abbreviations as-is (SOH, SLA, P1/P2/P3, BMS, etc.).
+            - Be concise and factual — avoid filler words.
+
+            Return ONLY the bullet list — no title, no preamble, no extra text.
 
             {{context}}
             """;
 
-    private static string BuildTranslatePrompt(string text, string targetLanguage)
+    private static string BuildTranslateOnlyPrompt(string text, string sourceLanguage, string targetLanguage)
         => $$"""
-            Dịch đoạn văn bản dưới đây sang ngôn ngữ có mã ISO 639-1 là "{{targetLanguage}}".
-            Chỉ trả về bản dịch, không thêm giải thích, ghi chú, hay tiêu đề.
+            You are a specialized translation assistant for a solar lithium-ion battery maintenance support system (ITIL-based service desk).
+            Translate the text below FROM {{sourceLanguage}} INTO the language with ISO 639-1 code "{{targetLanguage}}".
+
+            Rules:
+            - Use domain-appropriate technical equivalents — do NOT translate word-by-word.
+            - Preserve text inside double-bracket placeholders [[term_N]] exactly as-is — they will be substituted after translation.
+            - Preserve the original tone exactly (formal stays formal, urgent stays urgent).
+            - Return ONLY the translated text — no labels, no explanations, no extra formatting.
 
             {{text}}
             """;
 
-    private static string BuildDetectLanguagePrompt(string text)
+    private static string BuildTranslateWithDetectPrompt(string text, string targetLanguage)
         => $$"""
-            Xác định ngôn ngữ của đoạn văn bản dưới đây và trả về mã ISO 639-1 (ví dụ: "vi", "en", "fr", "ja").
-            Trả về JSON theo định dạng chính xác: {"lang": "<code>"}
-            Chỉ trả về JSON, không thêm bất kỳ văn bản nào khác.
+            You are a specialized translation assistant for a solar lithium-ion battery maintenance support system (ITIL-based service desk).
 
+            Task: Detect the source language of the text below, then translate it into the language with ISO 639-1 code "{{targetLanguage}}".
+
+            Rules:
+            - Use domain-appropriate technical equivalents — do NOT translate word-by-word.
+            - Preserve text inside double-bracket placeholders [[term_N]] exactly as-is — they will be substituted after translation.
+            - Preserve the original tone exactly (formal stays formal, urgent stays urgent).
+            - If the source language is already "{{targetLanguage}}", set "translated" to the original text unchanged.
+
+            Return ONLY valid JSON (no markdown, no extra text):
+            {"translated": "<translated text>", "source_lang": "<ISO 639-1 code of source language>"}
+
+            Text to translate:
             {{text}}
             """;
 }

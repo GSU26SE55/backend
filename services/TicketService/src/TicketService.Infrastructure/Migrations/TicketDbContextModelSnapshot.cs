@@ -1682,6 +1682,52 @@ namespace TicketService.Infrastructure.Migrations
                     b.ToTable("ticket_chat_edits", (string)null);
                 });
 
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatHide", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChatId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_ticket_chat_hides_user");
+
+                    b.HasIndex("ChatId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ticket_chat_hides_chat_user");
+
+                    b.ToTable("ticket_chat_hides", (string)null);
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.TicketChatMention", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1905,7 +1951,8 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("ChatId", "TargetLanguage")
                         .IsUnique()
-                        .HasDatabaseName("ix_ticket_chat_translations_chat_lang");
+                        .HasDatabaseName("ix_ticket_chat_translations_chat_lang")
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("ticket_chat_translations", (string)null);
                 });
@@ -2436,6 +2483,17 @@ namespace TicketService.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketChatEdit", b =>
+                {
+                    b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chat");
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketChatHide", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
                         .WithMany()

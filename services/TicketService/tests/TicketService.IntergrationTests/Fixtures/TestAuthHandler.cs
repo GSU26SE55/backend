@@ -30,16 +30,14 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         ["Admin"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
-            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
-            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
             ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,
             ChatPermissionCodes.ChatTemplateCreateGlobal
         },
         ["Manager"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
-            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatEditAny,
-            ChatPermissionCodes.ChatDeleteOwn, ChatPermissionCodes.ChatDeleteAny,
+            ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
             ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,
             ChatPermissionCodes.ChatTemplateCreateGlobal
         },

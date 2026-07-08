@@ -31,11 +31,6 @@ public class ChatDeleteCommand : IRequest<TicketActionResponse>, IValidatable<Ti
     [JsonIgnore]
     public List<string> UserPermissions { get; set; } = new();
 
-    /// <summary>
-    /// Lý do xóa.
-    /// </summary>
-    public string? DeleteReason { get; set; }
-
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();
@@ -48,9 +43,6 @@ public class ChatDeleteCommand : IRequest<TicketActionResponse>, IValidatable<Ti
 
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
-
-        if (!string.IsNullOrEmpty(DeleteReason) && DeleteReason.Length > 1000)
-            response.ListErrors.Add(new Errors { Field = "DeleteReason", Detail = "Lý do xóa tối đa 1000 ký tự." });
 
         if (response.ListErrors.Count > 0)
         {

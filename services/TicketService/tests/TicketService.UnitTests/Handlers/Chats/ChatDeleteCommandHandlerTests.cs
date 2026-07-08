@@ -12,6 +12,7 @@ using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
@@ -25,6 +26,7 @@ public class ChatDeleteCommandHandlerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
     private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<ILogger<ChatDeleteCommandHandler>> _logger = new();
 
     private ChatDeleteCommandHandler CreateHandler()
@@ -32,8 +34,10 @@ public class ChatDeleteCommandHandlerTests
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _uow.SetupChatTranslations();
+        _uow.SetupChatHides();
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
-        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _logger.Object);
+        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -93,7 +97,7 @@ public class ChatDeleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ManagerDeleteWithoutReason_ReturnsValidationError()
+    public async Task Handle_ManagerDeleteOthersChat_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -113,54 +117,19 @@ public class ChatDeleteCommandHandlerTests
             UserId = managerId,
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
-        };
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
-        result.ListErrors.Should().Contain(e => e.Field == "DeleteReason");
-        chat.IsDeleted.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Handle_ManagerDeleteWithReason_Succeeds()
-    {
-        var ticketId = Guid.NewGuid();
-        var chatId = Guid.NewGuid();
-        var authorId = Guid.NewGuid();
-        var managerId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId);
-        var chat = MakeChat(chatId, ticketId, authorId, ticket);
-
-        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
-        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
-
-        var handler = CreateHandler();
-        var command = new ChatDeleteCommand
-        {
-            TicketId = ticketId,
-            ChatId = chatId,
-            UserId = managerId,
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            DeleteReason = "Spam content",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        chat.IsDeleted.Should().BeTrue();
-
-        _activityLogger.Verify(x => x.LogAsync(
-            ticketId, managerId, ActorRoleEnum.Manager, "Manager",
-            ActivityActionEnum.ChatDeleted, It.IsAny<string>(), null, "Spam content"), Times.Once);
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
+        chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Handle_AdminDeleteWithReason_Succeeds()
+    public async Task Handle_AdminDeleteOthersChat_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -180,18 +149,19 @@ public class ChatDeleteCommandHandlerTests
             UserId = adminId,
             UserRole = ActorRoleEnum.Admin,
             UserDisplayName = "Admin",
-            DeleteReason = "Policy violation",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatDeleteAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        chat.IsDeleted.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
+        chat.IsDeleted.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Handle_NonAuthorWithoutDeleteAnyPermission_ReturnsForbidden()
+    public async Task Handle_NonAuthorWithoutDeleteAnyPermission_HidesForCaller()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -215,8 +185,9 @@ public class ChatDeleteCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Đã ẩn bình luận.");
         chat.IsDeleted.Should().BeFalse();
     }
 
@@ -385,25 +356,6 @@ public class ChatDeleteCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(404);
         chat.IsDeleted.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Validate_DeleteReasonTooLong_ReturnsError()
-    {
-        var command = new ChatDeleteCommand
-        {
-            TicketId = Guid.NewGuid(),
-            ChatId = Guid.NewGuid(),
-            UserId = Guid.NewGuid(),
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            DeleteReason = new string('a', 1001)
-        };
-
-        var result = await command.ValidateAsync();
-
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(e => e.Field == "DeleteReason");
     }
 
     [Fact]

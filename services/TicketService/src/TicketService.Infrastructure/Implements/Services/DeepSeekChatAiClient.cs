@@ -10,7 +10,7 @@ namespace TicketService.Infrastructure.Implements.Services;
 
 /// <summary>
 /// Gọi DeepSeek Chat Completions API (OpenAI-compatible) để sinh gợi ý chat.
-/// Chọn provider bằng Chat:Provider = "DeepSeek" trong appsettings.
+/// Config: Chat:DeepSeek:ApiKey, Chat:DeepSeek:Model, Chat:DeepSeek:BaseUrl.
 /// </summary>
 public class DeepSeekChatAiClient : IChatAiSuggestionClient
 {

@@ -59,7 +59,6 @@ public class ChatAuthorizationService : IChatAuthorizationService
         TicketChat chat,
         Guid actorUserId,
         IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided,
         int editWindowMinutes)
     {
         if (chat.AuthorUserId == actorUserId)
@@ -70,23 +69,16 @@ public class ChatAuthorizationService : IChatAuthorizationService
                 : ChatAuthorizationResult.Allowed;
         }
 
-        if (actorPermissions.Contains(ChatPermissionCodes.ChatEditAny))
-            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
-
         return ChatAuthorizationResult.Forbidden;
     }
 
     public ChatAuthorizationResult CanDeleteChat(
         TicketChat chat,
         Guid actorUserId,
-        IReadOnlyCollection<string> actorPermissions,
-        bool reasonProvided)
+        IReadOnlyCollection<string> actorPermissions)
     {
         if (chat.AuthorUserId == actorUserId)
             return ChatAuthorizationResult.Allowed;
-
-        if (actorPermissions.Contains(ChatPermissionCodes.ChatDeleteAny))
-            return reasonProvided ? ChatAuthorizationResult.Allowed : ChatAuthorizationResult.ReasonRequired;
 
         return ChatAuthorizationResult.Forbidden;
     }

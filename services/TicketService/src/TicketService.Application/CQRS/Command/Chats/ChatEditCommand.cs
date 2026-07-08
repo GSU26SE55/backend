@@ -35,7 +35,6 @@ public class ChatEditCommand : IRequest<TicketActionResponse>, IValidatable<Tick
     /// Nội dung chi tiết.
     /// </summary>
     public required string Body { get; set; }
-    public string? EditReason { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
@@ -56,9 +55,6 @@ public class ChatEditCommand : IRequest<TicketActionResponse>, IValidatable<Tick
         // PHẢI đồng bộ tay với ChatOptions.MaxBodyLength (appsettings.json "Chat:MaxBodyLength") nếu đổi giá trị này.
         else if (Body.Length > 10000)
             response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận tối đa 10000 ký tự." });
-
-        if (!string.IsNullOrEmpty(EditReason) && EditReason.Length > 1000)
-            response.ListErrors.Add(new Errors { Field = "EditReason", Detail = "Lý do chỉnh sửa tối đa 1000 ký tự." });
 
         if (response.ListErrors.Count > 0)
         {
