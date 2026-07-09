@@ -635,20 +635,24 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    ///// <summary>
-    ///// Đăng nhập / đăng ký bằng Google ID token. Auto-link nếu email đã tồn tại + EmailConfirmed=true,
-    ///// auto-create nếu email chưa tồn tại (gán role Customer, EmailConfirmed=true ngay).
-    ///// </summary>
-    //[HttpPost("google")]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
-    //public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthCommand command, CancellationToken cancellationToken)
-    //{
-    //    var result = await _mediator.Send(command, cancellationToken);
-    //    return StatusCode(result.StatusCode, result);
-    //}
+    /// <summary>
+    /// Đăng nhập / đăng ký bằng Google ID token. Auto-link nếu email đã tồn tại + EmailConfirmed=true,
+    /// auto-create nếu email chưa tồn tại (gán role Customer, EmailConfirmed=true ngay).
+    /// </summary>
+    /// <remarks>
+    /// Client (mobile) lấy <c>idToken</c> từ native Google Sign-In rồi gửi lên đây. BE validate
+    /// idToken qua <c>IGoogleOAuthHelper</c> và trả JWT hệ thống (giống <c>POST /api/auth/login</c>).
+    /// </remarks>
+    [HttpPost("google")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
 
     /// <summary>
     /// Bắt đầu luồng đăng nhập Google OAuth bằng cách redirect người dùng sang Google.
