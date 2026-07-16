@@ -120,7 +120,7 @@ Open ──→ Acknowledged ──→ Resolved
 | `HighInternalResistance` | 12 | Điện trở trong tăng (Tier 2 battery health) | Tính từ Voltage/Current pattern |
 | `CellImbalance` | 13 | Mất cân bằng giữa các cell | Tier 2 battery health analysis |
 | `EnvironmentalIncident` | 14 | Liên kết tới `EnvironmentalIncident` cấp site (smoke/fire/flood…) | Tạo từ incident raise |
-| `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check |
+| `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check — chỉ ghép cặp `Bms ↔ IotGateway`; ΔV > 0.5V hoặc ΔT > 5°C. **Nguồn `redundant` (INA226) không đo nhiệt (temp=0 cứng) → backend skip so sánh nhiệt cho cặp chứa nó** (contract firmware, NS-09 #653) |
 
 ### `EnvironmentalIncidentTypeEnum`
 

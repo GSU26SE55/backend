@@ -211,14 +211,27 @@ public static class AnomalyRules
                 SensorMismatchVoltageDeltaV, voltageDelta, "V");
         }
 
-        var tempDelta = Math.Abs(bms.Temperature - iot.Temperature);
-        if (tempDelta > SensorMismatchTemperatureDeltaC)
+        // Sprint Bonus NS-09 (#653, N5) — nguồn `redundant` (INA226) KHÔNG đo nhiệt độ:
+        // firmware set cứng temp=0 và kỳ vọng backend skip so sánh nhiệt (contract firmware
+        // ina226.cpp). Không skip → BMS 25°C vs 0°C = mismatch giả liên tục trên mọi pin.
+        if (MeasuresTemperature(bms) && MeasuresTemperature(iot))
         {
-            return new AnomalyDetection(
-                AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
-                SensorMismatchTemperatureDeltaC, tempDelta, "°C");
+            var tempDelta = Math.Abs(bms.Temperature - iot.Temperature);
+            if (tempDelta > SensorMismatchTemperatureDeltaC)
+            {
+                return new AnomalyDetection(
+                    AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
+                    SensorMismatchTemperatureDeltaC, tempDelta, "°C");
+            }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Sprint Bonus NS-09 (#653, N5) — nguồn <c>redundant</c> (INA226, shunt dòng) không có
+    /// cảm biến nhiệt → temp trong payload là 0 cứng, không được dùng để so sánh cross-source.
+    /// </summary>
+    public static bool MeasuresTemperature(SensorReading reading) =>
+        !string.Equals(reading.SensorSourceCode, "redundant", StringComparison.OrdinalIgnoreCase);
 }

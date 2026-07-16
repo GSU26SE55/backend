@@ -1,3 +1,4 @@
+using BatteryService.Application.Anomaly;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
@@ -65,9 +66,20 @@ public class CrossSourceValidationService : ICrossSourceValidationService
 
             foreach (var reading in group)
             {
-                // Tìm reading sourceType khác gần nhất trong cửa sổ.
+                // Sprint Bonus NS-09 (#653, N5) — CHỈ ghép cặp Bms ↔ IotGateway. Ghép "khác
+                // sourceType bất kỳ" sẽ ghép INA226 (IotGateway, temp=0) với DS18B20 (External,
+                // temp thật) → ΔT=25°C mismatch giả không liên quan gì tới BMS.
+                var counterpartType = reading.SourceType switch
+                {
+                    SensorReadingSourceTypeEnum.Bms => SensorReadingSourceTypeEnum.IotGateway,
+                    SensorReadingSourceTypeEnum.IotGateway => SensorReadingSourceTypeEnum.Bms,
+                    _ => (SensorReadingSourceTypeEnum?)null
+                };
+                if (counterpartType is null)
+                    continue;
+
                 var counterpart = window
-                    .Where(c => c.SourceType != reading.SourceType
+                    .Where(c => c.SourceType == counterpartType.Value
                                 && Math.Abs((c.Time - reading.Time).TotalSeconds) <= PairingWindow.TotalSeconds)
                     .OrderBy(c => Math.Abs((c.Time - reading.Time).TotalSeconds))
                     .FirstOrDefault();
@@ -75,7 +87,12 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                     continue;
 
                 var voltageDelta = Math.Abs(reading.Voltage - counterpart.Voltage);
-                var tempDelta = Math.Abs(reading.Temperature - counterpart.Temperature);
+                // NS-09 (N5) — nguồn `redundant` không đo nhiệt (temp=0 cứng) → chỉ so V cho cặp chứa nó.
+                var compareTemp = AnomalyRules.MeasuresTemperature(reading)
+                                  && AnomalyRules.MeasuresTemperature(counterpart);
+                var tempDelta = compareTemp
+                    ? Math.Abs(reading.Temperature - counterpart.Temperature)
+                    : 0m;
                 if (voltageDelta <= VoltageDeltaThreshold && tempDelta <= TemperatureDeltaThreshold)
                     continue;
 
