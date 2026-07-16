@@ -830,6 +830,8 @@ Base route: `/api/sensor-readings`
 
 **Response thành công `200`:** `CommonResponse<SensorReadingAggregateDto[]>` — danh sách bucket sắp xếp tăng dần theo thời gian.
 
+> **Sprint Bonus NS-01/NS-02 (#646/#647):** aggregate chỉ tính trên reading nguồn **primary** (`sensorSourceCode = "primary"` hoặc null/empty — cùng quy ước coalescer SSE §34.10.5). Reading `redundant`/`external-temp` bị loại để tránh đếm trùng 3 nguồn/pin.
+
 ```json
 {
   "isSuccess": true,
@@ -840,7 +842,19 @@ Base route: `/api/sensor-readings`
       "avgCurrent": -1.82,
       "avgTemperature": 28.5,
       "avgSocPercent": 76.4,
-      "avgSohPercent": 91.2
+      "avgSohPercent": 91.2,
+      "minVoltage": 51.9,
+      "maxVoltage": 52.8,
+      "minTemperature": 27.1,
+      "maxTemperature": 30.2,
+      "maxChargeCurrent": 1.92,
+      "minChargeCurrent": 0.31,
+      "avgChargeCurrent": 1.05,
+      "maxDischargeCurrent": 4.75,
+      "minDischargeCurrent": 0.42,
+      "avgDischargeCurrent": 2.31,
+      "chargeSampleCount": 210,
+      "dischargeSampleCount": 385
     }
   ]
 }
@@ -852,12 +866,26 @@ Base route: `/api/sensor-readings`
 |---|---|---|---|
 | `time` | `DateTime` | Không | Thời điểm bắt đầu bucket (UTC) — field tên là `time` (không phải `bucket`) |
 | `avgVoltage` | `decimal` | Không | AVG điện áp (V) trong bucket |
-| `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket |
+| `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket — ⚠️ trộn dấu nạp/xả (giữ backward-compat); vẽ chart dùng `avgChargeCurrent`/`avgDischargeCurrent` |
 | `avgTemperature` | `decimal` | Không | AVG nhiệt độ (°C) |
 | `avgSocPercent` | `decimal` | Không | AVG SOC (%) |
 | `avgSohPercent` | `decimal?` | Null nếu bucket không có reading nào có SohPercent | AVG SOH (%) |
+| `minVoltage` / `maxVoltage` | `decimal?` | Null nếu bucket không có reading primary | MIN/MAX điện áp (V) |
+| `minTemperature` / `maxTemperature` | `decimal?` | Null nếu bucket không có reading primary | MIN/MAX nhiệt độ (°C) |
+| `maxChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | Dòng nạp đỉnh (A, **luôn dương**) — `MAX(current)` với `current > 0` |
+| `minChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | Dòng nạp thấp nhất khi đang nạp (A, dương) |
+| `avgChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | AVG dòng nạp (A, dương) |
+| `maxDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | Dòng xả đỉnh (A, **luôn dương**) — `MAX(ABS(current))` với `current < 0` |
+| `minDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | Dòng xả thấp nhất khi đang xả (A, dương) |
+| `avgDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | AVG dòng xả (A, dương) |
+| `chargeSampleCount` | `int` | Không (0 nếu không có) | Số mẫu chiều nạp trong bucket |
+| `dischargeSampleCount` | `int` | Không (0 nếu không có) | Số mẫu chiều xả trong bucket |
 
-> **Lưu ý:** `SensorReadingAggregateDto` **không có** field `sampleCount` (số reading trong bucket) — không trả về trong response.
+**Quy ước min/max nạp/xả (chốt NS-01 — newsprint.md §2):**
+- Quy ước dấu dữ liệu thô: `current > 0` = nạp, `current < 0` = xả. Response min/max **luôn trả giá trị DƯƠNG** cho cả 2 chiều — chiều nằm trong tên field, FE không phải xử lý dấu.
+- Sample `current == 0` (idle) không thuộc chiều nào — bỏ qua khỏi cả 2 phía.
+- Field nullable: bucket không có mẫu chiều nào → `null` (pin idle cả bucket → cả cụm field nạp/xả null). **Không trả `0`** — 0A là giá trị đo hợp lệ ≠ không có dữ liệu.
+- Đường ngưỡng tham chiếu trên chart lấy từ `GET /api/thresholds` (`currentMaxCharge`/`currentMaxDischarge`) — là ngưỡng cảnh báo admin đặt, **không** nhầm với min/max thực đo.
 
 **Lỗi thường gặp:**
 - `400` — `BatteryAssetId` rỗng hoặc `interval` không thuộc `{1m, 5m, 15m, 1h, 1d}`

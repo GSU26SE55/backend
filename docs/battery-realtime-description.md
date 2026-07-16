@@ -89,12 +89,13 @@ Tham số `scope` quyết định tập pin được nhận và loại event tr�
 
 ## 5. Sự kiện SSE (events)
 
-Có **3 loại event**. Chỉ scope `asset:{1 id}` trả `reading`; mọi scope còn lại trả `summary`.
+Có **4 loại event**. Chỉ scope `asset:{1 id}` trả `reading`; mọi scope còn lại trả `summary`. Event `stats` (Sprint Bonus NS-01/03/04 — #646/#648/#649) đẩy trên **mọi scope**.
 
 | Event | Khi nào | Nội dung | Nhịp |
 |-------|---------|----------|------|
 | `reading` | scope `asset:{1 id}` | **1** reading đầy đủ của pin đó | mỗi reading (~5s) |
 | `summary` | mọi scope nhiều pin | `items[]` — **mỗi pin 1 phần tử, đầy đủ field y hệt `reading`** | throttle (~4s) gom latest/pin |
+| `stats` | mọi scope | rolling min/max dòng **nạp/xả** của 1 pin trong window `1h` / `today` | mỗi batch ingest (~5s), 2 event/batch (1 per window) |
 | `ping` | mọi scope | `{}` — heartbeat giữ kết nối | mỗi 30s |
 
 ### 5.1. Payload `reading`
@@ -138,6 +139,49 @@ data: { "scopeType": "customer", "items": [ { ...các field bên dưới... }, {
 | `sensorSourceCode` | string | có | `primary` \| `redundant` \| `external-temp` |
 
 > ⚠️ **Field null bị LƯỢC khỏi JSON của SSE** (serialize bỏ field null). FE phải coi **field vắng mặt = null** (vd `chargingState`, `sohPercent`, `bmsErrorCode` có thể không xuất hiện).
+
+### 5.3bis. Payload `stats` (Sprint Bonus — min/max nạp/xả streaming)
+
+```
+event: stats
+data: {
+  "batteryAssetId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "customerId": "9b2e...",
+  "siteId": "c1d4...",
+  "window": "1h",
+  "windowStart": "2026-07-08T09:00:00Z",
+  "maxChargeCurrent": 1.92,
+  "minChargeCurrent": 0.31,
+  "maxDischargeCurrent": 4.75,
+  "minDischargeCurrent": 0.42,
+  "chargeSampleCount": 210,
+  "dischargeSampleCount": 385,
+  "updatedAt": "2026-07-08T09:41:05Z"
+}
+```
+
+| Field | Kiểu | Nullable | Ý nghĩa |
+|-------|------|----------|---------|
+| `batteryAssetId` | string (GUID) | không | Pin của thống kê này |
+| `customerId` | string (GUID) | không | Khách sở hữu (route scope) |
+| `siteId` | string (GUID) | có | Site (null nếu pin không thuộc site) |
+| `window` | string | không | `1h` (bucket giờ hiện tại, UTC) \| `today` (từ 00:00 UTC) — **chốt chỉ 2 window** (Q3) |
+| `windowStart` | string (ISO UTC) | không | Thời điểm bắt đầu window |
+| `maxChargeCurrent` | number | có | Dòng nạp đỉnh trong window (A, **luôn dương**) |
+| `minChargeCurrent` | number | có | Dòng nạp thấp nhất khi đang nạp (A, dương) |
+| `maxDischargeCurrent` | number | có | Dòng xả đỉnh (A, **luôn dương** — `MAX(ABS(current))` với current < 0) |
+| `minDischargeCurrent` | number | có | Dòng xả thấp nhất khi đang xả (A, dương) |
+| `chargeSampleCount` | number (int) | không | Số mẫu chiều nạp đã tích lũy trong window |
+| `dischargeSampleCount` | number (int) | không | Số mẫu chiều xả đã tích lũy trong window |
+| `updatedAt` | string (ISO UTC) | không | Thời điểm cập nhật cuối |
+
+**Hành vi:**
+- Chỉ tính trên reading **`primary`** (null/empty coi như primary — cùng quy ước coalescer §5.4). Sample `current == 0` (idle) bỏ qua.
+- Field min/max **null** khi window chưa có mẫu chiều đó. Field null bị lược khỏi JSON (như §5.3).
+- State giữ trong Redis (TTL 2h cho `1h`, 26h cho `today`) — Redis flush → min/max window đang chạy reset, tự hồi sau vài mẫu; FE đối chiếu bằng REST `/aggregate` (§7.3).
+- `Realtime:Enabled=false` → không có event `stats` (giống `reading`/`summary`).
+- Client cũ không nghe `stats` → không ảnh hưởng (EventSource bỏ qua event lạ).
+- Backfill khi mở màn: dùng REST `/aggregate` (đã có min/max per bucket) — `stats` chỉ đẩy incremental.
 
 ### 5.4. Đa nguồn cùng 1 pin
 
@@ -196,7 +240,8 @@ GET /api/sensor-readings/{batteryAssetId}/aggregate?from=&to=&interval=
 ```
 - `interval`: `1m` | `5m` | `15m` | `1h` | `1d` (mặc định `1h`). Giá trị khác → **400**.
 - Response `data`: `SensorReadingAggregateDto[]` — mỗi bucket: `time`, `avgVoltage`, `avgCurrent`, `avgTemperature`, `avgSocPercent`, `avgSohPercent` (null nếu bucket không có SOH), **tăng dần theo thời gian**.
-- Dùng khi range lớn (> 1 ngày) để tránh quá nhiều điểm thô.
+- **Sprint Bonus NS-02 (#647):** mỗi bucket có thêm min/max tách chiều nạp/xả + V/T: `minVoltage`/`maxVoltage`, `minTemperature`/`maxTemperature`, `maxChargeCurrent`/`minChargeCurrent`/`avgChargeCurrent`, `maxDischargeCurrent`/`minDischargeCurrent`/`avgDischargeCurrent` (giá trị **luôn dương**, null nếu bucket không có mẫu chiều đó), `chargeSampleCount`/`dischargeSampleCount`. Aggregate chỉ tính trên source `primary`. Chi tiết: `docs/api-battery.md` §aggregate.
+- Dùng khi range lớn (> 1 ngày) để tránh quá nhiều điểm thô, và để **backfill** card/chart min/max trước khi nghe SSE `stats`.
 
 ---
 
@@ -285,7 +330,8 @@ curl -N "http://localhost:4001/api/sensor-readings/stream?scope=all&access_token
 
 - [ ] Nối SSE qua **gateway** (`/api/sensor-readings/stream`), token qua `?access_token=` (hoặc header nếu dùng fetch-based client).
 - [ ] Chọn `scope` đúng theo role (ẩn scope ngoài quyền — xem §6).
-- [ ] Lắng nghe **3 event**: `reading`, `summary`, `ping`. Với `summary`, xử lý **toàn bộ** `items` (mỗi phần tử là 1 pin).
+- [ ] Lắng nghe **4 event**: `reading`, `summary`, `stats`, `ping`. Với `summary`, xử lý **toàn bộ** `items` (mỗi phần tử là 1 pin). Với `stats`, phân biệt theo `window` (`1h`/`today`) + `batteryAssetId`.
+- [ ] Card "Nạp/Xả đỉnh": seed từ REST `/aggregate` (min/max per bucket) rồi cập nhật realtime bằng `stats`; vẽ đường ngưỡng từ `GET /api/thresholds` (`currentMaxCharge`/`currentMaxDischarge`).
 - [ ] Field **null bị lược** khỏi SSE → coi field vắng = null.
 - [ ] Mặc định dùng source `primary`.
 - [ ] (Tùy chọn) seed dữ liệu lịch sử bằng REST `/history` (nhớ **DESC**) hoặc `/aggregate` trước khi để SSE đắp tiếp.
