@@ -156,6 +156,55 @@ public class NoiseSuppressionTests
     }
 
     [Fact]
+    public async Task NoiseSuppression_OnlySuppressedTick_PersistsBreachEvents()
+    {
+        // Sprint Bonus NS-07 (#651, N1) — tick chỉ toàn suppress vẫn phải SaveChanges
+        // để NoiseBreachEvent pending không bị vứt cùng DbContext scope.
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
+            .WithSensorReadings(MakeReading(voltage: 9m));
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+
+        result.AlertsSuppressed.Should().Be(1);
+        result.AlertsCreated.Should().Be(0);
+        builder.NoiseBreachEvents.Verify(r => r.AddAsync(It.IsAny<NoiseBreachEvent>()), Times.Once);
+        builder.UnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_FiveConsecutiveTicks_FifthTickRaisesAlert()
+    {
+        // Sprint Bonus NS-07 (#651, N1) — kịch bản tái hiện bug: vi phạm lai rai qua nhiều tick,
+        // breach persist dần → tick 5 (count=5) alert phải nổ. Trước fix, breach bị vứt mỗi tick
+        // → count mãi = 0 → không bao giờ nổ.
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1));
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+
+        for (var tick = 1; tick <= 4; tick++)
+        {
+            builder.WithSensorReadings(MakeReading(voltage: 9m)); // thay reading mới mỗi tick
+            var r = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+            r.AlertsSuppressed.Should().Be(1, $"tick {tick} chưa đủ tần suất");
+            r.AlertsCreated.Should().Be(0, $"tick {tick} chưa đủ tần suất");
+        }
+
+        builder.WithSensorReadings(MakeReading(voltage: 9m));
+        var fifth = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+
+        fifth.AlertsCreated.Should().Be(1, "tick 5 đạt ngưỡng NoiseSuppressionCount=5");
+        fifth.AlertsSuppressed.Should().Be(0);
+        builder.UnitOfWork.Verify(
+            u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(5),
+            "cả 4 tick suppress lẫn tick 5 tạo alert đều phải save");
+    }
+
+    [Fact]
     public async Task NoiseSuppression_BreachOutsideWindow_ShouldStillSuppress()
     {
         var now = DateTime.UtcNow;

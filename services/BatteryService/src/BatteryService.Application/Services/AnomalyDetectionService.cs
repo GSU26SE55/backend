@@ -218,7 +218,10 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             result.AlertsCreated++;
         }
 
-        if (result.AlertsCreated + result.AlertsMerged > 0)
+        // Sprint Bonus NS-07 (#651, N1) — AlertsSuppressed PHẢI nằm trong điều kiện save:
+        // tick chỉ toàn anomaly bị nén vẫn phải persist NoiseBreachEvent pending; nếu không,
+        // scope DI mới mỗi tick vứt breach event → count mãi = 0 → suppression chặn alert vĩnh viễn.
+        if (result.AlertsCreated + result.AlertsMerged + result.AlertsSuppressed > 0)
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return result;
@@ -299,6 +302,14 @@ public class AnomalyDetectionService : IAnomalyDetectionService
         if (!threshold.NoiseSuppressionEnabled || threshold.NoiseSuppressionCount <= 1)
             return false;
 
+        // Đếm breach đã có trong window TRƯỚC khi Add (row pending không được DB đếm
+        // nên thứ tự này không đổi kết quả, và giữ cho phép đếm độc lập với ChangeTracker).
+        var windowCutoff = DateTime.UtcNow.AddHours(-threshold.NoiseSuppressionWindowHours);
+        var breachCount = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
+            .CountAsync(n => n.BatteryAssetId == batteryAssetId
+                          && n.AnomalyType == anomaly.Type
+                          && n.Time >= windowCutoff, ct);
+
         // Ghi breach event này.
         await _unitOfWork.NoiseBreachEvents.AddAsync(new Domain.Entities.NoiseBreachEvent
         {
@@ -309,12 +320,6 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             ActualValue = anomaly.ActualValue,
             Unit = anomaly.Unit
         });
-
-        var windowCutoff = DateTime.UtcNow.AddHours(-threshold.NoiseSuppressionWindowHours);
-        var breachCount = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
-            .CountAsync(n => n.BatteryAssetId == batteryAssetId
-                          && n.AnomalyType == anomaly.Type
-                          && n.Time >= windowCutoff, ct);
 
         // +1 vì row vừa Add chưa SaveChanges.
         return (breachCount + 1) < threshold.NoiseSuppressionCount;
