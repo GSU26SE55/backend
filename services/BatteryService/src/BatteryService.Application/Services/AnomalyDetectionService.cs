@@ -80,8 +80,8 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             {
                 // Sprint 5B B1 (#152) — Noise suppression frequency-based.
                 // Bypass: EnvironmentalIncident và Critical Overheat (an toàn).
-                var suppress = await ShouldSuppressByNoiseAsync(
-                    reading.BatteryAssetId, anomaly, threshold, cancellationToken);
+                var (suppress, recordedBreach) = await ShouldSuppressByNoiseAsync(
+                    reading, anomaly, threshold, cancellationToken);
                 if (suppress)
                 {
                     result.AlertsSuppressed++;
@@ -126,6 +126,15 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                 };
                 await _unitOfWork.Alerts.AddAsync(alert);
                 result.AlertsCreated++;
+
+                // Sprint Bonus NS-10 (#654, N2) — alert nổ từ chuỗi breach suppression → link
+                // chuỗi vào alert (audit "alert này nổ từ chuỗi breach nào") + giữ khỏi retention.
+                if (recordedBreach is not null)
+                {
+                    await PromoteBreachChainAsync(
+                        reading.BatteryAssetId, anomaly.Type, threshold, alert.Id,
+                        recordedBreach, cancellationToken);
+                }
 
                 if (anomaly.Severity == AlertSeverityEnum.Critical)
                 {
@@ -299,43 +308,94 @@ public class AnomalyDetectionService : IAnomalyDetectionService
     /// - Threshold không bật noise suppression (return false → không suppress).
     /// - Anomaly Critical Overheat (an toàn — fire alert ngay).
     /// - Anomaly EnvironmentalIncident (site-level — bypass).
+    ///
+    /// Sprint Bonus NS-10 (#654, N3): breach ghi theo <c>reading.Time</c> + dedup theo
+    /// (assetId, anomalyType, reading.Time) — scan lookback overlap 2× không được đếm
+    /// cùng 1 reading thành 2 breach; copy <c>SourceType</c> từ reading (B9).
+    /// Trả kèm breach vừa ghi (nếu có) để caller promote khi alert nổ (N2).
     /// </summary>
-    private async Task<bool> ShouldSuppressByNoiseAsync(
-        Guid batteryAssetId,
+    private async Task<(bool Suppress, Domain.Entities.NoiseBreachEvent? RecordedBreach)> ShouldSuppressByNoiseAsync(
+        Domain.Entities.SensorReading reading,
         Anomaly.AnomalyDetection anomaly,
         Domain.Entities.ThresholdConfig threshold,
         CancellationToken ct)
     {
         // Bypass — luôn fire alert ngay.
         if (anomaly.Type == AnomalyTypeEnum.EnvironmentalIncident)
-            return false;
+            return (false, null);
         if (anomaly.Type == AnomalyTypeEnum.Overheat && anomaly.Severity == AlertSeverityEnum.Critical)
-            return false;
+            return (false, null);
 
         // §1.3.3 — Count/Window NOT NULL với default, chỉ cần check Enabled + Count > 1.
         if (!threshold.NoiseSuppressionEnabled || threshold.NoiseSuppressionCount <= 1)
-            return false;
+            return (false, null);
 
-        // Đếm breach đã có trong window TRƯỚC khi Add (row pending không được DB đếm
-        // nên thứ tự này không đổi kết quả, và giữ cho phép đếm độc lập với ChangeTracker).
+        var batteryAssetId = reading.BatteryAssetId;
+
+        // Đếm breach đã persist trong window TRƯỚC khi Add (row pending không được DB đếm).
         var windowCutoff = DateTime.UtcNow.AddHours(-threshold.NoiseSuppressionWindowHours);
         var breachCount = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
             .CountAsync(n => n.BatteryAssetId == batteryAssetId
                           && n.AnomalyType == anomaly.Type
                           && n.Time >= windowCutoff, ct);
 
-        // Ghi breach event này.
-        await _unitOfWork.NoiseBreachEvents.AddAsync(new Domain.Entities.NoiseBreachEvent
-        {
-            Time = DateTime.UtcNow,
-            BatteryAssetId = batteryAssetId,
-            AnomalyType = anomaly.Type,
-            ThresholdValue = anomaly.ThresholdValue,
-            ActualValue = anomaly.ActualValue,
-            Unit = anomaly.Unit
-        });
+        // NS-10 (N3) — dedup: cùng 1 reading bị scan lại ở tick sau (lookback overlap 2×)
+        // đã có breach ghi theo đúng reading.Time → không ghi đôi, không đếm lạm phát.
+        var alreadyRecorded = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
+            .AnyAsync(n => n.BatteryAssetId == batteryAssetId
+                        && n.AnomalyType == anomaly.Type
+                        && n.Time == reading.Time, ct);
 
-        // +1 vì row vừa Add chưa SaveChanges.
-        return (breachCount + 1) < threshold.NoiseSuppressionCount;
+        Domain.Entities.NoiseBreachEvent? recorded = null;
+        if (!alreadyRecorded)
+        {
+            recorded = new Domain.Entities.NoiseBreachEvent
+            {
+                Time = reading.Time,
+                BatteryAssetId = batteryAssetId,
+                AnomalyType = anomaly.Type,
+                ThresholdValue = anomaly.ThresholdValue,
+                ActualValue = anomaly.ActualValue,
+                Unit = anomaly.Unit,
+                SourceType = reading.SourceType
+            };
+            await _unitOfWork.NoiseBreachEvents.AddAsync(recorded);
+        }
+
+        // Breach của reading này (persisted nếu re-scan, pending nếu mới) + breach persisted khác.
+        var effectiveCount = breachCount + (alreadyRecorded ? 0 : 1);
+        return (effectiveCount < threshold.NoiseSuppressionCount, recorded);
+    }
+
+    /// <summary>
+    /// Sprint Bonus NS-10 (#654, N2) — khi alert nổ qua đường suppression: gán
+    /// <c>PromotedToAlertId</c> cho chuỗi breach cùng (assetId, anomalyType) trong window
+    /// (audit "alert này nổ từ chuỗi breach nào") — retention sẽ giữ các row đã promote.
+    /// </summary>
+    private async Task PromoteBreachChainAsync(
+        Guid batteryAssetId,
+        AnomalyTypeEnum anomalyType,
+        Domain.Entities.ThresholdConfig threshold,
+        Guid alertId,
+        Domain.Entities.NoiseBreachEvent pendingBreach,
+        CancellationToken ct)
+    {
+        var windowCutoff = DateTime.UtcNow.AddHours(-threshold.NoiseSuppressionWindowHours);
+        var chain = await _unitOfWork.NoiseBreachEvents.GetAllAsync()
+            .Where(n => n.BatteryAssetId == batteryAssetId
+                     && n.AnomalyType == anomalyType
+                     && n.Time >= windowCutoff
+                     && n.PromotedToAlertId == null)
+            .ToListAsync(ct);
+
+        foreach (var breach in chain)
+        {
+            if (ReferenceEquals(breach, pendingBreach))
+                continue; // pending set trực tiếp bên dưới (DB query không thấy row pending)
+            breach.PromotedToAlertId = alertId;
+            _unitOfWork.NoiseBreachEvents.UpdateAsync(breach);
+        }
+
+        pendingBreach.PromotedToAlertId = alertId;
     }
 }
