@@ -120,7 +120,8 @@ Open ──→ Acknowledged ──→ Resolved
 | `HighInternalResistance` | 12 | Điện trở trong tăng (Tier 2 battery health) | Tính từ Voltage/Current pattern |
 | `CellImbalance` | 13 | Mất cân bằng giữa các cell | Tier 2 battery health analysis |
 | `EnvironmentalIncident` | 14 | Liên kết tới `EnvironmentalIncident` cấp site (smoke/fire/flood…) | Tạo từ incident raise |
-| `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check |
+| `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check — chỉ ghép cặp `Bms ↔ IotGateway`; ΔV > 0.5V hoặc ΔT > 5°C. **Nguồn `redundant` (INA226) không đo nhiệt (temp=0 cứng) → backend skip so sánh nhiệt cho cặp chứa nó** (contract firmware, NS-09 #653) |
+| `Undertemp` | 16 | Nhiệt độ thấp hơn ngưỡng tối thiểu (Sprint Bonus NS-25 #665) | `Temperature < ThresholdConfig.TemperatureMin` (seed −10°C). Dưới `TemperatureMin − 5°C` → Critical, còn lại Warning. Sạc pin lithium dưới 0°C gây lithium plating (nguy hiểm thật). ⚠️ **Wire value cross-service** — FE cần mirror giá trị 16 |
 
 ### `EnvironmentalIncidentTypeEnum`
 
@@ -281,8 +282,9 @@ Base route: `/api/alerts`
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `id` | `string` | Không | ID cảnh báo |
-| `batteryAssetId` | `string` | Không | ID battery asset phát sinh cảnh báo |
-| `batterySerialNumber` | `string` | Không | Serial number của pin (để hiển thị) |
+| `batteryAssetId` | `string` | Không (rỗng `""` cho alert cấp site) | ID battery asset phát sinh cảnh báo. **Chuỗi rỗng `""`** cho alert **cấp SITE** (ambient `HighAmbientTemp`/`HighHumidity`/`HighTempHumidityCombo` = 9/10/11, hoặc `EnvironmentalIncident` = 14) — khi đó dùng `siteId` |
+| `siteId` | `string?` | **Null** cho alert cấp pin thông thường | **Sprint Bonus NS-21 (#661)** — ID Site cho alert cấp site (ambient/environmental incident). Giúp FE route alert về đúng site. `null` với alert gắn 1 pin cụ thể |
+| `batterySerialNumber` | `string` | Không (rỗng cho alert cấp site) | Serial number của pin (để hiển thị) — `""` cho alert cấp site (không gắn pin) |
 | `anomalyType` | `AnomalyTypeEnum` | Không | Loại bất thường (xem enum) |
 | `severity` | `AlertSeverityEnum` | Không | Mức độ nghiêm trọng (xem enum) |
 | `thresholdValue` | `decimal?` | Null nếu anomaly không gắn ngưỡng cụ thể | Giá trị ngưỡng đã cấu hình |
@@ -830,6 +832,8 @@ Base route: `/api/sensor-readings`
 
 **Response thành công `200`:** `CommonResponse<SensorReadingAggregateDto[]>` — danh sách bucket sắp xếp tăng dần theo thời gian.
 
+> **Sprint Bonus NS-01/NS-02 (#646/#647):** aggregate chỉ tính trên reading nguồn **primary** (`sensorSourceCode = "primary"` hoặc null/empty — cùng quy ước coalescer SSE §34.10.5). Reading `redundant`/`external-temp` bị loại để tránh đếm trùng 3 nguồn/pin.
+
 ```json
 {
   "isSuccess": true,
@@ -840,7 +844,19 @@ Base route: `/api/sensor-readings`
       "avgCurrent": -1.82,
       "avgTemperature": 28.5,
       "avgSocPercent": 76.4,
-      "avgSohPercent": 91.2
+      "avgSohPercent": 91.2,
+      "minVoltage": 51.9,
+      "maxVoltage": 52.8,
+      "minTemperature": 27.1,
+      "maxTemperature": 30.2,
+      "maxChargeCurrent": 1.92,
+      "minChargeCurrent": 0.31,
+      "avgChargeCurrent": 1.05,
+      "maxDischargeCurrent": 4.75,
+      "minDischargeCurrent": 0.42,
+      "avgDischargeCurrent": 2.31,
+      "chargeSampleCount": 210,
+      "dischargeSampleCount": 385
     }
   ]
 }
@@ -852,12 +868,26 @@ Base route: `/api/sensor-readings`
 |---|---|---|---|
 | `time` | `DateTime` | Không | Thời điểm bắt đầu bucket (UTC) — field tên là `time` (không phải `bucket`) |
 | `avgVoltage` | `decimal` | Không | AVG điện áp (V) trong bucket |
-| `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket |
+| `avgCurrent` | `decimal` | Không | AVG dòng điện (A) trong bucket — ⚠️ trộn dấu nạp/xả (giữ backward-compat); vẽ chart dùng `avgChargeCurrent`/`avgDischargeCurrent` |
 | `avgTemperature` | `decimal` | Không | AVG nhiệt độ (°C) |
 | `avgSocPercent` | `decimal` | Không | AVG SOC (%) |
 | `avgSohPercent` | `decimal?` | Null nếu bucket không có reading nào có SohPercent | AVG SOH (%) |
+| `minVoltage` / `maxVoltage` | `decimal?` | Null nếu bucket không có reading primary | MIN/MAX điện áp (V) |
+| `minTemperature` / `maxTemperature` | `decimal?` | Null nếu bucket không có reading primary | MIN/MAX nhiệt độ (°C) |
+| `maxChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | Dòng nạp đỉnh (A, **luôn dương**) — `MAX(current)` với `current > 0` |
+| `minChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | Dòng nạp thấp nhất khi đang nạp (A, dương) |
+| `avgChargeCurrent` | `decimal?` | Null nếu bucket không có mẫu nạp | AVG dòng nạp (A, dương) |
+| `maxDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | Dòng xả đỉnh (A, **luôn dương**) — `MAX(ABS(current))` với `current < 0` |
+| `minDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | Dòng xả thấp nhất khi đang xả (A, dương) |
+| `avgDischargeCurrent` | `decimal?` | Null nếu bucket không có mẫu xả | AVG dòng xả (A, dương) |
+| `chargeSampleCount` | `int` | Không (0 nếu không có) | Số mẫu chiều nạp trong bucket |
+| `dischargeSampleCount` | `int` | Không (0 nếu không có) | Số mẫu chiều xả trong bucket |
 
-> **Lưu ý:** `SensorReadingAggregateDto` **không có** field `sampleCount` (số reading trong bucket) — không trả về trong response.
+**Quy ước min/max nạp/xả (chốt NS-01 — newsprint.md §2):**
+- Quy ước dấu dữ liệu thô: `current > 0` = nạp, `current < 0` = xả. Response min/max **luôn trả giá trị DƯƠNG** cho cả 2 chiều — chiều nằm trong tên field, FE không phải xử lý dấu.
+- Sample `current == 0` (idle) không thuộc chiều nào — bỏ qua khỏi cả 2 phía.
+- Field nullable: bucket không có mẫu chiều nào → `null` (pin idle cả bucket → cả cụm field nạp/xả null). **Không trả `0`** — 0A là giá trị đo hợp lệ ≠ không có dữ liệu.
+- Đường ngưỡng tham chiếu trên chart lấy từ `GET /api/thresholds` (`currentMaxCharge`/`currentMaxDischarge`) — là ngưỡng cảnh báo admin đặt, **không** nhầm với min/max thực đo.
 
 **Lỗi thường gặp:**
 - `400` — `BatteryAssetId` rỗng hoặc `interval` không thuộc `{1m, 5m, 15m, 1h, 1d}`
@@ -872,6 +902,59 @@ Base route: `/api/sensor-readings`
 - Thay thế `/history` cho time range lớn để tránh quá nhiều data points.
 
 > **Lưu ý:** Không trả `totalItems`. FE dùng độ dài mảng `items` từ data.
+
+---
+
+### `GET /api/sensor-readings/{batteryAssetId}/aggregate/hourly`
+
+**Sprint Bonus NS-06 (#650, PA-4).**
+
+**Mục đích / tác dụng:** trả aggregate cố định bucket **1 giờ** cho chart min/max nạp/xả (+ V/T + avg) của 1 pin, đọc từ TimescaleDB **continuous aggregate** `sensor_readings_agg_1h` (materialized view tự refresh mỗi phút, bật real-time aggregation nên bao gồm cả dữ liệu gần đây chưa materialize). Dùng cho **chart range dài (tháng/năm)** — query gần O(số bucket), **không** materialize toàn bộ rows vào RAM như `/aggregate` (in-memory bounded ~7 ngày).
+
+**Cách dùng:** giống `/aggregate` nhưng không có `interval` (cố định 1h). FE dùng khi vẽ chart range dài / cần hiệu năng ổn định. Chỉ tính trên reading source **primary** (giống `/aggregate`).
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` / `Customer`.
+
+**Path param:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `batteryAssetId` | `Guid` | ✅ | ID pin (lấy từ route — client không set qua query/body) |
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `from` | `DateTime?` | Không | Lọc `bucket >= from` (UTC) |
+| `to` | `DateTime?` | Không | Lọc `bucket <= to` (UTC) |
+
+> Không có `interval` — endpoint này cố định 1h.
+
+**Response thành công `200`:** `CommonResponse<SensorReadingAggregateDto[]>` — **cùng shape** với `/aggregate` (đủ min/max nạp/xả + min/max V/T + avg tách chiều + `chargeSampleCount`/`dischargeSampleCount`), sắp xếp **tăng dần** theo `time` (= bucket). Xem chi tiết field + quy ước dương/nullable ở section **`GET .../aggregate`** phía trên (field `time` ở đây là mốc đầu bucket 1h).
+
+```json
+{
+  "isSuccess": true,
+  "data": [
+    {
+      "time": "2026-07-08T09:00:00Z",
+      "avgVoltage": 52.34, "avgCurrent": -1.82, "avgTemperature": 28.5, "avgSocPercent": 76.4, "avgSohPercent": 91.2,
+      "minVoltage": 51.9, "maxVoltage": 52.8, "minTemperature": 27.1, "maxTemperature": 30.2,
+      "maxChargeCurrent": 1.92, "minChargeCurrent": 0.31, "avgChargeCurrent": 1.05,
+      "maxDischargeCurrent": 4.75, "minDischargeCurrent": 0.42, "avgDischargeCurrent": 2.31,
+      "chargeSampleCount": 210, "dischargeSampleCount": 385
+    }
+  ],
+  "listErrors": null
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — `batteryAssetId` rỗng → field-level (`listErrors: [{ field: "BatteryAssetId", detail }]`)
+- `422` — `from > to` → field-level (`listErrors: [{ field: "To", detail }]`)
+- `401` — Chưa đăng nhập
+
+> **Khi nào dùng cái nào:** range ngắn (≤ 7 ngày, cần interval linh hoạt 1m/5m/…) → `/aggregate`. Range dài / interval 1h cố định / cần hiệu năng ổn định → `/aggregate/hourly`.
 
 ---
 
@@ -1728,6 +1811,53 @@ Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload 
 
 ---
 
+### `POST /api/environmental-incidents/manual`
+
+**Sprint Bonus NS-23 (#663, E3).**
+
+**Mục đích / tác dụng:** cho **con người** (Staff/Manager/Admin đứng tại site) report sự cố môi trường **thủ công bằng JWT** khi thấy cháy/khói/ngập mà **không có sensor tự động** — đặc biệt các loại chỉ con người phát hiện được (`FireDetected`/`OverheatHazard`/`Other`). Trước fix, endpoint `POST /` chỉ nhận ApiKey (IoT) nên không ai tạo tay được. Reuse cùng handler với `POST /` → cũng tạo Alert site-level + publish `EnvironmentalIncidentDetectedEvent` (→ auto-ticket P1 NS-22).
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff`. Customer **KHÔNG** được phép.
+
+**Khác biệt so với `POST /` (ApiKey IoT):**
+- `reportedBy` trong body **bị bỏ qua** — backend luôn ghi đè bằng user id từ token (chống mạo danh).
+- `detectedAt` **không bắt buộc** — mặc định `UtcNow` nếu bỏ trống (con người report không cần điền giờ).
+
+**Request body:**
+```json
+{
+  "siteId": "11111111-1111-1111-1111-111111111111",
+  "incidentType": 2,
+  "severity": 3,
+  "notes": "Nhân viên phát hiện lửa tại cabinet B khu vực 2."
+}
+```
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `siteId` | `Guid` | ✅ | Không `Guid.Empty` | ID site xảy ra sự cố |
+| `incidentType` | `EnvironmentalIncidentTypeEnum` (int) | ✅ | Enum hợp lệ | Loại sự cố (xem `EnvironmentalIncidentTypeEnum`: 1 Smoke · 2 FireDetected · 3 GasLeak · 4 Flood · 5 OverheatHazard · 99 Other) |
+| `severity` | `AlertSeverityEnum` (int) | ❌ (mặc định `Critical` = 3) | Enum hợp lệ | Mức nghiêm trọng: `1` Info · `2` Warning · `3` Critical |
+| `detectedAt` | `DateTime?` | ❌ (mặc định `UtcNow`) | Không vượt `UtcNow + 5'` | Thời điểm phát hiện (UTC) |
+| `reportedBy` | `string?` | ❌ (**bị bỏ qua**) | — | **Không dùng** — backend lấy từ token |
+| `notes` | `string?` | ❌ | Max 1000 ký tự | Ghi chú/mô tả chi tiết |
+
+**Response thành công — 2 path (giống `POST /`):**
+
+| Status | Path | Mô tả |
+|---|---|---|
+| `201 Created` | Create | Incident mới tạo (`Status = Open`). Publish `EnvironmentalIncidentDetectedEvent` → Notification + auto Alert site-level + auto-ticket P1 (NS-22). |
+| `200 OK` | Dedup | Đã có incident active `Open`/`Acknowledged` cùng `SiteId`+`IncidentType` → trả incident cũ, KHÔNG phát event lần nữa. |
+
+Cả 2 path trả `CommonResponse<EnvironmentalIncidentDto>` (shape giống `GET /{id}`).
+
+**Lỗi thường gặp:**
+- `400` — `SiteId` rỗng, `IncidentType`/`Severity` không hợp lệ → field-level (`listErrors: [{ field, detail }]`)
+- `401` — Chưa đăng nhập
+- `403` — Role không nằm trong Admin/Manager/Staff
+
+---
+
 ### `POST /api/environmental-incidents/{id}/acknowledge`
 
 **Mục đích:** Acknowledge incident — chuyển state `Open → Acknowledged`. Hệ thống set `acknowledgedBy = userId hiện tại (từ JWT)` và `acknowledgedAt = UtcNow`.
@@ -1786,6 +1916,8 @@ Cả 2 path đều trả `CommonResponse<EnvironmentalIncidentDto>` — payload 
 **Mục đích:** Đánh dấu `FalseAlarm` — incident không thật (ví dụ sương khói do vệ sinh module bằng cồn). Set `falseAlarmBy` = user hiện tại, `falseAlarmAt = UtcNow`, lưu `falseAlarmReason`.
 
 **Auth:** Bắt buộc (chỉ Admin/Manager — Staff/Customer không được phép, để tránh lạm dụng).
+
+> **Side-effect (Sprint Bonus NS-22 #662):** endpoint này publish `EnvironmentalIncidentResolvedEvent` với `wasFalseAlarm = true` → **TicketService tự đóng ticket** đã auto-tạo từ incident này (chuyển sang `ClosedRejected`, dừng SLA timer). Genuine resolve (`POST /{id}/resolve`) **không** auto-close — Staff đóng theo quy trình chuẩn.
 
 **Path param:** `id` — Guid của incident.
 
@@ -2227,6 +2359,8 @@ Base route: `/api/admin/iot-devices` — toàn bộ yêu cầu role `Admin`.
 
 > **`IotDeviceCreatedDto`** (trả khi tạo mới + rotate-key) = `IotDeviceDto` + các field bí mật **chỉ trả 1 lần**: `rawApiKey`, `provisioningQrCode` (`iot://provision?dc={deviceCode}&key={rawApiKey}`), `mqttUsername`, `mqttPassword`, `mqttBrokerHost`, `mqttBrokerPort`.
 
+> **`IotDeviceDetailDto`** (trả bởi `GET /api/admin/iot-devices/{id}`) = `IotDeviceDto` + `apiKey` (`string?`) — **full plaintext API key**, xem lại được nhiều lần (khác `rawApiKey` của create/rotate). `null` với device cũ chưa lưu plaintext (rotate-key để populate). List **không** có field này.
+
 #### `GET /api/admin/iot-devices`
 
 **Auth:** Admin
@@ -2239,11 +2373,46 @@ Base route: `/api/admin/iot-devices` — toàn bộ yêu cầu role `Admin`.
 
 #### `GET /api/admin/iot-devices/{id}`
 
+**Mục đích:** Lấy chi tiết 1 device kèm **full plaintext API key** để Admin xem lại và flash vào ESP32. Đây là endpoint **duy nhất** trả full key ngoài lúc create/rotate — endpoint `list` chỉ trả `apiKeyLastFour`.
+
 **Auth:** Admin
 
-**Response thành công `200`:** `CommonResponse<IotDeviceDto>` (không trả raw API key)
+**Route param:** `id` (`Guid`, bắt buộc) — chỉ bind từ route (`[JsonIgnore][BindNever]`).
 
-**Lỗi:** `404` — không tìm thấy / đã soft-delete
+**Response thành công `200`:** `CommonResponse<IotDeviceDetailDto>`
+
+> **`IotDeviceDetailDto`** = tất cả field của `IotDeviceDto` (bảng trên) **+ 1 field bổ sung**:
+>
+> | Field | Type | Nullable | Mô tả |
+> |---|---|---|---|
+> | `apiKey` | `string?` | Có | **Full plaintext API key** (prefix `iotk_`, ~47 ký tự). `null` nếu device được tạo **trước** khi bật lưu plaintext key (DB cũ chỉ giữ hash SHA-256, không backfill được) — gọi `POST /{id}/rotate-key` để sinh key mới + lưu plaintext. |
+
+**Ví dụ response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": null,
+  "data": {
+    "id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+    "deviceCode": "ESP32-001",
+    "displayName": "Site A - Rack 1 gateway",
+    "siteId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "siteName": "Site A",
+    "status": 2,
+    "apiKeyScopes": 11,
+    "apiKeyLastFour": "aB12",
+    "apiKey": "iotk_9xK3...full-key-here...aB12",
+    "apiKeyIssuedAt": "2026-07-16T14:00:00Z",
+    "apiKeyRevokedAt": null,
+    "heartbeatIntervalSeconds": 60,
+    "createdAt": "2026-07-16T13:55:00Z"
+  }
+}
+```
+
+**Lỗi:** `404` — không tìm thấy / đã soft-delete (message-only, `listErrors` null)
 
 ---
 
@@ -2497,13 +2666,17 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 ## Nhóm 12 — Cascade Risk Assessment (Sprint 7 B4 · §31.7)
 
-**Bối cảnh & tác dụng:** Đánh giá rủi ro **1 pin hỏng lây lan sang pin lân cận cùng site** (cascade/propagation). `cascadeRiskScore` (0.0–1.0) được `CascadeRiskBackgroundService` tính lại **mỗi 5 phút** cho mọi asset đang có Open alert, theo 3 rule cộng dồn rồi clamp ≤ 1.0:
+**Bối cảnh & tác dụng:** Đánh giá rủi ro **1 pin hỏng lây lan sang pin lân cận cùng site** (cascade/propagation). `cascadeRiskScore` (0.0–1.0) được `CascadeRiskBackgroundService` tính lại **mỗi 5 phút** theo 3 rule cộng dồn rồi clamp ≤ 1.0:
 
 1. **Topology factor** — theo `ElectricalTopology` (xem enum): Independent +0.0 · ParallelBank +0.2 · SeriesParallel +0.4 · SeriesString +0.6.
 2. **Proximity** — số asset **cùng Site** có Open alert trong 1h gần đây: ≥1 → +0.2 · ≥3 → +0.2 (cộng dồn).
 3. **Thermal runaway** — asset có alert `Overheat` + `Critical` + `Open` → +0.3.
 
-Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` → TicketService consumer **auto-upgrade Priority ticket liên quan lên P1** (safety override, ghi `TicketActivity`).
+> **Sprint Bonus NS-15 (#659) — score decay:** ngoài asset đang có Open alert, service còn recompute asset **từng có score > 0 nhưng đã hết Open alert** → score tự **tụt về topology** khi pin khỏe lại (trước fix score bị "đóng băng" trên heat map mãi mãi). FE **không cần** dựa vào `cascadeRiskUpdatedAt` để đoán score ôi nữa — score luôn được cập nhật.
+
+**Chuỗi phản ứng khi score cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent`:
+- **TicketService** — auto-upgrade Priority ticket liên quan lên **P1** (safety override, ghi `TicketActivity`) + **rút SLA DueAt về 4h** (NS-12 #656). Fallback **chỉ chọn ticket incident** (không nâng nhầm ticket bảo trì định kỳ). **Không có ticket active** → **auto-tạo ticket P1** `origin = System` (NS-13 #657) — event không rơi vào hư không.
+- **NotificationService** — notify **Manager + Admin** (in-app + push + email) để điều Staff kiểm tra/cô lập (NS-14 #658, `NotificationTypeEnum.CascadeRiskHigh = 15`).
 
 > Adaptation: project đã bỏ `BatteryGroup` nên proximity nhóm theo `SiteId`.
 
@@ -2770,7 +2943,7 @@ Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` 
 | DELETE | `/api/iot-devices/{deviceId}/calibrations/{calibrationId}` | Xóa calibration | Admin/Staff |
 | GET | `/api/iot-devices/calibrations-expiring` | Calibration sắp hết hạn | Admin/Manager |
 | GET | `/api/admin/iot-devices` | List IoT device | Admin |
-| GET | `/api/admin/iot-devices/{id}` | Chi tiết IoT device | Admin |
+| GET | `/api/admin/iot-devices/{id}` | Chi tiết IoT device (kèm full `apiKey` plaintext) | Admin |
 | POST | `/api/admin/iot-devices` | Tạo device + sinh API key | Admin |
 | PUT | `/api/admin/iot-devices/{id}` | Cập nhật device | Admin |
 | DELETE | `/api/admin/iot-devices/{id}` | Decommission device | Admin |
@@ -2859,3 +3032,103 @@ Khi score **cross ngưỡng ≥ 0.7** → publish `BatteryCascadeRiskHighEvent` 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<BatteryAuditLogDto>>` (lọc `actionCode` bắt đầu bằng `Alert`).
 
 **Lỗi:** `401` / `403`.
+
+---
+
+## Nhóm 14 — AI Classification feedback (Sprint Bonus NS-26 · §30.3/§30.12)
+
+> **Bối cảnh:** module AI (Isolation Forest + LSTM/CNN-LSTM) phân loại pin thành **Normal / Degrading / Failed** và dự đoán SOH%. Kết quả lưu ở **bảng riêng** `anomaly_classifications` / `soh_predictions` (KHÔNG nhét vào `Alerts`) để giữ bằng chứng model chạy thật (score/confidence/latency/modelVersion) + **feedback loop** cho retrain.
+> **Trạng thái:** NS-26 dựng sẵn **persistence (2 bảng)** + **endpoint feedback** dưới đây. **Luồng AI populate** 2 bảng (gọi HTTP `ai-module`) thuộc **Sprint AI** (`aibeiotrealtime.md`) — chưa chạy. Vì vậy hiện tại các bảng trống cho đến khi Sprint AI wire.
+
+### Enum của nhóm này
+
+#### `AnomalyClassificationEnum` (output phân loại AI)
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Normal` | 1 | Pin bình thường — AI không thấy bất thường (ứng viên false-positive nếu threshold đã raise alert) |
+| `Degrading` | 2 | Pin đang xuống cấp — severity gợi ý Warning |
+| `Failed` | 3 | Pin hỏng/nguy cơ cao — severity gợi ý Critical |
+
+#### `StaffFeedbackEnum` (đánh giá của Staff về classification)
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Correct` | 1 | AI phân loại **đúng** |
+| `FalsePositive` | 2 | AI báo bất thường nhưng thực tế **bình thường** (dương tính giả) |
+| `FalseNegative` | 3 | AI **bỏ sót** bất thường thật (âm tính giả) |
+
+### `POST /api/v1/anomaly-classifications/{id}/feedback`
+
+**Mục đích:** Staff xác nhận classification của AI (sau khi xử lý/resolve ticket) là đúng hay sai — phục vụ đo precision/recall của model trên production + xuất dữ liệu retrain hàng tháng (§30.12). Là **feedback loop** của tầng AI.
+
+**Cách dùng:** sau khi Staff resolve một ticket/alert có classification AI, UI hỏi "AI phân loại `Failed` có đúng không?" → gửi feedback về classification tương ứng.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được). `staffFeedbackByUserId` **luôn lấy từ token**, client không set được (chống mạo danh).
+
+**Path param:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | ✅ | ID của bản ghi `AnomalyClassification` |
+
+**Request body:**
+```json
+{
+  "feedback": 2
+}
+```
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `feedback` | `StaffFeedbackEnum` (int) | ✅ | Phải là `1`/`2`/`3` | Đánh giá của Staff (xem enum trên) |
+
+> Các field khác (`id` từ route, `staffFeedbackByUserId` từ token) **không** nhận qua body.
+
+**Response thành công `200`:** `CommonResponse<AnomalyClassificationDto>` — trả về classification sau khi cập nhật feedback.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã ghi nhận feedback.",
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "alertId": "9b2e7c14-...",
+    "batteryAssetId": "c1d4a2b8-...",
+    "classification": 3,
+    "anomalyScore": -0.352100,
+    "confidence": 0.910,
+    "modelVersion": "1.0",
+    "classifiedAt": "2026-07-16T08:12:00Z",
+    "latencyMs": 42,
+    "staffFeedback": 2,
+    "staffFeedbackByUserId": "a77c...",
+    "staffFeedbackAt": "2026-07-16T09:30:00Z"
+  },
+  "listErrors": null
+}
+```
+
+**Chi tiết `AnomalyClassificationDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` (GUID) | Không | ID bản ghi classification |
+| `alertId` | `string?` (GUID) | **Null** nếu classify không gắn Alert cụ thể | Alert liên quan |
+| `batteryAssetId` | `string` (GUID) | Không | Pin được phân loại |
+| `classification` | `AnomalyClassificationEnum` (int) | Không | Kết quả phân loại (1 Normal / 2 Degrading / 3 Failed) |
+| `anomalyScore` | `decimal` | Không | Điểm Isolation Forest (âm = bất thường hơn), precision (8,6) |
+| `confidence` | `decimal` | Không | Độ tự tin 0–1, precision (4,3) |
+| `modelVersion` | `string` | Không | Phiên bản model ("1.0"/"1.1") — khớp artifact versioning |
+| `classifiedAt` | `DateTime` (UTC) | Không | Thời điểm AI phân loại |
+| `latencyMs` | `int` | Không | Độ trễ inference (ms) — monitor SLA < 100ms |
+| `staffFeedback` | `StaffFeedbackEnum?` (int) | **Null** khi chưa có feedback | Đánh giá của Staff (1 Correct / 2 FalsePositive / 3 FalseNegative) |
+| `staffFeedbackByUserId` | `string?` (GUID) | **Null** khi chưa có feedback | User Staff đã đánh giá (từ token) |
+| `staffFeedbackAt` | `DateTime?` (UTC) | **Null** khi chưa có feedback | Thời điểm đánh giá |
+
+**Lỗi thường gặp:**
+- `400` — `feedback` không thuộc `{1,2,3}` hoặc `id` rỗng → field-level (`listErrors: [{ field, detail }]`)
+- `401` — Chưa đăng nhập
+- `403` — Role không nằm trong Admin/Manager/Staff
+- `404` — Không tìm thấy classification → `message`, `listErrors: null`

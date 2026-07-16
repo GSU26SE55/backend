@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>newsprint.md — Giải thích Phụ lục A → F</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg-card: #171a22;
+    --bg-card-2: #1e222c;
+    --border: #2a2f3a;
+    --text: #d7dbe3;
+    --text-dim: #9aa2b1;
+    --accent: #5b9dff;
+    --accent-2: #7c5cff;
+    --red: #ff5f5f;
+    --yellow: #ffc857;
+    --gray: #8b93a3;
+    --green: #4fd18b;
+    --code-bg: #0b0d12;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .layout { display: flex; max-width: 1400px; margin: 0 auto; }
+
+  /* Sidebar */
+  aside {
+    width: 300px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 18px;
+    border-right: 1px solid var(--border);
+    background: #0c0e13;
+  }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin: 20px 0 8px; }
+  aside h2:first-child { margin-top: 0; }
+  aside a { display: block; color: var(--text-dim); text-decoration: none; padding: 4px 10px; border-radius: 6px; font-size: 14px; border-left: 2px solid transparent; }
+  aside a:hover { background: var(--bg-card); color: var(--text); }
+  aside a.sub { padding-left: 22px; font-size: 13px; }
+  aside a .tag { font-family: var(--mono); font-size: 11px; }
+
+  /* Main */
+  main { flex: 1; padding: 40px 56px; max-width: 1000px; min-width: 0; }
+  h1 { font-size: 30px; margin: 0 0 6px; line-height: 1.25; }
+  .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 4px; }
+  .meta-pill { display: inline-block; font-family: var(--mono); font-size: 12px; background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 20px; padding: 2px 12px; color: var(--text-dim); margin: 2px 4px 2px 0; }
+
+  section { margin-top: 56px; scroll-margin-top: 20px; }
+  section > h2 {
+    font-size: 24px; margin: 0 0 4px; padding-bottom: 10px; border-bottom: 2px solid var(--border);
+  }
+  .apx-label { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+  h3 { font-size: 19px; margin: 32px 0 10px; }
+  h4 { font-size: 16px; margin: 22px 0 8px; }
+
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: #e6b673; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.55; color: #cdd3de; }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+
+  /* Cards */
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin: 16px 0; }
+  .card.intro { background: linear-gradient(135deg, #171a22, #1a1d28); }
+
+  /* Bug blocks */
+  .bug { border-radius: 12px; padding: 2px 22px 18px; margin: 22px 0; border: 1px solid var(--border); border-left-width: 4px; background: var(--bg-card); }
+  .bug.red { border-left-color: var(--red); }
+  .bug.yellow { border-left-color: var(--yellow); }
+  .bug.gray { border-left-color: var(--gray); }
+  .bug.feature { border-left-color: var(--green); }
+  .bug h4 { display: flex; align-items: baseline; gap: 8px; font-size: 17px; }
+  .bug .code-id { font-family: var(--mono); font-weight: 700; font-size: 16px; }
+  .bug.red .code-id { color: var(--red); }
+  .bug.yellow .code-id { color: var(--yellow); }
+  .bug.gray .code-id { color: var(--gray); }
+  .bug.feature .code-id { color: var(--green); }
+
+  .field { margin: 10px 0; }
+  .field .k { font-weight: 700; color: var(--text); display: inline-block; }
+  .field.evidence .k { color: var(--accent); }
+  .field.impact .k { color: var(--red); }
+  .field.fix .k { color: var(--green); }
+  .field.scenario .k { color: var(--yellow); }
+
+  /* Badges */
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 9px; border-radius: 20px; vertical-align: middle; font-family: var(--mono); }
+  .badge.red { background: rgba(255,95,95,.15); color: var(--red); border: 1px solid rgba(255,95,95,.4); }
+  .badge.yellow { background: rgba(255,200,87,.13); color: var(--yellow); border: 1px solid rgba(255,200,87,.4); }
+  .badge.gray { background: rgba(139,147,163,.13); color: var(--gray); border: 1px solid rgba(139,147,163,.4); }
+  .badge.green { background: rgba(79,209,139,.13); color: var(--green); border: 1px solid rgba(79,209,139,.4); }
+  .badge.realmode { background: rgba(124,92,255,.13); color: var(--accent-2); border: 1px solid rgba(124,92,255,.4); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-card-2); color: var(--text); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code { font-size: 12.5px; }
+
+  /* Callout */
+  .callout { border-radius: 10px; padding: 12px 18px; margin: 16px 0; font-size: 14.5px; }
+  .callout.warn { background: rgba(255,200,87,.08); border: 1px solid rgba(255,200,87,.3); }
+  .callout.danger { background: rgba(255,95,95,.08); border: 1px solid rgba(255,95,95,.3); }
+  .callout.info { background: rgba(91,157,255,.08); border: 1px solid rgba(91,157,255,.3); }
+  .callout.good { background: rgba(79,209,139,.08); border: 1px solid rgba(79,209,139,.3); }
+  .callout .lead { font-weight: 700; }
+
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+
+  .flow { font-family: var(--mono); font-size: 12.5px; white-space: pre; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow-x: auto; color: #a9d5c0; }
+
+  .issue-row td:first-child { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  .footer-note { color: var(--text-dim); font-size: 13px; margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+  .thread { display: flex; gap: 14px; align-items: flex-start; margin: 14px 0; }
+  .thread .num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #06131f; font-weight: 800; display: flex; align-items: center; justify-content: center; font-family: var(--mono); }
+
+  @media (max-width: 980px) {
+    aside { display: none; }
+    main { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside>
+    <h2>Điều hướng</h2>
+    <a href="#top">↑ Tổng quan</a>
+    <h2>Phần mở đầu · §0–§7</h2>
+    <a href="#intro-sprint">Đề xuất min/max streaming</a>
+    <a href="#pa-compare" class="sub">6 phương án PA-1→PA-6</a>
+    <h2>6 phụ lục audit</h2>
+    <a href="#apx-a"><span class="tag">§8</span> Phụ lục A — Noise (4 lớp)</a>
+    <a href="#apx-b"><span class="tag">§9</span> Phụ lục B — Bug N1–N6</a>
+    <a href="#n1" class="sub">🔴 N1 · N4 · N5</a>
+    <a href="#n2" class="sub">🟡 N2 · N3 · ⚪ N6</a>
+    <a href="#apx-c"><span class="tag">§10</span> Phụ lục C — Cascade Risk</a>
+    <a href="#r1" class="sub">🔴 R1 · R2</a>
+    <a href="#r3" class="sub">🟡 R3–R5 · ⚪ R6–R8</a>
+    <a href="#apx-d"><span class="tag">§11</span> Phụ lục D — Cách ly pin</a>
+    <a href="#iso" class="sub">ISO-A · ISO-B · ISO-C</a>
+    <a href="#apx-e"><span class="tag">§12</span> Phụ lục E — Sự cố môi trường</a>
+    <a href="#e1" class="sub">🔴 E1 · E2 · 🟡 E3 · E4</a>
+    <a href="#apx-f"><span class="tag">§13</span> Phụ lục F — Anomaly classification</a>
+    <a href="#f1" class="sub">🟡 F1 · 🔴 F2</a>
+    <h2>Tổng kết</h2>
+    <a href="#threads">3 sợi chỉ đỏ</a>
+    <a href="#issues">Bảng issue audit (07→27)</a>
+    <a href="#deps">Sơ đồ phụ thuộc issue</a>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main id="top">
+    <h1>Giải thích <code style="font-size:.8em">newsprint.md</code></h1>
+    <p class="subtitle">Đề xuất min/max streaming (§0–§7) + 6 phụ lục audit pipeline dữ liệu BatteryService (A → F)</p>
+    <div style="margin-top:10px">
+      <span class="meta-pill">Ngày gốc: 2026-07-08 → 09</span>
+      <span class="meta-pill">Trạng thái: PROPOSAL</span>
+      <span class="meta-pill">20 điểm lệch</span>
+      <span class="meta-pill">Issue NS-07 → NS-27</span>
+    </div>
+
+    <div class="card intro">
+      <p><strong>Bối cảnh:</strong> <code>newsprint.md</code> khởi đầu là đề xuất một feature nhỏ (hiển thị min/max dòng nạp/xả streaming lên UI). Nhưng trong lúc đọc code để verify, tác giả phát hiện hàng loạt vấn đề hệ thống ở pipeline dữ liệu → viết thành <strong>6 phụ lục audit</strong>.</p>
+      <p style="margin-bottom:0"><strong>Trang này chỉ tập trung vào 6 phụ lục audit đó (A → F).</strong> Mỗi phụ lục audit một mảng riêng của backend, dùng hệ thống ký hiệu bug riêng: <span class="badge red">N1–N6</span> noise · <span class="badge red">R1–R8</span> cascade risk · <span class="badge red">E1–E4</span> môi trường · <span class="badge red">F1–F2</span> classification.</p>
+    </div>
+
+    <div class="callout warn">
+      <span class="lead">⚠️ Luận điểm quan trọng nhất xuyên suốt:</span> Nhiều bug nghiêm trọng nhất (N4, N5, và hệ quả real-mode) <strong>chỉ bùng lên khi chạy hardware thật</strong> (<code>USE_MOCK_BMS=0</code>). Mock hiện tại đang <em>che</em> chúng → test/demo không bao giờ thấy. Fix <code>N1</code> + <code>N4</code> là điều kiện tiên quyết trước khi lên hardware thật.
+    </div>
+
+    <!-- ===================== PHẦN MỞ ĐẦU §0–§7 ===================== -->
+    <section id="intro-sprint">
+      <div class="apx-label">§0–§7 · PHẦN MỞ ĐẦU</div>
+      <h2>Đề xuất gốc — Min/Max dòng nạp/xả streaming lên UI</h2>
+      <div class="callout info">
+        <span class="lead">Yêu cầu gốc:</span> UI hiển thị min/max dòng nạp (charge) và dòng xả (discharge) của từng cục pin, dữ liệu dạng <strong>streaming</strong> (push realtime, không chỉ polling). Phạm vi: BatteryService (BE) + FE Web/Mobile — <strong>firmware IoT KHÔNG cần sửa</strong> (đã verify src <code>capstone/iot</code>).
+      </div>
+
+      <h3>§0 — Khuyến nghị (TL;DR): kết hợp PA-2 + PA-3</h3>
+      <ol>
+        <li><strong>PA-2 (backfill/chart):</strong> mở rộng <code>GET /api/sensor-readings/{id}/aggregate</code> — thêm min/max tách 2 chiều nạp/xả cho mỗi bucket, và <strong>lọc source <code>primary</code></strong> (hiện đang trộn 3 nguồn/pin — bug tiềm ẩn).</li>
+        <li><strong>PA-3 (streaming) ⭐:</strong> tính rolling min/max lúc ingest (state trong Redis), publish <strong>SSE event mới <code>stats</code></strong> trên hạ tầng SSE sẵn có (<code>GET /api/sensor-readings/stream</code>). FE nhận push mỗi ~5s, không cần polling.</li>
+      </ol>
+      <div class="callout good">Firmware đã gửi đủ dữ liệu thô (current có dấu, 5s/mẫu) — mọi thứ làm ở tầng backend + FE.</div>
+
+      <h3>§1 — Hiện trạng đã xác minh</h3>
+      <p><strong>Dữ liệu thô ĐÃ có sẵn:</strong> dòng điện <strong>có dấu</strong> (<code>+</code>=nạp, <code>−</code>=xả), 5s/mẫu, 3 reading/pin/tick, lưu TimescaleDB hypertable. <strong>Hạ tầng streaming ĐÃ có</strong> (Sprint #614–#618): ingest → Redis pub/sub → SSE (<code>event: reading / summary / ping</code>), auth JWT theo scope.</p>
+      <p><strong>Cái CHƯA có:</strong> min/max nạp/xả ở mọi tầng (firmware chỉ có cellMin/cellMax cho delta điện áp); <code>/aggregate</code> chỉ có AVG (mà <code>AvgCurrent</code> trộn dấu nạp+xả → gần 0, vô nghĩa); <code>/aggregate</code> không lọc source → gộp cả 3 source/pin → đếm mỗi giá trị ~3 lần.</p>
+      <div class="callout warn">
+        <span class="lead">5 bẫy dữ liệu bắt buộc xử lý:</span>
+        <ol style="margin-bottom:0">
+          <li>3 reading/pin/tick → chỉ tính min/max trên <code>sensorSourceCode="primary"</code> (INA226 redundant + DS18B20 mirror phải loại, nếu không INA226 noise ±0.05A tạo max giả + nhân 3).</li>
+          <li>Quy ước dấu: xả là số âm → "max xả" = <code>MAX(ABS(current))</code> với current &lt; 0.</li>
+          <li>Outlier (|I|&gt;1000A) đã chặn ở ingest → không cần lọc lại khi aggregate.</li>
+          <li>Dev đang chạy mock (<code>USE_MOCK_BMS=1</code>, current random) → đừng tune ngưỡng theo mock.</li>
+          <li><code>ThresholdConfig.CurrentMaxCharge/Discharge</code> là ngưỡng cảnh báo admin đặt, KHÁC min/max thực đo — UI vẽ làm đường giới hạn tham chiếu.</li>
+        </ol>
+      </div>
+
+      <h3>§2 — Định nghĩa metric (chốt trước khi code)</h3>
+      <table>
+        <tr><th>Metric</th><th>Công thức</th><th>Ý nghĩa UI</th></tr>
+        <tr><td><code>maxChargeCurrent</code></td><td>MAX(current) với current &gt; 0</td><td>Dòng nạp đỉnh</td></tr>
+        <tr><td><code>minChargeCurrent</code></td><td>MIN(current) với current &gt; 0</td><td>Dòng nạp thấp nhất (khi đang nạp)</td></tr>
+        <tr><td><code>maxDischargeCurrent</code></td><td>MAX(ABS(current)) với current &lt; 0</td><td>Dòng xả đỉnh</td></tr>
+        <tr><td><code>minDischargeCurrent</code></td><td>MIN(ABS(current)) với current &lt; 0</td><td>Dòng xả thấp nhất (khi đang xả)</td></tr>
+        <tr><td><code>charge/dischargeSampleCount</code></td><td>COUNT theo chiều</td><td>FE biết bucket có dữ liệu chiều đó không</td></tr>
+      </table>
+      <p><strong>Quy ước trả về:</strong> luôn trả giá trị <strong>dương</strong> cả 2 chiều (chiều nằm trong tên field); field <strong>nullable</strong> (bucket không có mẫu chiều nào → null; pin idle cả bucket → cả 4 null) — KHÔNG trả 0 vì 0A là giá trị đo hợp lệ; sample <code>current==0</code> (idle) bỏ qua khỏi cả 2 phía.</p>
+
+      <h3 id="pa-compare">§3 — 6 phương án + bảng so sánh</h3>
+      <table>
+        <tr><th></th><th>Streaming?</th><th>Backfill?</th><th>Nhất quán multi-client</th><th>Effort</th><th>Verdict</th></tr>
+        <tr><td>PA-1 FE-only (tự tính từ SSE)</td><td>✅</td><td>❌</td><td>❌</td><td>0.5d</td><td>Demo tạm</td></tr>
+        <tr><td>PA-2 REST aggregate min/max</td><td>❌ (poll)</td><td>✅</td><td>✅</td><td>1–1.5d</td><td><strong>Làm</strong></td></tr>
+        <tr><td>PA-3 SSE event <code>stats</code></td><td>✅</td><td>➖ (nhờ PA-2)</td><td>✅</td><td>2–3d</td><td><strong>Làm ⭐</strong></td></tr>
+        <tr><td>PA-4 Continuous aggregate</td><td>❌</td><td>✅✅ range dài</td><td>✅</td><td>2d</td><td>Phase 2</td></tr>
+        <tr><td>PA-5 SignalR hub</td><td>✅</td><td>❌</td><td>✅</td><td>3d+</td><td>Loại</td></tr>
+        <tr><td>PA-6 Firmware tự tính</td><td>✅</td><td>❌</td><td>⚠️</td><td>3d+ (3 repo)</td><td>Loại</td></tr>
+      </table>
+      <p><strong>Lý do loại:</strong> PA-5 SignalR = 2 hạ tầng realtime song song cho cùng loại dữ liệu (BatteryService đã chuẩn hóa SSE). PA-6 Firmware = sửa nhiều repo, không hồi tố lịch sử đã nằm trong DB, device phải giữ state qua reboot/offline — vô ích khi backend đã có toàn bộ mẫu 5s. PA-4 = pull-based, để Phase 2 khi range &gt; 7 ngày.</p>
+
+      <h3>§4 — Kiến trúc khuyến nghị (PA-2 + PA-3)</h3>
+      <div class="flow">FE mở chart ─► GET /aggregate?interval=1h  (min/max per bucket, primary-only)   [PA-2 backfill]
+ESP32 ─5s─► POST /batch ─► Ingest handler ─► hypertable
+                              │ (sau SaveChangesAsync, soft-dep)
+                              ├─► TelemetryPublisher (event: reading — như cũ)
+                              └─► TelemetryStatsService (MỚI)
+                                    ├─ merge Redis HASH telemetry:stats:{asset}:{window}
+                                    └─ publish telemetry:stats:asset:{id} ─► SSE event: stats  [PA-3 push ~5s]</div>
+      <p><strong>Redis:</strong> HASH <code>telemetry:stats:{assetId}:1h:{yyyyMMddHH}</code> (TTL 2h) + <code>:today:{yyyyMMdd}</code> (TTL 26h). Merge atomic bằng Lua script (tránh race giữa 2 pod). Soft-dep như telemetry hiện tại: Redis chết chỉ log, không chặn ingest. <code>Realtime:Enabled=false</code> → no-op.</p>
+      <div class="callout danger"><span class="lead">Pitfall quan trọng nhất:</span> KHÔNG publish stats vào channel telemetry cũ — <code>RedisTelemetryStream</code> coi mọi message trên channel subscribed là <code>reading</code> (deserialize <code>LiveReadingDto</code> → đẩy vào coalescer summary) → nhét stats vào sẽ vỡ parser/summary. Bắt buộc channel prefix <code>stats</code> riêng, phân loại event theo channel nhận.</div>
+
+      <h3>§5 — Issue sprint chính (NS-01 → NS-06)</h3>
+      <table>
+        <tr><th>#</th><th>Task</th><th>Role</th><th>Ước</th></tr>
+        <tr class="issue-row"><td>NS-01</td><td>Chốt metric §2 + update docs contract (REST + SSE stats) cho FE bắt đầu song song</td><td>BE</td><td>0.5d</td></tr>
+        <tr class="issue-row"><td>NS-02</td><td>PA-2: mở rộng /aggregate min/max tách chiều + filter primary + unit tests</td><td>BE</td><td>1–1.5d</td></tr>
+        <tr class="issue-row"><td>NS-03</td><td>PA-3a: LiveStatsDto + ITelemetryStatsService + RedisTelemetryStatsService (merge HASH + TTL + publish) + tests</td><td>BE</td><td>1d</td></tr>
+        <tr class="issue-row"><td>NS-04</td><td>PA-3b: channels stats + stream forward event stats + metrics + wire vào ingest handler + integration test SSE</td><td>BE</td><td>1d</td></tr>
+        <tr class="issue-row"><td>NS-05</td><td>FE: card "Nạp/Xả đỉnh (1h/hôm nay)" nghe event stats; chart min/max band từ /aggregate; đường ngưỡng từ /thresholds</td><td>FE</td><td>1.5d</td></tr>
+        <tr class="issue-row"><td>NS-06</td><td>(Phase 2 optional) PA-4 continuous aggregate 1h + endpoint đọc view + rollback test migration</td><td>BE</td><td>2d</td></tr>
+      </table>
+
+      <h3>§6–§7 — Test plan &amp; rủi ro (tóm tắt)</h3>
+      <ul>
+        <li><strong>Test:</strong> unit (bucket có cả nạp+xả → tách đúng 2 chiều; chỉ idle → 4 field null; loại redundant/external-temp; xả trả dương); integration (POST /batch âm/dương → SSE nhận <code>event: stats</code> đúng payload; /aggregate khớp dữ liệu bơm vào); E2E (<code>esp32_simulator.py</code> → <code>curl -N</code> xem stats nhảy mỗi ~5s).</li>
+        <li><strong>Rủi ro:</strong> Redis flush → mất state window đang chạy (chấp nhận, tự hồi sau vài mẫu, FE có backfill PA-2 đối chiếu); nhiều pod ghi cùng asset (Lua atomic); <code>/aggregate</code> in-memory chậm khi range dài → trigger PA-4; số liệu demo là mock (ghi rõ trong demo script, đừng tune ngưỡng).</li>
+      </ul>
+    </section>
+
+    <!-- ===================== PHỤ LỤC A ===================== -->
+    <section id="apx-a">
+      <div class="apx-label">§8 · PHỤ LỤC A</div>
+      <h2>Giải phẫu xử lý NOISE trong BatteryService</h2>
+      <p>Mục đích: hiểu min/max streaming đứng ở đâu trong pipeline làm sạch dữ liệu, và làm nền cho danh sách bug ở Phụ lục B. Backend chống noise ở <strong>4 lớp</strong>, mỗi lớp nhắm một loại nhiễu khác nhau.</p>
+
+      <div class="flow">[Lớp 1 — INGEST]       nhiễu ĐO LƯỜNG   (sensor rác, lệch chuẩn, gửi trùng, lệch giờ)
+        ↓ dữ liệu vào DB đã "sạch vật lý"
+[Lớp 2 — DETECT]       nhiễu VI PHẠM NGƯỠNG thoáng qua (chớm ngưỡng 1–2 lần rồi thôi)
+        ↓ chỉ vi phạm lặp lại đủ tần suất mới thành Alert
+[Lớp 3 — ALERT]        nhiễu TRÙNG LẶP  (1 sự cố sinh N alert) + alert "tự khỏi"
+        ↓ Staff chỉ thấy alert đại diện
+[Lớp 4 — CROSS-SOURCE] nhiễu HỆ THỐNG  (1 trong 2 sensor "nói dối")</div>
+
+      <h3>8.1 — Lớp 1: Làm sạch lúc ingest</h3>
+      <p>Chạy trên từng item của <code>POST /api/sensor-readings/batch</code>, theo đúng thứ tự:</p>
+      <table>
+        <tr><th>Bước</th><th>Cơ chế</th><th>Hành vi khi dính</th></tr>
+        <tr><td>1</td><td><strong>Idempotency dedup</strong> — device retry gửi lại cùng <code>Idempotency-Key</code> (TTL 24h)</td><td>Trả lại kết quả cũ, KHÔNG insert đôi</td></tr>
+        <tr><td>2</td><td><strong>Clock skew check</strong> — <code>DeviceTimestamp</code> lệch server > 5 phút</td><td>Reject 400 field-level + metric</td></tr>
+        <tr><td>3</td><td><strong>Calibration</strong> — nắn sensor <code>raw × Scale + Offset</code> (cache Redis TTL 5')</td><td>Nắn TRƯỚC khi check outlier (thứ tự quan trọng)</td></tr>
+        <tr><td>4</td><td><strong>Outlier bounds cứng</strong> — V∉[0,1000], |I|>1000A, T∉[−50,150], SOC/SOH∉[0,100]</td><td>Loại im lặng (<code>Skipped++</code>), reading sạch cùng batch vẫn lưu, <strong>không throw</strong></td></tr>
+        <tr><td>5</td><td><strong>Auto-decommission device</strong> — > 50 outlier / cửa sổ trượt 1h</td><td>Device → <code>Decommissioned</code> + Alert Critical báo Admin (dedup 6h)</td></tr>
+      </table>
+      <div class="callout info">Triết lý lớp 1: <em>"reading rác thì loại từng viên, nguồn rác thì cắt cả vòi"</em> — và không bao giờ làm gateway fail cả batch vì 1 viên hỏng.<br><strong>Liên quan sprint min/max:</strong> PA-2/PA-3 đọc dữ liệu SAU lớp 1 → không cần lo outlier vật lý; chỉ còn phải tự lọc source <code>primary</code>.</div>
+
+      <h3>8.2 — Lớp 2: Noise suppression frequency-based (phần "Noise" đúng nghĩa)</h3>
+      <p><strong>Bài toán:</strong> reading chớm vượt ngưỡng 1–2 lần (gợn tải, nhiễu đo còn sót) mà raise Alert ngay → Staff bị spam → alert fatigue → bỏ sót alert thật.</p>
+      <p><strong>Giải pháp:</strong> chỉ raise Alert khi vi phạm <strong>lặp lại ≥ N lần trong cửa sổ W giờ</strong>. Config per <code>BatteryType</code>:</p>
+      <table>
+        <tr><th>Field</th><th>Default</th><th>Nghĩa</th></tr>
+        <tr><td><code>NoiseSuppressionEnabled</code></td><td><code>true</code></td><td>Công tắc</td></tr>
+        <tr><td><code>NoiseSuppressionCount</code></td><td><code>5</code></td><td>Ngưỡng tần suất</td></tr>
+        <tr><td><code>NoiseSuppressionWindowHours</code></td><td><code>24</code></td><td>Cửa sổ đếm</td></tr>
+      </table>
+      <p><strong>Luồng chạy</strong> (<code>ShouldSuppressByNoiseAsync</code>, gọi mỗi 30s với lookback 60s):</p>
+      <div class="flow">Reading vi phạm ngưỡng (AnomalyRules.Detect)
+ │
+ ├─ BYPASS raise ngay (an toàn > chống spam):
+ │    • AnomalyType == EnvironmentalIncident
+ │    • Overheat && Severity == Critical
+ │    • NoiseSuppressionEnabled == false hoặc Count <= 1
+ │
+ └─ Còn lại:
+     1. AddAsync 1 row NoiseBreachEvent (append-only)
+     2. COUNT breach cùng (assetId, anomalyType) trong WindowHours
+     3. (count_DB + 1) <  Count → SUPPRESS  (AlertsSuppressed++)
+        (count_DB + 1) >= Count → cho phép raise Alert</div>
+      <p>Ví dụ (5 lần / 24h): vi phạm #1→#4 đều bị nén (count 1..4 < 5); vi phạm #5 (DB đã có 4 breach) → 4+1=5 ≥ 5 → <strong>Alert nổ</strong>. <code>NoiseBreachEvent</code> là "sổ ghi nợ" — để lại vết audit. Dọn dẹp: xóa rows > 7 ngày.</p>
+
+      <h3>8.3 — Lớp 3: Nén nhiễu tầng Alert</h3>
+      <ul>
+        <li><strong>Dedup/merge (BR-03):</strong> alert mới cùng <code>(assetId, anomalyType)</code> với alert Open còn trong window 30' → tạo record <code>Merged</code>, KHÔNG thành alert mới. Pin kẹt lỗi 1 giờ → 2 alert thật thay vì ~120.</li>
+        <li><strong>Auto-resolve (B10):</strong> alert Open mà anomaly không còn xuất hiện trong 10' → tự đóng. Nhiễu thoáng qua tự dọn.</li>
+      </ul>
+
+      <h3>8.4 — Lớp 4: Cross-source validation</h3>
+      <p>Tận dụng 2 nguồn đo độc lập per pin (BMS primary + INA226 redundant). Ngưỡng: <strong>ΔV > 0.5V</strong> hoặc <strong>ΔT > 5°C</strong> → <code>SensorMismatch</code> Warning. Hiện có <strong>2 đường chạy song song</strong> (đây chính là nợ thiết kế N6):</p>
+      <table>
+        <tr><th></th><th><code>DetectSensorMismatches</code> (B10 #157)</th><th><code>CrossSourceValidationService</code> (#IoT2-28)</th></tr>
+        <tr><td>Trigger</td><td>ThresholdCheck tick 30s, lookback 60s</td><td>Background riêng tick 30s, lookback 75s</td></tr>
+        <tr><td>Ghép cặp</td><td>Bucket phút, FirstOrDefault Bms + FirstOrDefault IotGateway</td><td>Ghép reading gần nhất <strong>khác sourceType bất kỳ</strong> ±60s</td></tr>
+        <tr><td>Dedup</td><td>Merge vào alert active, window 30'</td><td>Skip nếu có SensorMismatch < 15'</td></tr>
+      </table>
+    </section>
+
+    <!-- ===================== PHỤ LỤC B ===================== -->
+    <section id="apx-b">
+      <div class="apx-label">§9 · PHỤ LỤC B</div>
+      <h2>6 điểm lệch phát hiện khi đọc code noise</h2>
+      <p>Mức độ: <span class="badge red">🔴 Cao</span> vô hiệu hoá cơ chế / spam Critical · <span class="badge yellow">🟡 Trung bình</span> sai so thiết kế, hậu quả giới hạn · <span class="badge gray">⚪ Ghi nhận</span> nợ thiết kế.</p>
+      <div class="callout danger"><strong>N4, N5 chỉ bùng khi chạy hardware thật</strong> (<code>USE_MOCK_BMS=0</code>) — mock đang CHE chúng, tức là test/demo hiện tại không bao giờ thấy.</div>
+
+      <div id="n1" class="bug red">
+        <h4><span class="code-id">N1</span> <span class="badge red">🔴 Cao</span> — NoiseBreachEvent bị vứt bỏ khi tick không tạo Alert → suppression chặn alert VĨNH VIỄN</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>ScanRecentReadingsAsync:221</code> — <code>SaveChangesAsync</code> CHỈ chạy khi <code>result.AlertsCreated + AlertsMerged > 0</code>. <code>AlertsSuppressed</code> không nằm trong điều kiện. Mỗi tick dùng scope DI mới → tick chỉ toàn anomaly bị nén = toàn bộ breach event pending <strong>bị huỷ cùng DbContext</strong>.</div>
+        <div class="field scenario"><span class="k">Kịch bản (Count=5):</span></div>
+        <ol>
+          <li>Pin A vi phạm <code>Undervoltage</code> lai rai (đúng kịch bản noise suppression sinh ra để xử lý).</li>
+          <li>Tick 1: breach → count_DB=0 → 0+1&lt;5 → nén. Không alert khác → <strong>không SaveChanges → breach row bị vứt</strong>.</li>
+          <li>Tick 2..∞: hệt tick 1 — count_DB <strong>mãi mãi = 0</strong>.</li>
+          <li>Pin vi phạm hàng tuần liền, <strong>Alert không bao giờ nổ</strong>. Cơ chế "nén nhiễu" thành "nén luôn sự cố thật".</li>
+        </ol>
+        <div class="field"><span class="k" style="color:var(--accent-2)">"Tự che" bằng bug khác:</span> tick nào tình cờ có alert khác (bypass Overheat-Critical, SensorMismatch của N5, asset khác) → SaveChanges flush ké breach pending. Ở real mode, N5 spam vô tình flush giùm thường xuyên — bug này tự che bằng một bug khác.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> vô hiệu hoá noise suppression với mọi anomaly không-bypass: Undervoltage, Overvoltage, LowSoc, RapidDischarge, AbnormalCharging, SohDegradation, HighInternalResistance, CellImbalance, và Overheat mức Warning.</div>
+        <div class="field fix"><span class="k">Fix (khuyến nghị a):</span> đổi điều kiện thành <code>if (AlertsCreated + AlertsMerged + AlertsSuppressed > 0)</code> — 1 dòng, giữ nguyên số round-trip. (b) sạch hơn: SaveChanges riêng ngay sau ghi breach.</div>
+      </div>
+
+      <div class="bug red">
+        <h4><span class="code-id">N4</span> <span class="badge red">🔴 Cao</span> <span class="badge realmode">real mode</span> — Không lọc source khi Detect → INA226 gửi SOC=0 → LowSoc Critical spam + auto-ticket</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> firmware real (<code>ina226.cpp:123</code>) set cứng <code>socPercent = 0.0f</code> (INA226 không đo SOC). Backend (<code>AnomalyDetectionService:40</code>) load <strong>mọi</strong> reading không filter source; <code>AnomalyRules.Detect</code> — <code>SocPercent &lt; SocCritical</code> → <code>LowSoc</code> Critical. Mock che bug vì mirror SOC từ BMS.</div>
+        <div class="field scenario"><span class="k">Kịch bản real:</span> mỗi 5s reading INA226 (SOC=0) → mỗi tick ~12 anomaly LowSoc Critical/pin → vượt Count=5 gần như ngay → Alert Critical → outbox <code>BatteryAnomalyDetectedEvent</code> → <strong>TicketService auto-tạo ticket</strong> → mỗi dedup window 30' lại một alert Critical mới. Spam vô hạn trên MỌI pin có INA226.</div>
+        <div class="field fix"><span class="k">Fix:</span> <code>ScanRecentReadingsAsync</code> chỉ Detect trên reading primary (<code>SensorSourceCode == "primary" || null/empty</code>). Reading redundant/external-temp chỉ dùng cho cross-source (lớp 4).</div>
+      </div>
+
+      <div class="bug red">
+        <h4><span class="code-id">N5</span> <span class="badge red">🔴 Cao</span> <span class="badge realmode">real mode</span> — Không skip so nhiệt độ cho source không đo temp → SensorMismatch liên tục (trái contract firmware §52.6)</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> firmware GHI RÕ kỳ vọng backend skip temp comparison (<code>ina226.cpp:120</code>: <em>"temp set 0 + sensorSourceCode lookup sẽ skip temp comparison ở backend §52.6"</em>). Backend KHÔNG làm ở cả 2 đường. Tệ hơn: <code>CrossSourceValidationService:69</code> ghép <strong>mọi</strong> cặp khác sourceType → INA226 (temp=0) vs DS18B20 (temp thật 25°C) cũng ghép → ΔT=25 > 5 → mismatch giả không liên quan BMS.</div>
+        <div class="field scenario"><span class="k">Kịch bản real:</span> BMS 25°C vs INA226 0°C → ΔT=25 → SensorMismatch Warning ~1 alert/15', <strong>mãi mãi, mọi pin</strong> → Staff học cách bỏ qua — đúng loại alert fatigue mà noise suppression sinh ra để chống.</div>
+        <div class="field fix"><span class="k">Fix:</span> (1) skip so temp khi 1 reading là <code>redundant</code>; (2) CSVS chỉ ghép cặp <code>Bms ↔ IotGateway</code>; (3) đồng bộ spec §52.6 vào docs backend.</div>
+      </div>
+
+      <div id="n2" class="bug yellow">
+        <h4><span class="code-id">N2</span> <span class="badge yellow">🟡 TB</span> — <code>PromotedToAlertId</code> không bao giờ được gán + retention xóa cả breach đã promote</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> entity doc ghi <em>"Giữ vĩnh viễn (không bị purge) để audit"</em>, nhưng grep toàn service — <strong>không dòng code nào gán giá trị</strong>. Retention (<code>ExecuteDeleteAsync</code>) xóa <strong>tất cả</strong> rows > 7 ngày, không loại trừ breach đã promote.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> mất audit "alert này nổ từ chuỗi breach nào"; index <code>promoted_to_alert_id</code> vô dụng; doc-comment đánh lừa dev sau.</div>
+        <div class="field fix"><span class="k">Fix:</span> gán <code>PromotedToAlertId = alert.Id</code> khi raise alert + retention thêm <code>&amp;&amp; PromotedToAlertId == null</code>. Hoặc xóa field + index + sửa doc nếu team không cần audit này (đừng để code nói dối).</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">N3</span> <span class="badge yellow">🟡 TB</span> — Đếm breach lạm phát ~2× do scan overlap + <code>SourceType</code> không copy</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> lookback = 2×interval (overlap 2x) nhưng dedup chỉ tồn tại cho <strong>Alert</strong>, KHÔNG cho <strong>breach count</strong> → cùng 1 reading scan ở 2 tick → ghi <strong>2 breach cho 1 lần vi phạm</strong>. Ngoài ra <code>NoiseBreachEvent</code> không set <code>SourceType</code> từ reading → luôn default <code>IotGateway</code>.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> <code>Count=5</code> thực tế ứng xử như ~2–3 lần → suppression yếu ~2× (ngược hướng N1 → hai bug kéo hai phía, hành vi tổng hợp gần như không dự đoán được).</div>
+        <div class="field"><span class="k" style="color:var(--yellow)">Lưu ý ngữ nghĩa:</span> với 5s/mẫu, "Count=5 trong 24h" = <strong>~25 giây vi phạm liên tục</strong>, không phải "5 đợt riêng biệt". Nếu ý đồ là đếm <em>đợt</em> cần thêm cooldown giữa 2 lần đếm.</div>
+        <div class="field fix"><span class="k">Fix:</span> dedup breach theo <code>(assetId, anomalyType, reading.Time)</code> + copy <code>SourceType</code> + chốt ngữ nghĩa Count với team.</div>
+      </div>
+
+      <div class="bug gray">
+        <h4><span class="code-id">N6</span> <span class="badge gray">⚪ Nợ TK</span> — Hai hệ thống SensorMismatch song song</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> 2 code path (B10 #157 vs #IoT2-28) cùng tạo <code>SensorMismatch</code>, cùng ngưỡng 0.5V/5°C nhưng khác cách ghép cặp + dedup window (30' merge vs 15' skip), chạy đồng thời mỗi 30s.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> dedup chéo <em>một phần</em> (ăn may, không phải thiết kế); sửa ngưỡng phải nhớ 2 nơi; N5 phải fix cả 2 chỗ.</div>
+        <div class="field fix"><span class="k">Fix:</span> hợp nhất về 1 đường — giữ <code>CrossSourceValidationService</code> (ghép cặp linh hoạt hơn) nhưng sửa theo N5, xóa <code>DetectSensorMismatches</code>; hằng số ngưỡng dồn về <code>AnomalyRules</code>.</div>
+      </div>
+
+      <div class="callout warn"><strong>Ghi chú ngoài lề:</strong> <code>ThresholdConfig.TemperatureMin</code> tồn tại nhưng <code>AnomalyRules.Detect</code> <strong>không có rule Undertemp</strong> → field chết (chính là F1 ở Phụ lục F).</div>
+      <div class="callout info"><span class="lead">§9.1 — Tác động lên sprint min/max:</span> PA-2/PA-3 <strong>KHÔNG bị chặn</strong> bởi các bug này — min/max đọc <code>sensor_readings</code> sau lớp 1 (outlier đã sạch), không đi qua lớp 2–4. Nhưng N4/N5 củng cố đúng bài học §1.4: <strong>mọi phép tính trên <code>sensor_readings</code> phải lọc source primary</strong> — anomaly engine quên điều này và trả giá. Fix N1 + N4 + N5 nên đi <strong>trước hoặc cùng</strong> sprint: khi lên hardware thật mà chưa fix, alert spam sẽ chôn vùi mọi thứ UI mới hiển thị.</div>
+      <p><strong>Issue đề xuất:</strong> NS-07 (N1) · NS-08 (N4) · NS-09 (N5) · NS-10 (N2+N3) · NS-11 (N6).</p>
+    </section>
+
+    <!-- ===================== PHỤ LỤC C ===================== -->
+    <section id="apx-c">
+      <div class="apx-label">§10 · PHỤ LỤC C</div>
+      <h2>Cascade Risk (rủi ro lan truyền)</h2>
+      <div class="callout info">Đầu vào của cascade risk là <strong>bảng Alert</strong> → bug noise N1/N4 truyền hậu quả thẳng vào đây (xem R5). Các pin trong 1 site đấu nối điện: series chết → ngắt cả string; parallel chết → pin còn lại gánh tải; quá nhiệt → lan nhiệt (thermal runaway).</div>
+
+      <h3>10.1 — Công thức <code>CascadeRiskScore</code> (0.0–1.0, rule-based cộng dồn, clamp ≤ 1.0)</h3>
+      <table>
+        <tr><th>Rule</th><th>Điều kiện</th><th>Điểm</th></tr>
+        <tr><td><strong>1. Topology</strong></td><td>Independent / ParallelBank / SeriesParallel / SeriesString</td><td>+0.0 / +0.2 / +0.4 / +0.6</td></tr>
+        <tr><td><strong>2. Proximity</strong></td><td>Số pin khác cùng SiteId có alert Open trong 1h: ≥1 → +0.2, ≥3 → +0.2 nữa</td><td>+0.2 / +0.4</td></tr>
+        <tr><td><strong>3. Thermal runaway</strong></td><td>Chính pin này có alert Overheat + Critical + Open</td><td>+0.3</td></tr>
+      </table>
+      <p>Phân mức: <span class="badge green">Low &lt; 0.5</span> · <span class="badge yellow">Medium 0.5–&lt;0.7</span> · <span class="badge red">High ≥ 0.7</span>.</p>
+      <div class="callout warn">Topology nặng ký nhất nhưng do <strong>Admin khai TAY</strong> (<code>POST /topology</code>, default <code>Independent</code> = rule 1 luôn 0 nếu quên khai). Adaptation: spec gốc dùng <code>BatteryGroupId</code>, project bỏ BatteryGroup → nhóm theo <code>SiteId</code>.</div>
+
+      <h3>10.2 — Vòng đời tính toán</h3>
+      <div class="flow">CascadeRiskBackgroundService — tick mỗi 5'
+  → RecomputeAsync(batchSize=200)
+      1. CHỈ chọn asset đang có ≥1 alert Open — pin "khỏe" KHÔNG tính lại
+      2. Score mới → lưu CascadeRiskScore + CascadeRiskUpdatedAt
+      3. Guard chuyển tiếp: CHỈ khi oldScore < 0.7 && newScore >= 0.7
+         → outbox BatteryCascadeRiskHighEvent
+      4. Medium (0.5–<0.7): chỉ log — không event, không notify</div>
+      <p><strong>API cho UI</strong> (đọc score đã lưu, KHÔNG recompute on-demand):</p>
+      <table>
+        <tr><th>Endpoint</th><th>Quyền</th><th>Trả về</th></tr>
+        <tr><td><code>GET /api/battery-assets/{id}/cascade-risk</code></td><td>mọi role</td><td>score + level + topology + <code>CascadeRiskUpdatedAt</code></td></tr>
+        <tr><td><code>GET /api/sites/{id}/cascade-risk-summary</code></td><td>Admin/Manager</td><td>heat map: đếm High/Medium/Low, MaxScore, HighRiskAssets sort giảm dần</td></tr>
+        <tr><td><code>POST /api/battery-assets/{id}/topology</code></td><td>Admin</td><td>set topology 1..4 → <strong>recompute ngay</strong></td></tr>
+      </table>
+
+      <h3>10.3 — Chuỗi phản ứng khi High (thiết kế vs thực tế)</h3>
+      <div class="flow">Score cross >= 0.7 → BatteryCascadeRiskHighEvent
+  ▼
+TicketService — BatteryCascadeRiskHighConsumer
+  │ Tìm ticket: RelatedTicketId → fallback ticket ACTIVE mới nhất
+  │ Không có ticket → log rồi RETURN            ← đứt R2
+  ▼
+Priority → P1Critical + TicketActivity (safety override, có audit)
+  ▼
+Bộ máy SLA/escalation phía sau P1 (THIẾT KẾ)   ← toàn tầng này CHẾT vì R1
+  ▼
+Con người: Manager điều Staff tier cao, cô lập pin, reassign</div>
+
+      <h3>10.4 — 8 điểm lệch R1 → R8</h3>
+
+      <div id="r1" class="bug red">
+        <h4><span class="code-id">R1</span> <span class="badge red">🔴 Cao</span> — SLA timer KHÔNG BAO GIỜ được tạo trong luồng thật → toàn tầng SLA/escalation chết</h4>
+        <div class="field evidence"><span class="k">Bằng chứng (grep toàn TicketService):</span> <code>new SlaTimer</code> chỉ xuất hiện trong <code>TicketDataSeeder</code> — không command handler/consumer/saga nào tạo timer khi triage/assign. <code>SlaCalculator.CalculateSlaDueDate</code> đăng ký DI nhưng <strong>0 call site</strong>.</div>
+        <div class="field impact"><span class="k">Hệ quả dây chuyền:</span> ticket thật không timer → <code>SlaTimerBackgroundService</code> không có gì đếm → không <code>SlaWarningEvent</code> 80% → không <code>SlaBreachedEvent</code> → <code>EscalationBackgroundService</code> không đẩy ESCALATED → <code>SlaBreachedConsumer</code> không notify. <strong>"P1 = SLA 4h" chỉ đúng trên seed demo.</strong> Cascade nâng P1 xong… không có gì xảy ra.</div>
+        <div class="field fix"><span class="k">Fix:</span> (1) tạo <code>SlaTimer</code> (dùng <code>SlaCalculator</code>) khi ticket <strong>Assigned</strong>; (2) recompute <code>DueAt</code> khi Priority đổi (cascade override).</div>
+      </div>
+
+      <div class="bug red">
+        <h4><span class="code-id">R2</span> <span class="badge red">🔴 Cao</span> — High risk mà không có ticket active → KHÔNG làm gì + cơ hội không quay lại</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>BatteryCascadeRiskHighConsumer:71</code> — không tìm thấy ticket → log info, <code>return</code>. Không auto-tạo ticket, không notify.</div>
+        <div class="field scenario"><span class="k">Kịch bản khả thi:</span> pin SeriesString (0.6) + 3 hàng xóm alert <strong>Warning</strong> (0.4) = score 1.0 High — nhưng alert Warning <strong>không tạo ticket</strong> (chỉ Critical mới auto-ticket). Event High bắn ra → consumer skip → rơi vào hư không. Tệ hơn: guard <code>oldScore &lt; 0.7</code> → event <strong>không bắn lại</strong> chừng nào còn ≥ 0.7 → cơ hội xử lý biến mất.</div>
+        <div class="field fix"><span class="k">Fix:</span> consumer auto-tạo ticket P1 khi không có ticket active (<code>TicketOrigin=System</code>).</div>
+      </div>
+
+      <div id="r3" class="bug yellow">
+        <h4><span class="code-id">R3</span> <span class="badge yellow">🟡 TB</span> — NotificationService không consume <code>BatteryCascadeRiskHighEvent</code> (doc nói có)</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> doc-comment ghi <em>"NotificationService notify Manager"</em>, nhưng grep — không có consumer nào. Kênh duy nhất Manager biết: tự mở dashboard poll heat map. Cùng họ lệch doc-vs-code với N2.</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm <code>BatteryCascadeRiskHighConsumer</code> bên NotificationService (push + email Manager của site).</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">R4</span> <span class="badge yellow">🟡 TB</span> — Score bị ĐÓNG BĂNG, không có decay</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>RecomputeAsync</code> chỉ quét asset <strong>đang có alert Open</strong>. Alert đóng hết → asset rớt khỏi danh sách → score <strong>giữ nguyên vĩnh viễn</strong>.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> pin từng chạm 0.8 hiện "High" trên heat map <strong>mãi mãi</strong> dù đã khỏe → "chỗ nào cũng đỏ" → Manager học cách bỏ qua (alert fatigue).</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm nhánh quét thứ 2: asset có <code>CascadeRiskScore &gt; 0</code> nhưng không còn alert Open → recompute (score tự tụt vì rule 2/3 = 0, chỉ còn topology).</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">R5</span> <span class="badge yellow">🟡 TB</span> — Bug noise N1/N4 truyền thẳng vào cascade risk (2 hướng ngược nhau)</h4>
+        <div class="field"><span class="k">•</span> <strong>N1</strong> (alert thật không nổ): proximity/thermal luôn 0 → cascade risk <strong>đánh giá thấp giả tạo</strong> — pin nguy hiểm thật không được nâng P1.</div>
+        <div class="field"><span class="k">•</span> <strong>N4</strong> (spam LowSoc mọi pin real mode): mọi pin cùng site có alert Open → rule proximity +0.2/+0.4 cho cả site → score ≥ 0.7 hàng loạt → <strong>nâng P1 hàng loạt ticket</strong> (safety-override sai diện rộng).</div>
+        <div class="field fix"><span class="k">Fix:</span> không fix ở đây — fix N1 (NS-07) + N4 (NS-08) là <strong>điều kiện tiên quyết</strong> để cascade risk có ý nghĩa trên hardware thật.</div>
+      </div>
+
+      <div id="r6" class="bug gray">
+        <h4><span class="code-id">R6</span> <span class="badge gray">⚪</span> — Fallback ticket có thể nâng P1 NHẦM ticket không liên quan</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> không có <code>RelatedTicketId</code> → lấy <strong>ticket active mới nhất bất kỳ</strong> của pin. Pin đang có ticket bảo trì định kỳ (P3) → bị nâng P1 oan, audit ghi "safety override" cho việc thay dầu mỡ.</div>
+        <div class="field fix"><span class="k">Fix:</span> fallback chỉ chọn ticket incident, hoặc bỏ fallback → đi đường R2-(a).</div>
+      </div>
+
+      <div class="bug gray">
+        <h4><span class="code-id">R7</span> <span class="badge gray">⚪</span> — <code>Take(200)</code> không <code>OrderBy</code> → starvation khi scale</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>Distinct().Take(batchSize)</code> không sort → quá 200 asset có alert Open thì asset ngoài top có thể <strong>không bao giờ</strong> được tính. Scale capstone chưa sao — mìn cho tương lai.</div>
+        <div class="field fix"><span class="k">Fix:</span> <code>OrderBy(a =&gt; a.CascadeRiskUpdatedAt)</code> (asset lâu chưa tính nhất lên đầu).</div>
+      </div>
+
+      <div class="bug gray">
+        <h4><span class="code-id">R8</span> <span class="badge gray">⚪</span> — Mức Medium hoàn toàn thụ động</h4>
+        <div class="field">Medium (0.5–&lt;0.7) chỉ <code>LogInformation</code> — không event, không notify. Manager chỉ thấy nếu chủ động mở heat map. Chấp nhận được cho scope capstone, nhưng nên ghi rõ docs FE: <strong>màu vàng = "hệ thống sẽ không nhắc bạn lần 2"</strong>.</div>
+      </div>
+
+      <div class="callout info"><strong>Thứ tự khuyến nghị nếu demo cascade risk cho hội đồng:</strong> NS-07/08 (vá đầu vào alert) → NS-12 (hồi sinh SLA) → NS-13 (không rơi event) → NS-14 (Manager được báo) → NS-15 (heat map đáng tin).</div>
+      <p><strong>Issue đề xuất:</strong> NS-12 (R1) · NS-13 (R2+R6) · NS-14 (R3) · NS-15 (R4) · NS-16 (R7).</p>
+    </section>
+
+    <!-- ===================== PHỤ LỤC D ===================== -->
+    <section id="apx-d">
+      <div class="apx-label">§11 · PHỤ LỤC D</div>
+      <h2>Cách ly pin nguy hiểm</h2>
+      <div class="callout danger"><span class="lead">Kết luận: CHƯA có.</span> Hệ thống hiện tại chỉ ĐỌC và BÁO, không có đường điều khiển nào can thiệp vật lý vào pin. Chuỗi phản ứng dừng ở "nâng P1 cho con người xử lý".</div>
+
+      <h3>11.1 — Vì sao kết luận CHƯA có</h3>
+      <ul>
+        <li><strong>a) Kênh downlink tồn tại nhưng không có lệnh cách ly.</strong> <code>POST /command</code> → MQTT, nhưng firmware chỉ hiểu <strong>3 lệnh</strong>: <code>set_interval</code>, <code>trigger_ota</code>, <code>request_heartbeat</code>. Gửi <code>"isolate_battery"</code> = device từ chối lịch sự (ack "unsupported").</li>
+        <li><strong>b) Không có phần cứng/giao thức để cách ly.</strong> Firmware không có driver relay/contactor; kênh Modbus tới BMS <strong>chỉ đọc</strong> (không một write nào). Những thứ <em>trông giống</em> cách ly (<code>SWLK</code>, <code>OVP/OCD</code>, <code>Bypass</code>) đều là BMS tự bảo vệ rồi báo về, phần mềm chỉ decode.</li>
+        <li><strong>c) "Cách ly" logic hiện có chỉ là NHÃN.</strong> Đặt <code>Inactive</code> không dừng ingest, không dừng anomaly scan. Device Decommissioned vẫn nhận ingest (phải revoke API key mới cắt).</li>
+        <li><strong>d) Spec cũng chưa định nghĩa.</strong> Business flow hiện tại: nguy hiểm → P1 → <strong>Staff đến site cô lập thủ công, ngoài hệ thống, không ai track</strong>.</li>
+      </ul>
+      <div class="callout warn">Lớp cách ly vật lý DUY NHẤT đang tồn tại = <strong>BMS hardware tự ngắt</strong> (quá dòng/ngắn mạch/quá nhiệt → FET off trong mili-giây) — nằm ngoài quyền kiểm soát của phần mềm.</div>
+
+      <h3>11.2 — Nguyên tắc thiết kế (đọc TRƯỚC khi chọn)</h3>
+      <ol>
+        <li><strong>Safety-critical:</strong> ngắt pin từ xa = cắt điện khách hàng thật. Ngắt nhầm tệ hơn không ngắt → mọi phương án đều <strong>semi-auto</strong> (đề xuất → con người xác nhận), KHÔNG full-auto trong scope capstone.</li>
+        <li><strong>Fix noise trước:</strong> auto-trigger trên nền N1/N4 chưa fix = ngắt điện oan hàng loạt → <strong>NS-07/NS-08 phải xong trước</strong>.</li>
+        <li><strong>Câu chuyện phân tầng:</strong> BMS phần cứng (mili-giây) → phát hiện sớm + điều phối người (phút) → <strong>quy trình cô lập có kiểm soát (đang thiếu = feature đề xuất)</strong>.</li>
+      </ol>
+
+      <h3 id="iso">11.3 — Ba phương án theo bậc thang</h3>
+
+      <div class="bug feature">
+        <h4><span class="code-id">ISO-A</span> <span class="badge green">⭐ Làm ngay</span> — Isolation workflow thuần phần mềm</h4>
+        <p>Không ngắt điện bằng phần mềm — biến hành động cô lập thủ công (đang tồn tại ngoài hệ thống) thành <strong>quy trình được quản lý, xác minh và audit</strong>.</p>
+        <ul>
+          <li><strong>Trạng thái mới <code>Isolated</code></strong> có ngữ nghĩa THẬT (khác <code>Inactive</code> chỉ là nhãn): loại khỏi dashboard vận hành, hiện cờ đỏ riêng; dừng auto-tạo ticket/alert mới cho pin đó; ghi <code>IsolatedAt / IsolatedByUserId / IsolationReason / RelatedTicketId</code>.</li>
+        </ul>
+        <div class="flow">Trigger (cascade High / Overheat Critical / Manager chủ động)
+  → hệ thống ĐỀ XUẤT cách ly trên ticket P1 (khuyến nghị + checklist an toàn)
+  → Staff đến site: ngắt breaker / tháo kết nối vật lý
+  → xác nhận trên app (checklist + ảnh chụp hiện trường)
+  → asset chuyển Isolated + audit đầy đủ
+  → sửa xong → Manager phê duyệt tái kết nối → asset về Active</div>
+        <div class="callout good"><strong>Điểm ăn tiền — xác minh bằng chính telemetry (không cần phần cứng nào):</strong> sau khi Staff xác nhận cô lập, hệ thống theo dõi reading — nếu vẫn nhận <code>|current| &gt; 0</code> (pin vẫn nạp/xả) → cảnh báo <strong>"cô lập chưa thành công"</strong>; telemetry im hẳn → tick xanh "verified". Demo được 100% với simulator.</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">ISO-B</span> <span class="badge yellow">Stretch goal</span> — Điều khiển FET của BMS qua Modbus/UART (bán tự động thật)</h4>
+        <p>BMS pilot (<strong>JBD SP04S100A</strong>, <strong>Daly R32S</strong>) có sẵn lệnh tắt FET sạc/xả từ xa → <strong>BOM = 0 đồng</strong>, chỉ cần phần mềm: firmware thêm <code>CommandKind::IsolateBattery</code> + driver <strong>ghi</strong> register; backend whitelist + xác nhận 2 bước.</p>
+        <div class="field impact"><span class="k">Nhược:</span> (1) write register map KHÔNG chuẩn hóa giữa model — phải verify datasheet + test bench từng con; (2) đòi hardware rig thật (<code>USE_MOCK_BMS=0</code>) — chưa có; (3) FET off ≠ galvanic tuyệt đối (BMS treo → lệnh vô nghĩa); (4) rủi ro an toàn cao nhất.</div>
+      </div>
+
+      <div class="bug gray">
+        <h4><span class="code-id">ISO-C</span> <span class="badge gray">Future work</span> — Contactor/relay DC ngoài, ESP32 điều khiển GPIO</h4>
+        <p>Cách ly galvanic đúng nghĩa, độc lập BMS. Nhưng contactor DC chịu dòng + dập hồ quang là bài toán phần cứng nghiêm túc (chọn sai là <strong>nguy hiểm thật</strong>); chi phí + thiết kế mạch lớn, giá trị cộng thêm so ISO-B không tương xứng scope capstone.</p>
+      </div>
+
+      <h4>Bảng so sánh</h4>
+      <table>
+        <tr><th></th><th>Cách ly thật?</th><th>Phần cứng thêm</th><th>Effort</th><th>Demo với mock?</th><th>Rủi ro</th><th>Verdict</th></tr>
+        <tr><td>ISO-A workflow</td><td>❌ (người ngắt, hệ thống xác minh)</td><td>Không</td><td>~1 sprint nhỏ</td><td>✅ 100%</td><td>Thấp nhất</td><td><strong>Làm ngay ⭐</strong></td></tr>
+        <tr><td>ISO-B BMS FET</td><td>✅ (bán tự động)</td><td>Không (BMS có sẵn)</td><td>FW+BE+bench</td><td>❌ cần rig</td><td>Trung–cao</td><td>Stretch goal</td></tr>
+        <tr><td>ISO-C contactor</td><td>✅✅ (galvanic)</td><td>Contactor DC + mạch</td><td>Lớn</td><td>❌</td><td>Cao</td><td>Future work</td></tr>
+      </table>
+
+      <h3>11.4 — Khung an toàn 7 điểm BẮT BUỘC nếu làm ISO-B</h3>
+      <ol>
+        <li>Whitelist command type ở backend (chấm dứt "relay JSON tự do")</li>
+        <li>Xác nhận 2 bước (four-eyes: Manager đề xuất → Admin phê duyệt)</li>
+        <li>Trạng thái lệnh đầy đủ: Pending → Sent → Acked → <strong>Verified (telemetry xác nhận dòng = 0)</strong> / Failed / Timeout</li>
+        <li>Idempotency <code>cmdId</code> — retry không tạo lệnh đôi</li>
+        <li>Audit: ai đề xuất, ai duyệt, căn cứ score/alert nào</li>
+        <li>Fail-safe khi device offline: hệ thống phải NÓI THẬT "chưa cách ly được, cần Staff đến site"</li>
+        <li>Không auto-trigger khi chưa fix N1/N4/N5</li>
+      </ol>
+
+      <h3>11.6 — Câu trả lời chuẩn bị cho hội đồng</h3>
+      <div class="callout info"><em>"Hệ thống phân tầng bảo vệ: (1) BMS tự ngắt bằng phần cứng trong mili-giây; (2) hệ thống phát hiện sớm + nâng P1 để con người phản ứng trong phút; (3) quy trình cô lập có kiểm soát, xác minh bằng chính telemetry và audit lại được. Chúng em chủ động KHÔNG cho phần mềm tự ngắt điện — vì ngắt nhầm điện khách hàng nguy hiểm hơn cảnh báo trễ; quyền quyết định cuối thuộc về con người có mặt tại hiện trường."</em></div>
+      <p><strong>Issue đề xuất:</strong> NS-17 (trạng thái Isolated + luồng) · NS-18 (telemetry verification) · NS-19 (FE checklist + ảnh) · NS-20 (stretch ISO-B).</p>
+    </section>
+
+    <!-- ===================== PHỤ LỤC E ===================== -->
+    <section id="apx-e">
+      <div class="apx-label">§12 · PHỤ LỤC E</div>
+      <h2>Sự cố môi trường (Environmental Incident)</h2>
+      <div class="callout good"><span class="lead">Kết luận: CÓ.</span> Định nghĩa đầy đủ, đồng bộ 2 đầu backend ↔ firmware, pipeline vận hành khá hoàn chỉnh (Sprint 5B). Phần thiếu nằm ở <strong>4 DÂY NỐI</strong>: ambient detection chưa cắm, ticket chưa auto-tạo, người chưa report tay được, MQ2 hardcode Smoke.</div>
+
+      <h3>12.1 — Những gì ĐÃ có (verified từng file)</h3>
+      <p><strong>a) Enum <code>EnvironmentalIncidentTypeEnum</code></strong> — đồng bộ int value 2 đầu:</p>
+      <table>
+        <tr><th>Giá trị</th><th>Loại</th><th>Nguồn phát hiện tự động hiện tại</th></tr>
+        <tr><td>1</td><td><code>Smoke</code></td><td>✅ MQ2 (Critical)</td></tr>
+        <tr><td>2</td><td><code>FireDetected</code></td><td>❌ chưa có nguồn</td></tr>
+        <tr><td>3</td><td><code>GasLeak</code></td><td>❌ chưa có nguồn (dù MQ2 vốn là gas sensor — xem E4)</td></tr>
+        <tr><td>4</td><td><code>Flood</code></td><td>✅ water leak sensor (Critical)</td></tr>
+        <tr><td>5</td><td><code>OverheatHazard</code></td><td>❌ chưa có nguồn</td></tr>
+        <tr><td>99</td><td><code>Other</code></td><td>❌ (dành manual — nhưng xem E3)</td></tr>
+      </table>
+      <p>Lifecycle: <code>Open=1 → Acknowledged=2 → Resolved=3 / FalseAlarm=4</code>.</p>
+      <ul>
+        <li><strong>b) Entity <code>EnvironmentalIncident</code></strong> — site-level, cố ý tách khỏi Alert battery-level, track đầy đủ vòng đời (ReportedBy, Acknowledged, Resolved + note, FalseAlarm + reason).</li>
+        <li><strong>c) API <code>api/environmental-incidents</code></strong> — POST (ApiKey ingest) + acknowledge/resolve/false-alarm (JWT) + GET list/detail/by-site.</li>
+        <li><strong>d) Firmware chống spam tử tế</strong> — edge-detection thuần + cooldown 5 phút + MQ2 warm-up 30s → khói bay 10 phút chỉ report 1 lần.</li>
+        <li><strong>e) Luồng report</strong> → tạo incident → tự tạo Alert site-level → outbox event → <strong>bypass noise suppression</strong> (fire ngay). Resolve → đóng luôn mọi Alert liên quan.</li>
+        <li><strong>f) Phân tầng đúng:</strong> <code>HighAmbientTemp/Humidity/Combo</code> (dữ liệu SHT31 liên tục, "điều kiện vượt ngưỡng") KHÁC <code>EnvironmentalIncident</code> ("sự cố rời rạc"). 2 tầng riêng — nhưng tầng ambient đang đứt dây (E1).</li>
+      </ul>
+
+      <h3>12.2 — 4 dây nối còn thiếu</h3>
+
+      <div id="e1" class="bug red">
+        <h4><span class="code-id">E1</span> <span class="badge red">🔴 Cao</span> — <code>DetectAmbient</code> KHÔNG có caller trong production (defined-but-not-wired)</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> grep toàn service — <code>AnomalyRules.DetectAmbient</code> chỉ được gọi trong <strong>tests</strong>. <code>BatchIngestAmbientReadingsCommandHandler</code> chỉ insert reading, không detect; không background nào đọc <code>ambient_readings</code> cho anomaly.</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> Admin cấu hình <code>AmbientThresholdConfig</code> xong <strong>không ai dùng để phát hiện</strong>. Anomaly 9/10/11 không bao giờ sinh ra ở production. Nhà kho 45°C + ẩm 95% (điều kiện thoát nhiệt pin lithium) → hệ thống im lặng.</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm bước detect vào <code>BatchIngestAmbientReadingsCommandHandler</code> (detect-at-ingest: load config site → gọi <code>DetectAmbient</code> → tạo Alert site-level).</div>
+      </div>
+
+      <div class="bug red">
+        <h4><span class="code-id">E2</span> <span class="badge red">🔴 Cao</span> — TicketService KHÔNG consume <code>EnvironmentalIncidentDetectedEvent</code> → cháy/ngập KHÔNG auto-tạo ticket</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> doc-comment event ghi rõ subscriber có <strong>TicketService</strong>, nhưng grep — không có consumer environmental. Ticket entity ĐÃ có cột <code>EnvironmentalIncidentId</code> (chỗ ngồi có sẵn, chưa ai ngồi).</div>
+        <div class="field impact"><span class="k">Hệ quả — nghịch lý:</span> pin hơi nóng (Overheat Critical) → auto-ticket đầy đủ; <strong>nhà kho đang cháy → chỉ có notify</strong>, không ticket, không assign, không SLA. Đây là loại sự cố P1-Critical rõ nhất theo Priority Matrix.</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm <code>EnvironmentalIncidentDetectedConsumer</code> (clone <code>BatteryAnomalyDetectedConsumer</code>), tạo ticket site-level gắn <code>EnvironmentalIncidentId</code>, Priority từ Severity. Consume thêm ResolvedEvent false-alarm → auto-close.</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">E3</span> <span class="badge yellow">🟡 TB</span> — Con người KHÔNG report thủ công được: POST chỉ nhận ApiKey IoT</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>POST /</code> authorize bằng ApiKey scheme + scope <code>EnvironmentalIngest</code>, <strong>không có biến thể JWT</strong>. Staff nhìn thấy cháy → không tạo được incident. <code>FireDetected/OverheatHazard/Other</code> vốn không sensor → <strong>không ai tạo được</strong>.</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm endpoint JWT (<code>POST /manual</code>, Admin/Manager/Staff), <code>ReportedBy</code> từ token. (Giống memory note "IoT devices auth split".)</div>
+      </div>
+
+      <div class="bug yellow">
+        <h4><span class="code-id">E4</span> <span class="badge yellow">🟡 TB</span> — MQ2 là cảm biến GAS nhưng hardcode report <code>Smoke</code> → <code>GasLeak</code> bỏ không</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>mq2.cpp:108</code> — mọi trigger đều <code>IncidentType::Smoke</code>. MQ2 về bản chất đo khí cháy (LPG/propane/methane/khói) → <code>GasLeak=3</code> không bao giờ dùng.</div>
+        <div class="field fix"><span class="k">Fix (khuyến nghị b, rẻ):</span> giữ <code>Smoke</code> + ghi docs/glossary rằng MQ2 đại diện "khói/khí cháy", <code>GasLeak</code>/<code>FireDetected</code> là future hardware. Không đụng firmware, chỉ cần câu trả lời nhất quán khi bảo vệ.</div>
+      </div>
+
+      <div class="callout info"><strong>Móc nối:</strong> E2 phụ thuộc NS-12 (R1 — SLA timer) giống ISO-A; E1 dùng chung khuôn Alert site-level; incident <code>OverheatHazard</code> chính là ứng viên trigger tự nhiên cho đề xuất cách ly ISO-A (thermal runaway site-level).</div>
+      <p><strong>Issue đề xuất:</strong> NS-21 (E1) · NS-22 (E2) · NS-23 (E3) · NS-24 (E4).</p>
+    </section>
+
+    <!-- ===================== PHỤ LỤC F ===================== -->
+    <section id="apx-f">
+      <div class="apx-label">§13 · PHỤ LỤC F</div>
+      <h2>Anomaly Classification</h2>
+      <div class="callout info"><span class="lead">Kết luận 2 vế:</span> (1) classification <strong>rule-based</strong> (tên + ngưỡng + luật severity) đã làm bài bản, có citation khoa học; (2) <strong>bảng riêng cho AI thì bạn nhớ ĐÚNG</strong> — spec <code>overall.md §30.3</code> (P0) định nghĩa 2 bảng nhưng <strong>0 dòng code</strong>, và plan <code>aibeiotrealtime.md</code> đang bỏ qua chúng.</div>
+
+      <h3>13.1 — Tầng 1 (rule-based): ĐÃ CÓ đầy đủ</h3>
+      <p><strong>a) Tên: <code>AnomalyTypeEnum</code> 15 loại</strong> (giá trị 1–15 là wire value cross-service, không đổi):</p>
+      <table>
+        <tr><td>1 <code>Overheat</code></td><td>2 <code>Overvoltage</code></td><td>3 <code>Undervoltage</code></td><td>4 <code>LowSoc</code></td><td>5 <code>RapidDischarge</code></td></tr>
+        <tr><td>6 <code>AbnormalCharging</code></td><td>7 <code>DeviceOffline</code></td><td>8 <code>SohDegradation</code></td><td>9 <code>HighAmbientTemp</code></td><td>10 <code>HighHumidity</code></td></tr>
+        <tr><td>11 <code>HighTempHumidityCombo</code></td><td>12 <code>HighInternalResistance</code></td><td>13 <code>CellImbalance</code></td><td>14 <code>EnvironmentalIncident</code></td><td>15 <code>SensorMismatch</code></td></tr>
+      </table>
+      <p>Chiều thứ 2: <code>AlertSeverityEnum</code> Info=1 / Warning=2 / Critical=3.</p>
+      <ul>
+        <li><strong>b) Cơ sở khoa học:</strong> mỗi loại + ngưỡng có paper citation (vd Overheat 60°C LiFePO4 cite Feng et al. 2018 + IEEE Std 1625-2008). Sẵn sàng cho hội đồng hỏi "tại sao ngưỡng X".</li>
+        <li><strong>c) Ngưỡng 3 tầng:</strong> DB per BatteryType (<code>ThresholdConfig</code> — đã seed số thật LiFePO4/NMC/NCA) · DB per Site (<code>AmbientThresholdConfig</code> — chưa cắm, E1) · hằng số code (<code>AnomalyRules</code>).</li>
+        <li><strong>d) Luật mapping rule → severity:</strong> Overheat >TempMax+5 → Critical; Over/Undervoltage → Critical luôn (an toàn); LowSoc/SohDegradation → Warning/Critical theo ngưỡng; v.v.</li>
+      </ul>
+
+      <div id="f1" class="bug yellow">
+        <h4><span class="code-id">F1</span> <span class="badge yellow">🟡 TB</span> — Thiếu rule Undertemp (gap tầng rule-based)</h4>
+        <div class="field evidence"><span class="k">Bằng chứng:</span> <code>ThresholdConfig.TemperatureMin</code> tồn tại và <strong>được seed −10°C</strong> cho cả 3 loại pin, nhưng <code>AnomalyRules.Detect</code> <strong>không có check nào dùng nó</strong> — không tồn tại anomaly "nhiệt độ quá thấp".</div>
+        <div class="field impact"><span class="k">Hệ quả:</span> sạc pin lithium dưới 0°C gây <strong>lithium plating</strong> (nguy hiểm thật, có cơ sở trong chính citation B2). Field đang chết y hệt N2/<code>TemperatureMin</code>.</div>
+        <div class="field fix"><span class="k">Fix:</span> thêm rule <code>Undertemp</code> (cần thêm enum value mới — lưu ý wire value cross-service).</div>
+      </div>
+
+      <h3>13.2 — Tầng 2 (AI với bảng riêng): spec CÓ, code CHƯA</h3>
+      <p>Spec <code>overall.md §30 "AI Module integration — P0"</code> định nghĩa đầy đủ 2 bảng mới cho BatteryService:</p>
+      <p><strong><code>AnomalyClassification</code></strong> — các field quan trọng:</p>
+      <table>
+        <tr><th>Field</th><th>Ý nghĩa</th></tr>
+        <tr><td><code>Classification</code></td><td>enum <strong>Normal=1 / Degrading=2 / Failed=3</strong> — output Isolation Forest + LSTM</td></tr>
+        <tr><td><code>AnomalyScore</code>, <code>Confidence</code></td><td>Isolation Forest decision score + độ tin cậy</td></tr>
+        <tr><td><code>ModelVersion</code></td><td>"1.0"/"1.1" — khớp artifact versioning</td></tr>
+        <tr><td><code>ClassifiedAt</code>, <code>LatencyMs</code></td><td>monitoring (SLA inference &lt; 100ms)</td></tr>
+        <tr><td><code>StaffFeedback</code></td><td>enum Correct=1 / FalsePositive=2 / FalseNegative=3 — <strong>feedback loop</strong>, Staff confirm sau resolve</td></tr>
+      </table>
+      <p><code>SohPrediction</code>: PredictedSohPercent, Confidence, ModelVersion, InputWindowStart/End, LatencyMs, RawResponse (jsonb debug).</p>
+      <div class="callout danger"><strong>Thực tế code (verified 2026-07-09):</strong> grep toàn services — <strong>0 file</strong> chứa <code>AnomalyClassification</code>/<code>SohPrediction</code>; DbContext không có DbSet tương ứng; không có <code>AiInferenceClient</code> (AI client duy nhất trong backend là chat DeepSeek/Gemini bên TicketService — không liên quan).</div>
+
+      <div class="bug red">
+        <h4><span class="code-id">F2</span> <span class="badge red">🔴 Cao</span> — Lệch spec §30 vs plan <code>aibeiotrealtime.md</code></h4>
+        <table>
+          <tr><th></th><th><code>overall.md §30</code> (spec gốc, P0)</th><th><code>aibeiotrealtime.md</code> (plan hiện tại)</th></tr>
+          <tr><td>Kiến trúc</td><td>Hybrid: threshold breach → classify per-alert → severity từ AI</td><td>Background service quét định kỳ → <code>/predict</code></td></tr>
+          <tr><td>Lưu ở đâu</td><td>2 bảng riêng</td><td><strong>Đi thẳng vào <code>Alerts</code></strong> (AnomalyType mới <code>PredictedSohDegradation=16</code>)</td></tr>
+          <tr><td>Feedback loop</td><td><code>StaffFeedback</code> Correct/FP/FN</td><td><strong>Không có</strong></td></tr>
+          <tr><td>Bằng chứng model chạy thật</td><td>score/confidence/latency/version persist</td><td>Mất — chỉ còn Alert</td></tr>
+        </table>
+        <div class="field impact"><span class="k">Hệ quả nếu đi theo plan tối giản:</span> không trả lời được hội đồng <em>"các em đánh giá model trên production thế nào?"</em> (không ground-truth feedback, không lịch sử score/confidence); không đối chiếu classification giữa các <code>ModelVersion</code> khi retrain v1.0→v1.1.</div>
+        <div class="field fix"><span class="k">Khuyến nghị chốt:</span> giữ <strong>tối thiểu bảng <code>AnomalyClassification</code></strong> (kể cả bỏ <code>SohPrediction</code>) — chi phí 1 entity + 1 migration + vài dòng insert, đổi lại: (1) bằng chứng model chạy thật; (2) feedback loop để nói chuyện precision/recall; (3) đối chiếu chất lượng giữa model version.</div>
+      </div>
+
+      <div class="callout info"><strong>Móc nối:</strong> bảng <code>AnomalyClassification</code> cũng là chỗ ghi "AI xác nhận Failed" trước khi ISO-A đề xuất cách ly; <code>LatencyMs</code> phục vụ benchmark SLA inference &lt; 100ms của rules AI.</div>
+      <p><strong>Issue đề xuất:</strong> NS-25 (F1 Undertemp) · NS-26 (F2 entity + feedback) · NS-27 (F2 đồng bộ tài liệu).</p>
+    </section>
+
+    <!-- ===================== 3 THREADS ===================== -->
+    <section id="threads">
+      <h2>3 sợi chỉ đỏ xuyên suốt 6 phụ lục</h2>
+      <div class="thread"><div class="num">1</div><div><strong>"Phải lọc source <code>primary</code>"</strong> — anomaly engine quên → N4/N5 trả giá. Mọi phép tính trên <code>sensor_readings</code> (aggregate, report, min/max, AI data) phải lọc primary kẻo đếm 3 lần + dính SOC=0/temp=0 real mode.</div></div>
+      <div class="thread"><div class="num">2</div><div><strong>"Defined-but-not-wired"</strong> — code/spec định nghĩa xong nhưng không có caller/consumer: N2 (PromotedToAlertId), R3 (notify), R1 (SlaTimer), E1 (DetectAmbient), E2 (env consumer), F1 (Undertemp), F2 (2 bảng AI).</div></div>
+      <div class="thread"><div class="num">3</div><div><strong>"Fix N1 + N4 là điều kiện tiên quyết"</strong> — trước khi lên hardware thật, nếu không alert spam sẽ chôn vùi mọi thứ. Là điều kiện cho cả cascade risk (R5) lẫn cách ly ISO-A.</div></div>
+    </section>
+
+    <!-- ===================== ISSUES ===================== -->
+    <section id="issues">
+      <h2>Bảng issue đề xuất (từ 6 phụ lục)</h2>
+      <table>
+        <tr><th>#</th><th>Task</th><th>Mức</th><th>Ước</th><th>Từ phụ lục</th></tr>
+        <tr class="issue-row"><td>NS-07</td><td>Fix N1 — persist breach khi suppressed</td><td><span class="badge red">🔴</span></td><td>0.5d</td><td>B</td></tr>
+        <tr class="issue-row"><td>NS-08</td><td>Fix N4 — Detect chỉ chạy trên reading primary</td><td><span class="badge red">🔴</span></td><td>0.5–1d</td><td>B</td></tr>
+        <tr class="issue-row"><td>NS-09</td><td>Fix N5 — skip temp-compare cho redundant + CSVS chỉ ghép Bms↔IotGateway</td><td><span class="badge red">🔴</span></td><td>0.5–1d</td><td>B</td></tr>
+        <tr class="issue-row"><td>NS-10</td><td>Fix N2 + N3 — PromotedToAlertId, retention filter, dedup breach, copy SourceType</td><td><span class="badge yellow">🟡</span></td><td>1d</td><td>B</td></tr>
+        <tr class="issue-row"><td>NS-11</td><td>Hợp nhất 2 đường SensorMismatch (N6)</td><td><span class="badge gray">⚪</span></td><td>1d</td><td>B</td></tr>
+        <tr class="issue-row"><td>NS-12</td><td>Fix R1 — tạo SlaTimer khi Assigned + recompute DueAt khi Priority đổi</td><td><span class="badge red">🔴</span></td><td>1–1.5d</td><td>C</td></tr>
+        <tr class="issue-row"><td>NS-13</td><td>Fix R2 + R6 — auto-tạo ticket P1 khi không có ticket; fallback chỉ chọn incident</td><td><span class="badge red">🔴</span></td><td>1d</td><td>C</td></tr>
+        <tr class="issue-row"><td>NS-14</td><td>Fix R3 — NotificationService consume CascadeRiskHighEvent</td><td><span class="badge yellow">🟡</span></td><td>0.5d</td><td>C</td></tr>
+        <tr class="issue-row"><td>NS-15</td><td>Fix R4 — recompute score cho asset hết alert Open (decay)</td><td><span class="badge yellow">🟡</span></td><td>0.5d</td><td>C</td></tr>
+        <tr class="issue-row"><td>NS-16</td><td>R7 — OrderBy CascadeRiskUpdatedAt trong batch scan</td><td><span class="badge gray">⚪</span></td><td>0.25d</td><td>C</td></tr>
+        <tr class="issue-row"><td>NS-17</td><td>ISO-A: trạng thái Isolated + luồng đề xuất→xác nhận→tái kết nối + audit</td><td><span class="badge green">feat</span></td><td>2–3d</td><td>D</td></tr>
+        <tr class="issue-row"><td>NS-18</td><td>ISO-A: telemetry verification (theo dõi current sau cô lập)</td><td><span class="badge green">feat</span></td><td>1d</td><td>D</td></tr>
+        <tr class="issue-row"><td>NS-19</td><td>ISO-A FE: checklist + upload ảnh + màn phê duyệt tái kết nối</td><td><span class="badge green">feat</span></td><td>1.5–2d</td><td>D</td></tr>
+        <tr class="issue-row"><td>NS-20</td><td>(Stretch) ISO-B: verify write-register JBD/Daly + firmware CommandKind</td><td><span class="badge yellow">🟡</span></td><td>3–5d</td><td>D</td></tr>
+        <tr class="issue-row"><td>NS-21</td><td>Fix E1 — wire DetectAmbient vào ambient ingest</td><td><span class="badge red">🔴</span></td><td>1d</td><td>E</td></tr>
+        <tr class="issue-row"><td>NS-22</td><td>Fix E2 — TicketService consume EnvironmentalIncidentDetectedEvent (auto-ticket P1)</td><td><span class="badge red">🔴</span></td><td>1–1.5d</td><td>E</td></tr>
+        <tr class="issue-row"><td>NS-23</td><td>Fix E3 — endpoint JWT report thủ công + FE form</td><td><span class="badge yellow">🟡</span></td><td>0.5+0.5d</td><td>E</td></tr>
+        <tr class="issue-row"><td>NS-24</td><td>Fix E4 — chốt ngữ nghĩa MQ2 (Smoke vs GasLeak) → docs</td><td><span class="badge gray">⚪</span></td><td>0.25d</td><td>E</td></tr>
+        <tr class="issue-row"><td>NS-25</td><td>F1 — thêm rule Undertemp + enum value mới + citation</td><td><span class="badge yellow">🟡</span></td><td>0.5d</td><td>F</td></tr>
+        <tr class="issue-row"><td>NS-26</td><td>F2 — entity AnomalyClassification + migration + insert + endpoint Staff feedback</td><td><span class="badge red">🔴</span></td><td>1–1.5d</td><td>F</td></tr>
+        <tr class="issue-row"><td>NS-27</td><td>F2 — đồng bộ tài liệu aibeiotrealtime.md khớp quyết định NS-26</td><td><span class="badge gray">⚪</span></td><td>0.25d</td><td>F</td></tr>
+      </table>
+    </section>
+
+    <!-- ===================== DEPENDENCY ===================== -->
+    <section id="deps">
+      <h2>Sơ đồ phụ thuộc &amp; thứ tự thực hiện issue</h2>
+      <p>Các issue không độc lập — nhiều cái phải chờ nền tảng xong trước. Sợi dây quan trọng nhất: <strong>fix noise (NS-07/08) là gốc</strong>, và <strong>NS-12 (hồi sinh SLA timer) mở khóa cả cascade lẫn môi trường lẫn cách ly</strong>.</p>
+      <div class="flow">NS-07 (N1) ┐
+NS-08 (N4) ┼─► [nền alert sạch] ─► R5 hết độc ─► cascade risk mới có nghĩa
+NS-09 (N5) ┘                     └─► điều kiện tiên quyết cho ISO-A / auto-trigger (§11.2)
+
+NS-12 (R1: tạo SlaTimer khi Assigned)
+   ├─► NS-13 (R2/R6: auto-tạo ticket P1)   ← ticket mới cần timer đúng
+   ├─► NS-22 (E2: env auto-ticket P1)      ← ticket mới cần timer đúng
+   └─► NS-17 (ISO-A gắn vào ticket P1)
+          ├─► NS-18 (telemetry verification)
+          └─► NS-19 (FE checklist + ảnh)
+
+NS-14 (R3 notify) · NS-15 (R4 decay) · NS-16 (R7) : độc lập, chạy song song
+NS-21 (E1 ambient) · NS-23 (E3 report tay) · NS-24 (E4 MQ2 docs) : độc lập
+NS-01→06 (min/max streaming) : độc lập với nhánh audit, chỉ cần lọc primary
+
+NS-26 (F2: bảng AnomalyClassification) ─► chờ Sprint AI (aibeiotrealtime.md)
+   └─► NS-27 (đồng bộ docs)
+NS-25 (F1 Undertemp) : độc lập, cần chốt wire value cross-service</div>
+      <div class="callout good"><span class="lead">Thứ tự khuyến nghị nếu demo cho hội đồng:</span> NS-07/08 (vá đầu vào alert) → NS-12 (hồi sinh SLA) → NS-13 (không rơi event) → NS-14 (Manager được báo) → NS-15 (heat map đáng tin) → rồi mới tới feature mới (ISO-A, min/max streaming).</div>
+      <h4>Nhóm ưu tiên</h4>
+      <table>
+        <tr><th>Nhóm</th><th>Issue</th><th>Vì sao làm trước</th></tr>
+        <tr><td><span class="badge red">🔴 Gốc</span></td><td>NS-07, NS-08, NS-09</td><td>Vá pipeline alert — mọi thứ downstream (cascade, môi trường, cách ly) ăn dữ liệu từ đây</td></tr>
+        <tr><td><span class="badge red">🔴 Hồi sinh SLA</span></td><td>NS-12</td><td>Không có timer thì "P1 = 4h" chỉ đúng trên seed demo; mở khóa NS-13/22/17</td></tr>
+        <tr><td><span class="badge red">🔴 Đóng vòng</span></td><td>NS-13, NS-22</td><td>Event bắn ra không còn rơi vào hư không (cascade High + cháy/ngập → có ticket)</td></tr>
+        <tr><td><span class="badge yellow">🟡 Đáng tin</span></td><td>NS-14, NS-15, NS-21</td><td>Manager được báo, heat map không "đỏ mãi", ambient được phát hiện</td></tr>
+        <tr><td><span class="badge green">🟢 Feature mới</span></td><td>NS-01→06 (min/max), NS-17→19 (ISO-A)</td><td>Xây trên nền đã sạch — không xây trên cát</td></tr>
+      </table>
+    </section>
+
+    <div class="footer-note">
+      <p>Tài liệu này được sinh từ nội dung <code>newsprint.md</code> (§8 → §13). Mọi bằng chứng file:line trong đây trích nguyên từ phần audit gốc — verify lại code trước khi implement vì có thể đã thay đổi kể từ 2026-07-09.</p>
+      <p>Ký hiệu bug: <span class="badge red">N/R/E/F</span> = điểm lệch phát hiện · <span class="badge green">NS-xx</span> = issue đề xuất cho sprint.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -48,6 +48,7 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
             HardwareRevision = request.HardwareRevision?.Trim(),
             Status = Domain.Enums.IotDeviceStatusEnum.Pending,
             ApiKeyHash = key.Hash,
+            ApiKeyPlaintext = key.RawKey,
             ApiKeyLastFour = key.LastFour,
             ApiKeyScopes = request.ApiKeyScopes,
             ApiKeyIssuedAt = now,

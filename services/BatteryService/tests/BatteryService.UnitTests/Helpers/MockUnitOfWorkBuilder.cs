@@ -23,6 +23,10 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IGenericRepository<EnvironmentalIncident>> EnvironmentalIncidents { get; } = new();
     public Mock<IGenericRepository<NoiseBreachEvent>> NoiseBreachEvents { get; } = new();
 
+    // Sprint Bonus NS-26 — AI classification.
+    public Mock<IGenericRepository<AnomalyClassification>> AnomalyClassifications { get; } = new();
+    public Mock<IGenericRepository<SohPrediction>> SohPredictions { get; } = new();
+
     // Sprint IoT-1 additions.
     public Mock<IGenericRepository<IotDevice>> IotDevices { get; } = new();
     public Mock<IGenericRepository<IotDeviceHeartbeat>> IotDeviceHeartbeats { get; } = new();
@@ -47,6 +51,8 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.AmbientThresholdConfigs).Returns(AmbientThresholdConfigs.Object);
         UnitOfWork.SetupGet(x => x.EnvironmentalIncidents).Returns(EnvironmentalIncidents.Object);
         UnitOfWork.SetupGet(x => x.NoiseBreachEvents).Returns(NoiseBreachEvents.Object);
+        UnitOfWork.SetupGet(x => x.AnomalyClassifications).Returns(AnomalyClassifications.Object);
+        UnitOfWork.SetupGet(x => x.SohPredictions).Returns(SohPredictions.Object);
         UnitOfWork.SetupGet(x => x.IotDevices).Returns(IotDevices.Object);
         UnitOfWork.SetupGet(x => x.IotDeviceHeartbeats).Returns(IotDeviceHeartbeats.Object);
         UnitOfWork.SetupGet(x => x.IotDeviceCalibrations).Returns(IotDeviceCalibrations.Object);
@@ -70,6 +76,8 @@ public sealed class MockUnitOfWorkBuilder
         Seed(AmbientThresholdConfigs, Array.Empty<AmbientThresholdConfig>());
         Seed(EnvironmentalIncidents, Array.Empty<EnvironmentalIncident>());
         Seed(NoiseBreachEvents, Array.Empty<NoiseBreachEvent>());
+        Seed(AnomalyClassifications, Array.Empty<AnomalyClassification>());
+        Seed(SohPredictions, Array.Empty<SohPrediction>());
         Seed(IotDevices, Array.Empty<IotDevice>());
         Seed(IotDeviceHeartbeats, Array.Empty<IotDeviceHeartbeat>());
         Seed(IotDeviceCalibrations, Array.Empty<IotDeviceCalibration>());
@@ -95,6 +103,8 @@ public sealed class MockUnitOfWorkBuilder
     public MockUnitOfWorkBuilder WithAmbientThresholdConfigs(params AmbientThresholdConfig[] data) { Seed(AmbientThresholdConfigs, data); return this; }
     public MockUnitOfWorkBuilder WithEnvironmentalIncidents(params EnvironmentalIncident[] data) { Seed(EnvironmentalIncidents, data); return this; }
     public MockUnitOfWorkBuilder WithNoiseBreachEvents(params NoiseBreachEvent[] data) { Seed(NoiseBreachEvents, data); return this; }
+    public MockUnitOfWorkBuilder WithAnomalyClassifications(params AnomalyClassification[] data) { Seed(AnomalyClassifications, data); return this; }
+    public MockUnitOfWorkBuilder WithSohPredictions(params SohPrediction[] data) { Seed(SohPredictions, data); return this; }
 
     public IBatteryUnitOfWork Build() => UnitOfWork.Object;
 

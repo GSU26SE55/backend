@@ -137,6 +137,8 @@
 | Documentation sync (Swagger/Postman/SRS/CHANGELOG/runbook/Mermaid) | 🔴 P0 | §65, §40.3, §53.2bis | Sprint 5B `#240` |
 | ADR-017 (Energy/CO2 removal) + ADR-018 (Saga orchestration) | 🔴 P0 | §40.1 | Sprint 5B `#233`/`#239` |
 | **`AuditAggregatorService`** (microservice MỚI) + 10 service onboard audit + AuditLog Hybrid Architecture | 🟠 P1 | §17 Sprint audit + §69.11 | **Sprint audit** ~44 dev-day, 7 phase, 45 task `#AUDIT-01..45` / `#447..#491`. Owner **Thắng (`@Alexdev257`)** (assigned 2026-06-24); gate "ổn định ≥ 2 tuần" **waived** (sole-dev, hard-blocker code đã merge). ADR-0007 ✅ viết xong. Decisions chốt 2026-06-24 — xem §17 Decision Log. |
+| **Sprint Bonus** (newsprint — Min/Max streaming + audit pipeline fixes) | 🟢 bonus | §17 Sprint Bonus + `newsprint.md` | 27 task `#NS-01..27` — 25 issue BE đã tạo GitHub `#646..#670` (milestone Sprint Bonus, cột Plan), 2 FE (NS-05/NS-19) ở repo `frontend`. 6 phase active ~22 dev-day + deferred cách ly pin ~9.5. Feature min/max streaming (PA-2/3/4) + vá noise N1–N6 / cascade R1–R8 / môi trường E1–E4 / classification F1–F2. Quyết định chốt 2026-07-14 (Q1–Q13) — xem `newsprint.md`. |
+| **Sprint 6.2** (Notification pipeline completion — review 2026-07-14) | 🔴 P1 | §17 Sprint 6.2 + `reviewnotification.md` | 17 task `#NOTI-01..17` = GitHub `#672..#688` (milestone Sprint 6.2, cột Plan, chưa assign), ~14 dev-day. Vấn đề gốc: `NotificationDispatcher` dead code (0 caller) → Push/Email/SMS không bao giờ gửi; + orphan events (publish nhưng 0 consumer) + gap routing matrix §3.4. **THÊM 6 · SỬA 8 · XOÁ 1 · 2 fork THÊM/XOÁ; 5 điểm cần chốt.** Nguồn: `reviewnotification.md` §7. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -4633,7 +4635,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -5716,6 +5718,118 @@ KHÔNG được skip:
 - Manager/Admin mở web → tracking nhiều pin theo site.
 - Data lên FE **đã loại outlier** (rác không hiện).
 - Tắt `Realtime:Enabled` → ingest vẫn chạy bình thường, chỉ không stream.
+
+---
+
+### Sprint Bonus (newsprint — Min/Max streaming + audit pipeline fixes — chưa chốt timeline)
+
+**Goal:** Triển khai đề xuất `newsprint.md`: (1) feature **min/max dòng nạp/xả streaming** lên UI (PA-2 REST aggregate + PA-3 SSE event `stats` + PA-4 continuous aggregate); (2) vá **4 nhóm điểm lệch pipeline dữ liệu** phát hiện khi audit code — noise (N1–N6), cascade risk (R1–R8), sự cố môi trường (E1–E4), anomaly classification (F1–F2). Thuần **BatteryService + TicketService + NotificationService (BE) + FE Web/Mobile**; firmware `iot` chỉ đụng 1 chỗ (NS-24). Cách ly pin (ISO-A/B/C) **defer** (Q9=D — làm sau).
+
+**Owner:** Thắng (`@Alexdev257`). **Issue numbers:** ✅ đã tạo GitHub `#646..#670` (25 issue BE, milestone `Sprint Bonus`, label `status: init` = cột Plan). **NS-05, NS-19 (FE) chưa tạo** — sẽ mở ở repo `frontend`. **Phụ thuộc:** ingest + làm sạch DONE (Sprint IoT-2 `#IoT2-14..17`); SSE telemetry DONE (Sprint BE-IoT-Realtime `#614..623`).
+
+**Design source of truth:** `newsprint.md` (§0–§13 — đầy đủ bằng chứng file:line + 6 phụ lục audit) + bản giải thích `newsprint-appendix.html`. Sprint này là **task tracking layer**. **Quyết định chốt 2026-07-14 (Q1–Q13):** xem `newsprint.md` mục "Quyết định đã chốt".
+
+**Quy mô:** 27 task — ~22 dev-day active (6 phase) + ~9.5 dev-day deferred (cách ly pin).
+
+**⚠️ Cross-service (báo team TRƯỚC khi merge):**
+- **NS-25 (Q11):** `AnomalyTypeEnum.Undertemp = 16` là **wire value** dùng chung — đồng bộ enum TicketService/NotificationService/FE.
+- **NS-26 (Q12):** theo spec §30 dùng **bảng riêng** → **KHÔNG** thêm `PredictedSohDegradation=16` vào `AnomalyTypeEnum` (16 dành cho `Undertemp`); kết quả AI đi vào `AnomalyClassification.Classification`, không vào `Alerts.AnomalyType`.
+
+**Tasks:**
+
+**Phase 0 — Contract (nền cho FE chạy song song):**
+- [ ] **NS-01** — Chốt metric §2 (min/max nạp/xả + V/T, trả dương/nullable) + update `docs/api-battery.md` contract REST `/aggregate` mở rộng + SSE `event: stats`. Window **CHỐT chỉ `1h` + `today`** (Q3). → #646
+
+**Phase 1 — Fix pipeline noise (🔴 BẮT BUỘC trước hardware thật — Q2=A):**
+- [ ] **NS-07** — Fix **N1**: `AnomalyDetectionService.ScanRecentReadingsAsync` — thêm `+ AlertsSuppressed` vào điều kiện `SaveChangesAsync` (breach event bị vứt khi tick chỉ toàn suppress → suppression chặn alert vĩnh viễn). ~1 dòng + tests (scan chỉ suppress → assert breach persist; 5 tick → tick 5 alert nổ). → #651
+- [ ] **NS-08** — Fix **N4**: `ScanRecentReadingsAsync` chỉ `Detect` trên reading `primary` (`SensorSourceCode=="primary"||null/empty`). Chặn INA226 real gửi SOC=0 → LowSoc Critical spam + auto-ticket. Tests. → #652
+- [ ] **NS-09** — Fix **N5**: skip so nhiệt độ khi 1 reading là `redundant` (`AnomalyRules.DetectSensorMismatch` + `CrossSourceValidationService`); CSVS chỉ ghép cặp `Bms↔IotGateway` (không ghép External temp=0). Đồng bộ spec §52.6. Tests. → #653
+- [ ] **NS-10** — Fix **N2+N3** (Q5=A giữ audit · Q6=A "5 reading"): gán `PromotedToAlertId=alert.Id` khi raise; retention thêm `&& PromotedToAlertId==null`; dedup breach theo `(assetId, anomalyType, reading.Time)`; copy `SourceType=reading.SourceType`. Tests. → #654
+- [ ] **NS-11** — Hợp nhất 2 đường SensorMismatch (**N6**, Q7=B làm luôn): giữ `CrossSourceValidationService` (đã vá N5), xoá `DetectSensorMismatches` khỏi `AnomalyDetectionService`, dồn hằng số ngưỡng về `AnomalyRules`. Tests. → #655
+
+**Phase 2 — Feature Min/Max streaming (PA-2 + PA-3 + PA-4):**
+- [ ] **NS-02** — PA-2: `SensorReadingAggregateDto` + `GetSensorReadingAggregateQueryHandler` — thêm min/max nạp/xả tách chiều + **min/max Voltage/Temperature (Q4=A)** + avgCharge/avgDischarge, **lọc source primary**, trả dương/nullable. Unit tests. → #647
+- [ ] **NS-03** — PA-3a: `LiveStatsDto` + `ITelemetryStatsService.AccumulateAndPublishAsync` + `RedisTelemetryStatsService` (merge HASH `telemetry:stats:{asset}:1h:{yyyyMMddHH}` TTL 2h + `:today:{yyyyMMdd}` TTL 26h, Lua atomic, soft-dep, no-op khi `Realtime:Enabled=false`). Window `1h`+`today` (Q3). Unit tests. → #648
+- [ ] **NS-04** — PA-3b: `RedisTelemetryChannels` thêm `StatsAsset/StatsChannelsFor`; `RedisTelemetryStream` subscribe channel stats + forward `SseMessage("stats",…)` (**KHÔNG** chung channel `reading` cũ); wire stats service vào `BatchIngestSensorReadingsCommandHandler` (soft-dep, try/catch riêng); `RealtimeMetrics` label `stats`; DI. Integration test SSE. → #649
+- [ ] **NS-05** — FE (Web+Mobile): card "Nạp/Xả đỉnh (1h/hôm nay)" nghe `event: stats`; chart min/max band từ `/aggregate`; vẽ đường ngưỡng từ `/api/thresholds` (`currentMaxCharge/Discharge`). → (FE — tạo issue riêng ở repo frontend)
+- [ ] **NS-06** — PA-4 (Q13=B làm luôn): continuous aggregate `sensor_readings_agg_1h` (raw SQL migration, `time_bucket` 1h, filter primary) + refresh policy + endpoint đọc view (`FromSqlRaw`/Dapper) + rollback test migration (checklist rule 14). → #650
+
+**Phase 3 — Fix cascade risk:**
+- [ ] **NS-12** — Fix **R1** (giá trị lớn nhất — hồi sinh cả tầng SLA): tạo `SlaTimer` (dùng `SlaCalculator`) khi ticket **Assigned**; recompute `DueAt` khi Priority đổi (cascade override). Tests (assign→timer Running+DueAt đúng priority; CascadeRiskHigh→DueAt rút về 4h). → #656
+- [ ] **NS-13** — Fix **R2+R6** (Q8=A): `BatteryCascadeRiskHighConsumer` auto-tạo ticket P1 (`TicketOrigin=System`) khi pin không có ticket active; fallback chỉ chọn ticket incident (không nâng nhầm ticket bảo trì định kỳ). Tests. → #657
+- [ ] **NS-14** — Fix **R3**: `BatteryCascadeRiskHighConsumer` MỚI bên NotificationService (push + email Manager của site). → #658
+- [ ] **NS-15** — Fix **R4** (decay): `CascadeRiskService.RecomputeAsync` thêm nhánh quét asset có `CascadeRiskScore>0` nhưng hết alert Open → recompute (score tự tụt về topology). Tests. → #659
+- [ ] **NS-16** — Fix **R7**: `CascadeRiskService` thêm `OrderBy(a=>a.CascadeRiskUpdatedAt)` trong batch scan (chống starvation khi >200 asset). → #660
+
+**Phase 4 — Fix sự cố môi trường:**
+- [ ] **NS-21** — Fix **E1**: wire `AnomalyRules.DetectAmbient` vào `BatchIngestAmbientReadingsCommandHandler` (detect-at-ingest: load `AmbientThresholdConfig` site → detect → Alert site-level). Anomaly 9/10/11 defined-but-not-wired. Tests. → #661
+- [ ] **NS-22** — Fix **E2**: `EnvironmentalIncidentDetectedConsumer` MỚI bên TicketService (auto-ticket P1 gắn `EnvironmentalIncidentId`, Priority từ Severity — **phụ thuộc NS-12**: ticket mới cần SlaTimer đúng); consume `EnvironmentalIncidentResolvedEvent` false-alarm → auto-close. Tests. → #662
+- [ ] **NS-23** — Fix **E3**: endpoint JWT `POST /manual` (Admin/Manager/Staff, `ReportedBy` từ token) cho report thủ công + FE form. → #663
+- [ ] **NS-24** — Fix **E4** (Q10=B): **đổi nhãn firmware MQ2 `Smoke`→`GasLeak`** (`iot/.../mq2.cpp`), giữ `Smoke` cho sensor khói quang học tương lai + cập nhật docs/glossary + câu trả lời hội đồng. **Đụng repo `iot`.** → #664
+
+**Phase 5 — Anomaly classification (gắn Sprint AI):**
+- [ ] **NS-25** — F1 (Q11=A): thêm rule `Undertemp` (dùng `ThresholdConfig.TemperatureMin` đang chết, seed −10°C) + enum **`AnomalyTypeEnum.Undertemp = 16`** (⚠️ wire value cross-service) + citation B2 (lithium plating) + tests. → #665
+- [ ] **NS-26** — F2 (Q12=A — spec §30 ĐẦY ĐỦ): entity `AnomalyClassification` (Classification Normal/Degrading/Failed, AnomalyScore, Confidence, ModelVersion, LatencyMs, StaffFeedback Correct/FP/FN + audit) + entity `SohPrediction` + migration + DbSet + insert trong flow AI + endpoint Staff feedback. **KHÔNG** thêm `PredictedSohDegradation` vào AnomalyTypeEnum. Gắn Sprint AI. → #666
+- [ ] **NS-27** — F2 docs: cập nhật `aibeiotrealtime.md` khớp NS-26 (dùng bảng riêng theo §30, không đi thẳng vào Alerts), đánh dấu §30.3 phần nào làm/không. → #667
+
+**Deferred — Cách ly pin (Q9=D — 📌 LÀM SAU, không trong đợt active):**
+- [ ] **NS-17** — ISO-A: trạng thái `BatteryStatusEnum.Isolated` + fields `IsolatedAt/IsolatedByUserId/IsolationReason/RelatedTicketId` + migration + workflow đề xuất→xác nhận→tái kết nối + audit + chặn auto-ticket/alert khi Isolated. → #668
+- [ ] **NS-18** — ISO-A: telemetry verification — theo dõi current sau xác nhận cô lập (còn `|current|>0` → "chưa thành công"; im hẳn → "verified"). Dùng chung filter primary. → #669
+- [ ] **NS-19** — ISO-A FE: checklist cô lập + upload ảnh + màn phê duyệt tái kết nối + cờ đỏ dashboard. → (FE — tạo issue riêng ở repo frontend)
+- [ ] **NS-20** — (Stretch) ISO-B: verify write-register map JBD/Daly trên bench + firmware `CommandKind::IsolateBattery` + khung an toàn 7 điểm §11.4. Cần hardware rig thật. → #670
+
+**Acceptance:**
+- **Min/max:** FE mở chart thấy min/max band nạp/xả (+ V/T) per bucket từ `/aggregate` (primary-only); card "Nạp/Xả đỉnh" nhảy realtime qua SSE `event: stats` mỗi ~5s; tắt `Realtime:Enabled` → ingest vẫn chạy, chỉ không stream stats.
+- **Noise:** 5 tick suppress liên tiếp → tick 5 alert nổ (N1 vá); real-mode INA226 SOC=0 → KHÔNG spam LowSoc (N4); BMS↔INA226 ΔT=25°C → KHÔNG SensorMismatch (N5).
+- **Cascade/SLA:** assign ticket → SlaTimer chạy đúng priority; cascade High không có ticket → auto-tạo ticket P1; Manager nhận notify; pin hết alert → score decay khỏi heat map.
+- **Môi trường:** ambient vượt ngưỡng → Alert site-level; incident Critical (khói/ngập) → auto-ticket P1; Staff report tay được qua JWT.
+- **Classification:** `Undertemp` phát hiện khi nhiệt độ < `TemperatureMin`; kết quả AI persist vào `AnomalyClassification` (score/confidence/latency/feedback).
+
+---
+
+### Sprint 6.2 (Notification pipeline completion — review 2026-07-14)
+
+**Goal:** Đóng khoảng cách giữa thiết kế và runtime của notification pipeline theo review `reviewnotification.md`. Vấn đề gốc: **`NotificationDispatcher` là dead code (0 caller)** → toàn bộ tầng giao nhận **Push/Email/SMS không bao giờ gửi** ở runtime (notification chỉ ghi DB `Status=Pending` rồi nằm im; user chỉ thấy khi tự poll REST); cộng nhiều **orphan event** (publish nhưng 0 consumer) + gap so với routing matrix spec §3.4. Sprint này nối dispatcher vào flow, viết consumer còn thiếu, và đóng gap nghiệp vụ. Là **follow-up của Sprint 6 (NotificationService)** sau review branch `dev` commit `3dce378`.
+
+**Owner:** đề xuất BE (gán khi `/kltn-sprint`). **Issue numbers:** ✅ đã tạo GitHub `#672..#688` (17 issue, milestone `Sprint 6.2`, label `status: init` = cột Plan, **chưa assign**). **Phụ thuộc:** NotificationService core + 22 consumer DONE (Sprint 6/Chat); một số task đụng SharedContracts / TicketService / BatteryService / AuthService / EmailService / SmsService.
+
+**Design source of truth:** `reviewnotification.md` (§3 phát hiện P1 đã verify grep/đọc file · §4 gap P2 · §6 ma trận spec-vs-thực-tế · §7 17 khuyến nghị). Sprint này là **task tracking layer** của §7.
+
+**Quy mô:** 17 task (`#NOTI-01..17`) · ~14 dev-day · **THÊM 6 · SỬA 8 · XOÁ 1 · 2 task fork THÊM-hoặc-XOÁ (NOTI-07/12)**. **5 điểm cần chốt quyết định:** NOTI-07/08/12/13/14.
+
+**⚠️ Cross-service:** NOTI-05 sửa payload event trong `SharedContracts` (đồng bộ publisher TicketService + consumer NotificationService); NOTI-04/17 đụng AuthService; NOTI-02/09/15 đụng EmailService; NOTI-11/15 đụng SmsService; NOTI-08 đụng BatteryService.
+
+**Tasks (nhãn hành động THÊM / XOÁ / SỬA):**
+
+**Phase P1 — Không có thì noti coi như chưa tồn tại:**
+- [ ] **NOTI-01** [THÊM] `NotificationDispatchBackgroundService`: background worker quét `Notification Status=Pending` theo batch → gọi `NotificationDispatcher.DispatchAsync` → update `Sent/Failed`. Tái dùng leader-election pattern của `NotificationAuditOutboxRelayBackgroundService`; đăng ký DI. **Task gốc** — không có thì Push/Email/SMS mãi không gửi (khuyến nghị 1b: tách write/dispatch, retry độc lập). ~2–3d → #672
+- [ ] **NOTI-02** [THÊM] Consumer `SendNotificationEmailEvent` trong EmailService (+ template generic + Redis inbox dedup như 4 consumer OTP). Không có thì bật dispatcher xong email notification (SLA/escalation/saga/chat) vẫn biến mất — event hiện 0 consumer, RabbitMQ drop không log. ~1d → #673
+- [ ] **NOTI-03** [THÊM] Consumer `ChatEscalatedToAdminEvent` (NotificationService) → notify Admin InApp+Push+Email. Saga escalation chat P1 (Manager mention → chờ ACK 30' → escalate Admin) chạy đúng, chỉ thiếu đầu nhận. ~0.5d → #674
+- [ ] **NOTI-04** [THÊM] Consumer + email template cảnh báo bảo mật cho `SuspiciousLoginDetectedEvent` + `RefreshTokenReuseDetectedEvent` → email user (đường EmailService trực tiếp như OTP). Detection logic AuthService đã chạy, chỉ thiếu đầu nhận. ~1d → #675
+
+**Phase P2 — Đúng spec nghiệp vụ:**
+- [ ] **NOTI-05** [SỬA+THÊM] Thêm `CustomerId` vào `TicketAssignedEvent`/`TicketResolvedEvent` (+ cân nhắc Priority/CustomerId vào `TicketCreatedEvent`) + `StaffId` vào `SlaWarningEvent` (SharedContracts) → cập nhật publisher TicketService → mở notify Customer/Staff trong consumer NotificationService (bỏ comment "Customer notification deferred"). ~1.5d → #676
+- [ ] **NOTI-06** [SỬA] Phân nhánh `SlaBreachedConsumer` theo priority: P1 → +SMS +Email (+escalate); P2 → +Email (bỏ SMS); P3 → in-app/digest (không push/email). Payload đã có `Priority`, chỉ thiếu logic. ~0.5d → #677
+- [ ] **NOTI-07** [THÊM/XOÁ — cần chốt] Bổ sung event + consumer cho state cuối ticket (approved / closed / rejected / reopen + rating request auto sau 7 ngày); **HOẶC** nếu ngoài scope → XOÁ enum `TicketStatusChanged(3)` / `TicketClosed(5)` (định nghĩa nhưng 0 producer/consumer) để khỏi gây hiểu nhầm. ~1–2d / 0.25d → #678
+- [ ] **NOTI-08** [THÊM/SỬA — cần chốt] Chốt gap Battery Warning/Info: BatteryService publish event Warning (kèm dedup chống spam) **HOẶC** cập nhật spec T#11/T#12; + thêm Email/SMS cho Critical anomaly theo preference (`BatteryAnomalyDetectedConsumer` hiện chỉ InApp+Push). ~1d → #679
+- [ ] **NOTI-09** [THÊM] 2 template email thiếu: `OtpPasswordReset.html` + `OtpEmailChange.html` (`EmailService.Api/wwwroot/email-templates/`). Hiện fallback về `OtpRegister.html` → user reset mật khẩu nhận email nội dung "đăng ký tài khoản" (sai ngữ cảnh, dễ nghi phishing). ~0.25d → #680
+- [ ] **NOTI-10** [SỬA] `ChatCreatedConsumer` ghi thêm `Channel=InApp` song song `Push` (hiện chỉ `Channel=Push` → sai ngữ nghĩa kênh + phụ thuộc push để hiển thị lịch sử). ~0.25d → #681
+
+**Phase P3 — Dọn dẹp & hoàn thiện:**
+- [ ] **NOTI-11** [THÊM] Consumer `SmsFailedEvent` (+ cân nhắc `SmsDeliveryReportEvent`) → cập nhật `Notification.Status=Failed` + `FailureReason` (feedback loop; tránh record kẹt `Sent` dù SMS fail). ~0.5d → #682
+- [ ] **NOTI-12** [THÊM/XOÁ — cần chốt] Implement digest (`Frequency`/`DigestWindowMinutes` batch non-critical) **HOẶC** gỡ 2 field khỏi API preferences để FE không hiểu nhầm là dùng được. ~1d / 0.25d → #683
+- [ ] **NOTI-13** [THÊM/SỬA — cần chốt] Ghi `NotificationAuditLog`/`NotificationAuditOutbox` tại PushSent/PushFailed/InAppRead (dùng `NotificationAuditActionEnum`) **HOẶC** tạm tắt `NotificationAuditOutboxRelayBackgroundService` đang poll bảng rỗng 2s/lần. ~1d / 0.1d → #684
+- [ ] **NOTI-14** [SỬA — cần chốt] Chọn 1 pattern template (DB `NotificationTemplate` seed 20+ vs inline hardcode) + cân nhắc đưa `TypeChannelMatrix` (hardcode trong dispatcher) ra config. ~0.5–1d → #685
+- [ ] **NOTI-15** [XOÁ] Xoá `SendPhoneOtpConsumer` stub (EmailService, đã `[ExcludeFromConfigureEndpoints]`) + legacy `SendSmsCommand` consumer cũ (SmsService, đánh dấu "Phase 9 XÓA class này"). ~0.25d → #686
+- [ ] **NOTI-16** [SỬA] Batch push qua Expo API (100 message/call) trong `ExpoPushChannel` (hiện mỗi device token = 1 HTTP call). Tối ưu, không phải bug. ~0.5d → #687
+- [ ] **NOTI-17** [VERIFY/SỬA] Verify flow `AccountDeletedEvent`: `AccountDeletedSyncConsumer` có sẵn nhưng chưa thấy AuthService publish → thêm publish khi xoá account (AuthService) **HOẶC** xoá consumer nếu không có flow xoá account. ~0.5d → #688
+
+**📌 5 task có fork cần chốt trước khi làm:** NOTI-07 (event cuối ticket **hay** xoá enum) · NOTI-08 (publish Warning **hay** sửa spec) · NOTI-12 (digest **hay** gỡ field) · NOTI-13 (ghi audit **hay** tắt relay) · NOTI-14 (DB template **hay** inline).
+
+**Acceptance:**
+- **P1 (cốt lõi):** POST tạo alert/ticket/sla-breach → sau NOTI-01, record `Pending` được worker dispatch → Push tới Expo + Email/SMS thực gửi, record chuyển `Sent`. `SendNotificationEmailEvent` có consumer (email SLA/escalation/saga/chat tới hộp thư). `ChatEscalatedToAdminEvent` → Admin nhận noti. Login bất thường / token reuse → user nhận email cảnh báo.
+- **P2:** Customer nhận noti khi ticket assigned/resolved/approved; SLA breach phân nhánh (P1 có SMS, P3 chỉ in-app); reset mật khẩu / đổi email nhận đúng template.
+- **P3:** SMS fail → Notification `Failed` + `FailureReason`; không còn consumer stub thừa; audit relay không còn poll bảng rỗng vô ích.
 
 ---
 

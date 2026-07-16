@@ -23,7 +23,7 @@ public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<Iot
     public bool IsDescending { get; set; } = true;
 }
 
-public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDto>>
+public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDetailDto>>
 {
     /// <summary>Lấy từ route — query string + body không bind để tránh nhầm lẫn nguồn.</summary>
     [JsonIgnore]

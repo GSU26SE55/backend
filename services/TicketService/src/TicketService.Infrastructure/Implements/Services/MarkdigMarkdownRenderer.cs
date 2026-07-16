@@ -22,6 +22,9 @@ public class MarkdigMarkdownRenderer : IMarkdownRenderer
         @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
         RegexOptions.Compiled);
 
+    // Bất kỳ src nào mang URI scheme (http:, https:, data:, javascript:, file:, ...) đều bị chặn.
+    private static readonly Regex UriSchemeRegex = new(@"^[a-zA-Z][a-zA-Z0-9+.-]*:", RegexOptions.Compiled);
+
     public string RenderToHtml(string markdownBody, IEnumerable<Guid> ticketAttachmentIds)
     {
         if (string.IsNullOrWhiteSpace(markdownBody))
@@ -77,7 +80,10 @@ public class MarkdigMarkdownRenderer : IMarkdownRenderer
         if (string.IsNullOrEmpty(src) || src.StartsWith("//", StringComparison.Ordinal))
             return false;
 
-        if (Uri.TryCreate(src, UriKind.Absolute, out _))
+        // Chỉ chặn src có scheme thật (absolute URL / data: / javascript: ...).
+        // KHÔNG dùng Uri.TryCreate(UriKind.Absolute) vì trên Unix (.NET) "/files/{id}" bị parse
+        // thành "file:///files/{id}" (absolute) → false-reject ảnh attachment nội bộ hợp lệ.
+        if (UriSchemeRegex.IsMatch(src))
             return false;
 
         var path = src.Split('?', '#')[0];

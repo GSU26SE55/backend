@@ -17,6 +17,8 @@ public class TicketAssignCommandHandlerTests
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
     private readonly Mock<IMessageProducerService> _producer = new();
+    // Sprint Bonus NS-12 (#656) — dùng SlaCalculator thật (pure util) để assert DueAt theo giờ SLA.
+    private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
 
     #region Happy Path
     [Fact]
@@ -51,7 +53,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -92,7 +94,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -126,7 +128,7 @@ public class TicketAssignCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Ticket must be Approved before assignment." });
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -158,7 +160,7 @@ public class TicketAssignCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Only Managers can assign staff." });
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -194,7 +196,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -231,7 +233,7 @@ public class TicketAssignCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
-        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -239,6 +241,84 @@ public class TicketAssignCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Message.Should().Contain("Lưu ý: Ticket thuộc danh mục phức tạp");
+    }
+    #endregion
+
+    #region Sprint Bonus NS-12 (#656, R1) — SlaTimer khi Assigned
+    [Fact]
+    public async Task Handle_TicketWithPriority_CreatesRunningSlaTimer_DueAtByPriority()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            Priority = TicketPriorityEnum.P3Normal,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D"
+        };
+        var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
+        SlaTimer? captured = null;
+        slaTimers.Setup(r => r.AddAsync(It.IsAny<SlaTimer>()))
+            .Callback<SlaTimer>(t => captured = t).Returns(Task.CompletedTask);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
+        await handler.Handle(command, CancellationToken.None);
+
+        captured.Should().NotBeNull("ticket có Priority → timer phải được tạo");
+        captured!.Status.Should().Be(SlaTimerStatusEnum.Running);
+        captured.Priority.Should().Be(TicketPriorityEnum.P3Normal);
+        captured.TicketId.Should().Be(ticketId);
+        (captured.DueAt - captured.StartedAt).Should().Be(TimeSpan.FromHours(72), "P3 = SLA 72h");
+        captured.OriginalDueAt.Should().Be(captured.DueAt);
+    }
+
+    [Fact]
+    public async Task Handle_TicketAlreadyHasTimer_DoesNotCreateSecond()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Status = TicketStatusEnum.Approved,
+            Priority = TicketPriorityEnum.P2High,
+            Code = "TKT-002",
+            Title = "T",
+            Description = "D"
+        };
+        var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var existingTimer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Status = SlaTimerStatusEnum.Running, Priority = TicketPriorityEnum.P2High, StartedAt = DateTime.UtcNow.AddHours(-1), DueAt = DateTime.UtcNow.AddHours(23) };
+        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff, slaTimerSeed: new[] { existingTimer });
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
+        await handler.Handle(command, CancellationToken.None);
+
+        slaTimers.Verify(r => r.AddAsync(It.IsAny<SlaTimer>()), Times.Never, "reassign không tạo timer thứ 2");
+    }
+
+    [Fact]
+    public async Task Handle_TicketWithoutPriority_DoesNotCreateTimer()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket { Id = ticketId, Status = TicketStatusEnum.Approved, Code = "TKT-003", Title = "T", Description = "D" }; // Priority null
+        var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
+
+        var handler = new TicketAssignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>(), _slaCalculator);
+        await handler.Handle(command, CancellationToken.None);
+
+        slaTimers.Verify(r => r.AddAsync(It.IsAny<SlaTimer>()), Times.Never);
     }
     #endregion
 }

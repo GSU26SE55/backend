@@ -110,7 +110,8 @@ public static class BatteryMapper
         return new AlertDto
         {
             Id = alert.Id.ToString(),
-            BatteryAssetId = alert.BatteryAssetId.ToString(),
+            BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+            SiteId = alert.SiteId?.ToString(),                // Sprint Bonus NS-21 (#661)
             BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,
             AnomalyType = alert.AnomalyType,
             Severity = alert.Severity,

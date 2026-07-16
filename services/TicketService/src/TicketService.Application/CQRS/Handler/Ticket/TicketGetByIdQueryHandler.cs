@@ -49,7 +49,9 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         {
             Id = ticket.Id.ToString(),
             Code = ticket.Code,
-            BatteryAssetId = ticket.BatteryAssetId.ToString(),
+            // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
+            // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
+            BatteryAssetId = ticket.BatteryAssetId == Guid.Empty ? string.Empty : ticket.BatteryAssetId.ToString(),
             CustomerId = ticket.CustomerId.ToString(),
             AssignedStaffId = ticket.AssignedStaffId?.ToString(),
             Title = ticket.Title,

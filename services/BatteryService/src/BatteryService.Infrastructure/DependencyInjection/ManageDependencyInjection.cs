@@ -115,6 +115,10 @@ public static class ManageDependencyInjection
         services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.SectionName));
         services.AddSingleton<ITelemetryPublisher, BatteryService.Infrastructure.Realtime.RedisTelemetryPublisher>();
         services.AddSingleton<ITelemetryStream, BatteryService.Infrastructure.Realtime.RedisTelemetryStream>();
+        // Sprint Bonus NS-03/NS-04 (#648/#649) — rolling min/max nạp/xả streaming (event `stats`).
+        services.AddSingleton<ITelemetryStatsService, BatteryService.Infrastructure.Realtime.RedisTelemetryStatsService>();
+        // Sprint Bonus NS-06 (#650) — đọc continuous aggregate 1h (scoped, dùng ApplicationDbContext).
+        services.AddScoped<ISensorReadingAggregateViewReader, BatteryService.Infrastructure.Realtime.SensorReadingAggregateViewReader>();
         services.AddScoped<IBatteryRealtimeAuthorizationService, BatteryService.Infrastructure.Implements.Services.BatteryRealtimeAuthorizationService>();
 
         return services;

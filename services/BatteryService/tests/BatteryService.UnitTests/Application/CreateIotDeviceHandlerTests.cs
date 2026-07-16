@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Handler.IotDevice;
+using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
@@ -40,6 +41,34 @@ public class CreateIotDeviceHandlerTests
         result.Data!.RawApiKey.Should().StartWith("iotk_");
         result.Data.DeviceCode.Should().Be("ESP32-001");
         result.Data.ApiKeyLastFour.Should().HaveLength(4);
+    }
+
+    [Fact]
+    public async Task Create_PersistsPlaintextKey_AndGetByIdReturnsSameKey()
+    {
+        var (createHandler, uow, _) = Build();
+        var site = new Site { Id = Guid.NewGuid(), Name = "Site A", CustomerId = Guid.NewGuid() };
+        uow.WithSites(site);
+
+        var created = await createHandler.Handle(new CreateIotDeviceCommand
+        {
+            DeviceCode = "esp32-persist",
+            DisplayName = "Persist test",
+            SiteId = site.Id,
+            ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault,
+            HeartbeatIntervalSeconds = 60
+        }, default);
+
+        created.IsSuccess.Should().BeTrue();
+        var rawKey = created.Data!.RawApiKey;
+        rawKey.Should().StartWith("iotk_");
+
+        // Đọc lại qua GetById (cùng store) — apiKey phải khớp raw key lúc create.
+        var getById = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var detail = await getById.Handle(new GetIotDeviceByIdQuery { Id = Guid.Parse(created.Data.Id) }, default);
+
+        detail.IsSuccess.Should().BeTrue();
+        detail.Data!.ApiKey.Should().Be(rawKey, "GET by id phải trả full plaintext key đã lưu lúc create");
     }
 
     [Fact]

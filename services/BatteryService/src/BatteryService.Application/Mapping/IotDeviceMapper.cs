@@ -30,6 +30,40 @@ public static class IotDeviceMapper
         CreatedAt = e.CreatedAt
     };
 
+    /// <summary>
+    /// Map cho GET by id — full base DTO + plaintext <c>ApiKey</c>. Chỉ dùng ở admin GetById,
+    /// KHÔNG dùng cho list/get-by-code (tránh lộ key).
+    /// </summary>
+    public static IotDeviceDetailDto ToDetailDto(IotDevice e, string? siteName = null, string? targetFirmwareVersion = null)
+    {
+        var dto = ToDto(e, siteName, targetFirmwareVersion);
+        return new IotDeviceDetailDto
+        {
+            Id = dto.Id,
+            DeviceCode = dto.DeviceCode,
+            DisplayName = dto.DisplayName,
+            SiteId = dto.SiteId,
+            SiteName = dto.SiteName,
+            HardwareRevision = dto.HardwareRevision,
+            Status = dto.Status,
+            CurrentFirmwareVersion = dto.CurrentFirmwareVersion,
+            TargetFirmwareReleaseId = dto.TargetFirmwareReleaseId,
+            TargetFirmwareVersion = dto.TargetFirmwareVersion,
+            ApiKeyScopes = dto.ApiKeyScopes,
+            ApiKeyLastFour = dto.ApiKeyLastFour,
+            ApiKeyIssuedAt = dto.ApiKeyIssuedAt,
+            ApiKeyRevokedAt = dto.ApiKeyRevokedAt,
+            LastSeenAt = dto.LastSeenAt,
+            LastProvisionedAt = dto.LastProvisionedAt,
+            LastOfflineAt = dto.LastOfflineAt,
+            HeartbeatIntervalSeconds = dto.HeartbeatIntervalSeconds,
+            LastClockSkewSeconds = dto.LastClockSkewSeconds,
+            Notes = dto.Notes,
+            CreatedAt = dto.CreatedAt,
+            ApiKey = e.ApiKeyPlaintext
+        };
+    }
+
     public static IotDeviceCreatedDto ToCreatedDto(IotDevice e, string rawApiKey, string? siteName = null)
     {
         var dto = ToDto(e, siteName);

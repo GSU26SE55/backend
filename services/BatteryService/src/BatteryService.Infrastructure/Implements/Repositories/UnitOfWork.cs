@@ -45,6 +45,10 @@ public class UnitOfWork : IBatteryUnitOfWork
     // Sprint 5B B1 (#152) — Noise breach hypertable.
     public IGenericRepository<NoiseBreachEvent> NoiseBreachEvents => new GenericRepository<NoiseBreachEvent>(_context);
 
+    // Sprint Bonus NS-26 (#666, F2) — AI classification (spec §30.3).
+    public IGenericRepository<AnomalyClassification> AnomalyClassifications => new GenericRepository<AnomalyClassification>(_context);
+    public IGenericRepository<SohPrediction> SohPredictions => new GenericRepository<SohPrediction>(_context);
+
     // Sprint IoT-1 (#242) — IoT device management.
     public IGenericRepository<IotDevice> IotDevices => new GenericRepository<IotDevice>(_context);
     public IGenericRepository<IotDeviceHeartbeat> IotDeviceHeartbeats => new GenericRepository<IotDeviceHeartbeat>(_context);

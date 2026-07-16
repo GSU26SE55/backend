@@ -80,7 +80,7 @@ REST API hiện tại phơi 3 nhóm endpoint:
 
 ### `NotificationTypeEnum`
 
-Phân loại notification, dùng cho template routing và filter UI. Giá trị int **không liên tục** — `15` đã được skip, `99` reserved cho `System`.
+Phân loại notification, dùng cho template routing và filter UI. Giá trị int **không liên tục** — `99` reserved cho `System`.
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
@@ -98,6 +98,7 @@ Phân loại notification, dùng cho template routing và filter UI. Giá trị 
 | `AccountActivated` | 12 | Account được kích hoạt thành công |
 | `AdminInvite` | 13 | Admin gửi lời mời tạo account cho Staff/Manager |
 | `IncidentDeclared` | 14 | Incident chính thức được declare (Major Incident) |
+| `CascadeRiskHigh` | 15 | **Sprint Bonus NS-14 (#658)** — cascade risk ≥ 0.7 trên 1 pin (`BatteryCascadeRiskHighEvent`) → notify Manager/Admin (in-app + push + email) để điều Staff kiểm tra/cô lập. ⚠️ Wire value — FE cần mirror giá trị 15 |
 | `BatteryAlertEscalationPending` | 16 | Sprint 5B #238 — Critical Alert chưa được ack > 5 phút (`BatteryAlertEscalationRequestedEvent`) |
 | `AlertTicketSagaFailed` | 17 | Sprint 5B #238 — Alert–Ticket Saga vào terminal state `Failed`, admin cần reprocess (`AlertTicketSagaFailedEvent`) |
 | `IotDeviceWentOffline` | 18 | Sprint IoT-1 (#249) — IoT edge device mất heartbeat > 5 phút |

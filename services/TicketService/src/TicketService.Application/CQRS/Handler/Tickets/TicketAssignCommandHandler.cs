@@ -22,19 +22,22 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ISlaCalculator _slaCalculator;   // Sprint Bonus NS-12 (#656)
 
     public TicketAssignCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         IMessageProducerService producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _producer = producer;
         _publisher = publisher;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAssignCommand request, CancellationToken ct)
@@ -99,6 +102,11 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             ActorDisplayName = request.ManagerName ?? "Manager"
         }, ct);
 
+        // Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer khi ticket được Assigned (SLA start theo
+        // business flow). Trước fix, timer chỉ tồn tại trong seeder → SlaTimerBackgroundService không
+        // có gì đếm → không warning/breach/escalation/notify. Tạo 1 lần (idempotent).
+        await EnsureSlaTimerAsync(ticket, ct);
+
         await _activityLogger.LogAsync(
             ticket.Id,
             request.ManagerId,
@@ -130,6 +138,36 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 Status = ticket.Status
             }
         };
+    }
+
+    /// <summary>
+    /// Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer Running nếu ticket có Priority và chưa có timer.
+    /// StartedAt = now (thời điểm Assigned); DueAt theo priority (P1=4h/P2=24h/P3=72h). Idempotent
+    /// để reassign không tạo timer thứ 2.
+    /// </summary>
+    private async Task EnsureSlaTimerAsync(TicketService.Domain.Entities.Ticket ticket, CancellationToken ct)
+    {
+        if (ticket.Priority is null)
+            return;
+
+        var hasTimer = await _uow.SlaTimers.GetAllAsync()
+            .AnyAsync(t => t.TicketId == ticket.Id, ct);
+        if (hasTimer)
+            return;
+
+        var now = DateTime.UtcNow;
+        var dueAt = _slaCalculator.CalculateDueDate(now, ticket.Priority.Value);
+
+        await _uow.SlaTimers.AddAsync(new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = ticket.Priority.Value,
+            StartedAt = now,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
+            Status = SlaTimerStatusEnum.Running
+        });
     }
 
     private static TicketActionResponse Fail(int statusCode, string message)

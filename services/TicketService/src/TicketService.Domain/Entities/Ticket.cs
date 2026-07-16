@@ -18,6 +18,13 @@ public class Ticket : AuditableEntity
     public TicketStatusEnum Status { get; set; }
     public TicketOriginEnum Origin { get; set; }
     public Guid? OriginAlertId { get; set; } //link tới Alert  nếu auto
+
+    /// <summary>
+    /// Sprint Bonus NS-22 (#662, E2) — link tới EnvironmentalIncident (site-level) khi ticket được
+    /// auto-tạo từ sự cố môi trường (khói/ngập). Null nếu ticket không phải từ environmental incident.
+    /// </summary>
+    public Guid? EnvironmentalIncidentId { get; set; }
+
     public int ReopenCount { get; set; }
     public string? ResolutionSummary { get; set; }
     public DateTime? ResolvedAt { get; set; }

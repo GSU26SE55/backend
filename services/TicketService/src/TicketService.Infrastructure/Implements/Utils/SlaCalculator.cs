@@ -17,7 +17,10 @@ public class SlaCalculator : ISlaCalculator
         return ticket.CreatedAt.AddHours(slaHours);
     }
 
-    private static int GetSlaHours(TicketPriorityEnum priority)
+    public DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority)
+        => startedAt.AddHours(GetSlaHours(priority));
+
+    public int GetSlaHours(TicketPriorityEnum priority)
     {
         return priority switch
         {

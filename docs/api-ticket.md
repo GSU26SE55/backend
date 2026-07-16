@@ -165,6 +165,7 @@ ClosedPendingRate → Open (Customer reopen → Manager triage lại; lần 2+ t
 | `ManualByCustomer` | 1 | Customer tự tạo qua app/web |
 | `AutoFromAlert` | 2 | Tự động tạo từ `BatteryAnomalyDetectedEvent` |
 | `CreatedByStaff` | 3 | Staff tạo thay cho Customer |
+| `System` | 4 | **Hệ thống tự tạo** (không từ 1 alert cụ thể) — Sprint Bonus NS-13/NS-22. Vd: cascade risk High mà pin chưa có ticket active (#657), hoặc sự cố môi trường Critical (#662). ⚠️ Wire value cross-service — FE cần mirror giá trị 4 |
 
 ### `ImpactScopeEnum`
 
@@ -327,7 +328,7 @@ Phong cách gợi ý AI cho endpoint `POST /chats/suggest`.
 |---|---|---|---|
 | `id` | `string` | Không | ID ticket |
 | `code` | `string` | Không | Mã hiển thị (e.g. `TKT-2606-0001`) |
-| `batteryAssetId` | `string` | Không (default `""`) | ID thiết bị pin — BE trả chuỗi rỗng (không phải `null`) khi không liên quan pin cụ thể |
+| `batteryAssetId` | `string` | Không (default `""`) | ID thiết bị pin — BE trả **chuỗi rỗng `""`** (không phải `null`, không phải GUID toàn số 0) khi ticket **không liên quan pin cụ thể**: vd ticket site-level từ sự cố môi trường (`origin = System`, Sprint Bonus NS-22 #662). FE nên coi `""` = ticket cấp site, không fetch pin |
 | `customerId` | `string` | Không | ID khách hàng tạo ticket |
 | `assignedStaffId` | `string?` | Null khi chưa gán | ID Staff được gán |
 | `title` | `string` | Không | Tiêu đề ticket |
@@ -341,7 +342,7 @@ Phong cách gợi ý AI cho endpoint `POST /chats/suggest`.
 | `isIncident` | `bool` | Không | Có được đánh dấu là Incident không |
 | `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
 | `updatedAt` | `string?` | Null nếu chưa cập nhật | Thời điểm cập nhật gần nhất |
-| `slaTimer` | `SlaTimerDTO?` | **Null khi chưa có SLA** | Thông tin SLA timer hiện tại — `null` khi ticket chưa triage (chưa tạo timer) |
+| `slaTimer` | `SlaTimerDTO?` | **Null khi chưa có SLA timer** | Thông tin SLA timer hiện tại. Timer được tạo khi ticket chuyển sang **`Assigned`** (Sprint Bonus NS-12 #656 — trước đó timer không được tạo ở runtime); ticket auto-tạo P1 (cascade NS-13 / env incident NS-22) có timer **ngay khi tạo**. `null` ở các state trước khi có timer (`New`/`Open`/vừa triage chưa assign) |
 
 ### `TicketDetailDTO` (chi tiết một ticket — extend `TicketDTO`)
 

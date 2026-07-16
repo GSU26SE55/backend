@@ -29,4 +29,29 @@ public static class RedisTelemetryChannels
         TelemetryScopeType.SiteNone => new[] { SiteNone },
         _ => Array.Empty<string>()
     };
+
+    // ── Sprint Bonus NS-04 (#649) — kênh riêng cho event `stats` ──
+    // Prefix riêng "telemetry:stats:*". TUYỆT ĐỐI KHÔNG dùng chung channel `reading` cũ:
+    // RedisTelemetryStream.Handler deserialize MỌI message trên channel reading thành LiveReadingDto
+    // → nhét stats vào sẽ vỡ parser/coalescer summary (§4.5.1 newsprint).
+    public const string StatsPrefix = Prefix + ":stats";
+    public const string StatsAll = StatsPrefix + ":all";
+    public const string StatsSiteNone = StatsPrefix + ":site:none";
+
+    public static string StatsAsset(Guid id) => $"{StatsPrefix}:asset:{id:N}";
+    public static string StatsCustomer(Guid id) => $"{StatsPrefix}:customer:{id:N}";
+    public static string StatsSite(Guid id) => $"{StatsPrefix}:site:{id:N}";
+    public static string StatsType(Guid id) => $"{StatsPrefix}:type:{id:N}";
+
+    /// <summary>Các kênh stats cần subscribe cho 1 scope (song song với <see cref="ChannelsFor"/>).</summary>
+    public static IReadOnlyList<string> StatsChannelsFor(TelemetryScope scope) => scope.Kind switch
+    {
+        TelemetryScopeType.Asset => scope.Ids.Select(StatsAsset).ToList(),
+        TelemetryScopeType.Customer => scope.Ids.Select(StatsCustomer).ToList(),
+        TelemetryScopeType.Site => scope.Ids.Select(StatsSite).ToList(),
+        TelemetryScopeType.BatteryType => scope.Ids.Select(StatsType).ToList(),
+        TelemetryScopeType.All => new[] { StatsAll },
+        TelemetryScopeType.SiteNone => new[] { StatsSiteNone },
+        _ => Array.Empty<string>()
+    };
 }
