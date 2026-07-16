@@ -39,6 +39,11 @@ builder.Services.AddSwaggerGen(options =>
             options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
     }
 
+    // Bọc enum $ref trong allOf để giữ được <summary> mô tả của property enum.
+    // OpenAPI 3.0 bỏ qua description đứng cạnh $ref trần → không có option này thì
+    // các field enum (classification, staffFeedback, feedback...) mất mô tả trên Swagger.
+    options.UseAllOfToExtendReferenceSchemas();
+
     options.AddSecurityDefinition(ApiKeyAuthenticationHandler.SchemeName, new OpenApiSecurityScheme
     {
         Description = "API key for IoT sensor ingest. Send it via X-Api-Key.",

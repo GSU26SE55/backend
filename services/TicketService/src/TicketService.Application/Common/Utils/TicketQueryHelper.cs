@@ -11,7 +11,9 @@ public static class TicketQueryHelper
     {
         Id = t.Id.ToString(),
         Code = t.Code,
-        BatteryAssetId = t.BatteryAssetId.ToString(),
+        // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
+        // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
+        BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
         CustomerId = t.CustomerId.ToString(),
         AssignedStaffId = t.AssignedStaffId.HasValue ? t.AssignedStaffId.Value.ToString() : null,
         Title = t.Title,

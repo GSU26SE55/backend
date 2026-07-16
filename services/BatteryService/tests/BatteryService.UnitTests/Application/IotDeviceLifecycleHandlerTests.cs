@@ -2,8 +2,10 @@ using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Handler.IotDevice;
 using BatteryService.Application.CQRS.Handler.SensorReading;
+using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Implements.Services;
 using BatteryService.UnitTests.Helpers;
 
 namespace BatteryService.UnitTests.Application;
@@ -66,6 +68,29 @@ public class IotDeviceLifecycleHandlerTests
     }
 
     [Fact]
+    public async Task RotateKey_ReplacesStoredPlaintext_AndGetByIdReturnsNewKey()
+    {
+        var deviceId = Guid.NewGuid();
+        var device = ActiveDevice(deviceId, Guid.NewGuid());
+        device.ApiKeyPlaintext = "iotk_old-key-abcd"; // key cũ đã lưu
+        var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
+        var rotateHandler = new RotateIotDeviceApiKeyCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()));
+
+        var rotated = await rotateHandler.Handle(new RotateIotDeviceApiKeyCommand { Id = deviceId }, default);
+
+        rotated.IsSuccess.Should().BeTrue();
+        var newRawKey = rotated.Data!.RawApiKey;
+        newRawKey.Should().StartWith("iotk_").And.NotBe("iotk_old-key-abcd");
+
+        // GET by id phải trả key MỚI (đã replace), không phải key cũ.
+        var getById = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var detail = await getById.Handle(new GetIotDeviceByIdQuery { Id = deviceId }, default);
+
+        detail.Data!.ApiKey.Should().Be(newRawKey);
+        detail.Data.ApiKey.Should().NotBe("iotk_old-key-abcd");
+    }
+
+    [Fact]
     public async Task Heartbeat_InsertsHistoryRowAndUpdatesLastSeen()
     {
         var deviceId = Guid.NewGuid();
@@ -98,7 +123,7 @@ public class IotDeviceLifecycleHandlerTests
         var assetId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-1", IsDeleted = false });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
         {
@@ -135,7 +160,7 @@ public class IotDeviceLifecycleHandlerTests
                 Unit = "V",
                 CalibratedAt = DateTime.UtcNow.AddDays(-1)
             });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var captured = new List<SensorReading>();
         uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))

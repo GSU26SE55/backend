@@ -23,16 +23,16 @@ public class CrossSourceValidationTests
         decimal temperature = 25m,
         string? sensorSourceCode = null,
         int secondsAgo = 10) => new()
-    {
-        Time = DateTime.UtcNow.AddSeconds(-secondsAgo),
-        BatteryAssetId = AssetId,
-        Voltage = voltage,
-        Current = 1m,
-        Temperature = temperature,
-        SocPercent = 50m,
-        SourceType = sourceType,
-        SensorSourceCode = sensorSourceCode
-    };
+        {
+            Time = DateTime.UtcNow.AddSeconds(-secondsAgo),
+            BatteryAssetId = AssetId,
+            Voltage = voltage,
+            Current = 1m,
+            Temperature = temperature,
+            SocPercent = 50m,
+            SourceType = sourceType,
+            SensorSourceCode = sensorSourceCode
+        };
 
     private static BatteryAsset MakeAsset() => new()
     {

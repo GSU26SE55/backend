@@ -986,6 +986,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<Guid?>("EnvironmentalIncidentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environmental_incident_id");
+
                     b.Property<DateTime?>("EscalatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("escalated_at");

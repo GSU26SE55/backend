@@ -33,6 +33,151 @@ public class AmbientHandlersTests
         return uow;
     }
 
+    // Sprint Bonus NS-21 (#661, E1) — uow có Alerts để test detect-at-ingest.
+    private static (Mock<IBatteryUnitOfWork> uow, List<Alert> alertsAdded) BuildUowWithAlerts(
+        List<AmbientThresholdConfig> thresholds, List<Alert>? existingAlerts = null)
+    {
+        var uow = BuildUow(thresholds: thresholds);
+        var alertsAdded = new List<Alert>();
+        var alertsRepo = new Mock<IGenericRepository<Alert>>();
+        alertsRepo.Setup(r => r.GetAllAsync()).Returns((existingAlerts ?? new List<Alert>()).AsQueryable().BuildMock());
+        alertsRepo.Setup(r => r.AddAsync(It.IsAny<Alert>())).Callback<Alert>(alertsAdded.Add).Returns(Task.CompletedTask);
+        uow.SetupGet(u => u.Alerts).Returns(alertsRepo.Object);
+        return (uow, alertsAdded);
+    }
+
+    private static AmbientThresholdConfig Config(Guid siteId, bool enabled = true) => new()
+    {
+        Id = Guid.NewGuid(),
+        SiteId = siteId,
+        Enabled = enabled,
+        HighAmbientTempWarning = 40m,
+        HighAmbientTempCritical = 45m,
+        HighHumidityWarning = 85m,
+        HighHumidityCritical = 90m,
+        ComboTempThreshold = 42m,
+        ComboHumidityThreshold = 88m
+    };
+
+    // ===== Sprint Bonus NS-21 (#661, E1) — detect-at-ingest ambient anomalies =====
+
+    [Fact]
+    public async Task BatchIngest_AmbientOverCritical_CreatesSiteLevelAlert()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem>
+            {
+                new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 50m }
+            }
+        }, default);
+
+        alerts.Should().ContainSingle(a =>
+            a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp
+            && a.Severity == AlertSeverityEnum.Critical
+            && a.SiteId == siteId
+            && a.BatteryAssetId == null);
+    }
+
+    [Fact]
+    public async Task BatchIngest_ComboTempHumidity_CreatesComboAlert()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem>
+            {
+                new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 43m, Humidity = 89m }
+            }
+        }, default);
+
+        alerts.Should().Contain(a => a.AnomalyType == AnomalyTypeEnum.HighTempHumidityCombo);
+    }
+
+    [Fact]
+    public async Task BatchIngest_ThresholdDisabled_NoAlert()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId, enabled: false) });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem> { new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 95m } }
+        }, default);
+
+        alerts.Should().BeEmpty("Enabled=false → không detect (query đã lọc, không load config)");
+    }
+
+    [Fact]
+    public async Task BatchIngest_NoConfigForSite_SavesReadingsNoAlert()
+    {
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig>()); // không có config
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem> { new() { SiteId = Guid.NewGuid(), Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 95m } }
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        alerts.Should().BeEmpty();
+        uow.Verify(u => u.AmbientReadings.AddAsync(It.IsAny<AmbientReading>()), Times.Once, "reading vẫn được lưu");
+    }
+
+    [Fact]
+    public async Task BatchIngest_ExistingOpenAlert_DedupSkips()
+    {
+        var siteId = Guid.NewGuid();
+        var existing = new Alert
+        {
+            Id = Guid.NewGuid(),
+            SiteId = siteId,
+            BatteryAssetId = null,
+            AnomalyType = AnomalyTypeEnum.HighAmbientTemp,
+            Severity = AlertSeverityEnum.Critical,
+            DetectedAt = DateTime.UtcNow.AddMinutes(-10),
+            Status = AlertStatusEnum.Open,
+            DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(50)
+        };
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) }, new List<Alert> { existing });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem> { new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 50m } }
+        }, default);
+
+        alerts.Should().NotContain(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp,
+            "đã có alert Open cùng site+loại trong cửa sổ → dedup skip");
+    }
+
+    [Fact]
+    public async Task BatchIngest_MultipleReadingsSameSite_SingleAlertPerType()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem>
+            {
+                new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 50m },
+                new() { SiteId = siteId, Time = DateTime.UtcNow.AddMinutes(-1), AmbientTemperature = 49m, Humidity = 50m }
+            }
+        }, default);
+
+        alerts.Count(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp).Should().Be(1, "dedup trong batch");
+    }
+
     // ===== Batch ingest =====
 
     [Fact]

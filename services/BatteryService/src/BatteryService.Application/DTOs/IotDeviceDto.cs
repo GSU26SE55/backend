@@ -48,6 +48,19 @@ public class IotDeviceDto
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// Chi tiết 1 IoT device cho <c>GET /api/admin/iot-devices/{id}</c> — mở rộng <see cref="IotDeviceDto"/>
+/// kèm full plaintext <see cref="ApiKey"/>. Endpoint list <b>không</b> trả field này (chỉ <c>ApiKeyLastFour</c>).
+/// </summary>
+public class IotDeviceDetailDto : IotDeviceDto
+{
+    /// <summary>
+    /// Plaintext API key đầy đủ (prefix <c>iotk_</c>, ~47 ký tự) — Admin xem lại để flash vào ESP32.
+    /// <c>null</c> nếu device được tạo trước khi bật lưu plaintext key — gọi <c>rotate-key</c> để sinh key mới + lưu.
+    /// </summary>
+    public string? ApiKey { get; set; }
+}
+
 public class IotDeviceCreatedDto : IotDeviceDto
 {
     /// <summary>Plaintext API key. Trả 1 lần duy nhất khi create/rotate.</summary>

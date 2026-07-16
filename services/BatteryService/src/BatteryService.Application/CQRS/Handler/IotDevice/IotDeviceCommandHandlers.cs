@@ -112,6 +112,7 @@ public class RotateIotDeviceApiKeyCommandHandler : IRequestHandler<RotateIotDevi
 
         var key = _apiKeyService.GenerateKey();
         entity.ApiKeyHash = key.Hash;
+        entity.ApiKeyPlaintext = key.RawKey;
         entity.ApiKeyLastFour = key.LastFour;
         entity.ApiKeyIssuedAt = DateTime.UtcNow;
         entity.ApiKeyRevokedAt = null;

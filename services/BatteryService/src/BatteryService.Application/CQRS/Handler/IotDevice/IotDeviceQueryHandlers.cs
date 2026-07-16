@@ -57,25 +57,25 @@ public class GetIotDevicesQueryHandler : IRequestHandler<GetIotDevicesQuery, Com
     }
 }
 
-public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuery, CommonResponse<IotDeviceDto>>
+public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuery, CommonResponse<IotDeviceDetailDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     public GetIotDeviceByIdQueryHandler(IBatteryUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
 
-    public async Task<CommonResponse<IotDeviceDto>> Handle(GetIotDeviceByIdQuery request, CancellationToken ct)
+    public async Task<CommonResponse<IotDeviceDetailDto>> Handle(GetIotDeviceByIdQuery request, CancellationToken ct)
     {
         var entity = await _unitOfWork.IotDevices.GetAllAsync()
             .Include(d => d.Site)
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceDetailDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
 
-        return new CommonResponse<IotDeviceDto>
+        return new CommonResponse<IotDeviceDetailDto>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = IotDeviceMapper.ToDto(entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version)
+            Data = IotDeviceMapper.ToDetailDto(entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version)
         };
     }
 }

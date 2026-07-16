@@ -244,6 +244,7 @@ Sprint 4+ (nếu MAE chưa đạt):
 | 13 | `HighTempHumidityCombo` | Combo điểm sương > 35°C | **ASHRAE Standard 90.1** (HVAC for telecom + battery rooms) — relative humidity + temperature combo guidance |
 | 14 | `EnvironmentalIncident` | Smoke/water detected | **NFPA 855** (Standard for the Installation of Stationary Energy Storage Systems) + **UL 9540A** (Test Method for Evaluating Thermal Runaway Fire Propagation in BESS) |
 | 15 | `SensorMismatch` (B10) | |V_bms − V_iot| > 0.5V hoặc |T_bms − T_iot| > 5°C | **IEEE Std 21451** (Smart Transducer Interface) + **ISO/IEC 21451-1:2010** — cross-sensor validation pattern |
+| 16 | `Undertemp` (NS-25 #665) | Temperature < TemperatureMin (seed −10°C); < min−5°C → Critical | **Feng et al.**, *J. Power Sources* 2018 (DOI 10.1016/j.jpowsour.2017.10.069) + **Petzl et al.**, "Lithium plating in a commercial lithium-ion battery", *J. Power Sources* 2015 — DOI 10.1016/j.jpowsour.2014.11.096 (sạc dưới 0°C → lithium plating: kim loại Li bám anode, mất dung lượng + nguy cơ short) |
 
 ## 2. IsolationForest hyperparameter justification
 

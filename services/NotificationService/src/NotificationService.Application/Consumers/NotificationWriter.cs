@@ -27,6 +27,16 @@ internal static class NotificationWriter
         NotificationChannelEnum.InApp
     };
 
+    /// <summary>
+    /// Sprint Bonus NS-14 (#658) — cảnh báo an toàn cấp cao (vd cascade risk): in-app + push + email.
+    /// </summary>
+    public static readonly NotificationChannelEnum[] InAppPushEmail =
+    {
+        NotificationChannelEnum.InApp,
+        NotificationChannelEnum.Push,
+        NotificationChannelEnum.Email
+    };
+
     public static async Task WriteAsync(
         INotificationUnitOfWork unitOfWork,
         IReadOnlyCollection<Guid> recipientIds,

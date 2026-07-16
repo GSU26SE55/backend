@@ -13,10 +13,8 @@ namespace BatteryService.Application.Services;
 /// </summary>
 public class CrossSourceValidationService : ICrossSourceValidationService
 {
-    // Ngưỡng mismatch — §1.6.6 overall.md.
-    private const decimal VoltageDeltaThreshold = 0.5m;
-    private const decimal TemperatureDeltaThreshold = 5m;
-
+    // Sprint Bonus NS-11 (#655, N6) — ngưỡng mismatch dồn về AnomalyRules.SensorMismatch*
+    // (single source of truth); logic so sánh dùng chung AnomalyRules.DetectSensorMismatch.
     private static readonly TimeSpan PairingWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan AlertDedupWindow = TimeSpan.FromMinutes(15);
 
@@ -86,14 +84,13 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                 if (counterpart is null)
                     continue;
 
-                var voltageDelta = Math.Abs(reading.Voltage - counterpart.Voltage);
-                // NS-09 (N5) — nguồn `redundant` không đo nhiệt (temp=0 cứng) → chỉ so V cho cặp chứa nó.
-                var compareTemp = AnomalyRules.MeasuresTemperature(reading)
-                                  && AnomalyRules.MeasuresTemperature(counterpart);
-                var tempDelta = compareTemp
-                    ? Math.Abs(reading.Temperature - counterpart.Temperature)
-                    : 0m;
-                if (voltageDelta <= VoltageDeltaThreshold && tempDelta <= TemperatureDeltaThreshold)
+                // Sprint Bonus NS-11 (#655, N6) — dùng CHUNG rule AnomalyRules.DetectSensorMismatch
+                // (đã vá N5: skip temp cho nguồn redundant). Trước đây logic so sánh nằm 2 nơi,
+                // sửa 1 nơi quên nơi kia. Giờ chỉ CSVS là caller trong production.
+                var bms = reading.SourceType == SensorReadingSourceTypeEnum.Bms ? reading : counterpart;
+                var iot = reading.SourceType == SensorReadingSourceTypeEnum.Bms ? counterpart : reading;
+                var mismatch = AnomalyRules.DetectSensorMismatch(bms, iot);
+                if (mismatch is null)
                     continue;
 
                 // Dedup theo asset + AnomalyType + cửa sổ 15 phút.
@@ -116,10 +113,10 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                     BatteryAssetId = assetId,
                     SiteId = asset.SiteId,
                     AnomalyType = AnomalyTypeEnum.SensorMismatch,
-                    Severity = AlertSeverityEnum.Warning,
-                    ThresholdValue = VoltageDeltaThreshold,
-                    ActualValue = voltageDelta > TemperatureDeltaThreshold ? voltageDelta : tempDelta,
-                    Unit = voltageDelta > VoltageDeltaThreshold ? "V" : "°C",
+                    Severity = mismatch.Severity,
+                    ThresholdValue = mismatch.ThresholdValue,
+                    ActualValue = mismatch.ActualValue,
+                    Unit = mismatch.Unit,
                     DetectedAt = now,
                     Status = AlertStatusEnum.Open,
                     DedupWindowEndUtc = now.Add(AlertDedupWindow)
@@ -128,8 +125,8 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                 created++;
 
                 _logger.LogWarning(
-                    "SensorMismatch on asset {AssetId}: ΔV={DeltaV:F2}V ΔT={DeltaT:F2}°C ({Src1} vs {Src2})",
-                    assetId, voltageDelta, tempDelta, reading.SourceType, counterpart.SourceType);
+                    "SensorMismatch on asset {AssetId}: Δ{Unit}={Delta:F2} ({Src1} vs {Src2})",
+                    assetId, mismatch.Unit, mismatch.ActualValue, bms.SourceType, iot.SourceType);
             }
         }
 

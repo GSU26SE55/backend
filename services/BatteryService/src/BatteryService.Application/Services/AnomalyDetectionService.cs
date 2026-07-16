@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BatteryService.Application.Anomaly;
+using BatteryService.Application.Common;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -64,7 +65,7 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             // Sprint Bonus NS-08 (#652, N4) — chỉ Detect trên reading primary. Reading redundant
             // (INA226 real mode: temp=0, SOC=0) / external-temp (mirror) đi qua threshold check sẽ
             // sinh LowSoc Critical giả spam mọi pin; chúng chỉ dùng cho cross-source validation.
-            if (!IsPrimarySource(reading.SensorSourceCode))
+            if (!SensorSource.IsPrimary(reading.SensorSourceCode))
                 continue;
 
             if (!assets.TryGetValue(reading.BatteryAssetId, out var asset))
@@ -187,51 +188,9 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             }
         }
 
-        // Sprint 5B B10 (#157) — Cross-source sensor mismatch detection.
-        // Group reading theo asset + cửa sổ 60s, so sánh BMS vs IoT.
-        var mismatches = DetectSensorMismatches(readings, now, dedupWindow);
-        foreach (var (assetId, anomaly, detectedAt) in mismatches)
-        {
-            if (!assets.TryGetValue(assetId, out var asset))
-                continue;
-
-            var existing = await FindActiveAlertToMergeAsync(
-                assetId, AnomalyTypeEnum.SensorMismatch, now, cancellationToken);
-            if (existing is not null)
-            {
-                await _unitOfWork.Alerts.AddAsync(new AlertEntity
-                {
-                    Id = Guid.NewGuid(),
-                    BatteryAssetId = assetId,
-                    AnomalyType = AnomalyTypeEnum.SensorMismatch,
-                    Severity = anomaly.Severity,
-                    ThresholdValue = anomaly.ThresholdValue,
-                    ActualValue = anomaly.ActualValue,
-                    Unit = anomaly.Unit,
-                    DetectedAt = detectedAt,
-                    Status = AlertStatusEnum.Merged,
-                    MergedIntoAlertId = existing.Id,
-                    DedupWindowEndUtc = existing.DedupWindowEndUtc
-                });
-                result.AlertsMerged++;
-                continue;
-            }
-
-            await _unitOfWork.Alerts.AddAsync(new AlertEntity
-            {
-                Id = Guid.NewGuid(),
-                BatteryAssetId = assetId,
-                AnomalyType = AnomalyTypeEnum.SensorMismatch,
-                Severity = anomaly.Severity,
-                ThresholdValue = anomaly.ThresholdValue,
-                ActualValue = anomaly.ActualValue,
-                Unit = anomaly.Unit,
-                DetectedAt = detectedAt,
-                Status = AlertStatusEnum.Open,
-                DedupWindowEndUtc = detectedAt.Add(dedupWindow)
-            });
-            result.AlertsCreated++;
-        }
+        // Sprint Bonus NS-11 (#655, N6) — đường SensorMismatch B10 (#157) đã HỢP NHẤT về
+        // CrossSourceValidationService (#IoT2-28): 1 nơi duy nhất ghép cặp Bms↔IotGateway,
+        // dedup 15' và tạo alert. Ngưỡng dùng chung AnomalyRules.SensorMismatch*.
 
         // Sprint Bonus NS-07 (#651, N1) — AlertsSuppressed PHẢI nằm trong điều kiện save:
         // tick chỉ toàn anomaly bị nén vẫn phải persist NoiseBreachEvent pending; nếu không,
@@ -241,49 +200,6 @@ public class AnomalyDetectionService : IAnomalyDetectionService
 
         return result;
     }
-
-    /// <summary>
-    /// Sprint 5B B10 — gom reading theo asset + bucket 60s, so sánh BMS vs IoT
-    /// qua <see cref="AnomalyRules.DetectSensorMismatch"/>.
-    /// </summary>
-    private static List<(Guid AssetId, Anomaly.AnomalyDetection Anomaly, DateTime DetectedAt)>
-        DetectSensorMismatches(
-            IReadOnlyList<Domain.Entities.SensorReading> readings,
-            DateTime now, TimeSpan dedupWindow)
-    {
-        var results = new List<(Guid, Anomaly.AnomalyDetection, DateTime)>();
-        var grouped = readings
-            .GroupBy(r => new
-            {
-                r.BatteryAssetId,
-                Bucket = new DateTime(r.Time.Ticks - (r.Time.Ticks % TimeSpan.TicksPerMinute), DateTimeKind.Utc)
-            });
-
-        foreach (var bucket in grouped)
-        {
-            var bms = bucket.FirstOrDefault(r => r.SourceType == SensorReadingSourceTypeEnum.Bms);
-            var iot = bucket.FirstOrDefault(r => r.SourceType == SensorReadingSourceTypeEnum.IotGateway);
-            if (bms is null || iot is null)
-                continue;
-
-            var mismatch = AnomalyRules.DetectSensorMismatch(bms, iot);
-            if (mismatch is null)
-                continue;
-
-            var detectedAt = bms.Time > iot.Time ? bms.Time : iot.Time;
-            results.Add((bucket.Key.BatteryAssetId, mismatch, detectedAt));
-        }
-
-        return results;
-    }
-
-    /// <summary>
-    /// primary = reading BMS đầy đủ thông số; null/empty (thiết bị single-source không gắn tag)
-    /// cũng coi như primary — CÙNG quy ước coalescer SSE (<c>RedisTelemetryStream</c>).
-    /// </summary>
-    internal static bool IsPrimarySource(string? sensorSourceCode) =>
-        string.IsNullOrEmpty(sensorSourceCode) ||
-        string.Equals(sensorSourceCode, "primary", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AlertEntity?> FindActiveAlertToMergeAsync(
         Guid batteryAssetId, AnomalyTypeEnum anomalyType, DateTime now, CancellationToken ct)

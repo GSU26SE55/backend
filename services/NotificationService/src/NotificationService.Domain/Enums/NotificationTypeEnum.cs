@@ -22,6 +22,12 @@ public enum NotificationTypeEnum
     IncidentDeclared = 14,
 
     /// <summary>
+    /// Sprint Bonus NS-14 (#658, R3) — cascade risk cao (≥ 0.7) trên 1 pin
+    /// (<c>BatteryCascadeRiskHighEvent</c>) → notify Manager (push + email).
+    /// </summary>
+    CascadeRiskHigh = 15,
+
+    /// <summary>
     /// Sprint 5B #238 — Critical Alert chưa-ack > 5 phút
     /// (<c>BatteryAlertEscalationRequestedEvent</c>).
     /// </summary>

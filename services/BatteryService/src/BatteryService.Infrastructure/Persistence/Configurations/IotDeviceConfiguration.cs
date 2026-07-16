@@ -48,6 +48,11 @@ public class IotDeviceConfiguration : IEntityTypeConfiguration<IotDevice>
             .HasMaxLength(128)
             .IsRequired();
 
+        // Plaintext key để Admin xem lại trên GET by id — nullable (device cũ chưa có).
+        builder.Property(d => d.ApiKeyPlaintext)
+            .HasColumnName("api_key_plaintext")
+            .HasMaxLength(128);
+
         builder.Property(d => d.ApiKeyLastFour)
             .HasColumnName("api_key_last_four")
             .HasMaxLength(8)

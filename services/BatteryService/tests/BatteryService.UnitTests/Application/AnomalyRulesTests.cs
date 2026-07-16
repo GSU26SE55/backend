@@ -49,6 +49,22 @@ public class AnomalyRulesTests
         => AnomalyRules.Detect(Reading(temp: 60m), Threshold())
             .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Critical);
 
+    // Sprint Bonus NS-25 (#665, F1) — Undertemp (TemperatureMin = -10°C trong Threshold()).
+    [Fact]
+    public void Undertemp_Warning_WhenBelowMinWithin5C()
+        => AnomalyRules.Detect(Reading(temp: -12m), Threshold())
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Undertemp && a.Severity == AlertSeverityEnum.Warning);
+
+    [Fact]
+    public void Undertemp_Critical_WhenBelowMinBeyond5C()
+        => AnomalyRules.Detect(Reading(temp: -20m), Threshold())
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Undertemp && a.Severity == AlertSeverityEnum.Critical);
+
+    [Fact]
+    public void Undertemp_None_WhenAtOrAboveMin()
+        => AnomalyRules.Detect(Reading(temp: -10m), Threshold())
+            .Should().NotContain(a => a.Type == AnomalyTypeEnum.Undertemp);
+
     [Fact]
     public void Overvoltage_Critical()
         => AnomalyRules.Detect(Reading(voltage: 15m), Threshold())

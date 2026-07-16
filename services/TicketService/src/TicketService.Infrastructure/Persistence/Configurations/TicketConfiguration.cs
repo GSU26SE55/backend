@@ -64,6 +64,10 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.OriginAlertId)
             .HasColumnName("origin_alert_id");
 
+        // Sprint Bonus NS-22 (#662, E2) — link tới EnvironmentalIncident (site-level).
+        builder.Property(e => e.EnvironmentalIncidentId)
+            .HasColumnName("environmental_incident_id");
+
         builder.Property(e => e.ReopenCount)
             .HasColumnName("reopen_count");
 

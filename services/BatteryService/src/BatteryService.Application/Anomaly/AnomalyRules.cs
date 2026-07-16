@@ -19,6 +19,9 @@ public static class AnomalyRules
 {
     private const decimal OverheatCriticalDeltaC = 5m;
 
+    // Sprint Bonus NS-25 (#665, F1) — dưới TemperatureMin quá 5°C → Critical (mirror Overheat delta).
+    private const decimal UndertempCriticalDeltaC = 5m;
+
     public static IReadOnlyList<AnomalyDetection> Detect(SensorReading reading, ThresholdConfig threshold)
     {
         var anomalies = new List<AnomalyDetection>();
@@ -31,6 +34,20 @@ public static class AnomalyRules
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.Overheat, severity,
                 threshold.TemperatureMax, reading.Temperature, "°C"));
+        }
+
+        // Sprint Bonus NS-25 (#665, F1, Q11=A) — Undertemp. Trước fix, TemperatureMin (seed −10°C
+        // cho cả 3 loại pin) là field CHẾT: không rule nào dùng. Sạc pin lithium dưới 0°C gây lithium
+        // plating (kim loại lithium bám lên anode → mất dung lượng + nguy cơ short) — nguy hiểm thật,
+        // citation B2 (Feng et al., J. Power Sources 2018).
+        if (reading.Temperature < threshold.TemperatureMin)
+        {
+            var severity = reading.Temperature < threshold.TemperatureMin - UndertempCriticalDeltaC
+                ? AlertSeverityEnum.Critical
+                : AlertSeverityEnum.Warning;
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.Undertemp, severity,
+                threshold.TemperatureMin, reading.Temperature, "°C"));
         }
 
         if (reading.Voltage > threshold.VoltageMax)

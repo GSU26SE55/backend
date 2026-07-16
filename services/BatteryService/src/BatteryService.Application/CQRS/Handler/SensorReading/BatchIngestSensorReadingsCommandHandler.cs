@@ -50,6 +50,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     private readonly IIotMetricsRecorder _metrics;
     private readonly IIotCalibrationCache _calibrationCache;
     private readonly ITelemetryPublisher _telemetryPublisher;
+    private readonly ITelemetryStatsService _telemetryStatsService;
     private readonly ILogger<BatchIngestSensorReadingsCommandHandler> _logger;
 
     public BatchIngestSensorReadingsCommandHandler(
@@ -57,12 +58,14 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         IIotMetricsRecorder metrics,
         IIotCalibrationCache calibrationCache,
         ITelemetryPublisher telemetryPublisher,
+        ITelemetryStatsService telemetryStatsService,
         ILogger<BatchIngestSensorReadingsCommandHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _metrics = metrics;
         _calibrationCache = calibrationCache;
         _telemetryPublisher = telemetryPublisher;
+        _telemetryStatsService = telemetryStatsService;
         _logger = logger;
     }
 
@@ -400,6 +403,12 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             try
             { await _telemetryPublisher.PublishAsync(liveReadings, cancellationToken); }
             catch (Exception ex) { _logger.LogWarning(ex, "Telemetry realtime publish thất bại — bỏ qua."); }
+
+            // Sprint Bonus NS-04 (#649) — rolling min/max nạp/xả (event `stats`). Try/catch RIÊNG,
+            // soft-dependency độc lập: lỗi stats không được ảnh hưởng publish reading (và ngược lại).
+            try
+            { await _telemetryStatsService.AccumulateAndPublishAsync(liveReadings, cancellationToken); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Telemetry stats accumulate/publish thất bại — bỏ qua."); }
         }
 
         return new CommonResponse<SensorReadingBatchIngestResult>

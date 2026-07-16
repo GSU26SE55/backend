@@ -48,6 +48,13 @@ public class RedisTelemetryStream : ITelemetryStream
             .Select(RedisChannel.Literal)
             .ToList();
 
+        // Sprint Bonus NS-04 (#649) — kênh stats riêng, handler riêng (forward thẳng, KHÔNG parse
+        // LiveReadingDto / coalesce). Đẩy trên MỌI scope (kể cả multi-asset): mỗi message stats là
+        // cho 1 pin, FE phân biệt theo batteryAssetId + window.
+        var statsChannels = RedisTelemetryChannels.StatsChannelsFor(scope)
+            .Select(RedisChannel.Literal)
+            .ToList();
+
         void Handler(RedisChannel _, RedisValue val)
         {
             if (!val.HasValue)
@@ -77,8 +84,18 @@ public class RedisTelemetryStream : ITelemetryStream
             }
         }
 
+        void StatsHandler(RedisChannel _, RedisValue val)
+        {
+            if (!val.HasValue)
+                return;
+            output.Writer.TryWrite(new SseMessage("stats", val.ToString()));
+            RealtimeMetrics.EventsPushed.WithLabels(scopeLabel, "stats").Inc();
+        }
+
         foreach (var ch in channels)
             await sub.SubscribeAsync(ch, Handler);
+        foreach (var ch in statsChannels)
+            await sub.SubscribeAsync(ch, StatsHandler);
         RealtimeMetrics.ActiveConnections.WithLabels(scopeLabel).Inc();
 
         var pump = Task.Run(() => PumpAsync(scopeLabel, isAsset, latest, output.Writer, cancellationToken), cancellationToken);
@@ -92,6 +109,8 @@ public class RedisTelemetryStream : ITelemetryStream
         {
             foreach (var ch in channels)
                 await sub.UnsubscribeAsync(ch, Handler);
+            foreach (var ch in statsChannels)
+                await sub.UnsubscribeAsync(ch, StatsHandler);
             RealtimeMetrics.ActiveConnections.WithLabels(scopeLabel).Dec();
             output.Writer.TryComplete();
             try
