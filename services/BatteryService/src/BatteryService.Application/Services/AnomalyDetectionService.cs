@@ -61,6 +61,12 @@ public class AnomalyDetectionService : IAnomalyDetectionService
 
         foreach (var reading in readings)
         {
+            // Sprint Bonus NS-08 (#652, N4) — chỉ Detect trên reading primary. Reading redundant
+            // (INA226 real mode: temp=0, SOC=0) / external-temp (mirror) đi qua threshold check sẽ
+            // sinh LowSoc Critical giả spam mọi pin; chúng chỉ dùng cho cross-source validation.
+            if (!IsPrimarySource(reading.SensorSourceCode))
+                continue;
+
             if (!assets.TryGetValue(reading.BatteryAssetId, out var asset))
                 continue;
             if (!thresholds.TryGetValue(asset.BatteryTypeId, out var threshold))
@@ -261,6 +267,14 @@ public class AnomalyDetectionService : IAnomalyDetectionService
 
         return results;
     }
+
+    /// <summary>
+    /// primary = reading BMS đầy đủ thông số; null/empty (thiết bị single-source không gắn tag)
+    /// cũng coi như primary — CÙNG quy ước coalescer SSE (<c>RedisTelemetryStream</c>).
+    /// </summary>
+    internal static bool IsPrimarySource(string? sensorSourceCode) =>
+        string.IsNullOrEmpty(sensorSourceCode) ||
+        string.Equals(sensorSourceCode, "primary", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AlertEntity?> FindActiveAlertToMergeAsync(
         Guid batteryAssetId, AnomalyTypeEnum anomalyType, DateTime now, CancellationToken ct)
