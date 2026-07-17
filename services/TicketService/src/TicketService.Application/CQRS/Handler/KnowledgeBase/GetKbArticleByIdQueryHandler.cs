@@ -33,10 +33,14 @@ public class GetKbArticleByIdQueryHandler : IRequestHandler<GetKbArticleByIdQuer
         if (article == null || article.IsDeleted)
             return Fail(404, "Không tìm thấy bài viết.");
 
+        // Block template access on Customer-facing endpoints
+        if (query.RequireNonTemplate && article.IsTemplate)
+            return Fail(404, "Không tìm thấy bài viết.");
+
         // Role-based access control
         if (_currentUserService.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase))
         {
-            if (article.IsInternalOnly || article.Status != KbArticleStatusEnum.Published)
+            if (article.IsInternalOnly || article.Status != KbArticleStatusEnum.Published || article.IsTemplate)
             {
                 return Fail(404, "Không tìm thấy bài viết.");
             }

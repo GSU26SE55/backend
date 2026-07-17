@@ -42,6 +42,9 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<ChatAiSuggestion> ChatAiSuggestions => new GenericRepository<ChatAiSuggestion>(_context);
     public IGenericRepository<TicketChatTranslation> TicketChatTranslations => new GenericRepository<TicketChatTranslation>(_context);
     public IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers => new GenericRepository<TicketChatTranslationUser>(_context);
+    public IGenericRepository<BlogPost> BlogPosts => new GenericRepository<BlogPost>(_context);
+    public IGenericRepository<BlogPostVersion> BlogPostVersions => new GenericRepository<BlogPostVersion>(_context);
+    public IGenericRepository<BlogTemplate> BlogTemplates => new GenericRepository<BlogTemplate>(_context);
 
     public async Task BeginTransactionAsync()
     {

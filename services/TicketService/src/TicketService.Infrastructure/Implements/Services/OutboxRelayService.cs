@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SharedContracts.Events.Blog;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -35,6 +36,8 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(IncidentDeclaredIntegrationEvent), typeof(IncidentDeclaredIntegrationEvent) },
         { nameof(TicketHeldIntegrationEvent), typeof(TicketHeldIntegrationEvent) },
         { nameof(TicketResumedIntegrationEvent), typeof(TicketResumedIntegrationEvent) },
+        { nameof(BlogGenerationRequestedEvent), typeof(BlogGenerationRequestedEvent) },
+        { nameof(BlogGenerationStatusChangedEvent), typeof(BlogGenerationStatusChangedEvent) },
     };
 
     public OutboxRelayService(
@@ -86,7 +89,13 @@ public class OutboxRelayService : IOutboxRelayService
                     continue;
                 }
 
-                await _producer.PublishAsync(evt, cancellationToken);
+                // Must invoke with runtime type so MassTransit routes to the correct exchange.
+                // Calling PublishAsync(evt, ct) directly infers T = IntegrationEvent (base),
+                // which would publish to the wrong exchange and consumers would never receive it.
+                var publishMethod = typeof(IMessageProducerService)
+                    .GetMethod(nameof(IMessageProducerService.PublishAsync))!
+                    .MakeGenericMethod(clrType);
+                await (Task)publishMethod.Invoke(_producer, new object[] { evt, cancellationToken })!;
                 msg.ProcessedAtUtc = DateTime.UtcNow;
                 _unitOfWork.OutboxMessages.UpdateAsync(msg);
                 result.Published++;

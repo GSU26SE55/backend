@@ -39,7 +39,7 @@ public class KbWorkflowHandlersTests
     }
 
     [Fact]
-    public async Task Handle_ApproveReview_UpdatesStatusToPublished()
+    public async Task Handle_ApproveReview_UpdatesStatusToDraft()
     {
         // Arrange
         var articleId = Guid.NewGuid();
@@ -61,8 +61,33 @@ public class KbWorkflowHandlersTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Data!.Status.Should().Be(KbArticleStatusEnum.Published);
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Draft);
         article.ReviewRequired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_PublishCommand_FromPendingReview_Returns409()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            Status = KbArticleStatusEnum.PendingReview
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var uow = resultExtended.uow;
+
+        var handler = new PublishKbArticleCommandHandler(uow.Object);
+        var command = new PublishKbArticleCommand { ArticleId = articleId };
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(409);
     }
 
     [Fact]
@@ -226,6 +251,192 @@ public class KbWorkflowHandlersTests
         kbArticles.Verify(x => x.UpdateAsync(article), Times.Once);
         kbVersions.Verify(x => x.AddAsync(It.Is<KbArticleVersion>(v => v.MajorVersion == 3 && v.Title == "Old Title")), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_ApproveReview_OnTemplate_Returns400()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Draft
+        };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var handler = new ApproveReviewCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new ApproveReviewCommand { ArticleId = articleId }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task Handle_RejectReview_OnTemplate_Returns400()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Draft
+        };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var handler = new RejectReviewCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new RejectReviewCommand { ArticleId = articleId, Reason = "test" }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task Handle_PublishTemplate_ByAdmin_Publishes_And_ApprovesVersion()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Draft,
+            Version = 0
+        };
+        var pendingVersion = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 0,
+            Status = KbVersionStatusEnum.Pending
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { pendingVersion });
+        var uow = resultExtended.uow;
+        var kbVersions = resultExtended.kbVersions;
+
+        var handler = new PublishKbArticleCommandHandler(uow.Object);
+
+        // Act
+        var result = await handler.Handle(new PublishKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserRole = "Admin"
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Published);
+        article.Status.Should().Be(KbArticleStatusEnum.Published);
+        pendingVersion.Status.Should().Be(KbVersionStatusEnum.Approved);
+        kbVersions.Verify(x => x.UpdateAsync(It.Is<KbArticleVersion>(v => v.Status == KbVersionStatusEnum.Approved)), Times.Once);
+        uow.Verify(x => x.CommitTransactionAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_PublishTemplate_ByManager_Returns403()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Draft
+        };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var handler = new PublishKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new PublishKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserRole = "Manager"
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task Handle_ArchiveTemplate_ByManager_Returns403()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle { Id = articleId, IsTemplate = true, Status = KbArticleStatusEnum.Published };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var handler = new ArchiveKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new ArchiveKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserRole = "Manager"
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task Handle_ArchiveTemplate_ByAdmin_Archives()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle { Id = articleId, IsTemplate = true, Status = KbArticleStatusEnum.Published };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var uow = resultExtended.uow;
+        var handler = new ArchiveKbArticleCommandHandler(uow.Object);
+
+        // Act
+        var result = await handler.Handle(new ArchiveKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserRole = "Admin"
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        article.Status.Should().Be(KbArticleStatusEnum.Archived);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_RollbackTemplate_ByNonAdmin_Returns403()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle { Id = articleId, IsTemplate = true };
+        var version = new KbArticleVersion { Id = versionId, ArticleId = articleId };
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { version });
+        var handler = new RollbackKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new RollbackKbArticleCommand
+        {
+            ArticleId = articleId,
+            ToVersionId = versionId,
+            CurrentUserId = Guid.NewGuid(),
+            CurrentUserRole = "Manager"
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
     }
 
     [Fact]

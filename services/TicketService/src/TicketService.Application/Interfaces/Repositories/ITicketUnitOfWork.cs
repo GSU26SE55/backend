@@ -30,4 +30,7 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<ChatAiSuggestion> ChatAiSuggestions { get; }
     IGenericRepository<TicketChatTranslation> TicketChatTranslations { get; }
     IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers { get; }
+    IGenericRepository<BlogPost> BlogPosts { get; }
+    IGenericRepository<BlogPostVersion> BlogPostVersions { get; }
+    IGenericRepository<BlogTemplate> BlogTemplates { get; }
 }

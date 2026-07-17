@@ -43,6 +43,8 @@ public class KnowledgeBaseController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<KbArticleListItemDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList([FromQuery] GetKbArticleListQuery query, CancellationToken ct)
     {
+        // Customer-facing endpoint: never expose template articles
+        query.IsTemplate = false;
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -59,7 +61,8 @@ public class KnowledgeBaseController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
-        var query = new GetKbArticleByIdQuery { ArticleId = id };
+        // Customer-facing endpoint: block access to template articles
+        var query = new GetKbArticleByIdQuery { ArticleId = id, RequireNonTemplate = true };
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }

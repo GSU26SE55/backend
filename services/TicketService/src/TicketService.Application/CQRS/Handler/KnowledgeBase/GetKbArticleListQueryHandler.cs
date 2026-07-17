@@ -40,13 +40,18 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         // Role-based filtering
         if (_currentUserService.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase))
         {
-            dbQuery = dbQuery.Where(a => a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly);
+            // Customer: only published non-internal non-template articles
+            dbQuery = dbQuery.Where(a => a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly && !a.IsTemplate);
         }
         else
         {
             // Internal roles can filter by status
             if (query.Status.HasValue)
                 dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
+
+            // Apply IsTemplate filter (set by controller or query param for internal roles)
+            if (query.IsTemplate.HasValue)
+                dbQuery = dbQuery.Where(a => a.IsTemplate == query.IsTemplate.Value);
         }
 
         if (query.Category.HasValue)

@@ -144,6 +144,21 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
         uow.SetupGet(u => u.TicketParticipants).Returns(participants.Object);
 
+        // Blog repos — default empty, test files override via SetupBlog*
+        var blogPosts = new Mock<IGenericRepository<BlogPost>>();
+        blogPosts.Setup(r => r.GetAllAsync()).Returns(Array.Empty<BlogPost>().BuildMock());
+        blogPosts.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<BlogPost, bool>>>())).ReturnsAsync(false);
+        uow.SetupGet(u => u.BlogPosts).Returns(blogPosts.Object);
+
+        var blogVersions = new Mock<IGenericRepository<BlogPostVersion>>();
+        blogVersions.Setup(r => r.GetAllAsync()).Returns(Array.Empty<BlogPostVersion>().BuildMock());
+        uow.SetupGet(u => u.BlogPostVersions).Returns(blogVersions.Object);
+
+        var blogTemplates = new Mock<IGenericRepository<BlogTemplate>>();
+        blogTemplates.Setup(r => r.GetAllAsync()).Returns(Array.Empty<BlogTemplate>().BuildMock());
+        blogTemplates.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<BlogTemplate, bool>>>())).ReturnsAsync(false);
+        uow.SetupGet(u => u.BlogTemplates).Returns(blogTemplates.Object);
+
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);

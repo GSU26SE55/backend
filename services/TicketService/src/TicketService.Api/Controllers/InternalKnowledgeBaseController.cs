@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Api.Controllers;
 
@@ -131,6 +132,22 @@ public class InternalKnowledgeBaseController : ControllerBase
     {
 
         query.ArticleId = id;
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Lấy danh sách các template đang ở trạng thái Xuất bản để Staff/Manager có thể tra cứu và sao chép.
+    /// </summary>
+    /// <param name="query">Tiêu chí lọc và phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy danh sách template thành công.</response>
+    [HttpGet("templates")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<KbArticleListItemDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTemplates([FromQuery] GetKbArticleListQuery query, CancellationToken ct)
+    {
+        query.IsTemplate = true;
+        query.Status = KbArticleStatusEnum.Published;
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }

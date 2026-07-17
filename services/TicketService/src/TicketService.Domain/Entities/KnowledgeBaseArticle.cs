@@ -15,6 +15,7 @@ public class KnowledgeBaseArticle : AuditableEntity
     public List<string> Tags { get; set; } = new();
     public KbArticleStatusEnum Status { get; set; } = KbArticleStatusEnum.Draft;
     public bool IsInternalOnly { get; set; } = false;
+    public bool IsTemplate { get; set; } = false;
     public int Version { get; set; } = 1;
     public int ViewCount { get; set; }
     public int HelpfulCount { get; set; }
