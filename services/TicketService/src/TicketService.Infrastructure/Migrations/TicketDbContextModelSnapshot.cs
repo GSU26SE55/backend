@@ -22,6 +22,223 @@ namespace TicketService.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogPost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<Guid?>("BlogTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("blog_template_id");
+
+                    b.Property<string>("ContentHtml")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_html");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CurrentVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_version");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("slug");
+
+                    b.Property<Guid?>("SourceKbArticleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_kb_article_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlogTemplateId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("SourceKbArticleId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("blog_posts", (string)null);
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogPostVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BlogPostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("blog_post_id");
+
+                    b.Property<string>("ChangeNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("change_note");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<string>("ContentHtml")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_html");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("version_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlogPostId");
+
+                    b.HasIndex("BlogPostId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("blog_post_versions", (string)null);
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentHtml")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_html");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("blog_templates", (string)null);
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.ChatAiSuggestion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -443,6 +660,9 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnName("is_deleted");
 
                     b.Property<bool>("IsInternalOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsTemplate")
                         .HasColumnType("boolean");
 
                     b.Property<string>("ManagerRejectReason")
@@ -985,10 +1205,6 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("description");
-
-                    b.Property<Guid?>("EnvironmentalIncidentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("environmental_incident_id");
 
                     b.Property<DateTime?>("EscalatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2379,6 +2595,34 @@ namespace TicketService.Infrastructure.Migrations
                     b.ToTable("chat_escalation_review_saga_states", (string)null);
                 });
 
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogPost", b =>
+                {
+                    b.HasOne("TicketService.Domain.Entities.BlogTemplate", "BlogTemplate")
+                        .WithMany("BlogPosts")
+                        .HasForeignKey("BlogTemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TicketService.Domain.Entities.KnowledgeBaseArticle", "SourceKbArticle")
+                        .WithMany()
+                        .HasForeignKey("SourceKbArticleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BlogTemplate");
+
+                    b.Navigation("SourceKbArticle");
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogPostVersion", b =>
+                {
+                    b.HasOne("TicketService.Domain.Entities.BlogPost", "BlogPost")
+                        .WithMany("Versions")
+                        .HasForeignKey("BlogPostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BlogPost");
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.ChatAiSuggestion", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.TicketChat", null)
@@ -2581,6 +2825,16 @@ namespace TicketService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogPost", b =>
+                {
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.BlogTemplate", b =>
+                {
+                    b.Navigation("BlogPosts");
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.KnowledgeBaseArticle", b =>

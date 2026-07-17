@@ -16,6 +16,8 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
     public Guid CurrentUserId { get; set; }
     [JsonIgnore]
     public string CurrentUserRole { get; set; } = string.Empty;
+    [JsonIgnore]
+    public bool IsTemplate { get; set; } = false;
     /// <summary>
     /// Danh mục phân loại.
     /// </summary>

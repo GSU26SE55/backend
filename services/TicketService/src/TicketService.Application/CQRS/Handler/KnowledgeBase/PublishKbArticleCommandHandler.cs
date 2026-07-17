@@ -22,13 +22,21 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(PublishKbArticleCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết.");
 
-        if (article.Status != KbArticleStatusEnum.Draft && article.Status != KbArticleStatusEnum.PendingReview)
-            return Fail(409, "Chỉ có thể xuất bản bài viết ở trạng thái Nháp hoặc Chờ phê duyệt.");
+        if (article.IsTemplate)
+        {
+            if (!command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                return Fail(403, "Chỉ Admin mới có thể xuất bản template.");
+
+            return await HandleTemplatePublish(article, ct);
+        }
+
+        if (article.Status != KbArticleStatusEnum.Draft)
+            return Fail(409, "Chỉ có thể xuất bản bài viết ở trạng thái Nháp.");
 
         article.Status = KbArticleStatusEnum.Published;
         article.ReviewRequired = false;
@@ -42,6 +50,54 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
             IsSuccess = true,
             StatusCode = 200,
             Message = "Bài viết đã được xuất bản thành công.",
+            Data = new KbArticleActionDTO
+            {
+                Id = article.Id.ToString(),
+                Code = article.Code,
+                Status = article.Status
+            }
+        };
+    }
+
+    private async Task<CommonResponse<KbArticleActionDTO>> HandleTemplatePublish(
+        KnowledgeBaseArticle article, CancellationToken ct)
+    {
+        if (article.Status != KbArticleStatusEnum.Draft)
+            return Fail(409, "Chỉ có thể xuất bản template ở trạng thái Nháp.");
+
+        await _uow.BeginTransactionAsync();
+        try
+        {
+            article.Status = KbArticleStatusEnum.Published;
+            _uow.KnowledgeBaseArticles.UpdateAsync(article);
+
+            // Chuyển pending version sang Approved khi publish
+            var pendingVersion = await _uow.KbArticleVersions.GetAllAsync()
+                .FirstOrDefaultAsync(v => v.ArticleId == article.Id
+                    && v.MajorVersion == article.Version + 1
+                    && v.Status == KbVersionStatusEnum.Pending
+                    && !v.IsDeleted, ct);
+
+            if (pendingVersion != null)
+            {
+                pendingVersion.Status = KbVersionStatusEnum.Approved;
+                article.Version = pendingVersion.MajorVersion;
+                _uow.KbArticleVersions.UpdateAsync(pendingVersion);
+            }
+
+            await _uow.CommitTransactionAsync();
+        }
+        catch
+        {
+            await _uow.RollbackTransactionAsync();
+            throw;
+        }
+
+        return new CommonResponse<KbArticleActionDTO>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Template đã được xuất bản thành công.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

@@ -19,6 +19,8 @@ public class RollbackKbArticleCommand : IRequest<CommonResponse<KbArticleActionD
     /// </summary>
     [JsonIgnore]
     public Guid CurrentUserId { get; set; }
+    [JsonIgnore]
+    public string CurrentUserRole { get; set; } = string.Empty;
 
     public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {

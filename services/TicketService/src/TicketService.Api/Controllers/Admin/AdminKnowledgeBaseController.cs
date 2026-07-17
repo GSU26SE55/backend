@@ -42,7 +42,11 @@ public class AdminKnowledgeBaseController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct)
     {
-        var command = new PublishKbArticleCommand { ArticleId = id };
+        var command = new PublishKbArticleCommand
+        {
+            ArticleId = id,
+            CurrentUserRole = _currentUser.Role ?? string.Empty
+        };
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -57,7 +61,11 @@ public class AdminKnowledgeBaseController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Archive(Guid id, CancellationToken ct)
     {
-        var command = new ArchiveKbArticleCommand { ArticleId = id };
+        var command = new ArchiveKbArticleCommand
+        {
+            ArticleId = id,
+            CurrentUserRole = _currentUser.Role ?? string.Empty
+        };
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -119,6 +127,7 @@ public class AdminKnowledgeBaseController : ControllerBase
     {
         command.ArticleId = id;
         command.CurrentUserId = GetCurrentUserId();
+        command.CurrentUserRole = _currentUser.Role ?? string.Empty;
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }

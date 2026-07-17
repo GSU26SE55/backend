@@ -30,7 +30,11 @@ public class TicketDbContext : DbContext
     public virtual DbSet<CustomerAccount> CustomerAccounts { get; set; }
     public virtual DbSet<StaffAccount> StaffAccounts { get; set; }
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
+    public virtual DbSet<KbArticleVersion> KbArticleVersions { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
+    public virtual DbSet<BlogPost> BlogPosts { get; set; }
+    public virtual DbSet<BlogPostVersion> BlogPostVersions { get; set; }
+    public virtual DbSet<BlogTemplate> BlogTemplates { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
     public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
     public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }

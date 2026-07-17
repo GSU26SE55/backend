@@ -27,4 +27,7 @@ public class GetKbArticleListQuery : PaginationRequest, IRequest<CommonResponse<
 
     /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
     public string? SortDir { get; set; }
+
+    [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+    public bool? IsTemplate { get; set; }
 }

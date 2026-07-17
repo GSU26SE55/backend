@@ -250,7 +250,9 @@ public class KbQueryHandlersTests
             Id = articleId,
             Title = "Template Title",
             Symptoms = "Template Symptoms",
-            Tags = new List<string> { "template", "general" },
+            Tags = new List<string> { "general" },
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Published,
             IsDeleted = false
         };
 
