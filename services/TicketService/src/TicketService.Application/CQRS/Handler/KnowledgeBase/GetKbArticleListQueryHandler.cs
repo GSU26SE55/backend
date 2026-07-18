@@ -63,7 +63,7 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var search = query.Q.ToLower();
-            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search) || a.Symptoms.ToLower().Contains(search));
+            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search));
         }
 
         var totalItems = await dbQuery.CountAsync(ct);

@@ -35,6 +35,7 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
+            .Include(t => t.BatteryAssets)
             .Where(t => !t.IsDeleted && t.CustomerId == customerId);
 
         if (request.Status.HasValue)

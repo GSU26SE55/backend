@@ -35,6 +35,7 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
+            .Include(t => t.BatteryAssets)
             .Where(t => !t.IsDeleted && t.AssignedStaffId == staffId);
 
         if (request.Status.HasValue)

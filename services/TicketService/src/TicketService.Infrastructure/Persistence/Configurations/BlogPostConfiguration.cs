@@ -14,7 +14,7 @@ public class BlogPostConfiguration : IEntityTypeConfiguration<BlogPost>
         builder.Property(e => e.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
         builder.Property(e => e.Slug).HasColumnName("slug").HasMaxLength(300).IsRequired();
         builder.Property(e => e.Summary).HasColumnName("summary").HasMaxLength(1000).IsRequired();
-        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("text").IsRequired();
+        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("jsonb").IsRequired();
         builder.Property(e => e.Status).HasColumnName("status").HasConversion<int>();
         builder.Property(e => e.Origin).HasColumnName("origin").HasConversion<int>();
         builder.Property(e => e.SourceKbArticleId).HasColumnName("source_kb_article_id");

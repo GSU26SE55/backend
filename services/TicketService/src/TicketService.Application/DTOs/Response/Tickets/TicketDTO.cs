@@ -11,6 +11,7 @@ public class TicketDTO
     public string Id { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string BatteryAssetId { get; set; } = string.Empty;
+    public List<string> BatteryAssetIds { get; set; } = new();
     /// <summary>
     /// Customer id.
     /// </summary>

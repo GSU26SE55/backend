@@ -51,15 +51,16 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
 
         var code = await _codeGenerator.GenerateAsync();
 
+        var ticketId = Guid.NewGuid();
         var ticket = new TicketEntity
         {
-            Id = Guid.NewGuid(),
+            Id = ticketId,
             Code = code,
             Title = request.Title,
             Description = request.Description,
             Category = request.Category,
             CustomerId = request.CustomerId,
-            BatteryAssetId = request.BatteryAssetId ?? Guid.Empty,
+            BatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty,
             Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
@@ -67,6 +68,16 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         };
 
         await _uow.Tickets.AddAsync(ticket);
+
+        foreach (var batteryId in request.BatteryAssetIds)
+        {
+            await _uow.TicketBatteryAssets.AddAsync(new TicketBatteryAsset
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                BatteryAssetId = batteryId
+            });
+        }
 
         // Auto-tạo participant Owner cho Customer tạo ticket (#528)
         await _uow.TicketParticipants.AddAsync(new TicketParticipant

@@ -34,14 +34,17 @@ public class KbArticleVersionConfiguration : IEntityTypeConfiguration<KbArticleV
 
         builder.Property(e => e.Symptoms)
             .HasColumnName("symptoms")
+            .HasColumnType("jsonb")
             .IsRequired();
 
         builder.Property(e => e.DiagnosisSteps)
             .HasColumnName("diagnosis_steps")
+            .HasColumnType("jsonb")
             .IsRequired();
 
         builder.Property(e => e.SolutionSteps)
             .HasColumnName("solution_steps")
+            .HasColumnType("jsonb")
             .IsRequired();
 
         builder.Property(e => e.RecommendedParts)

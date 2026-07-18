@@ -17,9 +17,9 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
     public TicketCategoryEnum Category { get; set; }
 
     /// <summary>
-    /// ID của thiết bị pin.
+    /// Danh sách ID thiết bị pin (có thể để trống, hoặc 1 hoặc nhiều cục pin).
     /// </summary>
-    public Guid? BatteryAssetId { get; set; }
+    public List<Guid> BatteryAssetIds { get; set; } = new();
 
     [JsonIgnore]
     public Guid CustomerId { get; set; }
@@ -36,6 +36,9 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
 
         if (CustomerId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "CustomerId", Detail = "CustomerId không hợp lệ." });
+
+        if (BatteryAssetIds.Any(id => id == Guid.Empty))
+            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Danh sách pin không được chứa ID rỗng." });
 
         if (response.ListErrors.Count > 0)
         {
