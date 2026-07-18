@@ -1,6 +1,6 @@
 # API Documentation — TicketService · Knowledge Base & Blog
 
-> Tài liệu này tách ra từ `api-ticket.md` — chứa toàn bộ các endpoint và DTO liên quan đến **Knowledge Base** (KB).
+> Tài liệu này tách ra từ `api-ticket.md` — chứa toàn bộ các endpoint và DTO liên quan đến **Knowledge Base (KB)** và **Blog**.
 > Base URL: `http://localhost:{port}/api`
 > Content-Type: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>` — xem cấu trúc đầy đủ tại `api-ticket.md`.
@@ -43,9 +43,26 @@ Dùng khi gán bài viết Knowledge Base vào Ticket.
 
 > Từ `ClosedPendingRate` trở đi, **mọi type** đều bị chặn (`409`). Chi tiết bảng quy tắc: xem `POST /api/knowledge-base/references` (Nhóm 11).
 
+### `BlogPostStatusEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Generating` | 1 | AI đang tạo nội dung (async) |
+| `GenerationFailed` | 2 | AI tạo thất bại — có thể chỉnh sửa thủ công |
+| `Draft` | 3 | Nháp — chờ Manager/Admin publish |
+| `Published` | 4 | Đã xuất bản (mọi user đăng nhập xem được) |
+| `Archived` | 5 | Đã lưu trữ (ẩn) |
+
+### `BlogPostOriginEnum`
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Manual` | 1 | Tạo thủ công bởi Staff/Manager/Admin |
+| `AiGeneratedFromKb` | 2 | AI tạo từ bài viết KB (qua `generate-from-kb`) |
+
 ---
 
-## DTOs
+## DTOs — Knowledge Base
 
 ### `KbArticleDTO` (detail — `GET /{id}`, response của `update`)
 
@@ -62,7 +79,7 @@ Dùng khi gán bài viết Knowledge Base vào Ticket.
 | `solutionSteps` | `string` | Không | Các bước xử lý |
 | `recommendedParts` | `string[]?` | Có | Danh sách linh kiện (**mảng**, không phải string) |
 | `tags` | `string[]` | Không | Danh sách thẻ |
-| `isTemplate` | `bool` | Không | `true` = bài viết này là mẫu (template) để copy cấu trúc. Bài template thường có tag `template` hoặc `example` |
+| `isTemplate` | `bool` | Không | `true` = bài viết này là mẫu (template) để copy cấu trúc |
 | `status` | `KbArticleStatusEnum` | Không | Enum chuỗi (e.g. `"Published"`) |
 | `isInternalOnly` | `bool` | Không | Bài chỉ nội bộ (ẩn với Customer) |
 | `version` | `int` | Không | Số phiên bản chính (Major Version) |
@@ -182,6 +199,90 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 | `referenceType` | `KbReferenceTypeEnum` | Không | Loại tham chiếu (**chuỗi**, vd `"ConsultedDuringResolve"`) |
 | `note` | `string?` | Có | Ghi chú |
 | `createdAt` | `string` | Không | Thời điểm gán (UTC) |
+
+---
+
+## DTOs — Blog
+
+### `BlogPostDTO` (detail — `GET /api/blog/{id}`)
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID bài blog |
+| `title` | `string` | Không | Tiêu đề |
+| `slug` | `string` | Không | URL-friendly slug (unique) |
+| `summary` | `string` | Không | Tóm tắt ngắn |
+| `contentHtml` | `string` | Không | Nội dung HTML đầy đủ |
+| `status` | `BlogPostStatusEnum` | Không | Enum chuỗi (e.g. `"Published"`) |
+| `origin` | `BlogPostOriginEnum` | Không | Enum chuỗi (`"Manual"` hoặc `"AiGeneratedFromKb"`) |
+| `sourceKbArticleId` | `string?` | Có | ID bài KB nguồn (chỉ có nếu `origin = AiGeneratedFromKb`) |
+| `blogTemplateId` | `string?` | Có | ID template đã dùng (nếu có) |
+| `authorUserId` | `string` | Không | ID người tạo |
+| `currentVersion` | `int` | Không | Số phiên bản hiện tại |
+| `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
+| `updatedAt` | `string?` | Có | Thời điểm cập nhật gần nhất |
+
+### `BlogPostListItemDTO` (item trong danh sách)
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `string` | ID bài blog |
+| `title` | `string` | Tiêu đề |
+| `slug` | `string` | Slug |
+| `summary` | `string` | Tóm tắt ngắn |
+| `status` | `BlogPostStatusEnum` | Enum chuỗi |
+| `origin` | `BlogPostOriginEnum` | Enum chuỗi |
+| `authorUserId` | `string` | ID người tạo |
+| `currentVersion` | `int` | Phiên bản hiện tại |
+| `createdAt` | `string` | Thời điểm tạo (UTC) |
+| `updatedAt` | `string?` | Thời điểm cập nhật gần nhất |
+
+### `BlogPostVersionDTO` (phiên bản trong lịch sử)
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `string` | ID bản ghi version |
+| `blogPostId` | `string` | ID bài blog gốc |
+| `versionNumber` | `int` | Số thứ tự version (1, 2, 3...) |
+| `title` | `string` | Tiêu đề snapshot |
+| `summary` | `string` | Tóm tắt snapshot |
+| `contentHtml` | `string` | Nội dung HTML snapshot |
+| `changedByUserId` | `string` | ID người thực hiện thay đổi |
+| `changeNote` | `string?` | Ghi chú thay đổi (nullable) |
+| `createdAt` | `string` | Thời điểm tạo version (UTC) |
+
+### `BlogDiffDTO` (kết quả `compare`)
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `oldVersionNumber` | `int` | Số version cũ |
+| `newVersionNumber` | `int` | Số version mới |
+| `oldContentHtml` | `string` | Nội dung HTML version cũ |
+| `newContentHtml` | `string` | Nội dung HTML version mới |
+
+> ⚠️ Blog diff **chỉ so sánh `contentHtml`** — không có diff từng field như KB. FE tự render diff từ 2 HTML string.
+
+### `BlogPostActionDTO` (response nhẹ sau action)
+
+| Field | Type | Mô tả |
+|---|---|---|
+| `id` | `string` | ID bài blog |
+| `title` | `string` | Tiêu đề |
+| `status` | `BlogPostStatusEnum` | Trạng thái sau thao tác (enum chuỗi) |
+| `currentVersion` | `int` | Phiên bản hiện tại |
+
+### `BlogTemplateDTO`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` | Không | ID template |
+| `name` | `string` | Không | Tên template — max 200 ký tự |
+| `description` | `string` | Không | Mô tả template |
+| `contentHtml` | `string` | Không | Nội dung HTML mẫu |
+| `isActive` | `bool` | Không | Template đang hoạt động hay đã vô hiệu hóa |
+| `createdByUserId` | `string` | Không | ID Admin tạo |
+| `createdAt` | `string` | Không | Thời điểm tạo (UTC) |
+| `updatedAt` | `string?` | Có | Thời điểm cập nhật gần nhất |
 
 ---
 
@@ -589,6 +690,369 @@ Gán bài viết Knowledge Base vào Ticket làm tài liệu tham khảo (lưu v
 
 ---
 
+## Nhóm 12 — Blog (Public — mọi role đã đăng nhập)
+
+Base path: `/api/blog`
+**Auth:** Bắt buộc — `Authorization: Bearer {accessToken}` (mọi role đã đăng nhập).
+
+Chỉ trả bài có `status = Published`. FE không cần filter thêm.
+
+---
+
+### `GET /api/blog`
+
+**Mục đích:** Danh sách bài blog đã Published (endpoint public — mọi user đăng nhập xem được).
+
+**Auth:** Bắt buộc (mọi role).
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Origin` | `BlogPostOriginEnum?` | Lọc theo nguồn gốc — gửi chuỗi (`Manual` hoặc `AiGeneratedFromKb`) |
+| `Page` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 20) |
+
+> ⚠️ `Status` không có trong query params của public endpoint — controller tự set `Status = Published`. Không cần gửi.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<BlogPostListItemDTO>>`
+
+---
+
+### `GET /api/blog/{id}`
+
+**Mục đích:** Lấy chi tiết bài blog đã Published.
+
+**Auth:** Bắt buộc (mọi role).
+
+**Path param:** `id` — UUID bài blog.
+
+**Response thành công `200`:** `CommonResponse<BlogPostDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy hoặc bài chưa Published.
+
+---
+
+## Nhóm 13 — Blog (Internal — Staff/Manager/Admin)
+
+Base path: `/api/internal/blog`
+**Auth:** Bắt buộc — role `Staff`, `Manager` hoặc `Admin`.
+
+Xem toàn bộ bài blog (kể cả `Draft`, `Generating`, `GenerationFailed`), soạn thảo thủ công, xem lịch sử version, so sánh version.
+
+---
+
+### `GET /api/internal/blog`
+
+**Mục đích:** Danh sách bài blog — internal view (filter theo `Status`, xem mọi trạng thái).
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `Status` | `BlogPostStatusEnum?` | Lọc theo trạng thái — gửi chuỗi (vd `Draft`, `Generating`) |
+| `Origin` | `BlogPostOriginEnum?` | Lọc theo nguồn gốc |
+| `Page` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 20) |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<BlogPostListItemDTO>>`
+
+---
+
+### `POST /api/internal/blog`
+
+**Mục đích:** Tạo bài blog thủ công — khởi tạo ở trạng thái `Draft`. Cần Manager/Admin publish để xuất bản.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `title` | `string` | ✅ | Tiêu đề — không rỗng, max 256 ký tự |
+| `slug` | `string` | ✅ | URL slug — không rỗng, max 300 ký tự, phải unique |
+| `summary` | `string` | ✅ | Tóm tắt — không rỗng |
+| `contentHtml` | `string` | ✅ | Nội dung HTML — không rỗng |
+| `blogTemplateId` | `Guid?` | Không | ID template muốn áp dụng |
+
+**Response thành công `201`:** `CommonResponse<BlogPostActionDTO>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field (title/slug/summary/contentHtml rỗng hoặc quá độ dài)
+- `409` — Slug đã tồn tại
+
+---
+
+### `PUT /api/internal/blog/{id}`
+
+**Mục đích:** Cập nhật nội dung bài blog. Có **optimistic concurrency check** qua `currentVersion`.
+
+Mỗi lần update thành công: tạo `BlogPostVersion` snapshot + tăng `CurrentVersion`.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID bài blog.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `title` | `string` | ✅ | Tiêu đề — max 256 ký tự |
+| `slug` | `string` | ✅ | Slug — phải unique (trừ slug hiện tại của bài) |
+| `summary` | `string` | ✅ | Tóm tắt |
+| `contentHtml` | `string` | ✅ | Nội dung HTML |
+| `changeNote` | `string?` | Không | Ghi chú thay đổi (lưu vào version history) |
+| `currentVersion` | `int` | ✅ | Phiên bản hiện tại — phải khớp với `BlogPost.currentVersion` trong DB. Dùng để phát hiện concurrent edit |
+
+> ⚠️ `currentVersion` là **bắt buộc** và phải khớp chính xác với giá trị hiện tại trong DB. Nếu không khớp → `409`. Lấy từ `GET /api/internal/blog` hoặc `BlogPostActionDTO` của lần update trước.
+
+**Lỗi `409` có thể gặp:**
+- Version mismatch (concurrent edit): `"Bài viết đã được cập nhật bởi người khác. Vui lòng tải lại và thử lại."`
+- Bài đang `Generating`: `"Bài viết đang được AI tạo, vui lòng thử lại sau."`
+- Bài đã `Archived`: `"Bài viết đã được archive, không thể chỉnh sửa."`
+- Slug trùng: `"Slug đã tồn tại."`
+
+**Response thành công `200`:** `CommonResponse<BlogPostActionDTO>` (trả `currentVersion` mới sau update)
+
+---
+
+### `GET /api/internal/blog/{id}/versions`
+
+**Mục đích:** Danh sách lịch sử phiên bản của bài blog (mỗi lần `PUT` thành công tạo 1 version).
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID bài blog.
+
+**Response thành công `200`:** `CommonResponse<List<BlogPostVersionDTO>>`
+
+---
+
+### `GET /api/internal/blog/{id}/compare`
+
+**Mục đích:** So sánh nội dung HTML giữa 2 phiên bản.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID bài blog.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `OldVersionNumber` | `int` | ✅ | Số version cũ hơn |
+| `NewVersionNumber` | `int` | ✅ | Số version mới hơn |
+
+> ⚠️ `OldVersionNumber`/`NewVersionNumber` là **số nguyên** (`versionNumber` trong `BlogPostVersionDTO`) — khác với KB compare dùng Guid.
+
+**Response thành công `200`:** `CommonResponse<BlogDiffDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy bài blog hoặc version không tồn tại.
+
+---
+
+## Nhóm 14 — Blog (Admin/Manager Workflow)
+
+Base path: `/api/admin/blog`
+**Auth:** Bắt buộc — role `Manager` hoặc `Admin`.
+
+Publish, Archive, xóa bài blog. Tạo blog từ KB bằng AI (async).
+
+---
+
+### `POST /api/admin/blog/generate-from-kb/{kbId}`
+
+**Mục đích:** Tạo bài blog từ bài viết Knowledge Base bằng AI — **async, trả `202` ngay**, nội dung được điền sau qua event queue (RabbitMQ → DeepSeek → callback).
+
+**Auth:** Manager hoặc Admin.
+
+**Path param:** `kbId` — UUID bài viết KB nguồn.
+
+**Luồng hoạt động:**
+1. BE kiểm tra KB article `Published` và chưa có blog đang tồn tại.
+2. Tạo `BlogPost` với `Status = Generating`, `Origin = AiGeneratedFromKb`.
+3. Phát `BlogGenerationRequestedEvent` → RabbitMQ.
+4. NotificationService/AI worker nhận event → gọi DeepSeek → điền nội dung → phát `BlogGenerationStatusChangedEvent`.
+5. TicketService nhận callback → update `ContentHtml`, `Summary`, `Status = Draft`.
+
+**Điều kiện bắt buộc:**
+- KB article phải tồn tại và `status = Published` (→ `409` nếu không phải).
+- KB article chưa có blog đang tồn tại với `status` không phải `Archived`/`GenerationFailed` (→ `409` nếu trùng).
+
+**Response thành công `202`:** `CommonResponse<BlogPostActionDTO>` — `status = Generating`, `currentVersion = 0`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 202,
+  "message": "Đã gửi yêu cầu tạo blog bằng AI. Bài viết sẽ sẵn sàng sau vài giây.",
+  "data": {
+    "id": "guid",
+    "title": "Pin không sạc được khi nhiệt độ thấp",
+    "status": "Generating",
+    "currentVersion": 0
+  }
+}
+```
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy KB article
+- `409` — KB chưa Published hoặc đã có blog đang tồn tại
+
+> ⚠️ FE cần **poll** hoặc dùng notification để biết khi `status` chuyển `Draft` (generation hoàn tất) hoặc `GenerationFailed`. Sau khi `GenerationFailed`, vẫn có thể `PUT /api/internal/blog/{id}` để sửa thủ công.
+
+---
+
+### `POST /api/admin/blog/{id}/publish`
+
+**Mục đích:** Publish bài blog (`Draft` → `Published`). Bài sẽ hiển thị trên `GET /api/blog`.
+
+**Auth:** Manager hoặc Admin.
+
+**Path param:** `id` — UUID bài blog.
+
+**Lỗi `409` có thể gặp:**
+- `status = Generating` hoặc `GenerationFailed`: `"Bài viết chưa sẵn sàng để publish."`
+- `status = Published`: `"Bài viết đã được publish."`
+- `status = Archived`: `"Bài viết đã được archive, không thể publish."`
+
+**Response thành công `200`:** `CommonResponse<BlogPostActionDTO>`
+
+---
+
+### `POST /api/admin/blog/{id}/archive`
+
+**Mục đích:** Lưu trữ bài blog (→ `Archived`, ngừng hiển thị trên public endpoint).
+
+**Auth:** Manager hoặc Admin.
+
+**Path param:** `id` — UUID bài blog.
+
+**Response thành công `200`:** `CommonResponse<BlogPostActionDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy bài blog
+
+---
+
+### `DELETE /api/admin/blog/{id}`
+
+**Mục đích:** Xóa mềm (soft delete) bài blog. Không thể khôi phục qua API.
+
+**Auth:** Manager hoặc Admin.
+
+**Path param:** `id` — UUID bài blog.
+
+**Response thành công `200`:** `CommonResponse<BlogPostActionDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy bài blog
+
+---
+
+## Nhóm 15 — Blog Templates (Admin/Manager/Staff)
+
+Base path: `/api/admin/blog/templates`
+**Auth:** Đọc (GET): Staff, Manager, Admin. Ghi (POST/PUT/DELETE): **chỉ Admin**.
+
+---
+
+### `GET /api/admin/blog/templates`
+
+**Mục đích:** Danh sách blog templates.
+
+**Auth:** Staff, Manager hoặc Admin.
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `IsActive` | `bool?` | `true` = chỉ trả template đang hoạt động; `false` = chỉ inactive; bỏ trống = tất cả |
+
+**Response thành công `200`:** `CommonResponse<List<BlogTemplateDTO>>`
+
+---
+
+### `GET /api/admin/blog/templates/{id}`
+
+**Mục đích:** Chi tiết một blog template.
+
+**Auth:** Staff, Manager hoặc Admin.
+
+**Path param:** `id` — UUID template.
+
+**Response thành công `200`:** `CommonResponse<BlogTemplateDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy template
+
+---
+
+### `POST /api/admin/blog/templates`
+
+**Mục đích:** Tạo template mới.
+
+**Auth:** **Chỉ Admin**.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `name` | `string` | ✅ | Tên template — không rỗng, max 200 ký tự |
+| `description` | `string` | Không | Mô tả template |
+| `contentHtml` | `string` | ✅ | Nội dung HTML mẫu — không rỗng |
+
+**Response thành công `201`:** `CommonResponse<BlogTemplateDTO>`
+
+**Lỗi thường gặp:**
+- `400` — Validation field (name/contentHtml rỗng hoặc name > 200 ký tự)
+
+---
+
+### `PUT /api/admin/blog/templates/{id}`
+
+**Mục đích:** Cập nhật template (bao gồm toggle `isActive`).
+
+**Auth:** **Chỉ Admin**.
+
+**Path param:** `id` — UUID template.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `name` | `string` | ✅ | Tên template — max 200 ký tự |
+| `description` | `string` | Không | Mô tả |
+| `contentHtml` | `string` | ✅ | Nội dung HTML |
+| `isActive` | `bool` | Không (mặc định `true`) | `false` để vô hiệu hóa template |
+
+**Response thành công `200`:** `CommonResponse<BlogTemplateDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy template
+- `400` — Validation field
+
+---
+
+### `DELETE /api/admin/blog/templates/{id}`
+
+**Mục đích:** Xóa mềm template.
+
+**Auth:** **Chỉ Admin**.
+
+**Path param:** `id` — UUID template.
+
+**Response thành công `200`:** `CommonResponse<BlogTemplateDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy template
+
+---
+
 ## KB Chat Integration
 
 Các endpoint trong hệ thống Chat liên quan đến Knowledge Base (xem chi tiết tại `api-ticket.md` — Nhóm Ticket Chats):
@@ -602,6 +1066,15 @@ Các endpoint trong hệ thống Chat liên quan đến Knowledge Base (xem chi 
 ---
 
 ## Changelog
+
+### 2026-07-18 — Thêm Blog module (feat/GH-671-blog)
+
+- **Enums mới:** `BlogPostStatusEnum` (Generating/GenerationFailed/Draft/Published/Archived), `BlogPostOriginEnum` (Manual/AiGeneratedFromKb).
+- **DTOs mới:** `BlogPostDTO`, `BlogPostListItemDTO`, `BlogPostVersionDTO`, `BlogDiffDTO`, `BlogPostActionDTO`, `BlogTemplateDTO`.
+- **Nhóm 12** — `GET /api/blog`, `GET /api/blog/{id}`: public blog read (Published only).
+- **Nhóm 13** — `GET /api/internal/blog`, `POST /api/internal/blog`, `PUT /api/internal/blog/{id}`, `GET /api/internal/blog/{id}/versions`, `GET /api/internal/blog/{id}/compare`: soạn thảo và lịch sử version.
+- **Nhóm 14** — `POST /api/admin/blog/generate-from-kb/{kbId}` (async AI, `202`), `POST .../publish`, `POST .../archive`, `DELETE .../{id}`.
+- **Nhóm 15** — CRUD template qua `/api/admin/blog/templates` (đọc: Staff+; ghi: Admin only).
 
 ### 2026-07-17 — Thêm field `isTemplate` (feat/GH-671.2)
 
