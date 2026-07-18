@@ -23,6 +23,7 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
+            .Include(t => t.BatteryAssets)
             .Where(t => !t.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))

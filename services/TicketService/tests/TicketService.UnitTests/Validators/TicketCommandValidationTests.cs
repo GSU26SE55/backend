@@ -528,9 +528,9 @@ public class TicketCommandValidationTests
         var command = new CreateKbArticleCommand
         {
             Title = new string('a', 201),
-            Symptoms = new string('b', 2001),
-            DiagnosisSteps = new string('c', 4001),
-            SolutionSteps = new string('d', 4001),
+            Symptoms = new string('b', 10001),
+            DiagnosisSteps = new string('c', 20001),
+            SolutionSteps = new string('d', 20001),
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };
@@ -591,9 +591,9 @@ public class TicketCommandValidationTests
         {
             ArticleId = Guid.NewGuid(),
             Title = new string('a', 201),
-            Symptoms = new string('b', 2001),
-            DiagnosisSteps = new string('c', 4001),
-            SolutionSteps = new string('d', 4001),
+            Symptoms = new string('b', 10001),
+            DiagnosisSteps = new string('c', 20001),
+            SolutionSteps = new string('d', 20001),
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };

@@ -59,18 +59,18 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
 
         if (string.IsNullOrWhiteSpace(Symptoms))
             response.ListErrors.Add(new Errors { Field = "Symptoms", Detail = "Triệu chứng không được để trống." });
-        else if (Symptoms.Length > 2000)
-            response.ListErrors.Add(new Errors { Field = "Symptoms", Detail = "Triệu chứng không được vượt quá 2000 ký tự." });
+        else if (Symptoms.Length > 10000)
+            response.ListErrors.Add(new Errors { Field = "Symptoms", Detail = "Triệu chứng không được vượt quá 10000 ký tự." });
 
         if (string.IsNullOrWhiteSpace(DiagnosisSteps))
             response.ListErrors.Add(new Errors { Field = "DiagnosisSteps", Detail = "Các bước chẩn đoán không được để trống." });
-        else if (DiagnosisSteps.Length > 4000)
-            response.ListErrors.Add(new Errors { Field = "DiagnosisSteps", Detail = "Các bước chẩn đoán không được vượt quá 4000 ký tự." });
+        else if (DiagnosisSteps.Length > 20000)
+            response.ListErrors.Add(new Errors { Field = "DiagnosisSteps", Detail = "Các bước chẩn đoán không được vượt quá 20000 ký tự." });
 
         if (string.IsNullOrWhiteSpace(SolutionSteps))
             response.ListErrors.Add(new Errors { Field = "SolutionSteps", Detail = "Các bước xử lý không được để trống." });
-        else if (SolutionSteps.Length > 4000)
-            response.ListErrors.Add(new Errors { Field = "SolutionSteps", Detail = "Các bước xử lý không được vượt quá 4000 ký tự." });
+        else if (SolutionSteps.Length > 20000)
+            response.ListErrors.Add(new Errors { Field = "SolutionSteps", Detail = "Các bước xử lý không được vượt quá 20000 ký tự." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))
             response.ListErrors.Add(new Errors { Field = "Category", Detail = "Danh mục không hợp lệ." });

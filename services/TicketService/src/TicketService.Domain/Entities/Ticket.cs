@@ -48,4 +48,5 @@ public class Ticket : AuditableEntity
     public ICollection<TicketAttachment> Attachments { get; set; } = new List<TicketAttachment>();
     public ICollection<TicketKbReference> KbReferences { get; set; } = new List<TicketKbReference>();
     public ICollection<TicketParticipant> Participants { get; set; } = new List<TicketParticipant>();
+    public ICollection<TicketBatteryAsset> BatteryAssets { get; set; } = new List<TicketBatteryAsset>();
 }
