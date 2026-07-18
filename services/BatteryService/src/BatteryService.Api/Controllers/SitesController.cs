@@ -21,7 +21,7 @@ namespace BatteryService.Api.Controllers;
 /// <list type="bullet">
 ///   <item><description><b>Admin</b>: full CRUD + restore.</description></item>
 ///   <item><description><b>Manager</b>: list/detail/assets/dashboard.</description></item>
-///   <item><description><b>Staff</b>: chỉ xem detail/assets/dashboard khi cần xử lý ticket trên site đó.</description></item>
+///   <item><description><b>Staff</b>: xem <b>list</b> (chọn site khi report sự cố thủ công) + detail/assets/dashboard khi cần xử lý ticket trên site đó.</description></item>
 ///   <item><description><b>Customer</b>: xem site của chính mình qua <c>GET /me</c>, chỉ xem được detail/assets/dashboard của site thuộc về mình.</description></item>
 /// </list>
 ///
@@ -45,7 +45,7 @@ public class SitesController : ControllerBase
     }
 
     /// <summary>
-    /// Liệt kê Site có phân trang + filter (customer/status/keyword) — Manager/Admin dashboard quản lý fleet site. Mỗi entry kèm asset count + alert count.
+    /// Liệt kê Site có phân trang + filter (customer/status/keyword) — Manager/Admin quản lý fleet site; Staff dùng để chọn site khi report sự cố thủ công (GH-145). Mỗi entry kèm asset count + alert count.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -66,9 +66,9 @@ public class SitesController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="SiteDto"/>.</returns>
     /// <response code="200">Trả danh sách.</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin/Manager.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
     [HttpGet]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<SiteDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

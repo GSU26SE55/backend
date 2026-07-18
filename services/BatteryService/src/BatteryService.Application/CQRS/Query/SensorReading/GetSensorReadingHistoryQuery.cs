@@ -24,6 +24,28 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
     /// <summary>Cursor pagination — timestamp record cuối trang trước.</summary>
     public DateTime? Cursor { get; set; }
 
+    /// <summary>
+    /// Cột sort. Whitelist: time (mặc định — cursor path) | voltage | current | temperature | socPercent.
+    /// Khi sort theo cột value (khác time) BẮT BUỘC truyền cả from+to (Hướng B — giới hạn khoảng quét, không cursor).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
+
+    /// <summary>
+    /// Chuẩn hoá SortBy → cột value ("voltage"/"current"/"temperature"/"socpercent");
+    /// trả null nếu sort theo time (cursor path) hoặc giá trị ngoài whitelist.
+    /// </summary>
+    public string? NormalizedValueSort() => (SortBy?.Trim().ToLowerInvariant()) switch
+    {
+        "voltage" => "voltage",
+        "current" => "current",
+        "temperature" => "temperature",
+        "socpercent" => "socpercent",
+        _ => null,
+    };
+
     public Task<CommonResponse<SensorReadingHistoryResponseDto>> ValidateAsync()
     {
         var response = new CommonResponse<SensorReadingHistoryResponseDto>();
@@ -36,6 +58,10 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
             AddCrossFieldError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
+
+        // Hướng B: sort theo cột value (khác time) yêu cầu khoảng [from, to] để giới hạn scan (tránh full-scan hypertable).
+        if (NormalizedValueSort() != null && (!From.HasValue || !To.HasValue))
+            AddError(response, nameof(SortBy), "Khi sort theo cột khác 'time' phải truyền cả 'from' và 'to'.");
 
         return Task.FromResult(response);
     }

@@ -18,4 +18,13 @@ public class GetKbArticleListQuery : PaginationRequest, IRequest<CommonResponse<
     /// Từ khóa tìm kiếm.
     /// </summary>
     public string? Q { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: code | title | category | status | viewCount | helpfulCount.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

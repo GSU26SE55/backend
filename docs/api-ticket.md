@@ -7,6 +7,54 @@
 
 ---
 
+## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
+
+**Mục đích/Tác dụng:** sort **toàn dataset** ở server (order **trước** phân trang, kèm tie-breaker `Id ASC`), thay client-side sort chỉ sort được 1 page. Không truyền `SortBy` → giữ default cũ. **Response shape KHÔNG đổi** — chỉ đổi thứ tự `items`.
+
+**Request — 2 query param mới (PascalCase, đều optional):**
+
+| Param | Type | Nullable | Default | Mô tả |
+|---|---|---|---|---|
+| `SortBy` | string | ✓ | field mặc định | Whitelist per-endpoint; ngoài whitelist → field mặc định |
+| `SortDir` | string | ✓ | `desc` | `asc` \| `desc`; lạ → `desc` |
+
+### `GET /api/admin/tickets`
+
+Ví dụ: `GET /api/admin/tickets?PageNumber=1&PageSize=20&SortBy=priority&SortDir=asc`
+
+> Giữ param cũ `IsDescending` (bool, tương thích ngược) — nếu có `SortDir` thì **`SortDir` thắng**.
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `code` | mã ticket | string | Không |
+| `title` | tiêu đề | string | Không |
+| `category` | phân loại | enum `TicketCategoryEnum` | Không |
+| `status` | trạng thái | enum `TicketStatusEnum` | Không |
+| `priority` | độ ưu tiên | enum `TicketPriorityEnum` | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`TicketStatusEnum`:** `New=1` (chờ triage) · `Open=2` (chờ Manager duyệt) · `Assigned=3` · `InProgress=4` · `WaitingCustomer=5` · `WaitingParts=6` · `WaitingOnsiteSchedule=7` · `Resolved=8` · `Escalated=9` · `ClosedPendingRate=10` · `Closed=11` · `ClosedRejected=12` · `Incident=13` · `Approved=14`.
+**`TicketPriorityEnum`:** `P1Critical=1` (SLA ngắn nhất) · `P2High=2` · `P3Normal=3`.
+**`TicketCategoryEnum`:** `Charging=1` · `Overheat=2` · `NoPower=3` · `Performance=4` · `Other=5` · `Repair=6`.
+
+> Sort theo enum = sort theo **giá trị số** (New→Approved, P1→P3…), không theo tên hiển thị.
+
+### `GET /api/knowledge-base`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `code` | mã bài | string | Không |
+| `title` | tiêu đề | string | Không |
+| `category` | phân loại | enum `TicketCategoryEnum` (như trên) | Không |
+| `status` | trạng thái | enum `KbArticleStatusEnum` | Không |
+| `viewCount` | lượt xem | int | Không |
+| `helpfulCount` | lượt đánh giá hữu ích | int | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`KbArticleStatusEnum`:** `Draft=1` · `PendingReview=2` · `Published=3` · `Archived=4`.
+
+---
+
 ## Cấu trúc Response chung
 
 ```json
@@ -1569,9 +1617,13 @@ Base path: `/api/admin/tickets`
 | `Priority` | `TicketPriorityEnum?` | Lọc theo priority |
 | `Category` | `TicketCategoryEnum?` | Lọc theo loại lỗi |
 | `BatteryAssetId` | `Guid?` | Lọc theo thiết bị |
-| `IsDescending` | `bool` | Sắp xếp giảm dần theo `createdAt` (**mặc định `true`** — mới nhất lên đầu) |
+| `IsDescending` | `bool` | (legacy) Đảo chiều theo `createdAt`, mặc định `true`. **Nếu có `SortDir` thì `SortDir` thắng** |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `code`, `title`, `category`, `status`, `priority`, `createdAt`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
 | `PageNumber` | `int` | Trang (mặc định 1) |
 | `PageSize` | `int` | Số item/trang |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). Sort theo `status`/`priority`/`category` = theo **giá trị số** enum. Chi tiết enum + nullable: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
 
@@ -2206,10 +2258,14 @@ Base path: `/api/knowledge-base`
 | `Category` | `TicketCategoryEnum?` | Lọc theo danh mục lỗi — gửi **chuỗi tên enum** (vd `Charging`) |
 | `Status` | `KbArticleStatusEnum?` | Lọc theo trạng thái — gửi **chuỗi tên enum** (vd `Published`). **Chỉ áp dụng cho internal role**; Customer bị bỏ qua |
 | `Tag` | `string?` | Lọc theo **một** thẻ (số ít — không phải mảng) |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `code`, `title`, `category`, `status`, `viewCount`, `helpfulCount`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
 | `PageNumber` | `int` | Trang (mặc định 1) |
 | `PageSize` | `int` | Số item/trang |
 
 > ⚠️ Param đúng theo `GetKbArticleListQuery`: tên là **`Q`** (không phải `Keyword`), **`Tag`** số ít (không phải `Tags[]`).
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). Chi tiết enum `KbArticleStatusEnum` + nullable: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<KbArticleListItemDTO>>`
 

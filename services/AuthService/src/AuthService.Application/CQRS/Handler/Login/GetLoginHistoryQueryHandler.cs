@@ -4,6 +4,7 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Handler.Login;
@@ -57,8 +58,18 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
 
         var totalItems = await query.CountAsync(cancellationToken);
 
-        var items = await query
-            .OrderByDescending(la => la.CreatedAt)
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist switch-case: createdAt (default) | result | method | ipAddress. Không dynamic LINQ.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "result" => descending ? query.OrderByDescending(la => la.Result) : query.OrderBy(la => la.Result),
+            "method" => descending ? query.OrderByDescending(la => la.Method) : query.OrderBy(la => la.Method),
+            "ipaddress" => descending ? query.OrderByDescending(la => la.IpAddress) : query.OrderBy(la => la.IpAddress),
+            _ => descending ? query.OrderByDescending(la => la.CreatedAt) : query.OrderBy(la => la.CreatedAt),
+        };
+
+        var items = await ordered
+            .ThenBy(la => la.Id) // tie-breaker cố định — pagination ổn định
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(la => new LoginAttemptDto

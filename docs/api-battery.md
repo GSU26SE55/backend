@@ -7,6 +7,127 @@
 
 ---
 
+## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
+
+**Mục đích:** sort **toàn bộ dataset** ở server rồi mới phân trang (thay client-side sort chỉ sort 1 page hiện tại). FE bấm header cột → gửi `SortBy`/`SortDir`.
+
+**Tác dụng:** BE `ORDER BY <cột> <chiều>, Id ASC` **trước** `Skip/Take` → page trả về đúng thứ tự toàn cục. Không truyền `SortBy` → giữ nguyên default cũ. **Response shape KHÔNG đổi** — chỉ đổi thứ tự phần tử trong `items`.
+
+**Request — 2 query param mới (PascalCase, đều optional):**
+
+| Param | Type | Nullable | Default | Mô tả |
+|---|---|---|---|---|
+| `SortBy` | string | ✓ | field mặc định của endpoint | Whitelist per-endpoint; ngoài whitelist → field mặc định |
+| `SortDir` | string | ✓ | `desc` | `asc` \| `desc`; giá trị lạ → `desc` |
+
+> Sort theo cột **enum** = sort theo **giá trị số** của enum, không theo tên hiển thị.
+> Ví dụ: `GET /api/battery-assets?PageNumber=1&PageSize=20&SortBy=installDate&SortDir=desc`
+
+### `GET /api/battery-assets`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `serialNumber` | số serial | string | Không |
+| `batteryTypeName` | tên loại pin | string | Không |
+| `customerName` | tên khách hàng (join) | string | Không (`""` nếu không có account) |
+| `siteName` | tên site (join) | string | **Có** (null nếu asset chưa gán site) |
+| `status` | trạng thái | enum `BatteryStatusEnum` | Không |
+| `installDate` | ngày lắp | datetime | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`BatteryStatusEnum`:** `Active=1` · `Inactive=2` · `Decommissioned=3`.
+
+### `GET /api/battery-types`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `name` | tên loại | string | Không |
+| `manufacturer` | hãng sản xuất | string | **Có** |
+| `chemistry` | hoá học pin | enum `BatteryChemistryEnum` | Không |
+| `nominalCapacityAh` | dung lượng danh định (Ah) | decimal | Không |
+| `nominalVoltage` | điện áp danh định (V) | decimal | Không |
+| `maxCycleCount` | số chu kỳ tối đa | int | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`BatteryChemistryEnum`:** `LiFePO4=1` · `Nmc=2` · `Nca=3` · `Lco=4` · `Other=99`.
+
+### `GET /api/admin/battery/audit-logs` (áp dụng cả `GET /api/admin/alerts/audit-logs`)
+
+Query dùng `pageNumber`/`pageSize` (mặc định 50, trần 100).
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `occurredAt` *(default)* | thời điểm xảy ra | datetime | Không |
+| `actionCode` | mã action | string | Không |
+| `severity` | mức độ | string | Không |
+| `targetDisplay` | đối tượng target | string | **Có** |
+| `actorAccountId` | account thực hiện | Guid | **Có** (null nếu system) |
+| `isSuccess` | thành công? | bool | Không |
+
+### `GET /api/admin/iot-devices`
+
+> Dùng key phân trang **`page`** (không phải `pageNumber`). Giữ param cũ `IsDescending` (bool) — có `SortDir` thì **`SortDir` thắng**.
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `deviceCode` | mã thiết bị | string | Không |
+| `displayName` | tên hiển thị | string | Không |
+| `siteName` | tên site (join) | string | **Có** |
+| `status` | trạng thái | enum `IotDeviceStatusEnum` | Không |
+| `currentFirmwareVersion` | firmware hiện tại | string | **Có** (null nếu chưa report) |
+| `lastSeenAt` | heartbeat gần nhất | datetime | **Có** (null nếu chưa từng online) |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`IotDeviceStatusEnum`:** `Pending=1` (chưa provision) · `Active=2` (heartbeat trong 5 phút) · `Offline=3` (mất heartbeat >5 phút) · `Disabled=4` (admin revoke key) · `Decommissioned=5` (ngưng dùng).
+
+### `GET /api/admin/iot-firmware-releases`
+
+> Dùng key phân trang **`page`**.
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `version` | phiên bản SemVer | string | Không |
+| `hardwareRevision` | revision phần cứng | string | Không |
+| `channel` | kênh rollout | enum `IotFirmwareChannelEnum` | Không |
+| `status` | trạng thái lifecycle (rank) | derived | Không |
+| `artifactSizeBytes` | kích thước file | long | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`IotFirmwareChannelEnum`:** `Stable=1` · `Beta=2`.
+**`status` (derived rank):** entity không có field status đơn — rank tính từ `IsPublished`/`IsArchived`: `Draft=0 < Published=1 < Archived=2`. Sort `status` = sort theo rank này.
+
+### `GET /api/sites`
+
+> **Auth (đổi đợt này):** trước đây `Admin,Manager` → nay **`Admin,Manager,Staff`** (Staff chọn site khi report sự cố thủ công, GH-145). Các thao tác mutation site vẫn Admin-only.
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `name` | tên site | string | Không |
+| `customerName` | tên khách hàng (join) | string | Không (`""` nếu không có account) |
+| `status` | trạng thái | enum `SiteStatusEnum` | Không |
+| `batteryAssetCount` | số pin thuộc site (computed) | int | Không |
+| `installDate` | ngày lắp | datetime | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`SiteStatusEnum`:** `Active=1` · `UnderMaintenance=2` · `Decommissioned=3`.
+
+### `GET /api/sites/{id}/assets`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `serialNumber` | số serial | string | Không |
+| `batteryTypeName` | tên loại pin | string | Không |
+| `status` | trạng thái | enum `BatteryStatusEnum` (như trên) | Không |
+| `installDate` | ngày lắp | datetime | Không |
+| `lastSensorReadingAt` | reading gần nhất | datetime | **Có** (null nếu chưa có reading) |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+### `GET /api/sensor-readings/{id}/history` — cursor (Hướng B)
+
+Whitelist `SortBy`: `time` (mặc định), `voltage`, `current`, `temperature`, `socPercent` — tất cả field non-null. Chi tiết behavior (Hướng B, validation 400 khi thiếu `from`/`to`, lọc primary source) xem section [`GET /history`](#get-apisensor-readingsbatteryassetidhistory) bên dưới.
+
+---
+
 ## Cấu trúc Response chung
 
 ```json
@@ -384,8 +505,10 @@ Base route: `/api/battery-assets`
 | `siteId` | `string?` | Không | Lọc theo site (UUID string) |
 | `status` | `BatteryStatusEnum?` | Không | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Không (mặc định `false`) | Bao gồm cả asset đã soft-delete |
+| `SortBy` | `string?` | Không | Cột sort server-side. Whitelist: `serialNumber`, `batteryTypeName`, `customerName`, `siteName`, `status`, `installDate`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | Không (mặc định `desc`) | `asc` \| `desc`; giá trị lạ → `desc` |
 
-> **Sắp xếp mặc định:** `createdAt` giảm dần (mới nhất trước). Hiện không hỗ trợ sort params động — FE cần sort trên client nếu cần thứ tự khác.
+> **Sắp xếp:** mặc định `createdAt` desc. **Đã hỗ trợ sort server-side** (đợt này) qua `SortBy`/`SortDir` — order toàn dataset **trước** khi phân trang, kèm tie-breaker `Id ASC`. Chi tiết whitelist + kiểu enum + field nullable: xem section **Server-side Sort** ở đầu tài liệu.
 
 **Response thành công `200`:** `PaginationResponse<BatteryAssetDto>`
 
@@ -599,6 +722,10 @@ Base route: `/api/battery-types`
 | `pageSize` | `int` | Số item/trang |
 | `keyword` | `string?` | Tìm theo tên loại pin **hoặc nhà sản xuất** (`Name` + `Manufacturer`, case-insensitive) |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `name`, `manufacturer`, `chemistry`, `nominalCapacityAh`, `nominalVoltage`, `maxCycleCount`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). Chi tiết enum `BatteryChemistryEnum` + nullable: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:** `PaginationResponse<BatteryTypeDto>`
 
@@ -770,9 +897,16 @@ Base route: `/api/sensor-readings`
 | `from` | `DateTime?` | Không | Từ thời điểm (UTC) |
 | `to` | `DateTime?` | Không | Đến thời điểm (UTC) |
 | `limit` | `int` | Không (mặc định 100) | Số record mỗi trang, range `1–1000` |
-| `cursor` | `DateTime?` | Không | Timestamp của record cuối trang trước; BE lấy record có `time < cursor` |
+| `cursor` | `DateTime?` | Không | Timestamp của record cuối trang trước; BE lấy record có `time < cursor` (desc) hoặc `time > cursor` (asc) |
+| `sortBy` | `string?` | Không (mặc định `time`) | Whitelist: `time` \| `voltage` \| `current` \| `temperature` \| `socPercent`. Xem **Lưu ý sort** bên dưới |
+| `sortDir` | `string?` | Không (mặc định `desc`) | `asc` \| `desc` |
 
 > **Lưu ý:** Swagger còn liệt kê một query param `BatteryAssetId` (trùng tên với path param) do model-binding của BE. FE **bỏ qua** query param này — chỉ truyền `batteryAssetId` qua path.
+
+> **Lưu ý sort (Hướng B):**
+> - `sortBy=time` (mặc định) — dùng **cursor pagination** bình thường (`nextCursor`/`hasMore` như cũ). Hỗ trợ cả `asc`/`desc`.
+> - `sortBy` khác `time` (`voltage`/`current`/`temperature`/`socPercent`) — **bắt buộc** truyền cả `from` và `to` (thiếu → `400`); BE sort toàn khoảng `[from, to]` theo cột đó, **không dùng cursor** → trả `nextCursor = null` + `hasMore = false` (FE tắt "Tải thêm"). Chỉ tính trên reading nguồn **primary** (`sensorSourceCode = "primary"`/null/empty) để tránh 3 nguồn/tick (redundant `temp=0` / external `voltage=0`) làm sort sai.
+> - `sortBy`/`sortDir` ngoài whitelist → coi như `time`/`desc`.
 
 **Response thành công `200`:**
 ```json
@@ -807,7 +941,7 @@ Base route: `/api/sensor-readings`
 | `hasMore` | `bool` | Không | `true` nếu còn dữ liệu sau trang hiện tại |
 
 **Lỗi thường gặp:**
-- `400` — `batteryAssetId` empty hoặc `limit` ngoài `1–1000`
+- `400` — `batteryAssetId` empty, `limit` ngoài `1–1000`, hoặc `sortBy` khác `time` mà thiếu `from`/`to`
 - `422` — `from > to` (cross-field business rule)
 
 **Lưu ý hiệu suất:** TimescaleDB có thể chứa hàng triệu rows. Luôn truyền `from`/`to` để giới hạn scan range. Endpoint này không trả `totalItems`. FE dùng `hasMore`/`nextCursor` để infinite scroll; không render pagination kiểu page number.
@@ -1052,9 +1186,9 @@ Base route: `/api/sites`
 
 ### `GET /api/sites`
 
-**Mục đích:** Danh sách site với phân trang và lọc (Admin/Manager).
+**Mục đích:** Danh sách site với phân trang và lọc (Admin/Manager/Staff — Staff dùng chọn site khi report sự cố thủ công, GH-145).
 
-**Auth:** Bắt buộc (Admin/Manager)
+**Auth:** Bắt buộc (Admin/Manager/**Staff** — mở cho Staff đợt này, GH-145/GH-146). Các thao tác tạo/sửa/xoá site vẫn Admin-only.
 
 **Query params:**
 
@@ -1066,6 +1200,10 @@ Base route: `/api/sites`
 | `customerId` | `string?` | Lọc theo khách hàng (UUID string) |
 | `status` | `SiteStatusEnum?` | Lọc theo trạng thái |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `name`, `customerName`, `status`, `batteryAssetCount`, `installDate`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). `batteryAssetCount` = số pin thuộc site (computed). Chi tiết enum `SiteStatusEnum` + nullable: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:** `PaginationResponse<SiteDto>`
 
@@ -1228,6 +1366,10 @@ Nếu site không có asset nào, healthScore = 100.
 | `pageNumber` | `int` | Trang |
 | `pageSize` | `int` | Số item/trang |
 | `status` | `BatteryStatusEnum?` | Lọc theo trạng thái |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `serialNumber`, `batteryTypeName`, `status`, `installDate`, `lastSensorReadingAt`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). `lastSensorReadingAt` nullable. Chi tiết: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:** `PaginationResponse<BatteryAssetDto>`
 
@@ -2905,7 +3047,7 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | GET | `/api/sensor-readings/{id}/history` | Lịch sử readings cursor-based | Mọi role |
 | GET | `/api/sensor-readings/{id}/aggregate` | Aggregate theo bucket (chart) | Mọi role |
 | POST | `/api/sensor-readings/batch` | Ingest batch (IoT) | API Key |
-| GET | `/api/sites` | Danh sách site | Admin/Manager |
+| GET | `/api/sites` | Danh sách site | Admin/Manager/Staff |
 | GET | `/api/sites/me` | Site của customer | Customer |
 | GET | `/api/sites/{id}` | Chi tiết site | Mọi role |
 | GET | `/api/sites/{id}/dashboard` | Dashboard site | Mọi role |
@@ -3010,6 +3152,10 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `to` | `DateTime?` | Không | Mốc cuối (UTC) |
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
 | `pageSize` | `int` | Không (mặc định 50, trần 100) | Số item/trang |
+| `sortBy` | `string?` | Không | Cột sort server-side. Whitelist: `occurredAt`, `actionCode`, `severity`, `targetDisplay`, `actorAccountId`, `isSuccess`. Ngoài whitelist → `occurredAt` |
+| `sortDir` | `string?` | Không (mặc định `desc`) | `asc` \| `desc`; giá trị lạ → `desc` |
+
+> **Sắp xếp:** mặc định `occurredAt` desc. Đã hỗ trợ sort server-side qua `sortBy`/`sortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`) — áp dụng cho cả `GET /api/admin/alerts/audit-logs` (dùng chung handler). `targetDisplay`/`actorAccountId` nullable. Chi tiết: xem **Server-side Sort** đầu tài liệu.
 
 **Action codes (battery):** `BatteryCreated` · `BatteryUpdated` · `BatteryDeleted` · `AssignedToCustomer` · `UnassignedFromCustomer` · `ThresholdConfigChanged` · `SensorReadingEdited` · `StatusChanged` · `MaintenanceLogged` · `CalibrationApplied`
 

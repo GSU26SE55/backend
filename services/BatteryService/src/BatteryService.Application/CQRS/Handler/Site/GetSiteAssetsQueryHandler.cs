@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Handler.Site;
@@ -49,8 +50,20 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
             .Where(account => !account.IsDeleted);
 
         var total = await query.CountAsync(cancellationToken);
-        var pageQuery = query
-            .OrderByDescending(asset => asset.CreatedAt)
+
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist: serialNumber | batteryTypeName | status | installDate | lastSensorReadingAt | createdAt (default).
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "serialnumber" => descending ? query.OrderByDescending(asset => asset.SerialNumber) : query.OrderBy(asset => asset.SerialNumber),
+            "batterytypename" => descending ? query.OrderByDescending(asset => asset.BatteryType.Name) : query.OrderBy(asset => asset.BatteryType.Name),
+            "status" => descending ? query.OrderByDescending(asset => asset.Status) : query.OrderBy(asset => asset.Status),
+            "installdate" => descending ? query.OrderByDescending(asset => asset.InstallDate) : query.OrderBy(asset => asset.InstallDate),
+            "lastsensorreadingat" => descending ? query.OrderByDescending(asset => asset.LastSensorReadingAt) : query.OrderBy(asset => asset.LastSensorReadingAt),
+            _ => descending ? query.OrderByDescending(asset => asset.CreatedAt) : query.OrderBy(asset => asset.CreatedAt),
+        };
+        var pageQuery = ordered
+            .ThenBy(asset => asset.Id) // tie-breaker cố định — pagination ổn định
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize);
 

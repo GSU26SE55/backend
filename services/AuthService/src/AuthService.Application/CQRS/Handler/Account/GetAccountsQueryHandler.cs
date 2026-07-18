@@ -4,6 +4,7 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Handler.Account;
@@ -45,12 +46,24 @@ public class GetAccountsQueryHandler : IRequestHandler<GetAccountsQuery, Account
 
         var total = await query.CountAsync(cancellationToken);
 
-        var accounts = await query
+        var descending = SortHelper.IsDescending(request.SortDir);
+        var included = query
             .Include(a => a.Role)
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
-                .ThenInclude(sp => sp.Skills)
-            .OrderByDescending(a => a.CreatedAt)
+                .ThenInclude(sp => sp.Skills);
+
+        // Whitelist switch-case: fullName | role | status | createdAt (default). Không dynamic LINQ.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "fullname" => descending ? included.OrderByDescending(a => a.FullName) : included.OrderBy(a => a.FullName),
+            "role" => descending ? included.OrderByDescending(a => a.Role.Name) : included.OrderBy(a => a.Role.Name),
+            "status" => descending ? included.OrderByDescending(a => a.Status) : included.OrderBy(a => a.Status),
+            _ => descending ? included.OrderByDescending(a => a.CreatedAt) : included.OrderBy(a => a.CreatedAt),
+        };
+
+        var accounts = await ordered
+            .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);

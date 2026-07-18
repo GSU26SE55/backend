@@ -14,4 +14,13 @@ public class GetIotFirmwareReleasesQuery : IRequest<CommonResponse<PaginationRes
     public int Page { get; set; } = 1;
     /// <summary>Số bản ghi mỗi trang (clamp [1, 100]).</summary>
     public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Cột sort. Whitelist: version | hardwareRevision | channel | status | artifactSizeBytes | createdAt.
+    /// status = rank lifecycle (Draft=0 &lt; Published=1 &lt; Archived=2). Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

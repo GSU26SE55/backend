@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Handler.IotDevice;
@@ -33,9 +34,23 @@ public class GetIotDevicesQueryHandler : IRequestHandler<GetIotDevicesQuery, Com
             query = query.Where(d => d.DeviceCode.ToLower().Contains(kw) || d.DisplayName.ToLower().Contains(kw));
         }
 
-        query = request.IsDescending
-            ? query.OrderByDescending(d => d.CreatedAt)
-            : query.OrderBy(d => d.CreatedAt);
+        // SortDir (mới) thắng nếu có; nếu không dùng IsDescending (legacy) để giữ tương thích ngược.
+        var descending = string.IsNullOrWhiteSpace(request.SortDir)
+            ? request.IsDescending
+            : SortHelper.IsDescending(request.SortDir);
+
+        // Whitelist: deviceCode | displayName | siteName | status | currentFirmwareVersion | lastSeenAt | createdAt (default).
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "devicecode" => descending ? query.OrderByDescending(d => d.DeviceCode) : query.OrderBy(d => d.DeviceCode),
+            "displayname" => descending ? query.OrderByDescending(d => d.DisplayName) : query.OrderBy(d => d.DisplayName),
+            "sitename" => descending ? query.OrderByDescending(d => d.Site != null ? d.Site.Name : null) : query.OrderBy(d => d.Site != null ? d.Site.Name : null),
+            "status" => descending ? query.OrderByDescending(d => d.Status) : query.OrderBy(d => d.Status),
+            "currentfirmwareversion" => descending ? query.OrderByDescending(d => d.CurrentFirmwareVersion) : query.OrderBy(d => d.CurrentFirmwareVersion),
+            "lastseenat" => descending ? query.OrderByDescending(d => d.LastSeenAt) : query.OrderBy(d => d.LastSeenAt),
+            _ => descending ? query.OrderByDescending(d => d.CreatedAt) : query.OrderBy(d => d.CreatedAt),
+        };
+        query = ordered.ThenBy(d => d.Id); // tie-breaker cố định — pagination ổn định
 
         var total = await query.CountAsync(ct);
         var items = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct);

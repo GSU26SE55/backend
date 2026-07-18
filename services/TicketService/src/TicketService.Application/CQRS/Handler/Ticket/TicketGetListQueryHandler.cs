@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -42,9 +43,22 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
         if (request.BatteryAssetId.HasValue)
             query = query.Where(t => t.BatteryAssetId == request.BatteryAssetId.Value);
 
-        query = request.IsDescending
-            ? query.OrderByDescending(t => t.CreatedAt)
-            : query.OrderBy(t => t.CreatedAt);
+        // SortDir (mới) thắng nếu có; nếu không dùng IsDescending (legacy) để giữ tương thích ngược.
+        var descending = string.IsNullOrWhiteSpace(request.SortDir)
+            ? request.IsDescending
+            : SortHelper.IsDescending(request.SortDir);
+
+        // Whitelist switch-case: code | title | category | status | priority | createdAt (default).
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "code" => descending ? query.OrderByDescending(t => t.Code) : query.OrderBy(t => t.Code),
+            "title" => descending ? query.OrderByDescending(t => t.Title) : query.OrderBy(t => t.Title),
+            "category" => descending ? query.OrderByDescending(t => t.Category) : query.OrderBy(t => t.Category),
+            "status" => descending ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
+            "priority" => descending ? query.OrderByDescending(t => t.Priority) : query.OrderBy(t => t.Priority),
+            _ => descending ? query.OrderByDescending(t => t.CreatedAt) : query.OrderBy(t => t.CreatedAt),
+        };
+        query = ordered.ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
         var total = await query.CountAsync(cancellationToken);
         var rawItems = await query

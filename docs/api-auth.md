@@ -6,6 +6,56 @@
 
 ---
 
+## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
+
+**Mục đích:** cho phép sort **toàn bộ dataset** ở server rồi mới phân trang (thay client-side sort chỉ sort được 1 page hiện tại). FE bấm header cột → gửi `SortBy`/`SortDir`.
+
+**Tác dụng:** BE `ORDER BY <cột> <chiều>, Id ASC` **trước** `Skip/Take` → page trả về đúng thứ tự toàn cục. Không truyền `SortBy` → giữ nguyên thứ tự mặc định cũ (không phá behavior). **Response shape KHÔNG đổi** — chỉ đổi thứ tự phần tử trong `items`.
+
+**Request — 2 query param mới (PascalCase, đều optional):**
+
+| Param | Type | Nullable | Default | Mô tả |
+|---|---|---|---|---|
+| `SortBy` | string | ✓ | field mặc định của endpoint | Whitelist per-endpoint; ngoài whitelist → coi như field mặc định |
+| `SortDir` | string | ✓ | `desc` | `asc` \| `desc`; giá trị lạ → `desc` |
+
+**Response:** `CommonResponse<PaginationResponse<AccountDto>>` — giữ nguyên (`items`/`totalItems`/`pageNumber`/`pageSize`/`totalPages`/`hasNextPage`/`hasPreviousPage`).
+
+### `GET /api/admin/accounts`
+
+Ví dụ: `GET /api/admin/accounts?PageNumber=1&PageSize=10&SortBy=fullName&SortDir=asc`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `fullName` | tên đầy đủ | string | Không |
+| `role` | tên role | string | Không (`""` nếu chưa gán role) |
+| `status` | trạng thái tài khoản | enum `AccountStatusEnum` | Không |
+| `createdAt` *(default)* | ngày tạo | datetime | Không |
+
+**`AccountStatusEnum`** — tác dụng từng giá trị:
+
+| Giá trị | Số | Ý nghĩa |
+|---|---|---|
+| `PendingVerification` | 0 | Vừa đăng ký, chưa xác thực email/OTP. ⚠️ FE đừng treat `0` là falsy |
+| `Active` | 1 | Đã xác thực, hoạt động bình thường |
+| `Locked` | 2 | Khoá tạm bởi system (5 lần fail password/OTP liên tiếp) — auto-unlock khi hết hạn |
+| `Inactive` | 3 | Admin deactivate — KHÔNG auto-unlock, phải request admin |
+| `Suspended` | 4 | Đình chỉ do vi phạm policy (admin set/clear) |
+| `Banned` | 5 | Cấm vĩnh viễn, không reactivate được |
+
+### `GET /api/accounts/me/login-history`
+
+| `SortBy` | Sort theo | Kiểu | Nullable |
+|---|---|---|---|
+| `createdAt` *(default)* | thời điểm login attempt | datetime | Không |
+| `result` | kết quả đăng nhập | enum `LoginAttemptResult` | Không |
+| `method` | `"Password"` / `"Google"` / `"VerifyOtp"` | string | Không |
+| `ipAddress` | IP client | string | **Có** (null nếu không ghi được) |
+
+**`LoginAttemptResult`:** `Success=1` · `WrongPassword=2` · `AccountNotFound=3` · `AccountLocked=4` · `AccountSuspended=5` · `AccountBanned=6` · `AccountInactive=7` · `AccountNotVerified=8`.
+
+---
+
 ## Cấu trúc Response chung
 
 ```json
@@ -2263,6 +2313,10 @@ Response body wrapped trong `CommonResponse<AccountDataExportDto>`:
 | `onlyFailed` | `bool?` | Không | Chỉ lấy lần thất bại |
 | `fromUtc` | `DateTime?` | Không | Từ thời điểm (UTC) |
 | `toUtc` | `DateTime?` | Không | Đến thời điểm (UTC) |
+| `SortBy` | `string?` | Không | Cột sort server-side. Whitelist: `createdAt`, `result`, `method`, `ipAddress`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | Không (mặc định `desc`) | `asc` \| `desc`; giá trị lạ → `desc` |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). `ipAddress` nullable. Chi tiết enum `LoginAttemptResult`: xem **Server-side Sort** đầu tài liệu.
 
 **Response thành công `200`:**
 ```json
@@ -2950,6 +3004,10 @@ Base route: `/api/admin/accounts`
 | `status` | `AccountStatusEnum?` | Lọc theo trạng thái |
 | `roleId` | `Guid?` | Lọc account đang có role cụ thể |
 | `emailConfirmed` | `bool?` | Lọc theo xác thực email |
+| `SortBy` | `string?` | Cột sort server-side. Whitelist: `fullName`, `role`, `status`, `createdAt`. Ngoài whitelist → `createdAt` |
+| `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
+
+> **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). Chi tiết enum `AccountStatusEnum` + nullable: xem **Server-side Sort** đầu tài liệu.
 
 **Response:** `PaginationResponse<AccountDto>`
 

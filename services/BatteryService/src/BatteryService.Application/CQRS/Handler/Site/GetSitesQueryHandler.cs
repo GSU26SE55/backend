@@ -3,6 +3,7 @@ using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Handler.Site;
@@ -40,31 +41,45 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
             .Where(account => !account.IsDeleted);
 
         var total = await query.CountAsync(cancellationToken);
-        var pageQuery = query
-            .OrderByDescending(site => site.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize);
 
-        var items = await (
-            from site in pageQuery
-            join account in customerAccounts on site.CustomerId equals account.Id into accountJoin
-            from account in accountJoin.DefaultIfEmpty()
-            select new SiteDto
+        // Join account TRƯỚC sort/paginate để sort được theo customerName (join 1:1 nên total không đổi).
+        var joined = from site in query
+                     join account in customerAccounts on site.CustomerId equals account.Id into accountJoin
+                     from account in accountJoin.DefaultIfEmpty()
+                     select new { site, account };
+
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist: name | customerName | status | batteryAssetCount | installDate | createdAt (default).
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "name" => descending ? joined.OrderByDescending(x => x.site.Name) : joined.OrderBy(x => x.site.Name),
+            "customername" => descending ? joined.OrderByDescending(x => x.account != null ? x.account.FullName : null) : joined.OrderBy(x => x.account != null ? x.account.FullName : null),
+            "status" => descending ? joined.OrderByDescending(x => x.site.Status) : joined.OrderBy(x => x.site.Status),
+            "batteryassetcount" => descending ? joined.OrderByDescending(x => x.site.BatteryAssets.Count(asset => !asset.IsDeleted)) : joined.OrderBy(x => x.site.BatteryAssets.Count(asset => !asset.IsDeleted)),
+            "installdate" => descending ? joined.OrderByDescending(x => x.site.InstallDate) : joined.OrderBy(x => x.site.InstallDate),
+            _ => descending ? joined.OrderByDescending(x => x.site.CreatedAt) : joined.OrderBy(x => x.site.CreatedAt),
+        };
+
+        var items = await ordered
+            .ThenBy(x => x.site.Id) // tie-breaker cố định — pagination ổn định
+            .Skip((request.PageNumber - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(x => new SiteDto
             {
-                Id = site.Id.ToString(),
-                Name = site.Name,
-                CustomerId = site.CustomerId.ToString(),
-                CustomerName = account != null ? account.FullName : string.Empty,
-                Address = site.Address,
-                Latitude = site.Latitude,
-                Longitude = site.Longitude,
-                InstallDate = site.InstallDate,
-                Status = site.Status,
-                ContactPersonName = site.ContactPersonName,
-                ContactPersonPhone = site.ContactPersonPhone,
-                BatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted),
-                ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
-                CreatedAt = site.CreatedAt
+                Id = x.site.Id.ToString(),
+                Name = x.site.Name,
+                CustomerId = x.site.CustomerId.ToString(),
+                CustomerName = x.account != null ? x.account.FullName : string.Empty,
+                Address = x.site.Address,
+                Latitude = x.site.Latitude,
+                Longitude = x.site.Longitude,
+                InstallDate = x.site.InstallDate,
+                Status = x.site.Status,
+                ContactPersonName = x.site.ContactPersonName,
+                ContactPersonPhone = x.site.ContactPersonPhone,
+                BatteryAssetCount = x.site.BatteryAssets.Count(asset => !asset.IsDeleted),
+                ActiveBatteryAssetCount = x.site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
+                CreatedAt = x.site.CreatedAt
             }).ToListAsync(cancellationToken);
 
         return new CommonResponse<PaginationResponse<SiteDto>>
