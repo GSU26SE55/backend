@@ -19,8 +19,20 @@ public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<Iot
     public int Page { get; set; } = 1;
     /// <summary>Số bản ghi mỗi trang (clamp [1, 100]).</summary>
     public int PageSize { get; set; } = 20;
-    /// <summary>Sort giảm dần theo CreatedAt nếu true.</summary>
+    /// <summary>
+    /// Sort giảm dần theo CreatedAt nếu true (legacy — giữ tương thích ngược).
+    /// Nếu <see cref="SortDir"/> được set thì SortDir thắng.
+    /// </summary>
     public bool IsDescending { get; set; } = true;
+
+    /// <summary>
+    /// Cột sort. Whitelist: deviceCode | displayName | siteName | status | currentFirmwareVersion | lastSeenAt.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Nếu set sẽ ghi đè <see cref="IsDescending"/>.</summary>
+    public string? SortDir { get; set; }
 }
 
 public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDetailDto>>

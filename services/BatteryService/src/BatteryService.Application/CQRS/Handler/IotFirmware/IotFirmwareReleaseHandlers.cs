@@ -5,6 +5,7 @@ using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 using FirmwareEntity = BatteryService.Domain.Entities.IotFirmwareRelease;
 
@@ -117,7 +118,24 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
             query = query.Where(f => f.IsPublished && !f.IsArchived);
 
         var total = await query.CountAsync(ct);
-        var items = await query.OrderByDescending(f => f.CreatedAt)
+
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist: version | hardwareRevision | channel | status(rank) | artifactSizeBytes | createdAt (default).
+        // status rank: Draft=0 < Published=1 < Archived=2 (lifecycle) — derived vì entity không có field Status đơn.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "version" => descending ? query.OrderByDescending(f => f.Version) : query.OrderBy(f => f.Version),
+            "hardwarerevision" => descending ? query.OrderByDescending(f => f.HardwareRevision) : query.OrderBy(f => f.HardwareRevision),
+            "channel" => descending ? query.OrderByDescending(f => f.Channel) : query.OrderBy(f => f.Channel),
+            "status" => descending
+                ? query.OrderByDescending(f => f.IsArchived ? 2 : (f.IsPublished ? 1 : 0))
+                : query.OrderBy(f => f.IsArchived ? 2 : (f.IsPublished ? 1 : 0)),
+            "artifactsizebytes" => descending ? query.OrderByDescending(f => f.ArtifactSizeBytes) : query.OrderBy(f => f.ArtifactSizeBytes),
+            _ => descending ? query.OrderByDescending(f => f.CreatedAt) : query.OrderBy(f => f.CreatedAt),
+        };
+
+        var items = await ordered
+            .ThenBy(f => f.Id) // tie-breaker cố định — pagination ổn định
             .Skip((page - 1) * size).Take(size).ToListAsync(ct);
 
         return new CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>

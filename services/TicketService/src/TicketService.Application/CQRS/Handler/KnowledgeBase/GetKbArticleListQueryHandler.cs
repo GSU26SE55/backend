@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
@@ -61,8 +62,22 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         }
 
         var totalItems = await dbQuery.CountAsync(ct);
-        var items = await dbQuery
-            .OrderByDescending(a => a.CreatedAt)
+
+        var descending = SortHelper.IsDescending(query.SortDir);
+        // Whitelist switch-case: code | title | category | status | viewCount | helpfulCount | createdAt (default).
+        var ordered = (query.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "code" => descending ? dbQuery.OrderByDescending(a => a.Code) : dbQuery.OrderBy(a => a.Code),
+            "title" => descending ? dbQuery.OrderByDescending(a => a.Title) : dbQuery.OrderBy(a => a.Title),
+            "category" => descending ? dbQuery.OrderByDescending(a => a.Category) : dbQuery.OrderBy(a => a.Category),
+            "status" => descending ? dbQuery.OrderByDescending(a => a.Status) : dbQuery.OrderBy(a => a.Status),
+            "viewcount" => descending ? dbQuery.OrderByDescending(a => a.ViewCount) : dbQuery.OrderBy(a => a.ViewCount),
+            "helpfulcount" => descending ? dbQuery.OrderByDescending(a => a.HelpfulCount) : dbQuery.OrderBy(a => a.HelpfulCount),
+            _ => descending ? dbQuery.OrderByDescending(a => a.CreatedAt) : dbQuery.OrderBy(a => a.CreatedAt),
+        };
+
+        var items = await ordered
+            .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
             .Skip((query.PageNumber - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);

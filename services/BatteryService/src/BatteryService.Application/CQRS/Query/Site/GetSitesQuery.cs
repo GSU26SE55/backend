@@ -19,4 +19,13 @@ public class GetSitesQuery : PaginationRequest, IRequest<CommonResponse<Paginati
 
     /// <summary>Bao gồm soft-deleted records.</summary>
     public bool IncludeDeleted { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: name | customerName | status | batteryAssetCount | installDate.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

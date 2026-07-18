@@ -19,5 +19,19 @@ public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<Pag
     /// </summary>
     public TicketCategoryEnum? Category { get; set; }
     public Guid? BatteryAssetId { get; set; }
+
+    /// <summary>
+    /// Đảo chiều theo CreatedAt (legacy — giữ tương thích ngược).
+    /// Nếu <see cref="SortDir"/> được set thì SortDir thắng.
+    /// </summary>
     public bool IsDescending { get; set; } = true;
+
+    /// <summary>
+    /// Cột sort. Whitelist: code | title | category | status | priority | createdAt.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Nếu set sẽ ghi đè <see cref="IsDescending"/>.</summary>
+    public string? SortDir { get; set; }
 }
