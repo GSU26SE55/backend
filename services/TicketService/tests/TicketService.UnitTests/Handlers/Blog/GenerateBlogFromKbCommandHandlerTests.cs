@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -88,9 +89,9 @@ public class GenerateBlogFromKbCommandHandlerTests
             Id = kbId,
             Title = "Test KB",
             Status = KbArticleStatusEnum.Published,
-            Symptoms = "S",
-            DiagnosisSteps = "D",
-            SolutionSteps = "Sol",
+            Symptoms = JsonDocument.Parse("\"S\""),
+            DiagnosisSteps = JsonDocument.Parse("\"D\""),
+            SolutionSteps = JsonDocument.Parse("\"Sol\""),
             Tags = new List<string>()
         };
 

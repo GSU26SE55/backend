@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
 using MockQueryable.Moq;
@@ -106,9 +107,9 @@ public class BlogGenerationConsumerTests
             Id = kbId,
             Title = "KB Article",
             Status = KbArticleStatusEnum.Published,
-            Symptoms = "S",
-            DiagnosisSteps = "D",
-            SolutionSteps = "Sol",
+            Symptoms = JsonDocument.Parse("\"S\""),
+            DiagnosisSteps = JsonDocument.Parse("\"D\""),
+            SolutionSteps = JsonDocument.Parse("\"Sol\""),
             Tags = new List<string>()
         };
 
@@ -158,9 +159,9 @@ public class BlogGenerationConsumerTests
             Id = kbId,
             Title = "KB Article",
             Status = KbArticleStatusEnum.Published,
-            Symptoms = "S",
-            DiagnosisSteps = "D",
-            SolutionSteps = "Sol",
+            Symptoms = JsonDocument.Parse("\"S\""),
+            DiagnosisSteps = JsonDocument.Parse("\"D\""),
+            SolutionSteps = JsonDocument.Parse("\"Sol\""),
             Tags = new List<string>()
         };
 

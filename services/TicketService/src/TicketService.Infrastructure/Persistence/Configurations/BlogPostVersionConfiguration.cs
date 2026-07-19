@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -15,7 +16,7 @@ public class BlogPostVersionConfiguration : IEntityTypeConfiguration<BlogPostVer
         builder.Property(e => e.VersionNumber).HasColumnName("version_number");
         builder.Property(e => e.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
         builder.Property(e => e.Summary).HasColumnName("summary").HasMaxLength(1000).IsRequired();
-        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("jsonb").IsRequired();
+        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("jsonb").HasConversion(new JsonDocumentValueConverter()).IsRequired();
         builder.Property(e => e.ChangedByUserId).HasColumnName("changed_by_user_id");
         builder.Property(e => e.ChangeNote).HasColumnName("change_note").HasMaxLength(500);
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");

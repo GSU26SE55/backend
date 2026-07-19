@@ -509,6 +509,21 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 ---
 
+### `GET /api/internal/knowledge-base/templates/{id}`
+
+**Mục đích:** Lấy chi tiết một bài viết Knowledge Base bất kỳ theo ID, kể cả bài là template hoặc không. Dùng khi cần preview nội dung template trước khi copy.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID bài viết (cần có `isTemplate = true` để dùng làm mẫu, nhưng endpoint này không validate điều đó).
+
+**Response thành công `200`:** `CommonResponse<KbArticleDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy bài viết
+
+---
+
 ### `GET /api/internal/knowledge-base/{id}/copy-template`
 
 **Mục đích:** Sao chép cấu trúc bài viết mẫu để tạo bài mới. Chỉ áp dụng cho bài viết có `isTemplate = true` **hoặc** gắn tag **`template`** / **`example`** (so khớp không phân biệt hoa thường).
@@ -819,6 +834,37 @@ Mỗi lần update thành công: tạo `BlogPostVersion` snapshot + tăng `Curre
 
 ---
 
+### `GET /api/internal/blog/templates`
+
+**Mục đích:** Danh sách blog templates — dành cho Staff/Manager/Admin dùng khi soạn bài blog mới.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Query params:**
+
+| Param | Type | Mô tả |
+|---|---|---|
+| `IsActive` | `bool?` | `true` = chỉ trả template đang hoạt động; `false` = chỉ inactive; bỏ trống = tất cả |
+
+**Response thành công `200`:** `CommonResponse<List<BlogTemplateDTO>>`
+
+---
+
+### `GET /api/internal/blog/templates/{id}`
+
+**Mục đích:** Chi tiết một blog template.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID template.
+
+**Response thành công `200`:** `CommonResponse<BlogTemplateDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy template
+
+---
+
 ### `GET /api/internal/blog/{id}/versions`
 
 **Mục đích:** Danh sách lịch sử phiên bản của bài blog (mỗi lần `PUT` thành công tạo 1 version).
@@ -954,41 +1000,10 @@ Publish, Archive, xóa bài blog. Tạo blog từ KB bằng AI (async).
 
 ---
 
-## Nhóm 15 — Blog Templates (Admin/Manager/Staff)
+## Nhóm 15 — Blog Templates (Admin only — ghi)
 
 Base path: `/api/admin/blog/templates`
-**Auth:** Đọc (GET): Staff, Manager, Admin. Ghi (POST/PUT/DELETE): **chỉ Admin**.
-
----
-
-### `GET /api/admin/blog/templates`
-
-**Mục đích:** Danh sách blog templates.
-
-**Auth:** Staff, Manager hoặc Admin.
-
-**Query params:**
-
-| Param | Type | Mô tả |
-|---|---|---|
-| `IsActive` | `bool?` | `true` = chỉ trả template đang hoạt động; `false` = chỉ inactive; bỏ trống = tất cả |
-
-**Response thành công `200`:** `CommonResponse<List<BlogTemplateDTO>>`
-
----
-
-### `GET /api/admin/blog/templates/{id}`
-
-**Mục đích:** Chi tiết một blog template.
-
-**Auth:** Staff, Manager hoặc Admin.
-
-**Path param:** `id` — UUID template.
-
-**Response thành công `200`:** `CommonResponse<BlogTemplateDTO>`
-
-**Lỗi thường gặp:**
-- `404` — Không tìm thấy template
+**Auth:** **Chỉ Admin** (POST/PUT/DELETE). Để đọc template, dùng `GET /api/internal/blog/templates` (Nhóm 13).
 
 ---
 
@@ -1066,6 +1081,14 @@ Các endpoint trong hệ thống Chat liên quan đến Knowledge Base (xem chi 
 ---
 
 ## Changelog
+
+### 2026-07-19 — Di chuyển Blog Template GET, thêm KB Template GET (feat/GH-671-blog)
+
+- **`GET /api/admin/blog/templates`** và **`GET /api/admin/blog/templates/{id}`**: **đã xóa** khỏi admin controller. Hai endpoint này chuyển sang Nhóm 13.
+- **`GET /api/internal/blog/templates`** (mới — Nhóm 13): Danh sách blog templates, auth Staff/Manager/Admin.
+- **`GET /api/internal/blog/templates/{id}`** (mới — Nhóm 13): Chi tiết blog template, auth Staff/Manager/Admin.
+- **`GET /api/internal/knowledge-base/templates/{id}`** (mới — Nhóm 9): Lấy chi tiết bài viết KB kể cả là template, dùng để preview trước khi copy.
+- **Nhóm 15**: Đổi mô tả — chỉ còn POST/PUT/DELETE (Admin only); đọc template qua Nhóm 13.
 
 ### 2026-07-18 — Thêm Blog module (feat/GH-671-blog)
 

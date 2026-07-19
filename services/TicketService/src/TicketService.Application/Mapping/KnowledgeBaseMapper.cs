@@ -9,10 +9,12 @@ namespace TicketService.Application.Mapping;
 public static class KnowledgeBaseMapper
 {
     // JsonDocument → string: unwrap JSON string, else return raw text
-    internal static string J(JsonDocument doc) =>
-        doc.RootElement.ValueKind == JsonValueKind.String
-            ? doc.RootElement.GetString() ?? string.Empty
-            : doc.RootElement.GetRawText();
+    internal static string J(JsonDocument? doc) =>
+        doc is null
+            ? string.Empty
+            : doc.RootElement.ValueKind == JsonValueKind.String
+                ? doc.RootElement.GetString() ?? string.Empty
+                : doc.RootElement.GetRawText();
 
     // string → JsonDocument: try parse JSON, fall back to JSON-encoded string
     internal static JsonDocument ToJsonDoc(string? value)

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TicketService.Application.CQRS.Handler.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.Interfaces.Services;
@@ -172,9 +173,9 @@ public class KbQueryHandlersTests
             MajorVersion = 1,
             MinorVersion = 0,
             Title = "Title A",
-            Symptoms = "Symptoms A",
-            DiagnosisSteps = "Diagnosis A",
-            SolutionSteps = "Solution A",
+            Symptoms = JsonDocument.Parse("\"Symptoms A\""),
+            DiagnosisSteps = JsonDocument.Parse("\"Diagnosis A\""),
+            SolutionSteps = JsonDocument.Parse("\"Solution A\""),
             RecommendedParts = new List<string> { "Part A" },
             Tags = new List<string> { "Tag A" }
         };
@@ -186,9 +187,9 @@ public class KbQueryHandlersTests
             MajorVersion = 2,
             MinorVersion = 0,
             Title = "Title B",
-            Symptoms = "Symptoms B",
-            DiagnosisSteps = "Diagnosis B",
-            SolutionSteps = "Solution B",
+            Symptoms = JsonDocument.Parse("\"Symptoms B\""),
+            DiagnosisSteps = JsonDocument.Parse("\"Diagnosis B\""),
+            SolutionSteps = JsonDocument.Parse("\"Solution B\""),
             RecommendedParts = new List<string> { "Part B" },
             Tags = new List<string> { "Tag B" }
         };
@@ -249,7 +250,7 @@ public class KbQueryHandlersTests
         {
             Id = articleId,
             Title = "Template Title",
-            Symptoms = "Template Symptoms",
+            Symptoms = JsonDocument.Parse("\"Template Symptoms\""),
             Tags = new List<string> { "general" },
             IsTemplate = true,
             Status = KbArticleStatusEnum.Published,

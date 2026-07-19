@@ -153,6 +153,23 @@ public class InternalKnowledgeBaseController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy chi tiết một template Knowledge Base theo ID.
+    /// </summary>
+    /// <param name="id">ID bài viết template.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Lấy template thành công.</response>
+    /// <response code="404">Không tìm thấy template.</response>
+    [HttpGet("templates/{id:guid}")]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTemplateById(Guid id, CancellationToken ct)
+    {
+        var query = new GetKbArticleByIdQuery { ArticleId = id, RequireNonTemplate = false };
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Sao chép cấu trúc bài viết mẫu để tạo bài viết mới.
     /// </summary>
     /// <remarks>

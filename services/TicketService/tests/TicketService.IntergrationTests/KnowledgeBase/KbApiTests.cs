@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
@@ -74,7 +75,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = Guid.NewGuid(),
                 Code = "KB-001",
                 Title = "Published Article",
-                Symptoms = "Troubleshoot charging",
+                Symptoms = JsonDocument.Parse("\"Troubleshoot charging\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = false
             });
@@ -83,7 +84,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = Guid.NewGuid(),
                 Code = "KB-002",
                 Title = "Deleted Article",
-                Symptoms = "Troubleshoot leaking",
+                Symptoms = JsonDocument.Parse("\"Troubleshoot leaking\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = true
             });
@@ -114,7 +115,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-003",
                 Title = "Get By Id Article",
-                Symptoms = "Symptom check",
+                Symptoms = JsonDocument.Parse("\"Symptom check\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = false
             });
@@ -145,7 +146,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-004",
                 Title = "Old Title",
-                Symptoms = "Old Symptoms",
+                Symptoms = JsonDocument.Parse("\"Old Symptoms\""),
                 Status = KbArticleStatusEnum.Published,
                 CreatedByUserId = creatorId,
                 IsDeleted = false
@@ -188,7 +189,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-005",
                 Title = "Helpful Article",
-                Symptoms = "Some issues",
+                Symptoms = JsonDocument.Parse("\"Some issues\""),
                 Status = KbArticleStatusEnum.Published,
                 HelpfulCount = 5,
                 IsDeleted = false

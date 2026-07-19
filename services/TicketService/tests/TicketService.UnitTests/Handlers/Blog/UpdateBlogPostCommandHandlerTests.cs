@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -31,7 +32,7 @@ public class UpdateBlogPostCommandHandlerTests
     public async Task Handle_ConcurrencyMismatch_ReturnsConflict()
     {
         var postId = Guid.NewGuid();
-        var post = new BlogPost { Id = postId, Title = "Old", Slug = "old", Summary = "s", ContentHtml = "<p>old</p>", Status = BlogPostStatusEnum.Draft, CurrentVersion = 2 };
+        var post = new BlogPost { Id = postId, Title = "Old", Slug = "old", Summary = "s", ContentHtml = JsonDocument.Parse("\"<p>old</p>\""), Status = BlogPostStatusEnum.Draft, CurrentVersion = 2 };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;
@@ -61,7 +62,7 @@ public class UpdateBlogPostCommandHandlerTests
     {
         var postId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var post = new BlogPost { Id = postId, Title = "Old", Slug = "old", Summary = "s", ContentHtml = "<p>old</p>", Status = BlogPostStatusEnum.Draft, CurrentVersion = 1 };
+        var post = new BlogPost { Id = postId, Title = "Old", Slug = "old", Summary = "s", ContentHtml = JsonDocument.Parse("\"<p>old</p>\""), Status = BlogPostStatusEnum.Draft, CurrentVersion = 1 };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;

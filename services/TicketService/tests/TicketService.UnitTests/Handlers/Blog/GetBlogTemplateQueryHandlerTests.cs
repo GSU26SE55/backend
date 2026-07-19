@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -34,7 +35,7 @@ public class GetBlogTemplateQueryHandlerTests
             Id = templateId,
             Name = "Standard Template",
             Description = "desc",
-            ContentHtml = "<div>template</div>",
+            ContentHtml = JsonDocument.Parse("\"<div>template</div>\""),
             IsActive = true,
             CreatedByUserId = creatorId,
         };
