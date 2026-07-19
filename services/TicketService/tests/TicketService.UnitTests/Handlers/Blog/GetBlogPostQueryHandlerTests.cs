@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -36,7 +37,7 @@ public class GetBlogPostQueryHandlerTests
             Title = "Hello Blog",
             Slug = "hello-blog",
             Summary = "summary",
-            ContentHtml = "<p>content</p>",
+            ContentHtml = JsonDocument.Parse("\"<p>content</p>\""),
             Status = BlogPostStatusEnum.Published,
             Origin = BlogPostOriginEnum.Manual,
             AuthorUserId = authorId,
@@ -197,8 +198,8 @@ public class GetBlogPostQueryHandlerTests
     {
         var postId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var v1 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 1, Title = "T", ContentHtml = "<p>v1</p>", ChangedByUserId = userId };
-        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", ContentHtml = "<p>v2</p>", ChangedByUserId = userId };
+        var v1 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 1, Title = "T", ContentHtml = JsonDocument.Parse("\"<p>v1</p>\""), ChangedByUserId = userId };
+        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", ContentHtml = JsonDocument.Parse("\"<p>v2</p>\""), ChangedByUserId = userId };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
 

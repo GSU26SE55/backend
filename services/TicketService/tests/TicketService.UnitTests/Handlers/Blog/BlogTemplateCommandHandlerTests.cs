@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -56,7 +57,7 @@ public class BlogTemplateCommandHandlerTests
     public async Task Update_ExistingTemplate_UpdatesSuccessfully()
     {
         var id = Guid.NewGuid();
-        var template = new BlogTemplate { Id = id, Name = "Old", Description = "OldDesc", ContentHtml = "<p>old</p>", IsActive = true };
+        var template = new BlogTemplate { Id = id, Name = "Old", Description = "OldDesc", ContentHtml = JsonDocument.Parse("\"<p>old</p>\""), IsActive = true };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;
@@ -102,7 +103,7 @@ public class BlogTemplateCommandHandlerTests
     public async Task Delete_ExistingTemplate_SoftDeletesSuccessfully()
     {
         var id = Guid.NewGuid();
-        var template = new BlogTemplate { Id = id, Name = "T", ContentHtml = "<p/>" };
+        var template = new BlogTemplate { Id = id, Name = "T", ContentHtml = JsonDocument.Parse("\"<p/>\"") };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;

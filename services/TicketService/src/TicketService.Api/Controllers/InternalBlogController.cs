@@ -77,6 +77,19 @@ public class InternalBlogController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>Danh sách blog templates (Staff/Manager/Admin).</summary>
+    [HttpGet("templates")]
+    [ProducesResponseType(typeof(CommonResponse<List<BlogTemplateDTO>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllTemplates([FromQuery] GetBlogTemplateListQuery query, CancellationToken ct)
+        => Ok(await _mediator.Send(query, ct));
+
+    /// <summary>Chi tiết blog template theo ID (Staff/Manager/Admin).</summary>
+    [HttpGet("templates/{id:guid}")]
+    [ProducesResponseType(typeof(CommonResponse<BlogTemplateDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTemplateById(Guid id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetBlogTemplateByIdQuery { TemplateId = id }, ct));
+
     private Guid GetCurrentUserId() =>
         string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Moq;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
@@ -32,9 +33,9 @@ public class TicketKbReferenceHandlerTests
             Code = "KB-2026-0001",
             Title = "Test Article",
             Category = TicketCategoryEnum.Charging,
-            Symptoms = "s",
-            DiagnosisSteps = "d",
-            SolutionSteps = "sol",
+            Symptoms = JsonDocument.Parse("\"s\""),
+            DiagnosisSteps = JsonDocument.Parse("\"d\""),
+            SolutionSteps = JsonDocument.Parse("\"sol\""),
             Status = KbArticleStatusEnum.Published,
             IsInternalOnly = isInternalOnly
         };

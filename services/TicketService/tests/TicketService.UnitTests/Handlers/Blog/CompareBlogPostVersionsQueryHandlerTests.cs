@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
@@ -31,7 +32,7 @@ public class CompareBlogPostVersionsQueryHandlerTests
     public async Task Handle_OldVersionNotFound_ReturnsNotFound()
     {
         var postId = Guid.NewGuid();
-        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", Summary = "S", ContentHtml = "<p>v2</p>" };
+        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", Summary = "S", ContentHtml = JsonDocument.Parse("\"<p>v2</p>\"") };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;
@@ -57,8 +58,8 @@ public class CompareBlogPostVersionsQueryHandlerTests
     public async Task Handle_BothVersionsFound_ReturnsDiff()
     {
         var postId = Guid.NewGuid();
-        var v1 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 1, Title = "T", Summary = "S", ContentHtml = "<p>v1</p>" };
-        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", Summary = "S", ContentHtml = "<p>v2</p>" };
+        var v1 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 1, Title = "T", Summary = "S", ContentHtml = JsonDocument.Parse("\"<p>v1</p>\"") };
+        var v2 = new BlogPostVersion { Id = Guid.NewGuid(), BlogPostId = postId, VersionNumber = 2, Title = "T", Summary = "S", ContentHtml = JsonDocument.Parse("\"<p>v2</p>\"") };
 
         var ext = MockTicketUnitOfWork.BuildExtended();
         var uow = ext.uow;

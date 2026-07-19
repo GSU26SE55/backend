@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Moq;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
@@ -222,9 +223,9 @@ public class KbWorkflowHandlersTests
             Id = versionId,
             ArticleId = articleId,
             Title = "Old Title",
-            Symptoms = "Symptoms",
-            DiagnosisSteps = "Steps",
-            SolutionSteps = "Solution",
+            Symptoms = JsonDocument.Parse("\"Symptoms\""),
+            DiagnosisSteps = JsonDocument.Parse("\"Steps\""),
+            SolutionSteps = JsonDocument.Parse("\"Solution\""),
             MajorVersion = 1,
             MinorVersion = 0
         };
@@ -553,7 +554,7 @@ public class KbWorkflowHandlersTests
             v.MajorVersion == 2 &&
             v.MinorVersion == 1 &&
             v.Title == "Updated Title" &&
-            v.Symptoms == "Updated Symptoms" &&
+            v.Symptoms.RootElement.GetString() == "Updated Symptoms" &&
             v.Status == KbVersionStatusEnum.Pending
         )), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);

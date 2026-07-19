@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Blog;
-using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Services;
 
@@ -26,21 +25,6 @@ public class AdminBlogTemplateController : ControllerBase
         _mediator = mediator;
         _currentUser = currentUser;
     }
-
-    /// <summary>Danh sách templates (Staff/Manager/Admin).</summary>
-    [HttpGet]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(CommonResponse<List<BlogTemplateDTO>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll([FromQuery] GetBlogTemplateListQuery query, CancellationToken ct)
-        => Ok(await _mediator.Send(query, ct));
-
-    /// <summary>Chi tiết template (Staff/Manager/Admin).</summary>
-    [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(CommonResponse<BlogTemplateDTO>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetBlogTemplateByIdQuery { TemplateId = id }, ct));
 
     /// <summary>Tạo template mới (Admin only).</summary>
     [HttpPost]

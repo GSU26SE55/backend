@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -13,7 +14,7 @@ public class BlogTemplateConfiguration : IEntityTypeConfiguration<BlogTemplate>
         builder.Property(e => e.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
         builder.Property(e => e.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
-        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("jsonb").IsRequired();
+        builder.Property(e => e.ContentHtml).HasColumnName("content_html").HasColumnType("jsonb").HasConversion(new JsonDocumentValueConverter()).IsRequired();
         builder.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
         builder.Property(e => e.CreatedByUserId).HasColumnName("created_by_user_id");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
