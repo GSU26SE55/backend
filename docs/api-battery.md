@@ -2507,7 +2507,7 @@ Base route: `/api/admin/iot-devices` — toàn bộ yêu cầu role `Admin`.
 
 **Auth:** Admin
 
-**Query params:** `siteId` (`Guid?`), `status` (`IotDeviceStatusEnum?`), `keyword` (`string?` — tìm trong `deviceCode` + `displayName`), `page` (mặc định 1), `pageSize` (mặc định 20, clamp `[1,100]`), `isDescending` (mặc định `true`, sort theo `createdAt`).
+**Query params:** `siteId` (`Guid?`), `status` (`IotDeviceStatusEnum?`), `keyword` (`string?` — tìm trong `deviceCode` + `displayName`), `pageNumber` (mặc định 1), `pageSize` (mặc định 10, clamp `[1,100]`), `isDescending` (mặc định `true`, sort theo `createdAt`).
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<IotDeviceDto>>`
 
@@ -2699,7 +2699,7 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 **Auth:** Admin
 
-**Query params:** `hardwareRevision` (`string?`), `publishedOnly` (`bool?` — `true` chỉ lấy đã publish & chưa archive), `page` (mặc định 1), `pageSize` (mặc định 20, clamp `[1,100]`).
+**Query params:** `hardwareRevision` (`string?`), `publishedOnly` (`bool?` — `true` chỉ lấy đã publish & chưa archive), `pageNumber` (mặc định 1), `pageSize` (mặc định 10, clamp `[1,100]`).
 
 > Sort `createdAt DESC`. Filter `!IsDeleted` luôn áp dụng.
 

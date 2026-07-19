@@ -5,6 +5,7 @@ using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
 
@@ -21,6 +22,10 @@ public class GetBlogPostByIdQueryHandler : IRequestHandler<GetBlogPostByIdQuery,
             .FirstOrDefaultAsync(ct);
 
         if (entity == null)
+            return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+
+        // Endpoint public không được lộ bài Draft/Generating/Archived
+        if (request.RequirePublished && entity.Status != BlogPostStatusEnum.Published)
             return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
 
         return new CommonResponse<BlogPostDTO>

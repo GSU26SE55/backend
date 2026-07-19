@@ -27,7 +27,8 @@ public class BlogController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] GetBlogPostListQuery query, CancellationToken ct)
     {
         query.Status = BlogPostStatusEnum.Published;
-        return Ok(await _mediator.Send(query, ct));
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>Chi tiết bài blog.</summary>
@@ -35,5 +36,8 @@ public class BlogController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<BlogPostDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetBlogPostByIdQuery { BlogPostId = id }, ct));
+    {
+        var result = await _mediator.Send(new GetBlogPostByIdQuery { BlogPostId = id }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 }

@@ -28,8 +28,9 @@ public class GetBlogPostListQueryHandler : IRequestHandler<GetBlogPostListQuery,
 
         var totalItems = await query.CountAsync(ct);
 
-        var page = request.Page < 1 ? 1 : request.Page;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
+        // PaginationRequest đã clamp: PageNumber >= 1, PageSize trong [1, 100]
+        var page = request.PageNumber;
+        var pageSize = request.PageSize;
 
         var items = await query
             .OrderByDescending(x => x.CreatedAt)

@@ -3,11 +3,12 @@ using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Query.IotDevice;
 
-public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<IotDeviceDto>>>
+public class GetIotDevicesQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<IotDeviceDto>>>
 {
     /// <summary>ID Site (Guid).</summary>
     public Guid? SiteId { get; set; }
@@ -15,14 +16,7 @@ public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<Iot
     public IotDeviceStatusEnum? Status { get; set; }
     /// <summary>Từ khoá search (case-insensitive).</summary>
     public string? Keyword { get; set; }
-    /// <summary>Số trang (1-based).</summary>
-    public int Page { get; set; } = 1;
-    /// <summary>Số bản ghi mỗi trang (clamp [1, 100]).</summary>
-    public int PageSize { get; set; } = 20;
-    /// <summary>
-    /// Sort giảm dần theo CreatedAt nếu true (legacy — giữ tương thích ngược).
-    /// Nếu <see cref="SortDir"/> được set thì SortDir thắng.
-    /// </summary>
+    /// <summary>Sort giảm dần theo CreatedAt nếu true.</summary>
     public bool IsDescending { get; set; } = true;
 
     /// <summary>
