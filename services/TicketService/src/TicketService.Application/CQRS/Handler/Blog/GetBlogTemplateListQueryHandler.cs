@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
 
@@ -20,21 +21,21 @@ public class GetBlogTemplateListQueryHandler : IRequestHandler<GetBlogTemplateLi
         if (request.IsActive.HasValue)
             query = query.Where(x => x.IsActive == request.IsActive.Value);
 
-        var items = await query
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new BlogTemplateDTO
-            {
-                Id = x.Id.ToString(),
-                Name = x.Name,
-                Description = x.Description,
-                ContentHtml = x.ContentHtml,
-                IsActive = x.IsActive,
-                CreatedByUserId = x.CreatedByUserId.ToString(),
-                CreatedAt = x.CreatedAt,
-                UpdatedAt = x.UpdatedAt,
-            })
-            .ToListAsync(ct);
+        var entities = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+
+        var items = entities.Select(x => new BlogTemplateDTO
+        {
+            Id = x.Id.ToString(),
+            Name = x.Name,
+            Description = x.Description,
+            ContentHtml = KnowledgeBaseMapper.J(x.ContentHtml),
+            IsActive = x.IsActive,
+            CreatedByUserId = x.CreatedByUserId.ToString(),
+            CreatedAt = x.CreatedAt,
+            UpdatedAt = x.UpdatedAt,
+        }).ToList();
 
         return new CommonResponse<List<BlogTemplateDTO>> { IsSuccess = true, StatusCode = 200, Data = items };
     }
+
 }

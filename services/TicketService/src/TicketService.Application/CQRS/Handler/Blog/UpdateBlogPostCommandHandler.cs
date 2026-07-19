@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -46,6 +47,7 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
         }
 
         var newVersionNumber = post.CurrentVersion + 1;
+        var contentDoc = KnowledgeBaseMapper.ToJsonDoc(request.ContentHtml);
 
         var version = new BlogPostVersion
         {
@@ -54,7 +56,7 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
             VersionNumber = newVersionNumber,
             Title = request.Title,
             Summary = request.Summary,
-            ContentHtml = request.ContentHtml,
+            ContentHtml = contentDoc,
             ChangedByUserId = request.CurrentUserId,
             ChangeNote = request.ChangeNote,
         };
@@ -62,7 +64,7 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
         post.Title = request.Title;
         post.Slug = request.Slug;
         post.Summary = request.Summary;
-        post.ContentHtml = request.ContentHtml;
+        post.ContentHtml = contentDoc;
         post.CurrentVersion = newVersionNumber;
 
         await _uow.BeginTransactionAsync();
@@ -92,4 +94,5 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
             }
         };
     }
+
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -80,6 +81,7 @@ public class BlogGenerationConsumer : IConsumer<BlogGenerationRequestedEvent>
         }
 
         var summary = ExtractSummary(contentHtml);
+        var contentDoc = ToJsonDoc(contentHtml);
 
         var version = new BlogPostVersion
         {
@@ -88,12 +90,12 @@ public class BlogGenerationConsumer : IConsumer<BlogGenerationRequestedEvent>
             VersionNumber = 1,
             Title = post.Title,
             Summary = summary,
-            ContentHtml = contentHtml,
+            ContentHtml = contentDoc,
             ChangedByUserId = evt.RequestedByUserId,
             ChangeNote = "AI auto-generated từ KB article",
         };
 
-        post.ContentHtml = contentHtml;
+        post.ContentHtml = contentDoc;
         post.Summary = summary;
         post.Status = BlogPostStatusEnum.Draft;
         post.CurrentVersion = 1;
@@ -144,5 +146,17 @@ public class BlogGenerationConsumer : IConsumer<BlogGenerationRequestedEvent>
         text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
 
         return text.Length <= 300 ? text : text[..297] + "...";
+    }
+
+    private static JsonDocument ToJsonDoc(string? v) =>
+        string.IsNullOrWhiteSpace(v) ? JsonDocument.Parse("{}") :
+        (v.TrimStart().StartsWith('{') || v.TrimStart().StartsWith('[')
+            ? TryParse(v) : JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(v)));
+
+    private static JsonDocument TryParse(string v)
+    {
+        try
+        { return JsonDocument.Parse(v); }
+        catch { return JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(v)); }
     }
 }

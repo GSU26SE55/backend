@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SharedKernels.Domain;
 using TicketService.Domain.Enums;
 
@@ -8,7 +9,7 @@ public class BlogPost : AuditableEntity
     public string Title { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
-    public string ContentHtml { get; set; } = string.Empty;
+    public JsonDocument ContentHtml { get; set; } = null!;
     public BlogPostStatusEnum Status { get; set; } = BlogPostStatusEnum.Draft;
     public BlogPostOriginEnum Origin { get; set; } = BlogPostOriginEnum.Manual;
 

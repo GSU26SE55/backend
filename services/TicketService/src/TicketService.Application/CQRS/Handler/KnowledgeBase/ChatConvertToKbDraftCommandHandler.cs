@@ -6,6 +6,7 @@ using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -52,9 +53,9 @@ public class ChatConvertToKbDraftCommandHandler : IRequestHandler<ChatConvertToK
             Code = code,
             Category = category,
             Title = title,
-            Symptoms = chat.Body,
-            DiagnosisSteps = string.Empty,
-            SolutionSteps = string.Empty,
+            Symptoms = KnowledgeBaseMapper.ToJsonDoc(chat.Body),
+            DiagnosisSteps = KnowledgeBaseMapper.ToJsonDoc(null),
+            SolutionSteps = KnowledgeBaseMapper.ToJsonDoc(null),
             Tags = new List<string>(),
             Status = KbArticleStatusEnum.Draft,
             Version = 0,
@@ -75,8 +76,8 @@ public class ChatConvertToKbDraftCommandHandler : IRequestHandler<ChatConvertToK
             Status = KbVersionStatusEnum.Pending,
             Title = article.Title,
             Symptoms = article.Symptoms,
-            DiagnosisSteps = string.Empty,
-            SolutionSteps = string.Empty,
+            DiagnosisSteps = KnowledgeBaseMapper.ToJsonDoc(null),
+            SolutionSteps = KnowledgeBaseMapper.ToJsonDoc(null),
             Tags = new List<string>(),
             ChangeDescription = $"Tạo từ chat #{command.ChatId}",
             ChangedBy = command.CurrentUserId

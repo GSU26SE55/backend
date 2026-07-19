@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SharedKernels.Domain;
 using TicketService.Domain.Enums;
 
@@ -8,9 +9,9 @@ public class KnowledgeBaseArticle : AuditableEntity
     public string Code { get; set; } = string.Empty;
     public TicketCategoryEnum Category { get; set; }
     public string Title { get; set; } = string.Empty;
-    public string Symptoms { get; set; } = string.Empty;
-    public string DiagnosisSteps { get; set; } = string.Empty;
-    public string SolutionSteps { get; set; } = string.Empty;
+    public JsonDocument Symptoms { get; set; } = JsonDocument.Parse("{}");
+    public JsonDocument DiagnosisSteps { get; set; } = JsonDocument.Parse("{}");
+    public JsonDocument SolutionSteps { get; set; } = JsonDocument.Parse("{}");
     public List<string>? RecommendedParts { get; set; }
     public List<string> Tags { get; set; } = new();
     public KbArticleStatusEnum Status { get; set; } = KbArticleStatusEnum.Draft;

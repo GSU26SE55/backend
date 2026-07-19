@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
 
@@ -15,29 +16,34 @@ public class GetBlogPostByIdQueryHandler : IRequestHandler<GetBlogPostByIdQuery,
 
     public async Task<CommonResponse<BlogPostDTO>> Handle(GetBlogPostByIdQuery request, CancellationToken ct)
     {
-        var post = await _uow.BlogPosts.GetAllAsync()
+        var entity = await _uow.BlogPosts.GetAllAsync()
             .Where(x => x.Id == request.BlogPostId && !x.IsDeleted)
-            .Select(x => new BlogPostDTO
-            {
-                Id = x.Id.ToString(),
-                Title = x.Title,
-                Slug = x.Slug,
-                Summary = x.Summary,
-                ContentHtml = x.ContentHtml,
-                Status = x.Status,
-                Origin = x.Origin,
-                SourceKbArticleId = x.SourceKbArticleId.HasValue ? x.SourceKbArticleId.Value.ToString() : null,
-                BlogTemplateId = x.BlogTemplateId.HasValue ? x.BlogTemplateId.Value.ToString() : null,
-                AuthorUserId = x.AuthorUserId.ToString(),
-                CurrentVersion = x.CurrentVersion,
-                CreatedAt = x.CreatedAt,
-                UpdatedAt = x.UpdatedAt,
-            })
             .FirstOrDefaultAsync(ct);
 
-        if (post == null)
+        if (entity == null)
             return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
 
-        return new CommonResponse<BlogPostDTO> { IsSuccess = true, StatusCode = 200, Data = post };
+        return new CommonResponse<BlogPostDTO>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Data = new BlogPostDTO
+            {
+                Id = entity.Id.ToString(),
+                Title = entity.Title,
+                Slug = entity.Slug,
+                Summary = entity.Summary,
+                ContentHtml = KnowledgeBaseMapper.J(entity.ContentHtml),
+                Status = entity.Status,
+                Origin = entity.Origin,
+                SourceKbArticleId = entity.SourceKbArticleId?.ToString(),
+                BlogTemplateId = entity.BlogTemplateId?.ToString(),
+                AuthorUserId = entity.AuthorUserId.ToString(),
+                CurrentVersion = entity.CurrentVersion,
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt,
+            }
+        };
     }
+
 }

@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -57,7 +58,7 @@ public class GenerateBlogFromKbCommandHandler : IRequestHandler<GenerateBlogFrom
             Title = article.Title,
             Slug = slug,
             Summary = string.Empty,
-            ContentHtml = string.Empty,
+            ContentHtml = KnowledgeBaseMapper.ToJsonDoc(null),
             Status = BlogPostStatusEnum.Generating,
             Origin = BlogPostOriginEnum.AiGeneratedFromKb,
             SourceKbArticleId = article.Id,
