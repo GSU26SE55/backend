@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TicketService.Domain.Entities;
@@ -283,9 +284,9 @@ public class TicketDataSeeder
                 Code = "KB-CHARGE-001",
                 Category = TicketCategoryEnum.Charging,
                 Title = "Pin không sạc: hướng dẫn chẩn đoán",
-                Symptoms = "Đèn báo không sáng, dung lượng pin không tăng khi cắm sạc.",
-                DiagnosisSteps = "1. Kiểm tra adapter\n2. Đo điện áp đầu vào\n3. Kiểm tra BMS log",
-                SolutionSteps = "1. Thay adapter nếu hỏng\n2. Reset BMS\n3. Liên hệ kỹ thuật nếu vẫn lỗi",
+                Symptoms = S("Đèn báo không sáng, dung lượng pin không tăng khi cắm sạc."),
+                DiagnosisSteps = S("1. Kiểm tra adapter\n2. Đo điện áp đầu vào\n3. Kiểm tra BMS log"),
+                SolutionSteps = S("1. Thay adapter nếu hỏng\n2. Reset BMS\n3. Liên hệ kỹ thuật nếu vẫn lỗi"),
                 Tags = new List<string> { "charging", "no-power" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -298,9 +299,9 @@ public class TicketDataSeeder
                 Code = "KB-HEAT-001",
                 Category = TicketCategoryEnum.Overheat,
                 Title = "Pin quá nhiệt khi sử dụng",
-                Symptoms = "Nhiệt độ vỏ pin > 50°C sau 30 phút hoạt động.",
-                DiagnosisSteps = "1. Đo nhiệt độ bề mặt\n2. Kiểm tra dòng tải\n3. Đọc threshold config",
-                SolutionSteps = "1. Giảm tải\n2. Kiểm tra thông gió\n3. Thay cell nếu hỏng",
+                Symptoms = S("Nhiệt độ vỏ pin > 50°C sau 30 phút hoạt động."),
+                DiagnosisSteps = S("1. Đo nhiệt độ bề mặt\n2. Kiểm tra dòng tải\n3. Đọc threshold config"),
+                SolutionSteps = S("1. Giảm tải\n2. Kiểm tra thông gió\n3. Thay cell nếu hỏng"),
                 Tags = new List<string> { "overheat", "safety" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -313,9 +314,9 @@ public class TicketDataSeeder
                 Code = "KB-PERF-001",
                 Category = TicketCategoryEnum.Performance,
                 Title = "Suy giảm dung lượng pin",
-                Symptoms = "Pin chỉ giữ điện được nửa so với ban đầu.",
-                DiagnosisSteps = "1. Kiểm tra SOH\n2. Đếm cycle count\n3. So sánh với baseline",
-                SolutionSteps = "1. Nếu SOH < 75% → đề xuất EOL\n2. Calibrate BMS\n3. Tư vấn khách hàng",
+                Symptoms = S("Pin chỉ giữ điện được nửa so với ban đầu."),
+                DiagnosisSteps = S("1. Kiểm tra SOH\n2. Đếm cycle count\n3. So sánh với baseline"),
+                SolutionSteps = S("1. Nếu SOH < 75% → đề xuất EOL\n2. Calibrate BMS\n3. Tư vấn khách hàng"),
                 Tags = new List<string> { "soh", "degradation" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -700,13 +701,13 @@ public class TicketDataSeeder
                 Code = "KB-2026-0001",
                 Category = TicketCategoryEnum.Charging,
                 Title = "Pin sạc chậm - Kiểm tra cáp và cổng",
-                Symptoms = @"
+                Symptoms = S(@"
 ## Triệu chứng quan sát:
 - Đèn báo sạc nhấp nháy hoặc không sáng
 - Thời gian sạc > 8 giờ (bình thường 4-6 giờ)
 - Nhiệt độ pin tăng cao khi sạc (>45°C)
-",
-                DiagnosisSteps = @"
+"),
+                DiagnosisSteps = S(@"
 ## Bước 1: Kiểm tra nguồn điện
 - [ ] Đo điện áp đầu vào: 220V ±10%
 - [ ] Kiểm tra ổn định nguồn: không dao động
@@ -718,8 +719,8 @@ public class TicketDataSeeder
 ## Bước 3: Kiểm tra cổng sạc
 - [ ] Không có bụi, gỉ, oxy hóa
 - [ ] Pin contact không bị cong hoặc hỏng
-",
-                SolutionSteps = @"
+"),
+                SolutionSteps = S(@"
 ## Giải pháp:
 1. Thay cáp sạc nếu hư hỏng (Mã linh kiện: CAB-USB-C-2M)
 2. Làm sạch cổng sạc bằng khí nén (AIR-CLEAN-500ML)
@@ -732,7 +733,7 @@ public class TicketDataSeeder
 
 ## Follow-up:
 - Kiểm tra lại sau 24 giờ
-",
+"),
                 RecommendedParts = new List<string> { "CAB-USB-C-2M", "AIR-CLEAN-500ML" },
                 Tags = new List<string> { "charging", "cable", "port", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
@@ -748,9 +749,9 @@ public class TicketDataSeeder
                 Code = "KB-2026-0002",
                 Category = TicketCategoryEnum.Overheat,
                 Title = "Quá nhiệt khi vận hành - Quản lý nhiệt độ",
-                Symptoms = "Pin nóng >45°C, quạt tản nhiệt không hoạt động, cảnh báo nhiệt độ trên màn hình",
-                DiagnosisSteps = "1. Kiểm tra nhiệt độ môi trường\n2. Kiểm tra khe tản nhiệt\n3. Kiểm tra quạt làm mát",
-                SolutionSteps = "1. Đảm bảo khoảng trống 10cm xung quanh\n2. Vệ sinh bụi trên khe tản nhiệt\n3. Thay quạt nếu hỏng",
+                Symptoms = S("Pin nóng >45°C, quạt tản nhiệt không hoạt động, cảnh báo nhiệt độ trên màn hình"),
+                DiagnosisSteps = S("1. Kiểm tra nhiệt độ môi trường\n2. Kiểm tra khe tản nhiệt\n3. Kiểm tra quạt làm mát"),
+                SolutionSteps = S("1. Đảm bảo khoảng trống 10cm xung quanh\n2. Vệ sinh bụi trên khe tản nhiệt\n3. Thay quạt nếu hỏng"),
                 RecommendedParts = new List<string> { "FAN-COOL-120MM" },
                 Tags = new List<string> { "overheat", "thermal", "cooling", "fan", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
@@ -766,9 +767,9 @@ public class TicketDataSeeder
                 Code = "KB-2026-0003",
                 Category = TicketCategoryEnum.NoPower,
                 Title = "Mất nguồn đột ngột - Kiểm tra firmware và kết nối",
-                Symptoms = "Pin tắt đột ngột, không khởi động lại, không phản hồi",
-                DiagnosisSteps = "1. Kiểm tra nguồn điện đầu vào\n2. Kiểm tra cầu chì bảo vệ\n3. Kiểm tra log firmware",
-                SolutionSteps = "1. Reset bằng nút reset phần cứng\n2. Cập nhật firmware\n3. Thay cầu chì nếu cần",
+                Symptoms = S("Pin tắt đột ngột, không khởi động lại, không phản hồi"),
+                DiagnosisSteps = S("1. Kiểm tra nguồn điện đầu vào\n2. Kiểm tra cầu chì bảo vệ\n3. Kiểm tra log firmware"),
+                SolutionSteps = S("1. Reset bằng nút reset phần cứng\n2. Cập nhật firmware\n3. Thay cầu chì nếu cần"),
                 RecommendedParts = new List<string> { "FUSE-10A" },
                 Tags = new List<string> { "power", "firmware", "connection", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
@@ -784,9 +785,9 @@ public class TicketDataSeeder
                 Code = "KB-2026-0004",
                 Category = TicketCategoryEnum.Performance,
                 Title = "Suy giảm hiệu năng - Phân tích chu kỳ sạc",
-                Symptoms = "Dung lượng pin giảm >20%, thời gian sử dụng ngắn hơn bình thường",
-                DiagnosisSteps = "1. Kiểm tra số chu kỳ sạc\n2. Đo điện áp cell\n3. Kiểm tra SOH (State of Health)",
-                SolutionSteps = "1. Cân bằng cell nếu chênh lệch >100mV\n2. Thay cell hỏng\n3. Khuyến nghị thay pin nếu SOH <70%",
+                Symptoms = S("Dung lượng pin giảm >20%, thời gian sử dụng ngắn hơn bình thường"),
+                DiagnosisSteps = S("1. Kiểm tra số chu kỳ sạc\n2. Đo điện áp cell\n3. Kiểm tra SOH (State of Health)"),
+                SolutionSteps = S("1. Cân bằng cell nếu chênh lệch >100mV\n2. Thay cell hỏng\n3. Khuyến nghị thay pin nếu SOH <70%"),
                 RecommendedParts = new List<string> { "CELL-LI-ION-3.7V" },
                 Tags = new List<string> { "performance", "capacity", "soh", "cycle", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
@@ -802,9 +803,9 @@ public class TicketDataSeeder
                 Code = "KB-2026-0005",
                 Category = TicketCategoryEnum.Repair,
                 Title = "Hư hỏng vật lý - Hướng dẫn thay thế linh kiện",
-                Symptoms = "Vỏ pin bị biến dạng, rò rỉ chất lỏng, tiếng kêu bất thường",
-                DiagnosisSteps = "1. Đánh giá mức độ hư hỏng\n2. Xác định linh kiện bị ảnh hưởng\n3. Kiểm tra BMS còn hoạt động không",
-                SolutionSteps = "1. Cách ly pin khỏi hệ thống\n2. Thay thế linh kiện hư hỏng\n3. Kiểm tra toàn bộ trước khi đưa vào vận hành",
+                Symptoms = S("Vỏ pin bị biến dạng, rò rỉ chất lỏng, tiếng kêu bất thường"),
+                DiagnosisSteps = S("1. Đánh giá mức độ hư hỏng\n2. Xác định linh kiện bị ảnh hưởng\n3. Kiểm tra BMS còn hoạt động không"),
+                SolutionSteps = S("1. Cách ly pin khỏi hệ thống\n2. Thay thế linh kiện hư hỏng\n3. Kiểm tra toàn bộ trước khi đưa vào vận hành"),
                 RecommendedParts = new List<string> { "CASE-REPLACEMENT-MODEL-A" },
                 Tags = new List<string> { "repair", "physical-damage", "replacement", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
@@ -923,4 +924,8 @@ public class TicketDataSeeder
             Console.WriteLine($"[TicketService] Successfully seeded {templates.Count} chat templates.");
         }
     }
+
+    private static JsonDocument S(string? v) =>
+        string.IsNullOrWhiteSpace(v) ? JsonDocument.Parse("{}") :
+        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(v));
 }

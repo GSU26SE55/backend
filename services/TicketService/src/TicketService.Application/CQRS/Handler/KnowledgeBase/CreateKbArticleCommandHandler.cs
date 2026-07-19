@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
@@ -54,9 +55,9 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
             Code = code,
             Category = command.Category,
             Title = command.Title,
-            Symptoms = command.Symptoms,
-            DiagnosisSteps = command.DiagnosisSteps,
-            SolutionSteps = command.SolutionSteps,
+            Symptoms = J(command.Symptoms),
+            DiagnosisSteps = J(command.DiagnosisSteps),
+            SolutionSteps = J(command.SolutionSteps),
             RecommendedParts = command.RecommendedParts,
             Tags = command.Tags ?? new List<string>(),
             Status = initialStatus,
@@ -78,9 +79,9 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
             MinorVersion = 0,
             Status = KbVersionStatusEnum.Pending,
             Title = command.Title,
-            Symptoms = command.Symptoms,
-            DiagnosisSteps = command.DiagnosisSteps,
-            SolutionSteps = command.SolutionSteps,
+            Symptoms = J(command.Symptoms),
+            DiagnosisSteps = J(command.DiagnosisSteps),
+            SolutionSteps = J(command.SolutionSteps),
             RecommendedParts = command.RecommendedParts,
             Tags = command.Tags ?? new List<string>(),
             ChangeDescription = versionMessage,
@@ -118,4 +119,6 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
             Message = message
         };
     }
+
+    private static JsonDocument J(string? v) => KnowledgeBaseMapper.ToJsonDoc(v);
 }

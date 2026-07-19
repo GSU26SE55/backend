@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -67,9 +68,9 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             MinorVersion = nextMinor,
             Status = KbVersionStatusEnum.Pending,
             Title = command.Title,
-            Symptoms = command.Symptoms,
-            DiagnosisSteps = command.DiagnosisSteps,
-            SolutionSteps = command.SolutionSteps,
+            Symptoms = J(command.Symptoms),
+            DiagnosisSteps = J(command.DiagnosisSteps),
+            SolutionSteps = J(command.SolutionSteps),
             RecommendedParts = command.RecommendedParts,
             Tags = command.Tags ?? new List<string>(),
             ChangeDescription = command.ChangeDescription ?? "Staff cập nhật nội dung",
@@ -157,9 +158,9 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
     private static void ApplyContentToArticle(KnowledgeBaseArticle article, UpdateKbArticleCommand command)
     {
         article.Title = command.Title;
-        article.Symptoms = command.Symptoms;
-        article.DiagnosisSteps = command.DiagnosisSteps;
-        article.SolutionSteps = command.SolutionSteps;
+        article.Symptoms = J(command.Symptoms);
+        article.DiagnosisSteps = J(command.DiagnosisSteps);
+        article.SolutionSteps = J(command.SolutionSteps);
         article.RecommendedParts = command.RecommendedParts;
         article.Tags = command.Tags ?? new List<string>();
         article.IsInternalOnly = command.IsInternalOnly;
@@ -168,12 +169,14 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
     private static void ApplyContentToVersion(KbArticleVersion version, UpdateKbArticleCommand command)
     {
         version.Title = command.Title;
-        version.Symptoms = command.Symptoms;
-        version.DiagnosisSteps = command.DiagnosisSteps;
-        version.SolutionSteps = command.SolutionSteps;
+        version.Symptoms = J(command.Symptoms);
+        version.DiagnosisSteps = J(command.DiagnosisSteps);
+        version.SolutionSteps = J(command.SolutionSteps);
         version.RecommendedParts = command.RecommendedParts;
         version.Tags = command.Tags ?? new List<string>();
     }
+
+    private static JsonDocument J(string? v) => KnowledgeBaseMapper.ToJsonDoc(v);
 
     private static CommonResponse<KbArticleDTO> Fail(int statusCode, string message)
     {

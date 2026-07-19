@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -42,7 +43,7 @@ public class KbSuggestionService : IKbSuggestionService
             var matchedIds = ids
                 .Where(a => keywords.Any(kw =>
                     a.Title.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                    (a.Symptoms != null && a.Symptoms.Contains(kw, StringComparison.OrdinalIgnoreCase))))
+                    (a.Symptoms != null && F(a.Symptoms).Contains(kw, StringComparison.OrdinalIgnoreCase))))
                 .Select(a => a.Id)
                 .ToHashSet();
 
@@ -67,6 +68,11 @@ public class KbSuggestionService : IKbSuggestionService
 
         return suggestions.Select(KnowledgeBaseMapper.ToSuggestDto).ToList();
     }
+
+    private static string F(JsonDocument doc) =>
+        doc.RootElement.ValueKind == JsonValueKind.String
+            ? doc.RootElement.GetString() ?? string.Empty
+            : doc.RootElement.GetRawText();
 
     private static List<string> ExtractKeywords(string body)
     {

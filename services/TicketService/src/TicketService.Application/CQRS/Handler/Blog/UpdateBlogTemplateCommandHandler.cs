@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
 
@@ -24,7 +25,7 @@ public class UpdateBlogTemplateCommandHandler : IRequestHandler<UpdateBlogTempla
 
         template.Name = request.Name;
         template.Description = request.Description;
-        template.ContentHtml = request.ContentHtml;
+        template.ContentHtml = KnowledgeBaseMapper.ToJsonDoc(request.ContentHtml);
         template.IsActive = request.IsActive;
 
         _uow.BlogTemplates.UpdateAsync(template);
@@ -40,7 +41,7 @@ public class UpdateBlogTemplateCommandHandler : IRequestHandler<UpdateBlogTempla
                 Id = template.Id.ToString(),
                 Name = template.Name,
                 Description = template.Description,
-                ContentHtml = template.ContentHtml,
+                ContentHtml = KnowledgeBaseMapper.J(template.ContentHtml),
                 IsActive = template.IsActive,
                 CreatedByUserId = template.CreatedByUserId.ToString(),
                 CreatedAt = template.CreatedAt,
@@ -48,4 +49,5 @@ public class UpdateBlogTemplateCommandHandler : IRequestHandler<UpdateBlogTempla
             }
         };
     }
+
 }

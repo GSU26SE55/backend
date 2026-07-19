@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
@@ -7,6 +8,22 @@ namespace TicketService.Application.Mapping;
 
 public static class KnowledgeBaseMapper
 {
+    // JsonDocument → string: unwrap JSON string, else return raw text
+    internal static string J(JsonDocument doc) =>
+        doc.RootElement.ValueKind == JsonValueKind.String
+            ? doc.RootElement.GetString() ?? string.Empty
+            : doc.RootElement.GetRawText();
+
+    // string → JsonDocument: try parse JSON, fall back to JSON-encoded string
+    internal static JsonDocument ToJsonDoc(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return JsonDocument.Parse("{}");
+        try
+        { return JsonDocument.Parse(value); }
+        catch { return JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(value)); }
+    }
+
     public static KbArticleDTO ToDto(KnowledgeBaseArticle article)
     {
         return new KbArticleDTO
@@ -15,9 +32,9 @@ public static class KnowledgeBaseMapper
             Code = article.Code,
             Category = article.Category,
             Title = article.Title,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
+            Symptoms = J(article.Symptoms),
+            DiagnosisSteps = J(article.DiagnosisSteps),
+            SolutionSteps = J(article.SolutionSteps),
             RecommendedParts = article.RecommendedParts,
             Tags = article.Tags.ToList(),
             Status = article.Status,
@@ -57,7 +74,7 @@ public static class KnowledgeBaseMapper
             Id = a.Id.ToString(),
             Code = a.Code,
             Title = a.Title,
-            Symptoms = a.Symptoms,
+            Symptoms = J(a.Symptoms),
             HelpfulCount = a.HelpfulCount,
             ViewCount = a.ViewCount,
             IsInternalOnly = a.IsInternalOnly
@@ -74,9 +91,9 @@ public static class KnowledgeBaseMapper
             MinorVersion = v.MinorVersion,
             Status = v.Status,
             Title = v.Title,
-            Symptoms = v.Symptoms,
-            DiagnosisSteps = v.DiagnosisSteps,
-            SolutionSteps = v.SolutionSteps,
+            Symptoms = J(v.Symptoms),
+            DiagnosisSteps = J(v.DiagnosisSteps),
+            SolutionSteps = J(v.SolutionSteps),
             RecommendedParts = v.RecommendedParts,
             Tags = v.Tags,
             ChangeDescription = v.ChangeDescription,
@@ -90,9 +107,9 @@ public static class KnowledgeBaseMapper
         return new KbArticleTemplateDTO
         {
             Category = article.Category,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
+            Symptoms = J(article.Symptoms),
+            DiagnosisSteps = J(article.DiagnosisSteps),
+            SolutionSteps = J(article.SolutionSteps),
             RecommendedParts = article.RecommendedParts,
             Tags = article.Tags.ToList()
         };

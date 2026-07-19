@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
 
@@ -39,9 +40,10 @@ public class CompareBlogPostVersionsQueryHandler : IRequestHandler<CompareBlogPo
             {
                 OldVersionNumber = oldVersion.VersionNumber,
                 NewVersionNumber = newVersion.VersionNumber,
-                OldContentHtml = oldVersion.ContentHtml,
-                NewContentHtml = newVersion.ContentHtml,
+                OldContentHtml = KnowledgeBaseMapper.J(oldVersion.ContentHtml),
+                NewContentHtml = KnowledgeBaseMapper.J(newVersion.ContentHtml),
             }
         };
     }
+
 }

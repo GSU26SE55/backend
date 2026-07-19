@@ -3,6 +3,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Application.CQRS.Handler.Blog;
@@ -20,7 +21,7 @@ public class CreateBlogTemplateCommandHandler : IRequestHandler<CreateBlogTempla
             Id = Guid.NewGuid(),
             Name = request.Name,
             Description = request.Description,
-            ContentHtml = request.ContentHtml,
+            ContentHtml = KnowledgeBaseMapper.ToJsonDoc(request.ContentHtml),
             IsActive = true,
             CreatedByUserId = request.CurrentUserId,
         };
@@ -42,10 +43,11 @@ public class CreateBlogTemplateCommandHandler : IRequestHandler<CreateBlogTempla
         Id = t.Id.ToString(),
         Name = t.Name,
         Description = t.Description,
-        ContentHtml = t.ContentHtml,
+        ContentHtml = KnowledgeBaseMapper.J(t.ContentHtml),
         IsActive = t.IsActive,
         CreatedByUserId = t.CreatedByUserId.ToString(),
         CreatedAt = t.CreatedAt,
         UpdatedAt = t.UpdatedAt,
     };
+
 }

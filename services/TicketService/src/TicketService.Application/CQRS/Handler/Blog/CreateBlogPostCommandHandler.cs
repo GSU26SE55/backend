@@ -3,6 +3,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -37,13 +38,15 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
                 };
         }
 
+        var contentDoc = KnowledgeBaseMapper.ToJsonDoc(request.ContentHtml);
+
         var post = new BlogPost
         {
             Id = Guid.NewGuid(),
             Title = request.Title,
             Slug = request.Slug,
             Summary = request.Summary,
-            ContentHtml = request.ContentHtml,
+            ContentHtml = contentDoc,
             Status = BlogPostStatusEnum.Draft,
             Origin = BlogPostOriginEnum.Manual,
             BlogTemplateId = request.BlogTemplateId,
@@ -58,7 +61,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
             VersionNumber = 1,
             Title = request.Title,
             Summary = request.Summary,
-            ContentHtml = request.ContentHtml,
+            ContentHtml = contentDoc,
             ChangedByUserId = request.CurrentUserId,
             ChangeNote = "Tạo bài viết",
         };
@@ -90,4 +93,5 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
             }
         };
     }
+
 }
