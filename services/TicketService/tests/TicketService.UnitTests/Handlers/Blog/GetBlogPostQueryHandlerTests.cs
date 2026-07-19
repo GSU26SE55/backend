@@ -169,11 +169,11 @@ public class GetBlogPostQueryHandlerTests
         ext.uow.SetupGet(u => u.BlogPosts).Returns(blogPostMock.Object);
 
         var handler = new GetBlogPostListQueryHandler(ext.uow.Object);
-        var result = await handler.Handle(new GetBlogPostListQuery { Page = 0, PageSize = 0 }, CancellationToken.None);
+        var result = await handler.Handle(new GetBlogPostListQuery { PageNumber = 0, PageSize = 0 }, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.PageNumber.Should().Be(1);
-        result.Data.PageSize.Should().Be(20);
+        result.Data.PageSize.Should().Be(10);
     }
 
     // ──────────────────────────── GetBlogPostVersionsQueryHandler ────────────────────────────

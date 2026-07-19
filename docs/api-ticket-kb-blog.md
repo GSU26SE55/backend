@@ -309,11 +309,12 @@ Base path: `/api/knowledge-base`
 | `Category` | `TicketCategoryEnum?` | Lọc theo danh mục lỗi — gửi **chuỗi tên enum** (vd `Charging`) |
 | `Status` | `KbArticleStatusEnum?` | Lọc theo trạng thái — gửi **chuỗi tên enum** (vd `Published`). **Chỉ áp dụng cho internal role**; Customer bị bỏ qua |
 | `Tag` | `string?` | Lọc theo **một** thẻ (số ít — không phải mảng) |
-| `IsTemplate` | `bool?` | Lọc bài viết mẫu — `true` = chỉ trả bài có `isTemplate = true` |
 | `PageNumber` | `int` | Trang (mặc định 1) |
 | `PageSize` | `int` | Số item/trang |
 
 > ⚠️ Param đúng theo `GetKbArticleListQuery`: tên là **`Q`** (không phải `Keyword`), **`Tag`** số ít (không phải `Tags[]`).
+>
+> ⚠️ **`IsTemplate` KHÔNG phải query param** — property này gắn `[BindNever]` trong `GetKbArticleListQuery` và bị controller ghi đè `= false` sau khi model binding chạy. Endpoint này **luôn** loại bỏ bài mẫu, gửi `?IsTemplate=true` sẽ bị bỏ qua im lặng. Để liệt kê bài mẫu, dùng `GET /api/internal/knowledge-base/templates` (Nhóm 9).
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<KbArticleListItemDTO>>`
 
@@ -500,12 +501,26 @@ Hệ thống tự động lưu bản hiện tại vào lịch sử. Trạng thá
 
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `fromVersion` | `Guid` | ✅ | ID phiên bản gốc (`KbArticleVersion.id`) |
-| `toVersion` | `Guid?` | Không | ID phiên bản đích. Bỏ trống → so sánh với **bản hiện tại** |
+| `FromVersionId` | `Guid` | ✅ | ID phiên bản gốc (`KbArticleVersion.id`) |
+| `ToVersionId` | `Guid?` | Không | ID phiên bản đích. Bỏ trống → so sánh với **bản hiện tại** |
 
-> ⚠️ `fromVersion`/`toVersion` là kiểu **`Guid`** (ID của version, không phải số version nguyên).
+> ⚠️ Tên param là **`FromVersionId`/`ToVersionId`** (theo `CompareKbArticleVersionsQuery`), kiểu **`Guid`** — ID của version, không phải số version nguyên. Khác với Blog compare dùng số nguyên `OldVersionNumber`/`NewVersionNumber`.
 
 **Response thành công `200`:** `CommonResponse<KbArticleDiffDTO>` — 6 `DiffSection` (`titleDiff`, `symptomsDiff`, `diagnosisStepsDiff`, `solutionStepsDiff`, `recommendedPartsDiff`, `tagsDiff`), mỗi cái có `oldValue`/`newValue`/`isChanged`.
+
+---
+
+### `GET /api/internal/knowledge-base/templates`
+
+**Mục đích:** Liệt kê các bài viết mẫu (`isTemplate = true`) đang ở trạng thái `Published`, để Staff tra cứu và sao chép.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Query params:** Cùng bộ với `GET /api/knowledge-base` (`Q`, `Category`, `Tag`, `PageNumber`, `PageSize`).
+
+> ⚠️ Server **ép cứng** `IsTemplate = true` và `Status = Published` — param `Status` client gửi sẽ bị ghi đè.
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<KbArticleListItemDTO>>`
 
 ---
 
@@ -633,6 +648,28 @@ Quản lý vòng đời bài viết: Phê duyệt / từ chối thay đổi, Xu�
 
 ---
 
+## Nhóm 10bis — KB Templates (Admin only — quản lý bài mẫu)
+
+Base path: `/api/admin/knowledge-base/templates`
+**Auth:** Bắt buộc — **chỉ role `Admin`** (`[Authorize(Roles = "Admin")]`).
+
+Quản lý vòng đời **bài viết mẫu** (`isTemplate = true`) tách biệt khỏi bài viết KB thường. Mọi endpoint trong nhóm này server đều ép `IsTemplate = true`.
+
+> Để **đọc** template với quyền Staff/Manager, dùng `GET /api/internal/knowledge-base/templates` và `.../templates/{id}` (Nhóm 9).
+
+| Method | Path | Response | Ghi chú |
+|---|---|---|---|
+| `GET` | `/api/admin/knowledge-base/templates` | `CommonResponse<PaginationResponse<KbArticleListItemDTO>>` | Liệt kê bài mẫu ở **mọi trạng thái** (khác Nhóm 9 chỉ trả `Published`) |
+| `GET` | `/api/admin/knowledge-base/templates/{id}` | `CommonResponse<KbArticleDTO>` | Chi tiết bài mẫu |
+| `POST` | `/api/admin/knowledge-base/templates` | `201` · `CommonResponse<KbArticleActionDTO>` | Tạo bài mẫu — body giống `POST /api/internal/knowledge-base`, `isTemplate` tự đặt `true` |
+| `PUT` | `/api/admin/knowledge-base/templates/{id}` | `CommonResponse<KbArticleDTO>` | Cập nhật bài mẫu |
+| `POST` | `/api/admin/knowledge-base/templates/{id}/publish` | `CommonResponse<KbArticleActionDTO>` · `409` | Xuất bản — bài mẫu phải `Published` mới hiện ở Nhóm 9 |
+| `POST` | `/api/admin/knowledge-base/templates/{id}/archive` | `CommonResponse<KbArticleActionDTO>` | Lưu trữ |
+| `POST` | `/api/admin/knowledge-base/templates/{id}/rollback` | `CommonResponse<KbArticleActionDTO>` | Hoàn tác về version cũ — body `{ toVersionId }` |
+| `DELETE` | `/api/admin/knowledge-base/templates/{id}` | `CommonResponse<object>` | Xóa mềm |
+
+---
+
 ## Nhóm 11 — Ticket–KB References (Staff/Manager/Admin)
 
 Base path: `/api/knowledge-base/references`
@@ -725,8 +762,8 @@ Chỉ trả bài có `status = Published`. FE không cần filter thêm.
 | Param | Type | Mô tả |
 |---|---|---|
 | `Origin` | `BlogPostOriginEnum?` | Lọc theo nguồn gốc — gửi chuỗi (`Manual` hoặc `AiGeneratedFromKb`) |
-| `Page` | `int` | Trang (mặc định 1) |
-| `PageSize` | `int` | Số item/trang (mặc định 20) |
+| `PageNumber` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 10, tối đa 100) |
 
 > ⚠️ `Status` không có trong query params của public endpoint — controller tự set `Status = Published`. Không cần gửi.
 
@@ -745,7 +782,9 @@ Chỉ trả bài có `status = Published`. FE không cần filter thêm.
 **Response thành công `200`:** `CommonResponse<BlogPostDTO>`
 
 **Lỗi thường gặp:**
-- `404` — Không tìm thấy hoặc bài chưa Published.
+- `404` — Không tìm thấy, đã xóa mềm, **hoặc bài chưa `Published`** (`Draft`/`Generating`/`GenerationFailed`/`Archived` đều trả 404).
+
+> ⚠️ Endpoint public này **không** đọc được bài chưa xuất bản. Để đọc bài ở trạng thái bất kỳ (kể cả đang `Generating`), dùng `GET /api/internal/blog/{id}` (Nhóm 13).
 
 ---
 
@@ -770,10 +809,25 @@ Xem toàn bộ bài blog (kể cả `Draft`, `Generating`, `GenerationFailed`), 
 |---|---|---|
 | `Status` | `BlogPostStatusEnum?` | Lọc theo trạng thái — gửi chuỗi (vd `Draft`, `Generating`) |
 | `Origin` | `BlogPostOriginEnum?` | Lọc theo nguồn gốc |
-| `Page` | `int` | Trang (mặc định 1) |
-| `PageSize` | `int` | Số item/trang (mặc định 20) |
+| `PageNumber` | `int` | Trang (mặc định 1) |
+| `PageSize` | `int` | Số item/trang (mặc định 10, tối đa 100) |
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<BlogPostListItemDTO>>`
+
+---
+
+### `GET /api/internal/blog/{id}`
+
+**Mục đích:** Lấy chi tiết bài blog ở **mọi trạng thái** — kể cả `Draft`, `Generating`, `GenerationFailed`, `Archived`. Đây là endpoint dùng để **poll** tiến độ sau khi gọi `generate-from-kb`.
+
+**Auth:** Bắt buộc (Staff, Manager, Admin).
+
+**Path param:** `id` — UUID bài blog.
+
+**Response thành công `200`:** `CommonResponse<BlogPostDTO>`
+
+**Lỗi thường gặp:**
+- `404` — Không tìm thấy hoặc đã xóa mềm.
 
 ---
 
@@ -949,7 +1003,11 @@ Publish, Archive, xóa bài blog. Tạo blog từ KB bằng AI (async).
 - `404` — Không tìm thấy KB article
 - `409` — KB chưa Published hoặc đã có blog đang tồn tại
 
-> ⚠️ FE cần **poll** hoặc dùng notification để biết khi `status` chuyển `Draft` (generation hoàn tất) hoặc `GenerationFailed`. Sau khi `GenerationFailed`, vẫn có thể `PUT /api/internal/blog/{id}` để sửa thủ công.
+> ⚠️ FE cần **poll `GET /api/internal/blog/{id}`** (Nhóm 13) với `id` lấy từ `data.id` của response `202`, hoặc dùng notification, để biết khi `status` chuyển `Draft` (generation hoàn tất) hoặc `GenerationFailed`. Dừng poll khi đạt 1 trong 2 trạng thái đó.
+>
+> **KHÔNG** poll `GET /api/blog/{id}` — endpoint public trả `404` khi bài chưa `Published`.
+>
+> Sau khi `GenerationFailed`, vẫn có thể `PUT /api/internal/blog/{id}` để sửa thủ công.
 
 ---
 
@@ -1082,7 +1140,23 @@ Các endpoint trong hệ thống Chat liên quan đến Knowledge Base (xem chi 
 
 ## Changelog
 
-### 2026-07-19 — Di chuyển Blog Template GET, thêm KB Template GET (feat/GH-671-blog)
+### 2026-07-19 (b) — Sửa contract Blog/KB + đồng bộ docs với code (feat/GH-671-blog)
+
+**Thay đổi code:**
+
+- **`KbArticleDTO` / `KbArticleListItemDTO`:** thêm field `isTemplate` (`bool`) vào **response**. Trước đây BE có cột trong DB và nhận được lúc create, nhưng không trả ra — FE ghi được mà không đọc được.
+- **`GET /api/blog/{id}`:** nay trả **`404` khi bài chưa `Published`**. Trước đây handler không filter theo status → endpoint public lộ bài `Draft`/`Generating`/`Archived` cho mọi role kể cả Customer (lỗ rò dữ liệu).
+- **`GET /api/internal/blog/{id}` (mới — Nhóm 13):** đọc bài blog ở mọi trạng thái, dành cho Staff/Manager/Admin. Đây là endpoint chuẩn để poll sau `generate-from-kb`.
+- **6 endpoint GET trả đúng HTTP status:** `GET /api/blog`, `GET /api/blog/{id}`, `GET /api/internal/blog`, `GET /api/internal/blog/{id}/versions`, `GET /api/internal/blog/templates`, `GET /api/internal/blog/templates/{id}` — trước dùng `Ok()` nên luôn trả HTTP `200` kể cả khi body ghi `statusCode: 404/409`, khiến client không bắt được lỗi qua HTTP status.
+
+**Sửa docs (docs sai so với code, code không đổi):**
+
+- **`GET /api/knowledge-base`:** bỏ `IsTemplate` khỏi bảng query params — property gắn `[BindNever]` và bị controller ghi đè `= false`, client **không** gửi được. Mục 2026-07-17 bên dưới mô tả sai điểm này.
+- **`GET /api/internal/knowledge-base/{id}/compare`:** tên param đúng là **`FromVersionId`/`ToVersionId`**, không phải `fromVersion`/`toVersion`.
+- **`GET /api/internal/knowledge-base/templates`** (Nhóm 9): bổ sung — endpoint đã tồn tại nhưng chưa được document.
+- **Nhóm 10bis** (mới): bổ sung toàn bộ `AdminKbTemplateController` (`/api/admin/knowledge-base/templates`, 8 endpoint, Admin only) — chưa từng được document.
+
+### 2026-07-19 (a) — Di chuyển Blog Template GET, thêm KB Template GET (feat/GH-671-blog)
 
 - **`GET /api/admin/blog/templates`** và **`GET /api/admin/blog/templates/{id}`**: **đã xóa** khỏi admin controller. Hai endpoint này chuyển sang Nhóm 13.
 - **`GET /api/internal/blog/templates`** (mới — Nhóm 13): Danh sách blog templates, auth Staff/Manager/Admin.
@@ -1105,7 +1179,7 @@ Các endpoint trong hệ thống Chat liên quan đến Knowledge Base (xem chi 
 - **`KbArticleListItemDTO`:** thêm field `isTemplate` để FE filter bài mẫu trong list.
 - **`POST /api/internal/knowledge-base`:** thêm field `isTemplate` vào request body (mặc định `false`).
 - **`PUT /api/internal/knowledge-base/{id}`:** hỗ trợ cập nhật `isTemplate`.
-- **`GET /api/knowledge-base`:** thêm query param `IsTemplate` (`bool?`) để lọc bài mẫu.
+- ~~**`GET /api/knowledge-base`:** thêm query param `IsTemplate` (`bool?`) để lọc bài mẫu.~~ **← SAI, xem changelog 2026-07-19 (b).** Property gắn `[BindNever]` và bị controller ghi đè `= false`; client không gửi được. Dùng `GET /api/internal/knowledge-base/templates` thay thế.
 - **`GET /api/internal/knowledge-base/{id}/copy-template`:** mở rộng điều kiện — ngoài tag `template`/`example`, bài có `isTemplate = true` cũng dùng được.
 
 ### 2026-07-07 — KB reference rules update

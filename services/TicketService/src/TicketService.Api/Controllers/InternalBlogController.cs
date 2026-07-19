@@ -33,7 +33,22 @@ public class InternalBlogController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] GetBlogPostListQuery query, CancellationToken ct)
     {
         query.IsInternal = true;
-        return Ok(await _mediator.Send(query, ct));
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Chi tiết bài blog — internal view (đọc được cả Draft/Generating/Archived).
+    /// Dùng để poll trạng thái sau khi gọi generate-from-kb.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(CommonResponse<BlogPostDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new GetBlogPostByIdQuery { BlogPostId = id, RequirePublished = false }, ct);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>Tạo bài blog thủ công (Draft).</summary>
@@ -64,7 +79,10 @@ public class InternalBlogController : ControllerBase
     [HttpGet("{id:guid}/versions")]
     [ProducesResponseType(typeof(CommonResponse<List<BlogPostVersionDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetBlogPostVersionsQuery { BlogPostId = id }, ct));
+    {
+        var result = await _mediator.Send(new GetBlogPostVersionsQuery { BlogPostId = id }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 
     /// <summary>So sánh 2 versions của bài blog.</summary>
     [HttpGet("{id:guid}/compare")]
@@ -81,14 +99,20 @@ public class InternalBlogController : ControllerBase
     [HttpGet("templates")]
     [ProducesResponseType(typeof(CommonResponse<List<BlogTemplateDTO>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllTemplates([FromQuery] GetBlogTemplateListQuery query, CancellationToken ct)
-        => Ok(await _mediator.Send(query, ct));
+    {
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 
     /// <summary>Chi tiết blog template theo ID (Staff/Manager/Admin).</summary>
     [HttpGet("templates/{id:guid}")]
     [ProducesResponseType(typeof(CommonResponse<BlogTemplateDTO>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTemplateById(Guid id, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetBlogTemplateByIdQuery { TemplateId = id }, ct));
+    {
+        var result = await _mediator.Send(new GetBlogTemplateByIdQuery { TemplateId = id }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 
     private Guid GetCurrentUserId() =>
         string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);

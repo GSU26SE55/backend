@@ -27,6 +27,10 @@ public class KbArticleDTO
     /// </summary>
     public KbArticleStatusEnum Status { get; set; }
     public bool IsInternalOnly { get; set; }
+    /// <summary>
+    /// Bài viết là bản mẫu (template) để sao chép cấu trúc.
+    /// </summary>
+    public bool IsTemplate { get; set; }
     public int Version { get; set; }
     /// <summary>
     /// View count.

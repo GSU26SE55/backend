@@ -15,6 +15,10 @@ public class KbArticleListItemDTO
     /// </summary>
     public TicketCategoryEnum Category { get; set; }
     public KbArticleStatusEnum Status { get; set; }
+    /// <summary>
+    /// Bài viết là bản mẫu (template).
+    /// </summary>
+    public bool IsTemplate { get; set; }
     public int ViewCount { get; set; }
     /// <summary>
     /// Helpful count.
