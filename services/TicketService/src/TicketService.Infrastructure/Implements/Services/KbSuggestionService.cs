@@ -28,7 +28,6 @@ public class KbSuggestionService : IKbSuggestionService
         var baseQuery = _uow.KnowledgeBaseArticles.GetAllAsync()
             .Where(a => !a.IsDeleted
                 && a.Status == KbArticleStatusEnum.Published
-                && !a.IsInternalOnly
                 && a.Category == category);
 
         if (keywords.Count > 0)
@@ -59,7 +58,7 @@ public class KbSuggestionService : IKbSuggestionService
         if (suggestions.Count == 0 && keywords.Count > 0)
         {
             suggestions = await _uow.KnowledgeBaseArticles.GetAllAsync()
-                .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly && a.Category == category)
+                .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && a.Category == category)
                 .OrderByDescending(a => a.HelpfulCount)
                 .Take(topN)
                 .ToListAsync(ct);

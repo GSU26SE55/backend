@@ -28,7 +28,6 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
     /// Tags.
     /// </summary>
     public List<string> Tags { get; set; } = new();
-    public bool IsInternalOnly { get; set; }
 
     public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
@@ -46,6 +45,8 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
 
         if (string.IsNullOrWhiteSpace(Content))
             response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được để trống." });
+        else if (Content.Length > 50000)
+            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được vượt quá 50000 ký tự." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))
             response.ListErrors.Add(new Errors { Field = "Category", Detail = "Danh mục không hợp lệ." });

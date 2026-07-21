@@ -9,12 +9,11 @@ using TicketService.Application.DTOs.Response.KnowledgeBases;
 namespace TicketService.Api.Controllers;
 
 /// <summary>
-/// Controller chung cho việc tra cứu Knowledge Base.
-/// Áp dụng cho mọi role đã đăng nhập (Customer, Staff, Manager, Admin).
+/// Controller tra cứu Knowledge Base — chỉ dành cho Staff, Manager và Admin.
 /// </summary>
 [ApiController]
 [Route("api/knowledge-base")]
-[Authorize]
+[Authorize(Roles = "Staff,Manager,Admin")]
 [Produces("application/json")]
 public class KnowledgeBaseController : ControllerBase
 {

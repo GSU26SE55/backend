@@ -47,7 +47,6 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
             Content = "Battery temperature exceeds 50C during charging. Verify cooling fan operation. Replace cooling fan if dead.",
             Category = TicketCategoryEnum.Overheat,
             Tags = new List<string> { "battery", "overheat" },
-            IsInternalOnly = false
         };
 
         // Act
@@ -159,7 +158,6 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
             Content = "New Symptoms. New Steps. New Solution.",
             Category = TicketCategoryEnum.Overheat,
             Tags = new List<string> { "battery" },
-            IsInternalOnly = true
         };
 
         // Act

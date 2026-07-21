@@ -525,7 +525,6 @@ public class KbWorkflowHandlersTests
             CurrentUserRole = "Staff",
             Title = "Updated Title",
             Content = "Updated Symptoms. Updated Steps. Updated Solution.",
-            IsInternalOnly = true,
             ChangeDescription = "Minor updates"
         };
 
@@ -535,7 +534,6 @@ public class KbWorkflowHandlersTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(200);
-        article.IsInternalOnly.Should().BeTrue();
         article.ReviewRequired.Should().BeTrue();
         article.Status.Should().Be(KbArticleStatusEnum.PendingReview);
         article.PendingReviewBy.Should().Be(creatorId);

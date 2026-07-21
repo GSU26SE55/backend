@@ -28,10 +28,6 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
-    /// <summary>
-    /// Is internal only.
-    /// </summary>
-    public bool IsInternalOnly { get; set; }
     public string? ChangeDescription { get; set; }
 
     public Task<CommonResponse<KbArticleDTO>> ValidateAsync()
@@ -53,6 +49,8 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
 
         if (string.IsNullOrWhiteSpace(Content))
             response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được để trống." });
+        else if (Content.Length > 50000)
+            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được vượt quá 50000 ký tự." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))
             response.ListErrors.Add(new Errors { Field = "Category", Detail = "Danh mục không hợp lệ." });

@@ -18,7 +18,7 @@ public class KbQueryHandlersTests
         // Arrange
         var userId = Guid.NewGuid().ToString();
         _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
+        _currentUserService.SetupGet(c => c.Role).Returns("Staff");
 
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
@@ -26,7 +26,6 @@ public class KbQueryHandlersTests
             Id = articleId,
             Title = "Trouble",
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             IsDeleted = false
         };
 
@@ -43,65 +42,6 @@ public class KbQueryHandlersTests
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().NotBeNull();
         result.Data!.Title.Should().Be("Trouble");
-    }
-
-    [Fact]
-    public async Task GetById_InternalOnlyForCustomer_Returns404()
-    {
-        // Arrange
-        var userId = Guid.NewGuid().ToString();
-        _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
-
-        var articleId = Guid.NewGuid();
-        var article = new KnowledgeBaseArticle
-        {
-            Id = articleId,
-            Title = "Secret",
-            Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = true,
-            IsDeleted = false
-        };
-
-        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
-        var uow = resultExtended.uow;
-
-        var handler = new GetKbArticleByIdQueryHandler(uow.Object, _currentUserService.Object);
-        var query = new GetKbArticleByIdQuery { ArticleId = articleId };
-
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(404);
-    }
-
-    [Fact]
-    public async Task GetList_Customer_ReturnsOnlyPublishedPublic()
-    {
-        // Arrange
-        var userId = Guid.NewGuid().ToString();
-        _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
-
-        var article1 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "A", Status = KbArticleStatusEnum.Published, IsInternalOnly = false };
-        var article2 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "B", Status = KbArticleStatusEnum.Draft, IsInternalOnly = false };
-        var article3 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "C", Status = KbArticleStatusEnum.Published, IsInternalOnly = true };
-
-        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article1, article2, article3 });
-        var uow = resultExtended.uow;
-
-        var handler = new GetKbArticleListQueryHandler(uow.Object, _currentUserService.Object);
-        var query = new GetKbArticleListQuery { PageNumber = 1, PageSize = 10 };
-
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Data!.Items.Should().HaveCount(1);
-        result.Data.Items.First().Title.Should().Be("A");
     }
 
     [Fact]
@@ -124,7 +64,6 @@ public class KbQueryHandlersTests
             Title = "Overheat Fix",
             Category = TicketCategoryEnum.Overheat,
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             HelpfulCount = 5,
             ViewCount = 10
         };
@@ -135,7 +74,6 @@ public class KbQueryHandlersTests
             Title = "Charging Fix",
             Category = TicketCategoryEnum.Charging,
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             HelpfulCount = 10,
             ViewCount = 20
         };

@@ -20,7 +20,6 @@ public class KbArticleDTO
     /// Trạng thái.
     /// </summary>
     public KbArticleStatusEnum Status { get; set; }
-    public bool IsInternalOnly { get; set; }
     /// <summary>
     /// Bài viết là bản mẫu (template) để sao chép cấu trúc.
     /// </summary>

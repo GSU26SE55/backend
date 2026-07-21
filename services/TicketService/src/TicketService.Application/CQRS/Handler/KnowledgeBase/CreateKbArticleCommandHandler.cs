@@ -64,8 +64,7 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
             HelpfulCount = 0,
             CreatedByUserId = command.CurrentUserId,
             ReviewRequired = reviewRequired,
-            PendingReviewBy = pendingReviewBy,
-            IsInternalOnly = command.IsInternalOnly
+            PendingReviewBy = pendingReviewBy
         };
 
         var initialVersion = new KbArticleVersion

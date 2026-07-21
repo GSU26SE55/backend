@@ -88,7 +88,8 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
                     FileName = att.FileName,
                     ContentType = att.ContentType,
                     SizeBytes = att.SizeBytes,
-                    Source = AttachmentSourceEnum.StaffWork
+                    Source = AttachmentSourceEnum.StaffWork,
+                    Url = att.Url
                 };
                 await _uow.TicketAttachments.AddAsync(attachment);
             }

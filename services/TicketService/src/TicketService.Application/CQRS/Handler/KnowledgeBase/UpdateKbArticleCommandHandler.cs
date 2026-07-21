@@ -46,9 +46,6 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             return Fail(403, "Bạn không có quyền cập nhật bài viết này.");
         }
 
-        // Directly update the visibility flag on the main article
-        article.IsInternalOnly = command.IsInternalOnly;
-
         // Determine next version numbers
         var nextMajor = article.Version + 1;
         var lastMinor = await _uow.KbArticleVersions.GetAllAsync()
@@ -101,7 +98,6 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
 
             if (article.Status == KbArticleStatusEnum.Draft)
             {
-                // In-place update: update existing Pending version record directly
                 var currentVersion = await _uow.KbArticleVersions.GetAllAsync()
                     .FirstOrDefaultAsync(v => v.ArticleId == article.Id
                         && v.MajorVersion == article.Version + 1
@@ -112,6 +108,21 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                 {
                     ApplyContentToVersion(currentVersion, command);
                     _uow.KbArticleVersions.UpdateAsync(currentVersion);
+                }
+                else
+                {
+                    var newPending = new KbArticleVersion
+                    {
+                        Id = Guid.NewGuid(),
+                        ArticleId = article.Id,
+                        MajorVersion = article.Version + 1,
+                        MinorVersion = 0,
+                        Status = KbVersionStatusEnum.Pending,
+                        ChangeDescription = command.ChangeDescription ?? "Admin cập nhật template",
+                        ChangedBy = command.CurrentUserId
+                    };
+                    ApplyContentToVersion(newPending, command);
+                    await _uow.KbArticleVersions.AddAsync(newPending);
                 }
             }
             else if (article.Status == KbArticleStatusEnum.Published)
@@ -157,7 +168,6 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         article.Title = command.Title;
         article.Content = J(command.Content);
         article.Tags = command.Tags ?? new List<string>();
-        article.IsInternalOnly = command.IsInternalOnly;
     }
 
     private static void ApplyContentToVersion(KbArticleVersion version, UpdateKbArticleCommand command)

@@ -37,7 +37,6 @@ public static class KnowledgeBaseMapper
             Content = J(article.Content),
             Tags = article.Tags.ToList(),
             Status = article.Status,
-            IsInternalOnly = article.IsInternalOnly,
             IsTemplate = article.IsTemplate,
             Version = article.Version,
             ViewCount = article.ViewCount,
@@ -77,8 +76,7 @@ public static class KnowledgeBaseMapper
             Title = a.Title,
             Content = J(a.Content),
             HelpfulCount = a.HelpfulCount,
-            ViewCount = a.ViewCount,
-            IsInternalOnly = a.IsInternalOnly
+            ViewCount = a.ViewCount
         };
     }
 

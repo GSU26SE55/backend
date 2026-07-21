@@ -61,8 +61,7 @@ public class ChatConvertToKbDraftCommandHandler : IRequestHandler<ChatConvertToK
             HelpfulCount = 0,
             CreatedByUserId = command.CurrentUserId,
             ReviewRequired = true,
-            PendingReviewBy = command.CurrentUserId,
-            IsInternalOnly = chat.IsInternal
+            PendingReviewBy = command.CurrentUserId
         };
 
         var initialVersion = new KbArticleVersion
