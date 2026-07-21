@@ -5,7 +5,7 @@ using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Mapping;
-using TicketService.Domain.Enums;
+// using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 
@@ -26,11 +26,10 @@ public class CopyKbArticleTemplateQueryHandler : IRequestHandler<CopyKbArticleTe
         if (article == null || article.IsDeleted)
             return Fail(404, "Không tìm thấy bài viết.");
 
-        if (!article.IsTemplate)
-            return Fail(400, "Bài viết này không phải là bản mẫu.");
-
-        if (article.Status != KbArticleStatusEnum.Published)
-            return Fail(400, "Chỉ có thể sao chép template đang ở trạng thái Xuất bản.");
+        // if (!article.IsTemplate)
+        //     return Fail(400, "Bài viết này không phải là bản mẫu.");
+        // if (article.Status != KbArticleStatusEnum.Published)
+        //     return Fail(400, "Chỉ có thể sao chép template đang ở trạng thái Xuất bản.");
 
         return new CommonResponse<KbArticleTemplateDTO>
         {

@@ -190,6 +190,31 @@ public class InternalKnowledgeBaseController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Sao chép 1 bài KB có sẵn thành bài mới (title = "{title}_copy", status = Draft).
+    /// </summary>
+    /// <remarks>
+    /// Tạo NGAY 1 bản ghi KB mới copy gần như toàn bộ bài gốc (category/content/tags),
+    /// title thêm hậu tố "_copy", trạng thái Draft. Trả Id bản mới để FE mở trang chỉnh sửa.
+    /// </remarks>
+    /// <param name="id">Id bài viết gốc.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="201">Sao chép thành công, trả Id bản mới.</response>
+    /// <response code="404">Không tìm thấy bài viết gốc.</response>
+    [HttpPost("{id:guid}/duplicate")]
+    [ProducesResponseType(typeof(CommonResponse<KbArticleActionDTO>), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Duplicate(Guid id, CancellationToken ct)
+    {
+        var command = new DuplicateKbArticleCommand
+        {
+            SourceId = id,
+            CurrentUserId = GetCurrentUserId()
+        };
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     private Guid GetCurrentUserId()
     {
         return string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
