@@ -29,28 +29,11 @@ public class KnowledgeBaseArticleConfiguration : IEntityTypeConfiguration<Knowle
             .HasMaxLength(256)
             .IsRequired();
 
-        builder.Property(e => e.Symptoms)
-            .HasColumnName("symptoms")
+        builder.Property(e => e.Content)
+            .HasColumnName("content")
             .HasColumnType("jsonb")
             .HasConversion(new JsonDocumentValueConverter())
             .IsRequired();
-
-        builder.Property(e => e.DiagnosisSteps)
-            .HasColumnName("diagnosis_steps")
-            .HasColumnType("jsonb")
-            .HasConversion(new JsonDocumentValueConverter())
-            .IsRequired();
-
-        builder.Property(e => e.SolutionSteps)
-            .HasColumnName("solution_steps")
-            .HasColumnType("jsonb")
-            .HasConversion(new JsonDocumentValueConverter())
-            .IsRequired();
-
-        builder.Property(e => e.RecommendedParts)
-            .HasColumnName("recommended_parts")
-            .HasColumnType("jsonb")
-            .HasConversion(new JsonValueConverter<List<string>?>());
 
         builder.Property(e => e.Tags)
             .HasColumnName("tags")

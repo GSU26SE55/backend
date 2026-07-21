@@ -40,10 +40,7 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
 
         // Copy content to article
         article.Title = version.Title;
-        article.Symptoms = version.Symptoms;
-        article.DiagnosisSteps = version.DiagnosisSteps;
-        article.SolutionSteps = version.SolutionSteps;
-        article.RecommendedParts = version.RecommendedParts;
+        article.Content = version.Content;
         article.Tags = version.Tags.ToList();
         article.Version = nextMajor;
 
@@ -63,10 +60,7 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
             MinorVersion = 0,
             Status = KbVersionStatusEnum.Approved,
             Title = article.Title,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
-            RecommendedParts = article.RecommendedParts,
+            Content = article.Content,
             Tags = article.Tags.ToList(),
             ChangeDescription = $"Khôi phục từ phiên bản v{version.MajorVersion}.{version.MinorVersion}",
             ChangedBy = command.CurrentUserId

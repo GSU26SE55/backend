@@ -23,13 +23,7 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
     /// </summary>
     public TicketCategoryEnum Category { get; set; }
     public string Title { get; set; } = string.Empty;
-    public string Symptoms { get; set; } = string.Empty;
-    /// <summary>
-    /// Diagnosis steps.
-    /// </summary>
-    public string DiagnosisSteps { get; set; } = string.Empty;
-    public string SolutionSteps { get; set; } = string.Empty;
-    public List<string>? RecommendedParts { get; set; }
+    public string Content { get; set; } = string.Empty;
     /// <summary>
     /// Tags.
     /// </summary>
@@ -50,20 +44,8 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
         else if (Title.Length > 200)
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được vượt quá 200 ký tự." });
 
-        if (string.IsNullOrWhiteSpace(Symptoms))
-            response.ListErrors.Add(new Errors { Field = "Symptoms", Detail = "Triệu chứng không được để trống." });
-        else if (Symptoms.Length > 10000)
-            response.ListErrors.Add(new Errors { Field = "Symptoms", Detail = "Triệu chứng không được vượt quá 10000 ký tự." });
-
-        if (string.IsNullOrWhiteSpace(DiagnosisSteps))
-            response.ListErrors.Add(new Errors { Field = "DiagnosisSteps", Detail = "Các bước chẩn đoán không được để trống." });
-        else if (DiagnosisSteps.Length > 20000)
-            response.ListErrors.Add(new Errors { Field = "DiagnosisSteps", Detail = "Các bước chẩn đoán không được vượt quá 20000 ký tự." });
-
-        if (string.IsNullOrWhiteSpace(SolutionSteps))
-            response.ListErrors.Add(new Errors { Field = "SolutionSteps", Detail = "Các bước xử lý không được để trống." });
-        else if (SolutionSteps.Length > 20000)
-            response.ListErrors.Add(new Errors { Field = "SolutionSteps", Detail = "Các bước xử lý không được vượt quá 20000 ký tự." });
+        if (string.IsNullOrWhiteSpace(Content))
+            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được để trống." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))
             response.ListErrors.Add(new Errors { Field = "Category", Detail = "Danh mục không hợp lệ." });

@@ -49,13 +49,32 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
+        var ticketIds = rawItems.Select(t => t.Id).ToList();
+        HashSet<Guid> unreadTicketIds;
+        if (ticketIds.Count == 0)
+        {
+            unreadTicketIds = new HashSet<Guid>();
+        }
+        else
+        {
+            var readChatIds = _unitOfWork.TicketChatReads.GetAllAsync().AsNoTracking()
+                .Where(r => r.UserId == customerId && !r.IsDeleted).Select(r => r.ChatId);
+            var unreadList = await _unitOfWork.TicketChats.GetAllAsync().AsNoTracking()
+                .Where(c => ticketIds.Contains(c.TicketId) && !c.IsDeleted
+                    && c.AuthorUserId != customerId && !c.IsInternal
+                    && !readChatIds.Contains(c.Id))
+                .Select(c => c.TicketId).Distinct()
+                .ToListAsync(cancellationToken);
+            unreadTicketIds = unreadList.ToHashSet();
+        }
+
         return new CommonResponse<PaginationResponse<TicketDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
             Data = new PaginationResponse<TicketDTO>
             {
-                Items = rawItems.Select(TicketQueryHelper.MapToTicketDTO).ToList(),
+                Items = rawItems.Select(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id))).ToList(),
                 TotalItems = total,
                 PageNumber = request.PageNumber,
                 PageSize = request.PageSize

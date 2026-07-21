@@ -223,9 +223,7 @@ public class KbWorkflowHandlersTests
             Id = versionId,
             ArticleId = articleId,
             Title = "Old Title",
-            Symptoms = JsonDocument.Parse("\"Symptoms\""),
-            DiagnosisSteps = JsonDocument.Parse("\"Steps\""),
-            SolutionSteps = JsonDocument.Parse("\"Solution\""),
+            Content = JsonDocument.Parse("\"Symptoms. Steps. Solution.\""),
             MajorVersion = 1,
             MinorVersion = 0
         };
@@ -455,9 +453,7 @@ public class KbWorkflowHandlersTests
             CurrentUserId = Guid.NewGuid(),
             CurrentUserRole = "Staff",
             Title = "Updated Title",
-            Symptoms = "symptoms",
-            DiagnosisSteps = "steps",
-            SolutionSteps = "solution"
+            Content = "symptoms. steps. solution."
         };
 
         // Act
@@ -490,9 +486,7 @@ public class KbWorkflowHandlersTests
             CurrentUserId = Guid.NewGuid(), // different user
             CurrentUserRole = "Customer", // not staff/manager/admin
             Title = "Updated Title",
-            Symptoms = "symptoms",
-            DiagnosisSteps = "steps",
-            SolutionSteps = "solution"
+            Content = "symptoms. steps. solution."
         };
 
         // Act
@@ -530,9 +524,7 @@ public class KbWorkflowHandlersTests
             CurrentUserId = creatorId,
             CurrentUserRole = "Staff",
             Title = "Updated Title",
-            Symptoms = "Updated Symptoms",
-            DiagnosisSteps = "Updated Steps",
-            SolutionSteps = "Updated Solution",
+            Content = "Updated Symptoms. Updated Steps. Updated Solution.",
             IsInternalOnly = true,
             ChangeDescription = "Minor updates"
         };
@@ -554,7 +546,7 @@ public class KbWorkflowHandlersTests
             v.MajorVersion == 2 &&
             v.MinorVersion == 1 &&
             v.Title == "Updated Title" &&
-            v.Symptoms.RootElement.GetString() == "Updated Symptoms" &&
+            v.Content.RootElement.GetString() == "Updated Symptoms. Updated Steps. Updated Solution." &&
             v.Status == KbVersionStatusEnum.Pending
         )), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);

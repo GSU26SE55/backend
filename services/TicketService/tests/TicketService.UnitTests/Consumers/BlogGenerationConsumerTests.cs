@@ -107,9 +107,7 @@ public class BlogGenerationConsumerTests
             Id = kbId,
             Title = "KB Article",
             Status = KbArticleStatusEnum.Published,
-            Symptoms = JsonDocument.Parse("\"S\""),
-            DiagnosisSteps = JsonDocument.Parse("\"D\""),
-            SolutionSteps = JsonDocument.Parse("\"Sol\""),
+            Content = JsonDocument.Parse("\"S\""),
             Tags = new List<string>()
         };
 
@@ -159,9 +157,7 @@ public class BlogGenerationConsumerTests
             Id = kbId,
             Title = "KB Article",
             Status = KbArticleStatusEnum.Published,
-            Symptoms = JsonDocument.Parse("\"S\""),
-            DiagnosisSteps = JsonDocument.Parse("\"D\""),
-            SolutionSteps = JsonDocument.Parse("\"Sol\""),
+            Content = JsonDocument.Parse("\"S\""),
             Tags = new List<string>()
         };
 

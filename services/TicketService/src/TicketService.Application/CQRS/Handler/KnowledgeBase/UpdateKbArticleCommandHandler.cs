@@ -68,10 +68,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             MinorVersion = nextMinor,
             Status = KbVersionStatusEnum.Pending,
             Title = command.Title,
-            Symptoms = J(command.Symptoms),
-            DiagnosisSteps = J(command.DiagnosisSteps),
-            SolutionSteps = J(command.SolutionSteps),
-            RecommendedParts = command.RecommendedParts,
+            Content = J(command.Content),
             Tags = command.Tags ?? new List<string>(),
             ChangeDescription = command.ChangeDescription ?? "Staff cập nhật nội dung",
             ChangedBy = command.CurrentUserId
@@ -158,10 +155,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
     private static void ApplyContentToArticle(KnowledgeBaseArticle article, UpdateKbArticleCommand command)
     {
         article.Title = command.Title;
-        article.Symptoms = J(command.Symptoms);
-        article.DiagnosisSteps = J(command.DiagnosisSteps);
-        article.SolutionSteps = J(command.SolutionSteps);
-        article.RecommendedParts = command.RecommendedParts;
+        article.Content = J(command.Content);
         article.Tags = command.Tags ?? new List<string>();
         article.IsInternalOnly = command.IsInternalOnly;
     }
@@ -169,10 +163,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
     private static void ApplyContentToVersion(KbArticleVersion version, UpdateKbArticleCommand command)
     {
         version.Title = command.Title;
-        version.Symptoms = J(command.Symptoms);
-        version.DiagnosisSteps = J(command.DiagnosisSteps);
-        version.SolutionSteps = J(command.SolutionSteps);
-        version.RecommendedParts = command.RecommendedParts;
+        version.Content = J(command.Content);
         version.Tags = command.Tags ?? new List<string>();
     }
 

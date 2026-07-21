@@ -8,16 +8,7 @@ public class KbArticleDiffDTO
     public string FromVersion { get; set; } = string.Empty;
     public string ToVersion { get; set; } = string.Empty;
     public DiffSection TitleDiff { get; set; } = new();
-    /// <summary>
-    /// Symptoms diff.
-    /// </summary>
-    public DiffSection SymptomsDiff { get; set; } = new();
-    public DiffSection DiagnosisStepsDiff { get; set; } = new();
-    public DiffSection SolutionStepsDiff { get; set; } = new();
-    /// <summary>
-    /// Recommended parts diff.
-    /// </summary>
-    public DiffSection RecommendedPartsDiff { get; set; } = new();
+    public DiffSection ContentDiff { get; set; } = new();
     public DiffSection TagsDiff { get; set; } = new();
 }
 
