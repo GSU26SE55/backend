@@ -284,9 +284,7 @@ public class TicketDataSeeder
                 Code = "KB-CHARGE-001",
                 Category = TicketCategoryEnum.Charging,
                 Title = "Pin không sạc: hướng dẫn chẩn đoán",
-                Symptoms = S("Đèn báo không sáng, dung lượng pin không tăng khi cắm sạc."),
-                DiagnosisSteps = S("1. Kiểm tra adapter\n2. Đo điện áp đầu vào\n3. Kiểm tra BMS log"),
-                SolutionSteps = S("1. Thay adapter nếu hỏng\n2. Reset BMS\n3. Liên hệ kỹ thuật nếu vẫn lỗi"),
+                Content = S("<h2>Triệu chứng</h2><p>Đèn báo không sáng, dung lượng pin không tăng khi cắm sạc.</p><h2>Các bước chẩn đoán</h2><p>1. Kiểm tra adapter\n2. Đo điện áp đầu vào\n3. Kiểm tra BMS log</p><h2>Các bước giải quyết</h2><p>1. Thay adapter nếu hỏng\n2. Reset BMS\n3. Liên hệ kỹ thuật nếu vẫn lỗi</p>"),
                 Tags = new List<string> { "charging", "no-power" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -299,9 +297,7 @@ public class TicketDataSeeder
                 Code = "KB-HEAT-001",
                 Category = TicketCategoryEnum.Overheat,
                 Title = "Pin quá nhiệt khi sử dụng",
-                Symptoms = S("Nhiệt độ vỏ pin > 50°C sau 30 phút hoạt động."),
-                DiagnosisSteps = S("1. Đo nhiệt độ bề mặt\n2. Kiểm tra dòng tải\n3. Đọc threshold config"),
-                SolutionSteps = S("1. Giảm tải\n2. Kiểm tra thông gió\n3. Thay cell nếu hỏng"),
+                Content = S("<h2>Triệu chứng</h2><p>Nhiệt độ vỏ pin > 50°C sau 30 phút hoạt động.</p><h2>Các bước chẩn đoán</h2><p>1. Đo nhiệt độ bề mặt\n2. Kiểm tra dòng tải\n3. Đọc threshold config</p><h2>Các bước giải quyết</h2><p>1. Giảm tải\n2. Kiểm tra thông gió\n3. Thay cell nếu hỏng</p>"),
                 Tags = new List<string> { "overheat", "safety" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -314,9 +310,7 @@ public class TicketDataSeeder
                 Code = "KB-PERF-001",
                 Category = TicketCategoryEnum.Performance,
                 Title = "Suy giảm dung lượng pin",
-                Symptoms = S("Pin chỉ giữ điện được nửa so với ban đầu."),
-                DiagnosisSteps = S("1. Kiểm tra SOH\n2. Đếm cycle count\n3. So sánh với baseline"),
-                SolutionSteps = S("1. Nếu SOH < 75% → đề xuất EOL\n2. Calibrate BMS\n3. Tư vấn khách hàng"),
+                Content = S("<h2>Triệu chứng</h2><p>Pin chỉ giữ điện được nửa so với ban đầu.</p><h2>Các bước chẩn đoán</h2><p>1. Kiểm tra SOH\n2. Đếm cycle count\n3. So sánh với baseline</p><h2>Các bước giải quyết</h2><p>1. Nếu SOH < 75% → đề xuất EOL\n2. Calibrate BMS\n3. Tư vấn khách hàng</p>"),
                 Tags = new List<string> { "soh", "degradation" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -701,40 +695,7 @@ public class TicketDataSeeder
                 Code = "KB-2026-0001",
                 Category = TicketCategoryEnum.Charging,
                 Title = "Pin sạc chậm - Kiểm tra cáp và cổng",
-                Symptoms = S(@"
-## Triệu chứng quan sát:
-- Đèn báo sạc nhấp nháy hoặc không sáng
-- Thời gian sạc > 8 giờ (bình thường 4-6 giờ)
-- Nhiệt độ pin tăng cao khi sạc (>45°C)
-"),
-                DiagnosisSteps = S(@"
-## Bước 1: Kiểm tra nguồn điện
-- [ ] Đo điện áp đầu vào: 220V ±10%
-- [ ] Kiểm tra ổn định nguồn: không dao động
-
-## Bước 2: Kiểm tra cáp kết nối
-- [ ] Cáp nguyên vẹn, không gãy, không cháy
-- [ ] Đầu cắm chặt chẽ, không lỏng
-
-## Bước 3: Kiểm tra cổng sạc
-- [ ] Không có bụi, gỉ, oxy hóa
-- [ ] Pin contact không bị cong hoặc hỏng
-"),
-                SolutionSteps = S(@"
-## Giải pháp:
-1. Thay cáp sạc nếu hư hỏng (Mã linh kiện: CAB-USB-C-2M)
-2. Làm sạch cổng sạc bằng khí nén (AIR-CLEAN-500ML)
-3. Cập nhật firmware nếu phiên bản < 1.2.3
-
-## Kiểm tra sau xử lý:
-- Đèn báo sạc sáng liên tục màu xanh
-- Thời gian sạc quay về 4-6 giờ
-- Nhiệt độ khi sạc < 40°C
-
-## Follow-up:
-- Kiểm tra lại sau 24 giờ
-"),
-                RecommendedParts = new List<string> { "CAB-USB-C-2M", "AIR-CLEAN-500ML" },
+                Content = S("<h2>Triệu chứng</h2><ul><li>Đèn báo sạc nhấp nháy hoặc không sáng</li><li>Thời gian sạc &gt; 8 giờ (bình thường 4-6 giờ)</li><li>Nhiệt độ pin tăng cao khi sạc (&gt;45°C)</li></ul><h2>Các bước chẩn đoán</h2><p>Bước 1: Kiểm tra nguồn điện — Đo điện áp đầu vào: 220V ±10%, kiểm tra ổn định nguồn. Bước 2: Kiểm tra cáp kết nối — Cáp nguyên vẹn, đầu cắm chặt. Bước 3: Kiểm tra cổng sạc — Không có bụi, gỉ, oxy hóa.</p><h2>Các bước giải quyết</h2><p>1. Thay cáp sạc nếu hư hỏng (CAB-USB-C-2M). 2. Làm sạch cổng sạc bằng khí nén (AIR-CLEAN-500ML). 3. Cập nhật firmware nếu phiên bản &lt; 1.2.3.</p>"),
                 Tags = new List<string> { "charging", "cable", "port", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -749,10 +710,7 @@ public class TicketDataSeeder
                 Code = "KB-2026-0002",
                 Category = TicketCategoryEnum.Overheat,
                 Title = "Quá nhiệt khi vận hành - Quản lý nhiệt độ",
-                Symptoms = S("Pin nóng >45°C, quạt tản nhiệt không hoạt động, cảnh báo nhiệt độ trên màn hình"),
-                DiagnosisSteps = S("1. Kiểm tra nhiệt độ môi trường\n2. Kiểm tra khe tản nhiệt\n3. Kiểm tra quạt làm mát"),
-                SolutionSteps = S("1. Đảm bảo khoảng trống 10cm xung quanh\n2. Vệ sinh bụi trên khe tản nhiệt\n3. Thay quạt nếu hỏng"),
-                RecommendedParts = new List<string> { "FAN-COOL-120MM" },
+                Content = S("<h2>Triệu chứng</h2><p>Pin nóng &gt;45°C, quạt tản nhiệt không hoạt động, cảnh báo nhiệt độ trên màn hình</p><h2>Các bước chẩn đoán</h2><p>1. Kiểm tra nhiệt độ môi trường\n2. Kiểm tra khe tản nhiệt\n3. Kiểm tra quạt làm mát</p><h2>Các bước giải quyết</h2><p>1. Đảm bảo khoảng trống 10cm xung quanh\n2. Vệ sinh bụi trên khe tản nhiệt\n3. Thay quạt nếu hỏng (FAN-COOL-120MM)</p>"),
                 Tags = new List<string> { "overheat", "thermal", "cooling", "fan", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -767,10 +725,7 @@ public class TicketDataSeeder
                 Code = "KB-2026-0003",
                 Category = TicketCategoryEnum.NoPower,
                 Title = "Mất nguồn đột ngột - Kiểm tra firmware và kết nối",
-                Symptoms = S("Pin tắt đột ngột, không khởi động lại, không phản hồi"),
-                DiagnosisSteps = S("1. Kiểm tra nguồn điện đầu vào\n2. Kiểm tra cầu chì bảo vệ\n3. Kiểm tra log firmware"),
-                SolutionSteps = S("1. Reset bằng nút reset phần cứng\n2. Cập nhật firmware\n3. Thay cầu chì nếu cần"),
-                RecommendedParts = new List<string> { "FUSE-10A" },
+                Content = S("<h2>Triệu chứng</h2><p>Pin tắt đột ngột, không khởi động lại, không phản hồi</p><h2>Các bước chẩn đoán</h2><p>1. Kiểm tra nguồn điện đầu vào\n2. Kiểm tra cầu chì bảo vệ\n3. Kiểm tra log firmware</p><h2>Các bước giải quyết</h2><p>1. Reset bằng nút reset phần cứng\n2. Cập nhật firmware\n3. Thay cầu chì nếu cần (FUSE-10A)</p>"),
                 Tags = new List<string> { "power", "firmware", "connection", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -785,10 +740,7 @@ public class TicketDataSeeder
                 Code = "KB-2026-0004",
                 Category = TicketCategoryEnum.Performance,
                 Title = "Suy giảm hiệu năng - Phân tích chu kỳ sạc",
-                Symptoms = S("Dung lượng pin giảm >20%, thời gian sử dụng ngắn hơn bình thường"),
-                DiagnosisSteps = S("1. Kiểm tra số chu kỳ sạc\n2. Đo điện áp cell\n3. Kiểm tra SOH (State of Health)"),
-                SolutionSteps = S("1. Cân bằng cell nếu chênh lệch >100mV\n2. Thay cell hỏng\n3. Khuyến nghị thay pin nếu SOH <70%"),
-                RecommendedParts = new List<string> { "CELL-LI-ION-3.7V" },
+                Content = S("<h2>Triệu chứng</h2><p>Dung lượng pin giảm &gt;20%, thời gian sử dụng ngắn hơn bình thường</p><h2>Các bước chẩn đoán</h2><p>1. Kiểm tra số chu kỳ sạc\n2. Đo điện áp cell\n3. Kiểm tra SOH (State of Health)</p><h2>Các bước giải quyết</h2><p>1. Cân bằng cell nếu chênh lệch &gt;100mV\n2. Thay cell hỏng (CELL-LI-ION-3.7V)\n3. Khuyến nghị thay pin nếu SOH &lt;70%</p>"),
                 Tags = new List<string> { "performance", "capacity", "soh", "cycle", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,
@@ -803,10 +755,7 @@ public class TicketDataSeeder
                 Code = "KB-2026-0005",
                 Category = TicketCategoryEnum.Repair,
                 Title = "Hư hỏng vật lý - Hướng dẫn thay thế linh kiện",
-                Symptoms = S("Vỏ pin bị biến dạng, rò rỉ chất lỏng, tiếng kêu bất thường"),
-                DiagnosisSteps = S("1. Đánh giá mức độ hư hỏng\n2. Xác định linh kiện bị ảnh hưởng\n3. Kiểm tra BMS còn hoạt động không"),
-                SolutionSteps = S("1. Cách ly pin khỏi hệ thống\n2. Thay thế linh kiện hư hỏng\n3. Kiểm tra toàn bộ trước khi đưa vào vận hành"),
-                RecommendedParts = new List<string> { "CASE-REPLACEMENT-MODEL-A" },
+                Content = S("<h2>Triệu chứng</h2><p>Vỏ pin bị biến dạng, rò rỉ chất lỏng, tiếng kêu bất thường</p><h2>Các bước chẩn đoán</h2><p>1. Đánh giá mức độ hư hỏng\n2. Xác định linh kiện bị ảnh hưởng\n3. Kiểm tra BMS còn hoạt động không</p><h2>Các bước giải quyết</h2><p>1. Cách ly pin khỏi hệ thống\n2. Thay thế linh kiện hư hỏng (CASE-REPLACEMENT-MODEL-A)\n3. Kiểm tra toàn bộ trước khi đưa vào vận hành</p>"),
                 Tags = new List<string> { "repair", "physical-damage", "replacement", "example", "template" },
                 Status = KbArticleStatusEnum.Published,
                 Version = 1,

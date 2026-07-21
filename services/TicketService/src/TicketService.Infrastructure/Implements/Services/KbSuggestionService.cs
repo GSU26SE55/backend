@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -37,13 +36,13 @@ public class KbSuggestionService : IKbSuggestionService
             // Build explicit OR predicate per keyword — avoids EF Core translation issues
             // with List<string>.Any() inside IQueryable.Where().
             var ids = await baseQuery
-                .Select(a => new { a.Id, a.Title, a.Symptoms })
+                .Select(a => new { a.Id, a.Title, a.Content })
                 .ToListAsync(ct);
 
             var matchedIds = ids
                 .Where(a => keywords.Any(kw =>
                     a.Title.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                    (a.Symptoms != null && F(a.Symptoms).Contains(kw, StringComparison.OrdinalIgnoreCase))))
+                    KnowledgeBaseMapper.J(a.Content).Contains(kw, StringComparison.OrdinalIgnoreCase)))
                 .Select(a => a.Id)
                 .ToHashSet();
 
@@ -68,11 +67,6 @@ public class KbSuggestionService : IKbSuggestionService
 
         return suggestions.Select(KnowledgeBaseMapper.ToSuggestDto).ToList();
     }
-
-    private static string F(JsonDocument doc) =>
-        doc.RootElement.ValueKind == JsonValueKind.String
-            ? doc.RootElement.GetString() ?? string.Empty
-            : doc.RootElement.GetRawText();
 
     private static List<string> ExtractKeywords(string body)
     {

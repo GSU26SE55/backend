@@ -33,9 +33,7 @@ public class TicketKbReferenceHandlerTests
             Code = "KB-2026-0001",
             Title = "Test Article",
             Category = TicketCategoryEnum.Charging,
-            Symptoms = JsonDocument.Parse("\"s\""),
-            DiagnosisSteps = JsonDocument.Parse("\"d\""),
-            SolutionSteps = JsonDocument.Parse("\"sol\""),
+            Content = JsonDocument.Parse("\"s\""),
             Status = KbArticleStatusEnum.Published,
             IsInternalOnly = isInternalOnly
         };

@@ -16,16 +16,7 @@ public class KbArticleVersionDTO
     public int MinorVersion { get; set; }
     public KbVersionStatusEnum Status { get; set; }
     public string Title { get; set; } = string.Empty;
-    /// <summary>
-    /// Symptoms.
-    /// </summary>
-    public string Symptoms { get; set; } = string.Empty;
-    public string DiagnosisSteps { get; set; } = string.Empty;
-    public string SolutionSteps { get; set; } = string.Empty;
-    /// <summary>
-    /// Recommended parts.
-    /// </summary>
-    public List<string>? RecommendedParts { get; set; }
+    public string Content { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
     public string ChangeDescription { get; set; } = string.Empty;
     /// <summary>

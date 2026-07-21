@@ -19,6 +19,15 @@ public class MyTicketsAsStaffQueryHandlerTests
     public MyTicketsAsStaffQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
+
+        var mockChatReads = new Mock<IGenericRepository<TicketChatRead>>();
+        mockChatReads.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChatRead>().BuildMock());
+        _mockUow.Setup(x => x.TicketChatReads).Returns(mockChatReads.Object);
+
+        var mockChats = new Mock<IGenericRepository<TicketChat>>();
+        mockChats.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChat>().BuildMock());
+        _mockUow.Setup(x => x.TicketChats).Returns(mockChats.Object);
+
         _handler = new MyTicketsAsStaffQueryHandler(_mockUow.Object, _mockCurrentUserService.Object);
     }
 

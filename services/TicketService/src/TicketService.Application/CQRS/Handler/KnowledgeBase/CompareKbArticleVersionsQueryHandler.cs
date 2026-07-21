@@ -1,10 +1,10 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
@@ -51,12 +51,8 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             toVersionLabel = $"v{toVersion.MajorVersion}.{toVersion.MinorVersion}";
         }
 
-        var fromSymptoms = F(fromVersion.Symptoms);
-        var toSymptoms = F(toVersion?.Symptoms ?? currentArticle!.Symptoms);
-        var fromDiagnosis = F(fromVersion.DiagnosisSteps);
-        var toDiagnosis = F(toVersion?.DiagnosisSteps ?? currentArticle!.DiagnosisSteps);
-        var fromSolution = F(fromVersion.SolutionSteps);
-        var toSolution = F(toVersion?.SolutionSteps ?? currentArticle!.SolutionSteps);
+        var fromContent = KnowledgeBaseMapper.J(fromVersion.Content);
+        var toContent = KnowledgeBaseMapper.J(toVersion?.Content ?? currentArticle!.Content);
         var toTitle = toVersion?.Title ?? currentArticle!.Title;
 
         var diff = new KbArticleDiffDTO
@@ -64,15 +60,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             FromVersion = $"v{fromVersion.MajorVersion}.{fromVersion.MinorVersion}",
             ToVersion = toVersionLabel,
             TitleDiff = new DiffSection { OldValue = fromVersion.Title, NewValue = toTitle, IsChanged = fromVersion.Title != toTitle },
-            SymptomsDiff = new DiffSection { OldValue = fromSymptoms, NewValue = toSymptoms, IsChanged = fromSymptoms != toSymptoms },
-            DiagnosisStepsDiff = new DiffSection { OldValue = fromDiagnosis, NewValue = toDiagnosis, IsChanged = fromDiagnosis != toDiagnosis },
-            SolutionStepsDiff = new DiffSection { OldValue = fromSolution, NewValue = toSolution, IsChanged = fromSolution != toSolution },
-            RecommendedPartsDiff = new DiffSection
-            {
-                OldValue = fromVersion.RecommendedParts != null ? string.Join(", ", fromVersion.RecommendedParts) : "",
-                NewValue = (toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts) != null ? string.Join(", ", toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts!) : "",
-                IsChanged = !(fromVersion.RecommendedParts ?? new List<string>()).SequenceEqual(toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts ?? new List<string>())
-            },
+            ContentDiff = new DiffSection { OldValue = fromContent, NewValue = toContent, IsChanged = fromContent != toContent },
             TagsDiff = new DiffSection { OldValue = string.Join(", ", fromVersion.Tags), NewValue = string.Join(", ", toVersion?.Tags ?? currentArticle!.Tags), IsChanged = !fromVersion.Tags.SequenceEqual(toVersion?.Tags ?? currentArticle!.Tags) }
         };
 
@@ -83,11 +71,6 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             Data = diff
         };
     }
-
-    private static string F(JsonDocument doc) =>
-        doc.RootElement.ValueKind == JsonValueKind.String
-            ? doc.RootElement.GetString() ?? string.Empty
-            : doc.RootElement.GetRawText();
 
     private static CommonResponse<KbArticleDiffDTO> Fail(int statusCode, string message)
     {

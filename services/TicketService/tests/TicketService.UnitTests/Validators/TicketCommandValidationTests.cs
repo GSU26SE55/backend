@@ -506,40 +506,31 @@ public class TicketCommandValidationTests
         var command = new CreateKbArticleCommand
         {
             Title = "",
-            Symptoms = "",
-            DiagnosisSteps = "",
-            SolutionSteps = "",
+            Content = "",
             Category = (TicketCategoryEnum)99,
             Tags = new List<string> { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" } // 11 tags
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
+        result.ListErrors.Should().Contain(x => x.Field == "Content");
         result.ListErrors.Should().Contain(x => x.Field == "Category");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
     [Fact]
-    public async Task CreateKbArticleCommand_ValuesTooLong_ReturnsErrors()
+    public async Task CreateKbArticleCommand_TitleTooLong_ReturnsErrors()
     {
         var command = new CreateKbArticleCommand
         {
             Title = new string('a', 201),
-            Symptoms = new string('b', 10001),
-            DiagnosisSteps = new string('c', 20001),
-            SolutionSteps = new string('d', 20001),
+            Content = "valid content",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
@@ -549,9 +540,7 @@ public class TicketCommandValidationTests
         var command = new CreateKbArticleCommand
         {
             Title = "Valid Title",
-            Symptoms = "Valid Symptoms",
-            DiagnosisSteps = "Valid Diagnosis",
-            SolutionSteps = "Valid Solution",
+            Content = "Valid content for KB article.",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { "valid" }
         };
@@ -567,9 +556,7 @@ public class TicketCommandValidationTests
         {
             ArticleId = Guid.Empty,
             Title = "",
-            Symptoms = "",
-            DiagnosisSteps = "",
-            SolutionSteps = "",
+            Content = "",
             Category = (TicketCategoryEnum)99,
             Tags = new List<string> { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" }
         };
@@ -577,32 +564,25 @@ public class TicketCommandValidationTests
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "ArticleId");
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
+        result.ListErrors.Should().Contain(x => x.Field == "Content");
         result.ListErrors.Should().Contain(x => x.Field == "Category");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
     [Fact]
-    public async Task UpdateKbArticleCommand_ValuesTooLong_ReturnsErrors()
+    public async Task UpdateKbArticleCommand_TitleTooLong_ReturnsErrors()
     {
         var command = new UpdateKbArticleCommand
         {
             ArticleId = Guid.NewGuid(),
             Title = new string('a', 201),
-            Symptoms = new string('b', 10001),
-            DiagnosisSteps = new string('c', 20001),
-            SolutionSteps = new string('d', 20001),
+            Content = "valid content",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
@@ -613,9 +593,7 @@ public class TicketCommandValidationTests
         {
             ArticleId = Guid.NewGuid(),
             Title = "Valid Title",
-            Symptoms = "Valid Symptoms",
-            DiagnosisSteps = "Valid Diagnosis",
-            SolutionSteps = "Valid Solution",
+            Content = "Valid content for KB article.",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { "valid" }
         };

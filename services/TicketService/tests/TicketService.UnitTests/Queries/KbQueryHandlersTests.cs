@@ -173,10 +173,7 @@ public class KbQueryHandlersTests
             MajorVersion = 1,
             MinorVersion = 0,
             Title = "Title A",
-            Symptoms = JsonDocument.Parse("\"Symptoms A\""),
-            DiagnosisSteps = JsonDocument.Parse("\"Diagnosis A\""),
-            SolutionSteps = JsonDocument.Parse("\"Solution A\""),
-            RecommendedParts = new List<string> { "Part A" },
+            Content = JsonDocument.Parse("\"Symptoms A\""),
             Tags = new List<string> { "Tag A" }
         };
 
@@ -187,10 +184,7 @@ public class KbQueryHandlersTests
             MajorVersion = 2,
             MinorVersion = 0,
             Title = "Title B",
-            Symptoms = JsonDocument.Parse("\"Symptoms B\""),
-            DiagnosisSteps = JsonDocument.Parse("\"Diagnosis B\""),
-            SolutionSteps = JsonDocument.Parse("\"Solution B\""),
-            RecommendedParts = new List<string> { "Part B" },
+            Content = JsonDocument.Parse("\"Symptoms B\""),
             Tags = new List<string> { "Tag B" }
         };
 
@@ -250,7 +244,7 @@ public class KbQueryHandlersTests
         {
             Id = articleId,
             Title = "Template Title",
-            Symptoms = JsonDocument.Parse("\"Template Symptoms\""),
+            Content = JsonDocument.Parse("\"Template Symptoms\""),
             Tags = new List<string> { "general" },
             IsTemplate = true,
             Status = KbArticleStatusEnum.Published,
@@ -269,7 +263,7 @@ public class KbQueryHandlersTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().NotBeNull();
-        result.Data!.Symptoms.Should().Be("Template Symptoms");
+        result.Data!.Content.Should().Be("Template Symptoms");
     }
 
     [Fact]

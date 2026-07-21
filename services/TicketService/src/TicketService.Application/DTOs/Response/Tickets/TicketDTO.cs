@@ -41,4 +41,5 @@ public class TicketDTO
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
     public SlaTimerDTO? SlaTimer { get; set; }
+    public bool HasUnreadChat { get; set; }
 }

@@ -7,7 +7,7 @@ namespace TicketService.Application.Common.Utils;
 
 public static class TicketQueryHelper
 {
-    internal static TicketDTO MapToTicketDTO(Ticket t) => new()
+    internal static TicketDTO MapToTicketDTO(Ticket t, bool hasUnreadChat = false) => new()
     {
         Id = t.Id.ToString(),
         Code = t.Code,
@@ -28,7 +28,8 @@ public static class TicketQueryHelper
         IsIncident = t.IsIncident,
         CreatedAt = t.CreatedAt,
         UpdatedAt = t.UpdatedAt,
-        SlaTimer = MapToSlaTimerDTO(t.SlaTimer)
+        SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
+        HasUnreadChat = hasUnreadChat
     };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)

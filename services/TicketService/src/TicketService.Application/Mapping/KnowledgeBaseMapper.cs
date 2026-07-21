@@ -9,7 +9,7 @@ namespace TicketService.Application.Mapping;
 public static class KnowledgeBaseMapper
 {
     // JsonDocument → string: unwrap JSON string, else return raw text
-    internal static string J(JsonDocument? doc) =>
+    public static string J(JsonDocument? doc) =>
         doc is null
             ? string.Empty
             : doc.RootElement.ValueKind == JsonValueKind.String
@@ -17,7 +17,7 @@ public static class KnowledgeBaseMapper
                 : doc.RootElement.GetRawText();
 
     // string → JsonDocument: try parse JSON, fall back to JSON-encoded string
-    internal static JsonDocument ToJsonDoc(string? value)
+    public static JsonDocument ToJsonDoc(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return JsonDocument.Parse("{}");
@@ -34,10 +34,7 @@ public static class KnowledgeBaseMapper
             Code = article.Code,
             Category = article.Category,
             Title = article.Title,
-            Symptoms = J(article.Symptoms),
-            DiagnosisSteps = J(article.DiagnosisSteps),
-            SolutionSteps = J(article.SolutionSteps),
-            RecommendedParts = article.RecommendedParts,
+            Content = J(article.Content),
             Tags = article.Tags.ToList(),
             Status = article.Status,
             IsInternalOnly = article.IsInternalOnly,
@@ -78,7 +75,7 @@ public static class KnowledgeBaseMapper
             Id = a.Id.ToString(),
             Code = a.Code,
             Title = a.Title,
-            Symptoms = J(a.Symptoms),
+            Content = J(a.Content),
             HelpfulCount = a.HelpfulCount,
             ViewCount = a.ViewCount,
             IsInternalOnly = a.IsInternalOnly
@@ -95,10 +92,7 @@ public static class KnowledgeBaseMapper
             MinorVersion = v.MinorVersion,
             Status = v.Status,
             Title = v.Title,
-            Symptoms = J(v.Symptoms),
-            DiagnosisSteps = J(v.DiagnosisSteps),
-            SolutionSteps = J(v.SolutionSteps),
-            RecommendedParts = v.RecommendedParts,
+            Content = J(v.Content),
             Tags = v.Tags,
             ChangeDescription = v.ChangeDescription,
             ChangedBy = v.ChangedBy.ToString(),
@@ -111,10 +105,7 @@ public static class KnowledgeBaseMapper
         return new KbArticleTemplateDTO
         {
             Category = article.Category,
-            Symptoms = J(article.Symptoms),
-            DiagnosisSteps = J(article.DiagnosisSteps),
-            SolutionSteps = J(article.SolutionSteps),
-            RecommendedParts = article.RecommendedParts,
+            Content = J(article.Content),
             Tags = article.Tags.ToList()
         };
     }

@@ -47,10 +47,7 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
             {
                 // Copy contents to main article
                 article.Title = pendingVersion.Title;
-                article.Symptoms = pendingVersion.Symptoms;
-                article.DiagnosisSteps = pendingVersion.DiagnosisSteps;
-                article.SolutionSteps = pendingVersion.SolutionSteps;
-                article.RecommendedParts = pendingVersion.RecommendedParts;
+                article.Content = pendingVersion.Content;
                 article.Tags = pendingVersion.Tags.ToList();
                 article.Version = nextMajor; // Update to new major version
 

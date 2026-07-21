@@ -13,10 +13,7 @@ public class KbArticleVersion : AuditableEntity
 
     // Content snapshot
     public string Title { get; set; } = string.Empty;
-    public JsonDocument Symptoms { get; set; } = JsonDocument.Parse("{}");
-    public JsonDocument DiagnosisSteps { get; set; } = JsonDocument.Parse("{}");
-    public JsonDocument SolutionSteps { get; set; } = JsonDocument.Parse("{}");
-    public List<string>? RecommendedParts { get; set; }
+    public JsonDocument Content { get; set; } = JsonDocument.Parse("{}");
     public List<string> Tags { get; set; } = new();
 
     // Metadata

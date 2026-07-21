@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Infrastructure.Implements.Services;
@@ -36,7 +37,7 @@ public class DeepSeekBlogGeneratorService : IBlogGeneratorService
 
     private static string BuildPrompt(KnowledgeBaseArticle article)
     {
-        var parts = string.Join(", ", article.RecommendedParts ?? new List<string>());
+        var content = KnowledgeBaseMapper.J(article.Content);
         var tags = string.Join(", ", article.Tags);
 
         return $"""
@@ -55,18 +56,11 @@ public class DeepSeekBlogGeneratorService : IBlogGeneratorService
                 **Danh mục:** {article.Category}
                 **Tags:** {tags}
 
-                **Triệu chứng:**
-                {article.Symptoms}
-
-                **Các bước chẩn đoán:**
-                {article.DiagnosisSteps}
-
-                **Giải pháp:**
-                {article.SolutionSteps}
-
-                {(string.IsNullOrEmpty(parts) ? "" : $"**Phụ tùng đề xuất:** {parts}")}
+                **Nội dung:**
+                {content}
 
                 Hãy bắt đầu bài blog ngay (không cần lời giới thiệu về nhiệm vụ).
                 """;
     }
+
 }

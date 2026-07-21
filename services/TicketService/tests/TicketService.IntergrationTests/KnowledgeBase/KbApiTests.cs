@@ -44,9 +44,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
         var command = new CreateKbArticleCommand
         {
             Title = "Battery Overheat Maintenance Steps",
-            Symptoms = "Battery temperature exceeds 50C during charging",
-            DiagnosisSteps = "Verify cooling fan operation",
-            SolutionSteps = "Replace cooling fan if dead",
+            Content = "Battery temperature exceeds 50C during charging. Verify cooling fan operation. Replace cooling fan if dead.",
             Category = TicketCategoryEnum.Overheat,
             Tags = new List<string> { "battery", "overheat" },
             IsInternalOnly = false
@@ -75,7 +73,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = Guid.NewGuid(),
                 Code = "KB-001",
                 Title = "Published Article",
-                Symptoms = JsonDocument.Parse("\"Troubleshoot charging\""),
+                Content = JsonDocument.Parse("\"Troubleshoot charging\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = false
             });
@@ -84,7 +82,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = Guid.NewGuid(),
                 Code = "KB-002",
                 Title = "Deleted Article",
-                Symptoms = JsonDocument.Parse("\"Troubleshoot leaking\""),
+                Content = JsonDocument.Parse("\"Troubleshoot leaking\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = true
             });
@@ -115,7 +113,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-003",
                 Title = "Get By Id Article",
-                Symptoms = JsonDocument.Parse("\"Symptom check\""),
+                Content = JsonDocument.Parse("\"Symptom check\""),
                 Status = KbArticleStatusEnum.Published,
                 IsDeleted = false
             });
@@ -146,7 +144,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-004",
                 Title = "Old Title",
-                Symptoms = JsonDocument.Parse("\"Old Symptoms\""),
+                Content = JsonDocument.Parse("\"Old Symptoms\""),
                 Status = KbArticleStatusEnum.Published,
                 CreatedByUserId = creatorId,
                 IsDeleted = false
@@ -158,9 +156,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
         {
             ArticleId = articleId,
             Title = "New Title",
-            Symptoms = "New Symptoms",
-            DiagnosisSteps = "New Steps",
-            SolutionSteps = "New Solution",
+            Content = "New Symptoms. New Steps. New Solution.",
             Category = TicketCategoryEnum.Overheat,
             Tags = new List<string> { "battery" },
             IsInternalOnly = true
@@ -189,7 +185,7 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
                 Id = articleId,
                 Code = "KB-005",
                 Title = "Helpful Article",
-                Symptoms = JsonDocument.Parse("\"Some issues\""),
+                Content = JsonDocument.Parse("\"Some issues\""),
                 Status = KbArticleStatusEnum.Published,
                 HelpfulCount = 5,
                 IsDeleted = false
