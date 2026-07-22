@@ -223,9 +223,9 @@ public class KbQueryHandlersTests
     }
 
     [Fact]
-    public async Task Handle_CopyTemplate_NotTemplateTag_Returns400()
+    public async Task Handle_CopyTemplate_NonTemplate_ReturnsSuccess()
     {
-        // Arrange
+        // Arrange — constraints relaxed in ebfc17e: any article can be copied, not just templates
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
@@ -245,8 +245,7 @@ public class KbQueryHandlersTests
         var result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
