@@ -48,6 +48,7 @@ public class TicketChatHub : Hub
 
     /// <summary>
     /// Client joins the ticket realtime channel. Quyền truy cập được xác thực tại đây.
+    /// Cache hit: validate quyền rồi return sớm — skip DB, Groups.Add, Metrics.
     /// </summary>
     public async Task JoinTicket(string ticketIdStr)
     {
@@ -64,24 +65,34 @@ public class TicketChatHub : Hub
             throw new HubException("Unauthorized.");
         }
 
-        var actorRoles = GetCurrentRoles();
+        var accessCache = GetAccessCache();
 
+        if (accessCache.TryGetValue(ticketId, out var cached))
+        {
+            if (!cached)
+                throw new HubException("Forbidden: No access to this ticket.");
+            return;
+        }
+
+        var actorRoles = GetCurrentRoles();
         var canAccess = await _authService.CanAccessTicketAsync(ticketId, actorUserId.Value, actorRoles);
+        accessCache[ticketId] = canAccess;
+
         if (!canAccess)
         {
             _logger.LogWarning("[TicketChatHub] JoinTicket failed. User {UserId} does not have access to ticket {TicketId}", actorUserId, ticketId);
             throw new HubException("Forbidden: No access to this ticket.");
         }
 
-        // Add to public chats group
         await Groups.AddToGroupAsync(Context.ConnectionId, PublicGroup(ticketId));
 
-        // Add to internal chats group if user is Staff/Manager/Admin, hoặc participant có CanViewInternal=true
         if (await _authService.CanViewInternalChatsAsync(ticketId, actorUserId.Value, actorRoles))
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, InternalGroup(ticketId));
         }
 
+        // Inc() runs only on the first successful join (cache miss path). Subsequent calls
+        // (direct or via Typing) hit the cache and return early, so metrics stay balanced.
         AppMetrics.SignalRConnectedUsersTotal.WithLabels(ticketId.ToString()).Inc();
         _logger.LogInformation("[TicketChatHub] User {UserId} connected to ticket {TicketId} (ConnId: {ConnId})", actorUserId, ticketId, Context.ConnectionId);
     }
@@ -105,6 +116,7 @@ public class TicketChatHub : Hub
 
     /// <summary>
     /// Client broadcasts that they are typing a chat message.
+    /// Delegates access check to JoinTicket to reuse cache — no duplicate DB call.
     /// </summary>
     public async Task Typing(string ticketIdStr)
     {
@@ -115,11 +127,22 @@ public class TicketChatHub : Hub
         if (!actorUserId.HasValue)
             return;
 
-        var displayName = Context.User?.FindFirstValue("FullName") ?? Context.User?.FindFirstValue(ClaimTypes.Name) ?? "Unknown";
+        try
+        { await JoinTicket(ticketIdStr); }
+        catch (HubException) { return; }
 
-        // Group membership from JoinTicket is the implicit access gate — no extra DB call needed.
-        // OthersInGroup broadcasts to nobody if the caller skipped JoinTicket.
+        var displayName = Context.User?.FindFirstValue("FullName") ?? Context.User?.FindFirstValue(ClaimTypes.Name) ?? "Unknown";
         await Clients.OthersInGroup(PublicGroup(ticketId)).SendAsync("UserTyping", ticketIdStr, actorUserId.ToString(), displayName);
+    }
+
+    // SignalR serializes hub method calls per connection — Context.Items has no concurrent access.
+    private Dictionary<Guid, bool> GetAccessCache()
+    {
+        if (Context.Items.TryGetValue("HasAccessTicket", out var val) && val is Dictionary<Guid, bool> cache)
+            return cache;
+        var newCache = new Dictionary<Guid, bool>();
+        Context.Items["HasAccessTicket"] = newCache;
+        return newCache;
     }
 
     private Guid? GetCurrentUserId()
