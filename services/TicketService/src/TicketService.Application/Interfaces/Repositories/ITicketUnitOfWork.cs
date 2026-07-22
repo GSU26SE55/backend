@@ -6,6 +6,7 @@ namespace TicketService.Application.Interfaces.Repositories;
 public interface ITicketUnitOfWork : IUnitOfWork
 {
     IGenericRepository<Ticket> Tickets { get; }
+    IGenericRepository<TicketBatteryAsset> TicketBatteryAssets { get; }
     IGenericRepository<TicketAuditLog> TicketAuditLogs { get; }       // Sprint audit #AUDIT-24
     IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes { get; } // Sprint audit #AUDIT-25
     IGenericRepository<TicketActivity> TicketActivities { get; }
@@ -30,4 +31,7 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<ChatAiSuggestion> ChatAiSuggestions { get; }
     IGenericRepository<TicketChatTranslation> TicketChatTranslations { get; }
     IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers { get; }
+    IGenericRepository<BlogPost> BlogPosts { get; }
+    IGenericRepository<BlogPostVersion> BlogPostVersions { get; }
+    IGenericRepository<BlogTemplate> BlogTemplates { get; }
 }

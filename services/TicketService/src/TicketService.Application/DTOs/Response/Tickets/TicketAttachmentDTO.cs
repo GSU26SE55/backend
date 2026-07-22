@@ -26,6 +26,7 @@ public class TicketAttachmentDTO
     /// Thumbnail url.
     /// </summary>
     public string? ThumbnailUrl { get; set; }
+    public string? Url { get; set; }
     public bool IsInline { get; set; }
     public int DownloadCount { get; set; }
     /// <summary>

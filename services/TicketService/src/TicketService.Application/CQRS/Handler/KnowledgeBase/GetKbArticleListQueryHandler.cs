@@ -24,7 +24,7 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
 
     public async Task<CommonResponse<PaginationResponse<KbArticleListItemDTO>>> Handle(GetKbArticleListQuery query, CancellationToken ct)
     {
-        if (!Guid.TryParse(_currentUserService.UserId, out var customerId))
+        if (!Guid.TryParse(_currentUserService.UserId, out _))
         {
             return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
             {
@@ -37,17 +37,12 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         var dbQuery = _uow.KnowledgeBaseArticles.GetAllAsync()
             .Where(a => !a.IsDeleted);
 
-        // Role-based filtering
-        if (_currentUserService.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase))
-        {
-            dbQuery = dbQuery.Where(a => a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly);
-        }
-        else
-        {
-            // Internal roles can filter by status
-            if (query.Status.HasValue)
-                dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
-        }
+        // Internal roles filter by status / template
+        if (query.Status.HasValue)
+            dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
+
+        if (query.IsTemplate.HasValue)
+            dbQuery = dbQuery.Where(a => a.IsTemplate == query.IsTemplate.Value);
 
         if (query.Category.HasValue)
             dbQuery = dbQuery.Where(a => a.Category == query.Category.Value);
@@ -58,7 +53,7 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var search = query.Q.ToLower();
-            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search) || a.Symptoms.ToLower().Contains(search));
+            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search));
         }
 
         var totalItems = await dbQuery.CountAsync(ct);

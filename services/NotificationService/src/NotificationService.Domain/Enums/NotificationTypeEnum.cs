@@ -60,5 +60,11 @@ public enum NotificationTypeEnum
     /// <summary>Sprint Chat Wave 4 (#544) — role/type của participant trên ticket bị đổi.</summary>
     ParticipantRoleChanged = 24,
 
+    /// <summary>GH-671 — AI blog generation hoàn thành thành công (status=Draft).</summary>
+    BlogGenerationCompleted = 25,
+
+    /// <summary>GH-671 — AI blog generation thất bại.</summary>
+    BlogGenerationFailed = 26,
+
     System = 99
 }

@@ -28,7 +28,6 @@ public class KbSuggestionService : IKbSuggestionService
         var baseQuery = _uow.KnowledgeBaseArticles.GetAllAsync()
             .Where(a => !a.IsDeleted
                 && a.Status == KbArticleStatusEnum.Published
-                && !a.IsInternalOnly
                 && a.Category == category);
 
         if (keywords.Count > 0)
@@ -36,13 +35,13 @@ public class KbSuggestionService : IKbSuggestionService
             // Build explicit OR predicate per keyword — avoids EF Core translation issues
             // with List<string>.Any() inside IQueryable.Where().
             var ids = await baseQuery
-                .Select(a => new { a.Id, a.Title, a.Symptoms })
+                .Select(a => new { a.Id, a.Title, a.Content })
                 .ToListAsync(ct);
 
             var matchedIds = ids
                 .Where(a => keywords.Any(kw =>
                     a.Title.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                    (a.Symptoms != null && a.Symptoms.Contains(kw, StringComparison.OrdinalIgnoreCase))))
+                    KnowledgeBaseMapper.J(a.Content).Contains(kw, StringComparison.OrdinalIgnoreCase)))
                 .Select(a => a.Id)
                 .ToHashSet();
 
@@ -59,7 +58,7 @@ public class KbSuggestionService : IKbSuggestionService
         if (suggestions.Count == 0 && keywords.Count > 0)
         {
             suggestions = await _uow.KnowledgeBaseArticles.GetAllAsync()
-                .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly && a.Category == category)
+                .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && a.Category == category)
                 .OrderByDescending(a => a.HelpfulCount)
                 .Take(topN)
                 .ToListAsync(ct);

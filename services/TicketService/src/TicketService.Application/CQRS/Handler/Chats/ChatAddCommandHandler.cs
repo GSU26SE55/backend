@@ -186,7 +186,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     SizeBytes = att.SizeBytes,
                     Source = request.UserRole == ActorRoleEnum.Customer
                         ? AttachmentSourceEnum.CustomerSubmission
-                        : AttachmentSourceEnum.StaffWork
+                        : AttachmentSourceEnum.StaffWork,
+                    Url = att.Url
                 };
                 await _uow.TicketAttachments.AddAsync(attachment);
             }

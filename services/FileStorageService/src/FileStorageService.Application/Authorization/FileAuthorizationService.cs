@@ -39,7 +39,10 @@ public class FileAuthorizationService : IFileAuthorizationService
         return purpose switch
         {
             FilePurposeEnum.Firmware => HasRole(AdminRole),
-            FilePurposeEnum.KbImage => HasAnyRole(AdminRole, ManagerRole),
+            // Staff là người soạn bài Knowledge Base chính (BE cho Staff tạo/sửa bài
+            // qua /api/internal/knowledge-base) nên phải được chèn ảnh vào bài viết.
+            // Customer vẫn bị chặn — không thuộc 3 role nội bộ.
+            FilePurposeEnum.KbImage => HasAnyRole(AdminRole, ManagerRole, StaffRole),
             _ => true
         };
     }

@@ -18,6 +18,7 @@ public class UnitOfWork : ITicketUnitOfWork
     }
 
     public IGenericRepository<Ticket> Tickets => new GenericRepository<Ticket>(_context);
+    public IGenericRepository<TicketBatteryAsset> TicketBatteryAssets => new GenericRepository<TicketBatteryAsset>(_context);
     public IGenericRepository<TicketAuditLog> TicketAuditLogs => new GenericRepository<TicketAuditLog>(_context);       // #AUDIT-24
     public IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes => new GenericRepository<TicketAuditOutbox>(_context); // #AUDIT-25
     public IGenericRepository<TicketActivity> TicketActivities => new GenericRepository<TicketActivity>(_context);
@@ -42,6 +43,9 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<ChatAiSuggestion> ChatAiSuggestions => new GenericRepository<ChatAiSuggestion>(_context);
     public IGenericRepository<TicketChatTranslation> TicketChatTranslations => new GenericRepository<TicketChatTranslation>(_context);
     public IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers => new GenericRepository<TicketChatTranslationUser>(_context);
+    public IGenericRepository<BlogPost> BlogPosts => new GenericRepository<BlogPost>(_context);
+    public IGenericRepository<BlogPostVersion> BlogPostVersions => new GenericRepository<BlogPostVersion>(_context);
+    public IGenericRepository<BlogTemplate> BlogTemplates => new GenericRepository<BlogTemplate>(_context);
 
     public async Task BeginTransactionAsync()
     {

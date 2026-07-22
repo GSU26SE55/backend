@@ -7,13 +7,14 @@ namespace TicketService.Application.Common.Utils;
 
 public static class TicketQueryHelper
 {
-    internal static TicketDTO MapToTicketDTO(Ticket t) => new()
+    internal static TicketDTO MapToTicketDTO(Ticket t, bool hasUnreadChat = false) => new()
     {
         Id = t.Id.ToString(),
         Code = t.Code,
         // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
         // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
         BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
+        BatteryAssetIds = t.BatteryAssets.Select(b => b.BatteryAssetId.ToString()).ToList(),
         CustomerId = t.CustomerId.ToString(),
         AssignedStaffId = t.AssignedStaffId.HasValue ? t.AssignedStaffId.Value.ToString() : null,
         Title = t.Title,
@@ -27,7 +28,8 @@ public static class TicketQueryHelper
         IsIncident = t.IsIncident,
         CreatedAt = t.CreatedAt,
         UpdatedAt = t.UpdatedAt,
-        SlaTimer = MapToSlaTimerDTO(t.SlaTimer)
+        SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
+        HasUnreadChat = hasUnreadChat
     };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)

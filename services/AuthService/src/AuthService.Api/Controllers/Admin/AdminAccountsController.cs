@@ -78,6 +78,8 @@ public class AdminAccountsController : ControllerBase
         [FromQuery] AccountStatusEnum? status = null,
         [FromQuery] Guid? roleId = null,
         [FromQuery] bool? emailConfirmed = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
         CancellationToken cancellationToken = default)
     {
         var query = new GetAccountsQuery
@@ -87,7 +89,9 @@ public class AdminAccountsController : ControllerBase
             Keyword = keyword,
             Status = status,
             RoleId = roleId,
-            EmailConfirmed = emailConfirmed
+            EmailConfirmed = emailConfirmed,
+            SortBy = sortBy,
+            SortDir = sortDir
         };
 
         var result = await _mediator.Send(query, cancellationToken);

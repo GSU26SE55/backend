@@ -130,6 +130,9 @@ public static class ManageDependencyInjection
         // #564 — KB suggestion service
         services.AddScoped<IKbSuggestionService, KbSuggestionService>();
 
+        // GH-671 — Blog AI generator (reuses DeepSeekChatAiClient HttpClient)
+        services.AddScoped<IBlogGeneratorService, DeepSeekBlogGeneratorService>();
+
         // #568 — PDF exporter
         services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
 

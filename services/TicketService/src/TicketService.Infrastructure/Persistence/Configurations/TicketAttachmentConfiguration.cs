@@ -46,6 +46,10 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
             .HasColumnName("thumbnail_url")
             .HasMaxLength(1000);
 
+        builder.Property(e => e.Url)
+            .HasColumnName("url")
+            .HasMaxLength(2000);
+
         builder.Property(e => e.IsInline)
             .HasColumnName("is_inline")
             .HasDefaultValue(false);

@@ -108,8 +108,9 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
 
     public async Task<CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>> Handle(GetIotFirmwareReleasesQuery request, CancellationToken ct)
     {
-        var page = request.Page <= 0 ? 1 : request.Page;
-        var size = Math.Clamp(request.PageSize, 1, 100);
+        // PaginationRequest đã clamp: PageNumber >= 1, PageSize trong [1, 100]
+        var page = request.PageNumber;
+        var size = request.PageSize;
 
         var query = _unitOfWork.IotFirmwareReleases.GetAllAsync().Where(f => !f.IsDeleted);
         if (!string.IsNullOrWhiteSpace(request.HardwareRevision))

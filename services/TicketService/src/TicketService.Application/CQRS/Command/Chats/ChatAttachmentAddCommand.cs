@@ -34,6 +34,7 @@ public class ChatAttachmentAddCommand : IRequest<CommonResponse<TicketAttachment
     /// Kích thước file tính bằng byte.
     /// </summary>
     public long SizeBytes { get; set; }
+    public string? Url { get; set; }
 
     public Task<CommonResponse<TicketAttachmentDTO>> ValidateAsync()
     {

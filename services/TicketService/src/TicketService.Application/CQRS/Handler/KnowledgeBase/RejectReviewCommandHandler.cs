@@ -22,10 +22,13 @@ public class RejectReviewCommandHandler : IRequestHandler<RejectReviewCommand, C
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(RejectReviewCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết.");
+
+        if (article.IsTemplate)
+            return Fail(400, "Template không có approval flow. Dùng endpoint publish để xuất bản template.");
 
         if (article.Status != KbArticleStatusEnum.PendingReview)
             return Fail(409, "Bài viết không ở trạng thái Chờ phê duyệt.");
@@ -33,7 +36,7 @@ public class RejectReviewCommandHandler : IRequestHandler<RejectReviewCommand, C
         // Find pending versions and reject them
         var nextMajor = article.Version + 1;
         var pendingVersions = await _uow.KbArticleVersions.GetAllAsync()
-            .Where(v => v.ArticleId == article.Id && v.MajorVersion == nextMajor && v.Status == KbVersionStatusEnum.Pending)
+            .Where(v => !v.IsDeleted && v.ArticleId == article.Id && v.MajorVersion == nextMajor && v.Status == KbVersionStatusEnum.Pending)
             .ToListAsync(ct);
 
         foreach (var v in pendingVersions)

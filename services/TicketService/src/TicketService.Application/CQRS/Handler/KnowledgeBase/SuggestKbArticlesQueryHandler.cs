@@ -27,7 +27,7 @@ public class SuggestKbArticlesQueryHandler : IRequestHandler<SuggestKbArticlesQu
             return Fail(404, "Không tìm thấy Ticket.");
 
         var suggestions = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly && a.Category == ticket.Category)
+            .Where(a => !a.IsDeleted && a.Status == KbArticleStatusEnum.Published && a.Category == ticket.Category)
             .OrderByDescending(a => a.HelpfulCount)
             .ThenByDescending(a => a.ViewCount)
             .Take(5)

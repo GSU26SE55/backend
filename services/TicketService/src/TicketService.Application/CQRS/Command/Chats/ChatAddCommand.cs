@@ -135,7 +135,8 @@ public record ChatAttachmentInput(
     Guid FileId,
     string FileName,
     string ContentType,
-    long SizeBytes
+    long SizeBytes,
+    string? Url = null
 );
 
 public record ChatMentionInput(

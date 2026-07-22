@@ -6,16 +6,19 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
 
 public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, CommonResponse<PaginationResponse<TicketDTO>>>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
+    private readonly ITicketCurrentUserService _currentUserService;
 
-    public TicketGetListQueryHandler(ITicketUnitOfWork unitOfWork)
+    public TicketGetListQueryHandler(ITicketUnitOfWork unitOfWork, ITicketCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(TicketGetListQuery request, CancellationToken cancellationToken)
@@ -23,6 +26,7 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
+            .Include(t => t.BatteryAssets)
             .Where(t => !t.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
@@ -66,13 +70,36 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
+        var ticketIds = rawItems.Select(t => t.Id).ToList();
+        HashSet<Guid> unreadTicketIds;
+        if (ticketIds.Count == 0 || !Guid.TryParse(_currentUserService.UserId, out var actorId))
+        {
+            unreadTicketIds = new HashSet<Guid>();
+        }
+        else
+        {
+            var actorRoles = new[] { _currentUserService.Role ?? "Admin" };
+            bool canViewInternal = TicketQueryHelper.CanViewInternalChats(actorRoles);
+            var readChatIds = _unitOfWork.TicketChatReads.GetAllAsync().AsNoTracking()
+                .Where(r => r.UserId == actorId && !r.IsDeleted).Select(r => r.ChatId);
+            var chatsBase = _unitOfWork.TicketChats.GetAllAsync().AsNoTracking()
+                .Where(c => ticketIds.Contains(c.TicketId) && !c.IsDeleted && c.AuthorUserId != actorId);
+            if (!canViewInternal)
+                chatsBase = chatsBase.Where(c => !c.IsInternal);
+            var unreadList = await chatsBase
+                .Where(c => !readChatIds.Contains(c.Id))
+                .Select(c => c.TicketId).Distinct()
+                .ToListAsync(cancellationToken);
+            unreadTicketIds = unreadList.ToHashSet();
+        }
+
         return new CommonResponse<PaginationResponse<TicketDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
             Data = new PaginationResponse<TicketDTO>
             {
-                Items = rawItems.Select(TicketQueryHelper.MapToTicketDTO).ToList(),
+                Items = rawItems.Select(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id))).ToList(),
                 TotalItems = total,
                 PageNumber = request.PageNumber,
                 PageSize = request.PageSize

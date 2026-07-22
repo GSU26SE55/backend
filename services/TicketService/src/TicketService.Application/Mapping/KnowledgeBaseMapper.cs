@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
@@ -7,6 +8,24 @@ namespace TicketService.Application.Mapping;
 
 public static class KnowledgeBaseMapper
 {
+    // JsonDocument → string: unwrap JSON string, else return raw text
+    public static string J(JsonDocument? doc) =>
+        doc is null
+            ? string.Empty
+            : doc.RootElement.ValueKind == JsonValueKind.String
+                ? doc.RootElement.GetString() ?? string.Empty
+                : doc.RootElement.GetRawText();
+
+    // string → JsonDocument: try parse JSON, fall back to JSON-encoded string
+    public static JsonDocument ToJsonDoc(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return JsonDocument.Parse("{}");
+        try
+        { return JsonDocument.Parse(value); }
+        catch { return JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(value)); }
+    }
+
     public static KbArticleDTO ToDto(KnowledgeBaseArticle article)
     {
         return new KbArticleDTO
@@ -15,13 +34,10 @@ public static class KnowledgeBaseMapper
             Code = article.Code,
             Category = article.Category,
             Title = article.Title,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
-            RecommendedParts = article.RecommendedParts,
+            Content = J(article.Content),
             Tags = article.Tags.ToList(),
             Status = article.Status,
-            IsInternalOnly = article.IsInternalOnly,
+            IsTemplate = article.IsTemplate,
             Version = article.Version,
             ViewCount = article.ViewCount,
             HelpfulCount = article.HelpfulCount,
@@ -43,6 +59,7 @@ public static class KnowledgeBaseMapper
             Title = a.Title,
             Category = a.Category,
             Status = a.Status,
+            IsTemplate = a.IsTemplate,
             ViewCount = a.ViewCount,
             HelpfulCount = a.HelpfulCount,
             ReviewRequired = a.ReviewRequired,
@@ -57,10 +74,9 @@ public static class KnowledgeBaseMapper
             Id = a.Id.ToString(),
             Code = a.Code,
             Title = a.Title,
-            Symptoms = a.Symptoms,
+            Content = J(a.Content),
             HelpfulCount = a.HelpfulCount,
-            ViewCount = a.ViewCount,
-            IsInternalOnly = a.IsInternalOnly
+            ViewCount = a.ViewCount
         };
     }
 
@@ -74,10 +90,7 @@ public static class KnowledgeBaseMapper
             MinorVersion = v.MinorVersion,
             Status = v.Status,
             Title = v.Title,
-            Symptoms = v.Symptoms,
-            DiagnosisSteps = v.DiagnosisSteps,
-            SolutionSteps = v.SolutionSteps,
-            RecommendedParts = v.RecommendedParts,
+            Content = J(v.Content),
             Tags = v.Tags,
             ChangeDescription = v.ChangeDescription,
             ChangedBy = v.ChangedBy.ToString(),
@@ -90,10 +103,7 @@ public static class KnowledgeBaseMapper
         return new KbArticleTemplateDTO
         {
             Category = article.Category,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
-            RecommendedParts = article.RecommendedParts,
+            Content = J(article.Content),
             Tags = article.Tags.ToList()
         };
     }

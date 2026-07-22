@@ -11,6 +11,7 @@ public class TicketDTO
     public string Id { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string BatteryAssetId { get; set; } = string.Empty;
+    public List<string> BatteryAssetIds { get; set; } = new();
     /// <summary>
     /// Customer id.
     /// </summary>
@@ -40,4 +41,5 @@ public class TicketDTO
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
     public SlaTimerDTO? SlaTimer { get; set; }
+    public bool HasUnreadChat { get; set; }
 }

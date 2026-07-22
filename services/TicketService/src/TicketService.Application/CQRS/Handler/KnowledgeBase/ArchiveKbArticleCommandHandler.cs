@@ -22,10 +22,13 @@ public class ArchiveKbArticleCommandHandler : IRequestHandler<ArchiveKbArticleCo
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(ArchiveKbArticleCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết.");
+
+        if (article.IsTemplate && !command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            return Fail(403, "Chỉ Admin mới có thể lưu trữ template.");
 
         article.Status = KbArticleStatusEnum.Archived;
         _uow.KnowledgeBaseArticles.UpdateAsync(article);

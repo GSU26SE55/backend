@@ -12,4 +12,10 @@ public class GetKbArticleByIdQuery : IRequest<CommonResponse<KbArticleDTO>>
     /// </summary>
     [BindNever]
     public Guid ArticleId { get; set; }
+
+    /// <summary>
+    /// Khi true, trả về 404 nếu article là template — dùng bởi Customer-facing endpoint.
+    /// </summary>
+    [BindNever]
+    public bool RequireNonTemplate { get; set; } = false;
 }

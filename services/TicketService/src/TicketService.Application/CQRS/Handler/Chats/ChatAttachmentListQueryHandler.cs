@@ -57,6 +57,7 @@ public class ChatAttachmentListQueryHandler : IRequestHandler<ChatAttachmentList
                 SizeBytes = a.SizeBytes,
                 Source = a.Source,
                 ThumbnailUrl = a.ThumbnailUrl,
+                Url = a.Url,
                 IsInline = a.IsInline,
                 DownloadCount = a.DownloadCount,
                 VirusScanStatus = a.VirusScanStatus,

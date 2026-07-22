@@ -65,11 +65,6 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         if (article == null)
             return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
 
-        // HÀNG RÀO NGHIỆP VỤ: bài viết nội bộ (IsInternalOnly) không được cung cấp cho khách hàng.
-        // 422: request đúng format nhưng dữ liệu vi phạm rule nghiệp vụ (không phải lỗi quyền/field).
-        if (command.ReferenceType == KbReferenceTypeEnum.ProvidedToCustomer && article.IsInternalOnly)
-            return Fail(422, "Bài viết nội bộ không thể gán với loại tham chiếu 'Cung cấp cho khách hàng'.");
-
         var existing = await _uow.TicketKbReferences.GetAllAsync()
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(r => r.TicketId == command.TicketId && r.KbArticleId == command.KbArticleId, ct);

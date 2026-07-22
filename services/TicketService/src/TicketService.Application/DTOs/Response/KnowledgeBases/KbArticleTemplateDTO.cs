@@ -8,12 +8,6 @@ public class KbArticleTemplateDTO
     /// Danh mục phân loại.
     /// </summary>
     public TicketCategoryEnum Category { get; set; }
-    public string Symptoms { get; set; } = string.Empty;
-    public string DiagnosisSteps { get; set; } = string.Empty;
-    /// <summary>
-    /// Solution steps.
-    /// </summary>
-    public string SolutionSteps { get; set; } = string.Empty;
-    public List<string>? RecommendedParts { get; set; }
+    public string Content { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
 }

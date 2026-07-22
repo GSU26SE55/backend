@@ -66,7 +66,8 @@ public class ChatAttachmentAddCommandHandler : IRequestHandler<ChatAttachmentAdd
             SizeBytes = request.SizeBytes,
             Source = request.UserRole == ActorRoleEnum.Customer
                 ? AttachmentSourceEnum.CustomerSubmission
-                : AttachmentSourceEnum.StaffWork
+                : AttachmentSourceEnum.StaffWork,
+            Url = request.Url
         };
 
         await _uow.TicketAttachments.AddAsync(attachment);
@@ -110,6 +111,7 @@ public class ChatAttachmentAddCommandHandler : IRequestHandler<ChatAttachmentAdd
         SizeBytes = a.SizeBytes,
         Source = a.Source,
         ThumbnailUrl = a.ThumbnailUrl,
+        Url = a.Url,
         IsInline = a.IsInline,
         DownloadCount = a.DownloadCount,
         VirusScanStatus = a.VirusScanStatus,

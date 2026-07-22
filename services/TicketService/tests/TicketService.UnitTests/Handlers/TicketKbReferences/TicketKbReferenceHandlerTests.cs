@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Moq;
 using TicketService.Application.CQRS.Command.TicketKbReferences;
@@ -25,18 +26,15 @@ public class TicketKbReferenceHandlerTests
             AssignedStaffId = assignedStaffId
         };
 
-    private static KnowledgeBaseArticle BuildArticle(bool isInternalOnly = false)
+    private static KnowledgeBaseArticle BuildArticle()
         => new()
         {
             Id = Guid.NewGuid(),
             Code = "KB-2026-0001",
             Title = "Test Article",
             Category = TicketCategoryEnum.Charging,
-            Symptoms = "s",
-            DiagnosisSteps = "d",
-            SolutionSteps = "sol",
+            Content = JsonDocument.Parse("\"s\""),
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = isInternalOnly
         };
 
     // ────────────────────────────────────────────────
@@ -150,37 +148,11 @@ public class TicketKbReferenceHandlerTests
     }
 
     [Fact]
-    public async Task Add_InternalOnlyArticle_ProvidedToCustomer_Returns422()
+    public async Task Add_Article_ConsultedDuringResolve_Returns200()
     {
         _currentUserMock.Setup(s => s.Role).Returns("Admin");
         var ticket = BuildTicket();
-        var article = BuildArticle(isInternalOnly: true);
-
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
-            ticketSeed: new[] { ticket },
-            kbSeed: new[] { article });
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
-
-        var result = await handler.Handle(new AddTicketKbReferenceCommand
-        {
-            TicketId = ticket.Id,
-            KbArticleId = article.Id,
-            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
-            CurrentUserId = Guid.NewGuid()
-        }, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(422); // vi phạm rule nghiệp vụ — không phải lỗi quyền
-        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Never);
-        kbRefs.Verify(r => r.UpdateAsync(It.IsAny<TicketKbReference>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Add_InternalOnlyArticle_ConsultedDuringResolve_Returns200()
-    {
-        _currentUserMock.Setup(s => s.Role).Returns("Admin");
-        var ticket = BuildTicket();
-        var article = BuildArticle(isInternalOnly: true);
+        var article = BuildArticle();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
@@ -275,31 +247,6 @@ public class TicketKbReferenceHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(409); // từ ClosedPendingRate trở đi chặn mọi type — xung đột trạng thái
-    }
-
-    [Fact]
-    public async Task Add_ResolvedTicket_ProvidedToCustomer_InternalOnlyArticle_StillReturns422()
-    {
-        _currentUserMock.Setup(s => s.Role).Returns("Admin");
-        var ticket = BuildTicket(TicketStatusEnum.Resolved);
-        var article = BuildArticle(isInternalOnly: true);
-
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
-            ticketSeed: new[] { ticket },
-            kbSeed: new[] { article });
-        var handler = new AddTicketKbReferenceCommandHandler(uow.Object, _currentUserMock.Object);
-
-        var result = await handler.Handle(new AddTicketKbReferenceCommand
-        {
-            TicketId = ticket.Id,
-            KbArticleId = article.Id,
-            ReferenceType = KbReferenceTypeEnum.ProvidedToCustomer,
-            CurrentUserId = Guid.NewGuid()
-        }, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(422); // guard nghiệp vụ internal-only vẫn thắng dù state Resolved cho phép type này
-        kbRefs.Verify(r => r.AddAsync(It.IsAny<TicketKbReference>()), Times.Never);
     }
 
     [Fact]
