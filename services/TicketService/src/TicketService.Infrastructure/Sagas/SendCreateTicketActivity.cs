@@ -17,7 +17,33 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
 
     public async Task Execute(BehaviorContext<AlertTicketSagaState> context, IBehavior<AlertTicketSagaState> next)
     {
-        var saga = context.Saga;
+        await PublishCreateTicketAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// FIX saga-stuck: MassTransit gọi overload GENERIC này khi activity chạy trong behavior
+    /// có message data — chính là <c>Initially(When(AnomalyDetectedV1/V2))</c>. Trước đây nó chỉ
+    /// <c>next.Execute(context)</c> mà KHÔNG publish command → saga chuyển sang TicketRequested
+    /// nhưng CreateTicketFromAlertCommand không bao giờ được gửi → saga kẹt vĩnh viễn, không
+    /// ticket auto nào được tạo. Nay publish giống overload non-generic.
+    /// </summary>
+    public async Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
+        where T : class
+    {
+        await PublishCreateTicketAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>Build + publish <see cref="CreateTicketFromAlertCommand"/> từ state saga.</summary>
+    private static async Task PublishCreateTicketAsync(IPublishEndpoint publishEndpoint, AlertTicketSagaState saga)
+    {
+        var description = $"Anomaly detected at {saga.DetectedAt:O}. Value: {saga.ActualValue} {saga.Unit}. Threshold: {saga.ThresholdValue} {saga.Unit}.";
+        // BE-AI — nếu AI có prescription (chỉ V2 từ SohPredictionBackgroundService), ghép vào
+        // Description để Manager thấy khuyến nghị ngay khi ticket vào hàng chờ. Nullable → không đổi
+        // ticket từ threshold engine (AiPrescription = null).
+        if (!string.IsNullOrWhiteSpace(saga.AiPrescription))
+            description += $"\n\n--- AI Prescription ---\n{saga.AiPrescription}";
 
         var command = new CreateTicketFromAlertCommand(
             CorrelationId: saga.CorrelationId,
@@ -33,16 +59,11 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             DetectedAt: saga.DetectedAt,
             AnomalyCategory: MapAnomalyTypeToCategory(saga.AnomalyType),
             Title: $"[Auto] {saga.AssetSerialNumber ?? "Battery"} - {MapAnomalyTypeToTitle(saga.AnomalyType)}",
-            Description: $"Anomaly detected at {saga.DetectedAt:O}. Value: {saga.ActualValue} {saga.Unit}. Threshold: {saga.ThresholdValue} {saga.Unit}."
+            Description: description
         );
 
-        await context.Publish(command);
-        await next.Execute(context).ConfigureAwait(false);
+        await publishEndpoint.Publish(command);
     }
-
-    public Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
-        where T : class
-        => next.Execute(context);
 
     public Task Faulted<TException>(BehaviorExceptionContext<AlertTicketSagaState, TException> context, IBehavior<AlertTicketSagaState> next)
         where TException : Exception

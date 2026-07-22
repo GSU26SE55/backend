@@ -56,6 +56,10 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.AutoFromAlert,
             OriginAlertId = request.OriginAlertId,
+            // Thời điểm anomaly được phát hiện + serial pin — để FE hiện panel "Bằng chứng
+            // cảnh báo (lúc phát hiện)" và cột Serial giống ticket do Customer tạo.
+            DetectedAt = request.DetectedAt,
+            BatterySerialNumber = request.BatterySerialNumber,
             ImpactScope = impact,
             UrgencyLevel = urgency,
             Priority = priority,

@@ -1124,6 +1124,18 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AiVerifyReason")
+                        .HasColumnType("text")
+                        .HasColumnName("ai_verify_reason");
+
+                    b.Property<double?>("AiVerifyScore")
+                        .HasColumnType("double precision")
+                        .HasColumnName("ai_verify_score");
+
+                    b.Property<int>("AiVerifyStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("ai_verify_status");
+
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("approved_at");
@@ -1139,6 +1151,11 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid>("BatteryAssetId")
                         .HasColumnType("uuid")
                         .HasColumnName("battery_asset_id");
+
+                    b.Property<string>("BatterySerialNumber")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("battery_serial_number");
 
                     b.Property<int>("Category")
                         .HasColumnType("integer")
@@ -1175,6 +1192,14 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<DateTime?>("DetectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detected_at");
+
+                    b.Property<string>("DuplicateReason")
+                        .HasColumnType("text")
+                        .HasColumnName("duplicate_reason");
+
                     b.Property<Guid?>("EnvironmentalIncidentId")
                         .HasColumnType("uuid")
                         .HasColumnName("environmental_incident_id");
@@ -1198,6 +1223,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<bool>("IsIncident")
                         .HasColumnType("boolean")
                         .HasColumnName("is_incident");
+
+                    b.Property<Guid?>("MergedIntoTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("merged_into_ticket_id");
 
                     b.Property<int>("Origin")
                         .HasColumnType("integer")
@@ -1246,6 +1275,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
+
+                    b.Property<Guid?>("SuspectedDuplicateOfTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("suspected_duplicate_of_ticket_id");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -2403,6 +2436,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("actual_value");
+
+                    b.Property<string>("AiPrescription")
+                        .HasColumnType("text")
+                        .HasColumnName("ai_prescription");
 
                     b.Property<Guid>("AlertId")
                         .HasColumnType("uuid")

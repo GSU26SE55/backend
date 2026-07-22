@@ -21,6 +21,9 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(BatteryAlertEscalationRequestedEvent), typeof(BatteryAlertEscalationRequestedEvent) },
         // Sprint 7 B4 (§31.7) — cascade risk cao → TicketService upgrade Priority + NotificationService notify.
         { nameof(BatteryCascadeRiskHighEvent), typeof(BatteryCascadeRiskHighEvent) },
+        // Sprint IoT — device offline detection publish qua outbox này nhưng thiếu map →
+        // event kẹt (retry vô hạn) chặn relay batch. Thêm để relay publish được.
+        { nameof(IotDeviceWentOfflineEvent), typeof(IotDeviceWentOfflineEvent) },
         // Legacy alias — payload schema cũ (BatteryAnomalyDetectedEvent) cho rows
         // pre-Sprint-5B chưa relay. Deserialize an toàn vì BatteryAnomalyDetectedEvent
         // có sẵn handler ở TicketService (giờ ignored qua Saga tombstone).

@@ -29,6 +29,38 @@ public static class MassTransitExtensions
         IConfiguration configuration,
         Action<IBusRegistrationConfigurator>? configure,
         params System.Reflection.Assembly[] consumerAssemblies)
+        => services.AddMessageBus(configuration, configure, configureBus: null, consumerAssemblies);
+
+    /// <summary>
+    /// Như overload trên, thêm hook <paramref name="configureBus"/> chạy BÊN TRONG
+    /// <c>UsingRabbitMq</c> — dùng khi service cần cấu hình pipeline bus, vd
+    /// <c>cfg.UseMessageScheduler(...)</c> cho saga có timer (TicketService).
+    /// </summary>
+    /// <param name="configureBus">
+    /// Chạy sau host/filter, TRƯỚC <c>ConfigureEndpoints</c>. Null = giữ hành vi mặc định.
+    /// </param>
+    public static IServiceCollection AddMessageBus(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<IBusRegistrationConfigurator>? configure,
+        Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureBus,
+        params System.Reflection.Assembly[] consumerAssemblies)
+        => services.AddMessageBus(
+            configuration, configure, configureBus, excludedConsumerTypes: null, consumerAssemblies);
+
+    /// <summary>
+    /// Như overload trên, thêm <paramref name="excludedConsumerTypes"/> để LOẠI TRỪ consumer
+    /// khỏi assembly scan — dùng khi 1 consumer bị thay thế bởi Saga và không được chạy song song
+    /// (vd <c>BatteryAnomalyDetectedConsumer</c> khi <c>AlertTicketSagaEnabled=true</c>).
+    /// </summary>
+    /// <param name="excludedConsumerTypes">Consumer types bỏ qua khi scan. Null/rỗng = scan hết.</param>
+    public static IServiceCollection AddMessageBus(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<IBusRegistrationConfigurator>? configure,
+        Action<IBusRegistrationContext, IRabbitMqBusFactoryConfigurator>? configureBus,
+        IEnumerable<Type>? excludedConsumerTypes,
+        params System.Reflection.Assembly[] consumerAssemblies)
     {
         services.AddHttpContextAccessor();
 
@@ -36,7 +68,11 @@ public static class MassTransitExtensions
         {
             if (consumerAssemblies != null && consumerAssemblies.Length > 0)
             {
-                x.AddConsumers(consumerAssemblies);
+                var excluded = excludedConsumerTypes?.ToHashSet() ?? new HashSet<Type>();
+                if (excluded.Count > 0)
+                    x.AddConsumers(type => !excluded.Contains(type), consumerAssemblies);
+                else
+                    x.AddConsumers(consumerAssemblies);
             }
 
             // Hook tùy biến — add Saga, Quartz, EF Outbox, … (per-service).
@@ -58,6 +94,9 @@ public static class MassTransitExtensions
                 // (per-endpoint override qua ReceiveEndpoint nếu cần).
                 cfg.PrefetchCount = configuration.GetValue<ushort?>("MessageBus:PrefetchCount") ?? 16;
                 cfg.ConcurrentMessageLimit = configuration.GetValue<int?>("MessageBus:ConcurrentMessageLimit") ?? 8;
+
+                // Hook per-service TRƯỚC ConfigureEndpoints — vd UseMessageScheduler cho saga timer.
+                configureBus?.Invoke(context, cfg);
 
                 cfg.ConfigureEndpoints(context);
             });

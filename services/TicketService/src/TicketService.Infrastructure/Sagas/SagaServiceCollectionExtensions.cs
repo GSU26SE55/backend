@@ -69,7 +69,46 @@ public static class SagaServiceCollectionExtensions
             });
 
         // Quartz scheduler endpoint cho persistent timeout (xem #237).
+        //
+        // FIX saga-scheduler: cần ĐỦ 3 vế, trước đây chỉ có vế 1 nên saga throw
+        // PayloadNotFoundException(MessageSchedulerContext) ngay ở Initially → không saga nào chạy:
+        //   1. AddPublishMessageScheduler()  — đăng ký DI (đã có)
+        //   2. AddQuartzConsumers()          — tạo receive endpoint "quartz" xử lý scheduled message
+        //   3. cfg.UseMessageScheduler(...)  — đưa MessageSchedulerContext vào consume pipeline
+        //      (gọi ở ConfigureAlertTicketSagaBus bên dưới)
         x.AddPublishMessageScheduler();
+        x.AddQuartzConsumers();
+    }
+
+    /// <summary>
+    /// Địa chỉ endpoint Quartz scheduler — phải khớp giữa <c>AddQuartzConsumers</c>
+    /// và <c>UseMessageScheduler</c>, nếu lệch thì scheduled message rơi vào hư không.
+    /// </summary>
+    public static readonly Uri QuartzSchedulerAddress = new("queue:quartz");
+
+    /// <summary>
+    /// Configurator cho <c>AddMessageBus(configureBus: ...)</c> — chạy trong <c>UsingRabbitMq</c>.
+    /// Bật message scheduler để saga dùng được <c>.Schedule(...)</c> / <c>.Unschedule(...)</c>.
+    /// </summary>
+    public static void ConfigureAlertTicketSagaBus(
+        IBusRegistrationContext context,
+        IRabbitMqBusFactoryConfigurator cfg)
+    {
+        cfg.UseMessageScheduler(QuartzSchedulerAddress);
+
+        // FIX saga-race: trước đây KHÔNG có retry policy nào → mọi va chạm timing tạm thời
+        // biến thành fault vĩnh viễn trong _error queue. 2 dạng gặp thực tế:
+        //   - UnhandledEventException: AlertLinked/TicketCreated về TRƯỚC khi saga kịp
+        //     TransitionTo state tương ứng (response nhanh hơn commit state).
+        //   - DbUpdateConcurrencyException: 2 message cùng update 1 saga instance
+        //     (EF repository dùng ConcurrencyMode.Optimistic).
+        // Cả hai đều tự khỏi khi thử lại sau vài chục ms.
+        cfg.UseMessageRetry(r =>
+        {
+            r.Interval(5, TimeSpan.FromMilliseconds(200));
+            r.Handle<DbUpdateConcurrencyException>();
+            r.Handle<UnhandledEventException>();
+        });
     }
 
     /// <summary>

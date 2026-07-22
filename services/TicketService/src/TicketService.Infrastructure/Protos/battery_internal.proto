@@ -1,0 +1,30 @@
+// BatteryService internal gRPC — GSU26SE55 (GH-verify-sensor-grpc)
+//
+// COPY từ BatteryService/src/BatteryService.Infrastructure/Protos/battery_internal.proto.
+// Contract gốc ở BatteryService (server). File này gen CLIENT stub cho TicketService
+// verify consumer gọi GetSensorSnapshot đọc sensor pin.
+
+syntax = "proto3";
+
+package batteryinternal.v1;
+
+option csharp_namespace = "BatteryService.Grpc";
+
+service BatteryInternal {
+  rpc GetSensorSnapshot(SensorSnapshotRequest) returns (SensorSnapshotResponse);
+}
+
+message SensorSnapshotRequest {
+  string asset_id = 1;
+}
+
+message SensorSnapshotResponse {
+  bool found = 1;
+  string serial = 2;
+  double soh_percent = 3;
+  double voltage = 4;
+  double current = 5;
+  double temperature = 6;
+  double soc_percent = 7;
+  bool has_active_alert = 8;
+}

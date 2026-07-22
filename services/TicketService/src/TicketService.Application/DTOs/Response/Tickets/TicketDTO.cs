@@ -42,4 +42,22 @@ public class TicketDTO
     public DateTime? UpdatedAt { get; set; }
     public SlaTimerDTO? SlaTimer { get; set; }
     public bool HasUnreadChat { get; set; }
+
+    // ── Verify + merge (GH-ticket-verify) ──
+    /// <summary>Thời điểm Customer phát hiện (nếu điền khi tạo).</summary>
+    public DateTime? DetectedAt { get; set; }
+    /// <summary>Serial pin snapshot lúc tạo ticket (null nếu lookup fail).</summary>
+    public string? BatterySerialNumber { get; set; }
+    /// <summary>Trạng thái AI verify: Pending/Legitimate/Suspicious/Skipped.</summary>
+    public TicketVerifyStatusEnum AiVerifyStatus { get; set; }
+    /// <summary>Điểm hợp lệ [0..1] từ AI.</summary>
+    public double? AiVerifyScore { get; set; }
+    /// <summary>Lý do AI verdict.</summary>
+    public string? AiVerifyReason { get; set; }
+    /// <summary>Ticket bị nghi trùng với ticket này (null nếu không nghi).</summary>
+    public string? SuspectedDuplicateOfTicketId { get; set; }
+    /// <summary>Lý do nghi trùng.</summary>
+    public string? DuplicateReason { get; set; }
+    /// <summary>Ticket đích nếu ticket này đã bị gộp (null nếu chưa gộp).</summary>
+    public string? MergedIntoTicketId { get; set; }
 }

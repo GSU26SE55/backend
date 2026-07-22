@@ -28,5 +28,10 @@ public record BatteryAnomalyDetectedV2Event(
     DateTime DetectedAt,
     decimal? InternalResistanceMilliohm,
     decimal? CellVoltageDeltaMv,
-    Guid? EnvironmentalIncidentId
+    Guid? EnvironmentalIncidentId,
+    // BE-AI — prescription text từ AI /prescribe (chỉ set khi SohPredictionBackgroundService
+    // raise alert + PrescriptionEnabled). Nullable + CUỐI constructor để backward-compat:
+    // consumer/saga cũ + threshold engine (không set) vẫn deserialize được (Saga #237 subscribe cả V1/V2).
+    string? AiPrescription = null,
+    IReadOnlyList<string>? AiActionSteps = null
 ) : IntegrationEvent;

@@ -40,6 +40,34 @@ public class Ticket : AuditableEntity
     public EscalationReasonEnum? EscalationReason { get; set; }
     public bool IsIncident { get; set; }
 
+    /// <summary>
+    /// Thời điểm Customer phát hiện pin bất thường (Customer điền khi tạo ticket thủ công).
+    /// Khác CreatedAt (thời điểm tạo ticket). Dùng để AI đối chiếu sensor tại thời điểm đó.
+    /// </summary>
+    public DateTime? DetectedAt { get; set; }
+
+    /// <summary>
+    /// Snapshot serial number của pin lúc tạo ticket (denormalize từ BatteryService) —
+    /// để FE hiển thị tên pin không cần gọi thêm API. Null nếu lookup fail (không chặn tạo ticket).
+    /// </summary>
+    public string? BatterySerialNumber { get; set; }
+
+    // ── AI verify (chấm điểm thật/rác — human-in-the-loop, KHÔNG tự chặn) ──
+    /// <summary>Trạng thái AI verify: Pending → Legitimate/Suspicious/Skipped.</summary>
+    public TicketVerifyStatusEnum AiVerifyStatus { get; set; } = TicketVerifyStatusEnum.Pending;
+    /// <summary>Điểm hợp lệ [0..1] từ AI (1=chắc chắn thật). Null khi chưa verify/skip.</summary>
+    public double? AiVerifyScore { get; set; }
+    /// <summary>Lý do AI đưa ra verdict (để Manager tham khảo).</summary>
+    public string? AiVerifyReason { get; set; }
+
+    // ── Merge / duplicate (cờ nghi trùng + Manager quyết gộp) ──
+    /// <summary>Ticket bị nghi trùng với ticket này (cùng pin/chủ, còn mở, AI so mô tả). Null nếu không nghi.</summary>
+    public Guid? SuspectedDuplicateOfTicketId { get; set; }
+    /// <summary>Lý do nghi trùng (cùng pin + category + độ tương đồng mô tả).</summary>
+    public string? DuplicateReason { get; set; }
+    /// <summary>Set khi Manager gộp ticket NÀY vào ticket khác — ticket này coi như đã gộp (ẩn khỏi queue).</summary>
+    public Guid? MergedIntoTicketId { get; set; }
+
     // Navigation properties
     public SlaTimer? SlaTimer { get; set; }
     public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();

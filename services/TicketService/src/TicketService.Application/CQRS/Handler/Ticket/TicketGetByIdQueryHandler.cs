@@ -79,6 +79,14 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             EscalationReason = ticket.EscalationReason,
             CreatedAt = ticket.CreatedAt,
             UpdatedAt = ticket.UpdatedAt,
+            DetectedAt = ticket.DetectedAt,
+            BatterySerialNumber = ticket.BatterySerialNumber,
+            AiVerifyStatus = ticket.AiVerifyStatus,
+            AiVerifyScore = ticket.AiVerifyScore,
+            AiVerifyReason = ticket.AiVerifyReason,
+            SuspectedDuplicateOfTicketId = ticket.SuspectedDuplicateOfTicketId?.ToString(),
+            DuplicateReason = ticket.DuplicateReason,
+            MergedIntoTicketId = ticket.MergedIntoTicketId?.ToString(),
             SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer),
             Activities = ticket.Activities.Select(a => new TicketActivityDTO
             {

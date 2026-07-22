@@ -284,6 +284,41 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  # ---------- AI Module (GSU26SE55) — hybrid serving, 2 container ----------
+  # Same image, 2 transports (BE gọi gRPC primary → fallback HTTP). ai-module nằm
+  # NGOÀI backend repo (../ai-module) — context trỏ ra ngoài. Model artifacts
+  # (soh_mamba_v1.6.pth, scaler.pkl, ...) đã commit trong repo ai-module.
+  # KHÔNG expose 50051 ra host — chỉ nội bộ solar-net (insecure, no TLS).
+  ai-module-grpc:
+    container_name: solar-ai-module-grpc
+    build:
+      context: ../ai-module
+      dockerfile: Dockerfile
+    command: ["python", "-m", "src.grpc_server"]
+    environment:
+      GRPC_PORT: "50051"
+      # LLM keys optional — chỉ cần cho /prescribe enrich=true. Thiếu → rule-based fallback.
+      DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
+      GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+    expose:
+      - "50051"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  ai-module-http:
+    container_name: solar-ai-module-http
+    build:
+      context: ../ai-module
+      dockerfile: Dockerfile
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
+      GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+    ports:
+      - "4015:8000"   # expose HTTP fallback ra host cho debug/Swagger (:4015/docs)
+    networks: [solar-net]
+    restart: unless-stopped
+
   batteryservice:
     container_name: solar-batteryservice
     build:
@@ -336,8 +371,22 @@ services:
       # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage (multipart upload).
       Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
       Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
+      # BE-AI — SohPredictionBackgroundService gọi AI (gRPC primary → HTTP fallback).
+      # Ai__Enabled=false → job no-op hoàn toàn (threshold rule vẫn chạy).
+      Ai__Enabled: ${AI_ENABLED:-true}
+      Ai__GrpcAddress: ${AI_GRPC_ADDRESS:-http://ai-module-grpc:50051}
+      Ai__HttpBaseUrl: ${AI_HTTP_BASE_URL:-http://ai-module-http:8000}
+      Ai__TimeoutSeconds: ${AI_TIMEOUT_SECONDS:-5}
+      Ai__IntervalMinutes: ${AI_INTERVAL_MINUTES:-5}
+      Ai__MinReadings: ${AI_MIN_READINGS:-30}
+      Ai__PrescriptionEnabled: ${AI_PRESCRIPTION_ENABLED:-true}
+      # GH-verify-sensor-grpc — gRPC server nội bộ (BatteryInternal.GetSensorSnapshot).
+      # Listener HTTP/2 riêng, chỉ trong solar-net (KHÔNG map ra host, KHÔNG JWT).
+      Grpc__Port: ${BATTERY_GRPC_PORT:-8081}
     ports:
       - "4006:8080"
+    expose:
+      - "8081"
     volumes:
       - firmware-storage:/data/firmware-storage
     depends_on:
@@ -349,6 +398,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      ai-module-grpc:
+        condition: service_started
+      ai-module-http:
+        condition: service_started
     networks: [solar-net]
     restart: unless-stopped
 
@@ -387,6 +440,15 @@ services:
       AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
       AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
       # AI features — config loaded directly from .env.Docker via env_file (no substitution needed)
+      # GH-ticket-verify — battery serial lookup (HTTP) + AI verify ticket (gRPC).
+      # TicketAi__Enabled=false → consumer set Skipped (ticket vẫn tạo bình thường).
+      TicketAi__Enabled: ${TICKET_AI_ENABLED:-true}
+      TicketAi__BatteryServiceBaseUrl: ${TICKET_AI_BATTERY_BASE_URL:-http://batteryservice:8080}
+      TicketAi__AiGrpcAddress: ${TICKET_AI_GRPC_ADDRESS:-http://ai-module-grpc:50051}
+      # GH-verify-sensor-grpc — gRPC tới BatteryService (đọc sensor pin verify). Nội bộ, không JWT.
+      TicketAi__BatteryGrpcAddress: ${TICKET_AI_BATTERY_GRPC_ADDRESS:-http://batteryservice:8081}
+      TicketAi__TimeoutSeconds: ${TICKET_AI_TIMEOUT_SECONDS:-5}
+      TicketAi__MaxDuplicateCandidates: ${TICKET_AI_MAX_DUPLICATE_CANDIDATES:-10}
     ports:
       - "4007:8080"
     depends_on:
@@ -398,6 +460,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      ai-module-grpc:
+        condition: service_started
+      # GH-verify-sensor-grpc — verify consumer gọi gRPC batteryservice đọc sensor.
+      batteryservice:
+        condition: service_started
     networks: [solar-net]
     restart: unless-stopped
 

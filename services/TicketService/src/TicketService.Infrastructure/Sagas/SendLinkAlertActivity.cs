@@ -17,8 +17,28 @@ public class SendLinkAlertActivity : IStateMachineActivity<AlertTicketSagaState>
 
     public async Task Execute(BehaviorContext<AlertTicketSagaState> context, IBehavior<AlertTicketSagaState> next)
     {
-        var saga = context.Saga;
+        await PublishLinkAlertAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// FIX saga-stuck (cùng lỗi với SendCreateTicketActivity): MassTransit gọi overload
+    /// GENERIC này khi activity chạy trong behavior có message data — vd
+    /// <c>During(TicketRequested, When(TicketCreated).Activity(...))</c>. Trước đây nó chỉ
+    /// <c>next.Execute(context)</c> mà KHÔNG publish → saga sang AlertLinkRequested nhưng
+    /// LinkAlertToTicketCommand không bao giờ được gửi → BatteryService không trả AlertLinked
+    /// → saga kẹt tới khi timeout, không bao giờ Completed.
+    /// </summary>
+    public async Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
+        where T : class
+    {
+        await PublishLinkAlertAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>Build + publish <see cref="LinkAlertToTicketCommand"/> từ state saga.</summary>
+    private static async Task PublishLinkAlertAsync(IPublishEndpoint publishEndpoint, AlertTicketSagaState saga)
+    {
         if (saga.TicketId is null)
             throw new InvalidOperationException(
                 $"Saga {saga.CorrelationId}: cannot send LinkAlertToTicketCommand without TicketId.");
@@ -30,13 +50,8 @@ public class SendLinkAlertActivity : IStateMachineActivity<AlertTicketSagaState>
             TicketCode: saga.TicketCode ?? string.Empty
         );
 
-        await context.Publish(command);
-        await next.Execute(context).ConfigureAwait(false);
+        await publishEndpoint.Publish(command);
     }
-
-    public Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
-        where T : class
-        => next.Execute(context);
 
     public Task Faulted<TException>(BehaviorExceptionContext<AlertTicketSagaState, TException> context, IBehavior<AlertTicketSagaState> next)
         where TException : Exception
