@@ -49,6 +49,14 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var targetStatus = request.Reason switch
         {
             PauseReasonEnum.WaitingCustomer => TicketStatusEnum.WaitingCustomer,

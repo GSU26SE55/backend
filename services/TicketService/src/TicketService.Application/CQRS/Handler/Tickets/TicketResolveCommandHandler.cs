@@ -44,7 +44,15 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        if (ticket.EscalatedAt.HasValue && ticket.AssignedStaffId != request.StaffId)
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (ticket.EscalatedAt.HasValue && ticket.PrimaryHandlerStaffId != request.StaffId)
             return Fail(403, "Chỉ Staff đang được assign sau escalation mới có thể resolve.");
 
         if (ticket.EscalationReason == EscalationReasonEnum.SkillGap)

@@ -17,7 +17,7 @@ public class TicketStateMachineTests
         _sut = new TicketStateMachine(_ruleProvider);
     }
 
-    private static Ticket CreateTicket(TicketStatusEnum status, Guid? assignedStaffId = null, Guid? customerId = null)
+    private static Ticket CreateTicket(TicketStatusEnum status, Guid? PrimaryHandlerStaffId = null, Guid? customerId = null)
     {
         return new Ticket
         {
@@ -26,7 +26,7 @@ public class TicketStateMachineTests
             Title = "Test Ticket",
             Description = "Test Description",
             Status = status,
-            AssignedStaffId = assignedStaffId,
+            PrimaryHandlerStaffId = PrimaryHandlerStaffId,
             CustomerId = customerId ?? Guid.NewGuid(),
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             UpdatedAt = DateTime.UtcNow.AddDays(-1)
@@ -74,11 +74,11 @@ public class TicketStateMachineTests
         TicketStatusEnum from, TicketStatusEnum to)
     {
         // Arrange
-        var assignedStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(from, assignedStaffId);
+        var PrimaryHandlerStaffId = Guid.NewGuid();
+        var ticket = CreateTicket(from, PrimaryHandlerStaffId);
 
         // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, assignedStaffId);
+        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, PrimaryHandlerStaffId);
 
         // Assert
         result.IsAllowed.Should().BeTrue();
@@ -226,9 +226,9 @@ public class TicketStateMachineTests
     public void CanTransition_WrongStaffCannotStart_ReturnsFalse()
     {
         // Arrange
-        var assignedStaffId = Guid.NewGuid();
+        var PrimaryHandlerStaffId = Guid.NewGuid();
         var otherStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, assignedStaffId);
+        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId);
 
         // Act
         var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, otherStaffId);
@@ -359,7 +359,7 @@ public class TicketStateMachineTests
     public void CanTransition_NullAssignedStaff_CannotStart()
     {
         // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, assignedStaffId: null);
+        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId: null);
 
         // Act
         var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, Guid.NewGuid());
@@ -598,7 +598,7 @@ public class TicketStateMachineTests
         // Arrange
         var ticket = CreateTicket(from);
         // Ngay cả khi không phải là Staff được assign hay Customer chủ sở hữu
-        ticket.AssignedStaffId = Guid.NewGuid();
+        ticket.PrimaryHandlerStaffId = Guid.NewGuid();
         ticket.CustomerId = Guid.NewGuid();
 
         // Act

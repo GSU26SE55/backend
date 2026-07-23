@@ -27,16 +27,24 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         // KIỂM TRA PHÂN QUYỀN:
         // - Admin/Manager được gán bài viết cho bất kỳ ticket nào.
-        // - Staff phải là người được gán vào Ticket (AssignedStaffId == CurrentUserId).
+        // - Staff phải là PrimaryHandler của Ticket.
         // - Các trường hợp khác bị chặn.
         var userRole = _currentUser.Role;
         if (userRole != "Admin" && userRole != "Manager")
         {
             if (userRole == "Staff")
             {
-                if (ticket.AssignedStaffId != command.CurrentUserId)
+                if (ticket.PrimaryHandlerStaffId != command.CurrentUserId)
                 {
                     return Fail(403, "Chỉ nhân viên kỹ thuật được phân công xử lý Ticket này mới được phép gán tài liệu tham khảo.");
                 }

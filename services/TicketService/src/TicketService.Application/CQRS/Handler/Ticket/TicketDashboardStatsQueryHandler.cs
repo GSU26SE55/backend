@@ -91,19 +91,40 @@ public class TicketDashboardStatsQueryHandler
             });
         }
 
-        // ===== Workload: số ticket mở theo staff =====
-        var openByStaffGroups = await ticketsQuery
-            .Where(t => t.AssignedStaffId != null && !TicketStatusGroups.Terminal.Contains(t.Status))
-            .GroupBy(t => t.AssignedStaffId!.Value)
-            .Select(g => new { StaffId = g.Key, Count = g.Count() })
+        // ===== Workload: số ticket mở theo staff (PrimaryHandler) =====
+        var openTicketIds = await ticketsQuery
+            .Where(t => !TicketStatusGroups.Terminal.Contains(t.Status))
+            .Select(t => t.Id)
             .ToListAsync(cancellationToken);
-        var openCountByStaff = openByStaffGroups
-            .OrderByDescending(g => g.Count)
-            .Select(g => new StaffOpenCountDto
+
+        var staffTicketsMap = new Dictionary<Guid, HashSet<Guid>>();
+
+        if (_unitOfWork.TicketAssignments != null)
+        {
+            var openTicketIdSet = openTicketIds.ToHashSet();
+            var openAssignments = await _unitOfWork.TicketAssignments.GetAllAsync().AsNoTracking()
+                .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler && openTicketIdSet.Contains(a.TicketId))
+                .Select(a => new { a.TicketId, a.StaffId })
+                .ToListAsync(cancellationToken);
+
+            foreach (var assignment in openAssignments)
             {
-                StaffId = g.StaffId.ToString(),
-                ActiveCount = g.Count
+                if (!staffTicketsMap.TryGetValue(assignment.StaffId, out var set))
+                {
+                    set = new HashSet<Guid>();
+                    staffTicketsMap[assignment.StaffId] = set;
+                }
+                set.Add(assignment.TicketId);
+            }
+        }
+
+        var openCountByStaff = staffTicketsMap
+            .Select(pair => new StaffOpenCountDto
+            {
+                StaffId = pair.Key.ToString(),
+                ActiveCount = pair.Value.Count
             })
+            .OrderByDescending(dto => dto.ActiveCount)
             .ToList();
 
         return new CommonResponse<TicketDashboardStatsDto>

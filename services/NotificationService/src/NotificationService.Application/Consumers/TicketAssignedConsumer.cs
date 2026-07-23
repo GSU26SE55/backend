@@ -47,7 +47,7 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
         {
             ticketId = evt.TicketId,
             code = evt.Code,
-            staffId = evt.StaffId,
+            staffId = evt.PrimaryHandlerStaffId,
             customerId = evt.CustomerId,
             priority = evt.Priority,
             screen = "TicketDetail"
@@ -55,13 +55,13 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
 
         // Staff được phân công.
         await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.StaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
+            _unitOfWork, [evt.PrimaryHandlerStaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
             $"Bạn được phân công ticket {evt.Code}",
             $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.",
             payload, "Ticket", evt.TicketId, context.CancellationToken);
 
         // Sprint 6.2 NOTI-05 (#676) — Customer sở hữu ticket.
-        if (evt.CustomerId != Guid.Empty && evt.CustomerId != evt.StaffId)
+        if (evt.CustomerId != Guid.Empty && evt.CustomerId != evt.PrimaryHandlerStaffId)
         {
             await NotificationWriter.WriteAsync(
                 _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,

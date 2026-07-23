@@ -45,9 +45,15 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
             Description = "Initial details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = _userId,
-            AssignedStaffId = _userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            StaffId = _userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         _db.SaveChanges();
@@ -117,9 +123,15 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
             Description = "Other ticket details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = _userId,
-            AssignedStaffId = _userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            StaffId = _userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
         var parent = new TicketChat
         {
@@ -163,9 +175,15 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
             Description = "Closed ticket details",
             Status = TicketStatusEnum.Closed,
             CustomerId = _userId,
-            AssignedStaffId = _userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = closedTicketId,
+            StaffId = _userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
         var parent = new TicketChat
         {

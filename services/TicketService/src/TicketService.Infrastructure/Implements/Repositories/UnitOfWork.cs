@@ -35,6 +35,7 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<KbArticleVersion> KbArticleVersions => new GenericRepository<KbArticleVersion>(_context);
     public IGenericRepository<TicketKbReference> TicketKbReferences => new GenericRepository<TicketKbReference>(_context);
     public IGenericRepository<TicketParticipant> TicketParticipants => new GenericRepository<TicketParticipant>(_context);
+    public IGenericRepository<TicketAssignment> TicketAssignments => new GenericRepository<TicketAssignment>(_context);
     public IGenericRepository<TicketChatMention> TicketChatMentions => new GenericRepository<TicketChatMention>(_context);
     public IGenericRepository<TicketChatReaction> TicketChatReactions => new GenericRepository<TicketChatReaction>(_context);
     public IGenericRepository<TicketChatRead> TicketChatReads => new GenericRepository<TicketChatRead>(_context);

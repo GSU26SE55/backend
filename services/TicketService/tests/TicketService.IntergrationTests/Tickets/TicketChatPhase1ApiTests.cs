@@ -45,9 +45,15 @@ public class TicketChatPhase1ApiTests : IClassFixture<TicketApiFactory>
             Description = "Initial details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = _userId,
-            AssignedStaffId = _userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            StaffId = _userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         _db.SaveChanges();

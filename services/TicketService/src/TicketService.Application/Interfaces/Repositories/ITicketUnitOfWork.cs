@@ -23,6 +23,7 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<KbArticleVersion> KbArticleVersions { get; }
     IGenericRepository<TicketKbReference> TicketKbReferences { get; }
     IGenericRepository<TicketParticipant> TicketParticipants { get; }
+    IGenericRepository<TicketAssignment> TicketAssignments { get; }
     IGenericRepository<TicketChatMention> TicketChatMentions { get; }
     IGenericRepository<TicketChatReaction> TicketChatReactions { get; }
     IGenericRepository<TicketChatRead> TicketChatReads { get; }
