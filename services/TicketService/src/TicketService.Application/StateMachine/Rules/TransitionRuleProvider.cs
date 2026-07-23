@@ -136,8 +136,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.InProgress,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin
                                 ? null
                                 : "Only the Assigned Staff can start work."
                         }
@@ -166,8 +166,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.WaitingCustomer,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin
                                 ? null
                                 : "Only the Assigned Staff can put on hold."
                         }
@@ -177,8 +177,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.WaitingParts,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin
                                 ? null
                                 : "Only the Assigned Staff can put on hold."
                         }
@@ -188,8 +188,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.WaitingOnsiteSchedule,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin
                                 ? null
                                 : "Only the Assigned Staff can put on hold."
                         }
@@ -199,8 +199,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.Resolved,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin
                                 ? null
                                 : "Only the Assigned Staff can resolve."
                         }
@@ -210,8 +210,8 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.Escalated,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin || role is ActorRoleEnum.Manager,
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId) || role is ActorRoleEnum.Admin || role is ActorRoleEnum.Manager
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin || role is ActorRoleEnum.Manager,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId) || role is ActorRoleEnum.Admin || role is ActorRoleEnum.Manager
                                 ? null
                                 : "Only the Assigned Staff, Manager or Admin can request escalation."
                         }
@@ -229,10 +229,10 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.InProgress,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                         || (role is ActorRoleEnum.System)
                                         || (role is ActorRoleEnum.Admin),
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                      || (role is ActorRoleEnum.System)
                                      || (role is ActorRoleEnum.Admin)
                                 ? null
@@ -252,10 +252,10 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.InProgress,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                         || (role is ActorRoleEnum.System)
                                         || (role is ActorRoleEnum.Admin),
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                      || (role is ActorRoleEnum.System)
                                      || (role is ActorRoleEnum.Admin)
                                 ? null
@@ -275,10 +275,10 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.InProgress,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                         || (role is ActorRoleEnum.System)
                                         || (role is ActorRoleEnum.Admin),
-                            Reason = (role is ActorRoleEnum.Staff && ticket.AssignedStaffId == userId)
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
                                      || (role is ActorRoleEnum.System)
                                      || (role is ActorRoleEnum.Admin)
                                 ? null

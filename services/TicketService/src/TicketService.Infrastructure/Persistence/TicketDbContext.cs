@@ -38,6 +38,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<BlogTemplate> BlogTemplates { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
     public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
+    public virtual DbSet<TicketAssignment> TicketAssignments { get; set; }
     public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }
     public virtual DbSet<TicketChatReaction> TicketChatReactions { get; set; }
     public virtual DbSet<TicketChatRead> TicketChatReads { get; set; }

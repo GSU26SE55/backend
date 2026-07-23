@@ -16,7 +16,7 @@ public class TicketDTO
     /// Customer id.
     /// </summary>
     public string CustomerId { get; set; } = string.Empty;
-    public string? AssignedStaffId { get; set; }
+    public List<TicketAssignmentDTO> Assignments { get; set; } = new();
     public string Title { get; set; } = string.Empty;
     /// <summary>
     /// Danh mục phân loại.

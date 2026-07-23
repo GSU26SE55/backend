@@ -14,6 +14,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.ChatTemplates;
 
@@ -52,13 +53,21 @@ public class ChatFromTemplateCommandHandler : IRequestHandler<ChatFromTemplateCo
         if (ticket == null || ticket.IsDeleted)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var activeParticipantIds = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
             .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
             .Select(p => p.UserId)
             .ToListAsync(ct);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId,
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId,
                 request.ActorUserId, request.ActorRoles, activeParticipantIds))
             return Fail(403, "Không có quyền truy cập Ticket này.");
 
@@ -95,7 +104,7 @@ public class ChatFromTemplateCommandHandler : IRequestHandler<ChatFromTemplateCo
                 chat.IsInternal,
                 chat.AttachmentFileIds,
                 ticket.CustomerId,
-                ticket.AssignedStaffId), ct);
+                ticket.PrimaryHandlerStaffId), ct);
 
             await _uow.CommitTransactionAsync();
         }

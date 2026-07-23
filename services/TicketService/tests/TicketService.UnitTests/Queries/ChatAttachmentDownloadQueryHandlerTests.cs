@@ -28,14 +28,14 @@ public class ChatAttachmentDownloadQueryHandlerTests
             VirusScan = new ChatOptions.VirusScanSection { FileStorageBaseUrl = "http://files" }
         }));
 
-    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = id,
         Code = "T-001",
         Title = "Test",
         Description = "desc",
         CustomerId = customerId,
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Status = TicketStatusEnum.Open
     };
 
@@ -139,7 +139,7 @@ public class ChatAttachmentDownloadQueryHandlerTests
         var chatId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId, Guid.NewGuid(), assignedStaffId: staffId);
+        var ticket = MakeTicket(ticketId, Guid.NewGuid(), PrimaryHandlerStaffId: staffId);
         var attachment = MakeAttachment(attachmentId, ticketId, chatId, VirusScanStatusEnum.Clean);
         SetupTickets(ticket);
         SetupAttachments(attachment);

@@ -146,7 +146,7 @@ public class ChatReactionRemoveCommandHandlerTests
         var authorId = Guid.NewGuid();
         var chat = MakeChat(ticketId, Guid.NewGuid(), authorId);
         chat.Ticket!.CustomerId = Guid.NewGuid();
-        chat.Ticket!.AssignedStaffId = Guid.NewGuid();
+        chat.Ticket!.PrimaryHandlerStaffId = Guid.NewGuid();
 
         var (uow, _) = BuildUow(chat, new List<TicketChatReaction>());
         var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260723022134_AddTicketAssignmentGH697")]
+    partial class AddTicketAssignmentGH697
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1383,7 +1386,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDatabaseName("ix_ticket_assignments_ticket_role");
 
                     b.HasIndex("TicketId", "StaffId")
-                        .IsUnique()
                         .HasDatabaseName("ix_ticket_assignments_ticket_staff");
 
                     b.ToTable("ticket_assignments", (string)null);

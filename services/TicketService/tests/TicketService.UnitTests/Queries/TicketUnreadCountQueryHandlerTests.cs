@@ -8,14 +8,14 @@ namespace TicketService.UnitTests.Queries;
 
 public class TicketUnreadCountQueryHandlerTests
 {
-    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? assignedStaffId) => new()
+    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? PrimaryHandlerStaffId) => new()
     {
         Id = id,
         Code = "TKT-001",
         Title = "Test Ticket",
         Description = "Test Description",
         CustomerId = customerId,
-        AssignedStaffId = assignedStaffId
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId
     };
 
     private static TicketChat MakeChat(Guid ticketId, Guid authorId, bool isInternal = false) => new()

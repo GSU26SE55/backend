@@ -39,7 +39,7 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
 
         var evt = context.Message;
 
-        var recipientIds = new[] { evt.StaffId };
+        var recipientIds = new[] { evt.PrimaryHandlerStaffId };
 
         var title = $"Bạn được phân công ticket {evt.Code}";
         var body = $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.";
@@ -47,7 +47,7 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
         {
             ticketId = evt.TicketId,
             code = evt.Code,
-            staffId = evt.StaffId,
+            staffId = evt.PrimaryHandlerStaffId,
             priority = evt.Priority,
             screen = "TicketDetail"
         });

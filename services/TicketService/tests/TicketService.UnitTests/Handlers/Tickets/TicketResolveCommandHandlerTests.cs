@@ -31,7 +31,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId
+            PrimaryHandlerStaffId = staffId
         };
 
         var command = new TicketResolveCommand
@@ -72,7 +72,7 @@ public class TicketResolveCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Desc",
-            AssignedStaffId = escalatedStaffId,
+            PrimaryHandlerStaffId = escalatedStaffId,
             EscalatedAt = DateTime.UtcNow
         };
 
@@ -107,7 +107,7 @@ public class TicketResolveCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Desc",
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalationReason = EscalationReasonEnum.SkillGap
         };
 
@@ -143,7 +143,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalatedAt = DateTime.UtcNow
         };
 
@@ -180,7 +180,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalationReason = EscalationReasonEnum.SkillGap,
             EscalatedAt = DateTime.UtcNow
         };

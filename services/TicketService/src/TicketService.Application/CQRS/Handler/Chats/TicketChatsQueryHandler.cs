@@ -7,6 +7,7 @@ using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -27,7 +28,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
@@ -39,7 +40,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             .Select(p => new { p.UserId, p.CanViewInternal })
             .ToListAsync(cancellationToken);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return new CommonResponse<PaginationResponse<TicketChatDTO>> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
         // 2. Xác định xem actor có quyền xem chat nội bộ không

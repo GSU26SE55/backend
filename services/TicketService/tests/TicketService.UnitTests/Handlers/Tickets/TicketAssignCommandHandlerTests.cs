@@ -45,7 +45,7 @@ public class TicketAssignCommandHandlerTests
         var command = new TicketAssignCommand
         {
             TicketId = ticketId,
-            StaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             ManagerId = managerId,
             ManagerName = "Manager A",
             Notes = "Please handle this."
@@ -60,7 +60,7 @@ public class TicketAssignCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        ticket.AssignedStaffId.Should().Be(staffId);
+        ticket.PrimaryHandlerStaffId.Should().Be(staffId);
         ticket.Status.Should().Be(TicketStatusEnum.Assigned);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -90,7 +90,7 @@ public class TicketAssignCommandHandlerTests
             new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
         };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = managerId, ManagerName = "Manager A" };
+        var command = new TicketAssignCommand { TicketId = ticketId, PrimaryHandlerStaffId = staffId, ManagerId = managerId, ManagerName = "Manager A" };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket }, staffSeed: staff);
 
@@ -121,7 +121,7 @@ public class TicketAssignCommandHandlerTests
             new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
         };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, PrimaryHandlerStaffId = staffId };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
@@ -153,7 +153,7 @@ public class TicketAssignCommandHandlerTests
             new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
         };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, PrimaryHandlerStaffId = staffId };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
@@ -171,9 +171,9 @@ public class TicketAssignCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SkillGapTicket_AssignedToGeneralist_Returns403()
+    public async Task Handle_P2HighTicket_AssignedToGeneralist_Returns403()
     {
-        // Arrange
+        // Arrange — tier validation: P2High requires ModuleSpecialist+; Generalist is rejected
         var ticketId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
@@ -181,7 +181,7 @@ public class TicketAssignCommandHandlerTests
         {
             Id = ticketId,
             Status = TicketStatusEnum.Approved,
-            EscalationReason = EscalationReasonEnum.SkillGap,
+            Priority = TicketPriorityEnum.P2High,
             Code = "TKT-001",
             Title = "Test Ticket",
             Description = "Test Description"
@@ -192,7 +192,7 @@ public class TicketAssignCommandHandlerTests
             new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.Generalist }
         };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, PrimaryHandlerStaffId = staffId };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
@@ -204,13 +204,13 @@ public class TicketAssignCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(403);
-        result.Message.Should().Contain("ModuleSpecialist trở lên");
+        result.Message.Should().Contain("ModuleSpecialist");
     }
 
     [Fact]
-    public async Task Handle_ComplexCategory_AssignedToGeneralist_ReturnsWarning()
+    public async Task Handle_NoPriorityTicket_GeneralistAssigned_Succeeds()
     {
-        // Arrange
+        // Arrange — no Priority set → tier check skipped → assignment succeeds regardless of category
         var ticketId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
@@ -229,7 +229,7 @@ public class TicketAssignCommandHandlerTests
             new StaffAccount { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.Generalist }
         };
 
-        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, StaffId = staffId };
+        var command = new TicketAssignCommand { TicketId = ticketId, ManagerId = managerId, PrimaryHandlerStaffId = staffId };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 
@@ -240,7 +240,7 @@ public class TicketAssignCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Message.Should().Contain("Lưu ý: Ticket thuộc danh mục phức tạp");
+        result.Message.Should().Be("Ticket assigned successfully.");
     }
     #endregion
 
@@ -260,7 +260,7 @@ public class TicketAssignCommandHandlerTests
             Description = "D"
         };
         var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
-        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+        var command = new TicketAssignCommand { TicketId = ticketId, PrimaryHandlerStaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
 
         var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
         SlaTimer? captured = null;
@@ -294,7 +294,7 @@ public class TicketAssignCommandHandlerTests
         };
         var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
         var existingTimer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Status = SlaTimerStatusEnum.Running, Priority = TicketPriorityEnum.P2High, StartedAt = DateTime.UtcNow.AddHours(-1), DueAt = DateTime.UtcNow.AddHours(23) };
-        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+        var command = new TicketAssignCommand { TicketId = ticketId, PrimaryHandlerStaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
 
         var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff, slaTimerSeed: new[] { existingTimer });
 
@@ -311,7 +311,7 @@ public class TicketAssignCommandHandlerTests
         var staffId = Guid.NewGuid();
         var ticket = new Ticket { Id = ticketId, Status = TicketStatusEnum.Approved, Code = "TKT-003", Title = "T", Description = "D" }; // Priority null
         var staff = new List<StaffAccount> { new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
-        var command = new TicketAssignCommand { TicketId = ticketId, StaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
+        var command = new TicketAssignCommand { TicketId = ticketId, PrimaryHandlerStaffId = staffId, ManagerId = Guid.NewGuid(), ManagerName = "Mgr" };
 
         var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staff);
 

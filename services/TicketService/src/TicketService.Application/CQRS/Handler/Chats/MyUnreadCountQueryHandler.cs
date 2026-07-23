@@ -4,6 +4,7 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -34,11 +35,20 @@ public class MyUnreadCountQueryHandler : IRequestHandler<MyUnreadCountQuery, Tic
         else
         {
             bool isCustomer = actorRoles.Contains("Customer");
-            var directIds = _uow.Tickets.GetAllAsync().AsNoTracking()
-                .Where(t => !t.IsDeleted && (
-                    (isCustomer && t.CustomerId == actorUserId) ||
-                    (!isCustomer && t.AssignedStaffId == actorUserId)))
-                .Select(t => t.Id);
+            IQueryable<Guid> directIds;
+
+            if (isCustomer)
+            {
+                directIds = _uow.Tickets.GetAllAsync().AsNoTracking()
+                    .Where(t => !t.IsDeleted && t.CustomerId == actorUserId)
+                    .Select(t => t.Id);
+            }
+            else
+            {
+                directIds = _uow.TicketAssignments.GetAllAsync().AsNoTracking()
+                    .Where(a => a.StaffId == actorUserId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                    .Select(a => a.TicketId);
+            }
 
             var participantIds = _uow.TicketParticipants.GetAllAsync().AsNoTracking()
                 .Where(p => p.UserId == actorUserId && p.RemovedAt == null && !p.IsDeleted)

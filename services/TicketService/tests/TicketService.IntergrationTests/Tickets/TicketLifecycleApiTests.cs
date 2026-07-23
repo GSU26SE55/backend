@@ -81,7 +81,7 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         // 3. Assign Ticket (Manager)
         var assignCmd = new TicketAssignCommand
         {
-            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
             Notes = "Assigned to staff"
         };
         var assignRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/assign", assignCmd);
