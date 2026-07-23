@@ -12,10 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260723035019_AddIncidentDetectedRangeToTicket")]
+    partial class AddIncidentDetectedRangeToTicket
     {
         /// <inheritdoc />
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1393,6 +1394,7 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDatabaseName("ix_ticket_assignments_ticket_role");
 
                     b.HasIndex("TicketId", "StaffId")
+                        .IsUnique()
                         .HasDatabaseName("ix_ticket_assignments_ticket_staff");
 
                     b.ToTable("ticket_assignments", (string)null);

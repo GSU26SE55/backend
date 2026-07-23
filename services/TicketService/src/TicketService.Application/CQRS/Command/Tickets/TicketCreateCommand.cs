@@ -22,10 +22,14 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
     public List<Guid> BatteryAssetIds { get; set; } = new();
 
     /// <summary>
-    /// Thời điểm Customer phát hiện pin bất thường (tùy chọn). Không được là thời điểm tương lai.
-    /// Dùng để AI đối chiếu sensor tại thời điểm đó khi verify.
+    /// Thời điểm bắt đầu phát hiện sự cố (bắt buộc).
     /// </summary>
-    public DateTime? DetectedAt { get; set; }
+    public DateTime? IncidentDetectedFrom { get; set; }
+
+    /// <summary>
+    /// Thời điểm kết thúc phát hiện sự cố (optional).
+    /// </summary>
+    public DateTime? IncidentDetectedTo { get; set; }
 
     [JsonIgnore]
     public Guid CustomerId { get; set; }
@@ -33,9 +37,6 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();
-
-        if (DetectedAt.HasValue && DetectedAt.Value > DateTime.UtcNow)
-            response.ListErrors.Add(new Errors { Field = "DetectedAt", Detail = "Thời điểm phát hiện không được là tương lai." });
 
         if (string.IsNullOrWhiteSpace(Title))
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });
@@ -48,6 +49,18 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
 
         if (BatteryAssetIds.Any(id => id == Guid.Empty))
             response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Danh sách pin không được chứa ID rỗng." });
+
+        if (!IncidentDetectedFrom.HasValue)
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedFrom", Detail = "Thời điểm phát hiện sự cố không được để trống." });
+
+        if (IncidentDetectedFrom.HasValue && IncidentDetectedFrom.Value > DateTime.UtcNow)
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedFrom", Detail = "Thời điểm phát hiện sự cố không được trong tương lai." });
+
+        if (IncidentDetectedTo.HasValue && IncidentDetectedTo.Value > DateTime.UtcNow)
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedTo", Detail = "Thời điểm kết thúc phát hiện sự cố không được trong tương lai." });
+
+        if (IncidentDetectedFrom.HasValue && IncidentDetectedTo.HasValue && IncidentDetectedFrom.Value > IncidentDetectedTo.Value)
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedFrom", Detail = "'Từ' phải trước hoặc bằng 'Đến'." });
 
         if (response.ListErrors.Count > 0)
         {

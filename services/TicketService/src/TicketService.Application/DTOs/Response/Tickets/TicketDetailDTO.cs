@@ -33,6 +33,14 @@ public class TicketDetailDTO : TicketDTO
     /// Escalation reason.
     /// </summary>
     public EscalationReasonEnum? EscalationReason { get; set; }
+    /// <summary>
+    /// Thời điểm bắt đầu phát hiện sự cố (do customer khai báo khi tạo ticket).
+    /// </summary>
+    public DateTime? IncidentDetectedFrom { get; set; }
+    /// <summary>
+    /// Thời điểm kết thúc phát hiện sự cố. Null nếu ticket được tạo tự động từ alert.
+    /// </summary>
+    public DateTime? IncidentDetectedTo { get; set; }
     public string? OriginAlertId { get; set; }
     public List<TicketActivityDTO> Activities { get; set; } = new();
     /// <summary>
