@@ -38,7 +38,14 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
     /// <summary>Build + publish <see cref="CreateTicketFromAlertCommand"/> từ state saga.</summary>
     private static async Task PublishCreateTicketAsync(IPublishEndpoint publishEndpoint, AlertTicketSagaState saga)
     {
-        var description = $"Anomaly detected at {saga.DetectedAt:O}. Value: {saga.ActualValue} {saga.Unit}. Threshold: {saga.ThresholdValue} {saga.Unit}.";
+        // Mô tả tiếng Việt, nêu rõ thông số + nguyên nhân theo loại anomaly.
+        // Trước đây là câu tiếng Anh toàn số ("Anomaly detected at ... Value: ... Threshold: ...")
+        // → KHÔNG có token chung nào với mô tả Customer viết tiếng Việt ⇒ Jaccard = 0 ⇒ AI dò
+        // trùng không bao giờ phát hiện được cặp (ticket auto ↔ ticket thủ công) trên cùng pin.
+        var description =
+            $"{DescribeAnomaly(saga.AnomalyType)} " +
+            $"Giá trị đo được {saga.ActualValue} {saga.Unit}, vượt ngưỡng cho phép {saga.ThresholdValue} {saga.Unit}. " +
+            $"Phát hiện lúc {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) trên thiết bị {saga.AssetSerialNumber}.";
         // BE-AI — nếu AI có prescription (chỉ V2 từ SohPredictionBackgroundService), ghép vào
         // Description để Manager thấy khuyến nghị ngay khi ticket vào hàng chờ. Nullable → không đổi
         // ticket từ threshold engine (AiPrescription = null).
@@ -73,6 +80,30 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         where T : class
         where TException : Exception
         => next.Faulted(context);
+
+    /// <summary>
+    /// Câu mô tả nguyên nhân theo loại anomaly — tiếng Việt, dùng từ ngữ Customer thường gõ
+    /// (nóng/quá nhiệt, sụt áp, sạc, chai pin…) để AI dò trùng so được mô tả 2 nguồn ticket.
+    /// </summary>
+    private static string DescribeAnomaly(int anomalyType) => anomalyType switch
+    {
+        1 => "Pin quá nhiệt — cảm biến ghi nhận nhiệt độ pin vượt ngưỡng an toàn.",
+        2 => "Pin quá áp — điện áp vượt ngưỡng cho phép.",
+        3 => "Pin sụt áp — điện áp tụt dưới ngưỡng an toàn.",
+        4 => "Pin cạn — mức pin (SOC) xuống rất thấp.",
+        5 => "Pin xả nhanh bất thường — tốc độ xả vượt ngưỡng.",
+        6 => "Sạc bất thường — dòng sạc vượt ngưỡng cho phép.",
+        7 => "Thiết bị mất kết nối — không nhận được dữ liệu cảm biến.",
+        8 => "Pin chai, suy giảm sức khoẻ (SOH) — hiệu suất giảm dưới ngưỡng.",
+        9 => "Nhiệt độ môi trường quanh pin cao bất thường.",
+        10 => "Độ ẩm quanh pin cao bất thường.",
+        11 => "Nhiệt độ và độ ẩm quanh pin cùng cao bất thường.",
+        12 => "Điện trở trong của pin tăng cao — dấu hiệu pin xuống cấp.",
+        13 => "Lệch áp giữa các cell pin vượt ngưỡng.",
+        14 => "Sự cố môi trường tại site ảnh hưởng tới pin.",
+        15 => "Cảm biến báo số liệu không khớp — nghi ngờ lỗi cảm biến.",
+        _ => "Phát hiện bất thường trên pin."
+    };
 
     private static string MapAnomalyTypeToCategory(int anomalyType) => anomalyType switch
     {

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Saga.AlertTicket;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
@@ -87,8 +88,10 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         }
 
         // Idempotency #2: reuse active Ticket cùng (BatteryAssetId, AnomalyCategory).
-        if (!Enum.TryParse<TicketCategoryEnum>(msg.AnomalyCategory, ignoreCase: true, out var category))
-            category = TicketCategoryEnum.Other;
+        // Dùng CHUNG map với handler — trước đây Enum.TryParse("SohDegradation") fail →
+        // fallback Other, trong khi handler tạo ticket với category khác ⇒ check lệch,
+        // không tìm thấy ticket đã có ⇒ tạo trùng rồi vỡ unique index.
+        var category = TicketAutoCreateFromAlertCommandHandler.MapAnomalyToCategory(msg.AnomalyCategory);
 
         var existingActive = await _uow.Tickets.GetAllAsync()
             .Where(t =>

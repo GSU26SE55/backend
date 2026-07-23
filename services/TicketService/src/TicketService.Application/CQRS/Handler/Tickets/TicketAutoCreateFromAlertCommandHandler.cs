@@ -50,7 +50,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             Code = code,
             Title = request.Title,
             Description = request.Description,
-            Category = TicketCategoryEnum.Repair,
+            Category = MapAnomalyToCategory(request.AnomalyCategory),
             CustomerId = request.CustomerId,
             BatteryAssetId = request.BatteryAssetId,
             Status = TicketStatusEnum.Open,
@@ -99,6 +99,28 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             }
         };
     }
+
+    /// <summary>
+    /// Map loại anomaly → <see cref="TicketCategoryEnum"/>.
+    ///
+    /// FIX duplicate-detection: trước đây hardcode <c>Repair</c> cho MỌI ticket auto, nên
+    /// ticket auto "Overheat" mang category Repair — không bao giờ khớp với ticket Customer
+    /// chọn "Quá nhiệt" (Overheat) ⇒ AI dò trùng bỏ sót (không cộng điểm cùng category),
+    /// và index ux_tickets_active_auto_per_asset_category cũng gom nhầm mọi loại anomaly
+    /// vào chung 1 slot.
+    ///
+    /// Anomaly không map được sang category nghiệp vụ (DeviceOffline, SensorMismatch, …)
+    /// vẫn về <c>Repair</c> — đúng bản chất "cần kỹ thuật viên xử lý".
+    /// </summary>
+    public static TicketCategoryEnum MapAnomalyToCategory(string anomalyCategory) => anomalyCategory switch
+    {
+        "Overheat" or "HighAmbientTemp" or "HighTempHumidityCombo" => TicketCategoryEnum.Overheat,
+        "AbnormalCharging" => TicketCategoryEnum.Charging,
+        "Undervoltage" or "LowSoc" => TicketCategoryEnum.NoPower,
+        "SohDegradation" or "RapidDischarge" or "HighInternalResistance" or "CellImbalance"
+            => TicketCategoryEnum.Performance,
+        _ => TicketCategoryEnum.Repair
+    };
 
     private static (ImpactScopeEnum, UrgencyLevelEnum) MapAnomalyToB3(string category)
     {
