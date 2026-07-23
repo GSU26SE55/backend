@@ -64,7 +64,9 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
-            IsIncident = false
+            IsIncident = false,
+            IncidentDetectedFrom = request.IncidentDetectedFrom,
+            IncidentDetectedTo = request.IncidentDetectedTo ?? DateTime.UtcNow
         };
 
         await _uow.Tickets.AddAsync(ticket);

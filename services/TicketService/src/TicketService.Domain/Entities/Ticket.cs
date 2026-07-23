@@ -45,6 +45,8 @@ public class Ticket : AuditableEntity
     public DateTime? RatedAt { get; set; }
     public DateTime? EscalatedAt { get; set; }
     public EscalationReasonEnum? EscalationReason { get; set; }
+    public DateTime? IncidentDetectedFrom { get; set; }
+    public DateTime? IncidentDetectedTo { get; set; }
     public bool IsIncident { get; set; }
 
     // Navigation properties
