@@ -33,14 +33,14 @@ public class ChatGetByIdQueryHandlerTests
         _handler = new ChatGetByIdQueryHandler(_mockUow.Object);
     }
 
-    private static Ticket MakeTicket(Guid id, Guid? customerId = null, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid id, Guid? customerId = null, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = id,
         Code = "T-001",
         Title = "Test Ticket",
         Description = "desc",
         CustomerId = customerId ?? Guid.NewGuid(),
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Status = TicketStatusEnum.InProgress
     };
 

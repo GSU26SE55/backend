@@ -62,7 +62,8 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         {
             Title = "Lifecycle Test",
             Description = "Testing full flow",
-            Category = TicketCategoryEnum.Other
+            Category = TicketCategoryEnum.Other,
+            IncidentDetectedFrom = DateTime.UtcNow.AddHours(-1)
         };
         var createRes = await _client.PostAsJsonAsync("/api/customer/tickets", createCmd);
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -81,7 +82,7 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         // 3. Assign Ticket (Manager)
         var assignCmd = new TicketAssignCommand
         {
-            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
             Notes = "Assigned to staff"
         };
         var assignRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/assign", assignCmd);

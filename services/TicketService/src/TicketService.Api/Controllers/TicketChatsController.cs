@@ -8,7 +8,6 @@ using SharedContracts.Common.Responses;
 using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.CQRS.Command.Chats;
-using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.CQRS.Query.ChatKbSuggestions;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -802,37 +801,6 @@ public class TicketChatsController : ControllerBase
             ActorRoles = GetCurrentRoles()
         }, ct);
 
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Gửi chat từ template — render nội dung template với variables tùy chọn.
-    /// </summary>
-    [HttpPost("from-template/{templateId}")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SendFromTemplate(
-        Guid ticketId,
-        Guid templateId,
-        [FromBody] ChatFromTemplateCommand command,
-        CancellationToken ct)
-    {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        command.TicketId = ticketId;
-        command.TemplateId = templateId;
-        command.ActorUserId = actorId.Value;
-        command.ActorDisplayName = _currentUser.FullName ?? "Unknown";
-        command.ActorRole = ResolveActorRole(_currentUser.Role);
-        command.ActorRoles = GetCurrentRoles();
-
-        var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 

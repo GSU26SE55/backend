@@ -65,7 +65,8 @@ public class SohPredictionBackgroundService : BackgroundService
                 _logger.LogError(ex, "SohPrediction tick failed");
             }
 
-            try { await Task.Delay(interval, stoppingToken); }
+            try
+            { await Task.Delay(interval, stoppingToken); }
             catch (OperationCanceledException) { /* shutdown */ }
         }
 
@@ -84,7 +85,10 @@ public class SohPredictionBackgroundService : BackgroundService
             .Where(a => !a.IsDeleted && a.Status == BatteryStatusEnum.Active)
             .Select(a => new
             {
-                a.Id, a.CustomerId, a.SiteId, a.SerialNumber,
+                a.Id,
+                a.CustomerId,
+                a.SiteId,
+                a.SerialNumber,
                 // BatteryType — cần để tính pack_config (n_series/chemistry/capacity) cho AI.
                 NominalVoltage = a.BatteryType.NominalVoltage,
                 NominalCapacityAh = a.BatteryType.NominalCapacityAh,

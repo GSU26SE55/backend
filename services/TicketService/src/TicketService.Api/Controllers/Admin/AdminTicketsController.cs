@@ -72,6 +72,24 @@ public class AdminTicketsController : ControllerBase
     }
 
     /// <summary>
+    /// Manager/Admin: Lấy số lượng ticket đang chờ phê duyệt trong queue.
+    /// </summary>
+    /// <remarks>
+    /// Đếm các ticket trạng thái <c>Open</c>, chưa bị xóa và chưa bị gộp vào ticket khác.
+    /// </remarks>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Thành công.</response>
+    [HttpGet("queue/count")]
+    [ProducesResponseType(typeof(CommonResponse<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ManagerQueueCount(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ManagerQueueCountQuery(), ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Manager phê duyệt tính hợp lệ của ticket và xác định mức độ ưu tiên.
     /// </summary>
     /// <remarks>

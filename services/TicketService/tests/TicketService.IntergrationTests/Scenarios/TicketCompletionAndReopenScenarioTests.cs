@@ -61,7 +61,8 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
         {
             Title = title,
             Description = "E2E scenario",
-            Category = TicketCategoryEnum.Other
+            Category = TicketCategoryEnum.Other,
+            IncidentDetectedFrom = DateTime.UtcNow.AddHours(-1)
         });
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>(_json))!.Data!;
@@ -76,7 +77,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
 
         (await _client.PostAsJsonAsync($"/api/admin/tickets/{id}/assign", new TicketAssignCommand
         {
-            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
             Notes = "Assigned"
         })).StatusCode.Should().Be(HttpStatusCode.OK);
 

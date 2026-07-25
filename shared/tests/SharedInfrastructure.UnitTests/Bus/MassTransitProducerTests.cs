@@ -12,7 +12,7 @@ public class MassTransitProducerTests
     public async Task PublishAsync_DelegatesToPublishEndpoint_WithSameMessageAndCancellationToken()
     {
         var endpoint = new Mock<IPublishEndpoint>();
-        endpoint.Setup(e => e.Publish(It.IsAny<TestEvent>(), It.IsAny<CancellationToken>()))
+        endpoint.Setup(e => e.Publish(It.IsAny<object>(), It.IsAny<Type>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
         var sut = new MassTransitProducer(endpoint.Object);
@@ -21,7 +21,7 @@ public class MassTransitProducerTests
 
         await sut.PublishAsync(evt, cts.Token);
 
-        endpoint.Verify(e => e.Publish(evt, cts.Token), Times.Once);
+        endpoint.Verify(e => e.Publish(evt, typeof(TestEvent), cts.Token), Times.Once);
         endpoint.VerifyNoOtherCalls();
     }
 
@@ -29,7 +29,7 @@ public class MassTransitProducerTests
     public async Task PublishAsync_PropagatesEndpointException()
     {
         var endpoint = new Mock<IPublishEndpoint>();
-        endpoint.Setup(e => e.Publish(It.IsAny<TestEvent>(), It.IsAny<CancellationToken>()))
+        endpoint.Setup(e => e.Publish(It.IsAny<object>(), It.IsAny<Type>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("broker down"));
 
         var sut = new MassTransitProducer(endpoint.Object);

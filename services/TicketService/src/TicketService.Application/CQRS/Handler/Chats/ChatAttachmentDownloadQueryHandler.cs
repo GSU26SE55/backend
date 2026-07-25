@@ -26,13 +26,13 @@ public class ChatAttachmentDownloadQueryHandler : IRequestHandler<ChatAttachment
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() ?? t.PrimaryHandlerStaffId })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
             return Fail(404, "Ticket not found");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles))
             return Fail(403, "Forbidden");
 
         var attachment = await _unitOfWork.TicketAttachments.GetAllAsync()

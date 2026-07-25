@@ -9,12 +9,12 @@ namespace TicketService.UnitTests.Services;
 
 public class ChatAuthorizationServiceTests
 {
-    private static Ticket MakeTicket(Guid? customerId = null, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid? customerId = null, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = Guid.NewGuid(),
         Code = "T-001",
         CustomerId = customerId ?? Guid.NewGuid(),
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Title = "Test",
         Description = "desc",
         Category = TicketCategoryEnum.Other,
@@ -196,13 +196,13 @@ public class ChatAuthorizationServiceTests
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+                ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal
         },
         ["Admin"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+                ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal
         }
     };
 

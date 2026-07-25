@@ -375,6 +375,7 @@ namespace TicketService.Infrastructure.Migrations
                     b.ToTable("chat_metrics_daily", (string)null);
                 });
 
+#if false // Preserve historical migration metadata without keeping this entity in the current runtime model.
             modelBuilder.Entity("TicketService.Domain.Entities.ChatTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -447,8 +448,9 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("Scope")
                         .HasDatabaseName("ix_chat_templates_scope");
 
-                    b.ToTable("chat_templates", (string)null);
-                });
+                b.ToTable("chat_templates", (string)null);
+            });
+#endif
 
             modelBuilder.Entity("TicketService.Domain.Entities.CustomerAccount", b =>
                 {
@@ -1212,13 +1214,21 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("escalation_reason");
 
-                    b.Property<int?>("ImpactScope")
-                        .HasColumnType("integer")
-                        .HasColumnName("impact_scope");
+                b.Property<int?>("ImpactScope")
+                    .HasColumnType("integer")
+                    .HasColumnName("impact_scope");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
+                b.Property<DateTime?>("IncidentDetectedFrom")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("incident_detected_from");
+
+                b.Property<DateTime?>("IncidentDetectedTo")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("incident_detected_to");
+
+                b.Property<bool>("IsDeleted")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_deleted");
 
                     b.Property<bool>("IsIncident")
                         .HasColumnType("boolean")
@@ -1375,8 +1385,58 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("TicketId");
 
-                    b.ToTable("ticket_activities", (string)null);
-                });
+                b.ToTable("ticket_activities", (string)null);
+            });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketAssignment", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<Guid?>("CreatedBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("created_by");
+
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
+
+                b.Property<bool>("IsDeleted")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_deleted");
+
+                b.Property<int>("Role")
+                    .HasColumnType("integer")
+                    .HasColumnName("role");
+
+                b.Property<Guid>("StaffId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("staff_id");
+
+                b.Property<Guid>("TicketId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("ticket_id");
+
+                b.Property<DateTime?>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("updated_at");
+
+                b.HasKey("Id");
+
+                b.HasIndex("TicketId", "Role")
+                    .HasDatabaseName("ix_ticket_assignments_ticket_role");
+
+                b.HasIndex("TicketId", "StaffId")
+                    .IsUnique()
+                    .HasDatabaseName("ix_ticket_assignments_ticket_staff");
+
+                b.ToTable("ticket_assignments", (string)null);
+            });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketAttachment", b =>
                 {
@@ -2752,8 +2812,19 @@ namespace TicketService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Ticket");
-                });
+                b.Navigation("Ticket");
+            });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketAssignment", b =>
+            {
+                b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
+                    .WithMany("Assignments")
+                    .HasForeignKey("TicketId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Ticket");
+            });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketAttachment", b =>
                 {
@@ -2916,9 +2987,11 @@ namespace TicketService.Infrastructure.Migrations
 
             modelBuilder.Entity("TicketService.Domain.Entities.Ticket", b =>
                 {
-                    b.Navigation("Activities");
+                b.Navigation("Activities");
 
-                    b.Navigation("Attachments");
+                b.Navigation("Assignments");
+
+                b.Navigation("Attachments");
 
                     b.Navigation("BatteryAssets");
 

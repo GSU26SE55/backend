@@ -20,7 +20,7 @@ public class TicketDashboardStatsQueryHandlerTests
             Code = "T-001",
             BatteryAssetId = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             Title = "Test",
             Description = "desc",
             Category = TicketCategoryEnum.Other,

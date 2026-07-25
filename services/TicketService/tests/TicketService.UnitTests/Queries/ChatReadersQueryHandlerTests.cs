@@ -78,7 +78,7 @@ public class ChatReadersQueryHandlerTests
         var chat = MakeChat(ticketId, Guid.NewGuid());
         // Ticket thuộc Customer khác, actor không phải Staff được assign — không có quan hệ gì với ticket này.
         chat.Ticket!.CustomerId = Guid.NewGuid();
-        chat.Ticket!.AssignedStaffId = Guid.NewGuid();
+        chat.Ticket!.PrimaryHandlerStaffId = Guid.NewGuid();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { chat.Ticket! });
         var chatsRepo = new Mock<IGenericRepository<TicketChat>>();

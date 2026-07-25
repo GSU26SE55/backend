@@ -28,6 +28,7 @@ namespace TicketService.Infrastructure.DependencyInjection;
 
 public static class ManageDependencyInjection
 {
+    [Obsolete]
     public static IServiceCollection AddTicketServiceInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDatabase(configuration);
@@ -138,9 +139,6 @@ public static class ManageDependencyInjection
 
         // #552 — Chat cache service
         services.AddScoped<IChatCacheService, ChatCacheService>();
-
-        // #547 — Template renderer
-        services.AddScoped<ITemplateRenderer, TemplateRendererService>();
 
         // #564 — KB suggestion service
         services.AddScoped<IKbSuggestionService, KbSuggestionService>();

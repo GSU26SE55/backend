@@ -1,3 +1,4 @@
+using MockQueryable.Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.Ticket;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -13,12 +14,14 @@ public class MyTicketsAsStaffQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockRepo = new();
+    private readonly Mock<IGenericRepository<TicketAssignment>> _mockAssignments = new();
     private readonly Mock<ITicketCurrentUserService> _mockCurrentUserService = new();
     private readonly MyTicketsAsStaffQueryHandler _handler;
 
     public MyTicketsAsStaffQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
+        _mockUow.Setup(x => x.TicketAssignments).Returns(_mockAssignments.Object);
 
         var mockChatReads = new Mock<IGenericRepository<TicketChatRead>>();
         mockChatReads.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChatRead>().BuildMock());
@@ -32,7 +35,6 @@ public class MyTicketsAsStaffQueryHandlerTests
     }
 
     private static Ticket MakeTicket(
-        Guid? staffId,
         TicketStatusEnum status = TicketStatusEnum.InProgress,
         TicketPriorityEnum priority = TicketPriorityEnum.P3Normal,
         string code = "T-001") => new()
@@ -41,7 +43,6 @@ public class MyTicketsAsStaffQueryHandlerTests
             Code = code,
             BatteryAssetId = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            AssignedStaffId = staffId,
             Title = "Test",
             Description = "desc",
             Category = TicketCategoryEnum.Other,
@@ -51,15 +52,34 @@ public class MyTicketsAsStaffQueryHandlerTests
             CreatedAt = DateTime.UtcNow
         };
 
-    private void SetupMock(List<Ticket> tickets)
-        => _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
+    private static TicketAssignment AssignPrimary(Guid ticketId, Guid staffId) => new()
+    {
+        Id = Guid.NewGuid(),
+        TicketId = ticketId,
+        StaffId = staffId,
+        Role = AssignmentRoleEnum.PrimaryHandler
+    };
+
+    private void SetupMock(List<Ticket> tickets, List<TicketAssignment>? assignments = null)
+    {
+        _mockRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<Ticket>(tickets));
+        _mockAssignments.Setup(r => r.GetAllAsync())
+            .Returns((assignments ?? new List<TicketAssignment>()).BuildMock());
+    }
 
     [Fact]
     public async Task Handle_ReturnsOnlyAssignedTickets()
     {
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
-        SetupMock([MakeTicket(myId), MakeTicket(myId), MakeTicket(Guid.NewGuid())]);
+
+        var mine1 = MakeTicket();
+        var mine2 = MakeTicket();
+        var other = MakeTicket();
+
+        SetupMock(
+            [mine1, mine2, other],
+            [AssignPrimary(mine1.Id, myId), AssignPrimary(mine2.Id, myId)]);
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
@@ -76,10 +96,13 @@ public class MyTicketsAsStaffQueryHandlerTests
     {
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
-        SetupMock([
-            MakeTicket(myId, TicketStatusEnum.InProgress),
-            MakeTicket(myId, TicketStatusEnum.Resolved)
-        ]);
+
+        var t1 = MakeTicket(TicketStatusEnum.InProgress);
+        var t2 = MakeTicket(TicketStatusEnum.Resolved);
+
+        SetupMock(
+            [t1, t2],
+            [AssignPrimary(t1.Id, myId), AssignPrimary(t2.Id, myId)]);
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
@@ -96,10 +119,13 @@ public class MyTicketsAsStaffQueryHandlerTests
     {
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
-        SetupMock([
-            MakeTicket(myId, priority: TicketPriorityEnum.P3Normal, code: "P3"),
-            MakeTicket(myId, priority: TicketPriorityEnum.P1Critical, code: "P1")
-        ]);
+
+        var tP3 = MakeTicket(priority: TicketPriorityEnum.P3Normal, code: "P3");
+        var tP1 = MakeTicket(priority: TicketPriorityEnum.P1Critical, code: "P1");
+
+        SetupMock(
+            [tP3, tP1],
+            [AssignPrimary(tP3.Id, myId), AssignPrimary(tP1.Id, myId)]);
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
@@ -128,12 +154,16 @@ public class MyTicketsAsStaffQueryHandlerTests
     {
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
-        SetupMock([
-            WithTimer(MakeTicket(myId, TicketStatusEnum.InProgress, code: "KEEP"), DateTime.UtcNow.AddHours(2)),
-            MakeTicket(myId, TicketStatusEnum.InProgress, code: "NO-TIMER"),
-            WithTimer(MakeTicket(myId, TicketStatusEnum.New, code: "NOT-MONITORED"), DateTime.UtcNow.AddHours(2)),
-            WithTimer(MakeTicket(myId, TicketStatusEnum.Resolved, code: "RESOLVED"), DateTime.UtcNow.AddHours(2))
-        ]);
+
+        var keep = WithTimer(MakeTicket(TicketStatusEnum.InProgress, code: "KEEP"), DateTime.UtcNow.AddHours(2));
+        var noTimer = MakeTicket(TicketStatusEnum.InProgress, code: "NO-TIMER");
+        var notMonitor = WithTimer(MakeTicket(TicketStatusEnum.New, code: "NOT-MONITORED"), DateTime.UtcNow.AddHours(2));
+        var resolved = WithTimer(MakeTicket(TicketStatusEnum.Resolved, code: "RESOLVED"), DateTime.UtcNow.AddHours(2));
+
+        SetupMock(
+            [keep, noTimer, notMonitor, resolved],
+            [AssignPrimary(keep.Id, myId), AssignPrimary(noTimer.Id, myId),
+             AssignPrimary(notMonitor.Id, myId), AssignPrimary(resolved.Id, myId)]);
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {
@@ -151,11 +181,14 @@ public class MyTicketsAsStaffQueryHandlerTests
     {
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
-        SetupMock([
-            WithTimer(MakeTicket(myId, code: "FAR"), DateTime.UtcNow.AddHours(10)),
-            WithTimer(MakeTicket(myId, code: "NEAR"), DateTime.UtcNow.AddHours(1)),
-            MakeTicket(myId, code: "NO-TIMER")
-        ]);
+
+        var far = WithTimer(MakeTicket(code: "FAR"), DateTime.UtcNow.AddHours(10));
+        var near = WithTimer(MakeTicket(code: "NEAR"), DateTime.UtcNow.AddHours(1));
+        var noTimer = MakeTicket(code: "NO-TIMER");
+
+        SetupMock(
+            [far, near, noTimer],
+            [AssignPrimary(far.Id, myId), AssignPrimary(near.Id, myId), AssignPrimary(noTimer.Id, myId)]);
 
         var result = await _handler.Handle(new MyTicketsAsStaffQuery
         {

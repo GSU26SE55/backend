@@ -102,6 +102,14 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
                 .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
                 .TransitionTo(TicketRequested),
 
+            When(AnomalyDetectedV1)
+                .Then(ctx => HydrateFromV1(ctx.Saga, ctx.Message))
+                .Then(_ => AppMetrics.SagaStarted.Inc())
+                .Then(_ => AppMetrics.SagaActive.Inc())
+                .Activity(x => x.OfInstanceType<SendCreateTicketActivity>())
+                .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
+                .TransitionTo(TicketRequested),
+
             // Admin reconciliation — Ticket đã tồn tại, skip create, đi thẳng tới link Alert.
             When(ReconciliationRequested)
                 .Then(ctx => HydrateFromReconciliation(ctx.Saga, ctx.Message))
@@ -132,6 +140,12 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
                 .Then(ctx => MarkFailed(ctx.Saga, "TicketRequested", ctx.Message.Reason, ctx.Message.ErrorCode))
                 .Activity(x => x.OfInstanceType<PublishSagaFailedActivity>())
                 .TransitionTo(Failed),
+
+            When(AnomalyDetectedV2)
+                .Then(ctx => HydrateFromV2(ctx.Saga, ctx.Message)),
+
+            When(AnomalyDetectedV1)
+                .Then(_ => AppMetrics.SagaRedeliveryDeduped.Inc()),
 
             When(TicketCreationTimer.Received)
                 .Then(ctx =>

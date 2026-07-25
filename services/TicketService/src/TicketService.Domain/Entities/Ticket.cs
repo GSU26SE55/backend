@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using SharedKernels.Domain;
 using TicketService.Domain.Enums;
 
@@ -8,7 +9,13 @@ public class Ticket : AuditableEntity
     public required string Code { get; set; }
     public Guid BatteryAssetId { get; set; }
     public Guid CustomerId { get; set; }
-    public Guid? AssignedStaffId { get; set; }
+
+    /// <summary>
+    /// In-memory only — not persisted. Populated by handlers before calling the state machine.
+    /// Replaces the removed AssignedStaffId column; state machine checks this instead.
+    /// </summary>
+    [NotMapped]
+    public Guid? PrimaryHandlerStaffId { get; set; }
     public required string Title { get; set; }
     public required string Description { get; set; }
     public TicketCategoryEnum Category { get; set; }
@@ -38,6 +45,8 @@ public class Ticket : AuditableEntity
     public DateTime? RatedAt { get; set; }
     public DateTime? EscalatedAt { get; set; }
     public EscalationReasonEnum? EscalationReason { get; set; }
+    public DateTime? IncidentDetectedFrom { get; set; }
+    public DateTime? IncidentDetectedTo { get; set; }
     public bool IsIncident { get; set; }
 
     /// <summary>
@@ -77,4 +86,5 @@ public class Ticket : AuditableEntity
     public ICollection<TicketKbReference> KbReferences { get; set; } = new List<TicketKbReference>();
     public ICollection<TicketParticipant> Participants { get; set; } = new List<TicketParticipant>();
     public ICollection<TicketBatteryAsset> BatteryAssets { get; set; } = new List<TicketBatteryAsset>();
+    public ICollection<TicketAssignment> Assignments { get; set; } = new List<TicketAssignment>();
 }

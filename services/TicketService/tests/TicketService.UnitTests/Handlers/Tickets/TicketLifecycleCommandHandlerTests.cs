@@ -29,10 +29,11 @@ public class TicketLifecycleCommandHandlerTests
         var managerId = Guid.NewGuid();
         var oldStaffId = Guid.NewGuid();
         var newStaffId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, AssignedStaffId = oldStaffId };
-        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewStaffId = newStaffId, ManagerName = "Mgr" };
+        var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, PrimaryHandlerStaffId = oldStaffId };
+        var newStaffSeed = new List<StaffAccount> { new() { AccountId = newStaffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewPrimaryHandlerStaffId = newStaffId, ManagerName = "Mgr" };
 
-        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: newStaffSeed);
 
         var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var result = await handler.Handle(command, CancellationToken.None);
@@ -43,7 +44,7 @@ public class TicketLifecycleCommandHandlerTests
         result.Data.Code.Should().Be(ticket.Code);
         result.Data.Status.Should().Be(ticket.Status);
 
-        ticket.AssignedStaffId.Should().Be(newStaffId);
+        ticket.PrimaryHandlerStaffId.Should().Be(newStaffId);
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Assigned, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _producer.Verify(x => x.PublishAsync(It.IsAny<TicketAssignedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -56,7 +57,7 @@ public class TicketLifecycleCommandHandlerTests
         var managerId = Guid.NewGuid();
         var oldStaffId = Guid.NewGuid();
         var newStaffId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, AssignedStaffId = oldStaffId };
+        var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Assigned, PrimaryHandlerStaffId = oldStaffId };
         var oldParticipant = new TicketParticipant
         {
             Id = Guid.NewGuid(),
@@ -70,10 +71,13 @@ public class TicketLifecycleCommandHandlerTests
             AddedByUserId = managerId,
             AddedAt = DateTime.UtcNow
         };
-        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewStaffId = newStaffId, ManagerName = "Mgr" };
+        var newStaffSeed2 = new List<StaffAccount> { new() { AccountId = newStaffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var oldAssignmentSeed = new[] { new TicketAssignment { Id = Guid.NewGuid(), TicketId = ticketId, StaffId = oldStaffId, Role = AssignmentRoleEnum.PrimaryHandler } };
+        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewPrimaryHandlerStaffId = newStaffId, ManagerName = "Mgr" };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(
-            ticketSeed: new[] { ticket }, participantSeed: new[] { oldParticipant });
+            ticketSeed: new[] { ticket }, participantSeed: new[] { oldParticipant },
+            staffSeed: newStaffSeed2, assignmentSeed: oldAssignmentSeed);
 
         var handler = new TicketReassignCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var result = await handler.Handle(command, CancellationToken.None);
@@ -92,10 +96,12 @@ public class TicketLifecycleCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
+        var newStaffId = Guid.NewGuid();
         var ticket = new Ticket { Id = ticketId, Code = "T-001", Title = "T", Description = "D", Status = TicketStatusEnum.Closed };
-        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId };
+        var staffSeed = new List<StaffAccount> { new() { AccountId = newStaffId, Status = AccountStatusEnum.Active, IsAvailable = true } };
+        var command = new TicketReassignCommand { TicketId = ticketId, ManagerId = managerId, NewPrimaryHandlerStaffId = newStaffId };
 
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, staffSeed: staffSeed);
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, managerId))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Denied" });
 

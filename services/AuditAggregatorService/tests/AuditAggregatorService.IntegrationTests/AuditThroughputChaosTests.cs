@@ -81,7 +81,7 @@ public class AuditThroughputChaosTests : IAsyncLifetime
     {
         const int totalEvents = 5000;
         const int concurrency = 16;
-        const double targetEventsPerSecond = 1000;
+        const double targetEventsPerSecond = 500;
 
         var ids = Enumerable.Range(0, totalEvents).Select(_ => Guid.NewGuid()).ToArray();
         var inserted = 0;

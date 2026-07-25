@@ -23,11 +23,11 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<KbArticleVersion> KbArticleVersions { get; }
     IGenericRepository<TicketKbReference> TicketKbReferences { get; }
     IGenericRepository<TicketParticipant> TicketParticipants { get; }
+    IGenericRepository<TicketAssignment> TicketAssignments { get; }
     IGenericRepository<TicketChatMention> TicketChatMentions { get; }
     IGenericRepository<TicketChatReaction> TicketChatReactions { get; }
     IGenericRepository<TicketChatRead> TicketChatReads { get; }
     IGenericRepository<TicketChatHide> TicketChatHides { get; }
-    IGenericRepository<ChatTemplate> ChatTemplates { get; }
     IGenericRepository<ChatAiSuggestion> ChatAiSuggestions { get; }
     IGenericRepository<TicketChatTranslation> TicketChatTranslations { get; }
     IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers { get; }

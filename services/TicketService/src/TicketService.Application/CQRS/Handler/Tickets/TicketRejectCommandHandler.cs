@@ -42,6 +42,14 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot reject.");
@@ -57,7 +65,7 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
 
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Rejected, reason: request.Reason);
 
-        await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.AssignedStaffId ?? Guid.Empty, request.Reason), ct);
+        await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.PrimaryHandlerStaffId ?? Guid.Empty, request.Reason), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

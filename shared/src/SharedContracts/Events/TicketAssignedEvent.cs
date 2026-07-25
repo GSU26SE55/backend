@@ -8,6 +8,6 @@ namespace SharedContracts.Events;
 public record TicketAssignedEvent(
     Guid TicketId,
     string Code,
-    Guid StaffId,
+    Guid PrimaryHandlerStaffId,
     string Priority
 ) : IntegrationEvent;

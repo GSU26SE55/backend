@@ -25,12 +25,12 @@ public class TicketDataSeeder
         var customers = await SeedCustomerAccountsAsync(ct);
         var staffs = await SeedStaffAccountsAsync(ct);
         var kbArticles = await SeedKnowledgeBaseAsync(staffs.First().AccountId, ct);
-        await SeedChatTemplatesAsync(staffs.First().AccountId, ct);
-        var tickets = await SeedTicketsAsync(customers, staffs, ct);
+        var (tickets, ticketAssignments) = await SeedTicketsAsync(customers, staffs, ct);
         if (tickets.Count == 0)
             return;
+        await SeedTicketAssignmentsAsync(ticketAssignments, ct);
         await SeedSlaTimersAsync(tickets, ct);
-        await SeedActivitiesAsync(tickets, staffs, customers, ct);
+        await SeedActivitiesAsync(tickets, staffs, customers, ticketAssignments, ct);
         await SeedChatsAsync(tickets, staffs, customers, ct);
         await SeedMaintenanceLogsAsync(tickets, staffs, kbArticles, ct);
         await SeedSagaStatesAsync(tickets, ct);
@@ -324,14 +324,27 @@ public class TicketDataSeeder
         return articles;
     }
 
-    private async Task<List<Ticket>> SeedTicketsAsync(
+    private async Task SeedTicketAssignmentsAsync(List<TicketAssignment> assignments, CancellationToken ct)
+    {
+        var hasAssignments = await _context.TicketAssignments.AnyAsync(ct);
+        if (hasAssignments)
+            return;
+        if (assignments.Count == 0)
+            return;
+
+        _context.TicketAssignments.AddRange(assignments);
+        await _context.SaveChangesAsync(ct);
+        _logger?.LogInformation("Seeded {Count} ticket assignments.", assignments.Count);
+    }
+
+    private async Task<(List<Ticket> Tickets, List<TicketAssignment> Assignments)> SeedTicketsAsync(
         List<CustomerAccount> customers,
         List<StaffAccount> staffs,
         CancellationToken ct)
     {
         var existing = await _context.Tickets.ToListAsync(ct);
         if (existing.Count > 0)
-            return existing;
+            return (existing, new List<TicketAssignment>());
 
         var customer1 = customers[0].AccountId;
         var customer2 = customers[1].AccountId;
@@ -343,114 +356,119 @@ public class TicketDataSeeder
         var batteryAssetId2 = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        var tickets = new List<Ticket>
+        var ticket1 = new Ticket
         {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Code = "TKT-2602-0001",
-                BatteryAssetId = batteryAssetId1,
-                CustomerId = customer1,
-                AssignedStaffId = staffTier3,
-                Title = "Battery not charging",
-                Description = "The battery unit is plugged in but not accumulating any charge. The indicator light is off.",
-                Category = TicketCategoryEnum.Charging,
-                Priority = TicketPriorityEnum.P1Critical,
-                ImpactScope = ImpactScopeEnum.Site,
-                UrgencyLevel = UrgencyLevelEnum.High,
-                Status = TicketStatusEnum.Open,
-                Origin = TicketOriginEnum.ManualByCustomer,
-                IsIncident = true,
-                CreatedAt = now.AddDays(-5)
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Code = "TKT-2602-0002",
-                BatteryAssetId = batteryAssetId2,
-                CustomerId = customer2,
-                AssignedStaffId = staffTier2,
-                Title = "Unit overheating during use",
-                Description = "The battery becomes unusually hot to the touch after about 30 minutes of operation.",
-                Category = TicketCategoryEnum.Overheat,
-                Priority = TicketPriorityEnum.P2High,
-                ImpactScope = ImpactScopeEnum.SingleAsset,
-                UrgencyLevel = UrgencyLevelEnum.Medium,
-                Status = TicketStatusEnum.InProgress,
-                Origin = TicketOriginEnum.ManualByCustomer,
-                IsIncident = false,
-                CreatedAt = now.AddDays(-3)
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Code = "TKT-2602-0003",
-                BatteryAssetId = batteryAssetId1,
-                CustomerId = customer1,
-                Title = "Performance degradation",
-                Description = "Battery life has significantly decreased. It only holds a charge for about half the advertised time.",
-                Category = TicketCategoryEnum.Performance,
-                Priority = TicketPriorityEnum.P3Normal,
-                ImpactScope = ImpactScopeEnum.SingleAsset,
-                UrgencyLevel = UrgencyLevelEnum.Low,
-                Status = TicketStatusEnum.WaitingCustomer,
-                Origin = TicketOriginEnum.CreatedByStaff,
-                IsIncident = false,
-                CreatedAt = now.AddDays(-10)
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Code = "TKT-2602-0004",
-                BatteryAssetId = batteryAssetId2,
-                CustomerId = customer2,
-                AssignedStaffId = staffTier3,
-                Title = "Automatic shutdown alert",
-                Description = "System automatically generated an alert for an unexpected shutdown event.",
-                Category = TicketCategoryEnum.NoPower,
-                Priority = TicketPriorityEnum.P1Critical,
-                ImpactScope = ImpactScopeEnum.Site,
-                UrgencyLevel = UrgencyLevelEnum.High,
-                Status = TicketStatusEnum.Resolved,
-                Origin = TicketOriginEnum.AutoFromAlert,
-                OriginAlertId = Guid.NewGuid(),
-                IsIncident = true,
-                CreatedAt = now.AddDays(-1),
-                ResolvedAt = now,
-                ResolvedByStaffId = staffTier3,
-                ResolutionSummary = "Firmware updated to version 1.2.3 which addresses the shutdown bug."
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Code = "TKT-2602-0005",
-                BatteryAssetId = batteryAssetId1,
-                CustomerId = customer1,
-                AssignedStaffId = staffTier2,
-                Title = "Request for on-site repair",
-                Description = "Customer has requested an on-site technician for a repair.",
-                Category = TicketCategoryEnum.Repair,
-                Priority = TicketPriorityEnum.P2High,
-                ImpactScope = ImpactScopeEnum.SingleAsset,
-                UrgencyLevel = UrgencyLevelEnum.Medium,
-                Status = TicketStatusEnum.Closed,
-                Origin = TicketOriginEnum.ManualByCustomer,
-                IsIncident = false,
-                CreatedAt = now.AddDays(-20),
-                ResolvedAt = now.AddDays(-18),
-                ResolvedByStaffId = staffTier2,
-                ClosedAt = now.AddDays(-17),
-                ResolutionSummary = "Technician replaced the main board.",
-                Rating = 5,
-                RatingComment = "Hỗ trợ rất nhanh và chuyên nghiệp.",
-                RatedAt = now.AddDays(-16)
-            }
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0001",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Battery not charging",
+            Description = "The battery unit is plugged in but not accumulating any charge. The indicator light is off.",
+            Category = TicketCategoryEnum.Charging,
+            Priority = TicketPriorityEnum.P1Critical,
+            ImpactScope = ImpactScopeEnum.Site,
+            UrgencyLevel = UrgencyLevelEnum.High,
+            Status = TicketStatusEnum.Open,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            IsIncident = true,
+            CreatedAt = now.AddDays(-5)
         };
+        var ticket2 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0002",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Unit overheating during use",
+            Description = "The battery becomes unusually hot to the touch after about 30 minutes of operation.",
+            Category = TicketCategoryEnum.Overheat,
+            Priority = TicketPriorityEnum.P2High,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Medium,
+            Status = TicketStatusEnum.InProgress,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-3)
+        };
+        var ticket3 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0003",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Performance degradation",
+            Description = "Battery life has significantly decreased. It only holds a charge for about half the advertised time.",
+            Category = TicketCategoryEnum.Performance,
+            Priority = TicketPriorityEnum.P3Normal,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Low,
+            Status = TicketStatusEnum.WaitingCustomer,
+            Origin = TicketOriginEnum.CreatedByStaff,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-10)
+        };
+        var ticket4 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0004",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Automatic shutdown alert",
+            Description = "System automatically generated an alert for an unexpected shutdown event.",
+            Category = TicketCategoryEnum.NoPower,
+            Priority = TicketPriorityEnum.P1Critical,
+            ImpactScope = ImpactScopeEnum.Site,
+            UrgencyLevel = UrgencyLevelEnum.High,
+            Status = TicketStatusEnum.Resolved,
+            Origin = TicketOriginEnum.AutoFromAlert,
+            OriginAlertId = Guid.NewGuid(),
+            IsIncident = true,
+            CreatedAt = now.AddDays(-1),
+            ResolvedAt = now,
+            ResolvedByStaffId = staffTier3,
+            ResolutionSummary = "Firmware updated to version 1.2.3 which addresses the shutdown bug."
+        };
+        var ticket5 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0005",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Request for on-site repair",
+            Description = "Customer has requested an on-site technician for a repair.",
+            Category = TicketCategoryEnum.Repair,
+            Priority = TicketPriorityEnum.P2High,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Medium,
+            Status = TicketStatusEnum.Closed,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-20),
+            ResolvedAt = now.AddDays(-18),
+            ResolvedByStaffId = staffTier2,
+            ClosedAt = now.AddDays(-17),
+            ResolutionSummary = "Technician replaced the main board.",
+            Rating = 5,
+            RatingComment = "Hỗ trợ rất nhanh và chuyên nghiệp.",
+            RatedAt = now.AddDays(-16)
+        };
+
+        var tickets = new List<Ticket> { ticket1, ticket2, ticket3, ticket4, ticket5 };
 
         _context.Tickets.AddRange(tickets);
         await _context.SaveChangesAsync(ct);
         _logger?.LogInformation("Seeded {Count} tickets.", tickets.Count);
-        return tickets;
+
+        // Create TicketAssignment records for tickets that have a PrimaryHandler
+        var assignments = new List<TicketAssignment>
+        {
+            new() { Id = Guid.NewGuid(), TicketId = ticket1.Id, StaffId = staffTier3, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket1.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket2.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket2.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket4.Id, StaffId = staffTier3, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket4.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket5.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket5.CreatedAt.AddMinutes(15) },
+        };
+
+        return (tickets, assignments);
     }
 
     private async Task SeedSlaTimersAsync(List<Ticket> tickets, CancellationToken ct)
@@ -504,6 +522,7 @@ public class TicketDataSeeder
         List<Ticket> tickets,
         List<StaffAccount> staffs,
         List<CustomerAccount> customers,
+        List<TicketAssignment> assignments,
         CancellationToken ct)
     {
         var hasActivities = await _context.TicketActivities.AnyAsync(ct);
@@ -512,6 +531,9 @@ public class TicketDataSeeder
 
         var customerById = customers.ToDictionary(c => c.AccountId);
         var staffById = staffs.ToDictionary(s => s.AccountId);
+        var primaryHandlerByTicketId = assignments
+            .Where(a => a.Role == AssignmentRoleEnum.PrimaryHandler)
+            .ToDictionary(a => a.TicketId, a => a.StaffId);
         var activities = new List<TicketActivity>();
 
         foreach (var ticket in tickets)
@@ -530,7 +552,7 @@ public class TicketDataSeeder
                 Ticket = ticket
             });
 
-            if (ticket.AssignedStaffId is { } staffId)
+            if (primaryHandlerByTicketId.TryGetValue(ticket.Id, out var staffId))
             {
                 var staff = staffById.GetValueOrDefault(staffId);
                 activities.Add(new TicketActivity
@@ -772,107 +794,6 @@ public class TicketDataSeeder
         Console.WriteLine($"[TicketService] Successfully seeded {articles.Count} KB articles.");
     }
 
-    private async Task SeedChatTemplatesAsync(Guid staffId, CancellationToken ct)
-    {
-        var hasTemplates = await _context.ChatTemplates.AnyAsync(ct);
-        if (hasTemplates)
-            return;
-
-        var now = DateTime.UtcNow;
-        var templates = new List<ChatTemplate>
-        {
-            new ChatTemplate
-            {
-                Id = Guid.Parse("1a5113d0-349c-4f76-90f1-4340798e4d1a"),
-                Name = "Lời chào hỗ trợ kỹ thuật",
-                Content = "Xin chào {{CustomerName}}, tôi là {{StaffName}} từ bộ phận kỹ thuật. Rất tiếc vì sự cố hệ thống pin mặt trời của bạn. Tôi có thể giúp gì cho bạn hôm nay?",
-                Category = ChatTemplateCategoryEnum.Greeting,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 15,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("2b5113d0-349c-4f76-90f1-4340798e4d1b"),
-                Name = "Yêu cầu thông tin thông số kỹ thuật",
-                Content = "Chào bạn, để chẩn đoán chính xác hơn về lỗi pin mặt trời, bạn vui lòng chụp ảnh bảng điện của bộ inverter và gửi kèm chỉ số điện áp đo được lúc này giúp tôi nhé.",
-                Category = ChatTemplateCategoryEnum.RequestInfo,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 42,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("3c5113d0-349c-4f76-90f1-4340798e4d1c"),
-                Name = "Báo cáo cập nhật tiến độ xử lý",
-                Content = "Chào bạn, kỹ thuật viên đã hoàn tất việc thay thế Cell pin bị lỗi tại thực địa. Hệ thống đang được chạy kiểm tra xả sạc trong vòng 15-30 phút tới.",
-                Category = ChatTemplateCategoryEnum.Update,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 8,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("4d5113d0-349c-4f76-90f1-4340798e4d1d"),
-                Name = "Thông báo hoàn thành & Nghiệm thu",
-                Content = "Xin chào {{CustomerName}}, ticket bảo trì pin mã số {{TicketCode}} đã được xử lý hoàn tất. Bạn vui lòng xác nhận nghiệm thu và đánh giá chất lượng phục vụ nhé. Cảm ơn bạn!",
-                Category = ChatTemplateCategoryEnum.Resolution,
-                IsInternalDefault = true,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 29,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("5e5113d0-349c-4f76-90f1-4340798e4d1e"),
-                Name = "Bàn giao nội bộ - Ca tiếp theo",
-                Content = "[NỘI BỘ] Đã kiểm tra dây nối ngoại vi, nghi ngờ mạch BMS bị chập chờn. Nhờ kỹ thuật ca tiếp theo mang theo bo mạch BMS thay thế (Model BMS-A1) để thử nghiệm.",
-                Category = ChatTemplateCategoryEnum.Internal,
-                IsInternalDefault = true,
-                Scope = ChatTemplateScopeEnum.Team,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 3,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("6f5113d0-349c-4f76-90f1-4340798e4d1f"),
-                Name = "Mẫu ghi chú cá nhân nháp",
-                Content = "Nháp: Ghi nhận nhiệt độ tăng cao bất thường khi sạc dòng cao. Cần theo dõi thêm điện áp từng cell.",
-                Category = ChatTemplateCategoryEnum.Other,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Personal,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 0,
-                CreatedAt = now
-            }
-        };
-
-        await _context.ChatTemplates.AddRangeAsync(templates, ct);
-        await _context.SaveChangesAsync(ct);
-
-        if (_logger != null)
-        {
-            _logger.LogInformation("[TicketService] Successfully seeded {Count} chat templates.", templates.Count);
-        }
-        else
-        {
-            Console.WriteLine($"[TicketService] Successfully seeded {templates.Count} chat templates.");
-        }
-    }
 
     private static JsonDocument S(string? v) =>
         string.IsNullOrWhiteSpace(v) ? JsonDocument.Parse("{}") :

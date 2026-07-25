@@ -23,9 +23,9 @@ public class TicketCodeGenerator : ITicketCodeGenerator
     private const int AdvisoryLockNamespace = 0x544B_5400; // "TKT"
 
     private readonly ITicketUnitOfWork _uow;
-    private readonly TicketDbContext _db;
+    private readonly TicketDbContext? _db;
 
-    public TicketCodeGenerator(ITicketUnitOfWork uow, TicketDbContext db)
+    public TicketCodeGenerator(ITicketUnitOfWork uow, TicketDbContext? db = null)
     {
         _uow = uow;
         _db = db;
@@ -42,8 +42,11 @@ public class TicketCodeGenerator : ITicketCodeGenerator
         var monthKey = now.Year % 100 * 100 + now.Month;
 
         // pg_advisory_xact_lock nhả tự động khi transaction kết thúc → serialize việc cấp số.
-        await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        if (_db != null && _db.Database.IsNpgsql())
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        }
 
         var lastTicket = await _uow.Tickets.GetAllAsync()
             .Where(t => t.Code.StartsWith(prefix))
