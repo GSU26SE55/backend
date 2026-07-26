@@ -41,10 +41,12 @@ public class StaffProfilesController : ControllerBase
     /// Query string:
     /// - <c>skill</c>: tùy chọn. Khi truyền, hệ thống chỉ trả staff có skill code đúng bằng giá trị này,
     ///   ví dụ <c>LiFePO4</c>. Nếu bỏ trống, trả toàn bộ staff profile hiện có.
+    /// - <c>ticketPriority</c>: tùy chọn. Nhận <c>P1Critical</c>, <c>P2High</c> hoặc <c>P3Normal</c> để chỉ trả
+    ///   staff active, available và đủ tier làm PrimaryHandler.
     ///
     /// Dữ liệu trả về cho mỗi staff gồm:
     /// - <c>accountId</c>, email, họ tên và số điện thoại liên hệ.
-    /// - <c>department</c>, <c>maxConcurrentTickets</c> và <c>isAvailable</c> để hỗ trợ assignment.
+    /// - <c>department</c>, <c>maxConcurrentTickets</c>, <c>isAvailable</c> và <c>skillTier</c> để hỗ trợ assignment.
     /// - <c>displayAvatarUrl</c> đã resolve theo cùng rule với profile cá nhân.
     /// - Danh sách skill gồm <c>skillCode</c>, <c>skillLevel</c> và <c>certifiedUntil</c>.
     ///
@@ -61,10 +63,12 @@ public class StaffProfilesController : ControllerBase
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns><see cref="StaffAssignmentProfileListResponse"/> chứa danh sách staff phù hợp.</returns>
     /// <response code="200">Lấy danh sách staff thành công.</response>
+    /// <response code="400">ticketPriority không hợp lệ.</response>
     /// <response code="401">Chưa đăng nhập hoặc access token không hợp lệ/hết hạn.</response>
     /// <response code="403">Account đăng nhập không có role Admin hoặc Manager.</response>
     [HttpGet]
     [ProducesResponseType(typeof(StaffAssignmentProfileListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(StaffAssignmentProfileListResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(StaffAssignmentProfileListResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(StaffAssignmentProfileListResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetStaff([FromQuery] string? skill = null, CancellationToken cancellationToken = default)

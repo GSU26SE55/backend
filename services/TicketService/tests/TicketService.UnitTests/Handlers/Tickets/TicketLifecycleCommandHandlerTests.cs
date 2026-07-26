@@ -83,6 +83,7 @@ public class TicketLifecycleCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        oldAssignment.Role.Should().Be(AssignmentRoleEnum.PreviousPrimaryHandler);
         oldParticipant.ParticipantType.Should().Be(ParticipantTypeEnum.PreviousAssignee);
         oldParticipant.CanPost.Should().BeFalse();
 
