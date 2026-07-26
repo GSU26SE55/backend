@@ -77,7 +77,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
 
         if (oldAssignment != null)
         {
-            oldAssignment.Role = AssignmentRoleEnum.Supporter;
+            oldAssignment.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
             _uow.TicketAssignments.UpdateAsync(oldAssignment);
         }
 

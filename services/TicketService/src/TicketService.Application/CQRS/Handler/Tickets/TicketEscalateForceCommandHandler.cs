@@ -103,7 +103,7 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
         if (staff == null || AssignmentRoleHelper.ValidatePrimaryHandlerTier(ticket.Priority.Value, staff.SkillTier))
             return;
 
-        primaryAssignment.Role = AssignmentRoleEnum.Supporter;
+        primaryAssignment.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
         _uow.TicketAssignments.UpdateAsync(primaryAssignment);
 
         await _activityLogger.LogAsync(ticket.Id, actorId, ActorRoleEnum.Manager, null,
