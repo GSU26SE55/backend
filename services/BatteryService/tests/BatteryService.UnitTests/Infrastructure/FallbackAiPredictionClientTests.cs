@@ -20,7 +20,7 @@ public class FallbackAiPredictionClientTests
 
     private static AiPredictionResult SampleResult(string src) => new(
         SohPercent: 84.5m, Confidence: 0.82m, Classification: AnomalyClassificationEnum.Degrading,
-        AnomalyScore: -0.12m, RulCyclesEstimate: 30, Priority: "P2", ModelVersion: src, LatencyMs: 40);
+        AnomalyScore: -0.12m, AnomalyConfidence: 0.8m, RulCyclesEstimate: 30, Priority: "P2", ModelVersion: src, LatencyMs: 40);
 
     private static (FallbackAiPredictionClient sut, Mock<AiPredictionGrpcClient> grpc, Mock<AiPredictionHttpClient> http)
         Build()

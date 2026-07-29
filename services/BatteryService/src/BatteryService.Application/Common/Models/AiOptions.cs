@@ -9,8 +9,12 @@ public class AiOptions
 {
     public const string SectionName = "Ai";
 
-    /// <summary>Bật/tắt toàn bộ AI bridge. false → job không gọi AI, không insert prediction.</summary>
-    public bool Enabled { get; set; } = true;
+    /// <summary>
+    /// Bật/tắt toàn bộ AI bridge. false → job không gọi AI, không insert prediction.
+    /// Mặc định false (fail-safe): local/non-docker không có ai-module → job no-op.
+    /// Docker bật qua env <c>Ai__Enabled</c> / <c>AI_ENABLED</c> (xem .env.Docker + docker-compose).
+    /// </summary>
+    public bool Enabled { get; set; } = false;
 
     /// <summary>gRPC endpoint (primary). VD "http://ai-module-grpc:50051" — insecure, nội bộ network.</summary>
     public string GrpcAddress { get; set; } = "http://localhost:50051";

@@ -7,7 +7,19 @@ namespace BatteryService.Application.Common.Models;
 /// AI chia voltage cho <see cref="NSeries"/> per-cell trước scaler + range guard, nếu không
 /// pack 12V/48V bị reject (per-cell range [2.0, 4.5]V). Tính từ BatteryType.NominalVoltage.
 /// </summary>
-public record AiPackConfig(int NSeries, string? Chemistry, double? CapacityAh);
+public class AiPackConfig
+{
+    public AiPackConfig(int NSeries, string? Chemistry, double? CapacityAh)
+    {
+        this.NSeries = NSeries;
+        this.Chemistry = Chemistry;
+        this.CapacityAh = CapacityAh;
+    }
+
+    public int NSeries { get; }
+    public string? Chemistry { get; }
+    public double? CapacityAh { get; }
+}
 
 /// <summary>
 /// BE-AI — kết quả /predict (hoặc gRPC Predict) đã map về domain BE, transport-neutral.
@@ -29,17 +41,40 @@ public record AiPackConfig(int NSeries, string? Chemistry, double? CapacityAh);
 /// Field phẳng <c>confidence</c> của AI response = soh_confidence (xem protos/ai_service.proto:161)
 /// — KHÔNG dùng nó cho classification.
 /// </summary>
-public record AiPredictionResult(
-    decimal SohPercent,
-    decimal Confidence,
-    AnomalyClassificationEnum Classification,
-    decimal AnomalyScore,
-    decimal AnomalyConfidence,
-    int RulCyclesEstimate,
-    string Priority,
-    string ModelVersion,
-    int LatencyMs)
+public class AiPredictionResult
 {
+    public AiPredictionResult(
+        decimal SohPercent,
+        decimal Confidence,
+        AnomalyClassificationEnum Classification,
+        decimal AnomalyScore,
+        decimal AnomalyConfidence,
+        int RulCyclesEstimate,
+        string Priority,
+        string ModelVersion,
+        int LatencyMs)
+    {
+        this.SohPercent = SohPercent;
+        this.Confidence = Confidence;
+        this.Classification = Classification;
+        this.AnomalyScore = AnomalyScore;
+        this.AnomalyConfidence = AnomalyConfidence;
+        this.RulCyclesEstimate = RulCyclesEstimate;
+        this.Priority = Priority;
+        this.ModelVersion = ModelVersion;
+        this.LatencyMs = LatencyMs;
+    }
+
+    public decimal SohPercent { get; }
+    public decimal Confidence { get; }
+    public AnomalyClassificationEnum Classification { get; }
+    public decimal AnomalyScore { get; }
+    public decimal AnomalyConfidence { get; }
+    public int RulCyclesEstimate { get; }
+    public string Priority { get; }
+    public string ModelVersion { get; }
+    public int LatencyMs { get; }
+
     /// <summary>Map chuỗi classification của AI → enum BE (Normal=1/Degrading=2/Failed=3).</summary>
     public static AnomalyClassificationEnum ParseClassification(string? raw) => raw?.Trim() switch
     {
