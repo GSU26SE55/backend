@@ -29,7 +29,15 @@ public static class TicketQueryHelper
         CreatedAt = t.CreatedAt,
         UpdatedAt = t.UpdatedAt,
         SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
-        HasUnreadChat = hasUnreadChat
+        HasUnreadChat = hasUnreadChat,
+        DetectedAt = t.DetectedAt,
+        BatterySerialNumber = t.BatterySerialNumber,
+        AiVerifyStatus = t.AiVerifyStatus,
+        AiVerifyScore = t.AiVerifyScore,
+        AiVerifyReason = t.AiVerifyReason,
+        SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
+        DuplicateReason = t.DuplicateReason,
+        MergedIntoTicketId = t.MergedIntoTicketId?.ToString()
     };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)

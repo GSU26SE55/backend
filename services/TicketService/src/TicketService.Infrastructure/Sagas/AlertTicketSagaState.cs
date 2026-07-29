@@ -48,6 +48,9 @@ public class AlertTicketSagaState : SagaStateMachineInstance, ISagaVersion
     public decimal? CellVoltageDeltaMv { get; set; }
     public Guid? EnvironmentalIncidentId { get; set; }
 
+    // ===== BE-AI — prescription text (V2 only, chỉ từ SohPredictionBackgroundService) =====
+    public string? AiPrescription { get; set; }
+
     // ===== Ticket info — set sau khi TicketCreated response =====
     public Guid? TicketId { get; set; }
     public string? TicketCode { get; set; }

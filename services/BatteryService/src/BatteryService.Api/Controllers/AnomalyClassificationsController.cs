@@ -1,4 +1,5 @@
 using BatteryService.Application.CQRS.Command.AnomalyClassification;
+using BatteryService.Application.CQRS.Query.AnomalyClassification;
 using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -25,6 +26,21 @@ public class AnomalyClassificationsController : ControllerBase
     {
         _mediator = mediator;
         _currentUser = currentUser;
+    }
+
+    /// <summary>
+    /// BE-AI — GET danh sách classification của 1 pin (AI populate qua SohPredictionBackgroundService).
+    /// Dùng cho FE hiển thị lịch sử phân loại + gắn nút feedback.
+    /// </summary>
+    /// <param name="query">Filter: <c>batteryAssetId</c> (bắt buộc), <c>classification</c>, <c>from/to</c>, phân trang.</param>
+    /// <param name="ct">Token hủy request.</param>
+    [HttpGet]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<AnomalyClassificationDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetList([FromQuery] GetAnomalyClassificationsQuery query, CancellationToken ct)
+    {
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>

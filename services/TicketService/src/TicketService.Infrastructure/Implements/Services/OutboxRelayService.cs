@@ -22,6 +22,9 @@ public class OutboxRelayService : IOutboxRelayService
     // TODO: Map event types as they are created
     private static readonly Dictionary<string, Type> EventTypeMap = new()
     {
+        // TicketCreatedEvent (SharedContracts) — dùng nội bộ cho TicketVerifyOnCreatedConsumer
+        // (AI verify). PHẢI có ở đây, nếu không OutboxRelay bỏ qua → consumer không nhận → verify kẹt.
+        { nameof(SharedContracts.Events.TicketCreatedEvent), typeof(SharedContracts.Events.TicketCreatedEvent) },
         { nameof(TicketCreatedIntegrationEvent), typeof(TicketCreatedIntegrationEvent) },
         { nameof(TicketAssignedIntegrationEvent), typeof(TicketAssignedIntegrationEvent) },
         { nameof(TicketResolvedIntegrationEvent), typeof(TicketResolvedIntegrationEvent) },

@@ -21,12 +21,21 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
     /// </summary>
     public List<Guid> BatteryAssetIds { get; set; } = new();
 
+    /// <summary>
+    /// Thời điểm Customer phát hiện pin bất thường (tùy chọn). Không được là thời điểm tương lai.
+    /// Dùng để AI đối chiếu sensor tại thời điểm đó khi verify.
+    /// </summary>
+    public DateTime? DetectedAt { get; set; }
+
     [JsonIgnore]
     public Guid CustomerId { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();
+
+        if (DetectedAt.HasValue && DetectedAt.Value > DateTime.UtcNow)
+            response.ListErrors.Add(new Errors { Field = "DetectedAt", Detail = "Thời điểm phát hiện không được là tương lai." });
 
         if (string.IsNullOrWhiteSpace(Title))
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });

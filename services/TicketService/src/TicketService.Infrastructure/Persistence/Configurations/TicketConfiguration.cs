@@ -111,6 +111,33 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.IsIncident)
             .HasColumnName("is_incident");
 
+        // GH-ticket-verify — DetectedAt + serial snapshot + AI verify + merge fields.
+        builder.Property(e => e.DetectedAt)
+            .HasColumnName("detected_at");
+
+        builder.Property(e => e.BatterySerialNumber)
+            .HasColumnName("battery_serial_number")
+            .HasMaxLength(128);
+
+        builder.Property(e => e.AiVerifyStatus)
+            .HasColumnName("ai_verify_status")
+            .HasConversion<int>();
+
+        builder.Property(e => e.AiVerifyScore)
+            .HasColumnName("ai_verify_score");
+
+        builder.Property(e => e.AiVerifyReason)
+            .HasColumnName("ai_verify_reason");
+
+        builder.Property(e => e.SuspectedDuplicateOfTicketId)
+            .HasColumnName("suspected_duplicate_of_ticket_id");
+
+        builder.Property(e => e.DuplicateReason)
+            .HasColumnName("duplicate_reason");
+
+        builder.Property(e => e.MergedIntoTicketId)
+            .HasColumnName("merged_into_ticket_id");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 

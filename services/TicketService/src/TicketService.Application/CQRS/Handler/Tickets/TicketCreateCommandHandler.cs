@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -22,19 +23,22 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly IActivityLogger _activityLogger;
     private readonly IMessageProducerService _producer;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly IBatteryLookupClient _batteryLookup;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
         IActivityLogger activityLogger,
         IMessageProducerService producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        IBatteryLookupClient batteryLookup)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _activityLogger = activityLogger;
         _producer = producer;
         _publisher = publisher;
+        _batteryLookup = batteryLookup;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
@@ -52,6 +56,13 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         var code = await _codeGenerator.GenerateAsync();
 
         var ticketId = Guid.NewGuid();
+        var primaryBatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty;
+
+        // Serial snapshot — lookup ĐỒNG BỘ dùng JWT của Customer request. Fail → null (KHÔNG chặn tạo ticket).
+        string? batterySerialNumber = null;
+        if (primaryBatteryAssetId != Guid.Empty)
+            batterySerialNumber = await _batteryLookup.GetSerialAsync(primaryBatteryAssetId, ct);
+
         var ticket = new TicketEntity
         {
             Id = ticketId,
@@ -60,7 +71,9 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Description = request.Description,
             Category = request.Category,
             CustomerId = request.CustomerId,
-            BatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty,
+            BatteryAssetId = primaryBatteryAssetId,
+            DetectedAt = request.DetectedAt,
+            BatterySerialNumber = batterySerialNumber,
             Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,

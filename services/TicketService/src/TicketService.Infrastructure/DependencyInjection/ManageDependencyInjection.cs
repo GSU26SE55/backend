@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
@@ -32,6 +33,7 @@ public static class ManageDependencyInjection
         services.AddDatabase(configuration);
         services.AddRepositories();
         services.AddHelpers();
+        services.AddAiVerify(configuration);
         services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
@@ -42,6 +44,16 @@ public static class ManageDependencyInjection
         services.AddAlertTicketSaga(configuration);
 
         // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
+        // FIX duplicate-ticket — khi Saga bật, consumer cũ BatteryAnomalyDetectedConsumer
+        // ([Obsolete] #238) PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
+        // (gây trùng mã ticket → 23505 duplicate key IX_tickets_code).
+        var sagaEnabled = configuration.GetValue(
+            $"{AlertTicketSagaOptions.SectionName}:{nameof(AlertTicketSagaOptions.AlertTicketSagaEnabled)}",
+            true);
+        var excludedConsumers = sagaEnabled
+            ? new[] { typeof(Consumers.BatteryAnomalyDetectedConsumer) }
+            : Array.Empty<Type>();
+
         services.AddMessageBus(
             configuration,
             configure: bus =>
@@ -49,6 +61,9 @@ public static class ManageDependencyInjection
                 SagaServiceCollectionExtensions.ConfigureAlertTicketSaga(bus);
                 SagaServiceCollectionExtensions.ConfigureChatEscalationReviewSaga(bus);
             },
+            // FIX saga-scheduler — bật UseMessageScheduler cho saga timer (.Schedule/.Unschedule).
+            configureBus: SagaServiceCollectionExtensions.ConfigureAlertTicketSagaBus,
+            excludedConsumerTypes: excludedConsumers,
             typeof(ManageDependencyInjection).Assembly,
             typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
 
@@ -180,6 +195,45 @@ public static class ManageDependencyInjection
         {
             http.Timeout = TimeSpan.FromSeconds(60);
         });
+    }
+
+    /// <summary>
+    /// GH-ticket-verify — battery serial lookup (HTTP, JWT forward) + AI verify (gRPC).
+    /// </summary>
+    private static void AddAiVerify(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<TicketAiOptions>(configuration.GetSection(TicketAiOptions.SectionName));
+        var aiOptions = configuration.GetSection(TicketAiOptions.SectionName).Get<TicketAiOptions>() ?? new TicketAiOptions();
+
+        // Battery serial lookup — typed HttpClient, base url = BatteryService (JWT forward trong client).
+        services.AddHttpClient<IBatteryLookupClient, BatteryLookupHttpClient>((_, http) =>
+        {
+            http.BaseAddress = new Uri(aiOptions.BatteryServiceBaseUrl);
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds));
+        });
+
+        // gRPC AiService client (VerifyTicket) — insecure, nội bộ docker network.
+        services.AddGrpcClient<AiModule.V1.AiService.AiServiceClient>(o =>
+        {
+            o.Address = new Uri(aiOptions.AiGrpcAddress);
+        });
+        services.AddScoped<IAiTicketVerifyClient>(sp => new AiTicketVerifyGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiTicketVerifyGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
+        // GH-verify-sensor-grpc — gRPC BatteryService client (đọc sensor pin verify), nội bộ, không JWT.
+        services.AddGrpcClient<BatteryService.Grpc.BatteryInternal.BatteryInternalClient>(o =>
+        {
+            o.Address = new Uri(aiOptions.BatteryGrpcAddress);
+        });
+        services.AddScoped<IBatterySensorClient>(sp => new BatterySensorGrpcClient(
+            sp.GetRequiredService<BatteryService.Grpc.BatteryInternal.BatteryInternalClient>(),
+            sp.GetRequiredService<ILogger<BatterySensorGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
+        // Logic verify dùng chung consumer (async) + re-verify thủ công (đồng bộ).
+        services.AddScoped<ITicketVerifyRunner, TicketVerifyRunner>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

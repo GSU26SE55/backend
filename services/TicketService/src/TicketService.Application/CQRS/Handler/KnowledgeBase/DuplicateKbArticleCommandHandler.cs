@@ -59,7 +59,6 @@ public class DuplicateKbArticleCommandHandler
             CreatedByUserId = command.CurrentUserId,
             ReviewRequired = false,
             PendingReviewBy = null,
-            IsInternalOnly = source.IsInternalOnly
         };
 
         var initialVersion = new KbArticleVersion

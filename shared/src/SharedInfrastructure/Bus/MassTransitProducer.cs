@@ -13,6 +13,11 @@ public class MassTransitProducer : IMessageProducerService, IIntegrationEventTra
     }
     public Task PublishAsync<T>(T @message, CancellationToken cancellationToken = default) where T : IntegrationEvent
     {
-        return _publishEndpoint.Publish(@message, cancellationToken);
+        // Publish theo RUNTIME type, không phải compile-time T. OutboxRelay deserialize event
+        // thành kiểu tĩnh IntegrationEvent rồi gọi PublishAsync(evt) → T=IntegrationEvent →
+        // MassTransit route lên exchange "IntegrationEvent" (sai) thay vì exchange của event
+        // cụ thể (BatteryAnomalyDetectedV2Event) mà saga bind vào → saga không bao giờ nhận.
+        // Publish(object, Type) ép MassTransit dùng đúng type cụ thể để route.
+        return _publishEndpoint.Publish(@message!, @message!.GetType(), cancellationToken);
     }
 }

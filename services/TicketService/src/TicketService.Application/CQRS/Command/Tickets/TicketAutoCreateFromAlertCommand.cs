@@ -20,6 +20,16 @@ public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, 
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Thời điểm anomaly được phát hiện (từ alert). Gán vào <c>Ticket.DetectedAt</c> để panel
+    /// "Bằng chứng cảnh báo" lấy đúng cửa sổ log — trước đây bỏ trống nên ticket auto không
+    /// hiện được bằng chứng dù saga có sẵn dữ liệu này.
+    /// </summary>
+    public DateTime? DetectedAt { get; set; }
+
+    /// <summary>Serial pin — hiển thị trên FE (ticket Customer đã có, ticket auto trước đây bỏ trống).</summary>
+    public string? BatterySerialNumber { get; set; }
+
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();

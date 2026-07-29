@@ -283,4 +283,53 @@ public class AdminTicketsController : ControllerBase
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
+
+    /// <summary>
+    /// Manager gộp ticket nghi trùng (B) vào ticket đích (A).
+    /// </summary>
+    /// <remarks>
+    /// - Ticket B (route id) đóng lại (<c>Closed</c>), link <c>MergedIntoTicketId</c> tới ticket A và ẩn khỏi queue.
+    /// - Body chứa <c>targetTicketId</c> (ticket A giữ lại).
+    /// - Human-in-the-loop: dùng khi Manager xác nhận cờ nghi trùng đúng là trùng thật.
+    /// </remarks>
+    /// <param name="id">ID của ticket bị gộp (B).</param>
+    /// <param name="command">Ticket đích (A).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Gộp thành công.</response>
+    /// <response code="404">Không tìm thấy ticket nguồn hoặc đích.</response>
+    /// <response code="409">Ticket đã được gộp trước đó.</response>
+    [HttpPost("{id:guid}/merge")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Merge(Guid id, [FromBody] TicketMergeCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Kích hoạt AI kiểm tra lại 1 ticket (chỉ ticket manual đang Skipped/Pending).</summary>
+    [HttpPost("{id:guid}/re-verify")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReVerify(Guid id, CancellationToken ct)
+    {
+        var command = new TicketReVerifyCommand
+        {
+            TicketId = id,
+            ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId)
+        };
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 }
