@@ -429,6 +429,65 @@ Base route: `/api/alerts`
 - `GET /api/alerts` mặc định loại trừ `Merged` (`excludeMerged=true`). Để xem Merged alerts, truyền `excludeMerged=false` hoặc `status=Merged`.
 - `assetsWithActiveAlerts` trong Site dashboard chỉ tính alert `Open` và `Acknowledged`, không tính `Merged` hoặc `Resolved`.
 
+### Thông báo cho Customer theo mức nghiêm trọng (Sprint 6.2 NOTI-08 · #679)
+
+Từ Sprint 6.2, **cả 3 mức severity đều sinh thông báo tới Customer sở hữu pin** — trước đó
+BatteryService **cố ý chỉ publish event cho mức `Critical`** để tránh spam ticket, nên
+`Warning`/`Info` chỉ nằm im trong bảng `alerts` và Customer **không bao giờ được báo** (spec §3.4
+T#11/T#12 chưa đạt).
+
+| Severity | Event publish (qua outbox) | Ai consume | Có tạo ticket không? | Kênh Customer nhận |
+|---|---|---|---|---|
+| `Critical` (3) | `BatteryAnomalyDetectedEvent` | TicketService (auto-tạo ticket BR-02) **+** NotificationService | ✅ **Có** | InApp + Push + **Email + SMS** (Sprint 6.2 mở đủ 4 kênh; trước chỉ InApp + Push) |
+| `Warning` (2) | **`BatteryAnomalyWarningDetectedEvent`** *(MỚI)* | **CHỈ** NotificationService | ❌ Không | InApp + Push |
+| `Info` (1) | **`BatteryAnomalyWarningDetectedEvent`** *(MỚI)* | **CHỈ** NotificationService | ❌ Không | **Chỉ InApp** |
+
+> **Vì sao là event RIÊNG chứ không tái dùng `BatteryAnomalyDetectedEvent`:** TicketService consume
+> `BatteryAnomalyDetectedEvent` để auto-tạo ticket (BR-02) và `AlertTicketSagaStateMachine` consume
+> bản V2 cho cùng mục đích. Publish severity Warning lên chính event đó thì **mọi cảnh báo nhẹ sẽ đẻ
+> ticket** — đúng nỗi lo "spam ticket" mà team đang né bằng cách không publish gì cả.
+
+**Payload `BatteryAnomalyWarningDetectedEvent`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `alertId` | `Guid` | Không | ID alert vừa tạo |
+| `batteryAssetId` | `Guid?` | **Có** | ID pin. `null`/`Guid.Empty` ⇒ **không publish** (xem dedup dưới) |
+| `customerId` | `Guid` | Không | Chủ sở hữu pin — consumer skip nếu rỗng |
+| `assetSerialNumber` | `string?` | **Có** | Serial để hiển thị; rỗng → consumer hiện `"(không rõ serial)"` |
+| `anomalyType` | `int` | Không | Giá trị `AnomalyTypeEnum` |
+| `severity` | `int` | Không | Giá trị `AlertSeverityEnum` — chỉ `1` (Info) hoặc `2` (Warning) |
+| `thresholdValue` | `decimal?` | **Có** | Ngưỡng đã cấu hình |
+| `actualValue` | `decimal?` | **Có** | Giá trị thực tế |
+| `unit` | `string?` | **Có** | Đơn vị (`V`, `°C`, `%`, …) |
+| `detectedAt` | `DateTime` | Không | UTC |
+
+**Chống spam — dedup ở phía publisher:** alert Warning **không** đi qua dedup-merge như Critical (mỗi
+tick vượt ngưỡng có thể tạo alert mới), nên publish thẳng sẽ khiến Customer lãnh một trận thông báo.
+Chỉ publish khi trong `WarningNotifyDedupMinutes` gần nhất **chưa có** outbox event cùng
+`(BatteryAssetId × AnomalyType)`. Alert **không gắn pin** (`batteryAssetId` null/rỗng — vd alert cấp
+site) **không bao giờ được publish** event này.
+
+**Config (section `AnomalyEngine`):**
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `AnomalyEngine:PublishWarningNotifications` | `bool` | `true` | `false` = quay lại hành vi cũ: chỉ ghi alert, **không báo ai** |
+| `AnomalyEngine:WarningNotifyDedupMinutes` | `int` | `60` | Cửa sổ chống spam theo `(BatteryAssetId × AnomalyType)`. `≤ 0` = tắt dedup (publish mọi lần) |
+
+> ⚠️ **Ghi chú cho người đọc code:** XML comment trong `BatteryAnomalyWarningDetectedEvent.cs` viết
+> khoá là `Anomaly:WarningNotifyDedupMinutes`. Đó là **sai trong comment** — `AnomalyEngineOptions.SectionName`
+> thực tế là **`AnomalyEngine`**, nên khoá đúng là `AnomalyEngine:WarningNotifyDedupMinutes`
+> (biến môi trường: `AnomalyEngine__WarningNotifyDedupMinutes`).
+
+**Outbox `EventTypeMap`:** `OutboxRelayService` đã đăng ký
+`{ nameof(BatteryAnomalyWarningDetectedEvent), typeof(BatteryAnomalyWarningDetectedEvent) }`.
+Thiếu dòng này thì relay báo `"Unknown event type"` và event **nằm lại outbox mãi mãi** — bẫy cố hữu
+khi thêm event mới cho BatteryService.
+
+> Chi tiết phía nhận (template, preference theo nhóm `Battery`, quiet hours, hạn mức):
+> xem [`api-notification.md`](api-notification.md).
+
 ---
 
 ### `GET /api/alerts/{id}`

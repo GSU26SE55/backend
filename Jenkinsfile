@@ -111,41 +111,24 @@ pipeline {
       }
     }
 
+    // Gọi thẳng ci/scripts/rule-checks.sh thay vì chép luật vào đây.
+    //
+    // Trước đây stage này chép tay 3 luật, trong khi rule-checks.sh — bản được bảo trì — đã có
+    // 10 luật. Hai bản trôi xa nhau và bản CHẠY lại là bản kém hơn:
+    //   · Luật GetAllAsync ở đây chỉ cần thấy 'await ... GetAllAsync(' là fail, nên cờ nhầm
+    //     chuỗi LINQ nhiều dòng — mẫu ĐÚNG và phổ biến nhất repo (319 chỗ), nơi await gắn vào
+    //     .ToListAsync()/.FirstOrDefaultAsync() ở dòng dưới. rule-checks.sh đã xử lý đúng bằng
+    //     cách chỉ bắt khi câu lệnh kết thúc ngay sau GetAllAsync().
+    //   · 7 luật kia (ADR-017 Energy/CO2, 3 luật CHAT-04, AUDIT001–003) chưa từng chạy trong CI.
+    // Đã đối chiếu cả 10 luật trên toàn bộ thay đổi Sprint 6.3 (135 file production): PASS hết.
+    //
+    // BASE_REF: PR so với nhánh đích, còn build thẳng trên nhánh thì so với dev.
     stage('5. Project Rule Checks') {
       when { anyOf { branch 'dev'; branch 'staging'; branch 'main'; changeRequest() } }
       steps {
         script {
           def baseRef = env.CHANGE_TARGET ?: 'dev'
-                    sh """
-            set -eu
-            git fetch origin ${baseRef}:refs/remotes/origin/${baseRef} 2>/dev/null || true
-
-            DIFF=\$(git diff origin/${baseRef}...HEAD -- '*.cs' 2>/dev/null || git diff HEAD~1...HEAD -- '*.cs' 2>/dev/null || echo "")
-
-            if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.(UpdateAsync|DeleteAsync)\\s*\\('; then
-              echo "FAIL: UpdateAsync/DeleteAsync are void in this repo. Do not await them."
-              exit 1
-            fi
-            echo "PASS: no await on void UpdateAsync/DeleteAsync"
-
-            if echo "\$DIFF" | grep -E '^\\+.*await\\s+\\w+(\\.\\w+)*\\.GetAllAsync\\s*\\('; then
-              echo "FAIL: GetAllAsync returns IQueryable in this repo. Do not await it."
-              exit 1
-            fi
-            echo "PASS: no await on GetAllAsync"
-
-            NEW_ENTITIES=\$(git diff origin/${baseRef}...HEAD --name-only --diff-filter=A 2>/dev/null | grep -E 'Domain/Entities/.*\\.cs\$' || true)
-            FAILED=0
-            for file in \$NEW_ENTITIES; do
-              if [ -f "\$file" ] && ! grep -qE 'class\\s+\\w+\\s*:\\s*(\\w+\\s*,\\s*)*AuditableEntity' "\$file"; then
-                if ! grep -qE '^(\\s*public\\s+)?(abstract|enum|interface)' "\$file"; then
-                  echo "FAIL: \$file must extend AuditableEntity"
-                  FAILED=1
-                fi
-              fi
-            done
-            [ \$FAILED -eq 0 ] && echo "PASS: new domain entities extend AuditableEntity" || exit 1
-          """
+          sh "BASE_REF=origin/${baseRef} ./ci/scripts/rule-checks.sh"
         }
       }
     }
@@ -279,6 +262,13 @@ pipeline {
             [name: 'batteryservice',     dockerfile: 'services/BatteryService/src/BatteryService.Api/Dockerfile'],
             [name: 'ticketservice',      dockerfile: 'services/TicketService/src/TicketService.Api/Dockerfile'],
             [name: 'notificationservice',dockerfile: 'services/NotificationService/src/NotificationService.Api/Dockerfile'],
+            // Sprint audit #AUDIT-13. Trước đây service này bị bỏ sót ở CẢ BA danh sách của
+            // Jenkinsfile (build / push / disable-phase-1) dù đã có trong helm values (enabled:
+            // true), docker-compose và scrape config của Prometheus. Hậu quả: Phase 1 vẫn dựng
+            // pod này với image ghcr.io/gsu26se55/auditaggregatorservice:<SHA> — tag chưa từng
+            // được push — nên pod ImagePullBackOff và `--wait --timeout 60m` treo đủ 60 phút
+            // rồi mới báo hỏng.
+            [name: 'auditaggregatorservice', dockerfile: 'services/AuditAggregatorService/src/AuditAggregatorService.Api/Dockerfile'],
           ]
 
           services.each { svc ->
@@ -301,7 +291,9 @@ pipeline {
       when { branch 'staging' }
       steps {
         script {
-          ['apigateway', 'authservice', 'emailservice', 'smsservice', 'filestorageservice', 'batteryservice', 'ticketservice', 'notificationservice'].each { svc ->
+          // Danh sách này PHẢI khớp `services` ở stage 10 — lệch một cái là image build xong
+          // nhưng không lên registry, rồi deploy hỏng ở chỗ khác hẳn nơi gây ra lỗi.
+          ['apigateway', 'authservice', 'emailservice', 'smsservice', 'filestorageservice', 'batteryservice', 'ticketservice', 'notificationservice', 'auditaggregatorservice'].each { svc ->
             sh "docker push ${REGISTRY}/${svc}:${SHA}"
             sh "docker push ${REGISTRY}/${svc}:${BRANCH_NAME}"
           }
@@ -462,6 +454,7 @@ pipeline {
                 --set services.batteryservice.enabled=false \
                 --set services.ticketservice.enabled=false \
                 --set services.notificationservice.enabled=false \
+                --set services.auditaggregatorservice.enabled=false \
                 --wait --wait-for-jobs --timeout 60m
               stop_deploy_watcher
 

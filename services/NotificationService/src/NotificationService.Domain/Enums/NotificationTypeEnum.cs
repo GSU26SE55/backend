@@ -66,5 +66,33 @@ public enum NotificationTypeEnum
     /// <summary>GH-671 — AI blog generation thất bại.</summary>
     BlogGenerationFailed = 26,
 
+    /// <summary>
+    /// Sprint 6.2 NOTI-03 (#674) — saga ChatEscalationReview timeout 30' (Manager không ACK)
+    /// → escalate lên Admin (<c>ChatEscalatedToAdminEvent</c>).
+    /// </summary>
+    ChatEscalatedToAdmin = 27,
+
+    /// <summary>Sprint 6.2 NOTI-07 (#678) — Manager duyệt kết quả xử lý, ticket chờ Customer đánh giá.</summary>
+    TicketApproved = 28,
+
+    /// <summary>Sprint 6.2 NOTI-07 (#678) — kết quả resolve bị từ chối, hoặc ticket bị đóng do ngoài scope.</summary>
+    TicketRejected = 29,
+
+    /// <summary>Sprint 6.2 NOTI-07 (#678) — Customer mở lại ticket.</summary>
+    TicketReopened = 30,
+
+    /// <summary>Sprint 6.2 NOTI-07 (#678) — nhắc Customer đánh giá ticket đang chờ.</summary>
+    TicketRatingRequested = 31,
+
+    /// <summary>Sprint 6.2 NOTI-08 (#679) — bất thường pin mức Warning (spec §3.4 T#12).</summary>
+    BatteryAnomalyWarning = 32,
+
+    /// <summary>Sprint 6.2 NOTI-08 (#679) — bất thường pin mức Info (spec §3.4 T#11, chỉ in-app).</summary>
+    BatteryAnomalyInfo = 33,
+
+    // Ghi chú Sprint 6.2 NOTI-04 (#675): cảnh báo bảo mật (suspicious login / refresh-token reuse)
+    // đi thẳng đường AuthService → EmailService như OTP, KHÔNG qua NotificationService — nên cố ý
+    // KHÔNG thêm type ở đây để tránh đẻ thêm enum không producer (đúng lỗi mà review §4.8 đã nêu).
+
     System = 99
 }

@@ -1,21 +1,103 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="UTF-8" />
-    <title>Verify your account</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no,address=no,email=no,date=no" />
+    <title>Xác thực tài khoản {{AppName}}</title>
+    <style type="text/css">
+        body, table, td, a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        table {
+            border-collapse: collapse !important;
+        }
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        @media screen and (max-width: 620px) {
+            .sbm-pad {
+                padding-left: 20px !important;
+                padding-right: 20px !important;
+            }
+            .sbm-h1 {
+                font-size: 20px !important;
+                line-height: 28px !important;
+            }
+            .sbm-otp {
+                font-size: 28px !important;
+                letter-spacing: 6px !important;
+            }
+            .sbm-label, .sbm-value {
+                display: block !important;
+                width: 100% !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+            .sbm-label {
+                padding-bottom: 2px !important;
+            }
+            .sbm-value {
+                padding-top: 0 !important;
+                padding-bottom: 14px !important;
+            }
+        }
+    </style>
 </head>
-<body style="margin:0;padding:0;background:#f4f6f8;">
-    <div style="font-family: Helvetica, Arial, sans-serif; min-width:1000px; overflow:auto; line-height:2">
-        <div style="margin:50px auto; width:70%; padding:20px 0; background:#ffffff;">
-            <div style="border-bottom:1px solid #eee">
-                <a href="#" style="font-size:1.4em; color:#00466a; text-decoration:none; font-weight:600">{{AppName}}</a>
-            </div>
-            <p style="font-size:1.1em">Xin chào {{UserName}},</p>
-            <p>Cảm ơn bạn đã đăng ký. Sử dụng mã OTP sau để hoàn tất quá trình đăng ký. Mã có hiệu lực trong {{ExpireMinutes}} phút.</p>
-            <h2 style="background:#00466a; margin:0 auto; width:max-content; padding:0 10px; color:#fff; border-radius:4px;">{{Otp}}</h2>
-            <p style="font-size:0.9em;">Xin cảm ơn,<br />{{AppName}} Team</p>
-            <hr style="border:none;border-top:1px solid #eee" />
-        </div>
-    </div>
+<body style="margin:0; padding:0; width:100%; background-color:#eef2f6;">
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all; font-size:1px; line-height:1px; color:#eef2f6;">Mã OTP xác thực đăng ký của bạn, hiệu lực {{ExpireMinutes}} phút.</div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background-color:#eef2f6;">
+        <tr>
+            <td align="center" style="padding:20px 10px;">
+                <!--[if mso]>
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td>
+                <![endif]-->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; margin:0 auto; background-color:#ffffff; border:1px solid #e3e9ef; border-radius:10px;">
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:18px 32px; background-color:#00466a; border-radius:9px 9px 0 0;">
+                            <span style="font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:17px; line-height:24px; font-weight:bold; color:#ffffff;">{{AppName}}</span>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:30px 32px 8px 32px;">
+                    <h1 class="sbm-h1" style="margin:0 0 18px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:23px; line-height:31px; color:#00466a; font-weight:bold;">Xác thực tài khoản</h1>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Xin chào <strong>{{UserName}}</strong>,</p>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Cảm ơn bạn đã đăng ký. Nhập mã OTP dưới đây để hoàn tất đăng ký. Mã có hiệu lực trong <strong>{{ExpireMinutes}} phút</strong>.</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:0 0 20px 0;">
+                        <tr>
+                            <td align="center" style="padding:22px 12px; background-color:#f1f6fa; border:1px dashed #00466a; border-radius:8px;">
+                                <div class="sbm-otp" style="font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:34px; line-height:42px; letter-spacing:9px; font-weight:bold; color:#00466a;">{{Otp}}</div>
+                            </td>
+                        </tr>
+                    </table>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:26px; color:#6b7785; font-weight:normal;">Nếu bạn không thực hiện đăng ký này, hãy bỏ qua email.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:18px 32px 24px 32px; border-top:1px solid #e3e9ef;">
+                            <p style="margin:0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:12px; line-height:19px; color:#6b7785;">Đây là email tự động từ hệ thống Solar Battery Monitor. Vui lòng không trả lời email này.</p>
+                        </td>
+                    </tr>
+
+                </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

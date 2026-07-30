@@ -25,5 +25,15 @@ public class AccountReadModel : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Sprint 6.3 NOTI3-12 (#712) — locale BCP-47 ưa dùng của người nhận (<c>vi-VN</c>, <c>en-US</c>).
+    ///
+    /// <c>null</c> ⇒ dùng <c>Notification:Dispatch:DefaultLocale</c>. Trước sprint này dispatcher
+    /// hardcode <c>vi-VN</c>, nên khách hàng không đọc tiếng Việt vẫn nhận thông báo tiếng Việt.
+    /// UserService chưa publish trường này ⇒ hiện luôn <c>null</c> và rơi về mặc định; cột có sẵn để
+    /// khi UserService bổ sung thì chỉ cần map, không phải đổi migration.
+    /// </summary>
+    public string? PreferredLocale { get; set; }
+
     public DateTime LastSyncedAtUtc { get; set; }
 }

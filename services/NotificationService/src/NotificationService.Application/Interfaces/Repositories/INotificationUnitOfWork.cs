@@ -12,4 +12,10 @@ public interface INotificationUnitOfWork : IUnitOfWork
     IGenericRepository<NotificationPreference> NotificationPreferences { get; }
     IGenericRepository<NotificationTemplate> NotificationTemplates { get; }
     IGenericRepository<AccountReadModel> Accounts { get; }
+
+    /// <summary>Sprint 6.3 NOTI3-02 (#702) — biên nhận push để đối soát với Expo.</summary>
+    IGenericRepository<PushReceipt> PushReceipts { get; }
+
+    /// <summary>Sprint 6.3 NOTI3-04 (#704) — tuỳ chọn theo nhóm × kênh.</summary>
+    IGenericRepository<NotificationCategoryPreference> NotificationCategoryPreferences { get; }
 }

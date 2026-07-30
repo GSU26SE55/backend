@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -84,6 +85,11 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
 
         // Outbox: Status Changed & Ticket Held
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket tạm dừng.
+        await _producer.PublishAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+            (int)oldStatus, (int)targetStatus, oldStatus.ToString(), targetStatus.ToString()), ct);
         await _producer.PublishAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
 
         // #AUDIT-26

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -60,6 +61,11 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
 
         // Outbox: Ticket Reopened
         await _producer.PublishAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts cho NotificationService (notify Manager + Staff).
+        await _producer.PublishAsync(new TicketReopenedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.ReopenReason,
+            ticket.ReopenCount, DateTime.UtcNow), ct);
 
         // BR-07: Auto-escalate if ReopenCount >= 2
         if (ticket.ReopenCount >= 2)

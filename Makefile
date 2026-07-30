@@ -237,6 +237,28 @@ docker-clean: ## down + xoá volumes (DESTRUCTIVE — xác nhận trước)
 	$(COMPOSE) down -v
 
 # ---------------------------------------------------------------------
+# Monitoring
+# ---------------------------------------------------------------------
+ALERT_RULES_SRC  := monitoring/prometheus/alert-rules.yml
+ALERT_RULES_HELM := deploy/helm/solar-battery/files/alert-rules.yml
+
+.PHONY: sync-alert-rules check-alert-rules
+
+sync-alert-rules: ## Đồng bộ alert rules sang chart Helm (chạy sau khi sửa alert-rules.yml)
+	@cp $(ALERT_RULES_SRC) $(ALERT_RULES_HELM)
+	@echo "Đã đồng bộ $(ALERT_RULES_SRC) -> $(ALERT_RULES_HELM) ($$(grep -c '^\s*- alert:' $(ALERT_RULES_SRC)) alert)."
+
+check-alert-rules: ## Kiểm 2 bản alert rules còn khớp nhau (CI cũng chạy luật này)
+	@if diff -q $(ALERT_RULES_SRC) $(ALERT_RULES_HELM) >/dev/null 2>&1; then \
+		echo "PASS: alert rules đồng bộ."; \
+	else \
+		echo "FAIL: $(ALERT_RULES_SRC) và $(ALERT_RULES_HELM) đã lệch nhau."; \
+		diff $(ALERT_RULES_SRC) $(ALERT_RULES_HELM) || true; \
+		echo "Chạy: make sync-alert-rules"; \
+		exit 1; \
+	fi
+
+# ---------------------------------------------------------------------
 # Helpers (internal)
 # ---------------------------------------------------------------------
 .PHONY: _require-svc _require-name

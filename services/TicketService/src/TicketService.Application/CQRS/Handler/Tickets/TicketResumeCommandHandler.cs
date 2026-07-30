@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -74,6 +75,12 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
 
         // Outbox: Status Changed & Ticket Resumed
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket chạy lại.
+        await _producer.PublishAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+            (int)oldStatus, (int)TicketStatusEnum.InProgress,
+            oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), ct);
         await _producer.PublishAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
 
         // #AUDIT-26

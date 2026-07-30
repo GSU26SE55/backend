@@ -7,6 +7,9 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- Sprint 6.3 NOTI3-13 (#713) — NotificationHub cần Microsoft.AspNetCore.SignalR.
+             Dùng FrameworkReference giống TicketService.Infrastructure, không thêm package rời. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="MassTransit" Version="8.5.9" />
         <PackageReference Include="MediatR" Version="12.2.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />

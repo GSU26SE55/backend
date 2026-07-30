@@ -26,6 +26,8 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<AccountReadModel> AccountReadModels { get; set; }
     public virtual DbSet<NotificationAuditLog> NotificationAuditLogs { get; set; }       // Sprint audit #AUDIT-34
     public virtual DbSet<NotificationAuditOutbox> NotificationAuditOutboxes { get; set; } // Sprint audit #AUDIT-34
+    public virtual DbSet<PushReceipt> PushReceipts { get; set; }                     // Sprint 6.3 NOTI3-02 (#702)
+    public virtual DbSet<NotificationCategoryPreference> NotificationCategoryPreferences { get; set; } // Sprint 6.3 NOTI3-04 (#704)
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

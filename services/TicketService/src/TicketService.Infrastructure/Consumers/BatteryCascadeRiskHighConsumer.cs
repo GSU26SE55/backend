@@ -187,7 +187,9 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
             ActivityActionEnum.Created,
             newValue: $"Auto-created P1 (Origin=System) — CascadeRiskHigh score={evt.CascadeRiskScore:F3}, asset={evt.AssetSerialNumber}");
 
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId + Priority trong payload.
+        await _producer.PublishAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _uow.SaveChangesAsync(ct);
 

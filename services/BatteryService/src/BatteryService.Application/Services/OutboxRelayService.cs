@@ -24,6 +24,9 @@ public class OutboxRelayService : IOutboxRelayService
         // Sprint IoT — device offline detection publish qua outbox này nhưng thiếu map →
         // event kẹt (retry vô hạn) chặn relay batch. Thêm để relay publish được.
         { nameof(IotDeviceWentOfflineEvent), typeof(IotDeviceWentOfflineEvent) },
+        // Sprint 6.2 NOTI-08 (#679) — anomaly Warning/Info → CHỈ NotificationService (không đẻ ticket).
+        // Thiếu dòng này thì relay báo "Unknown event type" và event nằm lại outbox mãi mãi.
+        { nameof(BatteryAnomalyWarningDetectedEvent), typeof(BatteryAnomalyWarningDetectedEvent) },
         // Legacy alias — payload schema cũ (BatteryAnomalyDetectedEvent) cho rows
         // pre-Sprint-5B chưa relay. Deserialize an toàn vì BatteryAnomalyDetectedEvent
         // có sẵn handler ở TicketService (giờ ignored qua Saga tombstone).

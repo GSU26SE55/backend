@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -65,6 +66,12 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
 
         // We can use a general status changed event or a specific reject event
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.ClosedRejected), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — Manager từ chối ở bước triage vì ngoài scope → CLOSED_REJECTED.
+        // Người cần biết là Customer (IsClosedRejected = true).
+        await _producer.PublishAsync(new TicketRejectedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.Reason,
+            IsClosedRejected: true, DateTime.UtcNow), ct);
 
         await _uow.SaveChangesAsync(ct);
 

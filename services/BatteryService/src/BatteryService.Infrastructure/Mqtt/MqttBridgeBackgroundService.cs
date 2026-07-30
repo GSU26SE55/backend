@@ -5,6 +5,7 @@ using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
 using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Observability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,6 +50,12 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Đặt series ngay khi khởi động, kể cả khi bridge tắt. Gauge chưa được set thì Prometheus
+        // không thấy series nào, và alert MqttBridgeDisconnected lại im lặng — đúng cái đang muốn
+        // sửa. Phát 0/0 khi tắt là trạng thái rõ ràng: "có bridge, chủ đích không bật".
+        IotMetrics.MqttBridgeEnabled.Set(_options.Enabled ? 1 : 0);
+        IotMetrics.MqttBridgeConnected.Set(0);
+
         if (!_options.Enabled)
         {
             _logger.LogInformation("MQTT bridge disabled (Mqtt:Enabled=false).");
@@ -87,12 +94,15 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
             await _client.SubscribeAsync(MqttTopicMap.StatusWildcard);
             await _client.SubscribeAsync(MqttTopicMap.CommandAckWildcard);
             // Sprint IoT-2 #IoT2-22 — log message khớp acceptance spec ("connected to broker, 4 subscriptions").
+            IotMetrics.MqttBridgeConnected.Set(1);
+            // Sprint IoT-2 #IoT2-22 — log message khớp acceptance spec ("connected to broker, 4 subscriptions").
             _logger.LogInformation(
                 "MQTT bridge connected to broker, 4 subscriptions ({Host}:{Port})",
                 _options.Host, _options.Port);
         };
         _client.DisconnectedAsync += d =>
         {
+            IotMetrics.MqttBridgeConnected.Set(0);
             _logger.LogWarning("MQTT bridge disconnected: {Reason}", d.Reason);
             return Task.CompletedTask;
         };
@@ -248,6 +258,17 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         {
             await unitOfWork.Alerts.AddAsync(new Domain.Entities.Alert
             {
+                // BaseEntity.Id KHÔNG có giá trị khởi tạo (`public Guid Id { get; set; }`), nên bỏ
+                // trống thì mọi Alert dựng trong vòng lặp đều mang Guid.Empty. EF gom chúng vào
+                // cùng một khoá trong identity map và ném ngay ở lần AddAsync thứ hai:
+                //   "The instance of entity type 'Alert' cannot be tracked because another
+                //    instance with the same key value for {'Id'} is already being tracked."
+                // Site chỉ có 1 asset thì không lộ; từ 2 asset trở lên là hỏng — đường LWT chưa
+                // bao giờ chạy được trên site thật. Bắt được khi test MQTT E2E 31/07/2026
+                // (site của GW-ESP32-MVP-001 có 5 asset).
+                // Cùng khuôn với IotDeviceOfflineDetectionService (đường phát hiện offline bằng
+                // polling) — chỗ đó set Id tường minh từ đầu.
+                Id = Guid.NewGuid(),
                 BatteryAssetId = asset.Id,
                 SiteId = asset.SiteId,
                 AnomalyType = AnomalyTypeEnum.DeviceOffline,

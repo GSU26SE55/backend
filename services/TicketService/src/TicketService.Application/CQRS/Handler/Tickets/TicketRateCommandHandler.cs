@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -63,6 +64,12 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
 
         // Outbox: Ticket Rated
         await _producer.PublishAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — rate xong là ticket đóng hẳn (CLOSED). Event SharedContracts
+        // để NotificationService xác nhận với Customer + báo Manager (IsAutoClosed = false).
+        await _producer.PublishAsync(new TicketClosedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.ClosedAt ?? DateTime.UtcNow,
+            IsAutoClosed: false, request.Rating), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

@@ -85,7 +85,9 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
-        await _producer.PublishAsync(new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
+        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để notify Customer khi ticket được resolve.
+        await _producer.PublishAsync(
+            new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary, ticket.CustomerId), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketAuditTrailNotification.For(

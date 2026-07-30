@@ -66,5 +66,11 @@ public enum ActivityActionEnum
     /// <summary>Đã unpin tin nhắn chat.</summary>
     ChatUnpinned = 31,
     /// <summary>Chat bị flag bởi spam/profanity/PII filter (audit trail, không chặn post trừ spam).</summary>
-    ChatFlagged = 32
+    ChatFlagged = 32,
+    /// <summary>
+    /// Sprint 6.2 NOTI-07 (#678) — hệ thống đã gửi nhắc Customer đánh giá ticket đang treo ở
+    /// CLOSED_PENDING_RATE. Đồng thời là cờ idempotent: <c>RatingRequestBackgroundService</c>
+    /// chỉ nhắc 1 lần / ticket bằng cách kiểm tra sự tồn tại của activity này.
+    /// </summary>
+    RatingRequested = 33
 }

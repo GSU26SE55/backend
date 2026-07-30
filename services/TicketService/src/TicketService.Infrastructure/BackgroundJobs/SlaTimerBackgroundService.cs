@@ -85,7 +85,15 @@ public class SlaTimerBackgroundService : BackgroundService
                     // SLA warning
                     _logger.LogWarning("SLA warning for ticket {TicketId}", timer.TicketId);
                     timer.WarningSentAt = currentTime;
-                    await producer.PublishAsync(new SlaWarningEvent { TicketId = timer.TicketId, WarningAt = timer.WarningSentAt.Value, Percentage = percentage }, stoppingToken);
+                    // Sprint 6.2 NOTI-05 (#676) — kèm StaffId đang assign để NotificationService
+                    // báo đúng Staff phụ trách (spec §3.4), không chỉ broadcast Manager.
+                    await producer.PublishAsync(new SlaWarningEvent
+                    {
+                        TicketId = timer.TicketId,
+                        WarningAt = timer.WarningSentAt.Value,
+                        Percentage = percentage,
+                        StaffId = timer.Ticket?.AssignedStaffId
+                    }, stoppingToken);
                 }
             }
         }

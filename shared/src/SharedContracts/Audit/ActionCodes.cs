@@ -120,7 +120,7 @@ public static class ActionCodes
         public const string EmailRejected = "EmailRejected";
     }
 
-    /// <summary>NotificationService — 7 action (<c>#AUDIT-34</c>).</summary>
+    /// <summary>NotificationService — 7 action (<c>#AUDIT-34</c>) + 1 bổ sung Sprint 6.3 (NOTI3-12).</summary>
     public static class Notification
     {
         public const string PushSent = "PushSent";
@@ -130,6 +130,14 @@ public static class ActionCodes
         public const string InAppCreated = "InAppCreated";
         public const string InAppRead = "InAppRead";
         public const string InAppDismissed = "InAppDismissed";
+
+        /// <summary>
+        /// Sprint 6.3 NOTI3-12 (#712) — admin bấm "gửi thử" một template.
+        ///
+        /// Phải ghi audit: endpoint này gửi email thật từ domain của hệ thống. Dù đã chặn không cho
+        /// nhập địa chỉ tự do (R-46), vẫn cần dấu vết ai gửi thử cái gì, lúc nào.
+        /// </summary>
+        public const string TemplateTestSent = "TemplateTestSent";
     }
 
     /// <summary>SmsService — 3 action bổ sung (<c>#AUDIT-35</c>).</summary>

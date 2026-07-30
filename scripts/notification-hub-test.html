@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>NotificationHub — kiểm thử realtime (NOTI3-13)</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; background:#0f172a; color:#e2e8f0; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color:#94a3b8; font-size: 13px; margin-bottom: 18px; }
+  #state { font-weight: 700; padding: 6px 12px; border-radius: 6px; display:inline-block; }
+  .connecting { background:#78350f; color:#fed7aa; }
+  .connected  { background:#064e3b; color:#6ee7b7; }
+  .failed     { background:#7f1d1d; color:#fecaca; }
+  #log { background:#1e293b; border:1px solid #334155; border-radius:8px; padding:12px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px;
+         white-space:pre-wrap; margin-top:14px; max-height:60vh; overflow:auto; }
+  .k { color:#7dd3fc; }
+  table { border-collapse: collapse; margin-top:12px; font-size:13px; }
+  td { padding:3px 14px 3px 0; }
+  td:first-child { color:#94a3b8; }
+</style>
+</head>
+<body>
+  <h1>NotificationHub — kiểm thử realtime</h1>
+  <div class="sub">Sprint 6.3 · NOTI3-13 (#713) — SignalR đẩy notification mới + badge count</div>
+
+  <div>Trạng thái: <span id="state" class="connecting">đang kết nối…</span></div>
+
+  <table>
+    <tr><td>Hub URL</td><td id="hubUrl">—</td></tr>
+    <tr><td>Transport</td><td id="transport">—</td></tr>
+    <tr><td>NotificationCreated</td><td id="cntCreated">0</td></tr>
+    <tr><td>UnreadCountChanged</td><td id="cntUnread">0</td></tr>
+    <tr><td>Badge mới nhất</td><td id="badge">—</td></tr>
+  </table>
+
+  <div id="log"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+<script>
+// Trang này được Playwright mở với ?token=<JWT>&hub=<url>.
+// Nó chỉ làm một việc: kết nối hub, ghi lại mọi sự kiện nhận được, phơi kết quả ra
+// window.__result để Playwright đọc bằng browser_evaluate.
+const params  = new URLSearchParams(location.search);
+const token   = params.get('token') || '';
+const hubUrl  = params.get('hub') || 'http://localhost:4001/hubs/notifications';
+
+const $ = (id) => document.getElementById(id);
+const events = [];
+
+window.__result = {
+  connected: false,
+  transport: null,
+  connectionId: null,
+  error: null,
+  events,
+  createdCount: 0,
+  unreadCount: null,
+  unreadEvents: 0,
+};
+
+function log(msg, obj) {
+  const line = `[${new Date().toISOString().slice(11,23)}] ${msg}` +
+               (obj !== undefined ? '\n' + JSON.stringify(obj, null, 2) : '');
+  $('log').textContent += line + '\n';
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+$('hubUrl').textContent = hubUrl;
+log('Bắt đầu — token ' + (token ? `có (${token.length} ký tự)` : 'KHÔNG CÓ'));
+
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl(hubUrl, { accessTokenFactory: () => token })
+  .configureLogging(signalR.LogLevel.Information)
+  .build();
+
+// Hai sự kiện server đẩy xuống — tên phải khớp SignalRNotificationNotifier.
+connection.on('NotificationCreated', (n) => {
+  window.__result.createdCount++;
+  $('cntCreated').textContent = window.__result.createdCount;
+  events.push({ type: 'NotificationCreated', at: Date.now(), payload: n });
+  log('◀ NotificationCreated', n);
+});
+
+connection.on('UnreadCountChanged', (count) => {
+  window.__result.unreadEvents++;
+  window.__result.unreadCount = count;
+  $('cntUnread').textContent = window.__result.unreadEvents;
+  $('badge').textContent = count;
+  events.push({ type: 'UnreadCountChanged', at: Date.now(), payload: count });
+  log('◀ UnreadCountChanged = ' + count);
+});
+
+connection.onclose((err) => {
+  $('state').className = 'failed';
+  $('state').textContent = 'đã đóng';
+  log('Kết nối đóng' + (err ? ': ' + err : ''));
+});
+
+connection.start()
+  .then(() => {
+    window.__result.connected = true;
+    window.__result.connectionId = connection.connectionId;
+    // Transport thật sự đang dùng (WebSockets / ServerSentEvents / LongPolling)
+    try {
+      const t = connection.connection?.transport?.constructor?.name || 'unknown';
+      window.__result.transport = t;
+      $('transport').textContent = t;
+    } catch (_) {}
+    $('state').className = 'connected';
+    $('state').textContent = 'ĐÃ KẾT NỐI';
+    log('✅ Kết nối thành công — connectionId=' + connection.connectionId);
+  })
+  .catch((err) => {
+    window.__result.error = String(err);
+    $('state').className = 'failed';
+    $('state').textContent = 'THẤT BẠI';
+    log('❌ Không kết nối được: ' + err);
+  });
+</script>
+</body>
+</html>

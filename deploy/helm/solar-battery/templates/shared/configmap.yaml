@@ -35,6 +35,14 @@ data:
   # Admin invite email link — EmailService append ?token=...
   AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
 
+  # Sprint 6.3 NOTI3-15 — gốc URL cho link hủy đăng ký một chạm trong email.
+  # Gmail/Yahoo POST thẳng vào URL này (List-Unsubscribe-Post), nên phải là domain công khai
+  # thật. Ingress của apigateway phục vụ host api.{domain} ở path "/", còn controller nằm tại
+  # /api/notification-unsubscribe ⇒ base đúng là https://api.{domain}.
+  # Thiếu biến này thì EmailBusChannel vẫn gửi email nhưng bỏ header List-Unsubscribe và chỉ
+  # ghi 1 dòng LogWarning — im lặng về phía người dùng.
+  Notification__Unsubscribe__PublicBaseUrl: "https://api.{{ .Values.global.domain }}"
+
   # #AUTH-51 — Frontend Web app base URL (cross-device 2FA confirm email link).
   # AuthService dùng `Frontend:WebBaseUrl` để build URL "https://{domain}/2fa/cross-device-confirm?token=..."
   Frontend__WebBaseUrl: "https://{{ .Values.global.domain }}"

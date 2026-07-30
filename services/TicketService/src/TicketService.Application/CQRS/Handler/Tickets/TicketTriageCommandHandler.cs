@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -77,6 +78,13 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
             newValue: $"Priority: {priority}, Impact: {request.Impact}, Urgency: {request.Urgency}");
 
         await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Open, TicketStatusEnum.Approved), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket đã được duyệt
+        // và gán ưu tiên (bước triage), chờ phân công Staff.
+        await _producer.PublishAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+            (int)TicketStatusEnum.Open, (int)TicketStatusEnum.Approved,
+            nameof(TicketStatusEnum.Open), nameof(TicketStatusEnum.Approved)), ct);
 
         await _uow.SaveChangesAsync(ct);
 

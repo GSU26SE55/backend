@@ -17,6 +17,7 @@ public class AccountReadModelConfiguration : IEntityTypeConfiguration<AccountRea
         builder.Property(x => x.PhoneNumber).HasColumnName("phone_number").HasMaxLength(32);
         builder.Property(x => x.Role).HasColumnName("role").HasMaxLength(64).IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(x => x.PreferredLocale).HasColumnName("preferred_locale").HasMaxLength(16); // NOTI3-12 (#712)
         builder.Property(x => x.LastSyncedAtUtc).HasColumnName("last_synced_at_utc").IsRequired();
 
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
