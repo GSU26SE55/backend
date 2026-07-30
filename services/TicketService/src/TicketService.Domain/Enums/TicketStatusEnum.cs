@@ -31,6 +31,4 @@ public enum TicketStatusEnum
     ClosedRejected = 12,
     /// <summary>Sự cố nghiêm trọng.</summary>
     Incident = 13,
-    /// <summary>Manager đã phê duyệt, chờ gán Staff.</summary>
-    Approved = 14
 }

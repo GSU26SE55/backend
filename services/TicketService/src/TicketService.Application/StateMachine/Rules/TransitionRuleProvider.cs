@@ -35,46 +35,6 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         }
                     },
                     {
-                        TicketStatusEnum.Approved,
-                        (ticket, role, userId) => new TransitionResult
-                        {
-                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
-                                ? null
-                                : "Only Managers can approve from New."
-                        }
-                    }
-                }
-            },
-            #endregion
-
-            //đã có test cho nó
-            #region Open Transitions
-            {
-                TicketStatusEnum.Open,
-                new Dictionary<TicketStatusEnum, Func<Ticket, ActorRoleEnum, Guid, TransitionResult>>
-                {
-                    {
-                        TicketStatusEnum.Approved,
-                        (ticket, role, userId) => new TransitionResult
-                        {
-                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
-                                ? null
-                                : "Only Managers can approve."
-                        }
-                    },
-                    {
-                        TicketStatusEnum.Escalated,
-                        (ticket, role, userId) => new TransitionResult
-                        {
-                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System,
-                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System
-                                ? null
-                                : "Only Managers, Admin or System can escalate."
-                        }
-                    },
-                    {
                         TicketStatusEnum.ClosedRejected,
                         (ticket, role, userId) => new TransitionResult
                         {
@@ -88,9 +48,10 @@ public class TransitionRuleProvider : ITransitionRuleProvider
             },
             #endregion
 
-            #region Approved Transitions
+            //đã có test cho nó
+            #region Open Transitions
             {
-                TicketStatusEnum.Approved,
+                TicketStatusEnum.Open,
                 new Dictionary<TicketStatusEnum, Func<Ticket, ActorRoleEnum, Guid, TransitionResult>>
                 {
                     {
@@ -107,10 +68,10 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.Escalated,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
+                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System,
+                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin or ActorRoleEnum.System
                                 ? null
-                                : "Only Managers can escalate approved tickets."
+                                : "Only Managers, Admin or System can escalate."
                         }
                     }
                 }

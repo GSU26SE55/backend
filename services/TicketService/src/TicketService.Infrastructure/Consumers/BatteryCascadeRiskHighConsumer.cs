@@ -43,7 +43,7 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
     private readonly IActivityLogger _activityLogger;
     private readonly ISlaCalculator _slaCalculator;   // Sprint Bonus NS-12 (#656)
     private readonly ITicketCodeGenerator _codeGenerator;   // Sprint Bonus NS-13 (#657)
-    private readonly IMessageProducerService _producer;     // Sprint Bonus NS-13 (#657)
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;     // Sprint Bonus NS-13 (#657)
     private readonly ILogger<BatteryCascadeRiskHighConsumer> _logger;
 
     public BatteryCascadeRiskHighConsumer(
@@ -51,14 +51,14 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
         IActivityLogger activityLogger,
         ISlaCalculator slaCalculator,
         ITicketCodeGenerator codeGenerator,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         ILogger<BatteryCascadeRiskHighConsumer> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _slaCalculator = slaCalculator;
         _codeGenerator = codeGenerator;
-        _producer = producer;
+        _outboxWriter = producer;
         _logger = logger;
     }
 
@@ -187,8 +187,7 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
             ActivityActionEnum.Created,
             newValue: $"Auto-created P1 (Origin=System) — CascadeRiskHigh score={evt.CascadeRiskScore:F3}, asset={evt.AssetSerialNumber}");
 
-        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId + Priority trong payload.
-        await _producer.PublishAsync(
+        await _outboxWriter.WriteAsync(
             new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _uow.SaveChangesAsync(ct);

@@ -18,20 +18,20 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketReopenCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -53,14 +53,14 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
         {
             ActorUserId = request.CustomerId,
             ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName ?? "Customer",
+            ActorDisplayName = request.CustomerName!,
             Payload = new Dictionary<string, object?> { { "ReopenReason", request.ReopenReason } }
         }, ct);
 
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Reopened, newValue: request.ReopenReason);
 
         // Outbox: Ticket Reopened
-        await _producer.PublishAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
+        await _outboxWriter.WriteAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts cho NotificationService (notify Manager + Staff).
         await _producer.PublishAsync(new TicketReopenedEvent(
@@ -90,7 +90,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
 
                 await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: reason.ToString(), reason: note);
 
-                await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
+                await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
             }
         }
 

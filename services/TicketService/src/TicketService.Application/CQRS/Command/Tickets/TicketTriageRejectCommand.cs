@@ -21,6 +21,7 @@ public class TicketTriageRejectCommand : IRequest<TicketActionResponse>, IValida
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+
     /// <summary>
     /// Tên của Manager.
     /// </summary>

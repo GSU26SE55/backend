@@ -40,6 +40,7 @@ public class Ticket : AuditableEntity
     public Guid? ApprovedByManagerId { get; set; }
     public string? Reason { get; set; }
     public DateTime? ClosedAt { get; set; }
+    public TicketCloseReasonEnum? CloseReason { get; set; }
     public short? Rating { get; set; }
     public string? RatingComment { get; set; }
     public DateTime? RatedAt { get; set; }

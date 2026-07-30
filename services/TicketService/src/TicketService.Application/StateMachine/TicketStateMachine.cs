@@ -87,10 +87,6 @@ public class TicketStateMachine : ITicketStateMachine
                 }
                 break;
 
-            case TicketStatusEnum.Approved:
-                ticket.ApprovedAt = DateTime.UtcNow;
-                ticket.ApprovedByManagerId = ctx.ActorUserId;
-                break;
 
             case TicketStatusEnum.Assigned:
                 break;

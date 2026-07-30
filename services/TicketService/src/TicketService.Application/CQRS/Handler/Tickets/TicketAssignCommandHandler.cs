@@ -7,7 +7,6 @@ using TicketService.Application.Common.Helpers;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
@@ -21,7 +20,7 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;
     private readonly ISlaCalculator _slaCalculator;
 
@@ -29,14 +28,14 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher,
         ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
         _slaCalculator = slaCalculator;
     }
@@ -77,38 +76,17 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         // Set in-memory cho state machine
         ticket.PrimaryHandlerStaffId = request.PrimaryHandlerStaffId;
 
-        // Upsert TicketAssignment — PrimaryHandler (restore soft-deleted row nếu tồn tại)
-        var primaryAssignment = await _uow.TicketAssignments.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == request.PrimaryHandlerStaffId, ct);
-        if (primaryAssignment != null)
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            primaryAssignment.Role = AssignmentRoleEnum.PrimaryHandler;
-            primaryAssignment.IsDeleted = false;
-            primaryAssignment.DeletedAt = null;
-            _uow.TicketAssignments.UpdateAsync(primaryAssignment);
-        }
-        else
-        {
-            await _uow.TicketAssignments.AddAsync(new TicketAssignment
+            // Upsert TicketAssignment — PrimaryHandler (restore soft-deleted row nếu tồn tại)
+            var primaryAssignment = await _uow.TicketAssignments.GetAllAsync()
+                .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == request.PrimaryHandlerStaffId, ct);
+            if (primaryAssignment != null)
             {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                StaffId = request.PrimaryHandlerStaffId,
-                Role = AssignmentRoleEnum.PrimaryHandler
-            });
-        }
-
-        // Upsert TicketAssignments — Supporters (restore soft-deleted row nếu tồn tại)
-        foreach (var supporterId in request.SupporterStaffIds)
-        {
-            var supporterAssignment = await _uow.TicketAssignments.GetAllAsync()
-                .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == supporterId, ct);
-            if (supporterAssignment != null)
-            {
-                supporterAssignment.Role = AssignmentRoleEnum.Supporter;
-                supporterAssignment.IsDeleted = false;
-                supporterAssignment.DeletedAt = null;
-                _uow.TicketAssignments.UpdateAsync(supporterAssignment);
+                primaryAssignment.Role = AssignmentRoleEnum.PrimaryHandler;
+                primaryAssignment.IsDeleted = false;
+                primaryAssignment.DeletedAt = null;
+                _uow.TicketAssignments.UpdateAsync(primaryAssignment);
             }
             else
             {
@@ -116,57 +94,112 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 {
                     Id = Guid.NewGuid(),
                     TicketId = ticket.Id,
-                    StaffId = supporterId,
-                    Role = AssignmentRoleEnum.Supporter
+                    StaffId = request.PrimaryHandlerStaffId,
+                    Role = AssignmentRoleEnum.PrimaryHandler
                 });
             }
-        }
 
-        // TicketParticipant — PrimaryAssignee (#528)
-        await _uow.TicketParticipants.AddAsync(new TicketParticipant
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Ticket = ticket,
-            UserId = request.PrimaryHandlerStaffId,
-            UserRole = ActorRoleEnum.Staff,
-            ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
-            CanPost = true,
-            CanViewInternal = true,
-            AddedByUserId = request.ManagerId,
-            AddedAt = DateTime.UtcNow
-        });
+            // Upsert TicketAssignments — Supporters (restore soft-deleted row nếu tồn tại)
+            foreach (var supporterId in request.SupporterStaffIds)
+            {
+                var supporterAssignment = await _uow.TicketAssignments.GetAllAsync()
+                    .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == supporterId, ct);
+                if (supporterAssignment != null)
+                {
+                    supporterAssignment.Role = AssignmentRoleEnum.Supporter;
+                    supporterAssignment.IsDeleted = false;
+                    supporterAssignment.DeletedAt = null;
+                    _uow.TicketAssignments.UpdateAsync(supporterAssignment);
+                }
+                else
+                {
+                    await _uow.TicketAssignments.AddAsync(new TicketAssignment
+                    {
+                        Id = Guid.NewGuid(),
+                        TicketId = ticket.Id,
+                        StaffId = supporterId,
+                        Role = AssignmentRoleEnum.Supporter
+                    });
+                }
+            }
 
-        // TicketParticipants — Supporters (Collaborator)
-        foreach (var supporterId in request.SupporterStaffIds)
-        {
-            var exists = await _uow.TicketParticipants.GetAllAsync()
-                .AnyAsync(p => p.TicketId == ticket.Id && p.UserId == supporterId && p.RemovedAt == null && !p.IsDeleted, ct);
-            if (!exists)
+            // TicketParticipant — PrimaryAssignee (#528). An assignee may already be an
+            // active participant, so avoid violating the active-participant unique index.
+            var primaryParticipantExists = await _uow.TicketParticipants.GetAllAsync()
+                .AnyAsync(p => p.TicketId == ticket.Id
+                    && p.UserId == request.PrimaryHandlerStaffId
+                    && p.RemovedAt == null
+                    && !p.IsDeleted, ct);
+
+            if (!primaryParticipantExists)
             {
                 await _uow.TicketParticipants.AddAsync(new TicketParticipant
                 {
                     Id = Guid.NewGuid(),
                     TicketId = ticket.Id,
                     Ticket = ticket,
-                    UserId = supporterId,
+                    UserId = request.PrimaryHandlerStaffId,
                     UserRole = ActorRoleEnum.Staff,
-                    ParticipantType = ParticipantTypeEnum.Collaborator,
+                    ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
                     CanPost = true,
                     CanViewInternal = true,
                     AddedByUserId = request.ManagerId,
                     AddedAt = DateTime.UtcNow
                 });
             }
-        }
 
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
-        {
-            ActorUserId = request.ManagerId,
-            ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager"
+            // TicketParticipants — Supporters (Collaborator)
+            foreach (var supporterId in request.SupporterStaffIds)
+            {
+                var exists = await _uow.TicketParticipants.GetAllAsync()
+                    .AnyAsync(p => p.TicketId == ticket.Id && p.UserId == supporterId && p.RemovedAt == null && !p.IsDeleted, ct);
+                if (!exists)
+                {
+                    await _uow.TicketParticipants.AddAsync(new TicketParticipant
+                    {
+                        Id = Guid.NewGuid(),
+                        TicketId = ticket.Id,
+                        Ticket = ticket,
+                        UserId = supporterId,
+                        UserRole = ActorRoleEnum.Staff,
+                        ParticipantType = ParticipantTypeEnum.Collaborator,
+                        CanPost = true,
+                        CanViewInternal = true,
+                        AddedByUserId = request.ManagerId,
+                        AddedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
+            {
+                ActorUserId = request.ManagerId,
+                ActorRole = ActorRoleEnum.Manager,
+                ActorDisplayName = request.ManagerName!
+            }, ct);
+
+            // Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer idempotent
+            await EnsureSlaTimerAsync(ticket, ct);
+
+            await _activityLogger.LogAsync(
+                ticket.Id,
+                request.ManagerId,
+                ActorRoleEnum.Manager,
+                    request.ManagerName!,
+                ActivityActionEnum.StaffAssigned,
+                oldValue: null,
+                newValue: request.PrimaryHandlerStaffId.ToString(),
+                reason: request.Notes);
+
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.PrimaryHandlerStaffId, ticket.Priority.ToString()!), ct);
+
+            await _publisher.Publish(TicketAuditTrailNotification.For(
+                TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?> { ["staffId"] = request.PrimaryHandlerStaffId }), ct);
+
         }, ct);
 
+<<<<<<< HEAD
         // Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer idempotent
         await EnsureSlaTimerAsync(ticket, ct);
 
@@ -190,6 +223,8 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
 
         await _uow.SaveChangesAsync(ct);
 
+=======
+>>>>>>> 2aaa4b15 (feat: resole duplicate ticket on merged Closes #699)
         return new TicketActionResponse
         {
             IsSuccess = true,

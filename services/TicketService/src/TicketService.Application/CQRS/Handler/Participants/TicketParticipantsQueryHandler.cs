@@ -6,7 +6,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.CQRS.Handler.TicketParticipants;
+namespace TicketService.Application.CQRS.Handler.Participants;
 
 public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipantsQuery, TicketParticipantsResponse>
 {

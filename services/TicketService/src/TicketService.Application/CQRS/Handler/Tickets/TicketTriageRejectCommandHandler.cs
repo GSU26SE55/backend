@@ -18,18 +18,18 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public TicketTriageRejectCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IIntegrationEventOutboxWriter producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketTriageRejectCommand request, CancellationToken ct)
@@ -51,7 +51,7 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
         {
             ActorUserId = request.ManagerId,
             ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager",
+            ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason } }
         }, ct);
 
@@ -65,7 +65,7 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
             newValue: "ClosedRejected");
 
         // We can use a general status changed event or a specific reject event
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.ClosedRejected), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.ClosedRejected), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — Manager từ chối ở bước triage vì ngoài scope → CLOSED_REJECTED.
         // Người cần biết là Customer (IsClosedRejected = true).

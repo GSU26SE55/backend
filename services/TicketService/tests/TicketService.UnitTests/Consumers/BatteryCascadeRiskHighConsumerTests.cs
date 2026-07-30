@@ -24,7 +24,7 @@ public class BatteryCascadeRiskHighConsumerTests
     private readonly Mock<IGenericRepository<SlaTimer>> _slaTimerRepo = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly Mock<ITicketCodeGenerator> _codeGenerator = new();       // Sprint Bonus NS-13 (#657)
-    private readonly Mock<IMessageProducerService> _producer = new();         // Sprint Bonus NS-13 (#657)
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();         // Sprint Bonus NS-13 (#657)
     // Sprint Bonus NS-12 (#656) — SlaCalculator thật (pure util) để assert DueAt recompute.
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
 
@@ -38,7 +38,7 @@ public class BatteryCascadeRiskHighConsumerTests
     }
 
     private BatteryCascadeRiskHighConsumer Build() =>
-        new(_uow.Object, _activityLogger.Object, _slaCalculator, _codeGenerator.Object, _producer.Object,
+        new(_uow.Object, _activityLogger.Object, _slaCalculator, _codeGenerator.Object, _outboxWriter.Object,
             NullLogger<BatteryCascadeRiskHighConsumer>.Instance);
 
     private static ConsumeContext<BatteryCascadeRiskHighEvent> Ctx(BatteryCascadeRiskHighEvent evt)
@@ -128,7 +128,7 @@ public class BatteryCascadeRiskHighConsumerTests
         timer.Should().NotBeNull("ticket P1 mới cần SlaTimer chạy ngay (NS-12 dependency)");
         timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
         (timer.DueAt - timer.StartedAt).Should().Be(TimeSpan.FromHours(4), "P1 = 4h");
-        _producer.Verify(p => p.PublishAsync(It.IsAny<SharedContracts.Events.TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<SharedContracts.Events.TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

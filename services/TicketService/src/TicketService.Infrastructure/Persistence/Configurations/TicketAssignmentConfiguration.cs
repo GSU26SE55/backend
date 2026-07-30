@@ -30,6 +30,11 @@ public class TicketAssignmentConfiguration : IEntityTypeConfiguration<TicketAssi
         builder.Property(e => e.IsDeleted).HasColumnName("is_deleted");
         builder.Property(e => e.DeletedAt).HasColumnName("deleted_at");
 
+        builder.HasIndex(e => e.TicketId)
+            .HasDatabaseName("ux_ticket_assignments_active_primary")
+            .IsUnique()
+            .HasFilter("role = 1 AND is_deleted = false");
+
         builder.HasOne(e => e.Ticket)
             .WithMany(t => t.Assignments)
             .HasForeignKey(e => e.TicketId)

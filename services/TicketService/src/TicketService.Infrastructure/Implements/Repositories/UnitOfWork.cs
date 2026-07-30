@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SharedInfrastructure.Persistence.Repositories;
 using SharedKernels.Interfaces;
@@ -55,6 +56,22 @@ public class UnitOfWork : ITicketUnitOfWork
         _currentTransaction = await _context.Database.BeginTransactionAsync();
     }
 
+    public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await operation(cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     public async Task CommitTransactionAsync()
     {
         try
@@ -107,5 +124,13 @@ public class UnitOfWork : ITicketUnitOfWork
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<int> IncrementChatReplyCountAsync(Guid parentChatId, CancellationToken cancellationToken = default)
+    {
+        return _context.TicketChats
+            .Where(chat => chat.Id == parentChatId && !chat.IsDeleted)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(chat => chat.ReplyCount, chat => chat.ReplyCount + 1), cancellationToken);
     }
 }

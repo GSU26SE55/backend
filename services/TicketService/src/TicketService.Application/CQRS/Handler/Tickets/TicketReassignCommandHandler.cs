@@ -20,20 +20,20 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;
 
     public TicketReassignCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -69,94 +69,120 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Reassignment not allowed.");
 
-        // Swap PrimaryHandler: old PrimaryHandler → Supporter
-        var oldAssignment = await _uow.TicketAssignments.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler, ct);
-
-        Guid? oldStaffId = oldAssignment?.StaffId;
-
-        if (oldAssignment != null)
+        Guid? oldStaffId = null;
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            oldAssignment.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
-            _uow.TicketAssignments.UpdateAsync(oldAssignment);
-        }
+            // Swap PrimaryHandler: old PrimaryHandler → Supporter
+            var oldAssignment = await _uow.TicketAssignments.GetAllAsync()
+                .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler, ct);
 
-        // New PrimaryHandler: upsert — restore nếu đang soft-deleted, cập nhật role nếu đang active
-        var newAssignment = await _uow.TicketAssignments.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == request.NewPrimaryHandlerStaffId, ct);
+            oldStaffId = oldAssignment?.StaffId;
 
-        if (newAssignment != null)
-        {
-            newAssignment.Role = AssignmentRoleEnum.PrimaryHandler;
-            newAssignment.IsDeleted = false;
-            newAssignment.DeletedAt = null;
-            _uow.TicketAssignments.UpdateAsync(newAssignment);
-        }
-        else
-        {
-            await _uow.TicketAssignments.AddAsync(new TicketAssignment
+            if (oldAssignment != null)
             {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                StaffId = request.NewPrimaryHandlerStaffId,
-                Role = AssignmentRoleEnum.PrimaryHandler
-            });
-        }
-
-        ticket.PrimaryHandlerStaffId = request.NewPrimaryHandlerStaffId;
-
-        // TicketParticipants: old PrimaryAssignee → PreviousAssignee
-        if (oldStaffId.HasValue)
-        {
-            var oldParticipant = await _uow.TicketParticipants.GetAllAsync()
-                .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == oldStaffId.Value
-                    && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee && p.RemovedAt == null && !p.IsDeleted, ct);
-
-            if (oldParticipant != null)
-            {
-                oldParticipant.ParticipantType = ParticipantTypeEnum.PreviousAssignee;
-                oldParticipant.CanPost = false;
-                oldParticipant.CanViewInternal = true;
-                _uow.TicketParticipants.UpdateAsync(oldParticipant);
+                oldAssignment.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
+                _uow.TicketAssignments.UpdateAsync(oldAssignment);
             }
-        }
 
-        // Update or create TicketParticipant for new PrimaryHandler
-        var newParticipant = await _uow.TicketParticipants.GetAllAsync()
-            .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == request.NewPrimaryHandlerStaffId
-                && p.RemovedAt == null && !p.IsDeleted, ct);
+            // Persist the demotion before promoting the replacement so the partial unique
+            // primary-assignment index never depends on EF command ordering.
+            await _uow.SaveChangesAsync(transactionCt);
 
-        if (newParticipant != null)
-        {
-            newParticipant.ParticipantType = ParticipantTypeEnum.PrimaryAssignee;
-            newParticipant.CanPost = true;
-            newParticipant.CanViewInternal = true;
-            _uow.TicketParticipants.UpdateAsync(newParticipant);
-        }
-        else
-        {
-            await _uow.TicketParticipants.AddAsync(new TicketParticipant
+            // New PrimaryHandler: upsert — restore nếu đang soft-deleted, cập nhật role nếu đang active
+            var newAssignment = await _uow.TicketAssignments.GetAllAsync()
+                .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == request.NewPrimaryHandlerStaffId, ct);
+
+            if (newAssignment != null)
             {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                Ticket = ticket,
-                UserId = request.NewPrimaryHandlerStaffId,
-                UserRole = ActorRoleEnum.Staff,
-                ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
-                CanPost = true,
-                CanViewInternal = true,
-                AddedByUserId = request.ManagerId,
-                AddedAt = DateTime.UtcNow
-            });
-        }
+                newAssignment.Role = AssignmentRoleEnum.PrimaryHandler;
+                newAssignment.IsDeleted = false;
+                newAssignment.DeletedAt = null;
+                _uow.TicketAssignments.UpdateAsync(newAssignment);
+            }
+            else
+            {
+                await _uow.TicketAssignments.AddAsync(new TicketAssignment
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticket.Id,
+                    StaffId = request.NewPrimaryHandlerStaffId,
+                    Role = AssignmentRoleEnum.PrimaryHandler
+                });
+            }
 
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
-        {
-            ActorUserId = request.ManagerId,
-            ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager"
+            ticket.PrimaryHandlerStaffId = request.NewPrimaryHandlerStaffId;
+
+            // TicketParticipants: old PrimaryAssignee → PreviousAssignee
+            if (oldStaffId.HasValue)
+            {
+                var oldParticipant = await _uow.TicketParticipants.GetAllAsync()
+                    .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == oldStaffId.Value
+                        && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee && p.RemovedAt == null && !p.IsDeleted, ct);
+
+                if (oldParticipant != null)
+                {
+                    oldParticipant.ParticipantType = ParticipantTypeEnum.PreviousAssignee;
+                    oldParticipant.CanPost = false;
+                    oldParticipant.CanViewInternal = true;
+                    _uow.TicketParticipants.UpdateAsync(oldParticipant);
+                }
+            }
+
+            // Update or create TicketParticipant for new PrimaryHandler
+            var newParticipant = await _uow.TicketParticipants.GetAllAsync()
+                .FirstOrDefaultAsync(p => p.TicketId == ticket.Id && p.UserId == request.NewPrimaryHandlerStaffId
+                    && p.RemovedAt == null && !p.IsDeleted, ct);
+
+            if (newParticipant != null)
+            {
+                newParticipant.ParticipantType = ParticipantTypeEnum.PrimaryAssignee;
+                newParticipant.CanPost = true;
+                newParticipant.CanViewInternal = true;
+                _uow.TicketParticipants.UpdateAsync(newParticipant);
+            }
+            else
+            {
+                await _uow.TicketParticipants.AddAsync(new TicketParticipant
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticket.Id,
+                    Ticket = ticket,
+                    UserId = request.NewPrimaryHandlerStaffId,
+                    UserRole = ActorRoleEnum.Staff,
+                    ParticipantType = ParticipantTypeEnum.PrimaryAssignee,
+                    CanPost = true,
+                    CanViewInternal = true,
+                    AddedByUserId = request.ManagerId,
+                    AddedAt = DateTime.UtcNow
+                });
+            }
+
+            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
+            {
+                ActorUserId = request.ManagerId,
+                ActorRole = ActorRoleEnum.Manager,
+                ActorDisplayName = request.ManagerName!
+            }, ct);
+
+            await _activityLogger.LogAsync(
+                ticket.Id,
+                request.ManagerId,
+                ActorRoleEnum.Manager,
+                request.ManagerName!,
+                ActivityActionEnum.StaffReassigned,
+                oldValue: oldStaffId?.ToString(),
+                newValue: request.NewPrimaryHandlerStaffId.ToString(),
+                reason: request.Reason);
+
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!), ct);
+
+            await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+                TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?> { ["newStaffId"] = request.NewPrimaryHandlerStaffId, ["reassign"] = true }), ct);
+
         }, ct);
 
+<<<<<<< HEAD
         await _activityLogger.LogAsync(
             ticket.Id,
             request.ManagerId,
@@ -177,6 +203,8 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
 
         await _uow.SaveChangesAsync(ct);
 
+=======
+>>>>>>> 2aaa4b15 (feat: resole duplicate ticket on merged Closes #699)
         return new TicketActionResponse
         {
             IsSuccess = true,

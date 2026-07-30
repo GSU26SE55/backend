@@ -18,20 +18,20 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketEscalateForceCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -54,7 +54,7 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
         {
             ActorUserId = request.ManagerId,
             ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager",
+            ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?> { { "EscalationReason", request.Reason }, { "Note", request.Note }, { "Forced", true } }
         }, ct);
 
@@ -64,7 +64,7 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
         await AutoDowngradePrimaryHandlerIfNeededAsync(ticket, request.ManagerId, ct);
 
         // Outbox: Ticket Escalated
-        await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.ManagerId, request.ManagerName), ct);
+        await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.ManagerId, request.ManagerName), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

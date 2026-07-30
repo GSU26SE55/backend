@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SharedContracts.Events;
 using SharedContracts.Events.Blog;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
@@ -15,7 +16,9 @@ namespace TicketService.Infrastructure.Implements.Services;
 public class OutboxRelayService : IOutboxRelayService
 {
     private readonly ITicketUnitOfWork _unitOfWork;
-    private readonly IMessageProducerService _producer;
+    private readonly IOutboxClaimService _claimService;
+    private readonly IOutboxLeaseOwner _leaseOwner;
+    private readonly IIntegrationEventTransport _transport;
     private readonly OutboxOptions _options;
     private readonly ILogger<OutboxRelayService> _logger;
 
@@ -39,18 +42,23 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(IncidentDeclaredIntegrationEvent), typeof(IncidentDeclaredIntegrationEvent) },
         { nameof(TicketHeldIntegrationEvent), typeof(TicketHeldIntegrationEvent) },
         { nameof(TicketResumedIntegrationEvent), typeof(TicketResumedIntegrationEvent) },
+        { nameof(TicketMergedEvent), typeof(TicketMergedEvent) },
         { nameof(BlogGenerationRequestedEvent), typeof(BlogGenerationRequestedEvent) },
         { nameof(BlogGenerationStatusChangedEvent), typeof(BlogGenerationStatusChangedEvent) },
     };
 
     public OutboxRelayService(
         ITicketUnitOfWork unitOfWork,
-        IMessageProducerService producer,
+        IOutboxClaimService claimService,
+        IOutboxLeaseOwner leaseOwner,
+        IIntegrationEventTransport transport,
         IOptions<OutboxOptions> options,
         ILogger<OutboxRelayService> logger)
     {
         _unitOfWork = unitOfWork;
-        _producer = producer;
+        _claimService = claimService;
+        _leaseOwner = leaseOwner;
+        _transport = transport;
         _options = options.Value;
         _logger = logger;
     }
@@ -58,26 +66,38 @@ public class OutboxRelayService : IOutboxRelayService
     public async Task<OutboxRelayResult> RelayBatchAsync(
         int batchSize = 100, CancellationToken cancellationToken = default)
     {
-        var pending = await _unitOfWork.OutboxMessages
+        var pendingIds = await _unitOfWork.OutboxMessages
             .GetAllAsync()
+            .AsNoTracking()
             .Where(m => m.ProcessedAtUtc == null && m.RetryCount < _options.MaxRetryCount)
             .OrderBy(m => m.OccurredAtUtc)
+            .Select(m => m.Id)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
 
         var result = new OutboxRelayResult();
-        if (pending.Count == 0)
+        if (pendingIds.Count == 0)
             return result;
 
-        foreach (var msg in pending)
+        foreach (var messageId in pendingIds)
         {
+            var msg = await _claimService.TryClaimAsync(
+                messageId,
+                _leaseOwner.Value,
+                TimeSpan.FromSeconds(_options.LeaseDurationSeconds),
+                cancellationToken);
+
+            if (msg is null)
+            {
+                continue;
+            }
+
             try
             {
                 if (!EventTypeMap.TryGetValue(msg.Type, out var clrType))
                 {
-                    msg.RetryCount += 1;
-                    msg.LastError = $"Unknown event type: {msg.Type}";
-                    _unitOfWork.OutboxMessages.UpdateAsync(msg);
+                    await _claimService.MarkFailedAsync(
+                        msg.Id, _leaseOwner.Value, $"Unknown event type: {msg.Type}", cancellationToken);
                     result.Failed++;
                     continue;
                 }
@@ -85,9 +105,8 @@ public class OutboxRelayService : IOutboxRelayService
                 var evt = (IntegrationEvent?)JsonSerializer.Deserialize(msg.Payload, clrType);
                 if (evt is null)
                 {
-                    msg.RetryCount += 1;
-                    msg.LastError = "Deserialize returned null";
-                    _unitOfWork.OutboxMessages.UpdateAsync(msg);
+                    await _claimService.MarkFailedAsync(
+                        msg.Id, _leaseOwner.Value, "Deserialize returned null", cancellationToken);
                     result.Failed++;
                     continue;
                 }
@@ -95,25 +114,33 @@ public class OutboxRelayService : IOutboxRelayService
                 // Must invoke with runtime type so MassTransit routes to the correct exchange.
                 // Calling PublishAsync(evt, ct) directly infers T = IntegrationEvent (base),
                 // which would publish to the wrong exchange and consumers would never receive it.
-                var publishMethod = typeof(IMessageProducerService)
-                    .GetMethod(nameof(IMessageProducerService.PublishAsync))!
+                var publishMethod = typeof(IIntegrationEventTransport)
+                    .GetMethod(nameof(IIntegrationEventTransport.PublishAsync))!
                     .MakeGenericMethod(clrType);
-                await (Task)publishMethod.Invoke(_producer, new object[] { evt, cancellationToken })!;
-                msg.ProcessedAtUtc = DateTime.UtcNow;
-                _unitOfWork.OutboxMessages.UpdateAsync(msg);
-                result.Published++;
+
+                using var publishTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                publishTimeout.CancelAfter(TimeSpan.FromSeconds(_options.PublishTimeoutSeconds));
+                await (Task)publishMethod.Invoke(_transport, new object[] { evt, publishTimeout.Token })!;
+
+                if (await _claimService.MarkProcessedAsync(msg.Id, _leaseOwner.Value, cancellationToken))
+                {
+                    result.Published++;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                msg.RetryCount += 1;
-                msg.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-                _unitOfWork.OutboxMessages.UpdateAsync(msg);
-                result.Failed++;
+                var error = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                if (await _claimService.MarkFailedAsync(msg.Id, _leaseOwner.Value, error, cancellationToken))
+                {
+                    result.Failed++;
+                }
                 _logger.LogError(ex, "Failed to relay outbox message {Id}", msg.Id);
             }
         }
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return result;
     }
 }

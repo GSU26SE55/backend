@@ -61,7 +61,7 @@ public class TicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -106,7 +106,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -152,7 +152,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -508,7 +508,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ParentChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -580,7 +580,7 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ResolveActorRole(_currentUser.Role),
             UserPermissions = _currentUser.Permissions.ToList()
         };
@@ -614,7 +614,7 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ResolveActorRole(_currentUser.Role),
             UserPermissions = _currentUser.Permissions.ToList()
         };
@@ -1077,7 +1077,7 @@ public class TicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ResolveActorRole(_currentUser.Role);
         command.UserPermissions = _currentUser.Permissions.ToList();
 
@@ -1126,7 +1126,7 @@ public class TicketChatsController : ControllerBase
             AudioFile = audioFile,
             AuthorizationHeader = Request.Headers.Authorization.ToString(),
             UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty,
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value),
             UserPermissions = _currentUser.Permissions.ToList()
         };

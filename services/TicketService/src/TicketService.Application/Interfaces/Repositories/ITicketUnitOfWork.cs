@@ -5,6 +5,8 @@ namespace TicketService.Application.Interfaces.Repositories;
 
 public interface ITicketUnitOfWork : IUnitOfWork
 {
+    Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default);
+    Task<int> IncrementChatReplyCountAsync(Guid parentChatId, CancellationToken cancellationToken = default);
     IGenericRepository<Ticket> Tickets { get; }
     IGenericRepository<TicketBatteryAsset> TicketBatteryAssets { get; }
     IGenericRepository<TicketAuditLog> TicketAuditLogs { get; }       // Sprint audit #AUDIT-24

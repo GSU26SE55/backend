@@ -22,7 +22,7 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly ISlaService _slaService;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketHoldCommandHandler(
@@ -30,14 +30,14 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         ISlaService slaService,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _slaService = slaService;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -74,7 +74,7 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
+            ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason }, { "Note", request.Note } }
         }, ct);
 
@@ -85,20 +85,18 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
             ticket.Id,
             request.StaffId,
             ActorRoleEnum.Staff,
-            request.StaffName ?? "Staff",
+            request.StaffName!,
             ActivityActionEnum.SlaPaused,
             oldValue: oldStatus.ToString(),
             newValue: targetStatus.ToString(),
             reason: request.Note);
 
         // Outbox: Status Changed & Ticket Held
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
-
-        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket tạm dừng.
-        await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
             (int)oldStatus, (int)targetStatus, oldStatus.ToString(), targetStatus.ToString()), ct);
-        await _producer.PublishAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
+        await _outboxWriter.WriteAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

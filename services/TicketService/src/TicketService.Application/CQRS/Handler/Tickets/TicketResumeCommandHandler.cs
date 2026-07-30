@@ -22,7 +22,7 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly ISlaService _slaService;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketResumeCommandHandler(
@@ -30,14 +30,14 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         ISlaService slaService,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _slaService = slaService;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -66,7 +66,7 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff"
+            ActorDisplayName = request.StaffName!
         }, ct);
 
         // SLA Timer logic
@@ -76,20 +76,18 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
             ticket.Id,
             request.StaffId,
             ActorRoleEnum.Staff,
-            request.StaffName ?? "Staff",
+            request.StaffName!,
             ActivityActionEnum.SlaResumed,
             oldValue: oldStatus.ToString(),
             newValue: "InProgress");
 
         // Outbox: Status Changed & Ticket Resumed
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), ct);
-
-        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket chạy lại.
-        await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
             (int)oldStatus, (int)TicketStatusEnum.InProgress,
             oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), ct);
-        await _producer.PublishAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
+        await _outboxWriter.WriteAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

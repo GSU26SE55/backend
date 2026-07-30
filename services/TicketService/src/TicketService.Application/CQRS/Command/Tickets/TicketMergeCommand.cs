@@ -21,6 +21,9 @@ public class TicketMergeCommand : IRequest<TicketActionResponse>, IValidatable<T
     [JsonIgnore]
     public Guid ManagerId { get; set; }
 
+    [JsonIgnore]
+    public string? ManagerName { get; set; }
+
     public Task<TicketActionResponse> ValidateAsync()
     {
         var response = new TicketActionResponse();

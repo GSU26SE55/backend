@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -14,12 +15,17 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantUpdateRoleCommandHandler : IRequestHandler<ParticipantUpdateRoleCommand, ParticipantActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
 
-    public ParticipantUpdateRoleCommandHandler(ITicketUnitOfWork uow, IMessageProducerService producer)
+    public ParticipantUpdateRoleCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IActivityLogger activityLogger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = outboxWriter;
+        _activityLogger = activityLogger;
     }
 
     public async Task<ParticipantActionResponse> Handle(ParticipantUpdateRoleCommand request, CancellationToken ct)
@@ -48,14 +54,22 @@ public class ParticipantUpdateRoleCommandHandler : IRequestHandler<ParticipantUp
             participant.CanViewInternal = request.CanViewInternal.Value;
 
         _uow.TicketParticipants.UpdateAsync(participant);
-        await _uow.SaveChangesAsync(ct);
-
-        await _producer.PublishAsync(new ParticipantRoleChangedEvent(
+        await _outboxWriter.WriteAsync(new ParticipantRoleChangedEvent(
             request.TicketId,
             participant.UserId,
             (int)oldType,
             (int)participant.ParticipantType,
             request.ActorUserId), ct);
+
+        await _activityLogger.LogAsync(
+            request.TicketId,
+            request.ActorUserId,
+            request.ActorRole,
+            request.ActorName,
+            ActivityActionEnum.ParticipantRoleChanged,
+            oldValue: oldType.ToString(),
+            newValue: $"User {participant.UserId} changed to {participant.ParticipantType}.");
+        await _uow.SaveChangesAsync(ct);
 
         return new ParticipantActionResponse
         {

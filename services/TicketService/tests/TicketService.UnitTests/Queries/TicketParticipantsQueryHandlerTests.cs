@@ -1,4 +1,4 @@
-using TicketService.Application.CQRS.Handler.TicketParticipants;
+using TicketService.Application.CQRS.Handler.Participants;
 using TicketService.Application.CQRS.Query.TicketParticipants;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;

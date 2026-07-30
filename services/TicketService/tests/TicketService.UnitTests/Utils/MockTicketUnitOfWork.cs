@@ -174,6 +174,8 @@ public static class MockTicketUnitOfWork
         uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.CommitTransactionAsync()).Returns(Task.CompletedTask);
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
+        uow.Setup(u => u.ExecuteInTransactionAsync(It.IsAny<Func<CancellationToken, Task>>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<CancellationToken, Task> operation, CancellationToken ct) => operation(ct));
 
         // Default rỗng cho 3 repo Chat Wave 4 (#536/#539/#541) — test nào cần seed data thì gọi
         // lại uow.SetupMentions/SetupReactions/SetupReads (MockChatExtraRepos.cs) sau BuildExtended,

@@ -16,18 +16,18 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public EscalationBackgroundService(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IIntegrationEventOutboxWriter producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
     }
 
     public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
@@ -60,7 +60,7 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
             await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: EscalationReasonEnum.SlaBreach.ToString(), reason: "SLA breached");
 
             // Outbox: Ticket Escalated
-            await _producer.PublishAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code, (int)EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
+            await _outboxWriter.WriteAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code, (int)EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
 
             await _uow.SaveChangesAsync(context.CancellationToken);
         }

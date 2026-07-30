@@ -19,7 +19,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IPriorityCalculator _priorityCalculator;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-27
 
     public TicketAutoCreateFromAlertCommandHandler(
@@ -27,14 +27,14 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         ITicketCodeGenerator codeGenerator,
         IPriorityCalculator priorityCalculator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _priorityCalculator = priorityCalculator;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -76,9 +76,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             ActivityActionEnum.Created,
             newValue: $"Auto-created from alert {request.OriginAlertId}");
 
-        // Outbox: Ticket Created — Sprint 6.2 NOTI-05 (#676) kèm CustomerId + Priority
-        // (ticket auto từ alert đã có Priority tính sẵn từ matrix Impact × Urgency).
-        await _producer.PublishAsync(
+        await _outboxWriter.WriteAsync(
             new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         // #AUDIT-27 — causation_id = OriginAlertId (anomaly event → ticket chain).

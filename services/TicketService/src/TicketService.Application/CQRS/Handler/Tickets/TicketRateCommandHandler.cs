@@ -18,20 +18,20 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketRateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -52,7 +52,7 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
         {
             ActorUserId = request.CustomerId,
             ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName ?? "Customer",
+            ActorDisplayName = request.CustomerName!,
             Payload = new Dictionary<string, object?>
             {
                 { "Rating", request.Rating },
@@ -63,7 +63,7 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Rated, newValue: request.Rating.ToString(), reason: request.RatingComment);
 
         // Outbox: Ticket Rated
-        await _producer.PublishAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
+        await _outboxWriter.WriteAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — rate xong là ticket đóng hẳn (CLOSED). Event SharedContracts
         // để NotificationService xác nhận với Customer + báo Manager (IsAutoClosed = false).

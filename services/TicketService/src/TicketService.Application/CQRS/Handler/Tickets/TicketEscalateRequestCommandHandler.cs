@@ -18,20 +18,20 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketEscalateRequestCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -54,7 +54,7 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
+            ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "EscalationReason", request.Reason }, { "Note", request.Note } }
         }, ct);
 
@@ -64,7 +64,7 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
         await AutoDowngradePrimaryHandlerIfNeededAsync(ticket, request.StaffId, ct);
 
         // Outbox: Ticket Escalated
-        await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName), ct);
+        await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

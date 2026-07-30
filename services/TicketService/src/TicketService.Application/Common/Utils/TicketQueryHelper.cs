@@ -40,7 +40,8 @@ public static class TicketQueryHelper
         AiVerifyReason = t.AiVerifyReason,
         SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
         DuplicateReason = t.DuplicateReason,
-        MergedIntoTicketId = t.MergedIntoTicketId?.ToString()
+        MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
+        CloseReason = t.CloseReason
     };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)

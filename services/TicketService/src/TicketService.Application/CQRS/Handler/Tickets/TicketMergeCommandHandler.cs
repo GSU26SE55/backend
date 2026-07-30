@@ -1,79 +1,134 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
-using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
 
-/// <summary>
-/// Manager gộp ticket B vào A: B.MergedIntoTicketId=A, B.Status=Closed (reason "Merged into {A.Code}"),
-/// B.ClosedAt=now. Log activity 2 bên. B đã gộp → ẩn khỏi ManagerQueue.
-/// </summary>
+/// <summary>Closes a New source ticket as a duplicate of a manager-selected master ticket.</summary>
 public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IActivityLogger _activityLogger;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
-    public TicketMergeCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger)
+    public TicketMergeCommandHandler(ITicketUnitOfWork uow, IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
-        _activityLogger = activityLogger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(TicketMergeCommand request, CancellationToken ct)
     {
-        var source = await _uow.Tickets.GetByIdAsync(request.TicketId);   // Ticket B — bị gộp
-        if (source is null || source.IsDeleted)
-            return Fail(404, "Không tìm thấy ticket cần gộp.");
+        var source = await _uow.Tickets.GetAllAsync()
+            .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
+        var master = await _uow.Tickets.GetAllAsync()
+            .FirstOrDefaultAsync(t => t.Id == request.TargetTicketId && !t.IsDeleted, ct);
 
-        var target = await _uow.Tickets.GetByIdAsync(request.TargetTicketId); // Ticket A — đích
-        if (target is null || target.IsDeleted)
-            return Fail(404, "Không tìm thấy ticket đích.");
+        if (source is null || master is null)
+            return Fail(404, "Không tìm thấy ticket nguồn hoặc ticket master.");
+        if (source.Id == master.Id)
+            return Fail(400, "Không thể gộp ticket vào chính nó.");
+        if (source.Status == TicketStatusEnum.Closed || master.Status == TicketStatusEnum.Closed ||
+            source.MergedIntoTicketId.HasValue || master.MergedIntoTicketId.HasValue)
+            return Fail(409, "Ticket đã đóng hoặc đã được gộp nên không thể thay đổi.");
+        if (source.Status != TicketStatusEnum.New)
+            return Fail(409, "Chỉ ticket nguồn ở trạng thái New mới được gộp.");
+        if (master.Status is not (TicketStatusEnum.New or TicketStatusEnum.Open or TicketStatusEnum.Assigned or TicketStatusEnum.InProgress))
+            return Fail(409, "Ticket master phải ở New, Open, Assigned hoặc InProgress.");
+        if (source.CustomerId != master.CustomerId)
+            return Fail(409, "Hai ticket phải thuộc cùng customer.");
 
-        if (source.MergedIntoTicketId != null)
-            return Fail(409, "Ticket đã được gộp trước đó.");
+        var sourceBatteryIds = await _uow.TicketBatteryAssets.GetAllAsync()
+            .Where(x => x.TicketId == source.Id && !x.IsDeleted)
+            .Select(x => x.BatteryAssetId)
+            .ToListAsync(ct);
+        var hasCommonBattery = await _uow.TicketBatteryAssets.GetAllAsync()
+            .AnyAsync(x => x.TicketId == master.Id && !x.IsDeleted && sourceBatteryIds.Contains(x.BatteryAssetId), ct);
+        if (!hasCommonBattery)
+            return Fail(409, "Hai ticket phải có ít nhất một battery asset chung.");
 
-        source.MergedIntoTicketId = target.Id;
-        source.Status = TicketStatusEnum.Closed;
-        source.Reason = $"Merged into {target.Code}";
-        source.ClosedAt = DateTime.UtcNow;
+        var managerDisplayName = request.ManagerName!;
 
-        _uow.Tickets.UpdateAsync(source);
+        try
+        {
+            await _uow.ExecuteInTransactionAsync(async transactionCt =>
+            {
+                var attachments = await _uow.TicketAttachments.GetAllAsync()
+                    .Where(a => a.TicketId == source.Id && !a.IsDeleted)
+                    .ToListAsync(transactionCt);
+                foreach (var attachment in attachments)
+                {
+                    attachment.TicketId = master.Id;
+                    attachment.SourceTicketId = source.Id;
+                    _uow.TicketAttachments.UpdateAsync(attachment);
+                }
 
-        // Log 2 bên — B đóng vì gộp, A nhận ticket gộp vào.
-        await _activityLogger.LogAsync(
-            source.Id,
-            request.ManagerId,
-            ActorRoleEnum.Manager,
-            "Manager",
-            ActivityActionEnum.StatusChanged,
-            reason: $"Gộp vào ticket {target.Code}");
+                var sourceTimer = await _uow.SlaTimers.GetAllAsync()
+                    .FirstOrDefaultAsync(t => t.TicketId == source.Id && !t.IsDeleted, transactionCt);
+                if (sourceTimer is not null)
+                {
+                    sourceTimer.Status = SlaTimerStatusEnum.Stopped;
+                    sourceTimer.CurrentPauseStartedAt = null;
+                    _uow.SlaTimers.UpdateAsync(sourceTimer);
+                }
 
-        await _activityLogger.LogAsync(
-            target.Id,
-            request.ManagerId,
-            ActorRoleEnum.Manager,
-            "Manager",
-            ActivityActionEnum.StatusChanged,
-            reason: $"Ticket {source.Code} được gộp vào ticket này");
+                var now = DateTime.UtcNow;
+                source.Status = TicketStatusEnum.Closed;
+                source.CloseReason = TicketCloseReasonEnum.MergedDuplicate;
+                source.ClosedAt = now;
+                source.MergedIntoTicketId = master.Id;
+                _uow.Tickets.UpdateAsync(source);
 
-        await _uow.SaveChangesAsync(ct);
+                await _uow.TicketActivities.AddAsync(new TicketActivity
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = source.Id,
+                    ActorUserId = request.ManagerId,
+                    ActorRole = ActorRoleEnum.Manager,
+                    ActorDisplayName = managerDisplayName,
+                    Action = ActivityActionEnum.StatusChanged,
+                    Ticket = source,
+                    NewValue = TicketStatusEnum.Closed.ToString(),
+                    Reason = $"Đã gộp vào master ticket {master.Code} ({master.Id})."
+                });
+                await _uow.TicketActivities.AddAsync(new TicketActivity
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = master.Id,
+                    SourceTicketId = source.Id,
+                    ActorUserId = request.ManagerId,
+                    ActorRole = ActorRoleEnum.Manager,
+                    ActorDisplayName = managerDisplayName,
+                    Action = ActivityActionEnum.StatusChanged,
+                    Ticket = master,
+                    Reason = $"source ticket {source.Code} ({source.Id}) đã được gộp vào ticket này."
+                });
+
+                await _outboxWriter.WriteAsync(new TicketMergedEvent(
+                    source.Id, source.Code, source.CustomerId, master.Id, master.Code, request.ManagerId), transactionCt);
+            }, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Fail(409, "Ticket đã được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.");
+        }
+        catch
+        {
+            throw;
+        }
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Ticket merged successfully.",
-            Data = new TicketActionDTO
-            {
-                Id = source.Id.ToString(),
-                TicketId = source.Id.ToString(),
-                Code = source.Code,
-                Status = source.Status
-            }
+            Message = "Gộp ticket thành công.",
+            Data = new TicketActionDTO { Id = source.Id.ToString(), TicketId = source.Id.ToString(), Code = source.Code, Status = source.Status }
         };
     }
 

@@ -67,6 +67,9 @@ public static class ManageDependencyInjection
             typeof(ManageDependencyInjection).Assembly,
             typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
 
+        // Command handlers write through IIntegrationEventOutboxWriter. The relay uses
+        // IIntegrationEventTransport to publish to RabbitMQ after the transaction commits.
+
         // Sprint 5B #238 — feature flag override cho cutover.
         services.Configure<AlertTicketSagaOptions>(configuration.GetSection(AlertTicketSagaOptions.SectionName));
 
@@ -75,10 +78,19 @@ public static class ManageDependencyInjection
 
     private static void AddOutbox(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
-        services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
+        services.AddOptions<OutboxOptions>()
+            .Bind(configuration.GetSection(OutboxOptions.SectionName))
+            .Validate(options => options.IntervalSeconds > 0, "Outbox:IntervalSeconds phải lớn hơn 0.")
+            .Validate(options => options.BatchSize > 0, "Outbox:BatchSize phải lớn hơn 0.")
+            .Validate(options => options.MaxRetryCount > 0, "Outbox:MaxRetryCount phải lớn hơn 0.")
+            .Validate(options => options.PublishTimeoutSeconds > 0, "Outbox:PublishTimeoutSeconds phải lớn hơn 0.")
+            .Validate(options => options.LeaseDurationSeconds >= options.PublishTimeoutSeconds + 5,
+                "Outbox:LeaseDurationSeconds phải lớn hơn PublishTimeoutSeconds ít nhất 5 giây safety buffer.")
+            .ValidateOnStart();
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddScoped<IOutboxClaimService, OutboxClaimService>();
+        services.AddSingleton<IOutboxLeaseOwner, OutboxLeaseOwner>();
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
         // Sprint 7 #114 (§5.2) — saga failed-rate report reader.
         services.AddScoped<TicketService.Application.Interfaces.Services.ISagaReportService,

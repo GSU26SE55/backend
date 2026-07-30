@@ -15,7 +15,7 @@ namespace TicketService.UnitTests.Handlers.Tickets;
 public class TicketTriageRejectCommandHandlerTests
 {
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketStateMachine> _stateMachine = new();
 
     [Fact]
@@ -54,7 +54,7 @@ public class TicketTriageRejectCommandHandlerTests
             })
             .ReturnsAsync(new TransitionResult { IsAllowed = true });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -66,7 +66,7 @@ public class TicketTriageRejectCommandHandlerTests
         ticket.Reason.Should().Be("Invalid ticket description");
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(
+        _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<TicketStatusChangedIntegrationEvent>(e =>
                 e.OldStatus == TicketStatusEnum.Open && e.NewStatus == TicketStatusEnum.ClosedRejected),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -110,7 +110,7 @@ public class TicketTriageRejectCommandHandlerTests
             })
             .ReturnsAsync(new TransitionResult { IsAllowed = true });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -118,7 +118,7 @@ public class TicketTriageRejectCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         ticket.Status.Should().Be(TicketStatusEnum.ClosedRejected);
-        _producer.Verify(x => x.PublishAsync(
+        _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<TicketStatusChangedIntegrationEvent>(e =>
                 e.OldStatus == TicketStatusEnum.Escalated && e.NewStatus == TicketStatusEnum.ClosedRejected),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -129,7 +129,7 @@ public class TicketTriageRejectCommandHandlerTests
     {
         // Arrange
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
         var command = new TicketTriageRejectCommand { TicketId = Guid.NewGuid(), Reason = "Test" };
 
         // Act
@@ -151,7 +151,7 @@ public class TicketTriageRejectCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<ActorRoleEnum>(), It.IsAny<Guid>()))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Invalid status" });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
         var command = new TicketTriageRejectCommand { TicketId = ticketId, Reason = "Test", ManagerId = Guid.NewGuid() };
 
         // Act

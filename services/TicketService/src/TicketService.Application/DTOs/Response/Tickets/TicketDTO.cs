@@ -60,4 +60,5 @@ public class TicketDTO
     public string? DuplicateReason { get; set; }
     /// <summary>Ticket đích nếu ticket này đã bị gộp (null nếu chưa gộp).</summary>
     public string? MergedIntoTicketId { get; set; }
+    public TicketCloseReasonEnum? CloseReason { get; set; }
 }

@@ -19,20 +19,20 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
     private readonly ITicketStateMachine _stateMachine;
     private readonly IPriorityCalculator _priorityCalculator;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public TicketTriageCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IPriorityCalculator priorityCalculator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IIntegrationEventOutboxWriter producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _priorityCalculator = priorityCalculator;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketTriageCommand request, CancellationToken ct)
@@ -43,7 +43,7 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Approved, ActorRoleEnum.Manager, request.ManagerId);
+        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot triage approve.");
 
@@ -54,11 +54,11 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
         ticket.UrgencyLevel = request.Urgency;
         ticket.Priority = priority;
 
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Approved, new TransitionContext
+        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Open, new TransitionContext
         {
             ActorUserId = request.ManagerId,
             ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager",
+            ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?>
             {
                 { "Comment", request.ManagerComment },
@@ -72,12 +72,12 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
             ticket.Id,
             request.ManagerId,
             ActorRoleEnum.Manager,
-            request.ManagerName,
+            request.ManagerName!,
             ActivityActionEnum.TriageApproved,
             reason: request.ManagerComment,
             newValue: $"Priority: {priority}, Impact: {request.Impact}, Urgency: {request.Urgency}");
 
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Open, TicketStatusEnum.Approved), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.New, TicketStatusEnum.Open), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket đã được duyệt
         // và gán ưu tiên (bước triage), chờ phân công Staff.

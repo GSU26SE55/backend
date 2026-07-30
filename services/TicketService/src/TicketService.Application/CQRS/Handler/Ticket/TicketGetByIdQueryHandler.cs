@@ -77,6 +77,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             ApprovedByManagerId = ticket.ApprovedByManagerId?.ToString(),
             RejectionReason = ticket.Reason,
             ClosedAt = ticket.ClosedAt,
+            CloseReason = ticket.CloseReason,
             Rating = ticket.Rating,
             RatingComment = ticket.RatingComment,
             RatedAt = ticket.RatedAt,
@@ -99,6 +100,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             {
                 Id = a.Id.ToString(),
                 TicketId = a.TicketId.ToString(),
+                SourceTicketId = a.SourceTicketId?.ToString(),
                 ActorUserId = a.ActorUserId?.ToString(),
                 ActorRole = a.ActorRole,
                 ActorDisplayName = a.ActorDisplayName,
