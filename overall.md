@@ -139,6 +139,7 @@
 | **`AuditAggregatorService`** (microservice MỚI) + 10 service onboard audit + AuditLog Hybrid Architecture | 🟠 P1 | §17 Sprint audit + §69.11 | **Sprint audit** ~44 dev-day, 7 phase, 45 task `#AUDIT-01..45` / `#447..#491`. Owner **Thắng (`@Alexdev257`)** (assigned 2026-06-24); gate "ổn định ≥ 2 tuần" **waived** (sole-dev, hard-blocker code đã merge). ADR-0007 ✅ viết xong. Decisions chốt 2026-06-24 — xem §17 Decision Log. |
 | **Sprint Bonus** (newsprint — Min/Max streaming + audit pipeline fixes) | 🟢 bonus | §17 Sprint Bonus + `newsprint.md` | 27 task `#NS-01..27` — 25 issue BE đã tạo GitHub `#646..#670` (milestone Sprint Bonus, cột Plan), 2 FE (NS-05/NS-19) ở repo `frontend`. 6 phase active ~22 dev-day + deferred cách ly pin ~9.5. Feature min/max streaming (PA-2/3/4) + vá noise N1–N6 / cascade R1–R8 / môi trường E1–E4 / classification F1–F2. Quyết định chốt 2026-07-14 (Q1–Q13) — xem `newsprint.md`. |
 | **Sprint 6.2** (Notification pipeline completion — review 2026-07-14) | 🔴 P1 | §17 Sprint 6.2 + `reviewnotification.md` | 17 task `#NOTI-01..17` = GitHub `#672..#688` (milestone Sprint 6.2, cột Plan, chưa assign), ~14 dev-day. Vấn đề gốc: `NotificationDispatcher` dead code (0 caller) → Push/Email/SMS không bao giờ gửi; + orphan events (publish nhưng 0 consumer) + gap routing matrix §3.4. **THÊM 6 · SỬA 8 · XOÁ 1 · 2 fork THÊM/XOÁ; 5 điểm cần chốt.** Nguồn: `reviewnotification.md` §7. |
+| **Sprint 6.3** (Notification production-hardening — benchmark 2026-07-30) | 🔴 P1 | §17 Sprint 6.3 (§17.6.3.1–17.6.3.5) | **16/17 task** `#NOTI3-01..17` = GitHub `#701..#717` (milestone `Sprint 6.3`, cột Plan, assign `@Alexdev257`), **~17 dev-day** — 🚫 **NOTI3-03 (#703) đã HUỶ 30/07** sau khi implement xong (xem §17.6.3.5 mục 5). Đứng trên Sprint 6.2 (phải merge trước). Vấn đề gốc: pipeline đã "gửi được" nhưng chưa "vận hành được" — feed in-app nhân bản 2–4 lần (`GetNotificationsQuery` không lọc channel), không đối soát Expo receipt, 1 metric duy nhất toàn service, không rate-limit, không retry/DLQ ở tầng bus. **THÊM 10 · SỬA 6.** ✅ 4 fork **đã chốt 30/07** (01→A · 05→B · 10→B · 12→A) — decision log + đánh đổi chấp nhận: §17.6.3.5; sinh thêm R-45/R-46. Thi công bắt đầu từ NOTI3-07. Benchmark: Knock · Courier · Novu. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -2340,129 +2341,282 @@ services/NotificationService/
 
 ### 3.3. Entities
 
-#### `Notification`
-| Field | Type | Note |
-|-------|------|------|
+> **Đồng bộ với code ngày 30/07/2026 (Sprint 6.3 NOTI3-17 / #717).** Trước bản này §3.3–§3.6 mô tả
+> một thiết kế chưa từng tồn tại trong code: enum sai số hiệu và sai tên, `NotificationPreference`
+> liệt kê 3 field không có thật (`EmailDigestEnabled`, `SmsCriticalEnabled`, `MinSeverityForPush`),
+> `DeviceToken.ExpoPushToken` thực tế tên là `Token`. Ai đọc tài liệu để viết FE/Mobile đều sai.
+
+#### `Notification` — bảng `notifications`
+| Field | Type | Ghi chú |
+|-------|------|---------|
 | `Id` | `Guid` | — |
-| `UserId` | `Guid` | recipient |
-| `Type` | `NotificationTypeEnum` | xem enum |
-| `Title` | `string(200)` | localized |
-| `Body` | `string(1000)` | — |
-| `Data` | `jsonb` | deep-link payload `{ ticketId, alertId, ... }` |
+| `UserId` | `Guid` | người nhận (AccountId từ AuthService) |
+| `Type` | `NotificationTypeEnum` | xem enum bên dưới |
 | `Channel` | `NotificationChannelEnum` | 1=Push, 2=Email, 3=Sms, 4=InApp |
-| `Status` | `NotificationStatusEnum` | 1=Pending, 2=Sent, 3=Failed, 4=Read |
-| `ReadAt` | `DateTime?` | — |
-| `SentAt` | `DateTime?` | — |
-| `FailureReason` | `string?` | — |
+| `Status` | `NotificationStatusEnum` | xem enum bên dưới |
+| `Title` | `string(200)` | — |
+| `Body` | `string(1000)` | — |
+| `PayloadJson` | `text` | deep-link payload — **tên field là `PayloadJson`**, không phải `Data` |
+| `EntityType` | `string?` | loại entity liên kết ("Ticket", "Battery"…) |
+| `EntityId` | `Guid?` | id entity liên kết |
+| `SentAt` | `DateTime?` | thời điểm bàn giao xuống channel |
+| `ReadAt` | `DateTime?` | thời điểm user đánh dấu đã đọc |
+| `FailureReason` | `string?` | lý do lỗi khi `Status = Failed` |
+| `DispatchAttemptCount` | `int` | **Sprint 6.2 NOTI-01** — số lần worker đã thử gửi |
+| `NextAttemptAt` | `DateTime?` | **Sprint 6.2 NOTI-01** — sớm nhất được thử lại (backoff / hoãn digest / hoãn quiet hours / hoãn rate limit) |
 | `CreatedAt` | `DateTime` | indexed DESC |
 
 ```csharp
+// 32 giá trị — ĐÚNG số hiệu trong code (NotificationTypeEnum.cs).
 public enum NotificationTypeEnum {
     TicketCreated = 1, TicketAssigned = 2, TicketStatusChanged = 3,
-    TicketResolved = 4, TicketApproved = 5, TicketClosed = 6,
-    TicketEscalated = 7, IncidentDeclared = 8,
-    SlaWarning = 9, SlaBreached = 10,
-    BatteryAlertInfo = 11, BatteryAlertWarning = 12, BatteryAlertCritical = 13,
-    AccountActivated = 14, AccountInvited = 15,
-    BatteryAlertEscalationPending = 16,   // Sprint 5B: Critical Alert chưa ack > 5 phút (BatteryAlertEscalationRequestedEvent)
-    AlertTicketSagaFailed = 17            // Sprint 5B: Saga Failed cần operator reprocess (AlertTicketSagaFailedEvent)
+    TicketResolved = 4, TicketClosed = 5, TicketEscalated = 6,
+    SlaWarning = 7, SlaBreached = 8,
+    BatteryAnomalyDetected = 9,
+    EnvironmentalIncidentDetected = 10, EnvironmentalIncidentResolved = 11,
+    AccountActivated = 12, AdminInvite = 13, IncidentDeclared = 14,
+    CascadeRiskHigh = 15,                    // Sprint Bonus NS-14 (#658)
+    BatteryAlertEscalationPending = 16,      // Sprint 5B #238
+    AlertTicketSagaFailed = 17,              // Sprint 5B #238
+    IotDeviceWentOffline = 18,               // Sprint IoT-1 #249
+    ChatCreated = 19, ChatMentioned = 20, ChatReacted = 21,
+    ParticipantAdded = 22, ParticipantRemoved = 23, ParticipantRoleChanged = 24,
+    ChatEscalatedToAdmin = 25,               // Sprint 6.2 NOTI-03
+    TicketApproved = 26, TicketRejected = 27,
+    TicketReopened = 28, TicketRatingRequested = 29,   // Sprint 6.2 NOTI-07
+    BatteryAnomalyWarning = 30, BatteryAnomalyInfo = 31,  // Sprint 6.2 NOTI-08
+    System = 99
+}
+
+// Sprint 6.3 NOTI3-14 (#714) — thêm Delivered/Opened.
+public enum NotificationStatusEnum {
+    Pending = 1,     // đã tạo, chưa gửi
+    Sent = 2,        // đã bàn giao cho channel — CHƯA chắc thiết bị nhận được
+    Failed = 3,
+    Read = 4,        // user đánh dấu đã đọc trên feed
+    Delivered = 5,   // provider XÁC NHẬN đã tới thiết bị (Expo receipt "ok")
+    Opened = 6       // user bấm mở notification (deep link)
 }
 ```
 
-#### `DeviceToken`
-| Field | Type |
-|-------|------|
-| `Id` | Guid |
-| `UserId` | Guid (indexed) |
-| `ExpoPushToken` | string(255) UNIQUE |
-| `Platform` | enum (iOS=1, Android=2) |
-| `AppVersion` | string |
-| `LastSeenAt` | DateTime |
+> **Vì sao tách `Sent` và `Delivered`:** Expo Push là relay bất đồng bộ — HTTP 200 chỉ chứng minh
+> *Expo nhận request*. Chỉ `Delivered` (đối soát qua `/push/getReceipts`, NOTI3-02) mới là bằng chứng
+> giao hàng thật. Báo cáo tỷ lệ gửi thành công phải dùng `Delivered`, không dùng `Sent`.
 
-#### `NotificationPreference`
-| Field | Type | Default |
+#### `PushReceipt` — bảng `push_receipts` *(Sprint 6.3 NOTI3-02 / #702)*
+| Field | Type | Ghi chú |
 |-------|------|---------|
-| `UserId` | Guid (PK) | — |
-| `PushEnabled` | bool | true |
-| `EmailDigestEnabled` | bool | true |
-| `SmsCriticalEnabled` | bool | true (P1 only) |
-| `MinSeverityForPush` | enum | Warning |
-| `QuietHoursStart` | TimeOnly? | null |
-| `QuietHoursEnd` | TimeOnly? | null |
-| `TimeZone` | string | "Asia/Ho_Chi_Minh" |
+| `Id` | `Guid` | — |
+| `NotificationId` | `Guid` | notification sinh ra message push này |
+| `UserId` | `Guid` | người nhận |
+| `TicketId` | `string(200)` | ticket id Expo trả về — UNIQUE, khoá tra cứu receipt |
+| `DeviceToken` | `string(500)` | token đã gửi tới (để tắt đúng thiết bị khi `DeviceNotRegistered`) |
+| `Status` | `PushReceiptStatusEnum` | 1=Pending, 2=Ok, 3=Error, 4=Expired |
+| `ErrorCode` | `string(100)?` | `DeviceNotRegistered`, `MessageTooBig`… |
+| `ErrorMessage` | `string(1000)?` | — |
+| `CheckedAt` | `DateTime?` | lần đối soát gần nhất |
+| `CheckAttemptCount` | `int` | quá `MaxCheckAttempts` → `Expired` (Expo chỉ giữ receipt ~24h) |
+
+#### `DeviceToken` — bảng `device_tokens`
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `Id` | `Guid` | — |
+| `UserId` | `Guid` | indexed |
+| `Token` | `string(500)` | UNIQUE — **tên field là `Token`**, không phải `ExpoPushToken` |
+| `Platform` | `DevicePlatformEnum` | — |
+| `DeviceInfo` | `string(500)?` | — |
+| `IsActive` | `bool` | `false` khi Expo báo `DeviceNotRegistered` |
+| `LastUsedAt` | `DateTime?` | — |
+
+#### `NotificationPreference` — bảng `notification_preferences`
+| Field | Type | Mặc định |
+|-------|------|----------|
+| `UserId` | `Guid` | — |
+| `PushEnabled` | `bool` | `true` |
+| `EmailEnabled` | `bool` | `true` |
+| `SmsEnabled` | `bool` | `false` |
+| `InAppEnabled` | `bool` | `true` |
+| `QuietHoursStart` / `QuietHoursEnd` | `TimeOnly?` | `null` |
+| `TimeZone` | `string` | `"Asia/Ho_Chi_Minh"` |
+| `Frequency` | `NotificationFrequencyEnum` | `Immediate` |
+| `DigestWindowMinutes` | `int?` | `null` = gửi ngay |
+| `NotifyOnChat` / `NotifyOnMention` / `NotifyOnReaction` | `bool` | `true` / `true` / `false` |
+
+> **KHÔNG tồn tại** trong code (bản tài liệu cũ ghi nhầm): `EmailDigestEnabled`, `SmsCriticalEnabled`,
+> `MinSeverityForPush`.
+
+#### `NotificationCategoryPreference` — bảng `notification_category_preferences` *(Sprint 6.3 NOTI3-04 / #704)*
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `UserId` + `Category` | `Guid` + `NotificationCategoryEnum` | UNIQUE cặp |
+| `PushEnabled` / `EmailEnabled` / `SmsEnabled` / `InAppEnabled` | `bool` | tuỳ chọn cho riêng nhóm đó |
+
+```csharp
+// 32 type gom thành 6 nhóm nghiệp vụ (NotificationCategoryMap).
+public enum NotificationCategoryEnum {
+    Ticket = 1, Sla = 2, Battery = 3, Environmental = 4, Chat = 5, Account = 6
+}
+```
+
+> Quan hệ với `NotificationPreference` là **và logic**: kênh phải bật ở CẢ hai cấp mới gửi.
+> Không có dòng nào cho một nhóm = chưa tuỳ chỉnh → rơi về tuỳ chọn cấp kênh (không cần backfill).
+
+#### `NotificationTemplate` — bảng `notification_templates`
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `Type` / `Channel` / `Locale` | enum / enum / `string(16)` | `vi-VN` mặc định, `en-US` cho type hướng Customer |
+| `Version` | `int` | **Sprint 6.3 NOTI3-12** — sửa là tạo bản mới, không ghi đè ⇒ rollback được |
+| `IsActive` | `bool` | chỉ **một** bản active mỗi bộ ba (partial unique index) |
+| `TitleTemplate` | `string(500)` | cú pháp Handlebars |
+| `BodyTemplate` | `string(4000)` | — |
 
 ### 3.4. Notification routing logic (`NotificationDispatcher`)
 
+Luồng thật trong code — hai đường vào:
+
 ```
-INPUT: NotificationTypeEnum + targetUserIds + payload
-1. For each targetUserId:
-   a. Load preference (cache 5min).
-   b. Check quiet hours → if yes, defer push to in-app only.
-   c. For each channel candidate by type mapping (e.g., Critical → Push+Email+Sms):
-      - If channel disabled in preference → skip.
-      - Render template.
-      - Create Notification record (Status=Pending).
-      - Invoke channel.SendAsync().
-      - On success → update Status=Sent, SentAt.
-      - On failure (3 retries via Polly) → Status=Failed, log.
+A) DispatchAsync (từ consumer)     — TẠO record cho từng recipient × channel
+B) DispatchPendingAsync (từ worker) — GIAO một record Pending xuống channel
+
+NotificationDispatchBackgroundService (leader election) quét Pending mỗi 5s
+  → với mỗi record gọi DispatchPendingAsync:
+
+  1. Preference tắt kênh (cấp kênh HOẶC cấp nhóm)      → Failed  "channel_disabled"
+  2. User bật digest + kênh ồn (Email/Push)            → Deferred "digest"
+  2b. Vượt hạn mức (NOTI3-06; critical & InApp bỏ qua) → Deferred "rate_limited"
+  3. Trong quiet hours + không critical + không InApp  → Deferred "quiet_hours"
+  4. Thiếu email / SĐT / device token                  → Failed  (lỗi vĩnh viễn)
+  5. Render nội dung: template DB (theo locale người nhận) → không có thì dùng Title/Body inline
+  6. channel.SendAsync()
+       thành công → Sent + SentAt + audit
+       thất bại   → DispatchAttemptCount++, NextAttemptAt = backoff;
+                    chạm MaxAttempts → Failed
+  7. Push: ExpoReceiptReconcileBackgroundService đối soát receipt sau ~15'
+       receipt "ok"             → Delivered + audit PushDelivered
+       DeviceNotRegistered      → tắt device token
+       không có receipt sau 10' + type critical → sinh bản SMS bù (NOTI3-05)
 ```
 
-**Type → Channel matrix:**
+**Type → Channel matrix** — nguồn sự thật là `NotificationDispatchOptions.DefaultTypeChannelMatrix`
+(ghi đè được qua `Notification:Dispatch:TypeChannelMatrix`). Trích các dòng chính:
+
 | NotificationType | InApp | Push | Email | SMS |
 |-----------------|-------|------|-------|-----|
-| TicketCreated (to Manager) | ✅ | ✅ | digest | — |
-| TicketAssigned (to Staff) | ✅ | ✅ | ✅ | — |
-| TicketAssigned (to Customer) | ✅ | ✅ | ✅ | — |
-| SlaWarning (Staff + Manager) | ✅ | ✅ | — | — |
-| SlaBreached P1 (Manager + Admin) | ✅ | ✅ | ✅ | ✅ |
-| SlaBreached P2 (Manager) | ✅ | ✅ | ✅ | — |
-| SlaBreached P3 (Manager) | ✅ | — | digest | — |
-| BatteryAlertCritical (Customer) | ✅ | ✅ | ✅ | ✅ (if enabled) |
-| BatteryAlertWarning (Customer) | ✅ | ✅ | — | — |
-| BatteryAlertInfo | ✅ | — (chỉ in-app) | — | — |
-| IncidentDeclared (broadcast Manager/Admin/LeadStaff) | ✅ | ✅ | ✅ | ✅ |
-| BatteryAlertEscalationPending (Manager + Admin) | ✅ | ✅ | ✅ | — | Critical Alert chưa-ack > 5 phút (xem §1, §8.3) |
-| AlertTicketSagaFailed (Admin) | ✅ | ✅ | ✅ | — | Saga Failed cần operator reprocess (xem §53.11) |
-| DeviceOffline (Customer) | ✅ | ✅ | — | — | Từ `DeviceOffline` Alert (Warning) — Customer biết pin mất giám sát (§52.6) |
-| DeviceOffline (Staff/ops) | ✅ | ✅ | — | — | Từ `IotDeviceWentOfflineEvent` — Staff đi kiểm tra device tại site (§52.6) |
+| TicketCreated | ✅ | ✅ | — | — |
+| TicketAssigned | ✅ | ✅ | ✅ | — |
+| TicketStatusChanged / TicketClosed / TicketEscalated / TicketReopened / TicketRatingRequested | ✅ | ✅ | — | — |
+| TicketResolved / TicketApproved / TicketRejected | ✅ | ✅ | ✅ | — |
+| SlaWarning | ✅ | ✅ | — | — |
+| SlaBreached | ✅ | ✅ | ✅ | ✅ |
+| IncidentDeclared | ✅ | ✅ | ✅ | ✅ |
+| EnvironmentalIncidentDetected | ✅ | ✅ | ✅ | ✅ |
+| EnvironmentalIncidentResolved | ✅ | ✅ | — | — |
+| BatteryAnomalyDetected / CascadeRiskHigh | ✅ | ✅ | ✅ | — |
+| BatteryAnomalyWarning / BatteryAlertEscalationPending / AlertTicketSagaFailed / IotDeviceWentOffline | ✅ | ✅ | — | — |
+| BatteryAnomalyInfo / System | ✅ | — | — | — |
+| ChatCreated / ChatReacted / Participant* | ✅ | ✅ | — | — |
+| ChatMentioned / ChatEscalatedToAdmin | ✅ | ✅ | ✅ | — |
+| AccountActivated | ✅ | — | ✅ | — |
+| AdminInvite | — | — | ✅ | — |
+
+**Critical types (luôn bỏ qua quiet hours, digest và hạn mức):** `EnvironmentalIncidentDetected`,
+`IncidentDeclared`, `BatteryAlertEscalationPending`, `AlertTicketSagaFailed`, `SlaBreached`,
+`ChatEscalatedToAdmin`.
+
+#### ⚠️ Giới hạn đã biết *(Sprint 6.3 NOTI3-10 / #710 — chốt nhánh B ngày 30/07/2026)*
+
+| Giới hạn | Con số | Khi nào thành vấn đề | Cách xử lý khi tới lúc |
+|----------|--------|----------------------|------------------------|
+| **Thông lượng dispatch** | ≈ `BatchSize / PollIntervalSeconds` = **20 noti/giây** (100/5s) | Leader election ⇒ chỉ MỘT instance xử lý dù chạy bao nhiêu replica. Chạm trần khi một sự kiện fan-out ra hàng nghìn người nhận, hoặc số pin tăng vài bậc | Bỏ leader election, phân vùng theo `Channel` hoặc `hash(UserId) % N` + `SELECT … FOR UPDATE SKIP LOCKED` (~1.5d). **Hoãn tới khi metric cho thấy queue lag tăng thật** |
+| **Trần Expo Push** | 600 message/giây mỗi project, payload 4 KB/message | Gửi hàng loạt cùng lúc | Guard 4 KB đã có ở `ExpoPushChannel`; vượt tốc độ thì Expo trả `MessageRateExceeded` ở receipt và worker ghi cảnh báo |
+| **Gateway SMS** | Một điện thoại Android duy nhất | Hết pin / mất mạng ⇒ cả tầng SMS chết | R-44 — chấp nhận có chủ đích (nhánh B NOTI3-05). Bù bằng alert Grafana khi gateway mất heartbeat + đã tách sẵn `ISmsProvider` |
+| **Provider email** | Chỉ Mailjet | Mailjet sự cố ⇒ không email nào đi được | R-44 — đã tách sẵn `IEmailProvider` để cắm provider thứ hai mà không sửa business logic |
+
+**Tín hiệu để biết khi nào phải nâng cấp:** gauge `notification_pending_total` và alert
+`NotificationQueueBacklog` (NOTI3-07). Hàng đợi tồn đọng tăng đều mà không tự tiêu = đã chạm trần.
+Đó chính là lý do NOTI3-07 (đo đạc) phải làm trước NOTI3-10 (tối ưu).
 
 ### 3.5. Endpoints
+
+Đường dẫn thật trong code (không có tiền tố `/api/v1`):
+
 ```
-GET    /api/v1/notifications?status=&type=&page=         (mine)
-GET    /api/v1/notifications/unread-count                (mine)
-PUT    /api/v1/notifications/{id}/read                   (mine)
-PUT    /api/v1/notifications/read-all                    (mine)
-GET    /api/v1/notification-preferences                  (mine)
-PUT    /api/v1/notification-preferences                  (mine)
-POST   /api/v1/device-tokens                             (Mobile register)
-DELETE /api/v1/device-tokens/{token}
+# Feed in-app
+GET    /api/notifications?status=&type=&unreadOnly=&channel=&includeAllChannels=&pageNumber=&pageSize=
+GET    /api/notifications/unread-count
+PATCH  /api/notifications/{id}/read
+PATCH  /api/notifications/{id}/opened              # Sprint 6.3 NOTI3-14 — deep link mở app
+POST   /api/notifications/read-all
+POST   /api/notifications                          # tạo thủ công (nội bộ)
+
+# Tuỳ chọn
+GET    /api/notification-preferences                # cấp kênh (giữ nguyên cho FE cũ)
+PUT    /api/notification-preferences
+GET    /api/notification-preferences/matrix         # Sprint 6.3 NOTI3-04 — ma trận nhóm × kênh
+PUT    /api/notification-preferences/matrix
+GET    /api/notification-preferences/categories     # bảng tra cứu type → nhóm
+
+# Device token
+POST   /api/device-tokens
+DELETE /api/device-tokens/{token}
+
+# Hủy đăng ký một chạm (công khai, xác thực bằng token HMAC) — Sprint 6.3 NOTI3-15
+GET    /api/notification-unsubscribe?token=...      # xem trước, KHÔNG thay đổi gì
+POST   /api/notification-unsubscribe?token=...      # Gmail/Yahoo gọi tự động
+
+# Quản trị template (AdminOnly) — Sprint 6.3 NOTI3-12
+GET    /api/admin/notification-templates?type=&channel=&locale=
+POST   /api/admin/notification-templates/{id}/preview     # render thử, KHÔNG gửi
+POST   /api/admin/notification-templates/{id}/test-send   # chỉ gửi tới email của CHÍNH admin, 5 lần/giờ
+POST   /api/admin/notification-templates/{id}/activate    # rollback về phiên bản cũ
+
+# Realtime (SignalR) — Sprint 6.3 NOTI3-13
+WS     /hubs/notifications        # sự kiện: NotificationCreated, UnreadCountChanged
 ```
 
 ### 3.6. Expo Push integration
 
-```csharp
-public class ExpoPushChannel : INotificationChannel {
-    private readonly HttpClient _http;  // Polly retry via SharedInfrastructure
-    private const string ExpoUrl = "https://exp.host/--/api/v2/push/send";
+`ExpoPushChannel` gửi **theo lô** (Sprint 6.2 NOTI-16): Expo nhận mảng tối đa 100 message mỗi
+request, nên một người dùng có 3 thiết bị chỉ tốn 1 lần gọi HTTP thay vì 3.
 
-    public async Task<ChannelResult> SendAsync(SendRequest req, CancellationToken ct) {
-        var payload = new {
-            to = req.ExpoToken,
-            title = req.Title,
-            body = req.Body,
-            data = req.Data,
-            sound = "default",
-            priority = req.IsCritical ? "high" : "normal",
-            channelId = req.IsCritical ? "alerts-critical" : "alerts-default"
-        };
-        var resp = await _http.PostAsJsonAsync(ExpoUrl, payload, ct);
-        // Parse Expo receipt; if DeviceNotRegistered → mark token invalid
-        ...
-    }
+```csharp
+// Mỗi phần tử của mảng gửi lên https://exp.host/--/api/v2/push/send
+new {
+    to = token,                 // 1 phần tử cho mỗi device token
+    title, body, data,
+    sound = "default",
+    priority  = isCritical ? "high"            : "normal",
+    channelId = isCritical ? "alerts-critical" : "alerts-default"
 }
 ```
 
-**Polly policy:** retry 3 lần exponential backoff (đã có sẵn pattern trong SharedInfrastructure).
+**Guard tại nguồn (Sprint 6.3 NOTI3-02):** message vượt **4096 byte** sẽ bị Expo từ chối bằng
+`MessageTooBig` ở *receipt* — tức là sau khi đã trả 200 OK, người dùng không nhận được gì mà hệ thống
+vẫn tưởng đã gửi. `ExpoPushChannel` ép vừa trần trước khi gửi: bỏ `data` trước (mất deep link, vẫn
+đọc được nội dung), rồi mới cắt `body` theo **byte** (tiếng Việt có dấu là 2–3 byte/ký tự nên không
+cắt theo index ký tự được).
+
+**Đối soát biên nhận — bắt buộc, không phải tuỳ chọn:**
+
+```
+send → ticket { status:"ok", id } → LƯU vào push_receipts (Status=Pending)
+                                     ↓ sau ≥ 15 phút
+                    POST /push/getReceipts { ids: [...] }   (tối đa 1000 id/lần)
+                                     ↓
+   "ok"                  → PushReceipt.Ok    → Notification.Delivered + audit PushDelivered
+   DeviceNotRegistered   → PushReceipt.Error → tắt device token (nguồn rác lớn nhất)
+   MessageTooBig         → log lỗi: guard 4KB đã hụt, phải rà lại
+   MessageRateExceeded   → chạm trần 600 msg/s, cân nhắc giãn nhịp dispatcher
+   MismatchSenderId /
+   InvalidCredentials    → log CRITICAL: sai cấu hình FCM/APNs, TOÀN BỘ push đang hỏng
+   không trả kết quả sau MaxCheckAttempts lần → Expired (Expo chỉ giữ receipt ~24h)
+```
+
+> **Ticket ≠ giao hàng.** `status:"ok"` chỉ nghĩa là Expo *nhận* request. Bỏ qua bước đối soát thì
+> token đã gỡ app nằm lại trong DB vĩnh viễn và mọi lần gửi sau đều tiêu quota vô ích, còn
+> `Status = Sent` là một con số dối.
+
+**Polly policy:** retry 3 lần exponential backoff cho named client `"expo"` (cấu hình ở DI).
 
 ---
 
@@ -3623,6 +3777,35 @@ cfg.ReceiveEndpoint("ticket-alert-ticket-saga", e => {
 
 **Quartz cluster checkin:** `quartz.scheduler.instanceId=AUTO`, `quartz.scheduler.makeSchedulerThreadDaemon=true`, `quartz.threadPool.threadCount=10`, `quartz.jobStore.clusterCheckinInterval=10000` (10s). Hai TicketService instance dùng cùng schema sẽ tự coordinate, không double-fire trigger.
 
+#### ⚠️ Persistent timeout cần ĐỦ BỐN mảnh — thiếu một là hỏng IM LẶNG
+
+Phát hiện khi test E2E ngày 30/07/2026 (xem `notification-test-evidence/`):
+
+| # | Mảnh | Ở đâu | Trạng thái trước 30/07 |
+|---|------|-------|------------------------|
+| 1 | `AddQuartz` + `AddQuartzHostedService` + 11 bảng `qrtz_` | `SagaServiceCollectionExtensions.AddAlertTicketSaga` | ✅ có |
+| 2 | `x.AddPublishMessageScheduler()` | `ConfigureAlertTicketSaga` | ✅ có |
+| 3 | `x.AddQuartzConsumers()` — ai đó phải NHẬN `ScheduleMessage<T>` rồi nạp vào Quartz | `ConfigureAlertTicketSaga` | ❌ **THIẾU** |
+| 4 | `cfg.UsePublishMessageScheduler()` — bơm `MessageSchedulerContext` vào consume pipe | `SharedInfrastructure/Bus/MassTransitExtensions` | ❌ **THIẾU** |
+
+**Triệu chứng khi thiếu (3) và (4):** mọi transition saga có `.Schedule(...)` ném
+
+```
+MassTransit.PayloadNotFoundException: The payload was not found: MassTransit.MessageSchedulerContext
+   at SagaStateMachine.ScheduleActivity.Execute(...)
+```
+
+→ retry → rơi `_error`. Đo được: **1662 message** trong `AlertTicketSagaState_error`, `qrtz_triggers`
+**0 dòng** (Quartz chưa từng nhận việc nào), và saga treo vĩnh viễn ở `TicketRequested` /
+`AlertLinkRequested` — timeout không bao giờ nổ để đẩy sang `Failed` cho admin reprocess.
+
+**Điều nguy hiểm nhất:** hạ tầng Quartz *trông như* đã hoạt động — bảng `qrtz_` tồn tại, migration đã
+áp, service khởi động không lỗi. Chỉ khi đọc `qrtz_triggers` hoặc theo dõi `_error` mới lộ ra. Đây
+chính là lý do NOTI3-07/08 (metric + DLQ monitor) có giá trị: chúng phát hiện ngay chu kỳ đầu.
+
+**Cách tự kiểm tra sau này:** tạo 1 saga rồi query `SELECT COUNT(*) FROM qrtz_triggers;` — phải **> 0**.
+Bằng 0 nghĩa là chuỗi hẹn giờ đứt ở đâu đó.
+
 ### 8.4. Distributed tracing (OpenTelemetry)
 
 ```csharp
@@ -4635,7 +4818,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -5830,6 +6013,174 @@ KHÔNG được skip:
 - **P1 (cốt lõi):** POST tạo alert/ticket/sla-breach → sau NOTI-01, record `Pending` được worker dispatch → Push tới Expo + Email/SMS thực gửi, record chuyển `Sent`. `SendNotificationEmailEvent` có consumer (email SLA/escalation/saga/chat tới hộp thư). `ChatEscalatedToAdminEvent` → Admin nhận noti. Login bất thường / token reuse → user nhận email cảnh báo.
 - **P2:** Customer nhận noti khi ticket assigned/resolved/approved; SLA breach phân nhánh (P1 có SMS, P3 chỉ in-app); reset mật khẩu / đổi email nhận đúng template.
 - **P3:** SMS fail → Notification `Failed` + `FailureReason`; không còn consumer stub thừa; audit relay không còn poll bảng rỗng vô ích.
+
+---
+
+### Sprint 6.3 (Notification production-hardening — benchmark chuẩn doanh nghiệp 2026-07-30)
+
+**Goal:** Sprint 6.2 đã đưa pipeline từ "không gửi gì" lên "gửi được". Sprint 6.3 đưa tiếp từ "gửi được"
+lên **"vận hành được"**: đo được, chặn được spam, biết thư có tới không, và sửa lỗi mô hình dữ liệu khiến
+user thấy thông báo trùng 2–4 lần.
+
+**Bối cảnh:** đối chiếu NotificationService (sau khi Sprint 6.2 merge) với thực hành của các nền tảng
+notification-infrastructure thương mại (Knock · Courier · Novu), yêu cầu bulk-sender của Google/Yahoo
+(hiệu lực 02/2024, siết thành **từ chối vĩnh viễn** từ 11/2025), và giới hạn thực tế của Expo Push.
+Xếp hạng trưởng thành hiện tại: **~4/10 so với nền tảng thương mại**, **7/10 so với mặt bằng đồ án**.
+
+**Owner:** Thắng (`@Alexdev257`) — assigned 30/07/2026. **Issue numbers:** ✅ đã tạo GitHub `#701..#717`
+(17 issue, milestone `Sprint 6.3` = milestone #19, label `status: init` = **cột Plan**, đã assign `@Alexdev257`).
+**Phụ thuộc:** Sprint 6.2 (`#672..#688`) phải merge vào `dev` trước — mọi task ở đây đứng trên tầng
+dispatch worker của NOTI-01.
+
+**Quy mô:** **16/17 task** (`#NOTI3-01..17`, trừ NOTI3-03 đã huỷ) · **~17 dev-day** · **THÊM 10 · SỬA 6**.
+✅ **Toàn bộ 4 fork đã được chốt 30/07/2026** — xem §17.6.3.5 Decision log. Không còn điểm nào treo.
+🚫 **NOTI3-03 (#703) huỷ 30/07/2026** sau khi đã implement xong — xem §17.6.3.5 mục 5.
+
+**⚠️ Cross-service:** NOTI3-15 đụng EmailService (NOTI3-03 đã huỷ) · NOTI3-05 đụng SmsService + EmailService ·
+NOTI3-08 đụng `SharedInfrastructure/Bus` (ảnh hưởng **toàn bộ** service) · NOTI3-13 đụng ApiGateway
+(WebSocket route) · NOTI3-04 đụng FE/Mobile (màn hình preference).
+
+---
+
+#### 17.6.3.1. Bảng đối chiếu: chuẩn doanh nghiệp vs hiện trạng
+
+Chú thích mức: 🔴 P0 = sai ở runtime, user thấy được · 🟠 P1 = thiếu so với chuẩn ngành ·
+🟡 P2 = nợ vận hành, đau về sau.
+
+| # | Hạng mục | Doanh nghiệp làm gì | Hiện trạng (bằng chứng) | Mức |
+|---|---|---|---|---|
+| 1 | **Mô hình feed in-app** | Tách `Notification` (1 sự kiện logic = 1 dòng feed) khỏi `Message`/`Delivery` (1 bản ghi giao nhận / channel, KHÔNG hiện cho user). Knock: *workflow run → messages*; Courier: in-app feed là channel riêng, 1 feed item | 1 sự kiện → **N row cùng Title/Body, mỗi channel 1 row**; `GetNotificationsQueryHandler` KHÔNG lọc channel mặc định, `GetUnreadCountQueryHandler` đếm hết → user thấy trùng **2–4 lần**, badge phồng 2–4× | 🔴 |
+| 2 | **Push receipt** | Expo là relay bất đồng bộ: ticket "ok" ≠ đã giao. Phải poll `/push/getReceipts` sau vài phút, act on `DeviceNotRegistered` | `ExpoPushChannel` chỉ đọc ticket trả về ngay → `Sent` không có nghĩa "đã tới"; token chết tồn đọng → theo tài liệu Expo cuối cùng **gây throttling** | 🔴 |
+| 3 | **Bounce / suppression** | Webhook bounce+complaint → suppression list → chặn gửi lại. Google/Yahoo: spam rate **< 0.3%** | **CHỦ ĐỘNG KHÔNG LÀM** (chốt 30/07/2026, xem §17.6.3.5 mục 5). Đã implement rồi gỡ: cái giá là biến EmailService thành service có DB, trong khi ở quy mô đồ án gần như không có bounce. Bù một phần bằng NOTI3-15 (`List-Unsubscribe` một chạm) — vẫn đáp ứng yêu cầu 2024 của Gmail/Yahoo về nút hủy | ⬜ |
+| 4 | **Preference** | Ma trận **(category × channel)** + tenant-level cho app B2B. "Per-category consent để nhận cảnh báo mà không nhận quảng bá" | 4 boolean toàn cục + 3 flag chat. Tắt `EmailEnabled` là mất **cả** email SLA lẫn email quảng bá | 🟠 |
+| 5 | **Provider failover** | ≥ 2 provider/kênh + **channel fallback chain** (push fail/không xác nhận trong X phút → SMS dự phòng) | 1 provider/kênh: Mailjet · Expo · gateway Android tự dựng. SMS gateway = **single point of failure** (1 điện thoại) | 🟠 |
+| 6 | **Rate limit / throttle** | Cap "tối đa N noti/user/giờ", tách biệt với dedup. Knock coi throttling là feature phân biệt chính | Chỉ có **dedup** (AlertId 5' · messageId 30'). Alert storm 20 pin = 20 AlertId khác nhau = 20 push liên tiếp | 🟠 |
+| 7 | **Observability** | Delivery-rate **tách theo channel** là metric số 1; kèm latency, queue lag, **DLQ size** (khoẻ = 0), alert khi failure rate tăng | Toàn service đúng **1 metric**: `AuditOutboxPending`. Vừa bật tầng gửi ở 6.2 mà không có cách nào biết nó hỏng | 🟠 |
+| 8 | **Retry / DLQ** | Retry có backoff ở tầng bus + DLQ được giám sát | `MassTransitExtensions` chỉ set `PrefetchCount`/`ConcurrentMessageLimit`; KHÔNG `UseMessageRetry`, KHÔNG `UseDelayedRedelivery` → throw 1 lần là rơi thẳng `_error` queue, không ai theo dõi | 🟠 |
+| 9 | **Idempotency** | `SET key val NX EX ttl` — 1 lệnh atomic | `NotificationDebounce` Get-rồi-Set; chính comment trong code thừa nhận không atomic | 🟠 |
+| 10 | **Scale tầng gửi** | Partition theo channel hoặc hash user — "push có kỳ vọng latency khác email, SMS có kiểm soát chi phí khác in-app" | `NotificationDispatchBackgroundService` leader-election ⇒ **1 instance** xử lý tất cả, trần throughput cứng | 🟠 |
+| 11 | **Retention** | TTL/archival cho bảng notification | Grep: 0 kết quả retention/archive/purge. Bảng tăng vô hạn, nay mỗi event đẻ 2–4 row nên nhanh gấp bội | 🟡 |
+| 12 | **Template** | Versioning, preview, test-send, editor, i18n thật | DB seed **5/32** type; không versioning/preview/test-send; cột `Locale` có nhưng hardcode `vi-VN` | 🟡 |
+| 13 | **Realtime in-app** | WebSocket/SSE đẩy feed + badge | Client phải poll REST. Hạ tầng SignalR **đã có sẵn** ở TicketService (`TicketCommentHub`) nhưng notification không dùng | 🟡 |
+| 14 | **Delivery status** | Sent → Delivered → Opened → Clicked | Chỉ `Pending/Sent/Failed/Read`. Enum `NotificationAuditActionEnum` **đã định nghĩa** `PushDelivered`/`PushOpened` nhưng không code nào ghi | 🟡 |
+| 15 | **List-Unsubscribe** | Bắt buộc cho email non-transactional (Google/Yahoo) | Không có header nào | 🟡 |
+| 16 | **XSS template** | Escape mặc định, opt-out có kiểm soát | `HandlebarsTemplateRenderer` đặt `NoEscape = true` → giá trị chèn vào 16 template không HTML-encode (`SiteName`, `Description`, `ResolutionNote` là dữ liệu người dùng nhập) | 🟡 |
+| 17 | **Doc ↔ code** | Spec là nguồn sự thật | **§3.3 lệch hẳn code**: enum doc 17 giá trị / code 32 và số hiệu khác nhau (`TicketClosed` doc=6 vs code=5, `BatteryAlertCritical=13` vs `BatteryAnomalyDetected=9`); `NotificationPreference` doc có `EmailDigestEnabled`/`SmsCriticalEnabled`/`MinSeverityForPush` — **không tồn tại trong code**; `DeviceToken.ExpoPushToken` vs code `Token` | 🟡 |
+
+---
+
+#### 17.6.3.2. Tasks (nhãn hành động THÊM / SỬA)
+
+**Phase P0 — đang sai ở runtime, user nhìn thấy:**
+- [x] **NOTI3-01** [SỬA] **(chốt 30/07: nhánh A — lọc channel)** Sửa feed in-app bị nhân bản: `GetNotificationsQuery` + `GetUnreadCountQuery` mặc định chỉ lấy `Channel = InApp` (giữ tham số `Channel` để client vẫn xem được từng kênh khi cần); `MarkNotificationRead` lan trạng thái sang các row anh em cùng (UserId × Type × EntityId × CreatedAt-bucket). Mức độ hiện tại sau Sprint 6.2: chat = 2 row, Battery Critical = 4 row, SLA P1 = 4 row.
+  ⚠️ **Bắt buộc kèm theo:** rà toàn bộ 28 consumer, đảm bảo **mọi** notification hướng user đều có ít nhất 1 row `InApp` — nếu còn type nào chỉ ghi `Push` thì sau khi lọc nó sẽ **biến mất hoàn toàn** khỏi feed (xem R-40). Viết test chặn: với mỗi `NotificationTypeEnum` hướng user, consumer phải sinh ≥ 1 row InApp.
+  📌 Nhánh B (tách bảng `Notification` feed / `NotificationDelivery` per-channel, ~4d) là hướng đúng chuẩn Knock/Courier — **hoãn sang sprint sau**, không huỷ. ~1.5d → #701
+- [x] **NOTI3-02** [THÊM] `ExpoReceiptReconcileBackgroundService`: lưu `ticketId` Expo trả về, cron poll `POST /push/getReceipts` sau ~15', map `DeviceNotRegistered`/`MessageRateExceeded`/`MessageTooBig` → deactivate token / retry / log; cập nhật `Notification.Status`. Kèm guard trần **600 msg/s per project** và payload **4KB**. ~1.5d → #702
+- [ ] ~~**NOTI3-03** [THÊM] Vòng phản hồi deliverability email: endpoint webhook Mailjet (`bounce`/`spam`/`blocked`/`unsub`) + bảng `EmailSuppression` + `EmailSenderService` kiểm tra suppression trước khi gửi + endpoint admin xem/gỡ.~~ → #703
+  🚫 **ĐÃ HUỶ 30/07/2026 — code đã implement xong rồi GỠ BỎ hoàn toàn.** Lý do: tính năng chỉ có giá trị khi vận hành ở quy mô thật, trong khi cái giá phải trả là **biến EmailService từ service thuần tiêu thụ message thành service có database** — thêm `email_db`, migration, `depends_on: postgres`, và một endpoint public phải tự dựng cơ chế xác thực riêng vì EmailService không có tầng JWT. Ở quy mô đồ án (vài chục email test tới địa chỉ thật của nhóm) gần như không phát sinh bounce nào, nên giữ service stateless đáng giá hơn. Chi tiết đánh đổi: §17.6.3.5 mục 5.
+
+**Phase P1 — đạt chuẩn ngành:**
+- [x] **NOTI3-04** [THÊM] Preference ma trận **(category × channel)**: bảng `NotificationCategoryPreference`, nhóm 32 `NotificationTypeEnum` thành ~6 category (Ticket · SLA · Battery · Environmental · Chat · Account), API GET/PUT mới (giữ API cũ làm alias để không phá FE), dispatcher đọc theo category. ~2.5d → #704
+- [x] **NOTI3-05** [THÊM] **(chốt 30/07: nhánh B — fallback chain nội bộ, KHÔNG mua provider thứ 2)** Channel fallback: notification `Critical` gửi qua Push mà sau `Notification:Fallback:PushReceiptTimeoutMinutes` (mặc định **30'** — phải ≥ `ExpoReceipt:MinAgeMinutes` 15' + chu kỳ quét 5' + biên 5', nếu không fallback bắn SMS trước khi đối soát kịp chạy) vẫn chưa có receipt `ok` (dữ liệu từ NOTI3-02) → tự động sinh bản SMS bù cho cùng recipient, đánh dấu `PayloadJson.fallbackFrom` để không đếm trùng. Chỉ áp cho `CriticalTypes`, có cờ tắt `Notification:Fallback:Enabled`.
+  📌 **Quyết định có đánh đổi:** không mua provider thứ 2 (SES/SendGrid, nhà mạng) vì chi phí ngoài ngân sách đồ án ⇒ **chấp nhận** Mailjet và gateway SMS Android vẫn là single point of failure. Ghi nhận là giới hạn có chủ đích, không phải bỏ sót — xem R-44. Vẫn nên tách interface `IEmailProvider`/`ISmsProvider` để sau này cắm provider thứ 2 không phải sửa business logic. ~1d → #705
+- [x] **NOTI3-06** [THÊM] Rate limit per-user: Redis sliding window, cấu hình `Notification:RateLimit:MaxPerUserPerHour` (mặc định 20) + `MaxPerUserPerType`; vượt ngưỡng → gom vào digest thay vì drop; critical type bypass. ~1d → #706
+- [x] **NOTI3-07** [THÊM] Observability: Prometheus counter `notification_sent_total{channel,type}` / `notification_failed_total{channel,reason}`, histogram latency (created→sent), gauge pending queue depth + DLQ size; Grafana dashboard "Notification Ops"; alert rule failure-rate > 5% / 5 phút và DLQ > 0. ~1.5d → #707
+- [x] **NOTI3-08** [SỬA] `MassTransitExtensions`: thêm `UseMessageRetry` (3 lần, interval tăng dần) + `UseDelayedRedelivery` (5'/15'/60') + đặt tên `_error` queue rõ ràng + expose metric số message trong `_error`. ⚠️ Ảnh hưởng **toàn bộ** service — cần regression test consumer của 4 service. ~0.5d → #708
+- [x] **NOTI3-09** [SỬA] `NotificationDebounce` dùng `SET NX EX` atomic (bổ sung `ICacheService.TrySetIfNotExistsAsync`) thay cho Get-rồi-Set. ~0.5d → #709
+- [x] **NOTI3-10** [SỬA] **(chốt 30/07: nhánh B — giữ leader-election)** GIỮ NGUYÊN kiến trúc 1-instance-xử-lý của `NotificationDispatchBackgroundService`. Việc cần làm chỉ là **ghi nhận giới hạn cho minh bạch**: comment XML trên class nêu rõ trần throughput ≈ `BatchSize / PollIntervalSeconds` (mặc định 100/5s = 20 noti/s) và điều kiện phải chuyển sang partition; bổ sung mục "Giới hạn đã biết" vào §3.4; đặt alert Grafana trên metric queue-depth (NOTI3-07) làm tín hiệu khi nào cần scale.
+  📌 Nhánh A (partition theo `Channel` hoặc hash `UserId % N` + `SELECT … FOR UPDATE SKIP LOCKED`, ~1.5d) **hoãn tới khi metric cho thấy queue lag tăng thật** — đó là lý do NOTI3-07 phải làm trước. ~0.1d → #710
+
+**Phase P2 — nợ vận hành:**
+- [x] **NOTI3-11** [THÊM] Retention: `NotificationRetentionBackgroundService` — archive/xoá notification `Read`/`Sent` quá `Notification:Retention:Days` (mặc định 90), giữ vĩnh viễn type critical; chạy hằng đêm, batch có giới hạn. ~1d → #711
+- [x] **NOTI3-12** [THÊM] **(chốt 30/07: nhánh A — bản đầy đủ)** Template hoàn chỉnh:
+  (a) seed đủ **32 type × channel** (hiện chỉ 5/32);
+  (b) thêm cột `Version` + giữ `IsActive` để lưu lịch sử và **rollback** về version trước (unique `(Type, Channel, Locale, Version)`; chỉ 1 bản `IsActive` mỗi bộ ba);
+  (c) endpoint admin `POST /api/admin/notification-templates/{id}/preview` — render với payload mẫu, **trả HTML, KHÔNG gửi đi**;
+  (d) endpoint `POST /api/admin/notification-templates/{id}/test-send` — gửi thật tới **duy nhất email/số của chính admin đang đăng nhập**, không nhận địa chỉ tự do (chống biến endpoint thành cổng spam — xem R-46), rate-limit 5 lần/giờ, ghi audit;
+  (e) bổ sung locale `en-US` cho các type hướng Customer + dispatcher chọn locale theo `AccountReadModel` (bỏ hardcode `vi-VN`).
+  Cả 2 endpoint chỉ Admin gọi được. ⚠️ **Sửa 30/07 sau test E2E:** dùng `[Authorize(Roles = "Admin")]` chứ KHÔNG phải `[Authorize(Policy = "AdminOnly")]` như bản nháp — policy `AdminOnly` trong `SharedInfrastructure/DependencyInjection/Extensions/AddAuthorizationRole.cs` **đã bị comment toàn bộ** (code chết), và định nghĩa cũ `RequireClaim("Role","1")` cũng không khớp token hiện tại (JWT phát `role = "Admin"` dạng chuỗi). Dùng policy chưa đăng ký ⇒ ASP.NET ném `InvalidOperationException` → **HTTP 500 ở mọi request**, kể cả của Admin. ~2d → #712
+- [x] **NOTI3-13** [THÊM] Realtime in-app: `NotificationHub` (SignalR) đẩy notification mới + badge count; clone khuôn `TicketCommentHub` bên TicketService; ApiGateway mở route WebSocket; fallback polling giữ nguyên. ~1.5d → #713
+- [x] **NOTI3-14** [THÊM] Delivery status chi tiết: thêm `Delivered`/`Opened` vào `NotificationStatusEnum`, ghi từ Expo receipt (NOTI3-02) và deep-link mở app; ghi audit `PushDelivered`/`PushOpened` (2 action đã khai báo từ #AUDIT-34 nhưng chưa ai ghi). ~1d → #714
+- [x] **NOTI3-15** [THÊM] `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` cho email non-transactional + endpoint xử lý one-click ghi vào preference. Email transactional (OTP/reset) được miễn theo quy định. ~0.5d → #715
+- [x] **NOTI3-16** [SỬA] Bỏ `NoEscape = true` ở `HandlebarsTemplateRenderer` (HTML-encode vẫn hiển thị đúng tiếng Việt) + rà 16 template đánh dấu chỗ nào thật sự cần raw HTML bằng `{{{triple-brace}}}` có kiểm soát. ~0.5d → #716
+- [x] **NOTI3-17** [SỬA] Đồng bộ **§3.3 / §3.4 / §3.6** với code thật: enum 32 giá trị đúng số hiệu, `NotificationPreference` đúng field (xoá `EmailDigestEnabled`/`SmsCriticalEnabled`/`MinSeverityForPush` không tồn tại), `DeviceToken.Token`, bổ sung `DispatchAttemptCount`/`NextAttemptAt` (Sprint 6.2). ~0.5d → #717
+
+**✅ 4 fork đã chốt 30/07/2026** — NOTI3-01 nhánh A · NOTI3-05 nhánh B · NOTI3-10 nhánh B · NOTI3-12 nhánh A. Chi tiết lý do + phần đánh đổi phải chấp nhận: §17.6.3.5.
+
+**Thứ tự thi công (sau khi chốt 4 fork 30/07):** **NOTI3-07 → 01 → 02** là 3 việc mở đường
+(~4.5 dev-day) đưa service từ "chạy được" lên "vận hành được" (NOTI3-03 đã huỷ khỏi chuỗi này). NOTI3-07 (metrics) lên **đầu tiên**
+chứ không phải thứ ba như bản nháp: quyết định giữ leader-election ở NOTI3-10 khiến metric queue-depth
+trở thành tín hiệu duy nhất để biết khi nào phải scale ⇒ phụ thuộc cứng. Thứ tự đầy đủ 17 task: §17.6.3.5.
+
+---
+
+#### 17.6.3.3. Acceptance
+
+- **P0:** mở app thấy **mỗi sự kiện đúng 1 dòng** trong feed, badge khớp số dòng chưa đọc; mark-read 1 lần là tắt cả nhóm. **Không type nào biến mất khỏi feed** sau khi bật lọc `Channel=InApp` (test bao mọi `NotificationTypeEnum` hướng user). Gỡ app khỏi thiết bị → sau 1 chu kỳ reconcile, token chuyển `IsActive=false` và notification chuyển `Failed` (không còn kẹt `Sent`).
+- **P1:** user tắt "Email quảng bá" vẫn nhận email SLA breach. Push một alert Critical rồi chặn receipt Expo → sau 30 phút hệ thống **tự sinh bản SMS bù** cho đúng recipient đó, và bản bù KHÔNG bị đếm trùng trong feed. Bắn 50 alert trong 1 phút cho 1 user → nhận tối đa 20, phần dư vào digest. Grafana "Notification Ops" hiện sent/failed theo channel + DLQ = 0. Consumer throw → thấy retry 3 lần rồi mới vào `_error`.
+- **P2:** notification `Read` quá 90 ngày biến mất khỏi bảng chính. Đổi template trong DB → preview + test-send thấy ngay, rollback về version trước được. Có notification mới → app nhận qua SignalR không cần refresh. Template render giá trị chứa `<script>` → hiển thị nguyên văn, không thực thi. §3.3 đọc lên khớp 100% với entity trong code.
+
+---
+
+#### 17.6.3.4. Rủi ro
+
+| ID | Rủi ro | Ảnh hưởng | Giảm thiểu |
+|----|--------|-----------|------------|
+| R-40 | **(nhánh A đã chốt)** Lọc `Channel=InApp` làm biến mất khỏi feed những type chỉ ghi row `Push` | User mất hẳn thông báo — hỏng nặng hơn cả lỗi đang sửa | Rà đủ 28 consumer TRƯỚC khi bật lọc; test bao mọi `NotificationTypeEnum` hướng user phải sinh ≥ 1 row InApp; bật lọc sau cùng trong PR |
+| R-41 | NOTI3-08 sửa `SharedInfrastructure` ảnh hưởng **8 service** gọi `AddMessageBus` (Auth · Battery · Ticket · Notification · Email · Sms · FileStorage · AuditAggregator) — bản nháp ghi nhầm là 4 | Retry sai làm consumer xử lý lặp | Bắt buộc idempotent trước (NOTI3-09 làm trước NOTI3-08). **Regression phải rebuild + khởi động lại ĐỦ 8**, không chỉ nhóm service đang sửa |
+| R-42 | ~~Webhook Mailjet public → bị giả mạo~~ | — | **KHÔNG CÒN ÁP DỤNG** (30/07/2026): NOTI3-03 đã huỷ, không còn endpoint webhook public nào. Ghi chú cho người sau nếu làm lại: Mailjet **không ký payload** (khác Stripe/SendGrid) nên "verify chữ ký" là bất khả thi — chỉ dùng được token dùng chung trong query, kèm rate limit |
+| R-43 | NOTI3-16 bỏ `NoEscape` làm vỡ 16 template | Email hiển thị sai/thẻ thô | Test `AllEmbeddedTemplatesTests` đã có sẵn; thêm assert render tiếng Việt |
+| R-44 | **(nhánh B đã chốt — rủi ro CHẤP NHẬN)** Không mua provider thứ 2 ⇒ Mailjet và gateway SMS Android vẫn là single point of failure. Gateway = 1 điện thoại: hết pin/mất mạng là tầng SMS chết | SLA P1 (4h) có thể trôi mà không ai được báo qua SMS | Fallback chain (NOTI3-05) chỉ cứu được trường hợp **push** hỏng, KHÔNG cứu được khi chính SMS hỏng. Bù bằng: alert Grafana khi gateway mất heartbeat + tách sẵn `IEmailProvider`/`ISmsProvider` để cắm provider thứ 2 sau mà không sửa business logic. Nêu rõ là giới hạn có chủ đích khi báo cáo hội đồng |
+| R-45 | **(nhánh B đã chốt)** Giữ leader-election ⇒ trần throughput ≈ 20 noti/s, không scale ngang | Alert storm quy mô lớn làm queue dồn, notification tới trễ | Alert Grafana trên queue-depth (NOTI3-07) làm tín hiệu chuyển sang partition; ghi rõ trần trong §3.4 để người sau không tưởng nhầm là scale được |
+| R-46 | **(nhánh A đã chốt)** Endpoint `test-send` của NOTI3-12 có thể bị lạm dụng thành cổng gửi thư rác | Domain đang warm-up bị đốt reputation | Chỉ cho gửi tới email/số của **chính admin đang đăng nhập** (không nhận địa chỉ tự do), policy `AdminOnly`, rate-limit 5 lần/giờ, ghi audit mọi lần gọi |
+
+---
+
+#### 17.6.3.5. Decision log (chốt 30/07/2026)
+
+| Fork | Chọn | Lý do | Đánh đổi phải chấp nhận | Ảnh hưởng công |
+|------|------|-------|--------------------------|----------------|
+| **NOTI3-01** | **A** — lọc `Channel=InApp` ở query | Lỗi user đang nhìn thấy hằng ngày, cần chặn máu ngay; không đổi schema nên PR nhỏ, review nhanh | Vẫn là bản vá — mô hình dữ liệu chưa đúng chuẩn. Thêm channel mới về sau vẫn đẻ row thừa. **Bắt buộc** rà 28 consumer trước khi bật lọc (R-40) | 1.5d (thay vì 4d) |
+| **NOTI3-05** | **B** — chỉ fallback chain nội bộ | Provider thứ 2 tốn phí + phải đăng ký, ngoài ngân sách đồ án | Mailjet và gateway SMS Android **vẫn là single point of failure**; fallback chỉ cứu khi *push* hỏng, không cứu khi *SMS* hỏng (R-44) | 1d (thay vì 2d) |
+| **NOTI3-10** | **B** — giữ leader-election | Quy mô đồ án chưa chạm trần ~20 noti/s; dồn công cho NOTI3-07 (metrics) có giá trị hơn | Không scale ngang. Chỉ biết khi nào cần chuyển nếu đã có metric queue-depth ⇒ NOTI3-07 trở thành **phụ thuộc cứng** (R-45) | 0.1d (thay vì 1.5d) |
+| **NOTI3-12** | **A** — bản đầy đủ | Có preview + test-send + rollback version; phần quản trị template demo được trước hội đồng | Phát sinh 2 endpoint admin ⇒ mở bề mặt tấn công, phải siết `test-send` (R-46). Đây là lựa chọn **ngược với khuyến nghị ban đầu** — chấp nhận thêm 1d để đổi lấy giá trị demo | 2d (thay vì 1d) |
+
+**Tổng ảnh hưởng:** ~21.5 dev-day → **~19 dev-day**.
+
+**Việc phát sinh từ quyết định (không được quên):**
+1. NOTI3-01 → viết test bao mọi `NotificationTypeEnum` hướng user phải có ≥ 1 row `InApp` (nếu không, lọc channel sẽ **xoá sạch** một số loại thông báo khỏi feed).
+2. NOTI3-05 → vẫn tách interface `IEmailProvider`/`ISmsProvider` dù chưa có provider thứ 2, để sau cắm vào không phải sửa business logic.
+3. NOTI3-10 → NOTI3-07 (metrics) chuyển thành **phụ thuộc cứng**, phải làm trước; kèm ghi trần throughput vào §3.4.
+4. NOTI3-12 → `test-send` chỉ gửi tới chính admin đang đăng nhập, rate-limit 5 lần/giờ, ghi audit.
+
+---
+
+**5. Huỷ NOTI3-03 (suppression list) — quyết định bổ sung 30/07/2026, SAU khi đã implement xong.**
+
+Đây là quyết định **đảo ngược**: task đã code hoàn chỉnh (entity + `EmailDbContext` + webhook Mailjet +
+guard trong `EmailSenderService` + 2 endpoint vận hành + migration + 23 unit test, tất cả pass) rồi
+**gỡ bỏ toàn bộ**.
+
+| | Nội dung |
+|---|---|
+| **Cái nhận được** | Chặn gửi vào địa chỉ đã hard-bounce/báo spam ⇒ giữ reputation domain `solarbattery.site` đang warm-up |
+| **Cái phải trả** | EmailService từ **service thuần tiêu thụ message** thành **service có database**: thêm logical DB `email_db`, migration, `depends_on: postgres`, `FrameworkReference` EF. Thêm một endpoint **public** mà EmailService không có tầng JWT nào để bảo vệ ⇒ phải tự dựng 2 cơ chế token riêng (`Mailjet:WebhookToken` fail-closed cho webhook, `EmailService:AdminApiKey` cho 2 endpoint vận hành — vì danh sách suppression chứa email khách hàng, là dữ liệu cá nhân) |
+| **Vì sao huỷ** | Giá trị chỉ hiện ra ở quy mô vận hành thật. Quy mô đồ án là vài chục email test tới địa chỉ thật của nhóm — gần như không phát sinh bounce nào, nên bảng suppression sẽ **rỗng vĩnh viễn**. Đổi lấy sự phức tạp thường trực (DB thứ 9, thêm phụ thuộc khởi động, 2 khoá bí mật phải quản lý) là không đáng |
+| **Rủi ro chấp nhận** | Gửi lặp vào địa chỉ chết không bị chặn ⇒ về lâu dài có thể ảnh hưởng reputation domain. Với lưu lượng hiện tại thì rủi ro thấp |
+| **Bù đắp** | **NOTI3-15** (`List-Unsubscribe` + `List-Unsubscribe-Post` một chạm) vẫn giữ — đây mới là thứ Gmail/Yahoo **bắt buộc** với người gửi số lượng lớn từ 2024. Nút hủy hoạt động là hàng rào chính chống bị báo cáo spam |
+| **Làm lại thế nào** | Toàn bộ nằm trong lịch sử git của nhánh Sprint 6.3. Khôi phục = revert phần gỡ + tạo lại `email_db` + cấu hình webhook bên Mailjet. Lưu ý cho người sau: **Mailjet không ký payload webhook** (khác Stripe/SendGrid) nên không có cách nào ngoài token dùng chung trong query |
+
+**Ảnh hưởng dây chuyền đã xử lý:** gỡ 3 metric Prometheus (`email_deliverability_event_total`,
+`email_suppressed_total`, `email_suppression_list_size`) · 2 panel Grafana · 1 alert rule
+`EmailDeliverabilityDegraded` · `emailCluster` + route webhook ở ApiGateway · `email_db` trong
+`docker-compose.yml` và `create-service-databases.sh` · 3 biến trong `.env`/`.env.Docker`.
+`IEmailProvider` (NOTI3-05) và overload header (NOTI3-15) **giữ nguyên** — không liên quan.
+
+**Kết quả:** Sprint 6.3 còn **16/17 task**, ~19 → **~17 dev-day**.
+
+---
+
+**Thứ tự thi công sau khi chốt:** NOTI3-07 (metrics, mở khoá quan sát) → 01 → ~~03~~ → 02 → 05 → 06 → 08 → 09 → 04 → 17 → 11 → 12 → 13 → 14 → 15 → 16 → 10.
 
 ---
 

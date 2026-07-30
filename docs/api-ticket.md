@@ -276,7 +276,7 @@ ClosedPendingRate → Open (Customer reopen → Manager triage lại; lần 2+ t
 | `PriorityAssigned` | 3 | Priority được gán (tại triage) |
 | `StaffAssigned` | 4 | Staff được gán |
 | `StaffReassigned` | 5 | Staff được điều chuyển |
-| `Commented` | 6 | Có bình luận mới |
+| `Chatted` | 6 | Có tin nhắn chat mới (tên cũ trong doc là `Commented` — đã đổi từ Sprint Chat) |
 | `MaintenanceLogged` | 7 | Nhật ký bảo trì được thêm |
 | `AttachmentAdded` | 8 | File đính kèm được thêm |
 | `SlaPaused` | 9 | SLA bị tạm dừng |
@@ -291,10 +291,21 @@ ClosedPendingRate → Open (Customer reopen → Manager triage lại; lần 2+ t
 | `Rejected` | 18 | Manager từ chối kết quả |
 | `Rated` | 19 | Customer đã đánh giá |
 | `Reopened` | 20 | Customer yêu cầu mở lại |
-| `AutoClosed` | 22 | Tự động đóng (hệ thống) |
+| `AutoClosed` | 22 | Tự động đóng (hệ thống) — `AutoCloseBackgroundService` sau 7 ngày ở `CLOSED_PENDING_RATE` |
 | `ResolvedByEscalatedStaff` | 23 | Được giải quyết bởi Staff cấp cao sau escalation |
 | `TriageApproved` | 24 | Manager phê duyệt tính hợp lệ tại bước triage |
 | `Closed` | 25 | Ticket đã đóng chính thức |
+| `ChatEdited` | 26 | Đã chỉnh sửa tin nhắn chat |
+| `ChatDeleted` | 27 | Đã xoá tin nhắn chat |
+| `ChatRestored` | 28 | Đã khôi phục tin nhắn chat |
+| `ChatReplied` | 29 | Đã trả lời tin nhắn chat |
+| `ChatPinned` | 30 | Đã pin tin nhắn chat |
+| `ChatUnpinned` | 31 | Đã unpin tin nhắn chat |
+| `ChatFlagged` | 32 | Chat bị flag bởi filter spam/profanity/PII (audit trail — không chặn post trừ spam) |
+| `RatingRequested` | **33** | **Sprint 6.2 NOTI-07 (#678)** — hệ thống đã gửi nhắc Customer đánh giá ticket đang treo ở `CLOSED_PENDING_RATE`. Đồng thời là **cờ idempotent**: `RatingRequestBackgroundService` chỉ nhắc **1 lần / ticket** bằng cách kiểm tra sự tồn tại của activity này (không cần cột mới / migration) |
+
+> ⚠️ **Giá trị `21` không tồn tại** (bị bỏ trống trong enum). FE không được giả định enum liên tục.
+> **Sprint 6.2 thêm `RatingRequested = 33`** — FE/Mobile phải mirror.
 
 ### `ActorRoleEnum`
 
@@ -2923,7 +2934,114 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 
 ---
 
+## Integration Events (RabbitMQ) — tác dụng phụ của endpoint
+
+> **Sprint 6.2 (`#672..#688`)** bổ sung một lớp event trong `SharedContracts` để NotificationService
+> consume được. Đây **không phải REST API** — FE không gọi trực tiếp — nhưng là thứ quyết định
+> *"bấm nút này thì ai được báo"*, nên cần nắm khi kiểm thử.
+
+### Vì sao phải thêm event mới
+
+TicketService trước đó chỉ publish các record cục bộ trong `TicketService.Application.IntegrationEvents`
+(vd `TicketApprovedIntegrationEvent`). **MassTransit route theo full type name**, nên
+NotificationService (assembly khác) **không bind được** → 2 giá trị `NotificationTypeEnum.TicketStatusChanged(3)`
+và `TicketClosed(5)` có định nghĩa nhưng **không producer, không consumer**.
+
+6 event mới nằm trong `SharedContracts` nên cả hai service dùng chung một contract.
+**Publish SONG SONG với event nội bộ cũ (không xoá)** để không phá vỡ subscriber hiện có.
+
+### Event MỚI — Sprint 6.2 NOTI-07 (#678)
+
+| Event | Publish bởi (endpoint / job) | Payload | Ai được báo |
+|---|---|---|---|
+| `TicketStatusChangedEvent` | `POST /api/admin/tickets/{id}/triage` (Open→Approved) · `POST /api/staff/tickets/{id}/start` (Assigned→InProgress) · `POST /api/staff/tickets/{id}/hold` · `POST /api/staff/tickets/{id}/resume` (→InProgress) | `TicketId`, `Code`, `CustomerId`, `StaffId?`, `OldStatus` (int), `NewStatus` (int), `OldStatusName`, `NewStatusName` | **Customer** — InApp + Push |
+| `TicketApprovedEvent` | `POST /api/admin/tickets/{id}/approve` | `TicketId`, `Code`, `CustomerId`, `ManagerId`, `ManagerComment?`, `ApprovedAt` | **Customer** — InApp + Push + Email (kèm lời mời đánh giá) |
+| `TicketRejectedEvent` | `POST /api/admin/tickets/{id}/reject` (`IsClosedRejected = false`) · `POST /api/admin/tickets/{id}/triage-reject` (`IsClosedRejected = true`) | `TicketId`, `Code`, `CustomerId`, `StaffId?`, `Reason`, `IsClosedRejected`, `RejectedAt` | `false` → **Staff đang assign** ("kết quả bị trả lại") · `true` → **Customer** ("ngoài phạm vi dịch vụ") |
+| `TicketClosedEvent` | `POST /api/customer/tickets/{id}/rate` (`IsAutoClosed = false`) · `AutoCloseBackgroundService` (`IsAutoClosed = true`, `Rating = null`) | `TicketId`, `Code`, `CustomerId`, `ClosedAt`, `IsAutoClosed`, `Rating?` (`short?`) | **Customer + Manager** — InApp + Push |
+| `TicketReopenedEvent` | `POST /api/customer/tickets/{id}/reopen` | `TicketId`, `Code`, `CustomerId`, `StaffId?`, `ReopenReason`, `ReopenCount`, `ReopenedAt` | **Manager + Staff đang assign** — InApp + Push |
+| `TicketRatingRequestedEvent` | `RatingRequestBackgroundService` | `TicketId`, `Code`, `CustomerId`, `ApprovedAt`, `DaysPending`, `DaysUntilAutoClose` | **Customer** — InApp + Push |
+
+> `OldStatus`/`NewStatus` là **giá trị int của `TicketStatusEnum`** — cố ý không dùng kiểu enum để
+> `SharedContracts` không phải tham chiếu `TicketService.Domain`. Kèm sẵn `*StatusName` để consumer
+> hiển thị mà không cần bảng tra cứu.
+
+### Event SỬA payload — Sprint 6.2 NOTI-05 (#676)
+
+⚠️ **Breaking cho consumer khác** (record positional — thêm tham số làm đổi chữ ký constructor):
+
+| Event | Field thêm | Publish bởi | Vì sao |
+|---|---|---|---|
+| `TicketCreatedEvent` | `CustomerId` (`Guid`), `Priority` (`string?`) | `POST /api/customer/tickets` · auto-tạo từ alert (`TicketAutoCreateFromAlertCommandHandler`) | Payload cũ chỉ có `TicketId`/`Code` nên notification cho Manager **không nói được ticket của ai, ưu tiên gì**. `Priority` **nullable** vì ticket tạo tay chưa qua triage thì `Ticket.Priority` còn `null`; ticket auto từ alert đã có Priority tính sẵn từ matrix Impact × Urgency |
+| `TicketAssignedEvent` | `CustomerId` (`Guid`) | `POST /api/admin/tickets/{id}/assign` · `.../reassign` | Mở khoá notify Customer *"Staff đang xử lý sự cố của bạn"* — trước đó consumer bỏ trống với comment `"deferred (event lacks CustomerId)"` |
+| `TicketResolvedEvent` | `CustomerId` (`Guid`) | `POST /api/staff/tickets/{id}/resolve` | Event cũ chỉ mang `StaffId` người resolve nên **không notify được Customer** |
+| `SlaWarningEvent` | `StaffId` (`Guid?`) | `SlaTimerBackgroundService` | Spec §3.4 yêu cầu SLA warning báo **cả Staff phụ trách lẫn Manager**; payload cũ không có `StaffId` nên consumer chỉ broadcast Manager được. `null` = ticket chưa assign ai |
+
+### `RatingRequestBackgroundService` — MỚI (Sprint 6.2 NOTI-07 / #678)
+
+Nhắc Customer đánh giá ticket đang treo ở `CLOSED_PENDING_RATE`.
+
+**Điều kiện chọn ticket** (tất cả phải đúng):
+```
+!IsDeleted
+AND Status = ClosedPendingRate
+AND ApprovedAt != null AND ApprovedAt <= now - AfterDays
+AND KHÔNG tồn tại TicketActivity nào có Action = RatingRequested (chưa bị xoá)
+ORDER BY ApprovedAt   LIMIT 200
+```
+
+Mỗi ticket được chọn → publish `TicketRatingRequestedEvent` + ghi 1 `TicketActivity` với
+`Action = RatingRequested` (chính là cờ idempotent, **mỗi ticket chỉ nhắc 1 lần**).
+
+`DaysPending = floor((now − ApprovedAt).TotalDays)` ·
+`DaysUntilAutoClose = max(0, AutoCloseAfterDays − DaysPending)`.
+
+| Config | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Ticket:RatingRequest:Enabled` | `bool` | `true` | Tắt worker |
+| `Ticket:RatingRequest:AfterDays` | `int` | **`3`** | Số ngày sau `ApprovedAt` mới nhắc |
+| `Ticket:RatingRequest:AutoCloseAfterDays` | `int` | `7` | Dùng để tính `DaysUntilAutoClose` — phải **khớp** mốc auto-close thật |
+| `Ticket:RatingRequest:PollIntervalMinutes` | `int` | `60` | Chu kỳ quét |
+
+> ⚠️ **Vì sao mặc định 3 ngày chứ không phải 7 như spec:** `AutoCloseBackgroundService` **tự đóng
+> ticket đúng mốc 7 ngày** kể từ `ApprovedAt`. Nhắc đúng ngày thứ 7 thì Customer gần như không còn cơ
+> hội đánh giá — nhắc xong ticket đóng luôn. Mốc để **cấu hình được** và mặc định **3** (giữa cửa sổ
+> 7 ngày). Đặt lại thành `7` nếu muốn bám nguyên văn spec.
+
+### `AutoCloseBackgroundService` — bổ sung publish (Sprint 6.2 NOTI-07)
+
+Ngoài việc đổi `Status = Closed` + ghi `TicketActivity(AutoClosed)` như trước, worker nay còn publish
+`TicketClosedEvent` với `IsAutoClosed = true`, `Rating = null` ⇒ **Customer và Manager được báo ticket
+đã tự đóng vì quá hạn đánh giá** (trước đây ticket đóng im lặng).
+
+---
+
 ## Changelog
+
+### 2026-07-30 — Sprint 6.2 (`#672..#688`): event vòng đời ticket + enrich payload cho NotificationService
+
+- **`ActivityActionEnum` thêm `RatingRequested = 33`** — FE/Mobile phải mirror. Bảng enum trong doc
+  cũng đã bổ sung 26–32 (nhóm Chat) vốn bị thiếu và sửa `Commented` → `Chatted` (giá trị `6`).
+- **6 event mới trong `SharedContracts`** (NOTI-07): `TicketStatusChangedEvent`, `TicketApprovedEvent`,
+  `TicketRejectedEvent`, `TicketClosedEvent`, `TicketReopenedEvent`, `TicketRatingRequestedEvent` —
+  publish **song song** event nội bộ cũ, không xoá. ⇒ 2 giá trị enum chết bên NotificationService
+  (`TicketStatusChanged`, `TicketClosed`) nay có producer thật.
+- **4 event đổi payload** (NOTI-05): `TicketCreatedEvent` (+`CustomerId`, +`Priority?`),
+  `TicketAssignedEvent` (+`CustomerId`), `TicketResolvedEvent` (+`CustomerId`),
+  `SlaWarningEvent` (+`StaffId?`). ⚠️ Record positional ⇒ **breaking cho mọi consumer khác**.
+- **`RatingRequestBackgroundService` mới** — nhắc đánh giá 1 lần/ticket, mặc định sau **3 ngày**
+  (không phải 7 — xem lý do ở trên), idempotent bằng `TicketActivity(RatingRequested)`.
+- **`AutoCloseBackgroundService`** publish thêm `TicketClosedEvent(IsAutoClosed: true)`.
+- **`SlaTimerBackgroundService`** publish `SlaWarningEvent` kèm `StaffId` của Staff đang assign.
+- **Hạ tầng bus (Sprint 6.3 NOTI3-08, ảnh hưởng cả 8 service):** consumer nay được retry **3 lần**
+  (exponential 200ms→5s) trước khi rơi `_error`; DLQ được giám sát. `UseDelayedRedelivery` **tắt mặc
+  định** (cần plugin RabbitMQ chưa có trong image).
+- **Sửa lỗi saga 30/07/2026:** thêm `cfg.UsePublishMessageScheduler()` — thiếu nó, `AlertTicketSaga`
+  và `ChatEscalationReview` ném `MassTransit.PayloadNotFoundException: MessageSchedulerContext` mỗi
+  lần `.Schedule(...)` → retry → rơi `_error`. Đo được **1662 message** kẹt ở
+  `AlertTicketSagaState_error`, `qrtz_triggers` = 0 dòng, 2 saga treo vĩnh viễn ở
+  `TicketRequested`/`AlertLinkRequested` vì timeout không bao giờ nổ.
+
+> Chi tiết phía nhận (kênh, template, preference, quiet hours): xem [`api-notification.md`](api-notification.md).
 
 ### 2026-07-07 — Dashboard aggregate stats + SLA filter + KB reference rules
 - **Thêm `GET /api/tickets/dashboard/stats`** (Nhóm 4, Manager/Admin) — snapshot KPI toàn hệ thống: total/openCount, SLA summary + compliancePercent, countByStatus (zero-fill 14 status), countByPriority, createdTrend7Days (UTC), openCountByStaff. Thay cho FE tự đếm trên 1 trang list.

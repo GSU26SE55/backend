@@ -19,7 +19,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <EmbeddedResource Include="Templates\*.hbs" />
+        <!-- Template email nhúng thẳng vào assembly (HandlebarsTemplateRenderer đọc qua
+             GetManifestResourceStream). Trước đây là *.hbs — đổi sang *.html để mở bằng
+             trình duyệt/IDE xem trước được ngay; cú pháp bên trong vẫn là Handlebars. -->
+        <EmbeddedResource Include="Templates\*.html" />
     </ItemGroup>
 
 </Project>

@@ -81,5 +81,26 @@ public class SpamDetectorTests
             _store.Remove(key);
             return Task.CompletedTask;
         }
+
+        /// <summary>Sprint 6.3 NOTI3-09 (#709) — mô phỏng SET NX (không TTL, đủ cho unit test).</summary>
+        public Task<bool> TrySetIfNotExistsAsync(
+            string key, string value, TimeSpan expiration, CancellationToken cancellationToken = default)
+        {
+            if (_store.ContainsKey(key))
+                return Task.FromResult(false);
+
+            _store[key] = value;
+            return Task.FromResult(true);
+        }
+
+        /// <summary>Sprint 6.3 NOTI3-06 (#706) — bộ đếm in-memory cho rate limit.</summary>
+        public Task<long> IncrementAsync(
+            string key, TimeSpan expiration, CancellationToken cancellationToken = default)
+        {
+            // _store lưu object nên đọc lại phải quy về long thay vì parse chuỗi.
+            var next = _store.TryGetValue(key, out var v) && v is long current ? current + 1 : 1L;
+            _store[key] = next;
+            return Task.FromResult(next);
+        }
     }
 }

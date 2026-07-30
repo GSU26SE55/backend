@@ -185,6 +185,37 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                     });
                     result.OutboxEventsQueued++;
                 }
+                else if (_options.PublishWarningNotifications)
+                {
+                    // Sprint 6.2 NOTI-08 (#679) — alert Warning/Info: publish event RIÊNG chỉ dành cho
+                    // NotificationService (spec §3.4 T#11 Info → InApp, T#12 Warning → InApp+Push).
+                    // KHÔNG dùng BatteryAnomalyDetectedEvent vì TicketService consume nó để auto-tạo
+                    // ticket — cảnh báo nhẹ mà đẻ ticket đúng là điều team đang né bằng cách im lặng.
+                    if (await ShouldNotifyWarningAsync(alert.BatteryAssetId, alert.AnomalyType, now, cancellationToken))
+                    {
+                        var warningEvt = new BatteryAnomalyWarningDetectedEvent(
+                            AlertId: alert.Id,
+                            BatteryAssetId: alert.BatteryAssetId,
+                            CustomerId: asset.CustomerId,
+                            AssetSerialNumber: asset.SerialNumber,
+                            AnomalyType: (int)alert.AnomalyType,
+                            Severity: (int)alert.Severity,
+                            ThresholdValue: alert.ThresholdValue,
+                            ActualValue: alert.ActualValue,
+                            Unit: alert.Unit,
+                            DetectedAt: alert.DetectedAt);
+
+                        await _unitOfWork.OutboxMessages.AddAsync(new OutboxEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            AggregateId = alert.Id,
+                            Type = nameof(BatteryAnomalyWarningDetectedEvent),
+                            Payload = JsonSerializer.Serialize(warningEvt),
+                            OccurredAtUtc = now
+                        });
+                        result.OutboxEventsQueued++;
+                    }
+                }
             }
         }
 
@@ -199,6 +230,45 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return result;
+    }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — chống spam notify Warning/Info.
+    ///
+    /// Alert Warning không đi qua dedup-merge như Critical (mỗi tick vượt ngưỡng có thể tạo alert
+    /// mới), nên nếu publish thẳng thì Customer lãnh một trận thông báo. Chỉ publish khi trong
+    /// <c>WarningNotifyDedupMinutes</c> gần nhất CHƯA có outbox event cùng
+    /// (BatteryAssetId × AnomalyType).
+    /// </summary>
+    private async Task<bool> ShouldNotifyWarningAsync(
+        Guid? batteryAssetId, AnomalyTypeEnum anomalyType, DateTime now, CancellationToken ct)
+    {
+        if (batteryAssetId is null || batteryAssetId == Guid.Empty)
+            return false;
+
+        var window = TimeSpan.FromMinutes(Math.Max(0, _options.WarningNotifyDedupMinutes));
+        if (window <= TimeSpan.Zero)
+            return true;
+
+        var cutoff = now - window;
+        var eventType = nameof(BatteryAnomalyWarningDetectedEvent);
+
+        // Outbox lưu AggregateId = AlertId nên phải join ngược qua alerts để lọc theo asset + type.
+        var recentAlertIds = await _unitOfWork.Alerts.GetAllAsync()
+            .Where(a => !a.IsDeleted
+                        && a.BatteryAssetId == batteryAssetId
+                        && a.AnomalyType == anomalyType
+                        && a.DetectedAt >= cutoff)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+
+        if (recentAlertIds.Count == 0)
+            return true;
+
+        var alreadyNotified = await _unitOfWork.OutboxMessages.GetAllAsync()
+            .AnyAsync(o => o.Type == eventType && recentAlertIds.Contains(o.AggregateId), ct);
+
+        return !alreadyNotified;
     }
 
     private async Task<AlertEntity?> FindActiveAlertToMergeAsync(

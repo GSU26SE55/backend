@@ -180,4 +180,92 @@ public static class AppMetrics
         {
             Buckets = new double[] { 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0 }
         });
+
+    // ===== NotificationService delivery (Sprint 6.3 NOTI3-07 / #707) =====
+    // Trước sprint này toàn NotificationService chỉ có đúng 1 metric (AuditOutboxPending):
+    // Sprint 6.2 vừa bật tầng gửi mà không có cách nào biết nó đang hỏng.
+    // "Delivery rate tách theo channel" là metric cơ bản nhất của một notification service —
+    // mỗi kênh có kiểu hỏng khác nhau nên KHÔNG được gộp chung.
+
+    /// <summary>Notification đã giao thành công xuống channel. Labels: channel, type.</summary>
+    public static readonly Counter NotificationSentTotal = Prometheus.Metrics.CreateCounter(
+        "notification_sent_total",
+        "Total notifications successfully delivered to their channel.",
+        new CounterConfiguration { LabelNames = new[] { "channel", "type" } });
+
+    /// <summary>
+    /// Notification thất bại VĨNH VIỄN (hết lượt thử hoặc lỗi không thể phục hồi).
+    /// Labels: channel, reason — <c>reason</c> phải là nhóm ngắn (vd "channel_disabled",
+    /// "no_device_token", "no_email", "provider_error"), KHÔNG nhét message thô vào label
+    /// để tránh nổ cardinality của Prometheus.
+    /// </summary>
+    public static readonly Counter NotificationFailedTotal = Prometheus.Metrics.CreateCounter(
+        "notification_failed_total",
+        "Total notifications that permanently failed delivery.",
+        new CounterConfiguration { LabelNames = new[] { "channel", "reason" } });
+
+    /// <summary>Lần gửi lỗi tạm thời, sẽ retry. Labels: channel.</summary>
+    public static readonly Counter NotificationRetryTotal = Prometheus.Metrics.CreateCounter(
+        "notification_retry_total",
+        "Total transient delivery failures scheduled for retry.",
+        new CounterConfiguration { LabelNames = new[] { "channel" } });
+
+    /// <summary>Notification bị hoãn có chủ đích. Labels: channel, reason (quiet_hours | digest).</summary>
+    public static readonly Counter NotificationDeferredTotal = Prometheus.Metrics.CreateCounter(
+        "notification_deferred_total",
+        "Total notifications intentionally deferred (quiet hours, digest window).",
+        new CounterConfiguration { LabelNames = new[] { "channel", "reason" } });
+
+    /// <summary>
+    /// Độ trễ end-to-end: từ lúc consumer ghi record tới lúc giao xong xuống channel.
+    /// Bucket kéo dài tới 1 giờ vì record có thể bị hoãn qua quiet hours / digest.
+    /// </summary>
+    public static readonly Histogram NotificationDeliveryLatencySeconds = Prometheus.Metrics.CreateHistogram(
+        "notification_delivery_latency_seconds",
+        "Latency from notification record creation to successful channel delivery.",
+        new HistogramConfiguration
+        {
+            LabelNames = new[] { "channel" },
+            Buckets = new double[] { 1, 5, 15, 30, 60, 300, 900, 3600 }
+        });
+
+    /// <summary>Số record đang chờ giao (Status=Pending, tới hạn). Tín hiệu queue lag.</summary>
+    public static readonly Gauge NotificationPendingTotal = Prometheus.Metrics.CreateGauge(
+        "notification_pending_total",
+        "Current count of notification records awaiting dispatch.");
+
+    /// <summary>
+    /// Số message trong dead-letter queue của NotificationService.
+    /// Trạng thái khoẻ mạnh là 0 — có message xuất hiện là phải điều tra.
+    /// </summary>
+    public static readonly Gauge NotificationDlqSize = Prometheus.Metrics.CreateGauge(
+        "notification_dlq_size",
+        "Current message count in NotificationService dead-letter (_error) queues.",
+        new GaugeConfiguration { LabelNames = new[] { "queue" } });
+
+    /// <summary>Notification bị chặn bởi rate limit per-user (NOTI3-06). Labels: type.</summary>
+    public static readonly Counter NotificationRateLimitedTotal = Prometheus.Metrics.CreateCounter(
+        "notification_rate_limited_total",
+        "Total notifications throttled by the per-user rate limit.",
+        // reason: per_hour | per_type — biết trần nào bị chạm mới chỉnh đúng tham số.
+        new CounterConfiguration { LabelNames = new[] { "channel", "reason" } });
+
+    /// <summary>Bản SMS bù sinh ra do push không có receipt (NOTI3-05). Labels: from_channel.</summary>
+    public static readonly Counter NotificationFallbackTotal = Prometheus.Metrics.CreateCounter(
+        "notification_fallback_total",
+        "Total fallback notifications generated when the primary channel had no delivery receipt.",
+        new CounterConfiguration { LabelNames = new[] { "from_channel", "to_channel" } });
+
+    // ===== Expo push receipt (Sprint 6.3 NOTI3-02 / #702) =====
+
+    /// <summary>Receipt Expo đã đối soát. Labels: status (ok|error), error_code.</summary>
+    public static readonly Counter ExpoReceiptTotal = Prometheus.Metrics.CreateCounter(
+        "expo_push_receipt_total",
+        "Total Expo push receipts reconciled.",
+        new CounterConfiguration { LabelNames = new[] { "status", "error_code" } });
+
+    /// <summary>Device token bị vô hiệu hoá do Expo báo DeviceNotRegistered.</summary>
+    public static readonly Counter ExpoTokenDeactivatedTotal = Prometheus.Metrics.CreateCounter(
+        "expo_push_token_deactivated_total",
+        "Total device tokens deactivated after Expo reported them unusable.");
 }

@@ -37,6 +37,19 @@ internal static class NotificationWriter
         NotificationChannelEnum.Email
     };
 
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — cảnh báo Critical hướng Customer: đủ 4 kênh theo spec §3.4 T#13.
+    /// Preference/quiet hours lọc lại ở <c>NotificationDispatcher</c>, nên bật đủ kênh ở đây là
+    /// "ý định gửi" chứ không phải ép gửi.
+    /// </summary>
+    public static readonly NotificationChannelEnum[] AllChannels =
+    {
+        NotificationChannelEnum.InApp,
+        NotificationChannelEnum.Push,
+        NotificationChannelEnum.Email,
+        NotificationChannelEnum.Sms
+    };
+
     public static async Task WriteAsync(
         INotificationUnitOfWork unitOfWork,
         IReadOnlyCollection<Guid> recipientIds,

@@ -100,6 +100,9 @@ public static class ManageDependencyInjection
         services.AddHostedService<VirusScanWorker>();
         services.AddHostedService<SlaGaugeBackgroundService>();
         services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
+
+        // Sprint 6.2 NOTI-07 (#678) — nhắc Customer đánh giá ticket treo ở CLOSED_PENDING_RATE.
+        services.AddHostedService<BackgroundJobs.RatingRequestBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)

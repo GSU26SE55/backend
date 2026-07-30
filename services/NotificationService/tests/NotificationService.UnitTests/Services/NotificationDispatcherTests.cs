@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
 using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Application.Interfaces.Repositories;
@@ -55,7 +56,21 @@ public class NotificationDispatcherTests
         INotificationUnitOfWork uow,
         ICacheService cache,
         params INotificationChannel[] channels) =>
-        new(uow, cache, channels, NullLogger<NotificationDispatcher>.Instance);
+        Build(uow, cache, new NotificationDispatchOptions(), channels);
+
+    /// <summary>Sprint 6.2 — dispatcher nay nhận thêm template renderer, audit writer và options.</summary>
+    private static NotificationDispatcher Build(
+        INotificationUnitOfWork uow,
+        ICacheService cache,
+        NotificationDispatchOptions options,
+        params INotificationChannel[] channels) =>
+        new(uow,
+            cache,
+            channels,
+            new Mock<NotificationService.Application.Templates.ITemplateRenderer>().Object,
+            new NoopAuditWriter(),
+            Microsoft.Extensions.Options.Options.Create(options),
+            NullLogger<NotificationDispatcher>.Instance);
 
     // ── basic dispatch ────────────────────────────────────────────────────────
 

@@ -32,12 +32,27 @@ IOT_ROUTES=(
   "/api/admin/sagas/alert-ticket"
 )
 
-# NotificationService — chỉ probe `/api/notifications` (đã có controller).
-# Route `/api/notification-preferences` đã map ở gateway nhưng controller chưa được tạo,
-# probe sẽ trả 404 → KHÔNG add vào smoke list cho đến khi controller được implement.
-# Endpoint dưới đây có [Authorize] nên smoke chỉ verify route map: 401 = OK, 404 = FAIL.
+# NotificationService — endpoint đều có [Authorize] nên smoke chỉ verify route map:
+# 401 = OK (route tồn tại, auth handler chạy), 404 = FAIL (gateway chưa map / service chết).
+#
+# `/api/notification-preferences` từng bị loại khỏi danh sách vì controller chưa tồn tại.
+# Sprint 6.3 NOTI3-10 đã tạo PreferencesController (kèm ma trận theo nhóm), đo thực tế qua
+# gateway trả 401 → đưa vào danh sách.
 NOTIFICATION_ROUTES=(
   "/api/notifications"
+  "/api/notification-preferences"
+  "/api/notification-preferences/matrix"
+  "/api/admin/notification-templates"
+)
+
+# Endpoint CÔNG KHAI (không [Authorize]) — không bao giờ trả 401, nên cần ngưỡng riêng.
+#
+# `/api/notification-unsubscribe` là nơi Gmail/Yahoo POST thẳng vào khi người nhận bấm
+# "Hủy đăng ký" (List-Unsubscribe-Post, Sprint 6.3 NOTI3-15). Route này hỏng thì nút hủy
+# chết lặng và tên miền bị hạ uy tín gửi — nên đáng canh trong smoke. Không kèm token hợp lệ
+# thì đúng chuẩn phải là 400: route sống, token sai.
+PUBLIC_ROUTES=(
+  "/api/notification-unsubscribe"
 )
 
 # Sprint SMS — SmsService gateway endpoints.
@@ -63,9 +78,29 @@ probe_iot_route() {
   local code
   code=$(curl -sk --max-time 10 -o /dev/null -w '%{http_code}' "${HOST}${path}" 2>/dev/null || echo "000")
   case "$code" in
-    200|401|403) return 0 ;;
+    # 405 cũng là bằng chứng route TỒN TẠI: gateway đã định tuyến tới service, service chỉ từ
+    # chối HTTP method. Probe này dùng GET cho mọi đường dẫn, nên endpoint chỉ nhận POST
+    # (vd /api/sms-gateway/heartbeat) tất yếu trả 405 — coi đó là hỏng thì stage smoke luôn đỏ,
+    # kéo theo `post { failure }` rollback bản helm vừa deploy dù hệ thống hoàn toàn bình thường.
+    # Chỉ 404 (chưa map) và 5xx (service chết) mới là hỏng thật.
+    200|401|403|405) return 0 ;;
     *)
-      echo "  -> ${HOST}${path} returned HTTP $code (expected 200/401/403)"
+      echo "  -> ${HOST}${path} returned HTTP $code (expected 200/401/403/405)"
+      return 1
+      ;;
+  esac
+}
+
+# Probe route công khai — chấp nhận 200 (thành công) và 400 (route sống, tham số sai).
+# Reject 404 (chưa map) và 5xx (service hỏng) — đúng hai thứ smoke cần bắt.
+probe_public_route() {
+  local path="$1"
+  local code
+  code=$(curl -sk --max-time 10 -o /dev/null -w '%{http_code}' "${HOST}${path}" 2>/dev/null || echo "000")
+  case "$code" in
+    200|400) return 0 ;;
+    *)
+      echo "  -> ${HOST}${path} returned HTTP $code (expected 200/400)"
       return 1
       ;;
   esac
@@ -114,7 +149,17 @@ for i in $(seq 1 "$MAX_RETRY"); do
   fi
 
   if [ "$all_ok" -eq 1 ]; then
-    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification + ${#SMS_ROUTES[@]} sms routes reachable"
+    for ep in "${PUBLIC_ROUTES[@]}"; do
+      echo "[smoke #$i] public ${HOST}${ep}"
+      if ! probe_public_route "$ep"; then
+        all_ok=0
+        break
+      fi
+    done
+  fi
+
+  if [ "$all_ok" -eq 1 ]; then
+    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification + ${#SMS_ROUTES[@]} sms + ${#PUBLIC_ROUTES[@]} public routes reachable"
     exit 0
   fi
 

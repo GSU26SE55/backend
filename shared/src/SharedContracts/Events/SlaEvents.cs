@@ -14,4 +14,11 @@ public record SlaWarningEvent : IntegrationEvent
     public Guid TicketId { get; init; }
     public DateTime WarningAt { get; init; }
     public double Percentage { get; init; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-05 (#676) — Staff đang được assign ticket. Spec §3.4 yêu cầu SLA warning
+    /// báo cả Staff phụ trách lẫn Manager; trước đó payload không có StaffId nên consumer chỉ
+    /// broadcast Manager được (reviewnotification.md §4.2). Null = ticket chưa assign ai.
+    /// </summary>
+    public Guid? StaffId { get; init; }
 }

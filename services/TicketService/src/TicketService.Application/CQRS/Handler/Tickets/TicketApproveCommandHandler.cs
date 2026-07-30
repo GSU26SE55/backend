@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -54,6 +55,12 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Approved, reason: request.ManagerComment);
 
         await _producer.PublishAsync(new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — event SharedContracts để NotificationService consume được
+        // (event nội bộ ở trên nằm trong assembly TicketService nên service khác không bind được).
+        await _producer.PublishAsync(new TicketApprovedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, request.ManagerId, request.ManagerComment,
+            ticket.ApprovedAt ?? DateTime.UtcNow), ct);
 
         await _uow.SaveChangesAsync(ct);
 

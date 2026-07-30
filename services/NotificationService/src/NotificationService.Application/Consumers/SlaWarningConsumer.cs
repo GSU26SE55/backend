@@ -12,8 +12,10 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — SLA timer sắp hết (warning threshold) → notify Manager. GH-604: recipient resolve qua
-/// <see cref="IRecipientResolver"/> (broadcast Manager). Staff phụ trách cụ thể bị DEFER
-/// (event chỉ mang TicketId, không có AssignedStaffId) — follow-up enrich event sau.
+/// <see cref="IRecipientResolver"/> (broadcast Manager).
+///
+/// Sprint 6.2 NOTI-05 (#676) — <c>SlaWarningEvent</c> nay mang <c>StaffId</c> nên Staff đang phụ
+/// trách cũng được báo, đúng spec §3.4 (trước đó phải defer vì payload thiếu StaffId).
 /// Ghi trực tiếp qua UnitOfWork (InApp + Push).
 /// </summary>
 public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
@@ -46,10 +48,15 @@ public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
 
         var evt = context.Message;
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+        var recipientIds = (await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager")).ToList();
+
+        // Sprint 6.2 NOTI-05 (#676) — spec §3.4 yêu cầu báo CẢ Staff đang phụ trách, không chỉ Manager.
+        if (evt.StaffId is { } staffId && staffId != Guid.Empty)
+            recipientIds.Add(staffId);
+
         if (recipientIds.Count == 0)
         {
-            _logger.LogWarning("No Manager recipient resolved for SlaWarning ticket={TicketId} — skip.", evt.TicketId);
+            _logger.LogWarning("No recipient resolved for SlaWarning ticket={TicketId} — skip.", evt.TicketId);
             return;
         }
 
@@ -61,11 +68,12 @@ public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
             ticketId = evt.TicketId,
             warningAt = evt.WarningAt,
             percentage = evt.Percentage,
+            staffId = evt.StaffId,
             screen = "TicketDetail"
         });
 
         await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.SlaWarning, NotificationWriter.InAppPush,
+            _unitOfWork, recipientIds.Distinct().ToList(), NotificationTypeEnum.SlaWarning, NotificationWriter.InAppPush,
             title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

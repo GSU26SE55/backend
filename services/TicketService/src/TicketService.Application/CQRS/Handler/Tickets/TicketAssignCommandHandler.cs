@@ -117,7 +117,9 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             newValue: request.StaffId.ToString(),
             reason: request.Notes);
 
-        await _producer.PublishAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.StaffId, ticket.Priority.ToString()!), ct);
+        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để NotificationService notify được Customer.
+        await _producer.PublishAsync(
+            new TicketAssignedEvent(ticket.Id, ticket.Code, request.StaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketAuditTrailNotification.For(

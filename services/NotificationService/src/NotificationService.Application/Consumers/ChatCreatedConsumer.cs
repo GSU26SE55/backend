@@ -11,6 +11,10 @@ namespace NotificationService.Application.Consumers;
 /// <summary>
 /// Consumer cho <see cref="ChatCreatedEvent"/>: notify Customer khi Staff post chat public,
 /// notify Staff (assigned) khi Customer post chat. Skip hoàn toàn nếu IsInternal=true.
+///
+/// Sprint 6.2 NOTI-10 (#681) — ghi SONG SONG record <c>Channel=InApp</c> bên cạnh <c>Channel=Push</c>.
+/// Trước đó chỉ ghi mỗi Push: sai ngữ nghĩa kênh (lịch sử in-app lại phụ thuộc record của kênh push)
+/// và nếu về sau API list lọc theo channel thì user mất sạch lịch sử chat (reviewnotification.md §4.4).
 /// </summary>
 public class ChatCreatedConsumer : IConsumer<ChatCreatedEvent>
 {
@@ -40,24 +44,27 @@ public class ChatCreatedConsumer : IConsumer<ChatCreatedEvent>
             if (recipientId == null || recipientId == Guid.Empty)
                 return;
 
-            var cmd = new CreateNotificationCommand
+            foreach (var channel in new[] { NotificationChannelEnum.InApp, NotificationChannelEnum.Push })
             {
-                UserId = recipientId.Value,
-                Type = NotificationTypeEnum.ChatCreated,
-                Channel = NotificationChannelEnum.Push,
-                Title = "Tin nhắn mới trên ticket",
-                Body = $"{evt.AuthorDisplayName}: {Truncate(evt.Body)}",
-                PayloadJson = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\"}}",
-                EntityType = "Chat",
-                EntityId = evt.ChatId
-            };
+                var cmd = new CreateNotificationCommand
+                {
+                    UserId = recipientId.Value,
+                    Type = NotificationTypeEnum.ChatCreated,
+                    Channel = channel,
+                    Title = "Tin nhắn mới trên ticket",
+                    Body = $"{evt.AuthorDisplayName}: {Truncate(evt.Body)}",
+                    PayloadJson = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\"}}",
+                    EntityType = "Chat",
+                    EntityId = evt.ChatId
+                };
 
-            var result = await _mediator.Send(cmd, context.CancellationToken);
-            if (!result.IsSuccess)
-            {
-                _logger.LogWarning(
-                    "Failed to create ChatCreated notification for ChatId={ChatId}: {Message}",
-                    evt.ChatId, result.Message);
+                var result = await _mediator.Send(cmd, context.CancellationToken);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        "Failed to create ChatCreated {Channel} notification for ChatId={ChatId}: {Message}",
+                        channel, evt.ChatId, result.Message);
+                }
             }
         });
     }

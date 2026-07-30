@@ -152,8 +152,16 @@ scrape_configs:
 
   # ---------- Sprint IoT-1 #253 — Mosquitto MQTT broker exporter ----------
   # Cần container `mosquitto-exporter` (sapcc/mosquitto-exporter) connect tới Mosquitto $SYS topics.
-  # Hiện tại job khai báo trước để Prometheus không phàn nàn khi rule iot-mqtt-bridge fire.
-  # Khi triển khai thật, thêm service `mosquitto-exporter:9234` vào docker-compose.
+  #
+  # Target này DOWN là trạng thái bình thường ở repo backend: từ Sprint IoT-2, broker Mosquitto
+  # được chuyển sang repo `capstone/iot` (`iot/infra/docker-compose.*.yml`) nên chỉ resolve được
+  # khi stack đó chạy và join cùng network `solar-net`. Không sinh alert vì `tier: infrastructure`
+  # mà `ServiceDown` chỉ lọc tier=backend|gateway.
+  #
+  # ⚠️ Đừng nhầm job này với alert `MqttBridgeDisconnected`. Alert đó dùng
+  # `mqtt_bridge_connected` / `mqtt_bridge_enabled`, do **batteryservice** phát ra
+  # (BatteryService.Infrastructure/Observability/IotMetrics.cs) chứ không phải exporter này —
+  # nó theo dõi phía client bridge, hoạt động độc lập với việc có exporter hay không.
   - job_name: mosquitto
     static_configs:
       - targets: ["mosquitto-exporter:9234"]

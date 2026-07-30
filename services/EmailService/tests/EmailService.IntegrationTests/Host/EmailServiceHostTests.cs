@@ -46,7 +46,12 @@ public class EmailServiceHostTests
         sp.GetService<SendOtpRegisterConsumer>().Should().NotBeNull();
         sp.GetService<SendPasswordResetOtpConsumer>().Should().NotBeNull();
         sp.GetService<SendEmailChangeOtpConsumer>().Should().NotBeNull();
-        sp.GetService<SendPhoneOtpConsumer>().Should().NotBeNull();
+
+        // Sprint 6.2 — consumer mới: NOTI-02 (#673) email notification pipeline,
+        // NOTI-04 (#675) cảnh báo bảo mật. SendPhoneOtpConsumer đã bị xoá ở NOTI-15 (#686).
+        sp.GetService<SendNotificationEmailConsumer>().Should().NotBeNull();
+        sp.GetService<SuspiciousLoginDetectedConsumer>().Should().NotBeNull();
+        sp.GetService<RefreshTokenReuseDetectedConsumer>().Should().NotBeNull();
     }
 
     [Fact]

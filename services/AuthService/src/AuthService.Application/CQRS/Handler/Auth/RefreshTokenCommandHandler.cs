@@ -81,8 +81,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             // #AUTH-79: publish security alert event để NotificationService email user
             // + monitoring tool (Grafana alert) detect anomaly.
             var (ipForEvt, uaForEvt, _) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
+            // Sprint 6.2 NOTI-04 (#675) — kèm Email để EmailService gửi được cảnh báo cho nạn nhân.
+            var reuseAccountEmail = await _unitOfWork.Accounts.GetAllAsync()
+                .Where(a => a.Id == existing.AccountId && !a.IsDeleted)
+                .Select(a => a.Email)
+                .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
             await _messageProducer.PublishAsync(new RefreshTokenReuseDetectedEvent(
                 AccountId: existing.AccountId,
+                Email: reuseAccountEmail,
                 ReusedTokenId: existing.Id,
                 IpAddress: ipForEvt,
                 UserAgent: uaForEvt,

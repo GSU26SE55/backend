@@ -14,16 +14,27 @@ public class CreateNotificationCommandValidationTests
         Body = "Nội dung",
     };
 
+    /// <summary>
+    /// **Đảo ngược 30/07/2026.** Test này trước đây khẳng định <c>Guid.Empty</c> ĐƯỢC chấp nhận,
+    /// theo ghi chú GH-594 ("broadcast placeholder, dispatcher resolve recipient sau").
+    ///
+    /// Thiết kế đó không tồn tại trong code: đã rà đủ 9 consumer dùng command này — tất cả resolve
+    /// recipient thật trước khi gửi; dispatcher (Sprint 6.2) không resolve broadcast mà đánh Failed
+    /// ngay với lý do <c>empty_user_id</c>. Nói cách khác bản ghi UserId rỗng là bản ghi chắc chắn
+    /// hỏng, và việc "chấp nhận" nó chỉ tạo ra rác.
+    ///
+    /// Chi tiết: xem <c>CreateNotificationUserIdTests</c>.
+    /// </summary>
     [Fact]
-    public async Task EmptyUserId_PassesValidation()
+    public async Task EmptyUserId_IsRejected()
     {
-        // GH-594: Guid.Empty (broadcast placeholder) KHÔNG bị reject nữa.
         var cmd = Valid(Guid.Empty);
 
         var resp = await cmd.ValidateAsync();
 
-        resp.IsSuccess.Should().BeTrue();
-        resp.ListErrors.Should().BeEmpty();
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(400);
+        resp.ListErrors.Should().Contain(e => e.Field == "UserId");
     }
 
     [Fact]

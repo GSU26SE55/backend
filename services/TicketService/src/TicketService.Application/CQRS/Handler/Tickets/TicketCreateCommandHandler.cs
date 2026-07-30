@@ -107,8 +107,10 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             AddedAt = DateTime.UtcNow
         });
 
-        // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        // Outbox: Ticket Created — Sprint 6.2 NOTI-05 (#676) kèm CustomerId + Priority.
+        // Ticket tạo tay chưa qua triage nên Priority còn null → truyền null, consumer tự xử lý.
+        await _producer.PublishAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,

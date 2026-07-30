@@ -1,0 +1,405 @@
+{
+  "uid": "notification-ops",
+  "title": "Notification Ops — Sprint 6.3 #NOTI3-07",
+  "tags": [
+    "notification",
+    "sprint-6.3"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Đã gửi (tổng)",
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(notification_sent_total)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Tổng notification giao thành công xuống channel kể từ khi service khởi động."
+    },
+    {
+      "type": "stat",
+      "title": "Thất bại vĩnh viễn",
+      "id": 2,
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(notification_failed_total)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Đã hết lượt thử hoặc lỗi không phục hồi được."
+    },
+    {
+      "type": "stat",
+      "title": "Đang chờ gửi",
+      "id": 3,
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "notification_pending_total",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Queue lag. Alert NotificationQueueBacklog bắn khi > 1000 kéo dài 10 phút."
+    },
+    {
+      "type": "stat",
+      "title": "DLQ",
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(notification_dlq_size)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Trạng thái khoẻ mạnh = 0. Bất kỳ giá trị nào > 0 đều cần điều tra."
+    },
+    {
+      "type": "stat",
+      "title": "Bị rate limit",
+      "id": 6,
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(notification_rate_limited_total[1h]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Notification bị chặn bởi giới hạn per-user (NOTI3-06) và dồn vào digest."
+    },
+    {
+      "type": "timeseries",
+      "title": "Tốc độ gửi theo channel",
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(notification_sent_total[5m]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{channel}} sent"
+        },
+        {
+          "expr": "sum by (channel) (rate(notification_failed_total[5m]))",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{channel}} failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": "Metric cơ bản nhất của notification service. PHẢI xem tách theo channel: Expo/Mailjet/SMS gateway có kiểu hỏng khác nhau, gộp lại sẽ che mất kênh đang chết."
+    },
+    {
+      "type": "timeseries",
+      "title": "Tỷ lệ thất bại theo channel",
+      "id": 8,
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(notification_failed_total[5m])) / clamp_min(sum by (channel) (rate(notification_sent_total[5m])) + sum by (channel) (rate(notification_failed_total[5m])), 0.001)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{channel}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Alert NotificationFailureRateHigh bắn ở ngưỡng 5%."
+    },
+    {
+      "type": "timeseries",
+      "title": "Độ trễ giao (p50 / p95)",
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, channel) (rate(notification_delivery_latency_seconds_bucket[5m])))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "p50 {{channel}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, channel) (rate(notification_delivery_latency_seconds_bucket[5m])))",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "p95 {{channel}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "Từ lúc consumer ghi record tới lúc giao xong. Đuôi dài là bình thường với record bị hoãn qua quiet hours / digest."
+    },
+    {
+      "type": "timeseries",
+      "title": "Lý do thất bại",
+      "id": 10,
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(notification_failed_total[15m]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": "channel_disabled = user tự tắt (bình thường). no_device_token / no_email / provider_error mới là thứ cần xử lý."
+    },
+    {
+      "type": "timeseries",
+      "title": "Hoãn có chủ đích",
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(notification_deferred_total[15m]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": "quiet_hours và digest là hành vi đúng, không phải lỗi — tách khỏi failed để không đọc nhầm."
+    },
+    {
+      "type": "timeseries",
+      "title": "Fallback push→SMS",
+      "id": 12,
+      "gridPos": {
+        "x": 8,
+        "y": 20,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (from_channel, to_channel) (rate(notification_fallback_total[1h]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{from_channel}}→{{to_channel}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": "Tăng đột biến nghĩa là push đang không tới được thiết bị (NOTI3-05)."
+    },
+    {
+      "type": "timeseries",
+      "title": "Expo receipt",
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(expo_push_receipt_total[15m]))",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{status}}"
+        },
+        {
+          "expr": "sum by (error_code) (rate(expo_push_receipt_total{status=\"error\"}[15m]))",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "{{error_code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": "Ticket 'ok' của Expo KHÔNG có nghĩa đã giao — đây mới là kết quả thật (NOTI3-02)."
+    },
+    {
+      "type": "timeseries",
+      "title": "Token bị vô hiệu hoá",
+      "id": 15,
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(expo_push_token_deactivated_total[1h])) * 3600",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "token/h"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Rải rác là bình thường (user gỡ app). Tăng vọt thường do sai EAS projectId hoặc credential FCM/APNs hết hạn."
+    }
+  ]
+}

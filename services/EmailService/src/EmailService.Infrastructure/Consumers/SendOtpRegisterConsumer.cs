@@ -11,13 +11,13 @@ public class SendOtpRegisterConsumer : IConsumer<SendOtpRegisterEvent>
 {
     private const int OtpExpireMinutes = 5;
 
-    private readonly EmailSenderService _emailSender;
+    private readonly IEmailProvider _emailSender;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IConfiguration _configuration;
     private readonly IInboxStore _inboxStore;
 
     public SendOtpRegisterConsumer(
-        EmailSenderService emailSender,
+        IEmailProvider emailSender,
         IEmailTemplateRenderer templateRenderer,
         IConfiguration configuration,
         IInboxStore inboxStore)

@@ -38,6 +38,10 @@ builder.Services.AddDbContext<SmsDbContext>(opt => opt.UseNpgsql(connectionStrin
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<SmsDbContext>());
 builder.Services.AddScoped<ISmsUnitOfWork, SmsUnitOfWork>();
 
+// Sprint 6.3 NOTI3-05 (#705) — seam để sau này cắm provider SMS thứ hai (Twilio/Vonage) mà không
+// phải sửa business logic. Hiện tại chỉ có gateway Android — giới hạn đã ghi nhận ở R-44.
+builder.Services.AddScoped<ISmsProvider, GatewaySmsProvider>();
+
 // ── 3. SharedInfrastructure ───────────────────────────────────────────────
 // CRITICAL: assemblyName là "SmsService.Application" — KHÔNG phải Api.
 // `AddMediatRInfrastructure` dùng Assembly.Load(assemblyName) để scan handlers; sai tên → runtime crash.

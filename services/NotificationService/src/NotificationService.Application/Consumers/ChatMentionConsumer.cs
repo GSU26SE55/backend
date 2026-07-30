@@ -34,7 +34,9 @@ public class ChatMentionConsumer : IConsumer<ChatMentionedEvent>
             var body = $"{evt.MentionedDisplayName} được mention trong ticket.";
             var payload = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\",\"isGroupMention\":{evt.IsGroupMention.ToString().ToLowerInvariant()}}}";
 
-            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.Email })
+            // Sprint 6.3 NOTI3-01 (#701) — thêm InApp: feed in-app nay lọc theo Channel=InApp,
+            // thiếu row này thì mention biến mất hoàn toàn khỏi danh sách thông báo (R-40).
+            foreach (var channel in new[] { NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email })
             {
                 var cmd = new CreateNotificationCommand
                 {

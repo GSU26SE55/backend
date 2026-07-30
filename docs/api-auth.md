@@ -4804,16 +4804,101 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 
 | Event | Payload fields | Published bởi handler | Consumed bởi (downstream) |
 |---|---|---|---|
-| `SendOtpRegisterEvent` | `ToEmail`, `Otp` | `RegisterCommandHandler`, `ResendOtpCommandHandler` | NotificationService (gửi email) |
-| `SendPasswordResetOtpEvent` | `ToEmail`, `Otp` | `ForgotPasswordCommandHandler`, `ResendResetOtpCommandHandler`, **`ReactivateRequestCommandHandler`** (re-use enum) | NotificationService |
-| `SendEmailChangeOtpEvent` | `ToNewEmail`, `Otp` | `ChangeEmailCommandHandler` | NotificationService → gửi tới email **mới** |
+| `SendOtpRegisterEvent` | `ToEmail`, `Otp` | `RegisterCommandHandler`, `ResendOtpCommandHandler` | **EmailService** → `SendOtpRegisterConsumer` (template `OtpRegister.html`) |
+| `SendPasswordResetOtpEvent` | `ToEmail`, `Otp` | `ForgotPasswordCommandHandler`, `ResendResetOtpCommandHandler`, **`ReactivateRequestCommandHandler`** (re-use enum) | **EmailService** → `SendPasswordResetOtpConsumer` (template **`OtpPasswordReset.html`** — mới có từ Sprint 6.2 NOTI-09) |
+| `SendEmailChangeOtpEvent` | `ToNewEmail`, `Otp` | `ChangeEmailCommandHandler` | **EmailService** → `SendEmailChangeOtpConsumer`, gửi tới email **mới** (template **`OtpEmailChange.html`** — mới có từ Sprint 6.2 NOTI-09) |
 | `SendSmsCommand` | `PhoneNumber`, `Message`, `SourceService`, `CorrelationId`, `Category` | `Request2FASmsCommandHandler` (`category="2fa_sms"`), `SendPhoneOtpCommandHandler` (`category="phone_verify"`) | SmsService |
-| `SendAdminInviteEvent` | (admin invite details + token) | `InviteAccountCommandHandler` | NotificationService → gửi email invite |
-| `AccountActivatedEvent` | `AccountId`, `Email`, `FullName`, `PhoneNumber`, `Role`, `CreationSource` | `VerifyOtpCommandHandler` (`SelfRegister`), `AcceptInviteCommandHandler` (`AdminInvite`), `GoogleAuthCommandHandler` (`GoogleOAuth`) | NotificationService (welcome email), UserDirectory sync |
-| `AccountDeletedEvent` | `AccountId`, `Email`, `DeletionSource` | `DeleteMeCommandHandler` (`SelfDelete`), `DeleteAccountCommandHandler` (`AdminDelete`) | NotificationService (confirm email), UserDirectory unsync |
-| `RefreshTokenReuseDetectedEvent` | `AccountId`, `ReusedTokenId`, `IpAddress`, `UserAgent`, `DetectedAt`, `RevokedFamilyCount` | `RefreshTokenCommandHandler` (#AUTH-79) | NotificationService (security alert email), Grafana |
-| `SuspiciousLoginDetectedEvent` | `AccountId`, `Email`, `IpAddress`, `UserAgent`, `Reason`, `DetectedAt` | `AuthTokenIssuer` (#AUTH-52, từ `LoginCommandHandler` + `Verify2FALoginCommandHandler`) | NotificationService (security alert) |
+| `SendAdminInviteEvent` | (admin invite details + token) | `InviteAccountCommandHandler` | **EmailService** → `SendAdminInviteConsumer` (template `AdminInvite.html`) |
+| `AccountActivatedEvent` | `AccountId`, `Email`, `FullName`, `PhoneNumber`, `Role`, `CreationSource` | `VerifyOtpCommandHandler` (`SelfRegister`), `AcceptInviteCommandHandler` (`AdminInvite`), `GoogleAuthCommandHandler` (`GoogleOAuth`) | NotificationService (`AccountActivatedConsumer` → in-app; `AccountActivatedSyncConsumer` → read-model) |
+| `AccountDeletedEvent` | `AccountId`, `Email`, `DeletionSource` | `DeleteMeCommandHandler` (`SelfDelete`), `DeleteAccountCommandHandler` (`AdminDelete`) | NotificationService (`AccountDeletedSyncConsumer` → xoá read-model) — ✅ **NOTI-17 (#688) đã verify 30/07/2026: publisher tồn tại thật ở cả 2 handler, consumer giữ nguyên, không phải orphan** |
+| `RefreshTokenReuseDetectedEvent` | `AccountId`, **`Email`** ⬅ *Sprint 6.2*, `ReusedTokenId`, `IpAddress`, `UserAgent`, `DetectedAt`, `RevokedFamilyCount` | `RefreshTokenCommandHandler` (#AUTH-79) | **EmailService** → `RefreshTokenReuseDetectedConsumer` (Sprint 6.2 NOTI-04), Grafana |
+| `SuspiciousLoginDetectedEvent` | `AccountId`, `Email`, `IpAddress`, `UserAgent`, `Reason`, `DetectedAt` | `AuthTokenIssuer` (#AUTH-52, từ `LoginCommandHandler` + `Verify2FALoginCommandHandler`) | **EmailService** → `SuspiciousLoginDetectedConsumer` (Sprint 6.2 NOTI-04) |
 | `StaffProfileUpdatedEvent` | (staff profile fields) | `UpdateStaffProfileCommandHandler` | TicketService (sync staff routing config), ManagerDashboard |
+
+> ⚠️ **Sửa 30/07/2026 — cột "Consumed bởi" của 5 event email trước đây ghi nhầm `NotificationService`.**
+> Toàn bộ email **giao dịch** (OTP đăng ký / đặt lại mật khẩu / đổi email / mời admin) đi thẳng
+> **AuthService → EmailService**, KHÔNG qua NotificationService. Chỉ email **thông báo nghiệp vụ**
+> (SLA, pin, chat, saga…) mới đi qua NotificationService rồi publish `SendNotificationEmailEvent`.
+
+#### Sprint 6.2 NOTI-09 (#680) — 2 template email thiếu, gây email SAI NGỮ CẢNH
+
+`EmailTemplates.OtpPasswordReset` và `EmailTemplates.OtpEmailChange` đã được tham chiếu trong code từ
+lâu, nhưng **2 file HTML tương ứng chưa tồn tại** trong
+`EmailService.Api/wwwroot/email-templates/`. Renderer không tìm thấy file ⇒ rơi về
+`OtpRegister.html`, nên:
+
+- user bấm **"Quên mật khẩu"** nhận email có nội dung **"đăng ký tài khoản"**;
+- user **đổi email** cũng nhận đúng email đó.
+
+Sai ngữ cảnh kiểu này **dễ bị nghi là phishing** và làm người dùng bỏ dở luồng.
+
+**Đã thêm:** `OtpPasswordReset.html`, `OtpEmailChange.html`.
+`SendEmailChangeOtpConsumer` truyền thêm placeholder **`PendingEmail` = `ToNewEmail`** để email hiển
+thị rõ địa chỉ đích — thiếu key này thì placeholder hiện nguyên văn trong thư gửi đi.
+
+> Ảnh hưởng tới endpoint: `POST /api/auth/forgot-password`, `POST /api/auth/resend-reset-otp`,
+> `POST /api/auth/reactivate-request` (dùng chung `SendPasswordResetOtpEvent`) và
+> `POST /api/accounts/me/change-email` (`SendEmailChangeOtpEvent`). **Contract REST không đổi** —
+> chỉ nội dung email user nhận được là đúng ngữ cảnh.
+
+#### Sprint 6.3 NOTI3-05 (#705) — `IEmailProvider`
+
+6 consumer email của EmailService nay phụ thuộc **`IEmailProvider`** thay vì lớp cụ thể
+`EmailSenderService`. Hành vi **không đổi** (Mailjet vẫn là hiện thực duy nhất, `ProviderName = "mailjet"`);
+mục đích là tách sẵn ranh giới để cắm provider thứ hai sau này chỉ cần đổi một dòng đăng ký DI, không
+phải mở lại business logic. Đăng ký:
+`builder.Services.AddTransient<IEmailProvider>(sp => sp.GetRequiredService<EmailSenderService>())`.
+
+Giới hạn ghi nhận có chủ đích (R-44): **Mailjet vẫn là single point of failure** — không mua provider
+thứ hai vì ngoài ngân sách đồ án.
+
+Interface có **2 overload `SendAsync`**: bản cũ (không header) và bản mới nhận
+`IReadOnlyDictionary<string,string>? headers` — dùng cho `List-Unsubscribe` (Sprint 6.3 NOTI3-15).
+Tách overload thay vì đổi chữ ký cũ để **6 consumer email giao dịch không phải sửa gì**, và để việc
+"email này có nút huỷ" là một quyết định hiện rõ ở chỗ gọi. Mailjet v3.1 nhận header tuỳ ý qua trường
+`Headers`; khi không có header, payload gửi đi **giữ nguyên như cũ**.
+
+> **Email giao dịch của AuthService (OTP, reset, đổi email, mời admin) KHÔNG có `List-Unsubscribe`** —
+> người dùng không thể "huỷ đăng ký" khỏi mã xác thực do chính họ yêu cầu. Chỉ email thông báo nghiệp
+> vụ đi qua NotificationService mới có.
+
+#### Sprint 6.2 NOTI-04 (#675) — cảnh báo bảo mật nay THỰC SỰ tới hộp thư user
+
+**Trước sprint này:** `AuthTokenIssuer` phát hiện login từ IP/User-Agent lạ (đối chiếu 50 session gần
+nhất) và `RefreshTokenCommandHandler` phát hiện replay attack — cả hai publish event đúng, đã revoke
+token đúng — nhưng **KHÔNG service nào consume**. Công detect bỏ đi: nạn nhân chỉ thấy mình "bị
+logout" không rõ lý do và **mất cơ hội đổi mật khẩu kịp thời**.
+
+| Event | Consumer mới (EmailService) | Template | Tiêu đề email |
+|---|---|---|---|
+| `SuspiciousLoginDetectedEvent` | `SuspiciousLoginDetectedConsumer` | `SuspiciousLogin.html` | `[Cảnh báo bảo mật] Đăng nhập mới trên tài khoản của bạn - {AppName}` |
+| `RefreshTokenReuseDetectedEvent` | `RefreshTokenReuseDetectedConsumer` | `RefreshTokenReuse.html` | `[Cảnh báo bảo mật] Phiên đăng nhập đáng ngờ - {AppName}` |
+
+**Vì sao đi thẳng EmailService (không qua NotificationService):** đây là email **bảo mật**, phải tới
+ngay và **không được phụ thuộc preference / quiet hours / digest / hạn mức** của user. Cũng vì vậy
+**cố ý KHÔNG thêm giá trị `NotificationTypeEnum`** cho 2 loại này — tránh đẻ thêm enum không producer.
+
+**⚠️ Breaking — `RefreshTokenReuseDetectedEvent` thêm field `Email` (vị trí thứ 2):**
+record positional nên chữ ký constructor đổi. Lý do: EmailService **không có DB account** nên không
+tra ngược được địa chỉ từ `AccountId`. `RefreshTokenCommandHandler` nay truy vấn
+`Accounts.Where(a => a.Id == existing.AccountId && !a.IsDeleted).Select(a => a.Email)` trước khi
+publish; không tìm thấy → truyền `string.Empty` và consumer **bỏ qua + log Warning** (không gửi email
+mù). `SuspiciousLoginDetectedEvent` đã mang sẵn `Email` từ trước theo cùng lý do.
+
+**Dedup:** cả 2 consumer dùng Redis inbox `ProcessOnceAsync(IInboxStore, consumerName, …)` như 4
+consumer OTP (key `inbox:{consumerName}:{messageId:N}`, TTL 7 ngày).
+
+**Nội dung `Reason` được diễn giải sang tiếng Việt** trong email:
+
+| `reason` (event) | Hiển thị |
+|---|---|
+| `new_ip` | "địa chỉ IP lạ" |
+| `new_user_agent` | "thiết bị / trình duyệt lạ" |
+| `new_ip_and_user_agent` | "cả địa chỉ IP lẫn thiết bị đều lạ" |
+| khác / null | "dấu hiệu bất thường" |
+
+`DetectedAt` format `dd/MM/yyyy HH:mm:ss 'UTC'`. Email `RefreshTokenReuse` hiển thị thêm
+`RevokedSessions` = `RevokedFamilyCount` (số phiên bị thu hồi).
 
 ### Events CONSUMED bởi AuthService ← RabbitMQ
 
@@ -4836,7 +4921,7 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 | Event | Status | Note |
 |---|---|---|
 | `AccountStatusChangedEvent` | Defined nhưng unused | `ChangeAccountStatusCommandHandler` chỉ publish `AuditTrailNotification`, không publish event ra outbox. Downstream services muốn react tới status change phải poll DB hoặc dùng audit log subscription. |
-| `SendPhoneOtpEvent` | **Deprecated** | Code comment trong `SendPhoneOtpCommandHandler.cs:66` xác nhận: *"SendPhoneOtpEvent đã được xoá khỏi flow này — backward-compat"*. Hiện publish `SendSmsCommand` thay thế. |
+| `SendPhoneOtpEvent` | **Deprecated — nay hoàn toàn CHẾT** | Code comment trong `SendPhoneOtpCommandHandler.cs:66` xác nhận: *"SendPhoneOtpEvent đã được xoá khỏi flow này — backward-compat"*. Hiện publish `SendSmsCommand` thay thế. **Sprint 6.2 NOTI-15 (#686) đã xoá nốt 2 consumer backward-compat cuối cùng** (`SendPhoneOtpConsumer` ở SmsService và stub cùng tên ở EmailService) ⇒ event này giờ **không còn consumer nào**, publish sẽ bị RabbitMQ drop im lặng. |
 | `StaffSkillsUpdatedEvent` | Defined, không publish trong handler nào của AuthService hiện tại | Reserved cho future `AddStaffSkillCommandHandler` integration (chưa wire up). |
 | `SmsDeliveryReportEvent`, `SmsFailedEvent` | Defined trong SharedContracts | AuthService **không consume** — đây là events SmsService publish cho ManagerDashboard/CustomerNotification consumer. AuthService chỉ publish `SendSmsCommand` request. |
 

@@ -76,8 +76,10 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             ActivityActionEnum.Created,
             newValue: $"Auto-created from alert {request.OriginAlertId}");
 
-        // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        // Outbox: Ticket Created — Sprint 6.2 NOTI-05 (#676) kèm CustomerId + Priority
+        // (ticket auto từ alert đã có Priority tính sẵn từ matrix Impact × Urgency).
+        await _producer.PublishAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         // #AUDIT-27 — causation_id = OriginAlertId (anomaly event → ticket chain).
         await _publisher.Publish(TicketAuditTrailNotification.For(

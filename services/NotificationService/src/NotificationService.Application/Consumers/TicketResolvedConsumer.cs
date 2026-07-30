@@ -11,8 +11,10 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — Ticket resolved → notify Manager. GH-604: recipient resolve qua <see cref="IRecipientResolver"/>
-/// (broadcast Manager). Customer cụ thể của ticket bị DEFER (event chỉ mang StaffId người resolve,
-/// không có CustomerId) — follow-up enrich event sau. Ghi trực tiếp qua UnitOfWork (InApp + Push).
+/// (broadcast Manager).
+///
+/// Sprint 6.2 NOTI-05 (#676) — event nay có <c>CustomerId</c> nên Customer cũng được báo
+/// (trước đây phần này bị defer vì payload thiếu CustomerId — reviewnotification.md §4.1).
 /// </summary>
 public class TicketResolvedConsumer : IConsumer<TicketResolvedEvent>
 {
@@ -44,27 +46,46 @@ public class TicketResolvedConsumer : IConsumer<TicketResolvedEvent>
 
         var evt = context.Message;
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager recipient resolved for TicketResolved ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
-
-        var title = $"Ticket {evt.Code} đã được xử lý";
-        var body = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
-            ? $"Ticket {evt.Code} đã được resolve."
-            : $"Ticket {evt.Code} đã được resolve: {evt.ResolutionSummary}";
         var payload = JsonSerializer.Serialize(new
         {
             ticketId = evt.TicketId,
             code = evt.Code,
             resolvedByStaffId = evt.StaffId,
+            customerId = evt.CustomerId,
             screen = "TicketDetail"
         });
 
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.TicketResolved, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+        if (recipientIds.Count > 0)
+        {
+            var body = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
+                ? $"Ticket {evt.Code} đã được resolve."
+                : $"Ticket {evt.Code} đã được resolve: {evt.ResolutionSummary}";
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.TicketResolved, NotificationWriter.InAppPushEmail,
+                $"Ticket {evt.Code} đã được xử lý", body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning("No Manager recipient resolved for TicketResolved ticket={TicketId}.", evt.TicketId);
+        }
+
+        // Sprint 6.2 NOTI-05 (#676) — báo Customer là sự cố của họ đã xử lý xong, chờ Manager duyệt.
+        if (evt.CustomerId != Guid.Empty)
+        {
+            var customerBody = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
+                ? $"Sự cố trong ticket {evt.Code} đã được xử lý xong, đang chờ quản lý duyệt."
+                : $"Sự cố trong ticket {evt.Code} đã được xử lý: {evt.ResolutionSummary}. Đang chờ quản lý duyệt.";
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketResolved, NotificationWriter.InAppPushEmail,
+                $"Ticket {evt.Code} đã xử lý xong", customerBody, payload, "Ticket", evt.TicketId, context.CancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "TicketResolved ticket={TicketId}: CustomerId rỗng — bỏ qua notification cho Customer.", evt.TicketId);
+        }
     }
 }

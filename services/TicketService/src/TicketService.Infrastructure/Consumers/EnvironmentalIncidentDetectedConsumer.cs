@@ -109,7 +109,9 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
             ActivityActionEnum.Created,
             newValue: $"Auto-created from environmental incident {evt.IncidentId} (site {evt.SiteName})");
 
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId + Priority trong payload.
+        await _producer.PublishAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _uow.SaveChangesAsync(ct);
 

@@ -113,8 +113,9 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
             newValue: request.NewStaffId.ToString(),
             reason: request.Reason);
 
-        // Outbox: Staff Reassigned
-        await _producer.PublishAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewStaffId, ticket.Priority.ToString()!), ct);
+        // Outbox: Staff Reassigned — Sprint 6.2 NOTI-05 (#676) kèm CustomerId.
+        await _producer.PublishAsync(
+            new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

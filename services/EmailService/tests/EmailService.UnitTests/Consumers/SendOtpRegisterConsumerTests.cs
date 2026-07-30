@@ -53,6 +53,8 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
         services.AddSingleton<EmailSenderService>(sp => new EmailSenderService(
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<HttpClient>()));
+        // Sprint 6.3 NOTI3-05 (#705) — consumer nay phụ thuộc IEmailProvider (seam cho provider thứ 2).
+        services.AddSingleton<IEmailProvider>(sp => sp.GetRequiredService<EmailSenderService>());
 
         services.AddMassTransitTestHarness(x =>
         {

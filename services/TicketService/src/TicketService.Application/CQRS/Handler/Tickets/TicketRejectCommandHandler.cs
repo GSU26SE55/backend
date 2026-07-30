@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -58,6 +59,12 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Rejected, reason: request.Reason);
 
         await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.AssignedStaffId ?? Guid.Empty, request.Reason), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — Manager từ chối KẾT QUẢ resolve, ticket quay lại IN_PROGRESS
+        // → người cần biết là Staff đang assign (IsClosedRejected = false).
+        await _producer.PublishAsync(new TicketRejectedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.Reason,
+            IsClosedRejected: false, DateTime.UtcNow), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

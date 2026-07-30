@@ -24,7 +24,13 @@ public class AlertTicketSagaFailedConsumerTests
     private static async Task<ITestHarness> StartHarness(IMediator mediator, ICacheService? cache = null)
     {
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<AlertTicketSagaFailedConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<AlertTicketSagaFailedConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
             .AddSingleton(cache ?? ProceedCache())
@@ -51,6 +57,7 @@ public class AlertTicketSagaFailedConsumerTests
         var c = new Mock<ICacheService>();
         c.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
+        c.Setup(x => x.TrySetIfNotExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         return c.Object;
     }
 
@@ -193,6 +200,7 @@ public class AlertTicketSagaFailedConsumerTests
         var cache = new Mock<ICacheService>();
         cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("2026-06-23T00:00:00.0000000Z");
+        cache.Setup(x => x.TrySetIfNotExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var harness = await StartHarness(mediator.Object, cache.Object);
         await harness.Bus.Publish(MakeEvent());
@@ -216,16 +224,18 @@ public class AlertTicketSagaFailedConsumerTests
         var cache = new Mock<ICacheService>();
         cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
+        cache.Setup(x => x.TrySetIfNotExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var evt = MakeEvent();
         var harness = await StartHarness(mediator.Object, cache.Object);
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
 
-        cache.Verify(x => x.SetAsync(
+        // Sprint 6.3 NOTI3-09 (#709) — debounce chiếm key bằng 1 lệnh atomic SET NX EX.
+        cache.Verify(x => x.TrySetIfNotExistsAsync(
             It.Is<string>(k => k == $"notif_debounce:{evt.AlertId}"),
             It.IsAny<string>(),
-            It.Is<TimeSpan?>(t => t == TimeSpan.FromMinutes(5)),
+            It.Is<TimeSpan>(t => t == TimeSpan.FromMinutes(5)),
             It.IsAny<CancellationToken>()), Times.Once);
 
         await harness.Stop();
