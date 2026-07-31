@@ -14,7 +14,7 @@ public class TicketCodeGeneratorTests
     {
         // Arrange
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
-        var generator = new TicketCodeGenerator(uow.Object);
+        var generator = new TicketCodeGenerator(uow.Object, null!);
 
         // Act
         var code = await generator.GenerateAsync();
@@ -39,7 +39,7 @@ public class TicketCodeGeneratorTests
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { existingTicket });
-        var generator = new TicketCodeGenerator(uow.Object);
+        var generator = new TicketCodeGenerator(uow.Object, null!);
 
         // Act
         var code = await generator.GenerateAsync();

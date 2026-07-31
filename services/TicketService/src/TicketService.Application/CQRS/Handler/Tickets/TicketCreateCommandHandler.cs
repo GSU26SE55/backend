@@ -21,7 +21,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
     private readonly IBatteryLookupClient _batteryLookup;
 
@@ -29,14 +29,14 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher,
         IBatteryLookupClient batteryLookup)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
         _batteryLookup = batteryLookup;
     }
@@ -72,12 +72,13 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Category = request.Category,
             CustomerId = request.CustomerId,
             BatteryAssetId = primaryBatteryAssetId,
-            DetectedAt = request.DetectedAt,
             BatterySerialNumber = batterySerialNumber,
-            Status = TicketStatusEnum.Open,
+            Status = TicketStatusEnum.New,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
-            IsIncident = false
+            IsIncident = false,
+            IncidentDetectedFrom = request.IncidentDetectedFrom,
+            IncidentDetectedTo = request.IncidentDetectedTo ?? DateTime.UtcNow
         };
 
         await _uow.Tickets.AddAsync(ticket);
@@ -107,9 +108,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             AddedAt = DateTime.UtcNow
         });
 
-        // Outbox: Ticket Created — Sprint 6.2 NOTI-05 (#676) kèm CustomerId + Priority.
-        // Ticket tạo tay chưa qua triage nên Priority còn null → truyền null, consumer tự xử lý.
-        await _producer.PublishAsync(
+        await _outboxWriter.WriteAsync(
             new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _activityLogger.LogAsync(

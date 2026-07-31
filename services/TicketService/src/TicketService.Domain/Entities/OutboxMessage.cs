@@ -2,7 +2,8 @@ namespace TicketService.Domain.Entities;
 
 /// <summary>
 /// Outbox pattern: event được ghi trong CÙNG transaction với ticket action, sau đó
-/// background relay đọc và publish lên RabbitMQ → đảm bảo exactly-once delivery.
+/// background relay đọc và publish lên RabbitMQ. Delivery là at-least-once; consumer
+/// phải dùng Inbox/idempotency để chịu được message bị gửi lặp.
 /// Technical outbox rows do not need user audit fields (non-auditable).
 /// </summary>
 public class OutboxMessage
@@ -26,4 +27,8 @@ public class OutboxMessage
     public int RetryCount { get; set; }
 
     public string? LastError { get; set; }
+
+    public string? LeaseOwner { get; set; }
+
+    public DateTime? LeaseUntilUtc { get; set; }
 }

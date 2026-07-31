@@ -99,14 +99,14 @@ public class SlaTimerBackgroundServiceTests
 
     private ServiceProvider CreateProvider(string dbName)
     {
-        var mockProducer = new Mock<IMessageProducerService>();
+        var mockProducer = new Mock<IIntegrationEventOutboxWriter>();
 
         return new ServiceCollection()
             .AddScoped<ICurrentUserService, NullUserService>()
             .AddScoped<AuditableEntityInterceptor>()
             .AddScoped<ISlaCalculator, SlaCalculator>()
             .AddDbContext<TicketDbContext>(options => options.UseInMemoryDatabase(dbName))
-            .AddSingleton<IMessageProducerService>(mockProducer.Object)
+            .AddSingleton<IIntegrationEventOutboxWriter>(mockProducer.Object)
             .AddMassTransitTestHarness()
             .BuildServiceProvider(true);
     }

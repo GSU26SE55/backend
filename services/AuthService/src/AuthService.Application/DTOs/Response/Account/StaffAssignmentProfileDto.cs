@@ -16,6 +16,8 @@ public class StaffAssignmentProfileDto
 
     public bool IsAvailable { get; set; }
 
+    public int SkillTier { get; set; }
+
     public string? DisplayAvatarUrl { get; set; }
 
     public List<StaffSkillDto> Skills { get; set; } = new();

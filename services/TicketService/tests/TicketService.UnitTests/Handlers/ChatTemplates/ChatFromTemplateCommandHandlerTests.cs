@@ -47,14 +47,14 @@ public class ChatFromTemplateCommandHandlerTests
     private ChatFromTemplateCommandHandler CreateHandler() =>
         new(_uow.Object, _renderer.Object, _notifier.Object, _outboxWriter.Object, _chatCache.Object, _logger.Object);
 
-    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid id, Guid customerId, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = id,
         Code = "T-001",
         Title = "Test",
         Description = "desc",
         CustomerId = customerId,
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Status = TicketStatusEnum.InProgress
     };
 
@@ -68,7 +68,7 @@ public class ChatFromTemplateCommandHandlerTests
         var customerId = Guid.NewGuid();
         var actorId = Guid.NewGuid();
         var templateId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId, customerId, assignedStaffId: actorId);
+        var ticket = MakeTicket(ticketId, customerId, PrimaryHandlerStaffId: actorId);
 
         var template = new ChatTemplate
         {

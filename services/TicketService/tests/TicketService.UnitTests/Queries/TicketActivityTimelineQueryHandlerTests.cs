@@ -25,13 +25,13 @@ public class TicketActivityTimelineQueryHandlerTests
         _handler = new TicketActivityTimelineQueryHandler(_mockUow.Object);
     }
 
-    private static Ticket MakeTicket(Guid? customerId = null, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid? customerId = null, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = Guid.NewGuid(),
         Code = "T-001",
         BatteryAssetId = Guid.NewGuid(),
         CustomerId = customerId ?? Guid.NewGuid(),
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Title = "Test",
         Description = "desc",
         Category = TicketCategoryEnum.Other,

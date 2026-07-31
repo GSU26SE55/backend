@@ -12,6 +12,8 @@ public class StaffProfileDto
 
     public bool IsAvailable { get; set; }
 
+    public int SkillTier { get; set; }
+
     public string? Notes { get; set; }
 
     public List<StaffSkillDto> Skills { get; set; } = new();

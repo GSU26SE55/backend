@@ -91,7 +91,7 @@ public class StaffTicketsController : ControllerBase
         {
             TicketId = id,
             StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
+            StaffName = _currentUser.FullName!
         };
 
         var result = await _mediator.Send(command, ct);
@@ -116,7 +116,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -141,7 +141,7 @@ public class StaffTicketsController : ControllerBase
         {
             TicketId = id,
             StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
+            StaffName = _currentUser.FullName!
         };
 
         var result = await _mediator.Send(command, ct);
@@ -168,7 +168,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -193,7 +193,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

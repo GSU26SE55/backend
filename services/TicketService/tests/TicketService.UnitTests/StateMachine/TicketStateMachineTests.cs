@@ -17,7 +17,7 @@ public class TicketStateMachineTests
         _sut = new TicketStateMachine(_ruleProvider);
     }
 
-    private static Ticket CreateTicket(TicketStatusEnum status, Guid? assignedStaffId = null, Guid? customerId = null)
+    private static Ticket CreateTicket(TicketStatusEnum status, Guid? PrimaryHandlerStaffId = null, Guid? customerId = null)
     {
         return new Ticket
         {
@@ -26,7 +26,7 @@ public class TicketStateMachineTests
             Title = "Test Ticket",
             Description = "Test Description",
             Status = status,
-            AssignedStaffId = assignedStaffId,
+            PrimaryHandlerStaffId = PrimaryHandlerStaffId,
             CustomerId = customerId ?? Guid.NewGuid(),
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             UpdatedAt = DateTime.UtcNow.AddDays(-1)
@@ -36,13 +36,10 @@ public class TicketStateMachineTests
     #region Group 1: Valid Transitions (20 cases)
 
     [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Approved, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Escalated, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
@@ -74,11 +71,11 @@ public class TicketStateMachineTests
         TicketStatusEnum from, TicketStatusEnum to)
     {
         // Arrange
-        var assignedStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(from, assignedStaffId);
+        var PrimaryHandlerStaffId = Guid.NewGuid();
+        var ticket = CreateTicket(from, PrimaryHandlerStaffId);
 
         // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, assignedStaffId);
+        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, PrimaryHandlerStaffId);
 
         // Assert
         result.IsAllowed.Should().BeTrue();
@@ -187,7 +184,7 @@ public class TicketStateMachineTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
     [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
     public void CanTransition_StaffCannotDoManagerActions_ReturnsFalse(
         TicketStatusEnum from, TicketStatusEnum to)
@@ -226,9 +223,9 @@ public class TicketStateMachineTests
     public void CanTransition_WrongStaffCannotStart_ReturnsFalse()
     {
         // Arrange
-        var assignedStaffId = Guid.NewGuid();
+        var PrimaryHandlerStaffId = Guid.NewGuid();
         var otherStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, assignedStaffId);
+        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId);
 
         // Act
         var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, otherStaffId);
@@ -359,7 +356,7 @@ public class TicketStateMachineTests
     public void CanTransition_NullAssignedStaff_CannotStart()
     {
         // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, assignedStaffId: null);
+        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId: null);
 
         // Act
         var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, Guid.NewGuid());
@@ -397,11 +394,11 @@ public class TicketStateMachineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_Approved_SetsMetadata()
+    public async Task ExecuteAsync_Open_DoesNotSetPostResolutionApprovalMetadata()
     {
         // Arrange
         var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Open);
+        var ticket = CreateTicket(TicketStatusEnum.New);
         var ctx = new TransitionContext
         {
             ActorRole = ActorRoleEnum.Manager,
@@ -409,14 +406,13 @@ public class TicketStateMachineTests
         };
 
         // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Approved, ctx, CancellationToken.None);
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, ctx, CancellationToken.None);
 
         // Assert
         result.IsAllowed.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Approved);
-        ticket.ApprovedAt.Should().NotBeNull();
-        ticket.ApprovedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-        ticket.ApprovedByManagerId.Should().Be(managerId);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
+        ticket.ApprovedAt.Should().BeNull();
+        ticket.ApprovedByManagerId.Should().BeNull();
     }
 
     [Fact]
@@ -585,8 +581,7 @@ public class TicketStateMachineTests
 
     [Theory]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Approved)]
-    [InlineData(TicketStatusEnum.Approved, TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
     [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.InProgress)]
     [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)]
     [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
@@ -598,7 +593,7 @@ public class TicketStateMachineTests
         // Arrange
         var ticket = CreateTicket(from);
         // Ngay cả khi không phải là Staff được assign hay Customer chủ sở hữu
-        ticket.AssignedStaffId = Guid.NewGuid();
+        ticket.PrimaryHandlerStaffId = Guid.NewGuid();
         ticket.CustomerId = Guid.NewGuid();
 
         // Act

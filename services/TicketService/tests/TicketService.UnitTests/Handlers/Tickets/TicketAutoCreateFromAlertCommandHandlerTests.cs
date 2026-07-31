@@ -15,7 +15,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
     private readonly Mock<ITicketCodeGenerator> _codeGen = new();
     private readonly Mock<IPriorityCalculator> _priorityCalc = new();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     [Theory]
     [InlineData("EnvironmentalIncident", ImpactScopeEnum.Site, UrgencyLevelEnum.High, TicketPriorityEnum.P1Critical)]
@@ -39,7 +39,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
-        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,6 +55,6 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
 
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

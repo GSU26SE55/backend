@@ -17,23 +17,23 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly FakeTimeProvider _timeProvider;
-    private readonly Mock<IMessageProducerService> _producerMock;
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriterMock;
 
     public SlaBreachScenarioTests(TicketApiFactory factory)
     {
         _timeProvider = new FakeTimeProvider();
         _timeProvider.SetUtcNow(new DateTimeOffset(2026, 6, 1, 10, 0, 0, TimeSpan.Zero));
-        _producerMock = new Mock<IMessageProducerService>();
+        _outboxWriterMock = new Mock<IIntegrationEventOutboxWriter>();
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<TimeProvider>();
-                services.RemoveAll<IMessageProducerService>();
+                services.RemoveAll<IIntegrationEventOutboxWriter>();
 
                 services.AddSingleton<TimeProvider>(_timeProvider);
-                services.AddScoped<IMessageProducerService>(_ => _producerMock.Object);
+                services.AddScoped<IIntegrationEventOutboxWriter>(_ => _outboxWriterMock.Object);
                 services.AddScoped<SlaTimerBackgroundService>();
                 services.AddScoped<EscalationBackgroundService>();
             });
@@ -89,7 +89,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             await db.Entry(timer).ReloadAsync();
             var updatedTimer = await db.SlaTimers.FindAsync(timer.Id);
             updatedTimer!.WarningSentAt.Should().NotBeNull();
-            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+            _outboxWriterMock.Verify(x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()), Times.Once);
 
             // 4. Advance time past breach (another 1h)
             _timeProvider.Advance(TimeSpan.FromHours(1));
@@ -101,7 +101,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             updatedTimer!.Status.Should().Be(SlaTimerStatusEnum.Breached);
 
             // Verify Breached Event Published
-            _producerMock.Verify(x => x.PublishAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+            _outboxWriterMock.Verify(x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }

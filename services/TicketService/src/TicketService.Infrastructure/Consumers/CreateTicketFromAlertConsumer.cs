@@ -38,7 +38,7 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         TicketStatusEnum.WaitingOnsiteSchedule,
         TicketStatusEnum.Escalated,
         TicketStatusEnum.Incident,
-        TicketStatusEnum.Approved
+        TicketStatusEnum.Open
     };
 
     public CreateTicketFromAlertConsumer(

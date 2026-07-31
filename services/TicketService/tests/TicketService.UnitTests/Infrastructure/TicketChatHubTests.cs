@@ -37,6 +37,7 @@ public class TicketChatHubTests
         var hub = new TicketChatHub(_authService.Object, _tracker.Object, _logger.Object);
         var context = new Mock<HubCallerContext>();
         context.Setup(c => c.ConnectionId).Returns(connectionId);
+        context.Setup(c => c.Items).Returns(new Dictionary<object, object?>());
         var claims = new List<Claim>
         {
             new("AccountId", userId.ToString()),
@@ -55,6 +56,7 @@ public class TicketChatHubTests
         var hub = new TicketChatHub(_authService.Object, _tracker.Object, _logger.Object);
         var context = new Mock<HubCallerContext>();
         context.Setup(c => c.ConnectionId).Returns(connectionId);
+        context.Setup(c => c.Items).Returns(new Dictionary<object, object?>());
         context.Setup(c => c.User).Returns(new ClaimsPrincipal(new ClaimsIdentity(Array.Empty<Claim>(), "Test")));
         hub.Context = context.Object;
         hub.Groups = _groups.Object;
@@ -168,6 +170,26 @@ public class TicketChatHubTests
         _groups.Verify(g => g.AddToGroupAsync("conn-1", TicketChatHub.InternalGroup(ticketId), default), Times.Once);
     }
 
+    [Fact]
+    public async Task JoinTicket_CalledTwice_DbCalledOnceGroupsAddedOnce()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        _authService.Setup(a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(true);
+        _authService.Setup(a => a.CanViewInternalChatsAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(false);
+        var hub = CreateHub(userId);
+
+        await hub.JoinTicket(ticketId.ToString());
+        await hub.JoinTicket(ticketId.ToString());
+
+        _authService.Verify(
+            a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default),
+            Times.Once);
+        _groups.Verify(g => g.AddToGroupAsync("conn-1", TicketChatHub.PublicGroup(ticketId), default), Times.Once);
+    }
+
     // ── LeaveTicket ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -210,6 +232,10 @@ public class TicketChatHubTests
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        _authService.Setup(a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(true);
+        _authService.Setup(a => a.CanViewInternalChatsAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(false);
         var hub = CreateHub(userId);
 
         await hub.Typing(ticketId.ToString());
@@ -219,5 +245,38 @@ public class TicketChatHubTests
             "UserTyping",
             It.Is<object[]>(args => args.Length == 3),
             default), Times.Once);
+    }
+
+    [Fact]
+    public async Task Typing_NoAccess_ReturnsSilentlyWithoutBroadcast()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        _authService.Setup(a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(false);
+        var hub = CreateHub(userId);
+
+        await hub.Typing(ticketId.ToString());
+
+        _clients.Verify(c => c.OthersInGroup(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task JoinTicket_ThenTyping_DbCalledOnlyOnce()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        _authService.Setup(a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(true);
+        _authService.Setup(a => a.CanViewInternalChatsAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default))
+            .ReturnsAsync(false);
+        var hub = CreateHub(userId);
+
+        await hub.JoinTicket(ticketId.ToString());
+        await hub.Typing(ticketId.ToString());
+
+        _authService.Verify(
+            a => a.CanAccessTicketAsync(ticketId, userId, It.IsAny<IReadOnlyCollection<string>>(), default),
+            Times.Once);
     }
 }

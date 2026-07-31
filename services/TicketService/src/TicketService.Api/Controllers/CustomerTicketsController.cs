@@ -96,7 +96,7 @@ public class CustomerTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.CustomerName = _currentUser.FullName ?? "Unknown";
+        command.CustomerName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -122,7 +122,7 @@ public class CustomerTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.CustomerName = _currentUser.FullName ?? "Unknown";
+        command.CustomerName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

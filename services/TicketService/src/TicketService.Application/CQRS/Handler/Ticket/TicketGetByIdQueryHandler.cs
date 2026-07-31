@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Maintenances;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
 
@@ -23,6 +24,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
+            .Include(t => t.Assignments.Where(a => !a.IsDeleted))
             .Include(t => t.Activities.OrderByDescending(a => a.CreatedAt))
             .Include(t => t.Chats.Where(c => !c.IsDeleted).OrderByDescending(c => c.CreatedAt))
             .Include(t => t.MaintenanceLogs.Where(m => !m.IsDeleted).OrderByDescending(m => m.CreatedAt))
@@ -32,13 +34,16 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         if (ticket is null)
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 404, Message = "Not found" };
 
+        ticket.PrimaryHandlerStaffId = ticket.Assignments
+            .FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId ?? ticket.PrimaryHandlerStaffId;
+
         var activeParticipants = await _unitOfWork.TicketParticipants.GetAllAsync()
             .AsNoTracking()
             .Where(p => p.TicketId == request.Id && p.RemovedAt == null && !p.IsDeleted)
             .Select(p => new { p.UserId, p.CanViewInternal })
             .ToListAsync(cancellationToken);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return new CommonResponse<TicketDetailDTO> { IsSuccess = false, StatusCode = 403, Message = "Forbidden" };
 
         var participantCanViewInternal = request.ActorUserId.HasValue
@@ -53,7 +58,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
             BatteryAssetId = ticket.BatteryAssetId == Guid.Empty ? string.Empty : ticket.BatteryAssetId.ToString(),
             CustomerId = ticket.CustomerId.ToString(),
-            AssignedStaffId = ticket.AssignedStaffId?.ToString(),
+            Assignments = ticket.Assignments.Select(a => new TicketAssignmentDTO { StaffId = a.StaffId.ToString(), Role = a.Role }).ToList(),
             Title = ticket.Title,
             Description = ticket.Description,
             Category = ticket.Category,
@@ -72,11 +77,14 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             ApprovedByManagerId = ticket.ApprovedByManagerId?.ToString(),
             RejectionReason = ticket.Reason,
             ClosedAt = ticket.ClosedAt,
+            CloseReason = ticket.CloseReason,
             Rating = ticket.Rating,
             RatingComment = ticket.RatingComment,
             RatedAt = ticket.RatedAt,
             EscalatedAt = ticket.EscalatedAt,
             EscalationReason = ticket.EscalationReason,
+            IncidentDetectedFrom = ticket.IncidentDetectedFrom,
+            IncidentDetectedTo = ticket.IncidentDetectedTo,
             CreatedAt = ticket.CreatedAt,
             UpdatedAt = ticket.UpdatedAt,
             DetectedAt = ticket.DetectedAt,
@@ -92,6 +100,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             {
                 Id = a.Id.ToString(),
                 TicketId = a.TicketId.ToString(),
+                SourceTicketId = a.SourceTicketId?.ToString(),
                 ActorUserId = a.ActorUserId?.ToString(),
                 ActorRole = a.ActorRole,
                 ActorDisplayName = a.ActorDisplayName,

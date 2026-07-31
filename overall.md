@@ -6660,7 +6660,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | Q-10 | IoT data source thật hay simulator? | **Simulator script** cho capstone (real IoT out of scope) |
 | Q-11 | Notification có cần "do not disturb" (quiet hours)? | **Có** — nằm trong NotificationPreference §3.3 |
 | Q-12 | Customer có thể cancel ticket không? | **KHÔNG** — chỉ rate hoặc reopen, vì cần audit trail |
-| Q-13 | Manager có thể đổi priority sau khi gán không? | **KHÔNG** — theo design.md priority policy |
+| Q-13 | Manager có thể đổi priority sau khi gán không? | **CÓ** — Manager/Admin dùng `POST /api/admin/tickets/{id}/re-prioritize`; bắt buộc `priority` + `reason`, display name lấy từ JWT `FullName`. SLA không reset; quá hạn sẽ chuyển `Running → Breached` atomically. |
 | Q-14 | Có cần SMS OTP cho login Customer Mobile? | **Có** (đã có SmsService) — optional flag |
 | Q-15 | File attachment limit size? | **10MB/file, 5 files/ticket** |
 | Q-16 | Cache strategy: Redis hay InMemory? | **Redis** (đã có sẵn) |
@@ -17278,6 +17278,18 @@ SLA + KB + Mobile + Export (21+22+23+24)
 ---
 
 **End of OVERALL.md (Final Complete Edition)**
+- v5.3 (2026-07-31): **Voice/gRPC contract correction** — các mô tả cũ về `#CHAT-67` multipart/synchronous Whisper flow được thay thế. FileStorageService chạy gRPC **server** với `FILE_STORAGE_SERVICE_GRPC_SERVER_PORT`; endpoint client tái sử dụng dùng `FILE_STORAGE_GRPC_CLIENT_ADDRESS` (TicketService là consumer hiện tại). Docker Compose map biến service-scoped vào key runtime tương ứng và fail-fast nếu thiếu; không còn fallback hardcode port/address cho FileStorage voice gRPC. API/FE contract chuẩn ở `docs/api-ticket.md`: upload trước lên FileStorage, queue `POST /api/tickets/{ticketId}/chats/voice`, nhận `202`, poll `voiceTranscriptionStatus`, retry khi `Failed`. `POST /api/admin/tickets/{id}/re-prioritize` Manager-only, display name từ JWT `FullName`, SLA không reset và breach được xử lý atomically trong transaction.
+- v5.2 (2026-07-31): **TicketService integration status** — tích hợp gRPC audio-to-text bất đồng bộ: FileStorageService expose internal gRPC metadata lookup; TicketService tạo voice-chat placeholder, ghi `VoiceTranscriptionRequestedEvent` qua `IIntegrationEventOutboxWriter.WriteAsync`, consumer xử lý lifecycle/retry và migration `AddVoiceTranscriptionLifecycle`. Bổ sung `POST /api/admin/tickets/{id}/re-prioritize` Manager-only: controller lấy `ManagerName` từ JWT `FullName` (không hardcode display name); handler cập nhật SLA trong transaction, chuyển atomic `Running → Breached` và ghi `SlaBreachedEvent` vào Outbox khi due date mới đã quá hạn; kiểm tra skill tier và escalation. Ticket merge phát `TicketMergedEvent`, NotificationService có `TicketMergedConsumer`/`NotificationTypeEnum.TicketMerged`. TicketService dùng PostgreSQL `xmin` (`IsConcurrencyToken`) và middleware `DbUpdateConcurrencyException` cho optimistic concurrency. Command/consumer flows sử dụng `IIntegrationEventOutboxWriter.WriteAsync`; `IPublishEndpoint` còn lại chỉ ở Outbox relay và MassTransit saga activities. Build `TicketService.Api` pass (warnings tồn tại: NU1902 và XML docs).
+
+### Current implementation corrections (2026-07-31)
+
+Các mô tả roadmap cũ của `#CHAT-67`/§70.21 về multipart, xử lý đồng bộ và Whisper không còn là contract chạy thật. Contract hiện hành là:
+
+- `POST /api/tickets/{ticketId}/chats/voice` nhận JSON metadata của file đã upload, tạo voice chat `Pending` và trả `202 Accepted`.
+- TicketService ghi `VoiceTranscriptionRequestedEvent` bằng `IIntegrationEventOutboxWriter.WriteAsync`; consumer dùng internal FileStorage gRPC rồi gọi `GeminiVoiceTranscriptionService`.
+- FE poll `Pending → Processing → Completed/Failed`; retry bằng `POST /api/tickets/{ticketId}/chats/{chatId}/voice/retry` khi `Failed`. Chi tiết copy-paste nằm ở `docs/api-ticket.md`.
+- Lifecycle Ticket hiện hành gồm `New`, `Open`, `Assigned`, `InProgress`, `WaitingCustomer`, `WaitingParts`, `WaitingOnsiteSchedule`, `Resolved`, `Escalated`, `ClosedPendingRate`, `Closed`, `ClosedRejected`, `Incident`. Không rút gọn thành chuỗi `NEW → OPEN → ASSIGNED → IN_PROGRESS → RESOLVED → CLOSED`.
+- Manager/Admin có thể re-prioritize qua `POST /api/admin/tickets/{id}/re-prioritize`; `reason` bắt buộc, display name lấy từ JWT `FullName`, SLA không reset và breach được xử lý atomic.
 
 **Document lifecycle:**
 - v1 (2026-05-12 morning): §0-29 initial roadmap

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TicketService.Infrastructure.Persistence;
@@ -13,6 +14,7 @@ namespace TicketService.Infrastructure.Migrations
     [DbContext(typeof(TicketDbContext))]
     partial class TicketDbContextModelSnapshot : ModelSnapshot
     {
+        /// <inheritdoc />
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
@@ -373,81 +375,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasDatabaseName("ix_chat_metrics_daily_date_staff");
 
                     b.ToTable("chat_metrics_daily", (string)null);
-                });
-
-            modelBuilder.Entity("TicketService.Domain.Entities.ChatTemplate", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("Category")
-                        .HasColumnType("integer")
-                        .HasColumnName("category");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("content");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by_user_id");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<bool>("IsInternalDefault")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_internal_default");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("name");
-
-                    b.Property<int>("Scope")
-                        .HasColumnType("integer")
-                        .HasColumnName("scope");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<int>("UsageCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("usage_count");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Scope")
-                        .HasDatabaseName("ix_chat_templates_scope");
-
-                    b.ToTable("chat_templates", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.CustomerAccount", b =>
@@ -831,6 +758,15 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("last_error");
 
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<DateTime?>("LeaseUntilUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until_utc");
+
                     b.Property<DateTime>("OccurredAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occurred_at_utc");
@@ -860,6 +796,10 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("OccurredAtUtc")
                         .HasDatabaseName("idx_outbox_pending")
+                        .HasFilter("processed_at_utc IS NULL");
+
+                    b.HasIndex("ProcessedAtUtc", "LeaseUntilUtc", "OccurredAtUtc")
+                        .HasDatabaseName("idx_outbox_claimable")
                         .HasFilter("processed_at_utc IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
@@ -1023,6 +963,12 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("warning_sent_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Status");
@@ -1161,6 +1107,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("category");
 
+                    b.Property<int?>("CloseReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("close_reason");
+
                     b.Property<DateTime?>("ClosedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("closed_at");
@@ -1215,6 +1165,14 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<int?>("ImpactScope")
                         .HasColumnType("integer")
                         .HasColumnName("impact_scope");
+
+                    b.Property<DateTime?>("IncidentDetectedFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("incident_detected_from");
+
+                    b.Property<DateTime?>("IncidentDetectedTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("incident_detected_to");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -1294,6 +1252,12 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("urgency_level");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedStaffId");
@@ -1306,6 +1270,8 @@ namespace TicketService.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("MergedIntoTicketId");
 
                     b.HasIndex("Priority");
 
@@ -1362,6 +1328,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
+                    b.Property<Guid?>("SourceTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_ticket_id");
+
                     b.Property<Guid>("TicketId")
                         .HasColumnType("uuid")
                         .HasColumnName("ticket_id");
@@ -1373,9 +1343,72 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("ActorUserId");
 
+                    b.HasIndex("SourceTicketId");
+
                     b.HasIndex("TicketId");
 
                     b.ToTable("ticket_activities", (string)null);
+                });
+
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("StaffId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("staff_id");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ticket_assignments_active_primary")
+                        .HasFilter("role = 1 AND is_deleted = false");
+
+                    b.HasIndex("TicketId", "Role")
+                        .HasDatabaseName("ix_ticket_assignments_ticket_role");
+
+                    b.HasIndex("TicketId", "StaffId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ticket_assignments_ticket_staff");
+
+                    b.ToTable("ticket_assignments", (string)null);
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketAttachment", b =>
@@ -1440,6 +1473,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("source");
 
+                    b.Property<Guid?>("SourceTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_ticket_id");
+
                     b.Property<string>("ThumbnailUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -1473,6 +1510,8 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("ChatId");
 
                     b.HasIndex("FileId");
+
+                    b.HasIndex("SourceTicketId");
 
                     b.HasIndex("TicketId");
 
@@ -2417,11 +2456,22 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("user_role");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TicketId")
                         .HasDatabaseName("ix_ticket_participants_ticket_active")
                         .HasFilter("removed_at IS NULL");
+
+                    b.HasIndex("TicketId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ticket_participants_active_user")
+                        .HasFilter("removed_at IS NULL AND is_deleted = false");
 
                     b.ToTable("ticket_participants", (string)null);
                 });
@@ -2755,6 +2805,17 @@ namespace TicketService.Infrastructure.Migrations
                     b.Navigation("Ticket");
                 });
 
+            modelBuilder.Entity("TicketService.Domain.Entities.TicketAssignment", b =>
+                {
+                    b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
+                        .WithMany("Assignments")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ticket");
+                });
+
             modelBuilder.Entity("TicketService.Domain.Entities.TicketAttachment", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.TicketChat", "Chat")
@@ -2917,6 +2978,8 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.Ticket", b =>
                 {
                     b.Navigation("Activities");
+
+                    b.Navigation("Assignments");
 
                     b.Navigation("Attachments");
 

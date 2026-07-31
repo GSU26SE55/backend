@@ -17,6 +17,8 @@ public class SlaService : ISlaService
 
     public async Task PauseSlaAsync(Guid ticketId, PauseReasonEnum reason, string? note, Guid userId, CancellationToken ct)
     {
+        if (await IsClosedOrMergedAsync(ticketId, ct))
+            return;
         var slaTimer = await _uow.SlaTimers.GetAllAsync()
             .FirstOrDefaultAsync(st => st.TicketId == ticketId && st.Status == SlaTimerStatusEnum.Running && !st.IsDeleted, ct);
 
@@ -41,6 +43,8 @@ public class SlaService : ISlaService
 
     public async Task ResumeSlaAsync(Guid ticketId, Guid userId, CancellationToken ct)
     {
+        if (await IsClosedOrMergedAsync(ticketId, ct))
+            return;
         var slaTimer = await _uow.SlaTimers.GetAllAsync()
             .FirstOrDefaultAsync(st => st.TicketId == ticketId && st.Status == SlaTimerStatusEnum.Paused && !st.IsDeleted, ct);
 
@@ -74,6 +78,8 @@ public class SlaService : ISlaService
 
     public async Task ResumeOnCustomerReplyAsync(Guid ticketId, Guid userId, CancellationToken ct)
     {
+        if (await IsClosedOrMergedAsync(ticketId, ct))
+            return;
         var slaTimer = await _uow.SlaTimers.GetAllAsync()
             .FirstOrDefaultAsync(st => st.TicketId == ticketId && st.Status == SlaTimerStatusEnum.Paused && !st.IsDeleted, ct);
 
@@ -99,4 +105,8 @@ public class SlaService : ISlaService
         slaTimer.Status = SlaTimerStatusEnum.Running;
         slaTimer.CurrentPauseStartedAt = null;
     }
+
+    private Task<bool> IsClosedOrMergedAsync(Guid ticketId, CancellationToken ct) =>
+        _uow.Tickets.GetAllAsync().AnyAsync(t => t.Id == ticketId && !t.IsDeleted &&
+            (t.Status == TicketStatusEnum.Closed || t.CloseReason == TicketCloseReasonEnum.MergedDuplicate), ct);
 }

@@ -18,18 +18,18 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
     public TicketApproveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
+        IIntegrationEventOutboxWriter producer)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
     }
 
     public async Task<TicketActionResponse> Handle(TicketApproveCommand request, CancellationToken ct)
@@ -48,17 +48,17 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
         {
             ActorUserId = request.ManagerId,
             ActorRole = ActorRoleEnum.Manager,
-            ActorDisplayName = request.ManagerName ?? "Manager",
+            ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?> { { "Comment", request.ManagerComment } }
         }, ct);
 
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Approved, reason: request.ManagerComment);
 
-        await _producer.PublishAsync(new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId), ct);
+        await _outboxWriter.WriteAsync(new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — event SharedContracts để NotificationService consume được
         // (event nội bộ ở trên nằm trong assembly TicketService nên service khác không bind được).
-        await _producer.PublishAsync(new TicketApprovedEvent(
+        await _outboxWriter.WriteAsync(new TicketApprovedEvent(
             ticket.Id, ticket.Code, ticket.CustomerId, request.ManagerId, request.ManagerComment,
             ticket.ApprovedAt ?? DateTime.UtcNow), ct);
 

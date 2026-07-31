@@ -14,7 +14,10 @@ public interface ICacheService
     /// hai lời gọi tách rời tạo cửa sổ tranh chấp — 2 message trùng đến gần như đồng thời có thể
     /// cùng đọc thấy "chưa có" và cùng được xử lý.
     /// </summary>
+    /// <param name="key"></param>
     /// <param name="value">Giá trị lưu kèm (thường là timestamp, phục vụ chẩn đoán).</param>
+    /// <param name="expiration"></param>
+    /// <param name="cancellationToken"></param>
     Task<bool> TrySetIfNotExistsAsync(
         string key, string value, TimeSpan expiration, CancellationToken cancellationToken = default);
 

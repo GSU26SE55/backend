@@ -45,9 +45,20 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
             .HasColumnName("last_error")
             .HasMaxLength(2000);
 
+        builder.Property(m => m.LeaseOwner)
+            .HasColumnName("lease_owner")
+            .HasMaxLength(128);
+
+        builder.Property(m => m.LeaseUntilUtc)
+            .HasColumnName("lease_until_utc");
+
         // Partial index: chỉ cần index các message chưa processed (relay query)
         builder.HasIndex(m => m.OccurredAtUtc)
             .HasDatabaseName("idx_outbox_pending")
+            .HasFilter("processed_at_utc IS NULL");
+
+        builder.HasIndex(m => new { m.ProcessedAtUtc, m.LeaseUntilUtc, m.OccurredAtUtc })
+            .HasDatabaseName("idx_outbox_claimable")
             .HasFilter("processed_at_utc IS NULL");
     }
 }

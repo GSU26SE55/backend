@@ -22,11 +22,15 @@ public class ParticipantBulkAddCommand : IRequest<ParticipantBulkActionResponse>
 
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+
     /// <summary>
     /// Actor role.
     /// </summary>
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
+
+    [JsonIgnore]
+    public string? ActorName { get; set; }
 
     private static readonly ParticipantTypeEnum[] ManuallyAssignableTypes =
     {

@@ -29,7 +29,7 @@ public class ChatFileSummaryQueryHandlerTests
         Title = "Test Ticket",
         Description = "desc",
         CustomerId = customerId,
-        AssignedStaffId = staffId,
+        PrimaryHandlerStaffId = staffId,
         Status = TicketStatusEnum.InProgress
     };
 

@@ -14,7 +14,7 @@ public class TicketKbReferenceHandlerTests
 {
     private readonly Mock<ITicketCurrentUserService> _currentUserMock = new();
 
-    private static Ticket BuildTicket(TicketStatusEnum status = TicketStatusEnum.InProgress, Guid? assignedStaffId = null)
+    private static Ticket BuildTicket(TicketStatusEnum status = TicketStatusEnum.InProgress, Guid? PrimaryHandlerStaffId = null)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -23,7 +23,7 @@ public class TicketKbReferenceHandlerTests
             Category = TicketCategoryEnum.Charging,
             Title = "Test Ticket",
             Description = "Test",
-            AssignedStaffId = assignedStaffId
+            PrimaryHandlerStaffId = PrimaryHandlerStaffId
         };
 
     private static KnowledgeBaseArticle BuildArticle()
@@ -254,7 +254,7 @@ public class TicketKbReferenceHandlerTests
     {
         var staffId = Guid.NewGuid();
         var otherStaffId = Guid.NewGuid();
-        var ticket = BuildTicket(assignedStaffId: otherStaffId);
+        var ticket = BuildTicket(PrimaryHandlerStaffId: otherStaffId);
         var article = BuildArticle();
 
         _currentUserMock.Setup(s => s.Role).Returns("Staff");
@@ -280,7 +280,7 @@ public class TicketKbReferenceHandlerTests
     public async Task Add_WhenStaffAssigned_Returns200()
     {
         var staffId = Guid.NewGuid();
-        var ticket = BuildTicket(assignedStaffId: staffId);
+        var ticket = BuildTicket(PrimaryHandlerStaffId: staffId);
         var article = BuildArticle();
 
         _currentUserMock.Setup(s => s.Role).Returns("Staff");

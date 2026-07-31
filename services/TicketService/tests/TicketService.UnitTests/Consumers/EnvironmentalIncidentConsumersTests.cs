@@ -24,7 +24,7 @@ public class EnvironmentalIncidentConsumersTests
     private readonly Mock<IGenericRepository<SlaTimer>> _slaTimerRepo = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
     private readonly Mock<ITicketCodeGenerator> _codeGenerator = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
 
     public EnvironmentalIncidentConsumersTests()
@@ -51,7 +51,7 @@ public class EnvironmentalIncidentConsumersTests
         DetectedAt: DateTime.UtcNow, AlertId: Guid.NewGuid(), Description: "Khói");
 
     private EnvironmentalIncidentDetectedConsumer BuildDetected() =>
-        new(_uow.Object, _codeGenerator.Object, _slaCalculator, _activityLogger.Object, _producer.Object,
+        new(_uow.Object, _codeGenerator.Object, _slaCalculator, _activityLogger.Object, _outboxWriter.Object,
             NullLogger<EnvironmentalIncidentDetectedConsumer>.Instance);
 
     private EnvironmentalIncidentResolvedConsumer BuildResolved() =>
@@ -77,7 +77,7 @@ public class EnvironmentalIncidentConsumersTests
         created.Origin.Should().Be(TicketOriginEnum.System);
         timer.Should().NotBeNull();
         (timer!.DueAt - timer.StartedAt).Should().Be(TimeSpan.FromHours(4));
-        _producer.Verify(p => p.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

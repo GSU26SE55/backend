@@ -21,12 +21,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(e => e.BatteryAssetId)
             .HasColumnName("battery_asset_id");
-
         builder.Property(e => e.CustomerId)
             .HasColumnName("customer_id");
-
-        builder.Property(e => e.AssignedStaffId)
-            .HasColumnName("assigned_staff_id");
 
         builder.Property(e => e.Title)
             .HasColumnName("title")
@@ -91,6 +87,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(e => e.ClosedAt)
             .HasColumnName("closed_at");
+        builder.Property(e => e.CloseReason)
+            .HasColumnName("close_reason")
+            .HasConversion<int>();
 
         builder.Property(e => e.Rating)
             .HasColumnName("rating");
@@ -107,6 +106,12 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.EscalationReason)
             .HasColumnName("escalation_reason")
             .HasConversion<int>();
+
+        builder.Property(e => e.IncidentDetectedFrom)
+            .HasColumnName("incident_detected_from");
+
+        builder.Property(e => e.IncidentDetectedTo)
+            .HasColumnName("incident_detected_to");
 
         builder.Property(e => e.IsIncident)
             .HasColumnName("is_incident");
@@ -156,9 +161,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(e => e.Code).IsUnique();
         builder.HasIndex(e => e.BatteryAssetId);
         builder.HasIndex(e => e.CustomerId);
-        builder.HasIndex(e => e.AssignedStaffId);
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.Category);
         builder.HasIndex(e => e.Priority);
+        builder.HasIndex(e => e.MergedIntoTicketId);
     }
 }

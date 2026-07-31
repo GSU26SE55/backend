@@ -19,20 +19,20 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketResolveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -44,7 +44,15 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        if (ticket.EscalatedAt.HasValue && ticket.AssignedStaffId != request.StaffId)
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (ticket.EscalatedAt.HasValue && ticket.PrimaryHandlerStaffId != request.StaffId)
             return Fail(403, "Chỉ Staff đang được assign sau escalation mới có thể resolve.");
 
         if (ticket.EscalationReason == EscalationReasonEnum.SkillGap)
@@ -78,15 +86,14 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
+            ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "ResolutionSummary", request.ResolutionSummary } }
         }, ct);
 
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
-        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để notify Customer khi ticket được resolve.
-        await _producer.PublishAsync(
+        await _outboxWriter.WriteAsync(
             new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary, ticket.CustomerId), ct);
 
         // #AUDIT-26

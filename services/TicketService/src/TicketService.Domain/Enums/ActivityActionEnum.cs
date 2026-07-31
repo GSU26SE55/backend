@@ -72,5 +72,11 @@ public enum ActivityActionEnum
     /// CLOSED_PENDING_RATE. Đồng thời là cờ idempotent: <c>RatingRequestBackgroundService</c>
     /// chỉ nhắc 1 lần / ticket bằng cách kiểm tra sự tồn tại của activity này.
     /// </summary>
-    RatingRequested = 33
+    RatingRequested = 33,
+    /// <summary>Đã thêm participant vào ticket.</summary>
+    ParticipantAdded = 34,
+    /// <summary>Đã xóa hoặc participant đã rời ticket.</summary>
+    ParticipantRemoved = 35,
+    /// <summary>Đã đổi vai trò hoặc quyền của participant.</summary>
+    ParticipantRoleChanged = 36
 }

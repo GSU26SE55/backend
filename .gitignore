@@ -30,9 +30,7 @@ coverage/
 # ---------- Gemini & Agents (Local only) ----------
 .gemini/
 AGENTS.md
-*.skill
 .claude.local/
-.claude/
 coverage.runsettings
 # ---------- Logs ----------
 *.log

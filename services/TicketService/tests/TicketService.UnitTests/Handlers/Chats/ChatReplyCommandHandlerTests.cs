@@ -27,6 +27,12 @@ public class ChatReplyCommandHandlerTests
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _uow.Setup(u => u.IncrementChatReplyCountAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        _uow.Setup(u => u.ExecuteInTransactionAsync(
+                It.IsAny<Func<CancellationToken, Task>>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<CancellationToken, Task> operation, CancellationToken cancellationToken) =>
+                operation(cancellationToken));
         return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
     }
 
@@ -78,7 +84,7 @@ public class ChatReplyCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(201);
-        parent.ReplyCount.Should().Be(1);
+        parent.ReplyCount.Should().Be(0);
 
         _chatsRepo.Verify(r => r.AddAsync(It.Is<TicketChat>(c =>
             c.TicketId == ticketId &&
@@ -86,13 +92,14 @@ public class ChatReplyCommandHandlerTests
             c.ThreadRootId == parentId &&
             c.Body == "This is a reply")), Times.Once);
 
-        _chatsRepo.Verify(r => r.UpdateAsync(It.Is<TicketChat>(c => c.Id == parentId && c.ReplyCount == 1)), Times.Once);
+        _uow.Verify(u => u.IncrementChatReplyCountAsync(parentId, It.IsAny<CancellationToken>()), Times.Once);
 
         _activityLogger.Verify(x => x.LogAsync(
             ticketId, userId, ActorRoleEnum.Staff, "Staff User",
             ActivityActionEnum.ChatReplied, null, It.IsAny<string>(), It.IsAny<string>()), Times.Once);
 
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.ExecuteInTransactionAsync(
+            It.IsAny<Func<CancellationToken, Task>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -38,6 +38,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<BlogTemplate> BlogTemplates { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
     public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
+    public virtual DbSet<TicketAssignment> TicketAssignments { get; set; }
     public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }
     public virtual DbSet<TicketChatReaction> TicketChatReactions { get; set; }
     public virtual DbSet<TicketChatRead> TicketChatReads { get; set; }
@@ -61,6 +62,34 @@ public class TicketDbContext : DbContext
         if (Database.IsNpgsql())
         {
             // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
+            modelBuilder.Entity<Ticket>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<TicketAssignment>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<TicketParticipant>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<SlaTimer>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
             modelBuilder.Entity<AlertTicketSagaState>()
                 .Property<uint>("xmin")
                 .HasColumnType("xid")

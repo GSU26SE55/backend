@@ -65,9 +65,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Initial details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = userId,
-            AssignedStaffId = userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            StaffId = userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         _db.SaveChanges();
@@ -229,9 +235,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Other ticket details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = Guid.Parse(TestAuthHandler.UserId),
-            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         var chat = new TicketChat
@@ -380,9 +392,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Closed ticket details",
             Status = TicketStatusEnum.Closed,
             CustomerId = Guid.Parse(TestAuthHandler.UserId),
-            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = closedTicketId,
+            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         var chat = new TicketChat
@@ -423,9 +441,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Other ticket details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = Guid.Parse(TestAuthHandler.UserId),
-            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         var chat = new TicketChat
@@ -511,9 +535,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Closed ticket details",
             Status = TicketStatusEnum.Closed,
             CustomerId = Guid.Parse(TestAuthHandler.UserId),
-            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = closedTicketId,
+            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         var chat = new TicketChat
@@ -584,9 +614,15 @@ public class TicketChatApiTests : IClassFixture<TicketApiFactory>
             Description = "Other ticket details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = Guid.Parse(TestAuthHandler.UserId),
-            AssignedStaffId = Guid.Parse(TestAuthHandler.UserId),
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = otherTicketId,
+            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         var chat = new TicketChat

@@ -16,7 +16,7 @@ public class TicketDTO
     /// Customer id.
     /// </summary>
     public string CustomerId { get; set; } = string.Empty;
-    public string? AssignedStaffId { get; set; }
+    public List<TicketAssignmentDTO> Assignments { get; set; } = new();
     public string Title { get; set; } = string.Empty;
     /// <summary>
     /// Danh mục phân loại.
@@ -60,4 +60,5 @@ public class TicketDTO
     public string? DuplicateReason { get; set; }
     /// <summary>Ticket đích nếu ticket này đã bị gộp (null nếu chưa gộp).</summary>
     public string? MergedIntoTicketId { get; set; }
+    public TicketCloseReasonEnum? CloseReason { get; set; }
 }

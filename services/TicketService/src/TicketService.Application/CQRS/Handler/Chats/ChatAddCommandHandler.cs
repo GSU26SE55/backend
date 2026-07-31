@@ -75,6 +75,11 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+            .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+            .Select(a => (Guid?)a.StaffId)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var blockReason = ChatClosedStateHelper.GetBlockReason(
             ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Add, _chatOptions.BlockEditOnClosed);
         if (blockReason != null)
@@ -298,7 +303,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             chat.IsInternal,
             chat.AttachmentFileIds,
             ticket.CustomerId,
-            ticket.AssignedStaffId), cancellationToken);
+            ticket.PrimaryHandlerStaffId), cancellationToken);
 
         if (request.RequestCustomerInfo &&
             request.UserRole is ActorRoleEnum.Staff or ActorRoleEnum.Manager or ActorRoleEnum.Admin)

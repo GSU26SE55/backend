@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Participants;
@@ -15,18 +16,21 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemoveCommand, ParticipantActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<ParticipantRemoveCommandHandler> _logger;
 
     public ParticipantRemoveCommandHandler(
         ITicketUnitOfWork uow,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
+        IActivityLogger activityLogger,
         ITicketChatRealtimeNotifier realtimeNotifier,
         ILogger<ParticipantRemoveCommandHandler> logger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = producer;
+        _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
         _logger = logger;
     }
@@ -69,13 +73,22 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
         participant.RemoveReason = request.RemoveReason;
         _uow.TicketParticipants.UpdateAsync(participant);
 
-        await _uow.SaveChangesAsync(ct);
-
-        await _producer.PublishAsync(new ParticipantRemovedEvent(
+        await _outboxWriter.WriteAsync(new ParticipantRemovedEvent(
             request.TicketId,
             participant.UserId,
             request.ActorUserId,
             request.RemoveReason ?? string.Empty), ct);
+
+        await _activityLogger.LogAsync(
+            request.TicketId,
+            request.ActorUserId,
+            request.ActorRole,
+            request.ActorName,
+            ActivityActionEnum.ParticipantRemoved,
+            oldValue: participant.ParticipantType.ToString(),
+            newValue: $"User {participant.UserId} removed from ticket.",
+            reason: request.RemoveReason);
+        await _uow.SaveChangesAsync(ct);
 
         try
         {
