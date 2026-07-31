@@ -1,6 +1,7 @@
 using FileStorageService.Application.DependencyInjection;
 using FileStorageService.Infrastructure.DependencyInjection;
 using FileStorageService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Prometheus;
@@ -10,8 +11,18 @@ using SharedInfrastructure.Extensions;
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
+var grpcPort = builder.Configuration.GetValue("Grpc:Port", 8081);
+if (grpcPort == 8080)
+    throw new InvalidOperationException("Grpc:Port must differ from HTTP port 8080.");
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(8080, listen => listen.Protocols = HttpProtocols.Http1);
+    options.ListenAnyIP(grpcPort, listen => listen.Protocols = HttpProtocols.Http2);
+});
 
 builder.Services.AddControllers();
+builder.Services.AddGrpc();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -77,6 +88,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGrpcService<FileStorageService.Api.Grpc.FileInternalGrpcService>();
 
 app.MapMetrics();
 

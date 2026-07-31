@@ -93,6 +93,8 @@ public enum NotificationTypeEnum
     // Ghi chú Sprint 6.2 NOTI-04 (#675): cảnh báo bảo mật (suspicious login / refresh-token reuse)
     // đi thẳng đường AuthService → EmailService như OTP, KHÔNG qua NotificationService — nên cố ý
     // KHÔNG thêm type ở đây để tránh đẻ thêm enum không producer (đúng lỗi mà review §4.8 đã nêu).
+    /// <summary>GH-699.1 — source ticket đã được gộp vào master ticket.</summary>
+    TicketMerged = 27,
 
     System = 99
 }

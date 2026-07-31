@@ -116,8 +116,8 @@ public class ChatOptions
         /// <summary>Tên model Gemini multimodal cho audio — ví dụ: "gemini-2.5-flash".</summary>
         public string ModelName { get; set; } = "gemini-1.5-flash";
 
-        /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
-        public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";
+        /// <summary>Private HTTP/2 endpoint exposed by FileStorageService for transcription workers.</summary>
+        public string FileStorageGrpcAddress { get; set; } = string.Empty;
 
         public int TranscribeTimeoutSeconds { get; set; } = 30;
     }

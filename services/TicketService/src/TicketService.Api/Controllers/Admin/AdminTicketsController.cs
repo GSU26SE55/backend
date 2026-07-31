@@ -147,6 +147,26 @@ public class AdminTicketsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>Manager thay đổi priority của ticket đang xử lý; SLA không reset.</summary>
+    [HttpPost("{id:guid}/re-prioritize")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reprioritize(Guid id, [FromBody] TicketReprioritizeCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        if (!Guid.TryParse(_currentUser.UserId, out var managerId))
+        {
+            return Unauthorized();
+        }
+
+        command.ManagerId = managerId;
+        command.ManagerName = _currentUser.FullName;
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     /// <summary>
     /// Manager điều chuyển ticket sang Staff khác — yêu cầu lý do (ManagerReassignReason), log lịch sử thay đổi assignee; SLA timer KHÔNG reset, vẫn đếm tiếp.
     /// </summary>

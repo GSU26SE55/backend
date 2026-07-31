@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events;
 using SharedContracts.Events.Blog;
+using SharedContracts.Events.Chats;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -37,6 +38,7 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketReopenedIntegrationEvent), typeof(TicketReopenedIntegrationEvent) },
         { nameof(TicketRatedIntegrationEvent), typeof(TicketRatedIntegrationEvent) },
         { nameof(TicketEscalatedIntegrationEvent), typeof(TicketEscalatedIntegrationEvent) },
+        { nameof(TicketEscalatedEvent), typeof(TicketEscalatedEvent) },
         { nameof(SlaBreachedIntegrationEvent), typeof(SlaBreachedIntegrationEvent) },
         { nameof(SlaWarningIntegrationEvent), typeof(SlaWarningIntegrationEvent) },
         { nameof(IncidentDeclaredIntegrationEvent), typeof(IncidentDeclaredIntegrationEvent) },
@@ -45,6 +47,7 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketMergedEvent), typeof(TicketMergedEvent) },
         { nameof(BlogGenerationRequestedEvent), typeof(BlogGenerationRequestedEvent) },
         { nameof(BlogGenerationStatusChangedEvent), typeof(BlogGenerationStatusChangedEvent) },
+        { nameof(VoiceTranscriptionRequestedEvent), typeof(VoiceTranscriptionRequestedEvent) },
     };
 
     public OutboxRelayService(

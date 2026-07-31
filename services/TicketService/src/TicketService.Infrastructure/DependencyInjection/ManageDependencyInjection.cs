@@ -200,16 +200,20 @@ public static class ManageDependencyInjection
 
         // #567 — Gemini voice transcription client (multimodal, timeout từ Chat:Voice:TranscribeTimeoutSeconds)
         services.AddHttpClient<IVoiceTranscriptionService, GeminiVoiceTranscriptionService>((sp, http) =>
+               {
+                   var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+                   http.Timeout = TimeSpan.FromSeconds(Math.Max(15, opts.Voice.TranscribeTimeoutSeconds));
+               });
+
+        services.AddGrpcClient<SharedContracts.Grpc.FileInternal.FileInternal.FileInternalClient>((sp, options) =>
         {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.Timeout = TimeSpan.FromSeconds(Math.Max(15, opts.Voice.TranscribeTimeoutSeconds));
+            var address = sp.GetRequiredService<IOptions<ChatOptions>>().Value.Voice.FileStorageGrpcAddress;
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("Chat:Voice:FileStorageGrpcAddress must be an absolute URI.");
+            options.Address = uri;
         });
 
         // #567 — FileStorageService upload client (dùng Bearer token forwarded từ original request)
-        services.AddHttpClient<IFileUploadClient, FileStorageApiClient>((_, http) =>
-        {
-            http.Timeout = TimeSpan.FromSeconds(60);
-        });
     }
 
     /// <summary>

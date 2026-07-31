@@ -78,6 +78,27 @@ public class OutboxRelayServiceTests
     }
 
     [Fact]
+    public async Task RelayBatchAsync_TicketEscalatedEvent_PublishesThroughTransportAndMarksProcessed()
+    {
+        var evt = new TicketEscalatedEvent(Guid.NewGuid(), "TKT-ESC", 1, "SLA breached", null, "System");
+        var msg = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = nameof(TicketEscalatedEvent),
+            Payload = JsonSerializer.Serialize(evt),
+            OccurredAtUtc = DateTime.UtcNow
+        };
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
+        var sut = CreateSut(uow, msg);
+
+        var result = await sut.RelayBatchAsync(10, CancellationToken.None);
+
+        result.Published.Should().Be(1);
+        msg.ProcessedAtUtc.Should().NotBeNull();
+        _transport.Verify(x => x.PublishAsync(It.IsAny<TicketEscalatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task RelayBatchAsync_NoPendingMessages_ReturnsEmptyResult()
     {
         // Arrange

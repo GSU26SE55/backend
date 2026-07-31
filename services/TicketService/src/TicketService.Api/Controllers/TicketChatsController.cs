@@ -1106,32 +1106,44 @@ public class TicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Upload audio và transcribe sang text — tạo chat với nội dung transcribed + đính kèm audio vào ticket_attachments (#567).
-    /// Sử dụng Google Gemini 1.5 Flash multimodal. Hỗ trợ: mp3, wav, ogg, webm, m4a, flac. Giới hạn: 20MB.
+    /// Tạo chat audio placeholder từ metadata file đã upload và xếp hàng transcribe bất đồng bộ.
     /// </summary>
     [HttpPost("voice")]
-    [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VoiceTranscribe(
         Guid ticketId,
-        IFormFile audioFile,
+        [FromBody] ChatVoiceTranscribeCommand command,
         CancellationToken ct)
     {
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = ticketId,
-            AudioFile = audioFile,
-            AuthorizationHeader = Request.Headers.Authorization.ToString(),
-            UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty,
-            UserDisplayName = _currentUser.FullName!,
-            UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value),
-            UserPermissions = _currentUser.Permissions.ToList()
-        };
+        command.TicketId = ticketId;
+        command.UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty;
+        command.UserDisplayName = _currentUser.FullName!;
+        command.UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value);
+        command.UserPermissions = _currentUser.Permissions.ToList();
 
         var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("{id}/voice/retry")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> RetryVoiceTranscription(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+        var result = await _mediator.Send(new ChatVoiceTranscriptionRetryCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = userId.Value,
+            UserRole = ResolveActorRole(_currentUser.Role)
+        }, ct);
         return StatusCode(result.StatusCode, result);
     }
 

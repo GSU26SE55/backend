@@ -21,11 +21,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(e => e.BatteryAssetId)
             .HasColumnName("battery_asset_id");
-        // Legacy column retained while assignments are represented by TicketAssignment rows.
-        // Keeping it as a shadow property prevents an unrelated schema drop in GH-699.
-        builder.Property<Guid?>("AssignedStaffId")
-            .HasColumnName("assigned_staff_id");
-
         builder.Property(e => e.CustomerId)
             .HasColumnName("customer_id");
 
@@ -165,7 +160,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.HasIndex(e => e.Code).IsUnique();
         builder.HasIndex(e => e.BatteryAssetId);
-        builder.HasIndex("AssignedStaffId");
         builder.HasIndex(e => e.CustomerId);
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.Category);
