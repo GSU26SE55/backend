@@ -40,9 +40,15 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
         }
 
         var now = DateTime.UtcNow;
+        var assignedTicketIds = _unitOfWork.TicketAssignments != null
+            ? _unitOfWork.TicketAssignments.GetAllAsync()
+                .Where(a => a.StaffId == staffId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                .Select(a => a.TicketId)
+            : Enumerable.Empty<Guid>().AsQueryable();
+
         var ticketsQuery = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Where(t => !t.IsDeleted && t.AssignedStaffId == staffId);
+            .Where(t => !t.IsDeleted && assignedTicketIds.Contains(t.Id));
 
         // ===== Count theo status — zero-fill đủ 14 status =====
         var statusGroups = await ticketsQuery

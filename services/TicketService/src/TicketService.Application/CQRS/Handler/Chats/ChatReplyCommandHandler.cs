@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
@@ -54,6 +55,14 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         if (ticket.Status == TicketStatusEnum.Closed)
             return Fail(400, "Không thể trả lời bình luận khi ticket đã đóng.");
 
@@ -96,7 +105,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             reply.IsInternal,
             reply.AttachmentFileIds,
             ticket.CustomerId,
-            ticket.AssignedStaffId), ct);
+            ticket.PrimaryHandlerStaffId), ct);
 
         await _uow.SaveChangesAsync(ct);
 

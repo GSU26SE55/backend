@@ -16,18 +16,25 @@ public class SlaByStaffReportQueryHandler
 
     public async Task<CommonResponse<List<SlaByStaffRow>>> Handle(SlaByStaffReportQuery request, CancellationToken ct)
     {
-        var q = _uow.Tickets.GetAllAsync().AsNoTracking().Include(t => t.SlaTimer)
-            .Where(t => !t.IsDeleted && t.AssignedStaffId != null);
+        var ticketsBase = _uow.Tickets.GetAllAsync().AsNoTracking()
+            .Where(t => !t.IsDeleted);
         if (request.From.HasValue)
-            q = q.Where(t => t.CreatedAt >= request.From.Value);
+            ticketsBase = ticketsBase.Where(t => t.CreatedAt >= request.From.Value);
         if (request.To.HasValue)
-            q = q.Where(t => t.CreatedAt <= request.To.Value);
+            ticketsBase = ticketsBase.Where(t => t.CreatedAt <= request.To.Value);
 
-        var data = await q.Select(t => new
-        {
-            StaffId = t.AssignedStaffId!.Value,
-            Status = t.SlaTimer != null ? (SlaTimerStatusEnum?)t.SlaTimer.Status : null
-        }).ToListAsync(ct);
+        var assignmentsBase = _uow.TicketAssignments.GetAllAsync().AsNoTracking()
+            .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler);
+
+        var data = await (
+            from a in assignmentsBase
+            join t in ticketsBase on a.TicketId equals t.Id
+            select new
+            {
+                a.StaffId,
+                Status = t.SlaTimer != null ? (SlaTimerStatusEnum?)t.SlaTimer.Status : null
+            }
+        ).ToListAsync(ct);
 
         var names = await StaffNameLookup(ct);
 

@@ -25,17 +25,29 @@ public class Sprint62PublisherTests
     private readonly Mock<IMessageProducerService> _producer = new();
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
 
-    private static Ticket MakeTicket(TicketStatusEnum status, Guid customerId, Guid? staffId = null) => new()
+    private static Ticket MakeTicket(TicketStatusEnum status, Guid customerId, Guid? staffId = null)
     {
-        Id = Guid.NewGuid(),
-        Code = "TKT-620",
-        Title = "T",
-        Description = "D",
-        Status = status,
-        CustomerId = customerId,
-        AssignedStaffId = staffId,
-        Priority = TicketPriorityEnum.P2High,
-    };
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-620",
+            Title = "T",
+            Description = "D",
+            Status = status,
+            CustomerId = customerId,
+            PrimaryHandlerStaffId = staffId,
+            Priority = TicketPriorityEnum.P2High,
+        };
+        if (staffId.HasValue)
+            ticket.Assignments.Add(new TicketAssignment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                StaffId = staffId.Value,
+                Role = AssignmentRoleEnum.PrimaryHandler
+            });
+        return ticket;
+    }
 
     // ── NOTI-05 ──────────────────────────────────────────────────────────────
 
@@ -48,7 +60,7 @@ public class Sprint62PublisherTests
 
         var staff = new List<StaffAccount>
         {
-            new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+            new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.SeniorSpecialist }
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket], staffSeed: staff);
@@ -59,13 +71,13 @@ public class Sprint62PublisherTests
         await handler.Handle(new TicketAssignCommand
         {
             TicketId = ticket.Id,
-            StaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             ManagerId = Guid.NewGuid(),
             ManagerName = "M"
         }, CancellationToken.None);
 
         _producer.Verify(p => p.PublishAsync(
-            It.Is<TicketAssignedEvent>(e => e.CustomerId == customerId && e.StaffId == staffId),
+            It.Is<TicketAssignedEvent>(e => e.CustomerId == customerId && e.PrimaryHandlerStaffId == staffId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -59,7 +59,8 @@ public class AiPrescriptionHttpClient
             var list = new List<string>();
             if (e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Array)
                 foreach (var item in v.EnumerateArray())
-                    if (item.ValueKind == JsonValueKind.String) list.Add(item.GetString()!);
+                    if (item.ValueKind == JsonValueKind.String)
+                        list.Add(item.GetString()!);
             return list;
         }
 

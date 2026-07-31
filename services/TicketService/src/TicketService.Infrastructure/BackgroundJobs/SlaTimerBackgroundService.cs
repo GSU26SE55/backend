@@ -59,6 +59,7 @@ public class SlaTimerBackgroundService : BackgroundService
 
         var runningTimers = await dbContext.SlaTimers
             .Include(st => st.Ticket)
+                .ThenInclude(t => t.Assignments)
             .Where(st => st.Status == SlaTimerStatusEnum.Running && !st.IsDeleted)
             .ToListAsync(stoppingToken);
 
@@ -92,7 +93,8 @@ public class SlaTimerBackgroundService : BackgroundService
                         TicketId = timer.TicketId,
                         WarningAt = timer.WarningSentAt.Value,
                         Percentage = percentage,
-                        StaffId = timer.Ticket?.AssignedStaffId
+                        StaffId = timer.Ticket?.Assignments
+                            .FirstOrDefault(a => a.Role == Domain.Enums.AssignmentRoleEnum.PrimaryHandler)?.StaffId
                     }, stoppingToken);
                 }
             }

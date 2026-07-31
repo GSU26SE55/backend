@@ -43,6 +43,14 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot reject.");
@@ -58,12 +66,12 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
 
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Rejected, reason: request.Reason);
 
-        await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.AssignedStaffId ?? Guid.Empty, request.Reason), ct);
+        await _producer.PublishAsync(new TicketRejectedIntegrationEvent(ticket.Id, ticket.Code, ticket.PrimaryHandlerStaffId ?? Guid.Empty, request.Reason), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — Manager từ chối KẾT QUẢ resolve, ticket quay lại IN_PROGRESS
         // → người cần biết là Staff đang assign (IsClosedRejected = false).
         await _producer.PublishAsync(new TicketRejectedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.Reason,
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.Reason,
             IsClosedRejected: false, DateTime.UtcNow), ct);
 
         // #AUDIT-26

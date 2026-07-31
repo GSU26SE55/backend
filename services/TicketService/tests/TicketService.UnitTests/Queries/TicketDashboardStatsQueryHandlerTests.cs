@@ -14,13 +14,15 @@ public class TicketDashboardStatsQueryHandlerTests
         Guid? staffId = null,
         SlaTimer? slaTimer = null,
         DateTime? createdAt = null,
-        bool isDeleted = false) => new()
+        bool isDeleted = false)
+    {
+        var t = new Ticket
         {
             Id = Guid.NewGuid(),
             Code = "T-001",
             BatteryAssetId = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             Title = "Test",
             Description = "desc",
             Category = TicketCategoryEnum.Other,
@@ -31,6 +33,18 @@ public class TicketDashboardStatsQueryHandlerTests
             CreatedAt = createdAt ?? DateTime.UtcNow,
             IsDeleted = isDeleted
         };
+        if (staffId.HasValue)
+        {
+            t.Assignments.Add(new TicketAssignment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = t.Id,
+                StaffId = staffId.Value,
+                Role = AssignmentRoleEnum.PrimaryHandler
+            });
+        }
+        return t;
+    }
 
     private static SlaTimer MakeTimer(SlaTimerStatusEnum status) => new()
     {

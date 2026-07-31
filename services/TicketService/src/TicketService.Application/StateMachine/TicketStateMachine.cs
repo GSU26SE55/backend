@@ -113,8 +113,8 @@ public class TicketStateMachine : ITicketStateMachine
 
             case TicketStatusEnum.Resolved:
                 ticket.ResolvedAt = DateTime.UtcNow;
-                ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.AssignedStaffId && ctx.ActorRole == ActorRoleEnum.Staff)
-                                            ? ctx.ActorUserId : ticket.AssignedStaffId;
+                ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.PrimaryHandlerStaffId && ctx.ActorRole == ActorRoleEnum.Staff)
+                                            ? ctx.ActorUserId : ticket.PrimaryHandlerStaffId;
 
                 if (ctx.Payload.TryGetValue("ResolutionSummary", out var summary) && summary is string s)
                     ticket.ResolutionSummary = s;

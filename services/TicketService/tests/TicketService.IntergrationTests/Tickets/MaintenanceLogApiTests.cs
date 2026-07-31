@@ -66,9 +66,15 @@ public class MaintenanceLogApiTests : IClassFixture<TicketApiFactory>
             Description = "Initial details",
             Status = TicketStatusEnum.InProgress,
             CustomerId = userId,
-            AssignedStaffId = userId,
             Category = TicketCategoryEnum.Other,
             IsDeleted = false
+        });
+        _db.TicketAssignments.Add(new TicketAssignment
+        {
+            Id = Guid.NewGuid(),
+            TicketId = _ticketId,
+            StaffId = userId,
+            Role = AssignmentRoleEnum.PrimaryHandler
         });
 
         _db.SaveChanges();

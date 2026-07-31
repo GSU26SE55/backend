@@ -5,6 +5,7 @@ using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.UnitTests.Utils;
 
@@ -24,10 +25,12 @@ public static class MockTicketUnitOfWork
             IEnumerable<StaffAccount>? staffSeed = null,
             IEnumerable<OutboxMessage>? outboxSeed = null,
             IEnumerable<SlaTimer>? slaTimerSeed = null,
-            IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null)
+            IEnumerable<SlaPauseEvent>? slaPauseEventSeed = null,
+            IEnumerable<TicketAssignment>? assignmentSeed = null)
     {
         var result = BuildExtended(
-            ticketSeed, activitySeed, customerSeed, staffSeed, outboxSeed, slaTimerSeed, slaPauseEventSeed);
+            ticketSeed, activitySeed, customerSeed, staffSeed, outboxSeed, slaTimerSeed, slaPauseEventSeed,
+            assignmentSeed: assignmentSeed);
 
         return (result.uow, result.tickets, result.activities, result.customers, result.staff, result.slaTimers, result.slaPauseEvents);
     }
@@ -60,8 +63,10 @@ public static class MockTicketUnitOfWork
             IEnumerable<KnowledgeBaseArticle>? kbSeed = null,
             IEnumerable<KbArticleVersion>? kbVersionSeed = null,
             IEnumerable<TicketKbReference>? kbRefSeed = null,
-            IEnumerable<TicketParticipant>? participantSeed = null)
+            IEnumerable<TicketParticipant>? participantSeed = null,
+            IEnumerable<TicketAssignment>? assignmentSeed = null)
     {
+        assignmentSeed ??= ticketSeed?.SelectMany(t => t.Assignments);
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
         tickets.Setup(r => r.GetAllAsync()).Returns(ticketsMock);
@@ -128,6 +133,12 @@ public static class MockTicketUnitOfWork
         participants.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<TicketParticipant, bool>>>()))
               .ReturnsAsync((Expression<Func<TicketParticipant, bool>> p) => (participantSeed ?? Array.Empty<TicketParticipant>()).AsQueryable().Any(p));
 
+        var assignmentsMock = (assignmentSeed ?? Array.Empty<TicketAssignment>()).BuildMock();
+        var ticketAssignments = new Mock<IGenericRepository<TicketAssignment>>();
+        ticketAssignments.Setup(r => r.GetAllAsync()).Returns(assignmentsMock);
+        ticketAssignments.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<TicketAssignment, bool>>>()))
+            .ReturnsAsync((Expression<Func<TicketAssignment, bool>> p) => (assignmentSeed ?? Array.Empty<TicketAssignment>()).AsQueryable().Any(p));
+
         var uow = new Mock<ITicketUnitOfWork>();
         uow.SetupGet(u => u.Tickets).Returns(tickets.Object);
         uow.SetupGet(u => u.TicketActivities).Returns(activities.Object);
@@ -143,6 +154,7 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.TicketKbReferences).Returns(kbRefs.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
         uow.SetupGet(u => u.TicketParticipants).Returns(participants.Object);
+        uow.SetupGet(u => u.TicketAssignments).Returns(ticketAssignments.Object);
 
         // Blog repos — default empty, test files override via SetupBlog*
         var blogPosts = new Mock<IGenericRepository<BlogPost>>();

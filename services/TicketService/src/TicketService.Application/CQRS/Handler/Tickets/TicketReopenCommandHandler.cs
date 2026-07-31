@@ -64,7 +64,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts cho NotificationService (notify Manager + Staff).
         await _producer.PublishAsync(new TicketReopenedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.ReopenReason,
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ReopenReason,
             ticket.ReopenCount, DateTime.UtcNow), ct);
 
         // BR-07: Auto-escalate if ReopenCount >= 2

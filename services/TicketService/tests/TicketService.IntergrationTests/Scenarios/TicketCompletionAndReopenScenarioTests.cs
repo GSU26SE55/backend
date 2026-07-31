@@ -76,7 +76,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
 
         (await _client.PostAsJsonAsync($"/api/admin/tickets/{id}/assign", new TicketAssignCommand
         {
-            StaffId = Guid.Parse(TestAuthHandler.UserId),
+            PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
             Notes = "Assigned"
         })).StatusCode.Should().Be(HttpStatusCode.OK);
 

@@ -4,6 +4,7 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.TicketParticipants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.TicketParticipants;
 
@@ -21,7 +22,7 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
@@ -32,7 +33,7 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
             .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
             .ToListAsync(cancellationToken);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return Fail(403, "Không có quyền truy cập ticket này.");
 
         var items = activeParticipants

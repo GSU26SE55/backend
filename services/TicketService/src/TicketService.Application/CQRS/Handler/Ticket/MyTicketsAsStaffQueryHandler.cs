@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
 
@@ -32,11 +33,17 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
             };
         }
 
+        var assignedTicketIds = _unitOfWork.TicketAssignments != null
+            ? _unitOfWork.TicketAssignments.GetAllAsync()
+                .Where(a => a.StaffId == staffId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                .Select(a => a.TicketId)
+            : Enumerable.Empty<Guid>().AsQueryable();
+
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
             .Include(t => t.BatteryAssets)
-            .Where(t => !t.IsDeleted && t.AssignedStaffId == staffId);
+            .Where(t => !t.IsDeleted && assignedTicketIds.Contains(t.Id));
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);

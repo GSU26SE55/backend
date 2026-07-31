@@ -94,6 +94,14 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
         // Chỉ V2 được khởi tạo saga (nhiều field hơn). V1 KHÔNG còn ở Initially — nó vẫn
         // được DuringAny bắt để dedup, và NotificationService vẫn consume V1 như cũ.
         Initially(
+            When(AnomalyDetectedV1)
+                .Then(ctx => HydrateFromV1(ctx.Saga, ctx.Message))
+                .Then(_ => AppMetrics.SagaStarted.Inc())
+                .Then(_ => AppMetrics.SagaActive.Inc())
+                .Activity(x => x.OfInstanceType<SendCreateTicketActivity>())
+                .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
+                .TransitionTo(TicketRequested),
+
             When(AnomalyDetectedV2)
                 .Then(ctx => HydrateFromV2(ctx.Saga, ctx.Message))
                 .Then(_ => AppMetrics.SagaStarted.Inc())

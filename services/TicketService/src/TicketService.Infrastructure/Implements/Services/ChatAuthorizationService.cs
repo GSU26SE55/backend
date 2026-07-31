@@ -9,6 +9,7 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Implements.Services;
 
@@ -26,13 +27,13 @@ public class ChatAuthorizationService : IChatAuthorizationService
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == ticketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
             return false;
 
-        if (TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, actorUserId, actorRoles))
+        if (TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, actorUserId, actorRoles))
             return true;
 
         return await _unitOfWork.TicketParticipants.GetAllAsync()

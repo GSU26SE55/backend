@@ -44,6 +44,14 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, request.StaffId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot start work.");
@@ -92,7 +100,7 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết Staff đã bắt tay xử lý.
         await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
             (int)TicketStatusEnum.Assigned, (int)TicketStatusEnum.InProgress,
             nameof(TicketStatusEnum.Assigned), nameof(TicketStatusEnum.InProgress)), ct);
 

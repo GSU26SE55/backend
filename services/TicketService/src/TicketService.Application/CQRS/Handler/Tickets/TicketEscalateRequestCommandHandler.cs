@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
@@ -59,6 +60,9 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
 
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, ActivityActionEnum.EscalationRequested, newValue: request.Reason.ToString(), reason: request.Note);
 
+        // Auto-downgrade PrimaryHandler if tier no longer meets priority (safety check post-escalation)
+        await AutoDowngradePrimaryHandlerIfNeededAsync(ticket, request.StaffId, ct);
+
         // Outbox: Ticket Escalated
         await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName), ct);
 
@@ -80,6 +84,33 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
                 Status = ticket.Status
             }
         };
+    }
+
+    private async Task AutoDowngradePrimaryHandlerIfNeededAsync(TicketService.Domain.Entities.Ticket ticket, Guid actorId, CancellationToken ct)
+    {
+        if (!ticket.Priority.HasValue)
+            return;
+
+        var primaryAssignment = await _uow.TicketAssignments.GetAllAsync()
+            .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler, ct);
+
+        if (primaryAssignment == null)
+            return;
+
+        var staff = await _uow.StaffAccounts.GetAllAsync()
+            .FirstOrDefaultAsync(s => s.AccountId == primaryAssignment.StaffId && !s.IsDeleted, ct);
+
+        if (staff == null || AssignmentRoleHelper.ValidatePrimaryHandlerTier(ticket.Priority.Value, staff.SkillTier))
+            return;
+
+        primaryAssignment.Role = AssignmentRoleEnum.Supporter;
+        _uow.TicketAssignments.UpdateAsync(primaryAssignment);
+
+        await _activityLogger.LogAsync(ticket.Id, actorId, ActorRoleEnum.Staff, null,
+            ActivityActionEnum.StaffReassigned,
+            oldValue: primaryAssignment.StaffId.ToString(),
+            newValue: null,
+            reason: $"Auto-downgraded: tier không đủ cho priority {ticket.Priority} sau khi escalate.");
     }
 
     private static TicketActionResponse Fail(int statusCode, string message)

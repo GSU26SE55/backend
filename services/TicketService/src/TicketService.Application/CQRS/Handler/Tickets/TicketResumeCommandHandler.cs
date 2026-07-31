@@ -49,6 +49,14 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, request.StaffId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot resume.");
@@ -78,7 +86,7 @@ public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, T
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket chạy lại.
         await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
             (int)oldStatus, (int)TicketStatusEnum.InProgress,
             oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), ct);
         await _producer.PublishAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
