@@ -208,7 +208,8 @@ public static class ManageDependencyInjection
 
         services.AddGrpcClient<SharedContracts.Grpc.FileInternal.FileInternal.FileInternalClient>((sp, options) =>
         {
-            var address = sp.GetRequiredService<IOptions<ChatOptions>>().Value.Voice.FileStorageGrpcAddress;
+            var address = sp.GetRequiredService<IConfiguration>()["FILE_STORAGE_GRPC_CLIENT_ADDRESS"]
+                ?? sp.GetRequiredService<IOptions<ChatOptions>>().Value.Voice.FileStorageGrpcAddress;
             if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
                 throw new InvalidOperationException("Chat:Voice:FileStorageGrpcAddress must be an absolute URI.");
             options.Address = uri;

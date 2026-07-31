@@ -11,7 +11,9 @@ using SharedInfrastructure.Extensions;
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
-var grpcPort = builder.Configuration.GetValue("Grpc:Port", 8081);
+var grpcPort = builder.Configuration.GetValue<int?>("FILE_STORAGE_SERVICE_GRPC_SERVER_PORT")
+    ?? builder.Configuration.GetValue<int?>("Grpc:Port")
+    ?? throw new InvalidOperationException("FILE_STORAGE_SERVICE_GRPC_SERVER_PORT (or Grpc:Port) must be configured.");
 if (grpcPort == 8080)
     throw new InvalidOperationException("Grpc:Port must differ from HTTP port 8080.");
 

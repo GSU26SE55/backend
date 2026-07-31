@@ -255,6 +255,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
+      # FileStorageService gRPC server consumed internally by TicketService voice transcription.
+      Grpc__Port: ${FILE_STORAGE_SERVICE_GRPC_SERVER_PORT:?FILE_STORAGE_SERVICE_GRPC_SERVER_PORT is required}
       # HARDCODE — match minio container credentials. KHÔNG đọc từ .env.Docker để tránh mismatch.
       ObjectStorage__ServiceUrl: http://minio:9000              # internal API calls (filestorage container → minio)
       ObjectStorage__PublicServiceUrl: http://localhost:9090    # presigned URL signed cho browser
@@ -270,6 +272,8 @@ services:
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
     ports:
       - "4005:8080"
+    expose:
+      - "8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -428,6 +432,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
+      # TicketService gRPC client target; source variable names both services explicitly.
+      Chat__Voice__FileStorageGrpcAddress: ${FILE_STORAGE_GRPC_CLIENT_ADDRESS:?FILE_STORAGE_GRPC_CLIENT_ADDRESS is required}
       ConnectionStrings__TicketDb: "Host=postgres;Port=5432;Database=${TICKET_DB_NAME:-ticket_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
       ConnectionStrings__Redis: redis:6379
       RabbitMQ__Host: rabbitmq
