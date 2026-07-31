@@ -153,7 +153,7 @@ public sealed class TicketReprioritizeCommandHandler : IRequestHandler<TicketRep
             {
                 ActorUserId = request.ManagerId,
                 ActorRole = ActorRoleEnum.Manager,
-                ActorDisplayName = request.ManagerName ?? "Manager",
+                ActorDisplayName = request.ManagerName!,
                 Payload = new Dictionary<string, object?>
                 {
                     ["EscalationReason"] = EscalationReasonEnum.SkillGap
