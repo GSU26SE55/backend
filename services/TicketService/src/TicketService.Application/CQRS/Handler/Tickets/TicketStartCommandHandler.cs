@@ -99,8 +99,8 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
         await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, TicketStatusEnum.Assigned, TicketStatusEnum.InProgress), ct);
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết Staff đã bắt tay xử lý.
-        await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
+        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
             (int)TicketStatusEnum.Assigned, (int)TicketStatusEnum.InProgress,
             nameof(TicketStatusEnum.Assigned), nameof(TicketStatusEnum.InProgress)), ct);
 

@@ -72,7 +72,6 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Category = request.Category,
             CustomerId = request.CustomerId,
             BatteryAssetId = primaryBatteryAssetId,
-            DetectedAt = request.DetectedAt,
             BatterySerialNumber = batterySerialNumber,
             Status = TicketStatusEnum.New,
             Origin = TicketOriginEnum.ManualByCustomer,

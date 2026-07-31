@@ -69,8 +69,8 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
 
         // Sprint 6.2 NOTI-07 (#678) — Manager từ chối ở bước triage vì ngoài scope → CLOSED_REJECTED.
         // Người cần biết là Customer (IsClosedRejected = true).
-        await _producer.PublishAsync(new TicketRejectedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.Reason,
+        await _outboxWriter.WriteAsync(new TicketRejectedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.Reason,
             IsClosedRejected: true, DateTime.UtcNow), ct);
 
         await _uow.SaveChangesAsync(ct);

@@ -185,46 +185,23 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 ticket.Id,
                 request.ManagerId,
                 ActorRoleEnum.Manager,
-                    request.ManagerName!,
+                request.ManagerName!,
                 ActivityActionEnum.StaffAssigned,
                 oldValue: null,
                 newValue: request.PrimaryHandlerStaffId.ToString(),
                 reason: request.Notes);
 
-            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.PrimaryHandlerStaffId, ticket.Priority.ToString()!), ct);
+            // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để NotificationService notify được Customer.
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.PrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
             await _publisher.Publish(TicketAuditTrailNotification.For(
                 TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
                 metadata: new Dictionary<string, object?> { ["staffId"] = request.PrimaryHandlerStaffId }), ct);
 
+            await _uow.SaveChangesAsync(ct);
+
         }, ct);
 
-<<<<<<< HEAD
-        // Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer idempotent
-        await EnsureSlaTimerAsync(ticket, ct);
-
-        await _activityLogger.LogAsync(
-            ticket.Id,
-            request.ManagerId,
-            ActorRoleEnum.Manager,
-            request.ManagerName ?? "Manager",
-            ActivityActionEnum.StaffAssigned,
-            oldValue: null,
-            newValue: request.PrimaryHandlerStaffId.ToString(),
-            reason: request.Notes);
-
-        // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để NotificationService notify được Customer.
-        await _producer.WriteAsync(
-            new TicketAssignedEvent(ticket.Id, ticket.Code, request.PrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
-
-        await _publisher.Publish(TicketAuditTrailNotification.For(
-            TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
-            metadata: new Dictionary<string, object?> { ["staffId"] = request.PrimaryHandlerStaffId }), ct);
-
-        await _uow.SaveChangesAsync(ct);
-
-=======
->>>>>>> 2aaa4b15 (feat: resole duplicate ticket on merged Closes #699)
         return new TicketActionResponse
         {
             IsSuccess = true,
@@ -234,7 +211,7 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             {
                 Id = ticket.Id.ToString(),
                 Code = ticket.Code,
-                Status = ticket.Status
+                Status = ticket.Status,
             }
         };
     }

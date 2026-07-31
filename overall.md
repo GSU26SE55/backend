@@ -17278,6 +17278,7 @@ SLA + KB + Mobile + Export (21+22+23+24)
 ---
 
 **End of OVERALL.md (Final Complete Edition)**
+- v5.2 (2026-07-31): **TicketService integration status** — tích hợp gRPC audio-to-text bất đồng bộ: FileStorageService expose internal gRPC metadata lookup; TicketService tạo voice-chat placeholder, ghi `VoiceTranscriptionRequestedEvent` qua `IIntegrationEventOutboxWriter.WriteAsync`, consumer xử lý lifecycle/retry và migration `AddVoiceTranscriptionLifecycle`. Bổ sung `POST /api/admin/tickets/{id}/re-prioritize` Manager-only: controller lấy `ManagerName` từ JWT `FullName` (không hardcode display name); handler cập nhật SLA trong transaction, chuyển atomic `Running → Breached` và ghi `SlaBreachedEvent` vào Outbox khi due date mới đã quá hạn; kiểm tra skill tier và escalation. Ticket merge phát `TicketMergedEvent`, NotificationService có `TicketMergedConsumer`/`NotificationTypeEnum.TicketMerged`. TicketService dùng PostgreSQL `xmin` (`IsConcurrencyToken`) và middleware `DbUpdateConcurrencyException` cho optimistic concurrency. Command/consumer flows sử dụng `IIntegrationEventOutboxWriter.WriteAsync`; `IPublishEndpoint` còn lại chỉ ở Outbox relay và MassTransit saga activities. Build `TicketService.Api` pass (warnings tồn tại: NU1902 và XML docs).
 
 **Document lifecycle:**
 - v1 (2026-05-12 morning): §0-29 initial roadmap

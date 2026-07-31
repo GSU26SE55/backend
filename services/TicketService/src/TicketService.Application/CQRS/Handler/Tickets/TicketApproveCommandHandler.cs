@@ -58,7 +58,7 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
 
         // Sprint 6.2 NOTI-07 (#678) — event SharedContracts để NotificationService consume được
         // (event nội bộ ở trên nằm trong assembly TicketService nên service khác không bind được).
-        await _producer.PublishAsync(new TicketApprovedEvent(
+        await _outboxWriter.WriteAsync(new TicketApprovedEvent(
             ticket.Id, ticket.Code, ticket.CustomerId, request.ManagerId, request.ManagerComment,
             ticket.ApprovedAt ?? DateTime.UtcNow), ct);
 

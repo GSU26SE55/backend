@@ -67,7 +67,7 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
 
         // Sprint 6.2 NOTI-07 (#678) — rate xong là ticket đóng hẳn (CLOSED). Event SharedContracts
         // để NotificationService xác nhận với Customer + báo Manager (IsAutoClosed = false).
-        await _producer.PublishAsync(new TicketClosedEvent(
+        await _outboxWriter.WriteAsync(new TicketClosedEvent(
             ticket.Id, ticket.Code, ticket.CustomerId, ticket.ClosedAt ?? DateTime.UtcNow,
             IsAutoClosed: false, request.Rating), ct);
 

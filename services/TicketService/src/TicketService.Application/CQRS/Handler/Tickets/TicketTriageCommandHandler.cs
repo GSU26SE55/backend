@@ -81,10 +81,10 @@ public class TicketTriageCommandHandler : IRequestHandler<TicketTriageCommand, T
 
         // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts để Customer biết ticket đã được duyệt
         // và gán ưu tiên (bước triage), chờ phân công Staff.
-        await _producer.PublishAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId,
-            (int)TicketStatusEnum.Open, (int)TicketStatusEnum.Approved,
-            nameof(TicketStatusEnum.Open), nameof(TicketStatusEnum.Approved)), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
+            (int)TicketStatusEnum.New, (int)TicketStatusEnum.Open,
+            nameof(TicketStatusEnum.New), nameof(TicketStatusEnum.Open)), ct);
 
         await _uow.SaveChangesAsync(ct);
 

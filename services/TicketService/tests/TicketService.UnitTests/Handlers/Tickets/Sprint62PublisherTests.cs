@@ -22,7 +22,7 @@ public class Sprint62PublisherTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _activityLogger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
 
     private static Ticket MakeTicket(TicketStatusEnum status, Guid customerId, Guid? staffId = null) => new()
@@ -33,7 +33,7 @@ public class Sprint62PublisherTests
         Description = "D",
         Status = status,
         CustomerId = customerId,
-        AssignedStaffId = staffId,
+        PrimaryHandlerStaffId = staffId,
         Priority = TicketPriorityEnum.P2High,
     };
 
@@ -44,28 +44,28 @@ public class Sprint62PublisherTests
     {
         var customerId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
-        var ticket = MakeTicket(TicketStatusEnum.Approved, customerId);
+        var ticket = MakeTicket(TicketStatusEnum.Open, customerId);
 
         var staff = new List<StaffAccount>
         {
-            new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true }
+            new() { AccountId = staffId, Status = AccountStatusEnum.Active, IsAvailable = true, SkillTier = StaffSkillTierEnum.SeniorSpecialist }
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket], staffSeed: staff);
         var handler = new TicketAssignCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object,
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object,
             Mock.Of<MediatR.IPublisher>(), _slaCalculator);
 
         await handler.Handle(new TicketAssignCommand
         {
             TicketId = ticket.Id,
-            StaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             ManagerId = Guid.NewGuid(),
             ManagerName = "M"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
-            It.Is<TicketAssignedEvent>(e => e.CustomerId == customerId && e.StaffId == staffId),
+        _outboxWriter.Verify(p => p.WriteAsync(
+            It.Is<TicketAssignedEvent>(e => e.CustomerId == customerId && e.PrimaryHandlerStaffId == staffId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -78,7 +78,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketResolveCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object, Mock.Of<MediatR.IPublisher>());
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object, Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new TicketResolveCommand
         {
@@ -88,7 +88,7 @@ public class Sprint62PublisherTests
             ResolutionSummary = "Đã thay cell"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketResolvedEvent>(e => e.CustomerId == customerId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -104,7 +104,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketApproveCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object);
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object);
 
         await handler.Handle(new TicketApproveCommand
         {
@@ -114,7 +114,7 @@ public class Sprint62PublisherTests
             ManagerComment = "OK"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketApprovedEvent>(e =>
                 e.CustomerId == customerId && e.ManagerId == managerId && e.ManagerComment == "OK"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -129,7 +129,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketRejectCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object, Mock.Of<MediatR.IPublisher>());
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object, Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new TicketRejectCommand
         {
@@ -139,7 +139,7 @@ public class Sprint62PublisherTests
             Reason = "Chưa đạt"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketRejectedEvent>(e =>
                 !e.IsClosedRejected && e.StaffId == staffId && e.Reason == "Chưa đạt"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -149,11 +149,11 @@ public class Sprint62PublisherTests
     public async Task TriageReject_PublishesSharedTicketRejectedEvent_ClosedRejected()
     {
         var customerId = Guid.NewGuid();
-        var ticket = MakeTicket(TicketStatusEnum.Open, customerId);
+        var ticket = MakeTicket(TicketStatusEnum.New, customerId);
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketTriageRejectCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object);
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object);
 
         await handler.Handle(new TicketTriageRejectCommand
         {
@@ -163,7 +163,7 @@ public class Sprint62PublisherTests
             Reason = "Ngoài scope"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketRejectedEvent>(e => e.IsClosedRejected && e.CustomerId == customerId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -176,7 +176,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketRateCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object, Mock.Of<MediatR.IPublisher>());
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object, Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new TicketRateCommand
         {
@@ -187,7 +187,7 @@ public class Sprint62PublisherTests
             RatingComment = "Tốt"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketClosedEvent>(e => e.Rating == 5 && !e.IsAutoClosed && e.CustomerId == customerId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -201,7 +201,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketReopenCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object, Mock.Of<MediatR.IPublisher>());
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object, Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new TicketReopenCommand
         {
@@ -211,7 +211,7 @@ public class Sprint62PublisherTests
             ReopenReason = "Vẫn lỗi"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketReopenedEvent>(e => e.CustomerId == customerId && e.StaffId == staffId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -225,7 +225,7 @@ public class Sprint62PublisherTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
         var handler = new TicketStartCommandHandler(
-            uow.Object, _stateMachine.Object, _activityLogger.Object, _producer.Object, Mock.Of<MediatR.IPublisher>());
+            uow.Object, _stateMachine.Object, _activityLogger.Object, _outboxWriter.Object, Mock.Of<MediatR.IPublisher>());
 
         await handler.Handle(new TicketStartCommand
         {
@@ -234,7 +234,7 @@ public class Sprint62PublisherTests
             StaffName = "S"
         }, CancellationToken.None);
 
-        _producer.Verify(p => p.PublishAsync(
+        _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketStatusChangedEvent>(e =>
                 e.CustomerId == customerId &&
                 e.NewStatusName == nameof(TicketStatusEnum.InProgress)),

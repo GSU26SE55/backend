@@ -31,8 +31,10 @@ public class AiPrescriptionGrpcClient
         if (packConfig is not null)
         {
             request.PackConfig = new PackConfig { NSeries = packConfig.NSeries };
-            if (packConfig.Chemistry is not null) request.PackConfig.Chemistry = packConfig.Chemistry;
-            if (packConfig.CapacityAh is not null) request.PackConfig.CapacityAh = packConfig.CapacityAh.Value;
+            if (packConfig.Chemistry is not null)
+                request.PackConfig.Chemistry = packConfig.Chemistry;
+            if (packConfig.CapacityAh is not null)
+                request.PackConfig.CapacityAh = packConfig.CapacityAh.Value;
         }
 
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);

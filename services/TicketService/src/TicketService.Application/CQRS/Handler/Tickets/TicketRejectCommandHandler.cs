@@ -70,8 +70,8 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
 
         // Sprint 6.2 NOTI-07 (#678) — Manager từ chối KẾT QUẢ resolve, ticket quay lại IN_PROGRESS
         // → người cần biết là Staff đang assign (IsClosedRejected = false).
-        await _producer.PublishAsync(new TicketRejectedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.AssignedStaffId, request.Reason,
+        await _outboxWriter.WriteAsync(new TicketRejectedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.Reason,
             IsClosedRejected: false, DateTime.UtcNow), ct);
 
         // #AUDIT-26

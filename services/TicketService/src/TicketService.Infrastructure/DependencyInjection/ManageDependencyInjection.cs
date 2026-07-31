@@ -28,6 +28,7 @@ namespace TicketService.Infrastructure.DependencyInjection;
 
 public static class ManageDependencyInjection
 {
+    [Obsolete]
     public static IServiceCollection AddTicketServiceInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDatabase(configuration);

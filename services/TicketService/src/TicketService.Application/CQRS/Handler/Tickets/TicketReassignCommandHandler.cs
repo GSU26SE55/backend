@@ -174,7 +174,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                 newValue: request.NewPrimaryHandlerStaffId.ToString(),
                 reason: request.Reason);
 
-            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!), ct);
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
             await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
                 TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
@@ -182,29 +182,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
 
         }, ct);
 
-<<<<<<< HEAD
-        await _activityLogger.LogAsync(
-            ticket.Id,
-            request.ManagerId,
-            ActorRoleEnum.Manager,
-            request.ManagerName ?? "Manager",
-            ActivityActionEnum.StaffReassigned,
-            oldValue: oldStaffId?.ToString(),
-            newValue: request.NewPrimaryHandlerStaffId.ToString(),
-            reason: request.Reason);
 
-        // Outbox: Staff Reassigned — Sprint 6.2 NOTI-05 (#676) kèm CustomerId.
-        await _producer.WriteAsync(
-            new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
-
-        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
-            TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
-            metadata: new Dictionary<string, object?> { ["newStaffId"] = request.NewPrimaryHandlerStaffId, ["reassign"] = true }), ct);
-
-        await _uow.SaveChangesAsync(ct);
-
-=======
->>>>>>> 2aaa4b15 (feat: resole duplicate ticket on merged Closes #699)
         return new TicketActionResponse
         {
             IsSuccess = true,

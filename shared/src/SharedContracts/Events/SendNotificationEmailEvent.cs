@@ -6,6 +6,11 @@ namespace SharedContracts.Events;
 /// Publish khi NotificationService muốn gửi email notification chung (ticket alert, SLA breach, ...).
 /// EmailService consume và gửi email thực tế — template rendering xử lý ở #111.
 /// </summary>
+/// <param name="NotificationId"></param>
+/// <param name="ToEmail"></param>
+/// <param name="Subject"></param>
+/// <param name="Body"></param>
+/// <param name="SourceService"></param>
 /// <param name="UnsubscribeUrl">
 /// Sprint 6.3 NOTI3-15 (#715) — URL hủy đăng ký một chạm cho email KHÔNG giao dịch.
 ///

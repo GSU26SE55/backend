@@ -130,7 +130,6 @@ public class SlaTimerBackgroundService : BackgroundService
                         StaffId = timer.Ticket?.Assignments.FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId
                     }, cancellationToken);
                 }
-                }
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);

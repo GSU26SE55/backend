@@ -1,8 +1,8 @@
 using BatteryService.Application.Common.Models;
 using BatteryService.Application.Interfaces;
 using Grpc.Core;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace BatteryService.Infrastructure.Implements.Ai;
 
