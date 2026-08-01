@@ -93,8 +93,17 @@ public enum NotificationTypeEnum
     // Ghi chú Sprint 6.2 NOTI-04 (#675): cảnh báo bảo mật (suspicious login / refresh-token reuse)
     // đi thẳng đường AuthService → EmailService như OTP, KHÔNG qua NotificationService — nên cố ý
     // KHÔNG thêm type ở đây để tránh đẻ thêm enum không producer (đúng lỗi mà review §4.8 đã nêu).
-    /// <summary>GH-699.1 — source ticket đã được gộp vào master ticket.</summary>
-    TicketMerged = 27,
+    /// <summary>
+    /// GH-699.1 — source ticket đã được gộp vào master ticket.
+    ///
+    /// GH-83 (2026-08-01): đổi <c>27 → 34</c>. Giá trị 27 đã thuộc về
+    /// <see cref="ChatEscalatedToAdmin"/>; hai tên trùng giá trị là hợp lệ với compiler nhưng khiến
+    /// <c>NotificationCategoryMap</c> (dictionary khoá theo giá trị enum) **không thể** chứa
+    /// <c>TicketMerged</c> như một khoá riêng → nó bị xếp nhầm nhóm <c>Sla</c> và biến mất khỏi
+    /// <c>GET /api/notification-preferences/categories</c>.
+    /// An toàn: bảng <c>notifications</c> không có record nào <c>type = 27</c> khi đổi.
+    /// </summary>
+    TicketMerged = 34,
 
     System = 99
 }

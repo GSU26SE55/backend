@@ -24,6 +24,9 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.TicketRejected] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketReopened] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketRatingRequested] = NotificationCategoryEnum.Ticket,
+            // GH-83: trước đây không khai báo được vì TicketMerged trùng giá trị 27 với
+            // ChatEscalatedToAdmin ⇒ cùng một khoá dictionary. Sau khi đổi sang 34 mới thêm được.
+            [NotificationTypeEnum.TicketMerged] = NotificationCategoryEnum.Ticket,
 
             // ── SLA & leo thang ─────────────────────────────────────────────
             // TicketEscalated nằm ở nhóm SLA (không phải Ticket): leo thang luôn là hệ quả của
@@ -59,13 +62,9 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.AccountActivated] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.AdminInvite] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.System] = NotificationCategoryEnum.Account,
-
-            // Blog (GH-671): kết quả AI sinh blog, gửi InApp cho **chính người bấm generate**
-            // (`BlogGenerationStatusConsumer` dùng `evt.RequestedByUserId`) — là phản hồi cho một hành
-            // động tự khởi xướng, không phải cảnh báo vận hành, nên xếp cùng nhóm "hệ thống".
-            // Trước 2026-07-31 hai type này KHÔNG được khai báo ⇒ `Resolve()` rơi vào fallback (cũng là
-            // Account) và test bao `EveryNotificationType_HasExplicitCategory` đỏ. Khai báo tường minh
-            // ở đây giữ nguyên hành vi runtime, chỉ bỏ phần "âm thầm".
+            // GH-83: hai type Blog trước đây thiếu khai báo ⇒ rơi vào nhánh mặc định của Resolve()
+            // (cũng là Account) nên hành vi runtime KHÔNG đổi — nhưng test bao vẫn đỏ vì `All` thiếu
+            // khoá, và FE không thấy chúng trong GET /categories.
             [NotificationTypeEnum.BlogGenerationCompleted] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.BlogGenerationFailed] = NotificationCategoryEnum.Account,
         };
