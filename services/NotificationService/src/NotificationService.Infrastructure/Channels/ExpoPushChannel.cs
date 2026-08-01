@@ -37,6 +37,14 @@ public class ExpoPushChannel : INotificationChannel
     /// <summary>Chừa chỗ cho các field cố định (to/title/sound/priority/channelId) khi cắt bớt.</summary>
     private const int MessageOverheadBytes = 512;
 
+    /// <summary>
+    /// Sprint 6.3 NOTI3-14 (#714) — khoá trong <c>data</c> mang id của chính notification.
+    /// Client mobile cần nó để gọi <c>PATCH /api/notifications/{id}/opened</c> khi user bấm push;
+    /// <see cref="SendRequest.PayloadJson"/> do consumer viết chỉ chứa context nghiệp vụ
+    /// (<c>chatId</c>, <c>ticketId</c>, …) nên không bao giờ có sẵn id này.
+    /// </summary>
+    private const string NotificationIdKey = "notificationId";
+
     private readonly IHttpClientFactory _httpFactory;
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ILogger<ExpoPushChannel> _logger;
@@ -63,18 +71,7 @@ public class ExpoPushChannel : INotificationChannel
             return new ChannelResult(false, "No Expo token");
         }
 
-        object? data = null;
-        if (!string.IsNullOrWhiteSpace(request.PayloadJson))
-        {
-            try
-            { data = JsonSerializer.Deserialize<object>(request.PayloadJson); }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex,
-                    "ExpoPushChannel: payload của notification {NotificationId} không phải JSON hợp lệ — gửi không kèm data.",
-                    request.NotificationId);
-            }
-        }
+        var data = BuildData(request);
 
         // Sprint 6.3 NOTI3-02 (#702) — ép message vừa trần 4KB TRƯỚC khi gửi.
         var (title, body, dataToSend) = FitWithinSizeLimit(request, data);
@@ -171,12 +168,57 @@ public class ExpoPushChannel : INotificationChannel
     }
 
     /// <summary>
+    /// Sprint 6.3 NOTI3-14 (#714) — dựng <c>data</c> gửi kèm push.
+    ///
+    /// Luôn có <see cref="NotificationIdKey"/>, cộng thêm context nghiệp vụ từ
+    /// <see cref="SendRequest.PayloadJson"/>. Payload hỏng thì vẫn gửi được id — mất deep link còn
+    /// hơn mất luôn khả năng báo "đã mở".
+    /// </summary>
+    private Dictionary<string, object?> BuildData(SendRequest request)
+    {
+        var data = new Dictionary<string, object?> { [NotificationIdKey] = request.NotificationId };
+
+        if (string.IsNullOrWhiteSpace(request.PayloadJson))
+            return data;
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(request.PayloadJson);
+            if (payload is not null)
+            {
+                foreach (var (key, value) in payload)
+                {
+                    // Payload do consumer viết KHÔNG được ghi đè id thật của notification.
+                    if (string.Equals(key, NotificationIdKey, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    data[key] = value;
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex,
+                "ExpoPushChannel: payload của notification {NotificationId} không phải JSON object hợp lệ — "
+                + "gửi kèm mỗi notificationId.",
+                request.NotificationId);
+        }
+
+        return data;
+    }
+
+    /// <summary>
     /// Sprint 6.3 NOTI3-02 (#702) — ép một message vừa trần 4096 byte của Expo.
     ///
-    /// Thứ tự hy sinh: bỏ <c>data</c> trước (client vẫn mở được app, chỉ mất deep link),
+    /// Thứ tự hy sinh: bỏ context nghiệp vụ trong <c>data</c> trước (mất deep link),
     /// rồi mới cắt <c>body</c> — vì tiêu đề + nội dung là thứ người dùng thực sự đọc.
+    ///
+    /// Sprint 6.3 NOTI3-14 (#714): trước đây bỏ SẠCH <c>data</c>. Nhưng mất
+    /// <see cref="NotificationIdKey"/> nghĩa là client không báo được "đã mở" cho đúng những push
+    /// dài nhất — thứ đáng đo nhất. Nay giữ lại bản tối thiểu (chỉ id, ~60 byte, luôn vừa trần).
     /// </summary>
-    private (string Title, string Body, object? Data) FitWithinSizeLimit(SendRequest request, object? data)
+    private (string Title, string Body, object? Data) FitWithinSizeLimit(
+        SendRequest request, Dictionary<string, object?> data)
     {
         var title = request.Title ?? string.Empty;
         var body = request.Body ?? string.Empty;
@@ -184,12 +226,12 @@ public class ExpoPushChannel : INotificationChannel
         if (EstimateBytes(title, body, data) <= MaxMessageBytes)
             return (title, body, data);
 
-        if (data is not null)
+        if (data.Count > 1)
         {
             _logger.LogWarning(
-                "ExpoPushChannel: notification {NotificationId} vượt trần {Limit} byte — bỏ phần data để gửi được.",
+                "ExpoPushChannel: notification {NotificationId} vượt trần {Limit} byte — bỏ context nghiệp vụ, giữ notificationId.",
                 request.NotificationId, MaxMessageBytes);
-            data = null;
+            data = new Dictionary<string, object?> { [NotificationIdKey] = request.NotificationId };
 
             if (EstimateBytes(title, body, data) <= MaxMessageBytes)
                 return (title, body, data);

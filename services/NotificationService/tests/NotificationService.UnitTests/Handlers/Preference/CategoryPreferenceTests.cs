@@ -44,6 +44,28 @@ public class NotificationCategoryMapTests
             "mọi NotificationTypeEnum phải được khai báo nhóm trong NotificationCategoryMap");
     }
 
+    /// <summary>
+    /// GH-83 — chặn hai tên enum trùng giá trị.
+    ///
+    /// **Vì sao cần test riêng:** <see cref="EveryNotificationType_HasExplicitCategory"/> kiểm theo
+    /// *giá trị* (<c>All.ContainsKey</c>). Khi <c>TicketMerged</c> và <c>ChatEscalatedToAdmin</c> cùng
+    /// bằng 27 thì khoá 27 đã tồn tại ⇒ test đó vẫn **XANH**, trong khi thực tế <c>TicketMerged</c>
+    /// không thể có nhóm riêng, bị xếp nhầm vào <c>Sla</c> và biến mất khỏi
+    /// <c>GET /api/notification-preferences/categories</c>. Lỗi lọt CI vì không ai kiểm điều kiện này.
+    /// </summary>
+    [Fact]
+    public void NotificationTypeEnum_HasNoDuplicateValues()
+    {
+        var duplicates = Enum.GetNames<NotificationTypeEnum>()
+            .GroupBy(name => (int)Enum.Parse<NotificationTypeEnum>(name))
+            .Where(group => group.Count() > 1)
+            .Select(group => $"{group.Key} = {string.Join(" / ", group)}")
+            .ToList();
+
+        duplicates.Should().BeEmpty(
+            "hai tên trùng giá trị làm NotificationCategoryMap không khai báo được nhóm riêng cho từng type");
+    }
+
     [Fact]
     public void EveryCategory_HasAtLeastOneType()
     {

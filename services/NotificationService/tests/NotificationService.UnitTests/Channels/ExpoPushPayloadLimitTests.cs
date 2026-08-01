@@ -75,26 +75,80 @@ public class ExpoPushPayloadLimitTests
     }
 
     /// <summary>
-    /// Payload data khổng lồ → bỏ data trước, giữ nguyên tiêu đề/nội dung.
-    /// Người dùng vẫn đọc được thông báo, chỉ mất deep link.
+    /// Payload data khổng lồ → bỏ CONTEXT NGHIỆP VỤ trước, giữ nguyên tiêu đề/nội dung.
+    ///
+    /// Sprint 6.3 NOTI3-14 (#714) — đổi hành vi: trước đây bỏ SẠCH <c>data</c>. Nay vẫn phải giữ
+    /// <c>notificationId</c>, nếu không client mất khả năng gọi <c>PATCH /{id}/opened</c> đúng ở
+    /// những push dài nhất — thứ đáng đo open-rate nhất.
     /// </summary>
     [Fact]
-    public async Task OversizedData_IsDropped_ButTitleAndBodySurvive()
+    public async Task OversizedData_DropsBusinessContext_ButKeepsNotificationId()
     {
         var (uow, _, _) = MockNotificationUnitOfWork.Build();
         var (channel, handler) = Build(uow, Ok("t1"));
 
         var hugePayload = JsonSerializer.Serialize(new { blob = new string('x', 8000) });
-        await channel.SendAsync(Request("Cảnh báo", "Pin lỗi", hugePayload));
+        var request = Request("Cảnh báo", "Pin lỗi", hugePayload);
+        await channel.SendAsync(request);
 
         using var doc = JsonDocument.Parse(handler.Body!);
         var msg = doc.RootElement[0];
 
         msg.GetProperty("title").GetString().Should().Be("Cảnh báo");
         msg.GetProperty("body").GetString().Should().Be("Pin lỗi");
-        msg.GetProperty("data").ValueKind.Should().Be(JsonValueKind.Null);
+
+        var data = msg.GetProperty("data");
+        data.ValueKind.Should().Be(JsonValueKind.Object);
+        data.GetProperty("notificationId").GetGuid().Should().Be(request.NotificationId);
+        data.TryGetProperty("blob", out _).Should().BeFalse("context nghiệp vụ mới là thứ bị hy sinh");
 
         Encoding.UTF8.GetByteCount(handler.Body!).Should().BeLessThan(4096);
+    }
+
+    /// <summary>
+    /// Sprint 6.3 NOTI3-14 (#714) — <c>data</c> LUÔN mang <c>notificationId</c>, kèm nguyên context
+    /// nghiệp vụ khi message còn vừa trần. Không có id thì mobile không biết gọi
+    /// <c>PATCH /api/notifications/{id}/opened</c> cho record nào.
+    /// </summary>
+    [Fact]
+    public async Task Data_AlwaysCarriesNotificationId_AlongsideBusinessPayload()
+    {
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var (channel, handler) = Build(uow, Ok("t1"));
+
+        var ticketId = Guid.NewGuid();
+        var payload = JsonSerializer.Serialize(new { ticketId, chatId = "c-1" });
+        var request = Request("Tin nhắn mới", "Bạn có bình luận mới", payload);
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(handler.Body!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("notificationId").GetGuid().Should().Be(request.NotificationId);
+        data.GetProperty("ticketId").GetGuid().Should().Be(ticketId);
+        data.GetProperty("chatId").GetString().Should().Be("c-1");
+    }
+
+    /// <summary>
+    /// Payload do consumer tự viết KHÔNG được ghi đè <c>notificationId</c> — nếu đè được thì client
+    /// sẽ đánh dấu "đã mở" nhầm sang record khác. Payload hỏng cũng vẫn phải gửi kèm id.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"notificationId\":\"11111111-1111-1111-1111-111111111111\"}")]
+    [InlineData("khong-phai-json")]
+    [InlineData("[1,2,3]")]
+    public async Task Payload_CannotOverrideOrRemoveNotificationId(string payloadJson)
+    {
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var (channel, handler) = Build(uow, Ok("t1"));
+
+        var request = Request("Tiêu đề", "Nội dung", payloadJson);
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(handler.Body!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("notificationId").GetGuid().Should().Be(request.NotificationId);
     }
 
     /// <summary>Body quá dài (không phải do data) → cắt theo BYTE, không được vỡ ký tự tiếng Việt.</summary>
