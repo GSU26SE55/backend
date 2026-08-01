@@ -5,9 +5,9 @@ using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Implements.Repositories;
 using BatteryService.Infrastructure.Mqtt;
 using BatteryService.Infrastructure.Persistence;
-using BatteryService.Infrastructure.Implements.Repositories;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -111,7 +111,8 @@ public class MqttBridgeE2ETests
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (condition()) return true;
+            if (condition())
+                return true;
             await Task.Delay(100);
         }
         return condition();
@@ -263,7 +264,8 @@ public class MqttBridgeE2ETests
         var observer = await ConnectAsync(MosquittoBrokerFixture.BridgeUser);
         observer.ApplicationMessageReceivedAsync += e =>
         {
-            lock (received) received.Add(e.ApplicationMessage.Topic);
+            lock (received)
+                received.Add(e.ApplicationMessage.Topic);
             return Task.CompletedTask;
         };
         await observer.SubscribeAsync("solar/#");
@@ -281,7 +283,8 @@ public class MqttBridgeE2ETests
         // Chờ topic hợp lệ tới — mốc thời gian này cũng đủ rộng cho topic bị chặn nếu nó lọt.
         var arrived = await WaitUntilAsync(() =>
         {
-            lock (received) return received.Contains(ownTopic);
+            lock (received)
+                return received.Contains(ownTopic);
         }, TimeSpan.FromSeconds(10));
 
         await deviceA.DisconnectAsync();

@@ -33,8 +33,10 @@ public sealed class RedisFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (Redis is not null) await Redis.CloseAsync();
-        if (_container is not null) await _container.DisposeAsync();
+        if (Redis is not null)
+            await Redis.CloseAsync();
+        if (_container is not null)
+            await _container.DisposeAsync();
     }
 }
 

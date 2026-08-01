@@ -15,7 +15,14 @@ namespace SmsService.Infrastructure.BackgroundJobs;
 /// </summary>
 public class SmsMessageRedactorBackgroundService : BackgroundService
 {
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(15);
+    /// <summary>
+    /// Nhịp quét. Khai <c>protected virtual</c> thay vì hằng số <b>chỉ để test lớp con rút ngắn
+    /// được nhịp</b> — 15 phút mỗi lượt thì thân vòng lặp không thể chạy trong test, mà đây là chỗ
+    /// thực hiện việc xoá nội dung tin nhắn (nghĩa vụ bảo vệ dữ liệu cá nhân), không được để không
+    /// ai kiểm. Giá trị production KHÔNG đổi; không có ai override ngoài test.
+    /// </summary>
+    protected virtual TimeSpan TickInterval => TimeSpan.FromMinutes(15);
+
     private static readonly TimeSpan RetainAfterSent = TimeSpan.FromHours(24);
     private const int BatchSize = 500;
 

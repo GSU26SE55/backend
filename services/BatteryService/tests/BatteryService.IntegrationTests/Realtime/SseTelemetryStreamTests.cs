@@ -1,24 +1,24 @@
 using System.Diagnostics;
 using System.Text.Json;
-using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Common.Models;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Handler.SensorReading;
+using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Realtime;
 using BatteryService.Domain.Entities;
-using BatteryService.UnitTests.Helpers;
 using BatteryService.Infrastructure.Implements.Repositories;
 using BatteryService.Infrastructure.Persistence;
 using BatteryService.Infrastructure.Realtime;
+using BatteryService.UnitTests.Helpers;
+using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using SharedInfrastructure.Persistence.Interceptors;
-using SharedInfrastructure.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SharedInfrastructure.Persistence.Interceptors;
+using SharedInfrastructure.Services;
 
 namespace BatteryService.IntegrationTests.Realtime;
 
@@ -59,16 +59,16 @@ public class SseTelemetryStreamTests
 
     private static LiveReadingDto Reading(Guid assetId, Guid customerId, decimal voltage = 51.2m,
         string? sourceCode = "primary") => new()
-    {
-        BatteryAssetId = assetId,
-        CustomerId = customerId,
-        Time = DateTime.UtcNow,
-        Voltage = voltage,
-        Current = 3.1m,
-        Temperature = 29.5m,
-        SocPercent = 90m,
-        SensorSourceCode = sourceCode
-    };
+        {
+            BatteryAssetId = assetId,
+            CustomerId = customerId,
+            Time = DateTime.UtcNow,
+            Voltage = voltage,
+            Current = 3.1m,
+            Temperature = 29.5m,
+            SocPercent = 90m,
+            SensorSourceCode = sourceCode
+        };
 
     // ---------------------------------------------------------------- 1) e2e < 1s
 
@@ -87,7 +87,8 @@ public class SseTelemetryStreamTests
             await foreach (var msg in stream.SubscribeAsync(scope, lastEventId: null, cts.Token))
             {
                 // Bỏ qua `ping` heartbeat — chỉ quan tâm reading.
-                if (msg.Event == "reading") { received.TrySetResult(msg); break; }
+                if (msg.Event == "reading")
+                { received.TrySetResult(msg); break; }
             }
         }, cts.Token);
 
@@ -131,7 +132,8 @@ public class SseTelemetryStreamTests
             await foreach (var msg in stream.SubscribeAsync(scope, lastEventId: null, cts.Token))
             {
                 if (msg.Event == "summary")
-                    lock (summaries) summaries.Add(DateTime.UtcNow);
+                    lock (summaries)
+                        summaries.Add(DateTime.UtcNow);
             }
         }, cts.Token);
 
@@ -152,7 +154,8 @@ public class SseTelemetryStreamTests
         await Task.WhenAny(pump, Task.Delay(2000));
 
         int count;
-        lock (summaries) count = summaries.Count;
+        lock (summaries)
+            count = summaries.Count;
 
         count.Should().BeGreaterThan(0, "scope nhiều pin phải phát event `summary`");
         // Cửa sổ quan sát ≈ flood + 1 nhịp chờ. Cho dư 1 message để không phụ thuộc thời điểm tick đầu.
@@ -266,7 +269,8 @@ public class SseTelemetryStreamTests
             var pump1 = Task.Run(async () =>
             {
                 await foreach (var m in stream.SubscribeAsync(scope, lastEventId: null, s1.Token))
-                    if (m.Event == "reading") { got.TrySetResult(m); break; }
+                    if (m.Event == "reading")
+                    { got.TrySetResult(m); break; }
             }, s1.Token);
 
             await Task.Delay(700, cts.Token);
@@ -296,7 +300,8 @@ public class SseTelemetryStreamTests
         {
             await foreach (var m in stream.SubscribeAsync(scope, firstId, s2.Token))
             {
-                if (m.Event != "reading") continue;
+                if (m.Event != "reading")
+                    continue;
                 lock (replayed)
                 {
                     ids.Add(m.Id);
@@ -346,9 +351,11 @@ public class SseTelemetryStreamTests
         {
             await foreach (var m in stream.SubscribeAsync(scope, lastEventId: null, s.Token))
             {
-                if (m.Event != "reading") continue;
+                if (m.Event != "reading")
+                    continue;
                 var dto = JsonSerializer.Deserialize<LiveReadingDto>(m.Data, Json)!;
-                lock (seen) seen.Add(dto.Voltage);
+                lock (seen)
+                    seen.Add(dto.Voltage);
             }
         }, s.Token);
 
@@ -373,7 +380,8 @@ public class SseTelemetryStreamTests
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (condition()) return true;
+            if (condition())
+                return true;
             await Task.Delay(100);
         }
         return condition();

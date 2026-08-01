@@ -4420,7 +4420,7 @@ Pipeline (`Program.cs` line 130-148):
 
 ```
 HTTPS redirection (skip nếu env=Docker)
-  → CORS "AllowAll"
+  → CORS "AppCors"   (đổi tên 2026-08-01, trước là "AllowAll")
   → Rate limiter (per-endpoint policies)
   → JwtBearer Authentication
   → TokenRevocationMiddleware (#AUTH-54)
@@ -4470,15 +4470,56 @@ Mọi entity extend `AuditableEntity` (Account, Role, Permission, RolePermission
 - Repository `GetAllAsync()` mặc định KHÔNG filter `IsDeleted` (project không dùng global query filter, xem `CLAUDE.md`) → handler PHẢI explicit `.Where(x => !x.IsDeleted)`.
 - Reactivate flow (`/reactivate-request`/`/reactivate-verify`) dùng `IgnoreQueryFilters()` để bypass — nhưng project không có global query filter nên `IgnoreQueryFilters()` ở reactivate handler thực ra **no-op**. Vẫn safe vì code logic check `IsDeleted = true` explicit.
 
-### CORS policy `"AllowAll"`
+### CORS policy `"AppCors"` — ĐÃ SỬA `#AUTH-05` (2026-08-01)
 
-Hiện tại config CORS = **AllowAll** — permissive cho mọi origin/method/header. **Production lock down** qua config:
-- Whitelist origins (vd `https://app.solarbattery.com`, `https://admin.solarbattery.com`)
-- Allow methods: `GET, POST, PUT, PATCH, DELETE`
-- Allow headers: `Authorization, Content-Type, Idempotency-Key, X-Challenge-Token, X-Correlation-Id`
-- Allow credentials: `true` (cho cookie-based auth nếu có)
+> ⚠️ **Mục này trước đây mô tả `AllowAll` và xếp vào "cần lock down cho production". Lỗ hổng đó đã
+> được vá.** Tên policy đổi từ `"AllowAll"` → **`"AppCors"`** (`AddCORS.PolicyName`).
 
-> **SECURITY review checkpoint**: AllowAll cho mọi cross-origin browser request bypass được CORS, nhưng KHÔNG bypass được auth (vẫn cần `Authorization` header). Tuy vậy enable cross-origin malicious sites đọc response 401/403 → có thể infer user state.
+`AddCorsExtentions(configuration, environment)` đọc danh sách origin từ config `Cors:AllowedOrigins`:
+
+| Môi trường | `Cors:AllowedOrigins` | Hành vi |
+|---|---|---|
+| Bất kỳ | **có giá trị** | `WithOrigins(<danh sách>)` + `AllowAnyMethod()` + `AllowAnyHeader()` + `AllowCredentials()`. Origin ngoài danh sách **bị chặn** |
+| `Development` | rỗng | Vẫn cho **mọi** origin (để FE chạy cổng bất kỳ) + in cảnh báo ra console |
+| `Production` | rỗng | **NÉM `InvalidOperationException` — service TỪ CHỐI KHỞI ĐỘNG** |
+
+**Vì sao ném chứ không chỉ log:** cảnh báo trong log thì không ai đọc, và lỗ hổng P0 sẽ sống tiếp.
+Thà service không lên còn hơn lên với CORS mở toang.
+
+**Cách khai** — biến môi trường dạng mảng (xem `.env.Docker`):
+
+```
+Cors__AllowedOrigins__0=https://app.solarbattery.site
+Cors__AllowedOrigins__1=https://admin.solarbattery.site
+```
+
+**Ba điều dễ vấp:**
+
+- **Dấu `/` cuối được tự cắt khi nạp.** `https://x.com/` và `https://x.com` là cùng một origin, nhưng
+  `WithOrigins` so khớp **chuỗi nguyên văn** — không cắt là whitelist trượt mà không có thông báo nào.
+- **Origin phân biệt scheme và cổng.** `http://app.x` ≠ `https://app.x`; `https://app.x:3000` ≠ `https://app.x`.
+  FE chạy cổng khác ở staging thì phải khai riêng dòng cho cổng đó.
+- **Method và header vẫn mở hoàn toàn** (`AllowAnyMethod` + `AllowAnyHeader`). Việc siết nằm ở **origin**,
+  không ở method/header — không cần liệt kê `Authorization`, `Idempotency-Key`, `X-Correlation-Id`… vào đâu cả.
+
+**Chốt ở tầng triển khai (2026-08-01):** `docker-compose.prod.yml` khai `Cors__AllowedOrigins__0`
+cho **8 service** (mọi service trừ `emailservice` — service này không dùng CORS) bằng cú pháp bắt buộc
+`${Cors__AllowedOrigins__0:?...}`. Thiếu khoá thì **`docker compose up` DỪNG NGAY** kèm thông báo,
+thay vì để 8 container khởi động rồi cùng crash-loop. Giá trị đặt trong `/opt/solar/.env.prod`.
+
+**Còn treo:** danh sách domain production thật do **Leader chốt** rồi điền vào biến môi trường.
+Phần cơ chế đã xong và có 5 test bao ở
+`shared/tests/SharedInfrastructure.UnitTests/DependencyInjection/CorsExtensionsTests.cs`.
+
+> ⚠️ **ApiGateway từng bị bỏ sót và đã sửa 2026-08-01.** Gateway KHÔNG gọi `AddSharedInfrastructure`
+> nên không tự có policy; nó tự khai một policy tên `"AllowAll"` riêng. Khi `app.UseCors(...)` đổi
+> sang `AddCORS.PolicyName` (`"AppCors"`) thì tên không khớp ⇒ `CorsMiddleware` ném
+> `InvalidOperationException: The CORS policy 'AppCors' was not found` trên **mọi request** qua cửa
+> trước của hệ thống. Nay gateway gọi thẳng `AddCorsExtentions(builder.Configuration, builder.Environment)`
+> — cùng whitelist với 7 service phía sau.
+
+> Bộ test cũ của file này từng khẳng định "mọi origin đều được phép" — tức nó **đang bảo vệ chính lỗ
+> hổng cần sửa**. Đã viết lại.
 
 ### Debug console output trong production code
 
@@ -4785,7 +4826,7 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 6. **`Redis:ConnectionString`** reachable từ pod — verify qua `/ready` probe.
 7. **`RabbitMQ:*`** config + reachable — verify qua `/ready`.
 8. **`Outbox:PollIntervalSeconds`** = 2 (production), có thể tăng cho dev.
-9. **CORS** policy không phải `AllowAll` cho production — whitelist origins cụ thể.
+9. **`Cors__AllowedOrigins__0..n`** — **BẮT BUỘC ở Production**. Thiếu là service **ném ngay lúc khởi động**, không phải cảnh báo. Đây là chốt tự động của `#AUTH-05`, không còn là mục "nhớ siết bằng tay".
 10. **DataProtection key store** persist (Redis/file mount) — TRÁNH user bị mất 2FA sau restart.
 11. **`Idempotency:Enabled`** = true cho production.
 12. **`Session:MaxConcurrentSessions`** = 5 (default) hoặc theo policy.

@@ -18,9 +18,47 @@ BatteryCreated · BatteryUpdated · BatteryDeleted · AssignedToCustomer · Unas
 ## Alert (host trong BatteryService — D14) — `AlertAuditActionEnum`
 AlertAcknowledged · AlertSuppressed · AlertRuleChanged · AlertSeverityOverridden · AlertManuallyResolved
 
-## TicketService (ticket_audit_logs) — `TicketAuditActionEnum` (21)
+## TicketService (ticket_audit_logs) — `TicketAuditActionEnum` (28)
+
+**Vòng đời ticket (21 — `#AUDIT-24`, giá trị enum 1–21):**
 TicketCreated · StateTransitioned · PriorityChanged · AssignedToStaff · UnassignedFromStaff · SlaPaused · SlaResumed · SlaBreached · EscalatedToManager · EscalatedToAdmin · MaintenanceLogAdded · CommentAdded · AttachmentUploaded · AttachmentDeleted · ResolutionAdded · ClosedByUser · ReopenedByAdmin · RejectedByManager · FalseAlarmMarked · CustomerRated · AutoCreatedFromAnomaly
 > AutoCreatedFromAnomaly có `causation_id = OriginAlertId` (#AUDIT-27).
+>
+> ⚠️ **4 mã khai báo nhưng CHƯA CÓ handler nào ghi** (rà mã nguồn 2026-08-01): `AttachmentUploaded` · `AttachmentDeleted` · `ClosedByUser` · `FalseAlarmMarked`. Thực tế chỉ **24/28** mã xuất hiện trong `ticket_audit_logs`; lọc theo 4 mã đó luôn ra rỗng.
+
+**Module Chat (7 — Sprint Chat DoD, 2026-07-31, giá trị enum 22–28):**
+ChatCreated · ChatEdited · ChatDeleted · ChatPinned · ChatUnpinned · ChatReacted · ChatMentioned
+
+> **Vì sao thêm:** trước 2026-07-31 module Chat **không ghi audit nào**. Kênh trao đổi
+> Customer ↔ Staff/Manager là nơi dễ phát sinh tranh chấp nội dung nhất (sửa/xoá tin nhắn, gỡ ghim,
+> tag nhầm người) mà lại không có vết forensic.
+>
+> **Cả 7 action đều là `severity = Info`, `category = DataModification`** (rơi vào nhánh mặc định
+> của `TicketAuditTrailNotification.For`). Không có action nào trong nhóm này là `Critical`/`Security`.
+>
+> **`target_id` là ID TICKET, không phải ID tin nhắn.** ID tin nhắn nằm trong `metadata_json.chatId`.
+> Chọn như vậy để lọc theo ticket (`?ticketId=`) gom được cả thao tác chat của ticket đó.
+> `target_display` = mã ticket (`ticket.Code`).
+>
+> **`metadata_json` theo từng action:**
+>
+> | Action | Khoá trong `metadata_json` |
+> |---|---|
+> | `ChatCreated` | `chatId` (UUID), `isInternal` (bool — tin nội bộ hay công khai) |
+> | `ChatEdited` / `ChatDeleted` / `ChatPinned` / `ChatUnpinned` | `chatId` |
+> | `ChatReacted` | `chatId`, `reactionType` (chuỗi tên `ReactionTypeEnum`) |
+> | `ChatMentioned` | `chatId`, `mentionedUserIds` (mảng UUID) |
+>
+> **`ChatCreated` và `ChatMentioned` là HAI entry riêng** cho cùng một lần gửi tin: gửi tin có tag
+> người sẽ sinh 2 bản ghi audit. Cố ý — tra "ai bị tag vào ticket này" phải lọc được độc lập với
+> "ai gửi tin".
+>
+> **`ChatReacted` ghi ở cả 2 nhánh** — thả reaction mới, và khôi phục reaction đã gỡ trước đó
+> (bản ghi soft-delete được bật lại). Cùng một action code, không phân biệt.
+>
+> ⚠️ **`metadata_json` KHÔNG xuất hiện ở endpoint nội bộ** `GET /api/admin/ticket/audit-logs`
+> (`TicketAuditLogDto` không có field này). Muốn đọc `chatId`/`reactionType`/`mentionedUserIds`
+> phải dùng Audit Aggregator: `GET /api/admin/audit/search` → `AuditAggregateDto.metadataJson`.
 
 ## FileStorageService (file_audit_logs) — `FileAuditActionEnum`
 FileUploaded · FileDownloaded · FileDeleted · AccessDenied · PresignedUrlGenerated · PresignedUrlRevoked

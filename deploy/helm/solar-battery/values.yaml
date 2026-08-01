@@ -27,7 +27,19 @@ global:
   domain: capstonegsu26se55.mooo.com
 
   # ASP.NET environment — Development / Staging / Production
+  # ⚠️ Đặt `Production` thì CORS whitelist trở thành BẮT BUỘC (#AUTH-05): thiếu
+  # `Cors__AllowedOrigins__0` là mọi pod CrashLoopBackOff. Chart tự sinh origin từ `domain`
+  # ở trên nên mặc định đã có 1 origin — chỉ cần thêm origin phụ vào `extraCorsOrigins`.
   aspnetEnvironment: Development
+
+  # #AUTH-05 — origin PHỤ được phép gọi API (ngoài "https://{domain}" chart tự thêm).
+  # Dùng cho: cổng dev của FE, domain quản trị riêng, WebView mobile có origin riêng…
+  # Origin = scheme + host (+ port nếu khác 443/80). KHÔNG kèm path, KHÔNG kèm '/' cuối.
+  # Ví dụ:
+  #   extraCorsOrigins:
+  #     - "https://admin.capstonegsu26se55.mooo.com"
+  #     - "http://localhost:5173"
+  extraCorsOrigins: []
 
   # cert-manager ClusterIssuer — staging dùng letsencrypt-staging (rate limit cao),
   # production dùng letsencrypt-prod.
@@ -271,6 +283,19 @@ config:
   ConnectionStrings__Redis: "redis:6379"
   RabbitMQ__Host: rabbitmq
   RabbitMQ__Username: guest
+
+  # ---------- Sprint BE-IoT-Realtime — SSE telemetry (overall.md §34.10) ----------
+  Realtime__Enabled: "true"
+  Realtime__HeartbeatSeconds: "30"
+  Realtime__SummaryIntervalSeconds: "4"
+  # #614 — phát bù khi client reconnect kèm header Last-Event-ID.
+  # CHỈ áp cho scope 1 pin (event `reading`); summary/stats/ping không phát bù.
+  # Bộ đệm là Redis Stream key `telemetry:replay:asset:{id}` — dùng CHUNG Redis với cache/backplane,
+  # nên nhân N pin đang phát số liệu là N key. 200 bản ghi/pin ≈ vài phút dữ liệu.
+  # ReplayMaxEvents=0 => TẮT phát bù (không sinh dòng `id:`). ReplayTtlMinutes=0 => không đặt hạn sống
+  # (⚠️ để 0 thì key của pin đã ngừng gửi sẽ nằm lại Redis vĩnh viễn).
+  Realtime__ReplayMaxEvents: "200"
+  Realtime__ReplayTtlMinutes: "5"
 
   MailJet__FromEmail: thangbpse180445@fpt.edu.vn
   MailJet__DisplayName: Solar Panel Battery Maintainance

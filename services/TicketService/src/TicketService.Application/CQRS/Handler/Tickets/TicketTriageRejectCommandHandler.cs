@@ -44,7 +44,7 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot reject ticket at this stage.");
 
-        // Capture trạng thái cũ TRƯỚC khi ExecuteAsync mutate ticket.Status (reject hợp lệ từ Open hoặc Escalated).
+        // Capture trạng thái cũ TRƯỚC khi ExecuteAsync mutate ticket.Status (reject hợp lệ từ New hoặc Escalated).
         var oldStatus = ticket.Status;
 
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, new TransitionContext

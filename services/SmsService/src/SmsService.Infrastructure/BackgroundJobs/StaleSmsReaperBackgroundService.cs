@@ -15,7 +15,14 @@ namespace SmsService.Infrastructure.BackgroundJobs;
 /// </summary>
 public class StaleSmsReaperBackgroundService : BackgroundService
 {
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// Nhịp quét. Khai <c>protected virtual</c> thay vì hằng số <b>chỉ để test lớp con rút ngắn
+    /// được nhịp</b> — chờ đủ 1 phút cho mỗi lượt kiểm thì thân vòng lặp này sẽ không bao giờ được
+    /// chạy trong test, và nó vốn đang ở mức phủ 0%.
+    /// Giá trị production KHÔNG đổi; không có ai override ngoài test.
+    /// </summary>
+    protected virtual TimeSpan TickInterval => TimeSpan.FromMinutes(1);
+
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromMinutes(5);
 
     private readonly IServiceScopeFactory _scopeFactory;

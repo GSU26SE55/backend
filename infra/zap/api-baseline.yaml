@@ -1,0 +1,97 @@
+---
+# ZAP Automation Framework — baseline (thụ động) cho một service .NET của GSU26SE55.
+#
+# Vì sao có file này thay vì gọi thẳng zap-baseline.py:
+#
+#   1. `zap-baseline.py -t http://<service>:8080` gần như KHÔNG quét được gì. Service .NET không
+#      có trang gốc, spider ăn 404 ngay ở "/" và chỉ chạm được /robots.txt + /sitemap.xml.
+#      Phải NẠP OPENAPI thì ZAP mới biết 70+ endpoint mà gọi.
+#
+#   2. `/api/auth/google/login` trả 302 sang accounts.google.com. Không khoá phạm vi thì ZAP
+#      đi theo redirect và quét luôn hạ tầng của Google — việc không được phép làm với hệ thống
+#      của bên thứ ba, kể cả khi chỉ quét thụ động. `excludePaths` bên dưới chặn việc đó.
+#
+#   3. Chạy `-S` (safe mode): CHỈ quét thụ động, không bắn payload tấn công. Đây là đúng nghĩa
+#      "baseline scan" mà DoD yêu cầu.
+#
+# Cách chạy — xem `make zap-scan` (mặc định SVC=authservice).
+#
+# Biến môi trường:
+#   ZAP_TARGET   URL gốc của service trong mạng docker, vd http://authservice:8080
+#   ZAP_OPENAPI  URL file OpenAPI, vd http://authservice:8080/swagger/v1/swagger.json
+#   ZAP_NAME     tên dùng để đặt tên file báo cáo, vd authservice
+
+env:
+  contexts:
+    - name: target
+      urls:
+        - ${ZAP_TARGET}
+      includePaths:
+        - "${ZAP_TARGET}.*"
+      excludePaths:
+        # Mọi thứ ngoài host đích. Chốt chặn cho redirect OAuth sang Google.
+        - "^(?!${ZAP_TARGET}).*$"
+  parameters:
+    # failOnError PHẢI là false. Swagger của .NET đặt tên component schema theo tên type C#
+    # generic, vd `CommonResponse`1[[...AccountDto, AuthService.Application, Version=...]]`.
+    # Tên đó vi phạm regex ^[a-zA-Z0-9.\-_]+$ mà đặc tả OpenAPI quy định cho khoá
+    # components.schemas, nên ZAP báo lỗi cho TỪNG schema và dừng cả kế hoạch.
+    #
+    # Đây là lỗi thật của tài liệu OpenAPI, không phải lỗi của ZAP — công cụ sinh mã client
+    # nghiêm ngặt cũng sẽ từ chối. Nhưng nó KHÔNG cản việc quét (ZAP vẫn nạp được đủ URL),
+    # nên ở đây hạ xuống cảnh báo để phần quét chạy tiếp. Việc sửa tên schema là task riêng.
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      enableTags: false
+      maxAlertsPerRule: 10
+
+  # Nạp toàn bộ endpoint từ OpenAPI. Đây mới là phần cho ZAP thứ để quét.
+  - type: openapi
+    parameters:
+      apiUrl: ${ZAP_OPENAPI}
+      targetUrl: ${ZAP_TARGET}
+      context: target
+
+  # Spider bổ sung để bắt các tài nguyên tĩnh (swagger-ui, css, js) mà OpenAPI không mô tả.
+  - type: spider
+    parameters:
+      context: target
+      url: ${ZAP_TARGET}/swagger/index.html
+      maxDuration: 2
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  # summaryFile để tên cố định: ZAP KHÔNG thay biến môi trường trong tham số này (chỉ thay ở
+  # url/apiUrl/context), nên đặt ${ZAP_NAME} vào đây sẽ tạo ra file tên nguyên văn "${ZAP_NAME}-...".
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/summary.json
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/
+      reportFile: zap-baseline-${ZAP_NAME}.html
+      reportTitle: "ZAP Baseline — ${ZAP_NAME}"
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/
+      reportFile: zap-baseline-${ZAP_NAME}.json
+      reportTitle: "ZAP Baseline — ${ZAP_NAME}"
+
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk/
+      reportFile: zap-baseline-${ZAP_NAME}.md
+      reportTitle: "ZAP Baseline — ${ZAP_NAME}"

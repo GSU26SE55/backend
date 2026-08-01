@@ -155,7 +155,7 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

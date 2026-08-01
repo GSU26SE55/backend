@@ -43,14 +43,17 @@ public class RedisTelemetryStream : ITelemetryStream
     internal static (string? Id, string Json) SplitReplayEnvelope(string raw)
     {
         var sp = raw.IndexOf(' ');
-        if (sp <= 0) return (null, raw);
+        if (sp <= 0)
+            return (null, raw);
 
         var head = raw.AsSpan(0, sp);
         var dash = head.IndexOf('-');
-        if (dash <= 0) return (null, raw);
+        if (dash <= 0)
+            return (null, raw);
 
         foreach (var c in head)
-            if (!char.IsAsciiDigit(c) && c != '-') return (null, raw);
+            if (!char.IsAsciiDigit(c) && c != '-')
+                return (null, raw);
 
         return (head.ToString(), raw[(sp + 1)..]);
     }
@@ -138,7 +141,8 @@ public class RedisTelemetryStream : ITelemetryStream
         {
             foreach (var m in await ReadBacklogAsync(scope.Ids[0], lastEventId!))
             {
-                if (m.Id is not null) replayed.Add(m.Id);
+                if (m.Id is not null)
+                    replayed.Add(m.Id);
                 backlog.Add(m);
             }
         }

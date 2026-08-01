@@ -36,7 +36,7 @@ public class TicketTriageRejectCommandHandlerTests
         {
             Id = ticketId,
             Code = "TKT-001",
-            Status = TicketStatusEnum.Open,
+            Status = TicketStatusEnum.New,
             Title = "Test",
             Description = "Test"
         };
@@ -68,7 +68,7 @@ public class TicketTriageRejectCommandHandlerTests
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<TicketStatusChangedIntegrationEvent>(e =>
-                e.OldStatus == TicketStatusEnum.Open && e.NewStatus == TicketStatusEnum.ClosedRejected),
+                e.OldStatus == TicketStatusEnum.New && e.NewStatus == TicketStatusEnum.ClosedRejected),
             It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager Test", ActivityActionEnum.Rejected, null, "ClosedRejected", "Invalid ticket description"), Times.Once);

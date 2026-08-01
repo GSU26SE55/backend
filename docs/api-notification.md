@@ -175,8 +175,8 @@ viễn khi retention dọn) hay không.
 | `ParticipantAdded` | 22 | Chat | | User được thêm làm participant ticket |
 | `ParticipantRemoved` | 23 | Chat | | User bị xoá khỏi participant ticket |
 | `ParticipantRoleChanged` | 24 | Chat | | Role/type của participant trên ticket bị đổi |
-| `BlogGenerationCompleted` | 25 | Account ⚠️ | | **GH-671 (module Blog)** — AI sinh blog xong (`status=Draft`). ⚠️ **Chưa khai báo trong `NotificationCategoryMap`** → đang fallback nhóm `Account` |
-| `BlogGenerationFailed` | 26 | Account ⚠️ | | **GH-671 (module Blog)** — AI sinh blog thất bại. ⚠️ **Chưa khai báo trong `NotificationCategoryMap`** → đang fallback nhóm `Account` |
+| `BlogGenerationCompleted` | 25 | Account | | **GH-671 (module Blog)** — AI sinh blog xong (`status=Draft`). Gửi **InApp cho chính người bấm generate** (`BlogGenerationStatusConsumer` dùng `evt.RequestedByUserId`) |
+| `BlogGenerationFailed` | 26 | Account | | **GH-671 (module Blog)** — AI sinh blog thất bại. Gửi **InApp cho chính người bấm generate** |
 | `ChatEscalatedToAdmin` | 27 | **SLA** | ✅ | **Sprint 6.2 NOTI-03 (#674)** — saga `ChatEscalationReview` timeout 30' (Manager không ACK) → escalate lên Admin |
 | `TicketApproved` | 28 | Ticket | | **Sprint 6.2 NOTI-07 (#678)** — Manager duyệt kết quả, ticket vào `CLOSED_PENDING_RATE` chờ Customer đánh giá |
 | `TicketRejected` | 29 | Ticket | | **Sprint 6.2 NOTI-07** — kết quả resolve bị trả lại (→ Staff), HOẶC ticket đóng do ngoài scope (→ Customer) |
@@ -192,6 +192,16 @@ viễn khi retention dọn) hay không.
 > bản trước ghi. Module Blog (`GH-671`) chiếm mất **25** và **26**, đẩy toàn bộ nhóm Sprint 6.2 lên
 > 2 bậc. FE/Mobile nào đã mirror theo bản cũ **phải sửa lại**, nếu không sẽ hiển thị sai loại
 > thông báo (ví dụ coi `ChatEscalatedToAdmin` thành `BlogGenerationCompleted`).
+>
+> **Cập nhật 2026-08-01 — `BlogGenerationCompleted`/`BlogGenerationFailed` NAY đã được khai báo
+> tường minh** trong `NotificationCategoryMap` (nhóm `Account`). Trước đó hai type này thiếu khai báo
+> và rơi vào nhánh dự phòng của `Resolve()` — vốn cũng trả `Account`, nên **hành vi lúc chạy không
+> đổi**; điều đổi là nó không còn im lặng nữa và test bao `EveryNotificationType_HasExplicitCategory`
+> đã xanh trở lại.
+>
+> Vì sao xếp nhóm `Account` chứ không phải một nhóm riêng: đây là **phản hồi cho một hành động người
+> dùng tự khởi xướng** (bấm nút generate), không phải cảnh báo vận hành như `Battery`/`SLA`. Người
+> nhận cũng chính là người bấm, không phát tán cho ai khác.
 >
 > **Không có type cho cảnh báo bảo mật** (đăng nhập lạ / refresh-token reuse). Đây là **cố ý**:
 > hai luồng đó đi thẳng `AuthService → EmailService` như OTP, không qua NotificationService, nên

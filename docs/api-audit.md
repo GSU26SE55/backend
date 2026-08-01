@@ -112,6 +112,28 @@ String PascalCase thì quá khứ (vd `LoginSucceeded`, `BatteryUpdated`, `State
 > hành động — đừng hiển thị nhãn "người thực hiện" cho nhóm này. `actorRole` và `actorDisplay` luôn `null`.
 > Kênh **Email/Sms không sinh audit** (nằm ngoài 7 action của `#AUDIT-34`).
 
+> **Cập nhật Sprint Chat DoD (2026-07-31) — nguồn `TicketService` thêm 7 action:**
+>
+> `ChatCreated` · `ChatEdited` · `ChatDeleted` · `ChatPinned` · `ChatUnpinned` · `ChatReacted` ·
+> `ChatMentioned` (giá trị enum 22–28). Trước đó module Chat **không ghi audit nào** — mọi thao tác
+> trên kênh trao đổi Customer ↔ Staff/Manager đều không có vết forensic, trong khi đây là nơi dễ
+> phát sinh tranh chấp nội dung nhất. `TicketService` nay có **28** action code.
+>
+> Cả 7 đều `severity = Info`, `category = DataModification`. Đặc thù khi hiển thị:
+>
+> - **`targetId` là ID TICKET, KHÔNG phải ID tin nhắn** (`targetDisplay` = mã ticket). ID tin nhắn
+>   nằm trong `metadataJson.chatId`. Đừng render `targetId` với nhãn "tin nhắn".
+> - **`metadataJson`** — `ChatCreated`: `chatId`, `isInternal`; `ChatReacted`: `chatId`,
+>   `reactionType`; `ChatMentioned`: `chatId`, `mentionedUserIds[]`; bốn action còn lại chỉ có `chatId`.
+> - **Một lần gửi tin có tag người sinh 2 bản ghi** (`ChatCreated` + `ChatMentioned`) cùng
+>   `correlationId`. Nếu FE đếm "số tin nhắn" theo số bản ghi audit sẽ ra số lớn hơn thực tế —
+>   phải đếm riêng `ChatCreated`.
+>
+> ⚠️ **4 action code của TicketService đã khai báo nhưng CHƯA CÓ handler nào ghi** (rà mã nguồn
+> 2026-08-01): `AttachmentUploaded` · `AttachmentDeleted` · `ClosedByUser` · `FalseAlarmMarked`.
+> Thực tế chỉ **24/28** mã xuất hiện trong dữ liệu; lọc theo 4 mã đó luôn trả `200` + rỗng.
+> Dựng dropdown chọn action thì nên ẩn hoặc gắn nhãn "chưa có dữ liệu".
+
 ### `groupBy` (param của `/stats`)
 
 | Giá trị | Ý nghĩa |

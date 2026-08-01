@@ -9,16 +9,17 @@ EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.SetIsOriginAllowed(_ => true)
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
-    });
-});
+// #AUTH-05 — dùng CHUNG policy với 7 service phía sau thay vì tự khai `AllowAll` tại chỗ.
+//
+// Gateway là CỬA TRƯỚC của hệ thống: nó mà mở cho mọi origin thì việc siết whitelist ở downstream
+// gần như vô nghĩa với trình duyệt. Trước đây khối này đăng ký policy tên "AllowAll" trong khi
+// `app.UseCors(...)` bên dưới lại yêu cầu policy tên "AppCors" — tên không khớp thì
+// `CorsMiddleware` ném `InvalidOperationException: The CORS policy 'AppCors' was not found`
+// trên MỌI request. Gọi `AddCorsExtentions` khép lại cả hai vấn đề: đúng tên, đúng whitelist.
+//
+// ApiGateway KHÔNG gọi `AddSharedInfrastructure` (không cần MediatR/EF/Swagger dùng chung) nên
+// phải gọi thẳng ở đây — bỏ dòng này là gateway chết ngay request đầu tiên.
+builder.Services.AddCorsExtentions(builder.Configuration, builder.Environment);
 
 // Sprint 7 #115 — validate JWT tại gateway (cùng JwtSettings với downstream) + forward claim.
 builder.Services.AddJwtAuthentication(builder.Configuration);
@@ -111,7 +112,7 @@ if (!app.Environment.IsEnvironment("Docker")
 // để middleware pipeline chấp nhận upgrade từ Connection: Upgrade + Upgrade: websocket.
 app.UseWebSockets();
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 
 // Sprint 7 #115 — validate JWT (populate HttpContext.User cho claim forwarding + rate-limit partition).
 // KHÔNG RequireAuthorization trên proxy route → request ẩn danh vẫn pass (downstream tự authorize);

@@ -5,6 +5,22 @@ Versions tuân theo [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`#AUTH-05` (P0) — CORS: thay `AllowAll` bằng whitelist.** Trước đây `AddCORS` đặt cứng
+  `SetIsOriginAllowed(origin => true)` kèm `AllowCredentials()` — bất kỳ website nào trên Internet
+  cũng gọi được API bằng cookie/credential của user đang đăng nhập.
+  Nay đọc `Cors:AllowedOrigins` (mảng) từ config; policy đổi tên `AllowAll` → `AppCors`
+  (`AddCORS.PolicyName`) vì tên cũ gây hiểu nhầm. Cập nhật 7 call site `app.UseCors(...)`.
+  - **Development** để trống danh sách → vẫn cho mọi origin, có in cảnh báo.
+  - **Production** để trống danh sách → **service TỪ CHỐI KHỞI ĐỘNG**. Cố ý: thà không lên còn hơn
+    lên với CORS mở toang; chỉ log cảnh báo thì sẽ không ai đọc.
+  - Origin có dấu `/` cuối được chuẩn hoá (`WithOrigins` so khớp chuỗi nguyên văn, dễ trượt im lặng).
+  - ⚠️ **CÒN TREO:** danh sách domain production **chờ Leader chốt**. Placeholder đã để sẵn (comment)
+    trong `.env.Docker`. Đây là phần duy nhất của `#AUTH-05` chưa xong — cơ chế đã hoàn tất và có
+    5 test phủ (`CorsExtensionsTests`), trong đó có test khẳng định Production thiếu config thì ném lỗi.
+
+
 > **Dashboard aggregate endpoints** theo yêu cầu FE (FE đang tự đếm KPI trên 1 trang list → sai số khi vượt pageSize). Docs chi tiết: `docs/api-ticket.md` / `docs/api-battery.md` / `docs/api-auth.md` (changelog 2026-07-07). Issue/PR number gán khi ship.
 
 ### Added

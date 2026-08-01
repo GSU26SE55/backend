@@ -81,9 +81,16 @@ test-perf: ## Chạy riêng test Category=Performance (YÊU CẦU máy rảnh �
 	@sleep 10
 	dotnet test services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj \
 		--no-build --filter "Category=Performance" --verbosity minimal
-	@docker info >/dev/null 2>&1 || { echo "SKIP: AuditThroughputChaosTests cần Docker."; exit 0; }
+	@docker info >/dev/null 2>&1 || { echo "SKIP: phần còn lại cần Docker (Testcontainers)."; exit 0; }
 	@sleep 5
+	# AuditThroughputChaosTests + AuditSearchSloTests (SLO search p95 < 200ms trên 1M dòng).
 	dotnet test services/AuditAggregatorService/tests/AuditAggregatorService.IntegrationTests/AuditAggregatorService.IntegrationTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+	@sleep 5
+	# DoD Sprint Chat — ChatSloTests (GetList p95 < 200ms / 1000 chat) + SignalRBroadcastSloTests
+	# (broadcast p99 < 500ms / 100 user). Thiếu dòng này thì 2 lớp đó KHÔNG chạy ở đâu cả:
+	# ci-test loại theo tên "IntegrationTests", ci-integration loại theo Category=Performance.
+	dotnet test services/TicketService/tests/TicketService.IntegrationTests/TicketService.IntegrationTests.csproj \
 		--no-build --filter "Category=Performance" --verbosity minimal
 
 # ---------------------------------------------------------------------
@@ -251,6 +258,38 @@ docker-ps: ## Liệt kê container
 docker-clean: ## down + xoá volumes (DESTRUCTIVE — xác nhận trước)
 	@read -p "Xoá toàn bộ volumes (postgres, rabbit, minio, ...)? [y/N] " ans && [ "$$ans" = "y" ]
 	$(COMPOSE) down -v
+
+# ---------------------------------------------------------------------
+# Security scan — OWASP ZAP baseline (thụ động)
+# ---------------------------------------------------------------------
+# Yêu cầu: stack đang chạy (`make docker-up`) và service đích trả được OpenAPI.
+#
+# Quét THỤ ĐỘNG: chỉ đọc response, KHÔNG bắn payload tấn công. An toàn để chạy trên
+# stack local. Tuyệt đối KHÔNG trỏ vào môi trường của người khác.
+#
+# Kế hoạch quét khoá phạm vi trong đúng host đích — xem lý do trong infra/zap/api-baseline.yaml
+# (endpoint /api/auth/google/login trả 302 sang Google; không khoá thì ZAP quét luôn Google).
+.PHONY: zap-scan
+
+ZAP_SVC     ?= authservice
+ZAP_PORT    ?= 8080
+ZAP_NET     ?= backend_solar-net
+ZAP_OUT     ?= $(CURDIR)/logs/zap
+ZAP_SPEC    ?= /swagger/v1/swagger.json
+
+zap-scan: ## OWASP ZAP baseline scan (ZAP_SVC=authservice, kết quả trong logs/zap/)
+	@docker info >/dev/null 2>&1 || { echo "Cần Docker daemon đang chạy."; exit 1; }
+	@docker network inspect $(ZAP_NET) >/dev/null 2>&1 || \
+		{ echo "Không thấy network $(ZAP_NET) — chạy 'make docker-up' trước."; exit 1; }
+	@mkdir -p $(ZAP_OUT)
+	docker run --rm --network $(ZAP_NET) \
+		-v $(ZAP_OUT):/zap/wrk:rw \
+		-v $(CURDIR)/infra/zap:/plan:ro -u root \
+		-e ZAP_TARGET=http://$(ZAP_SVC):$(ZAP_PORT) \
+		-e ZAP_OPENAPI=http://$(ZAP_SVC):$(ZAP_PORT)$(ZAP_SPEC) \
+		-e ZAP_NAME=$(ZAP_SVC) \
+		ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /plan/api-baseline.yaml
+	@echo "Báo cáo: $(ZAP_OUT)/zap-baseline-$(ZAP_SVC).html"
 
 # ---------------------------------------------------------------------
 # Monitoring

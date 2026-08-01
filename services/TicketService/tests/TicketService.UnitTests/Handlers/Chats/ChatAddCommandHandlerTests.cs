@@ -1,5 +1,4 @@
 using MediatR;
-using TicketService.Application.CQRS.Notification.Audit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events.Chats;
@@ -7,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;

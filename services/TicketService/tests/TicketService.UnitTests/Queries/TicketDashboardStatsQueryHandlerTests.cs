@@ -43,7 +43,18 @@ public class TicketDashboardStatsQueryHandlerTests
 
     private static TicketDashboardStatsQueryHandler MakeHandler(params Ticket[] tickets)
     {
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: tickets);
+        var assignments = tickets
+            .Where(t => t.PrimaryHandlerStaffId.HasValue)
+            .Select(t => new TicketAssignment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = t.Id,
+                StaffId = t.PrimaryHandlerStaffId!.Value,
+                Role = AssignmentRoleEnum.PrimaryHandler
+            });
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: tickets,
+            assignmentSeed: assignments);
         return new TicketDashboardStatsQueryHandler(uow.Object);
     }
 

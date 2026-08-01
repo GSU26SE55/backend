@@ -38,7 +38,7 @@ public class TicketStateMachineTests
     [Theory]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.New, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
@@ -463,7 +463,7 @@ public class TicketStateMachineTests
     {
         // Arrange
         var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Open);
+        var ticket = CreateTicket(TicketStatusEnum.New);
         var ctx = new TransitionContext
         {
             ActorRole = ActorRoleEnum.Manager,

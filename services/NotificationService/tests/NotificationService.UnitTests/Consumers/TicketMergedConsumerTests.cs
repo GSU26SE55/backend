@@ -44,25 +44,34 @@ public class TicketMergedConsumerTests
         mediator.Setup(x => x.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
         var inbox = new Mock<IInboxStore>();
-        inbox.SetupSequence(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        var inboxClaims = 0;
+        inbox.Setup(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Interlocked.Increment(ref inboxClaims) == 1);
         var harness = await StartHarness(mediator.Object, inbox);
         var evt = new TicketMergedEvent(Guid.NewGuid(), "TKT-001", Guid.NewGuid(), Guid.NewGuid(), "TKT-002", Guid.NewGuid());
 
         await harness.Bus.Publish(evt);
         await harness.Bus.Publish(evt);
 
+        (await harness.Consumed.SelectAsync<TicketMergedEvent>().Take(2).Count()).Should().Be(2);
         mediator.Verify(x => x.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Once);
         await harness.Stop();
     }
 
     private static async Task<ITestHarness> StartHarness(IMediator mediator, Mock<IInboxStore>? inbox = null)
     {
-        inbox ??= new Mock<IInboxStore>();
-        inbox.Setup(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        if (inbox is null)
+        {
+            inbox = new Mock<IInboxStore>();
+            inbox.Setup(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+        }
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<TicketMergedConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+                x.AddConsumer<TicketMergedConsumer>();
+            })
             .AddSingleton(mediator)
             .AddSingleton(inbox.Object)
             .AddSingleton(NullLogger<TicketMergedConsumer>.Instance)

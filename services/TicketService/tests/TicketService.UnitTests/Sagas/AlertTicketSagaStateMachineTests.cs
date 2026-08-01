@@ -510,4 +510,72 @@ public class AlertTicketSagaStateMachineTests
         state.FailedAt.Should().BeOnOrAfter(before);
         await harness.Stop();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Sprint IoT-2 — DoD: "Saga path verify: trigger 1 anomaly Critical → Saga
+    // `TicketProvisioned → Completed`; bơm cùng anomaly 2 lần (idempotent) → 1 Ticket duy nhất."
+    //
+    // Các Case 1–21 ở trên kiểm TỪNG chuyển trạng thái riêng lẻ. Hai test dưới đi HẾT vòng trong
+    // một bài, đúng như câu chữ DoD — để khi đọc báo cáo không phải ghép 5 test lại mới thấy luồng.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task DoD_IoT2_CriticalAnomaly_WalksFullPath_ToCompleted()
+    {
+        var (harness, saga) = await SetupHarnessAsync();
+        var alertId = Guid.NewGuid();
+
+        // Severity 3 = Critical.
+        await harness.Bus.Publish(MakeV2(alertId));
+        (await saga.Exists(alertId, x => x.TicketRequested)).Should().NotBeNull(
+            "anomaly Critical phải khởi tạo saga và yêu cầu tạo ticket");
+
+        var created = MakeTicketCreated(alertId, alertId);
+        await harness.Bus.Publish(created);
+        (await saga.Exists(alertId, x => x.AlertLinkRequested)).Should().NotBeNull(
+            "ticket tạo xong -> đi qua TicketProvisioned rồi sang AlertLinkRequested");
+
+        await harness.Bus.Publish(MakeAlertLinked(alertId, alertId, created.TicketId));
+        (await saga.Exists(alertId, x => x.Completed)).Should().NotBeNull(
+            "alert đã gắn vào ticket -> saga Completed");
+
+        var state = saga.Created.Contains(alertId);
+        state!.CurrentState.Should().Be(nameof(AlertTicketSagaStateMachine.Completed));
+        state.TicketId.Should().Be(created.TicketId);
+        state.CompletedAt.Should().NotBeNull();
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task DoD_IoT2_SameAnomalyTwice_IsIdempotent_OneTicketOnly()
+    {
+        var (harness, saga) = await SetupHarnessAsync();
+        var alertId = Guid.NewGuid();
+
+        // Lần 1 — tạo saga + yêu cầu tạo ticket.
+        await harness.Bus.Publish(MakeV2(alertId));
+        (await saga.Exists(alertId, x => x.TicketRequested)).Should().NotBeNull();
+
+        // Lần 2 — CÙNG alert (redelivery của broker, hoặc BatteryService bắn lại).
+        await harness.Bus.Publish(MakeV2(alertId));
+        await Task.Delay(300);
+
+        saga.Created.Select(x => true).Count().Should().Be(1,
+            "cùng AlertId phải gom về 1 saga — nếu đẻ 2 saga thì Customer nhận 2 ticket cho cùng 1 sự cố");
+
+        var created = MakeTicketCreated(alertId, alertId);
+        await harness.Bus.Publish(created);
+        (await saga.Exists(alertId, x => x.AlertLinkRequested)).Should().NotBeNull();
+
+        // Redelivery của chính response tạo ticket cũng không được đẩy state đi tiếp.
+        await harness.Bus.Publish(created);
+        await Task.Delay(300);
+
+        var state = saga.Created.Contains(alertId);
+        state!.CurrentState.Should().Be(nameof(AlertTicketSagaStateMachine.AlertLinkRequested));
+        state.TicketId.Should().Be(created.TicketId, "vẫn đúng 1 TicketId duy nhất");
+
+        await harness.Stop();
+    }
 }
