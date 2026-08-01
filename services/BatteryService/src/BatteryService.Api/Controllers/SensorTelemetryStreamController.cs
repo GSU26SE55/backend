@@ -75,12 +75,25 @@ public class SensorTelemetryStreamController : ControllerBase
         Response.Headers["X-Accel-Buffering"] = "no"; // tắt buffering ở reverse proxy
         await Response.Body.FlushAsync(cancellationToken);
 
+        // ─── Last-Event-ID resume (#614) ───
+        // `EventSource` tự nối lại khi rớt mạng và TỰ gửi header này kèm id cuối nó đã nhận — client
+        // không phải viết thêm dòng code nào. Server đọc để biết phát bù từ đâu.
+        // Header có thể xuất hiện dạng `Last-Event-ID` hoặc `Last-Event-Id` tuỳ client; HeaderDictionary
+        // so sánh không phân biệt hoa thường nên 1 lần đọc là đủ.
+        var lastEventId = Request.Headers["Last-Event-ID"].FirstOrDefault();
+
         // RequestAborted = hủy khi client đóng kết nối → stream tự unsubscribe Redis.
         var clientToken = HttpContext.RequestAborted;
         try
         {
-            await foreach (var msg in _stream.SubscribeAsync(parsed.Value, clientToken))
+            await foreach (var msg in _stream.SubscribeAsync(parsed.Value, lastEventId, clientToken))
             {
+                // `id:` PHẢI đứng trước `data:` trong cùng khối event thì trình duyệt mới ghi nhận.
+                // Chỉ ghi khi stream cấp id — không bịa id cho event mà server không phát lại được
+                // (xem chú thích trên SseMessage.Id).
+                if (!string.IsNullOrEmpty(msg.Id))
+                    await Response.WriteAsync($"id: {msg.Id}\n", clientToken);
+
                 await Response.WriteAsync($"event: {msg.Event}\n", clientToken);
                 await Response.WriteAsync($"data: {msg.Data}\n\n", clientToken);
                 await Response.Body.FlushAsync(clientToken);

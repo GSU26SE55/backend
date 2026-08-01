@@ -95,6 +95,11 @@ public class CalibrationExpiryNotificationBackgroundService : BackgroundService
 
             await uow.Alerts.AddAsync(new Alert
             {
+                // Cùng lỗi với CrossSourceValidationService: `Alert.Id` không được EF tự sinh, bỏ
+                // trống là mọi Alert trong vòng lặp đều mang Guid.Empty ⇒ AddAsync thứ hai ném
+                // "another instance with the same key value for {'Id'} is already being tracked".
+                // Job này quét NHIỀU calibration hết hạn một lượt nên gần như chắc chắn dính.
+                Id = Guid.NewGuid(),
                 BatteryAssetId = assetIdForAlert,
                 SiteId = cal.IotDevice?.SiteId,
                 AnomalyType = AnomalyTypeEnum.SohDegradation,

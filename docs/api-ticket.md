@@ -3227,9 +3227,84 @@ Verify toàn bộ doc với codebase TicketService. Enums (16/16) và SignalR Hu
 | `pageNumber` | `int` | Không (mặc định 1) | Số trang |
 | `pageSize` | `int` | Không (mặc định 50, trần 100) | Số item/trang |
 
-**Action codes (ticket, 21):** `TicketCreated` · `StateTransitioned` · `PriorityChanged` · `AssignedToStaff` · `UnassignedFromStaff` · `SlaPaused` · `SlaResumed` · `SlaBreached` · `EscalatedToManager` · `EscalatedToAdmin` · `MaintenanceLogAdded` · `CommentAdded` · `AttachmentUploaded` · `AttachmentDeleted` · `ResolutionAdded` · `ClosedByUser` · `ReopenedByAdmin` · `RejectedByManager` · `FalseAlarmMarked` · `CustomerRated` · `AutoCreatedFromAnomaly`
+**Action codes — 28 giá trị** (`TicketAuditActionEnum`, đánh số từ 1).
+
+Param `action` nhận **tên chuỗi** (vd `action=StateTransitioned`), không nhận số. Bỏ trống = tất cả.
+So khớp **chính xác, phân biệt hoa-thường**.
+
+**Nhóm A — vòng đời ticket (21, enum 1–21, `#AUDIT-24`):**
+
+| Action code | Enum | Severity | Category | Khi nào ghi |
+|---|---|---|---|---|
+| `TicketCreated` | 1 | `Info` | `DataModification` | Ticket được tạo (thủ công) |
+| `StateTransitioned` | 2 | `Info` | `DataModification` | Đổi trạng thái ticket |
+| `PriorityChanged` | 3 | **`Security`** | `DataModification` | Đổi priority — nhạy cảm vì priority quyết định SLA |
+| `AssignedToStaff` | 4 | `Info` | `DataModification` | Gán staff xử lý |
+| `UnassignedFromStaff` | 5 | `Info` | `DataModification` | Gỡ staff khỏi ticket |
+| `SlaPaused` | 6 | `Info` | `DataModification` | Tạm dừng đồng hồ SLA |
+| `SlaResumed` | 7 | `Info` | `DataModification` | Chạy lại đồng hồ SLA |
+| `SlaBreached` | 8 | **`Critical`** | **`Security`** | SLA hết hạn |
+| `EscalatedToManager` | 9 | **`Critical`** | **`Security`** | Leo thang lên Manager |
+| `EscalatedToAdmin` | 10 | **`Critical`** | **`Security`** | Leo thang lên Admin |
+| `MaintenanceLogAdded` | 11 | `Info` | `DataModification` | Thêm nhật ký bảo trì |
+| `CommentAdded` | 12 | `Info` | `DataModification` | Thêm bình luận |
+| `AttachmentUploaded` | 13 | `Info` | `DataModification` | ⚠️ **chưa được ghi** — xem ghi chú dưới bảng |
+| `AttachmentDeleted` | 14 | `Info` | `DataModification` | ⚠️ **chưa được ghi** |
+| `ResolutionAdded` | 15 | `Info` | `DataModification` | Ghi kết quả xử lý |
+| `ClosedByUser` | 16 | `Info` | `DataModification` | ⚠️ **chưa được ghi** |
+| `ReopenedByAdmin` | 17 | `Info` | `DataModification` | Admin mở lại ticket |
+| `RejectedByManager` | 18 | **`Security`** | `DataModification` | Manager từ chối kết quả / đóng ngoài scope |
+| `FalseAlarmMarked` | 19 | `Info` | `DataModification` | ⚠️ **chưa được ghi** |
+| `CustomerRated` | 20 | `Info` | `DataModification` | Customer chấm điểm |
+| `AutoCreatedFromAnomaly` | 21 | `Info` | `DataModification` | Ticket tự sinh từ cảnh báo pin |
 
 > `AutoCreatedFromAnomaly` có `causationId = OriginAlertId` (chuỗi nhân-quả anomaly → ticket).
+
+> ⚠️ **4 mã ĐÃ KHAI BÁO nhưng CHƯA CÓ handler nào ghi** (rà mã nguồn 2026-08-01):
+> `AttachmentUploaded` (13) · `AttachmentDeleted` (14) · `ClosedByUser` (16) · `FalseAlarmMarked` (19).
+> Chỉ **24/28** mã thực sự xuất hiện trong `ticket_audit_logs`.
+>
+> **Với FE:** lọc theo 4 mã này luôn trả **`200` + danh sách rỗng**, không phải lỗi. Nếu dựng dropdown
+> chọn action thì hoặc ẩn 4 mã này đi, hoặc gắn nhãn "chưa có dữ liệu" — đừng để người dùng tưởng
+> mất dữ liệu. Thao tác tương ứng vẫn có vết ở `TicketActivity` (dòng thời gian UI), chỉ là chưa có
+> bản ghi **audit forensic**.
+
+**Nhóm B — module Chat (7, enum 22–28, Sprint Chat DoD 2026-07-31):**
+
+| Action code | Enum | Severity | Category | Khi nào ghi |
+|---|---|---|---|---|
+| `ChatCreated` | 22 | `Info` | `DataModification` | Gửi tin nhắn mới vào ticket |
+| `ChatEdited` | 23 | `Info` | `DataModification` | Sửa nội dung tin nhắn |
+| `ChatDeleted` | 24 | `Info` | `DataModification` | Xoá mềm tin nhắn |
+| `ChatPinned` | 25 | `Info` | `DataModification` | Ghim tin nhắn |
+| `ChatUnpinned` | 26 | `Info` | `DataModification` | Gỡ ghim |
+| `ChatReacted` | 27 | `Info` | `DataModification` | Thả reaction (kể cả khôi phục reaction đã gỡ) |
+| `ChatMentioned` | 28 | `Info` | `DataModification` | Tin nhắn có tag người |
+
+> **Vì sao có nhóm này:** trước 2026-07-31 module Chat **không ghi audit nào**. Kênh trao đổi
+> Customer ↔ Staff/Manager là nơi dễ tranh chấp nội dung nhất (sửa/xoá tin, gỡ ghim, tag nhầm người)
+> mà lại không có vết forensic.
+>
+> ⚠️ **`targetId` của nhóm Chat là ID TICKET, KHÔNG phải ID tin nhắn.** ID tin nhắn nằm trong
+> `metadata_json.chatId`. Nhờ vậy `?ticketId=` gom được cả thao tác chat của ticket đó. `targetDisplay`
+> = mã ticket.
+>
+> **Gửi một tin có tag người sinh HAI bản ghi** (`ChatCreated` + `ChatMentioned`) — cố ý, để tra
+> "ai bị tag vào ticket này" độc lập với "ai gửi tin".
+>
+> **`metadata_json` theo từng action:**
+>
+> | Action | Khoá trong `metadata_json` | Kiểu |
+> |---|---|---|
+> | `ChatCreated` | `chatId` · `isInternal` | UUID · bool (tin nội bộ hay công khai) |
+> | `ChatEdited` · `ChatDeleted` · `ChatPinned` · `ChatUnpinned` | `chatId` | UUID |
+> | `ChatReacted` | `chatId` · `reactionType` | UUID · chuỗi tên `ReactionTypeEnum` (`ThumbsUp`/`Acknowledged`/`Resolved`/`NeedMoreInfo`/`Disagree`) |
+> | `ChatMentioned` | `chatId` · `mentionedUserIds` | UUID · mảng UUID |
+>
+> ⚠️ **`metadata_json` KHÔNG có trong response của endpoint này.** `TicketAuditLogDto` (bảng bên dưới)
+> không chứa field đó. Muốn đọc `chatId`/`reactionType`/`mentionedUserIds` phải dùng Audit Aggregator:
+> `GET /api/admin/audit/search?service=TicketService&action=ChatReacted` → `AuditAggregateDto.metadataJson`.
+> Xem [docs/api-audit.md](api-audit.md#dto-auditaggregatedto).
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<TicketAuditLogDto>>` (mới nhất trước).
 

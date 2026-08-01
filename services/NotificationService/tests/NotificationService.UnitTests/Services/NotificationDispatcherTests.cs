@@ -360,4 +360,95 @@ public class NotificationDispatcherTests
         // InApp always sent regardless of quiet hours
         inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Sprint IoT-2 — DoD: "Environmental Critical bypass verify: trigger MQ-2 incident
+    // trong giờ 23:00 (quiet hours) → Manager vẫn nhận push."
+    //
+    // Test có sẵn `DispatchAsync_CriticalType_BypassesQuietHours` dùng `SlaBreached` — đúng cơ chế
+    // nhưng KHÔNG phải kịch bản mà DoD nêu. Cảm biến khí MQ-2 báo rò gas lúc nửa đêm mà bị quiet
+    // hours nuốt mất là tình huống nguy hiểm tính mạng, nên chốt riêng bằng đúng type của nó.
+    //
+    // Quiet hours đặt 00:00–23:59 để "lúc nào chạy test cũng đang trong quiet hours" — bao trùm
+    // cả mốc 23:00 mà DoD nêu, và không phụ thuộc giờ chạy CI.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task DoD_IoT2_EnvironmentalIncident_DuringQuietHours_StillPushesToManager()
+    {
+        var managerId = Guid.NewGuid();
+        var pref = new NotificationPreference
+        {
+            UserId = managerId,
+            PushEnabled = true,
+            EmailEnabled = true,
+            SmsEnabled = true,
+            InAppEnabled = true,
+            QuietHoursStart = new TimeOnly(0, 0),
+            QuietHoursEnd = new TimeOnly(23, 59),
+            TimeZone = "UTC",
+        };
+        var deviceToken = new DeviceToken { UserId = managerId, Token = "ExponentPushToken[mgr]", IsActive = true };
+
+        var (uow, _) = BuildUow(pref, deviceToken);
+        var push = FakeChannel(NotificationChannelEnum.Push);
+        var email = FakeChannel(NotificationChannelEnum.Email);
+        var sms = FakeChannel(NotificationChannelEnum.Sms);
+        var inApp = FakeChannel(NotificationChannelEnum.InApp);
+        var sut = Build(uow.Object, NoCache().Object, push.Object, email.Object, sms.Object, inApp.Object);
+
+        await sut.DispatchAsync(new DispatchRequest
+        {
+            Type = NotificationTypeEnum.EnvironmentalIncidentDetected,   // MQ-2 rò gas / khói
+            Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
+            Title = "Rò khí gas tại site",
+            Body = "MQ-2 vượt ngưỡng",
+        });
+
+        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once,
+            "sự cố môi trường là critical — quiet hours KHÔNG được nuốt push, đây là tình huống an toàn tính mạng");
+    }
+
+    /// <summary>
+    /// Mặt đối chứng: sự cố môi trường ĐÃ GIẢI QUYẾT (<c>EnvironmentalIncidentResolved</c>) KHÔNG
+    /// nằm trong danh sách critical, nên vẫn phải bị quiet hours chặn push. Thiếu vế này thì một cài
+    /// đặt "cho mọi thứ bypass" cũng làm test trên xanh — mà như vậy là quiet hours vô nghĩa.
+    /// </summary>
+    [Fact]
+    public async Task DoD_IoT2_EnvironmentalIncidentResolved_DuringQuietHours_DoesNotPush()
+    {
+        var managerId = Guid.NewGuid();
+        var pref = new NotificationPreference
+        {
+            UserId = managerId,
+            PushEnabled = true,
+            EmailEnabled = true,
+            SmsEnabled = true,
+            InAppEnabled = true,
+            QuietHoursStart = new TimeOnly(0, 0),
+            QuietHoursEnd = new TimeOnly(23, 59),
+            TimeZone = "UTC",
+        };
+        var deviceToken = new DeviceToken { UserId = managerId, Token = "ExponentPushToken[mgr2]", IsActive = true };
+
+        var (uow, _) = BuildUow(pref, deviceToken);
+        var push = FakeChannel(NotificationChannelEnum.Push);
+        var email = FakeChannel(NotificationChannelEnum.Email);
+        var sms = FakeChannel(NotificationChannelEnum.Sms);
+        var inApp = FakeChannel(NotificationChannelEnum.InApp);
+        var sut = Build(uow.Object, NoCache().Object, push.Object, email.Object, sms.Object, inApp.Object);
+
+        await sut.DispatchAsync(new DispatchRequest
+        {
+            Type = NotificationTypeEnum.EnvironmentalIncidentResolved,
+            Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
+            Title = "Sự cố đã xử lý",
+            Body = "Clear",
+        });
+
+        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never,
+            "tin 'đã xử lý xong' không khẩn cấp — để sáng mai đọc, không đánh thức Manager lúc nửa đêm");
+        inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once,
+            "in-app vẫn ghi để user mở app là thấy");
+    }
 }

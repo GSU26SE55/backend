@@ -235,6 +235,7 @@ Open ──→ Acknowledged ──→ Resolved
 | `AbnormalCharging` | 6 | Quá trình nạp bất thường | Charging current vượt `CurrentMaxCharge` |
 | `DeviceOffline` | 7 | Thiết bị mất kết nối | Không nhận sensor reading trong X phút |
 | `SohDegradation` | 8 | SOH giảm dưới ngưỡng (pin xuống cấp) | `SohPercent < ThresholdConfig.SohCriticalThreshold` |
+| ↑ *(dùng lại)* | 8 | **Hiệu chuẩn thiết bị IoT hết hạn** | `CalibrationExpiryNotificationBackgroundService` tạo alert **cùng mã 8**. ⚠️ **Cùng `anomalyType` nhưng KHÁC hẳn nguyên nhân** — xem ghi chú ngay dưới bảng để biết cách phân biệt |
 | `HighAmbientTemp` | 9 | Nhiệt độ môi trường xung quanh site vượt ngưỡng | Ambient `Temperature > AmbientThresholdConfig.HighAmbientTempCritical` |
 | `HighHumidity` | 10 | Độ ẩm môi trường vượt ngưỡng | Ambient `Humidity > AmbientThresholdConfig.HighHumidityCritical` |
 | `HighTempHumidityCombo` | 11 | Combo nhiệt độ cao + độ ẩm cao đồng thời | Temp ≥ `ComboTempThreshold` AND Humidity ≥ `ComboHumidityThreshold` |
@@ -243,6 +244,23 @@ Open ──→ Acknowledged ──→ Resolved
 | `EnvironmentalIncident` | 14 | Liên kết tới `EnvironmentalIncident` cấp site (smoke/fire/flood…) | Tạo từ incident raise |
 | `SensorMismatch` | 15 | BMS reading lệch IoT reading vượt ngưỡng (Sprint 7) | Cross-source mismatch check — chỉ ghép cặp `Bms ↔ IotGateway`; ΔV > 0.5V hoặc ΔT > 5°C. **Nguồn `redundant` (INA226) không đo nhiệt (temp=0 cứng) → backend skip so sánh nhiệt cho cặp chứa nó** (contract firmware, NS-09 #653) |
 | `Undertemp` | 16 | Nhiệt độ thấp hơn ngưỡng tối thiểu (Sprint Bonus NS-25 #665) | `Temperature < ThresholdConfig.TemperatureMin` (seed −10°C). Dưới `TemperatureMin − 5°C` → Critical, còn lại Warning. Sạc pin lithium dưới 0°C gây lithium plating (nguy hiểm thật). ⚠️ **Wire value cross-service** — FE cần mirror giá trị 16 |
+
+> ⚠️ **`SohDegradation` (8) được DÙNG CHO HAI VIỆC KHÁC NHAU.** `anomalyType` một mình **không đủ**
+> để phân biệt, và **`severity` cũng không đủ** (cả hai đều có thể là `Warning`). Dấu hiệu phân biệt
+> chắc chắn là **bộ ba `thresholdValue`/`actualValue`/`unit`**:
+>
+> | | SOH pin thật sự tụt | Hiệu chuẩn thiết bị IoT hết hạn |
+> |---|---|---|
+> | Sinh bởi | `AnomalyRules` (ngưỡng) · `SohPredictionBackgroundService` (AI) | `CalibrationExpiryNotificationBackgroundService` |
+> | `severity` | `Critical` (dưới `SohCriticalThreshold`) hoặc `Warning` (dưới `SohWarningThreshold`) | **luôn `Warning`** |
+> | `thresholdValue` | **có** (vd `80`) | **`null`** |
+> | `actualValue` | **có** (SOH % đo/dự đoán) | **`null`** |
+> | `unit` | `"%"` | **`null`** |
+> | `dedupWindowEndUtc` | nhánh ngưỡng: `detectedAt + DedupWindowMinutes` (`AnomalyEngineOptions`, mặc định **30 phút**) · nhánh AI: `detectedAt + 1 giờ` | `detectedAt + **7 ngày**` |
+>
+> **Quy tắc cho FE:** `anomalyType == 8 && actualValue == null` ⇒ đây là **cảnh báo hiệu chuẩn hết
+> hạn**, không phải pin xuống cấp. Đừng hiển thị "SOH tụt còn N%" cho nhóm này — không có số nào để
+> hiện.
 
 ### `EnvironmentalIncidentTypeEnum`
 
@@ -898,6 +916,56 @@ Khôi phục loại pin đã xóa.
 Base route: `/api/sensor-readings`
 
 > **Lưu ý:** SensorReading không extend `AuditableEntity`. Đây là time-series append-only data lưu trong TimescaleDB hypertable.
+
+---
+
+### `GET /api/sensor-readings/stream` — SSE realtime
+
+**Mục đích:** Kênh **một chiều server → client** đẩy số đo cảm biến theo thời gian thực (~5 giây/pin)
+cho 1 pin hoặc nhiều pin cùng lúc.
+
+**Tác dụng:** Thay cho việc FE gọi `/latest` theo vòng lặp. Dữ liệu lên stream **đã calibrate và đã
+loại nhiễu/outlier** — giống hệt dữ liệu đã ghi vào hypertable.
+
+**Auth:** Bắt buộc — `Admin` / `Manager` / `Staff` / `Customer`. Vì `EventSource` của trình duyệt
+**không set được header `Authorization`**, token truyền qua query `?access_token=<JWT>`.
+Quyền theo từng scope còn bị kiểm thêm (Customer chỉ mở được scope pin của chính mình).
+
+**Content-Type trả về:** `text/event-stream` (KHÔNG phải `application/json` như các endpoint khác).
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `scope` | `string` | **Có** | `asset:{id}` · `assets:{id1,id2}` · `customer:{id}` · `site:{id}` · `sites:{id1,id2}` · `type:{id}` · `all` · `site:none`. Mỗi danh sách **tối đa 50 id** |
+| `access_token` | `string` | Có (nếu không set header `Authorization`) | JWT |
+
+**Request header tuỳ chọn:**
+
+| Header | Mô tả |
+|---|---|
+| `Last-Event-ID` | Id của event cuối client đã nhận. Có giá trị ⇒ server **phát bù** các reading sau id đó trước khi nối luồng trực tiếp. **Chỉ có tác dụng với scope 1 pin** (`asset:{1 id}`) |
+
+**4 loại event** — `reading` · `summary` · `stats` · `ping`. **Chỉ `reading` mang dòng `id:`.**
+
+```
+id: 1785578400123-0
+event: reading
+data: {"batteryAssetId":"3fa85f64-...","time":"2026-08-01T07:20:00.123Z","voltage":52.3, ... }
+
+```
+
+**Lỗi non-2xx** trả `CommonResponse` như mọi endpoint khác (chưa mở stream):
+
+| Mã | Khi nào | Hình dạng |
+|---|---|---|
+| `400` | `scope` sai cú pháp hoặc quá 50 id | `listErrors: [{ field: "scope", detail: "..." }]` |
+| `401` | Không xác định được người dùng từ token | Chỉ `message`, `listErrors` = `null` |
+| `403` | Token hợp lệ nhưng không có quyền với scope đó | Chỉ `message`, `listErrors` = `null` |
+
+> 📖 **Hợp đồng đầy đủ cho FE/Mobile** — bộ field của `reading`/`summary`/`stats`, RBAC theo từng
+> scope, phát bù `Last-Event-ID` (cửa sổ bù, tình huống biên, khử trùng), cờ cấu hình, và cách thử
+> bằng curl: xem [docs/battery-realtime-description.md](battery-realtime-description.md).
 
 ---
 

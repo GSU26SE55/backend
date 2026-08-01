@@ -66,6 +66,19 @@ SMS_ROUTES=(
   "/hubs/sms-gateway/negotiate"
 )
 
+# Sprint BE-IoT-Realtime — BatteryService realtime + telemetry.
+# Trước 2026-08-01 KHÔNG có route BatteryService nào được smoke-test: gateway quên định tuyến
+# `/api/sensor-readings/*` thì realtime chết im lặng mà deploy vẫn xanh.
+#
+# /api/sensor-readings/stream          — SSE live telemetry (#614). KHÔNG token => 401 ngay,
+#                                        curl không bị treo ở stream long-lived.
+# /api/sensor-readings/{id}/latest     — snapshot REST, cùng cụm route với stream.
+# Cả hai yêu cầu JWT => 401 = OK (route mapped), 404 = FAIL (gateway misconfig).
+BATTERY_ROUTES=(
+  "/api/sensor-readings/stream?scope=all"
+  "/api/sensor-readings/00000000-0000-0000-0000-000000000000/latest"
+)
+
 probe_endpoint() {
   local path="$1"
   curl -fsSk --max-time 10 "${HOST}${path}" > /dev/null 2>&1
@@ -149,6 +162,17 @@ for i in $(seq 1 "$MAX_RETRY"); do
   fi
 
   if [ "$all_ok" -eq 1 ]; then
+    for ep in "${BATTERY_ROUTES[@]}"; do
+      echo "[smoke #$i] battery ${HOST}${ep}"
+      # Reuse probe_iot_route — semantics giống nhau (chấp nhận 200/401/403/405, reject 404/5xx).
+      if ! probe_iot_route "$ep"; then
+        all_ok=0
+        break
+      fi
+    done
+  fi
+
+  if [ "$all_ok" -eq 1 ]; then
     for ep in "${PUBLIC_ROUTES[@]}"; do
       echo "[smoke #$i] public ${HOST}${ep}"
       if ! probe_public_route "$ep"; then
@@ -159,7 +183,7 @@ for i in $(seq 1 "$MAX_RETRY"); do
   fi
 
   if [ "$all_ok" -eq 1 ]; then
-    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification + ${#SMS_ROUTES[@]} sms + ${#PUBLIC_ROUTES[@]} public routes reachable"
+    echo "OK - all ${#ENDPOINTS[@]} health + ${#IOT_ROUTES[@]} IoT + ${#NOTIFICATION_ROUTES[@]} notification + ${#SMS_ROUTES[@]} sms + ${#BATTERY_ROUTES[@]} battery + ${#PUBLIC_ROUTES[@]} public routes reachable"
     exit 0
   fi
 

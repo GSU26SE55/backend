@@ -317,6 +317,50 @@ groups:
           description: "Kiểm tra: Mqtt__Host reachable, Mqtt__Password, cert TLS (production), ACL config. Bridge tự reconnect mỗi Mqtt__ReconnectIntervalSeconds (default 5s)."
 
   # =====================================================================
+  # Sprint BE-IoT-Realtime — SSE telemetry live stream (overall.md §34.10)
+  # Metric do RealtimeMetrics.cs phát: `sse_active_connections{scope}`,
+  # `sse_events_pushed_total{scope,event}`. Trước 2026-08-01 hai metric này ĐÃ CÓ trong code
+  # nhưng KHÔNG rule/dashboard nào đọc — tức là stream chết cũng không ai biết.
+  # =====================================================================
+  - name: sse-realtime
+    interval: 30s
+    rules:
+      # 22. Có client đang mở stream nhưng KHÔNG event nào được đẩy trong 5 phút.
+      # Nghĩa là ingest ngừng, Redis pub/sub đứt, hoặc Realtime:Enabled bị tắt nhầm.
+      # Người dùng thấy biểu đồ đứng hình mà không có lỗi nào — đúng kiểu hỏng im lặng.
+      # `ping` bị loại khỏi phép đếm: heartbeat vẫn chạy kể cả khi không còn dữ liệu thật,
+      # tính vào là alert sẽ không bao giờ fire.
+      - alert: SseStreamStalled
+        expr: |
+          sum(sse_active_connections) > 0
+          and
+          sum(rate(sse_events_pushed_total{event!="ping"}[5m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSE có {{ $value }} kết nối nhưng không đẩy event nào > 5 phút"
+          description: >-
+            Kiểm tra theo thứ tự: (1) cờ Realtime:Enabled còn true?
+            (2) ingest /api/sensor-readings/batch còn nhận dữ liệu?
+            (3) Redis pub/sub còn sống? Client vẫn nhận `ping` nên kết nối KHÔNG rớt —
+            chỉ là không có số liệu.
+
+      # 23. Số kết nối SSE tăng bất thường — mỗi kết nối giữ 1 subscription Redis + 1 channel
+      # trong tiến trình, nên rò kết nối (client không đóng, reverse proxy giữ) sẽ ăn dần bộ nhớ.
+      # Ngưỡng 200 chọn theo quy mô capstone; chỉnh khi số người dùng thật tăng.
+      - alert: SseConnectionsHigh
+        expr: sum(sse_active_connections) > 200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSE đang giữ {{ $value }} kết nối đồng thời"
+          description: >-
+            Nghi rò kết nối hoặc client reconnect liên tục. Mỗi kết nối = 1 subscription Redis
+            + 1 channel in-process. Kiểm tra log reconnect và cấu hình timeout ở reverse proxy.
+
+  # =====================================================================
   # Infrastructure
   # =====================================================================
   - name: infrastructure

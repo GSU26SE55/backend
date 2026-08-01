@@ -47,6 +47,22 @@ data:
   # AuthService dùng `Frontend:WebBaseUrl` để build URL "https://{domain}/2fa/cross-device-confirm?token=..."
   Frontend__WebBaseUrl: "https://{{ .Values.global.domain }}"
 
+  # ---------- #AUTH-05 (P0) — CORS whitelist ----------
+  # Origin mặc định = chính domain phục vụ FE Web, dựng từ `global.domain` giống
+  # `Frontend__WebBaseUrl` ở trên để không bao giờ lệch nhau.
+  #
+  # ⚠️ BẮT BUỘC khi `global.aspnetEnvironment: Production` — thiếu khoá này thì `AddCorsExtentions`
+  # ném `InvalidOperationException` và **cả 9 pod CrashLoopBackOff**, không phải chỉ cảnh báo.
+  # Ở Development/Staging thì thiếu chỉ ra cảnh báo + mở cho mọi origin, nhưng cụm staging đã có
+  # Ingress công khai + cert thật nên vẫn nên siết.
+  #
+  # Origin = scheme + host (+ port nếu khác 443/80). KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+  # Thêm origin khác (mobile web, cổng dev, domain phụ) qua `global.extraCorsOrigins` trong values.
+  Cors__AllowedOrigins__0: "https://{{ .Values.global.domain }}"
+  {{- range $i, $origin := .Values.global.extraCorsOrigins }}
+  Cors__AllowedOrigins__{{ add $i 1 }}: {{ $origin | quote }}
+  {{- end }}
+
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}
   {{ $key }}: {{ $value | quote }}

@@ -184,6 +184,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -239,6 +247,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -267,6 +283,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       # Override để dùng internal minio hostname (container-to-container)
@@ -294,6 +318,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -310,6 +342,14 @@ services:
       # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
+      # Sprint BE-IoT-Realtime — SSE telemetry (overall.md §34.10)
+      Realtime__Enabled: ${Realtime__Enabled:-true}
+      Realtime__HeartbeatSeconds: ${Realtime__HeartbeatSeconds:-30}
+      Realtime__SummaryIntervalSeconds: ${Realtime__SummaryIntervalSeconds:-4}
+      # #614 — phát bù khi client reconnect kèm header Last-Event-ID (chỉ scope 1 pin, event `reading`).
+      # ReplayMaxEvents=0 => TẮT phát bù (không sinh dòng `id:`). TtlMinutes=0 => không đặt hạn sống.
+      Realtime__ReplayMaxEvents: ${Realtime__ReplayMaxEvents:-200}
+      Realtime__ReplayTtlMinutes: ${Realtime__ReplayTtlMinutes:-5}
       # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
       Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
       Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
@@ -372,6 +412,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -420,6 +468,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -449,6 +505,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -481,6 +545,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"

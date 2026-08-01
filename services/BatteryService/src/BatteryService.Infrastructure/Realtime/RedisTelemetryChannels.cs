@@ -14,6 +14,17 @@ public static class RedisTelemetryChannels
     public const string SiteNone = Prefix + ":site:none";
 
     public static string Asset(Guid id) => $"{Prefix}:asset:{id:N}";
+
+    /// <summary>
+    /// Sprint BE-IoT-Realtime <c>#614</c> — Redis <b>Stream</b> lưu lịch sử reading của 1 pin để
+    /// phát lại khi client reconnect kèm <c>Last-Event-ID</c>.
+    ///
+    /// <para>Pub/sub KHÔNG có lịch sử: client rớt mạng là mất trắng các reading trong lúc rớt.
+    /// Redis Stream vừa giữ được N bản ghi gần nhất, vừa tự sinh id tăng dần (<c>&lt;ms&gt;-&lt;seq&gt;</c>)
+    /// — đúng thứ SSE cần cho <c>Last-Event-ID</c>, không phải tự chế bộ đếm (bộ đếm tự chế sẽ vỡ khi
+    /// chạy nhiều instance hoặc service restart).</para>
+    /// </summary>
+    public static string AssetReplay(Guid id) => $"{Prefix}:replay:asset:{id:N}";
     public static string Customer(Guid id) => $"{Prefix}:customer:{id:N}";
     public static string Site(Guid id) => $"{Prefix}:site:{id:N}";
     public static string Type(Guid id) => $"{Prefix}:type:{id:N}";

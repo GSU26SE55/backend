@@ -11,7 +11,19 @@
 
 **Connection string env var:** `ConnectionStrings__SmsDb` (PostgreSQL). Fallback đọc thêm `SmsDb`, `Sms_Db`, `SMS_DB` (xem `Program.cs:30-35`) — thiếu cả 4 → throw `InvalidOperationException` khi startup.
 
-**CORS:** Policy `"AllowAll"` (xem `SharedInfrastructure/.../AddCORS.cs`) — `SetIsOriginAllowed(_ => true) + AllowAnyMethod + AllowAnyHeader + AllowCredentials`. Mọi origin (Flutter, web admin, mobile, Postman) gọi được. **Production NÊN siết** lại whitelist domain.
+**CORS:** Policy **`"AppCors"`** (xem `SharedInfrastructure/.../AddCORS.cs`). ⚠️ **Đổi 2026-08-01 — mô tả cũ (`"AllowAll"` + `SetIsOriginAllowed(_ => true)`) KHÔNG còn đúng** (`#AUTH-05`):
+
+| Môi trường | `Cors:AllowedOrigins` | Hành vi |
+|---|---|---|
+| Bất kỳ | **có giá trị** | `WithOrigins(<danh sách>)` + `AllowAnyMethod` + `AllowAnyHeader` + `AllowCredentials`. Origin ngoài danh sách bị chặn |
+| `Development` | rỗng | Vẫn cho **mọi** origin + in cảnh báo ra console |
+| `Production` | rỗng | **NÉM `InvalidOperationException` — service KHÔNG khởi động** |
+
+- Khai bằng biến môi trường `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (xem `.env.Docker`).
+- Dấu `/` cuối được **tự cắt** khi nạp: `https://x.com/` và `https://x.com` là một. `WithOrigins` so khớp
+  chuỗi nguyên văn nên không cắt là whitelist trượt **im lặng**.
+- So khớp origin phân biệt **scheme và cổng**: `http://app.x` ≠ `https://app.x`, `https://app.x:3000` ≠ `https://app.x`.
+- **Còn treo:** danh sách domain production thật do **Leader chốt** — phần cơ chế đã xong.
 
 **Ops endpoints (không bọc CommonResponse, không cần auth):**
 

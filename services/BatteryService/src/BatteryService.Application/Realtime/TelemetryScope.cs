@@ -117,4 +117,16 @@ public readonly record struct TelemetryScope(TelemetryScopeType Kind, IReadOnlyL
 }
 
 /// <summary>Một message SSE đã sẵn sàng ghi xuống client: <c>event: {Event}\n data: {Data}</c>.</summary>
-public readonly record struct SseMessage(string Event, string Data);
+/// <param name="Event">Tên event SSE (`reading` | `summary` | `stats` | `ping`).</param>
+/// <param name="Data">Payload JSON.</param>
+/// <param name="Id">
+/// Sprint BE-IoT-Realtime <c>#614</c> — id của sự kiện, ghi ra dòng <c>id:</c> để trình duyệt nhớ và
+/// gửi lại qua header <c>Last-Event-ID</c> khi reconnect.
+///
+/// <para><b>Chỉ set cho `reading` ở scope 1 pin</b> — đó là chỗ duy nhất replay được (xem
+/// <c>RedisTelemetryStream</c>). `summary` là ảnh chụp định kỳ latest-per-asset: bỏ lỡ vài nhịp
+/// không mất dữ liệu vì nhịp kế tiếp (≤ SummaryIntervalSeconds) đã mang trạng thái hiện tại của mọi
+/// pin. `ping`/`stats` cũng không cần phát lại. KHÔNG phát <c>id:</c> ở những chỗ không honor được —
+/// gửi id rồi lờ đi khi client resume còn tệ hơn không gửi.</para>
+/// </param>
+public readonly record struct SseMessage(string Event, string Data, string? Id = null);

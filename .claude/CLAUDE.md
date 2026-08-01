@@ -242,6 +242,36 @@ Viết unit tests:
 
 ---
 
+## Chat patterns
+
+> ⚠️ File này bị GitHub Action đồng bộ **ghi đè** từ repo `workflow-ai`. Muốn nội dung dưới đây
+> sống sót, phải sửa ở `workflow-ai`, không phải ở đây. Bản bền vững nằm trong repo backend:
+> `docs/non-obvious-decisions.md`. (Bài học: commit `744b0c0` từng xoá sạch 59 dòng quyết định
+> mà Sprint additional-auth ghi vào `.claude/memory.md`.)
+
+Module Chat của TicketService — đọc trước khi động vào:
+
+| Cần gì | Đọc file nào |
+|--------|--------------|
+| Hợp đồng API + luồng nghiệp vụ | `docs/chat/api-reference.md` |
+| Quy ước khi viết code Chat | `docs/chat/contributor-guide.md` |
+| Realtime: hub, group, sự kiện | `docs/chat/signalr-setup.md` · `docs/chat/signalr-client-guide.md` |
+| Kiểu dữ liệu cho FE | `docs/chat/chat-hub.types.ts` |
+| Ai được làm gì | `docs/chat/permission-matrix.md` |
+| Vận hành / sự cố | `docs/chat/operations-runbook.md` · `docs/chat/rabbitmq-topology.md` |
+| Lưu trữ & xoá dữ liệu | `docs/chat/retention-policy.md` |
+| Bộ sưu tập Postman (52 request) | `docs/chat/chat-hub.postman.json` |
+| Hạn mức, nhà cung cấp AI, bẫy đã trả giá | `docs/non-obvious-decisions.md` |
+
+Bốn điều sai nhiều nhất:
+
+1. **Ghi chú nội bộ** (`IsInternal=true`) Customer KHÔNG được thấy — cả ở REST lẫn SignalR. Hub có hai group tách biệt: `ticket:{id}:public` và `ticket:{id}:internal`.
+2. **Client SignalR phải khai JSON protocol khớp server** — camelCase + `JsonStringEnumConverter`. Thiếu là callback im lặng không chạy, nhìn hệt như tin nhắn bị rơi.
+3. **Cache trang chat chỉ áp cho truy vấn mặc định** (trang 1, `pageSize=10`, không filter). Thêm bất kỳ tham số lọc nào là xuống thẳng DB — đừng tối ưu nhầm chỗ.
+4. **Thêm/xoá endpoint Chat phải cập nhật `docs/chat/chat-hub.postman.json`** — có test chặn (`TicketService.UnitTests/Docs/ChatPostmanCollectionTests.cs`), quên là CI đỏ.
+
+---
+
 ## Quy tắc đặt tên Branch
 
 | Branch | Mục đích | Tạo bởi |

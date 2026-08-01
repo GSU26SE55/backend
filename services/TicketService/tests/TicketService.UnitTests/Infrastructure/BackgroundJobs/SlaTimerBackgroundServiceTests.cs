@@ -107,7 +107,12 @@ public class SlaTimerBackgroundServiceTests
             .AddScoped<ISlaCalculator, SlaCalculator>()
             .AddDbContext<TicketDbContext>(options => options.UseInMemoryDatabase(dbName))
             .AddSingleton<IIntegrationEventOutboxWriter>(mockProducer.Object)
-            .AddMassTransitTestHarness()
+            .AddMassTransitTestHarness(x =>
+            {
+                // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+                // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+            })
             .BuildServiceProvider(true);
     }
 

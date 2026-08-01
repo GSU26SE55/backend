@@ -133,7 +133,7 @@ if (!EF.IsDesignTime)
         && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
         app.UseHttpsRedirection();
 
-    app.UseCors("AllowAll");
+    app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 
     // Sprint IoT-2 #IoT2-35 — serve firmware binary đã upload (multipart) qua static path.
     var firmwareRoot = builder.Configuration["Firmware:StorageRoot"];

@@ -133,7 +133,7 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseRateLimiter();
 app.UseAuthentication();
 // #AUTH-54: chạy SAU JwtBearer authentication, TRƯỚC Authorization.

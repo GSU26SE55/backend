@@ -32,7 +32,16 @@ public class LinkAlertToTicketConsumerTests
     private static async Task<ITestHarness> StartHarness(IBatteryUnitOfWork uow)
     {
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<LinkAlertToTicketConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<LinkAlertToTicketConsumer>();
+
+                // Sửa flaky 2026-07-31 — mặc định inactivity timeout của MassTransit v8 chỉ **1 giây**.
+                // `harness.Consumed.Any<T>()` trả `false` cả khi hết giờ lẫn khi hỏng thật, không phân
+                // biệt được. Chạy cả solution song song thì 5 test này đỏ; chạy riêng assembly thì pass
+                // 5/5. Nới trần theo khuôn `NotificationService/Helpers/ConsumerTestHarness.cs`.
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+            })
             .AddSingleton(uow)
             .AddSingleton<SharedContracts.Interfaces.IIntegrationEventOutboxWriter>(Helpers.NoOpOutbox.Instance)
             .AddSingleton(NullLogger<LinkAlertToTicketConsumer>.Instance)

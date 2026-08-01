@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Behaviors;
 using SharedInfrastructure.Caching;
@@ -30,7 +31,12 @@ public static class ManageDependencyInjection
         services.AddScoped<AuditableEntityInterceptor>();
 
         services.AddMediatRInfrastructure(configuration, assemblyName);
-        services.AddCorsExtentions();
+        // #AUTH-05 — truyền configuration + environment để CORS đọc whitelist `Cors:AllowedOrigins`.
+        // `IHostEnvironment` lấy từ service đã đăng ký sẵn (WebApplicationBuilder luôn đăng ký).
+        var hostEnv = services
+            .FirstOrDefault(d => d.ServiceType == typeof(IHostEnvironment))?.ImplementationInstance
+            as IHostEnvironment;
+        services.AddCorsExtentions(configuration, hostEnv);
         services.AddJwtAuthentication(configuration);
         services.AddRoleAuthorize();
         services.AddCommonModelStateResponse();

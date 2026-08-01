@@ -42,8 +42,21 @@ public class TicketCodeGenerator : ITicketCodeGenerator
         var monthKey = now.Year % 100 * 100 + now.Month;
 
         // pg_advisory_xact_lock nhả tự động khi transaction kết thúc → serialize việc cấp số.
-        await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        //
+        // Guard theo provider: `pg_advisory_xact_lock` là hàm riêng của PostgreSQL, và
+        // `ExecuteSqlInterpolatedAsync` là API relational-only. Không có guard này thì class hard-require
+        // Postgres ⇒ provider khác (InMemory trong unit test) ném InvalidOperationException ngay ở dòng
+        // đầu, khiến phần sinh mã bên dưới không cách nào test được.
+        //
+        // ⚠️ Runtime thật LUÔN là Npgsql (DI: ManageDependencyInjection.cs → options.UseNpgsql;
+        // design-time: TicketDbContextFactory cũng UseNpgsql), nên guard KHÔNG làm mất bảo vệ
+        // race-condition trong production. Nếu sau này đổi provider, chống trùng mã phải được cài lại
+        // bằng cơ chế khác — nếu không sẽ quay lại đúng lỗi 23505 mô tả ở phần tóm tắt trên.
+        if (_db.Database.IsNpgsql())
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        }
 
         var lastTicket = await _uow.Tickets.GetAllAsync()
             .Where(t => t.Code.StartsWith(prefix))
