@@ -144,7 +144,7 @@ services/TicketService/src/
 └── tests/
     ├── TicketService.UnitTests/Handlers/Chats/
     │   └── ChatAddCommandHandlerTests.cs
-    └── TicketService.IntergrationTests/Tickets/
+    └── TicketService.IntegrationTests/Tickets/
         └── TicketChatApiTests.cs
 ```
 
@@ -1797,7 +1797,7 @@ services/TicketService/src/
     │       ├── Templates/                               # 4 test class
     │       ├── Participants/                            # 7 test class
     │       └── Metrics/
-    └── TicketService.IntergrationTests/
+    └── TicketService.IntegrationTests/
         ├── Tickets/
         │   └── TicketChatApiTests.cs                 # Mở rộng
         ├── Templates/

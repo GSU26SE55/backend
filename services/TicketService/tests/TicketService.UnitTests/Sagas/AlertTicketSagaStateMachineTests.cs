@@ -23,6 +23,9 @@ public class AlertTicketSagaStateMachineTests
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>
             {
+                // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+                // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
                 x.AddSagaStateMachine<AlertTicketSagaStateMachine, AlertTicketSagaState>()
                     .InMemoryRepository();
             })
@@ -79,16 +82,28 @@ public class AlertTicketSagaStateMachineTests
 
     // ===== 1-3: Initial transitions =====
 
+    /// <summary>
+    /// ĐẢO NGƯỢC 2026-07-31 — trước đây case này khẳng định "V1 khởi tạo saga", nay hợp đồng ngược lại:
+    /// <b>V1 một mình KHÔNG được khởi tạo saga</b>.
+    ///
+    /// Lý do (xem comment <c>Initially</c> trong <see cref="AlertTicketSagaStateMachine"/>):
+    /// BatteryService publish CẢ V1 LẪN V2 cho cùng một alert, và cả hai đều <c>SelectId(AlertId)</c>
+    /// ⇒ cùng correlation id. Nếu cả hai cùng nằm ở <c>Initially</c> thì 2 message tranh nhau tạo
+    /// instance ⇒ <c>23505 PK_alert_ticket_saga_states</c>, nhánh thua nhận AlertLinked sai state
+    /// ⇒ <c>UnhandledEventException</c>. Nay chỉ V2 (nhiều field hơn) được khởi tạo; V1 chỉ còn ở
+    /// <c>DuringAny</c> để đếm dedup.
+    /// </summary>
     [Fact]
-    public async Task Case1_V1Anomaly_ShouldStartSaga_AndTransitionToTicketRequested()
+    public async Task Case1_V1AnomalyAlone_ShouldNotStartSaga()
     {
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
         await harness.Bus.Publish(MakeV1(alertId));
+        await Task.Delay(300);
 
-        var found = await saga.Exists(alertId, x => x.TicketRequested);
-        found.Should().NotBeNull();
+        saga.Created.Select(x => true).Any().Should()
+            .BeFalse("Initially chỉ nhận V2 — V1 chỉ được DuringAny bắt để dedup");
         await harness.Stop();
     }
 
@@ -133,7 +148,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         await harness.Bus.Publish(MakeTicketCreated(alertId, alertId));
@@ -149,7 +164,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var ticketCreated = MakeTicketCreated(alertId, alertId);
@@ -169,7 +184,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         await harness.Bus.Publish(MakeTicketCreated(alertId, alertId, isReused: true));
@@ -186,7 +201,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var ticketCreated = MakeTicketCreated(alertId, alertId);
@@ -209,7 +224,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         await harness.Bus.Publish(MakeTicketRejected(alertId, alertId));
@@ -225,7 +240,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         await harness.Bus.Publish(MakeTicketRejected(alertId, alertId, reason: "CUSTOMER_INACTIVE"));
@@ -243,7 +258,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var ticketCreated = MakeTicketCreated(alertId, alertId);
@@ -262,19 +277,24 @@ public class AlertTicketSagaStateMachineTests
 
     // ===== 11-13: Idempotency / Redelivery =====
 
+    /// <summary>
+    /// SỬA 2026-07-31 — mô phỏng đúng hành vi production: BatteryService bắn **cả V2 lẫn V1** cho
+    /// cùng một alert. V2 khởi tạo saga; V1 tới sau chỉ được dedup, KHÔNG được đẻ instance thứ hai.
+    /// </summary>
     [Fact]
-    public async Task Case11_DuplicateV1Anomaly_ShouldNotCreateSecondSaga()
+    public async Task Case11_V1ArrivingAfterV2_ShouldNotCreateSecondSaga()
     {
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
+        await Task.Delay(200);
 
-        var instances = saga.Created.Select(s => s.AlertId == alertId).Count();
-        instances.Should().Be(1);
+        saga.Created.Select(x => true).Count().Should().Be(1);
         await harness.Stop();
     }
 
@@ -284,7 +304,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var ticketCreated = MakeTicketCreated(alertId, alertId);
@@ -293,7 +313,9 @@ public class AlertTicketSagaStateMachineTests
         await harness.Bus.Publish(MakeAlertLinked(alertId, alertId, ticketCreated.TicketId));
         await saga.Exists(alertId, x => x.Completed);
 
+        // Redelivery V1 ở state tombstone — DuringAny chỉ đếm dedup, không đổi state.
         await harness.Bus.Publish(MakeV1(alertId));
+        await Task.Delay(200);
 
         var state = saga.Created.Contains(alertId);
         state!.CurrentState.Should().Be(nameof(AlertTicketSagaStateMachine.Completed));
@@ -306,12 +328,14 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
         await harness.Bus.Publish(MakeTicketRejected(alertId, alertId));
         await saga.Exists(alertId, x => x.Failed);
 
-        await harness.Bus.Publish(MakeV2(alertId));
+        // Redelivery V1 ở state Failed — phải giữ nguyên Failed.
+        await harness.Bus.Publish(MakeV1(alertId));
+        await Task.Delay(200);
 
         var state = saga.Created.Contains(alertId);
         state!.CurrentState.Should().Be(nameof(AlertTicketSagaStateMachine.Failed));
@@ -320,22 +344,43 @@ public class AlertTicketSagaStateMachineTests
 
     // ===== 14-16: State persistence =====
 
+    /// <summary>
+    /// ĐỔI Ý ĐỒ 2026-07-31 — trước đây case này kiểm "snapshot persist từ V1", nhưng
+    /// <c>HydrateFromV1</c> nay là code chết (saga chỉ khởi tạo từ V2). Thứ đáng bảo vệ là:
+    /// V1 tới sau KHÔNG được ghi đè snapshot mà V2 đã ghi — V1 ít field hơn (không có SiteId /
+    /// Tier-2), ghi đè sẽ làm mất dữ liệu. Snapshot từ V2 đã được Case15 phủ.
+    /// </summary>
     [Fact]
-    public async Task Case14_PayloadSnapshot_ShouldBePersistedFromV1()
+    public async Task Case14_V1ArrivingAfterV2_ShouldNotOverwriteSnapshot()
     {
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
-        var evt = MakeV1(alertId);
+        var v2 = MakeV2(alertId);
 
-        await harness.Bus.Publish(evt);
+        await harness.Bus.Publish(v2);
         await saga.Exists(alertId, x => x.TicketRequested);
 
+        // V1 cùng AlertId nhưng số liệu khác hẳn — nếu bị hydrate lại thì assert dưới sẽ gãy.
+        await harness.Bus.Publish(new BatteryAnomalyDetectedEvent(
+            AlertId: alertId,
+            BatteryAssetId: Guid.NewGuid(),
+            CustomerId: Guid.NewGuid(),
+            AssetSerialNumber: "BMS-OVERWRITE",
+            AnomalyType: 99,
+            Severity: 1,
+            ThresholdValue: 1m,
+            ActualValue: 2m,
+            Unit: "X",
+            DetectedAt: DateTime.UtcNow));
+        await Task.Delay(200);
+
         var state = saga.Created.Contains(alertId);
-        state!.AnomalyType.Should().Be(evt.AnomalyType);
-        state.Severity.Should().Be(evt.Severity);
-        state.ThresholdValue.Should().Be(evt.ThresholdValue);
-        state.ActualValue.Should().Be(evt.ActualValue);
-        state.CustomerId.Should().Be(evt.CustomerId);
+        state!.AnomalyType.Should().Be(v2.AnomalyType);
+        state.Severity.Should().Be(v2.Severity);
+        state.ThresholdValue.Should().Be(v2.ThresholdValue);
+        state.ActualValue.Should().Be(v2.ActualValue);
+        state.CustomerId.Should().Be(v2.CustomerId);
+        state.SiteId.Should().Be(v2.SiteId);
         await harness.Stop();
     }
 
@@ -362,7 +407,7 @@ public class AlertTicketSagaStateMachineTests
         var alertId = Guid.NewGuid();
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var state = saga.Created.Contains(alertId);
@@ -395,8 +440,8 @@ public class AlertTicketSagaStateMachineTests
         var alert1 = Guid.NewGuid();
         var alert2 = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alert1));
-        await harness.Bus.Publish(MakeV1(alert2));
+        await harness.Bus.Publish(MakeV2(alert1));
+        await harness.Bus.Publish(MakeV2(alert2));
 
         await saga.Exists(alert1, x => x.TicketRequested);
         await saga.Exists(alert2, x => x.TicketRequested);
@@ -414,7 +459,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
         await harness.Bus.Publish(MakeTicketRejected(alertId, alertId));
         await saga.Exists(alertId, x => x.Failed);
@@ -432,7 +477,7 @@ public class AlertTicketSagaStateMachineTests
         var (harness, saga) = await SetupHarnessAsync();
         var alertId = Guid.NewGuid();
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
 
         var ticketCreated = MakeTicketCreated(alertId, alertId);
@@ -455,7 +500,7 @@ public class AlertTicketSagaStateMachineTests
         var alertId = Guid.NewGuid();
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        await harness.Bus.Publish(MakeV1(alertId));
+        await harness.Bus.Publish(MakeV2(alertId));
         await saga.Exists(alertId, x => x.TicketRequested);
         await harness.Bus.Publish(MakeTicketRejected(alertId, alertId));
         await saga.Exists(alertId, x => x.Failed);

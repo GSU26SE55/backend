@@ -147,7 +147,7 @@ Phân loại notification — quyết định template, ma trận kênh (`TypeCh
 (`NotificationCategoryEnum`), và có thuộc diện critical (bypass quiet hours + hạn mức + giữ vĩnh
 viễn khi retention dọn) hay không.
 
-**32 giá trị.** Số hiệu **không liên tục** — `99` reserved cho `System`.
+**34 giá trị** (1–33 liên tục + `System = 99`). Số hiệu **không liên tục** — `99` reserved cho `System`.
 
 | Giá trị | Int | Nhóm (category) | Critical? | Ý nghĩa |
 |---|---|---|---|---|
@@ -175,16 +175,23 @@ viễn khi retention dọn) hay không.
 | `ParticipantAdded` | 22 | Chat | | User được thêm làm participant ticket |
 | `ParticipantRemoved` | 23 | Chat | | User bị xoá khỏi participant ticket |
 | `ParticipantRoleChanged` | 24 | Chat | | Role/type của participant trên ticket bị đổi |
-| `ChatEscalatedToAdmin` | 25 | **SLA** | ✅ | **Sprint 6.2 NOTI-03 (#674)** — saga `ChatEscalationReview` timeout 30' (Manager không ACK) → escalate lên Admin |
-| `TicketApproved` | 26 | Ticket | | **Sprint 6.2 NOTI-07 (#678)** — Manager duyệt kết quả, ticket vào `CLOSED_PENDING_RATE` chờ Customer đánh giá |
-| `TicketRejected` | 27 | Ticket | | **Sprint 6.2 NOTI-07** — kết quả resolve bị trả lại (→ Staff), HOẶC ticket đóng do ngoài scope (→ Customer) |
-| `TicketReopened` | 28 | Ticket | | **Sprint 6.2 NOTI-07** — Customer mở lại ticket → Manager + Staff đang assign |
-| `TicketRatingRequested` | 29 | Ticket | | **Sprint 6.2 NOTI-07** — nhắc Customer đánh giá ticket đang treo |
-| `BatteryAnomalyWarning` | 30 | Battery | | **Sprint 6.2 NOTI-08 (#679)** — bất thường pin mức **Warning** (spec §3.4 T#12) → InApp + Push |
-| `BatteryAnomalyInfo` | 31 | Battery | | **Sprint 6.2 NOTI-08** — bất thường pin mức **Info** (spec §3.4 T#11) → chỉ InApp |
+| `BlogGenerationCompleted` | 25 | Account ⚠️ | | **GH-671 (module Blog)** — AI sinh blog xong (`status=Draft`). ⚠️ **Chưa khai báo trong `NotificationCategoryMap`** → đang fallback nhóm `Account` |
+| `BlogGenerationFailed` | 26 | Account ⚠️ | | **GH-671 (module Blog)** — AI sinh blog thất bại. ⚠️ **Chưa khai báo trong `NotificationCategoryMap`** → đang fallback nhóm `Account` |
+| `ChatEscalatedToAdmin` | 27 | **SLA** | ✅ | **Sprint 6.2 NOTI-03 (#674)** — saga `ChatEscalationReview` timeout 30' (Manager không ACK) → escalate lên Admin |
+| `TicketApproved` | 28 | Ticket | | **Sprint 6.2 NOTI-07 (#678)** — Manager duyệt kết quả, ticket vào `CLOSED_PENDING_RATE` chờ Customer đánh giá |
+| `TicketRejected` | 29 | Ticket | | **Sprint 6.2 NOTI-07** — kết quả resolve bị trả lại (→ Staff), HOẶC ticket đóng do ngoài scope (→ Customer) |
+| `TicketReopened` | 30 | Ticket | | **Sprint 6.2 NOTI-07** — Customer mở lại ticket → Manager + Staff đang assign |
+| `TicketRatingRequested` | 31 | Ticket | | **Sprint 6.2 NOTI-07** — nhắc Customer đánh giá ticket đang treo |
+| `BatteryAnomalyWarning` | 32 | Battery | | **Sprint 6.2 NOTI-08 (#679)** — bất thường pin mức **Warning** (spec §3.4 T#12) → InApp + Push |
+| `BatteryAnomalyInfo` | 33 | Battery | | **Sprint 6.2 NOTI-08** — bất thường pin mức **Info** (spec §3.4 T#11) → chỉ InApp |
 | `System` | 99 | Account | | Notification hệ thống tổng quát (broadcast, maintenance) + **bản tin digest tổng hợp** |
 
-> ⚠️ **FE/Mobile phải mirror đủ 32 giá trị.** 7 giá trị mới của Sprint 6.2 là **25–31**.
+> ⚠️ **FE/Mobile phải mirror đủ 34 giá trị** (1–33 + `System = 99`).
+>
+> **Sửa 2026-07-31 — số hiệu ĐÃ ĐỔI:** 7 giá trị của Sprint 6.2 là **27–33**, KHÔNG phải 25–31 như
+> bản trước ghi. Module Blog (`GH-671`) chiếm mất **25** và **26**, đẩy toàn bộ nhóm Sprint 6.2 lên
+> 2 bậc. FE/Mobile nào đã mirror theo bản cũ **phải sửa lại**, nếu không sẽ hiển thị sai loại
+> thông báo (ví dụ coi `ChatEscalatedToAdmin` thành `BlogGenerationCompleted`).
 >
 > **Không có type cho cảnh báo bảo mật** (đăng nhập lạ / refresh-token reuse). Đây là **cố ý**:
 > hai luồng đó đi thẳng `AuthService → EmailService` như OTP, không qua NotificationService, nên
@@ -2441,9 +2448,10 @@ user chỉ thấy khi tự poll REST. Cộng nhiều **orphan event** (publish n
 - 2 template email thiếu (NOTI-09): `OtpPasswordReset.html`, `OtpEmailChange.html` — trước đó fallback
   về `OtpRegister.html` khiến user reset mật khẩu nhận email nội dung "đăng ký tài khoản".
 
-**Enum mới (7):** `ChatEscalatedToAdmin = 25`, `TicketApproved = 26`, `TicketRejected = 27`,
-`TicketReopened = 28`, `TicketRatingRequested = 29`, `BatteryAnomalyWarning = 30`,
-`BatteryAnomalyInfo = 31`.
+**Enum mới (7)** — *số hiệu đã sửa 2026-07-31, xem cảnh báo ở bảng enum trên:*
+`ChatEscalatedToAdmin = 27`, `TicketApproved = 28`, `TicketRejected = 29`,
+`TicketReopened = 30`, `TicketRatingRequested = 31`, `BatteryAnomalyWarning = 32`,
+`BatteryAnomalyInfo = 33`. (25 và 26 thuộc module Blog `GH-671`, không phải Sprint 6.2.)
 
 **SỬA:**
 - `TicketAssignedEvent` / `TicketResolvedEvent` thêm `CustomerId`; `TicketCreatedEvent` thêm

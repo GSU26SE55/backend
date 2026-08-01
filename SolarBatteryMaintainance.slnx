@@ -53,7 +53,7 @@
     <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" />
     <Project Path="services\TicketService\src\TicketService.Application\TicketService.Application.csproj" />
     <Project Path="services\TicketService\src\TicketService.Domain\TicketService.Domain.csproj" />
-    <Project Path="services\TicketService\tests\TicketService.IntergrationTests\TicketService.IntergrationTests.csproj" Type="Classic C#" />
+    <Project Path="services\TicketService\tests\TicketService.IntegrationTests\TicketService.IntegrationTests.csproj" Type="Classic C#" />
     <Project Path="services\TicketService\tests\TicketService.UnitTests\TicketService.UnitTests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/Services/AuditAggregatorService/">

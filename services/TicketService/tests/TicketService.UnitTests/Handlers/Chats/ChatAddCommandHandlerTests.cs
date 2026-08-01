@@ -1,3 +1,5 @@
+using MediatR;
+using TicketService.Application.CQRS.Notification.Audit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events.Chats;
@@ -18,6 +20,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatAddCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private IReadOnlyList<string> NoMatches = Array.Empty<string>();
     private static readonly List<string> PublicCreatePermission = new() { ChatPermissionCodes.ChatCreatePublic };
     private static readonly List<string> InternalCreatePermission = new() { ChatPermissionCodes.ChatCreateInternal };
@@ -51,7 +55,7 @@ public class ChatAddCommandHandlerTests
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object);
+            _slaService.Object, _publisher.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -93,6 +97,11 @@ public class ChatAddCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.created phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatCreated)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(201);
 
         chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>

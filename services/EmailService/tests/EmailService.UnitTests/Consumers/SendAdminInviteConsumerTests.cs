@@ -62,6 +62,15 @@ public class SendAdminInviteConsumerTests : IAsyncLifetime
         services.AddMassTransitTestHarness(x =>
         {
             x.AddConsumer<SendAdminInviteConsumer>();
+
+            // Sửa flaky 2026-07-31 — mặc định inactivity timeout của MassTransit v8 chỉ **1 giây**.
+            // `harness.Consumed.Any<T>()` ngừng chờ khi bus "im" quá ngưỡng đó rồi trả `false`, nên
+            // **hết giờ và hỏng thật cho ra CÙNG một kết quả**. Khi chạy cả solution song song
+            // (~9 assembly cùng lúc) việc điều phối luồng trượt quá 1 giây là test đỏ dù code đúng —
+            // chạy riêng assembly này thì pass trong 168ms. Nới trần theo đúng khuôn đã dùng ở
+            // NotificationService (`Helpers/ConsumerTestHarness.cs`): hỏng chậm 30 giây vẫn tốt hơn
+            // xanh-đỏ thất thường.
+            x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
         });
 
         _provider = services.BuildServiceProvider(true);

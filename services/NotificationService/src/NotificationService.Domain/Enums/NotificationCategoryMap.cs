@@ -59,6 +59,15 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.AccountActivated] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.AdminInvite] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.System] = NotificationCategoryEnum.Account,
+
+            // Blog (GH-671): kết quả AI sinh blog, gửi InApp cho **chính người bấm generate**
+            // (`BlogGenerationStatusConsumer` dùng `evt.RequestedByUserId`) — là phản hồi cho một hành
+            // động tự khởi xướng, không phải cảnh báo vận hành, nên xếp cùng nhóm "hệ thống".
+            // Trước 2026-07-31 hai type này KHÔNG được khai báo ⇒ `Resolve()` rơi vào fallback (cũng là
+            // Account) và test bao `EveryNotificationType_HasExplicitCategory` đỏ. Khai báo tường minh
+            // ở đây giữ nguyên hành vi runtime, chỉ bỏ phần "âm thầm".
+            [NotificationTypeEnum.BlogGenerationCompleted] = NotificationCategoryEnum.Account,
+            [NotificationTypeEnum.BlogGenerationFailed] = NotificationCategoryEnum.Account,
         };
 
     /// <summary>

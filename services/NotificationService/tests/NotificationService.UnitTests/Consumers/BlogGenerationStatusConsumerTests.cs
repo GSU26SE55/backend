@@ -20,7 +20,14 @@ public class BlogGenerationStatusConsumerTests
         inboxStore ??= MakeInboxStore();
 
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<BlogGenerationStatusConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<BlogGenerationStatusConsumer>();
+                // Sửa flaky 2026-07-31 — inactivity timeout mặc định của MassTransit v8 chỉ 1 giây;
+                // `Consumed.Any<T>()` trả `false` cả khi hết giờ lẫn khi hỏng thật. Chạy cả solution
+                // song song thì trượt ngưỡng. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs.
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+            })
             .AddSingleton(mediator)
             .AddSingleton(inboxStore.Object)
             .AddSingleton(NullLogger<BlogGenerationStatusConsumer>.Instance)

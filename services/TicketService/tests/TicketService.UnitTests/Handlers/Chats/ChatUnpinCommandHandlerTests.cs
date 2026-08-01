@@ -1,3 +1,5 @@
+using MediatR;
+using TicketService.Application.CQRS.Notification.Audit;
 using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
@@ -13,6 +15,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatUnpinCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
@@ -25,7 +29,7 @@ public class ChatUnpinCommandHandlerTests
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatUnpinCommandHandler(_uow.Object, _activityLogger.Object, new ChatAuthorizationService(_uow.Object));
+        return new ChatUnpinCommandHandler(_uow.Object, _activityLogger.Object, new ChatAuthorizationService(_uow.Object), _publisher.Object);
     }
 
     private static Ticket MakeTicket(Guid id) => new()
@@ -76,6 +80,11 @@ public class ChatUnpinCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.unpinned phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatUnpinned)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(200);
         chat.IsPinned.Should().BeFalse();
         chat.PinnedAt.Should().BeNull();

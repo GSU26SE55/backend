@@ -73,7 +73,7 @@ public static class ActionCodes
         public const string AlertManuallyResolved = "AlertManuallyResolved";
     }
 
-    /// <summary>TicketService — 21 action (<c>#AUDIT-24</c>).</summary>
+    /// <summary>TicketService — 28 action (<c>#AUDIT-24</c> 21 + Sprint Chat DoD 7).</summary>
     public static class Ticket
     {
         public const string TicketCreated = "TicketCreated";
@@ -97,6 +97,15 @@ public static class ActionCodes
         public const string FalseAlarmMarked = "FalseAlarmMarked";
         public const string CustomerRated = "CustomerRated";
         public const string AutoCreatedFromAnomaly = "AutoCreatedFromAnomaly";
+
+        // Sprint Chat DoD (2026-07-31) — audit module Chat.
+        public const string ChatCreated = "ChatCreated";
+        public const string ChatEdited = "ChatEdited";
+        public const string ChatDeleted = "ChatDeleted";
+        public const string ChatPinned = "ChatPinned";
+        public const string ChatUnpinned = "ChatUnpinned";
+        public const string ChatReacted = "ChatReacted";
+        public const string ChatMentioned = "ChatMentioned";
     }
 
     /// <summary>FileStorageService — 6 action (<c>#AUDIT-29</c>).</summary>

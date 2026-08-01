@@ -1,3 +1,5 @@
+using MediatR;
+using TicketService.Application.CQRS.Notification.Audit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -18,6 +20,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatEditCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private IReadOnlyList<string> NoMatches = Array.Empty<string>();
 
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
@@ -52,7 +56,8 @@ public class ChatEditCommandHandlerTests
         return new ChatEditCommandHandler(
             _uow.Object, _activityLogger.Object, _markdownRenderer.Object,
             chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions,
-            _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object);
+            _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object,
+            _publisher.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -102,6 +107,11 @@ public class ChatEditCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.edited phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatEdited)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(200);
         chat.Body.Should().Be("Edited body");
         chat.EditCount.Should().Be(1);

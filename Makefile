@@ -72,6 +72,20 @@ test-coverage: ## Test + coverage (XPlat Code Coverage)
 test-svc: _require-svc ## Test 1 service (SVC=BatteryService)
 	dotnet test $(SERVICES_DIR)/$(SVC)/$(SVC).slnx --verbosity minimal
 
+test-perf: ## Chạy riêng test Category=Performance (YÊU CẦU máy rảnh — xem ghi chú)
+	@printf '\n\033[1;34m[+] Performance tests (tuần tự, 1 assembly/lượt)\033[0m\n'
+	@printf 'Các test này đo tài nguyên máy nên bị loại khỏi ci-test/ci-integration.\n'
+	@printf '⚠️  Chạy trên máy RẢNH. Đo 2026-07-31: máy rảnh p99 ~6ms, pass 3/3 lần;\n'
+	@printf '    chạy song song cả solution p99 = 389ms (ngưỡng 50ms) => đỏ giả.\n'
+	@printf '    Đợi 10s cho tiến trình/container của lệnh trước teardown xong...\n'
+	@sleep 10
+	dotnet test services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+	@docker info >/dev/null 2>&1 || { echo "SKIP: AuditThroughputChaosTests cần Docker."; exit 0; }
+	@sleep 5
+	dotnet test services/AuditAggregatorService/tests/AuditAggregatorService.IntegrationTests/AuditAggregatorService.IntegrationTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+
 # ---------------------------------------------------------------------
 # CI — chạy local trước khi push (mirror Jenkinsfile stage 0-7)
 # ---------------------------------------------------------------------
@@ -128,8 +142,10 @@ ci-integration: ## [stage 7] Integration tests (cần Docker daemon)
 	@printf '\n\033[1;34m[+] Integration tests\033[0m\n'
 	@docker info >/dev/null 2>&1 || { echo "FAIL: Docker daemon không chạy."; exit 1; }
 	@mkdir -p TestResults
+	# AuditThroughputChaosTests skip: đo throughput/kết nối đồng thời, đỏ giả khi chạy song song
+	# cả solution (428 ev/s vs 1000; Npgsql read-timeout khi mở 3200 connection). Run: make test-perf
 	dotnet test $(SLN) -c Release --no-build \
-		--filter "FullyQualifiedName~IntegrationTests" \
+		--filter "FullyQualifiedName~IntegrationTests&Category!=Performance" \
 		--logger "trx" \
 		--results-directory ./TestResults
 

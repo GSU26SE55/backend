@@ -31,6 +31,8 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
     private readonly ICacheService _cache;
     private readonly ILogger<ChatDeleteCommandHandler> _logger;
 
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.delete
+
     public ChatDeleteCommandHandler(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
@@ -40,8 +42,10 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         ITicketChatRealtimeNotifier realtimeNotifier,
         IChatCacheService chatCache,
         ICacheService cache,
-        ILogger<ChatDeleteCommandHandler> logger)
+        ILogger<ChatDeleteCommandHandler> logger,
+        IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
@@ -139,6 +143,12 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             t.DeletedAt = DateTime.UtcNow;
             _uow.TicketChatTranslations.UpdateAsync(t);
         }
+
+        // Sprint Chat DoD — audit ChatDeleted. Publish TRƯỚC SaveChanges để entry audit +
+        // outbox đi cùng transaction với thay đổi nghiệp vụ (#AUDIT-25/26).
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.ChatDeleted, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
 
         await _uow.SaveChangesAsync(ct);
 

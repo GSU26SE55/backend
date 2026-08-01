@@ -33,6 +33,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly ILogger<ChatAddCommandHandler> _logger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IGroupMentionResolverService _groupMentionResolver;
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.create/mention
     private readonly IChatCacheService _chatCache;
     private readonly ISlaService _slaService;
 
@@ -51,8 +52,10 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IIntegrationEventOutboxWriter outboxWriter,
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
-        ISlaService slaService)
+        ISlaService slaService,
+        IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
@@ -314,6 +317,23 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         if (request.UserRole == ActorRoleEnum.Customer)
         {
             await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, cancellationToken);
+        }
+
+        // Sprint Chat DoD — audit chat.create (+ chat.mention nếu tin nhắn có tag người).
+        // Publish TRƯỚC SaveChanges để audit + outbox nằm cùng transaction với chat (#AUDIT-25/26).
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.ChatCreated, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id, ["isInternal"] = chat.IsInternal }), cancellationToken);
+
+        if (createdMentions.Count > 0)
+        {
+            await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+                TicketService.Domain.Enums.TicketAuditActionEnum.ChatMentioned, ticket.Id, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?>
+                {
+                    ["chatId"] = chat.Id,
+                    ["mentionedUserIds"] = createdMentions.Select(m => m.MentionedUserId).ToArray()
+                }), cancellationToken);
         }
 
         await _uow.SaveChangesAsync(cancellationToken);

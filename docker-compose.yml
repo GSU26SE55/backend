@@ -23,6 +23,8 @@ networks:
 
 volumes:
   postgres-data:
+  mosquitto-data:   # Sprint IoT-1 #253 — chỉ dùng khi bật profile `mqtt`
+  mosquitto-log:
   rabbitmq-data:
   minio-data:
   prometheus-data:
@@ -101,6 +103,46 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [solar-net]
+
+  # ==================================================================
+  # Sprint IoT-1 #253 — MQTT broker cho bridge của BatteryService.
+  #
+  # ĐẶT SAU PROFILE `mqtt` nên KHÔNG chạy mặc định (`docker compose up` bỏ qua service này) —
+  # đúng yêu cầu "chỉ bật khi triển khai MQTT" (§51). Bật bằng:
+  #     docker compose --profile mqtt up -d mosquitto
+  #
+  # Trước 31/07/2026 compose KHÔNG có service này, trong khi batteryservice đã trỏ sẵn
+  # `Mqtt__Host=mosquitto` ⇒ đặt `Mqtt__Enabled=true` là bridge treo ở trạng thái reconnect vô hạn
+  # vì không có host nào tên `mosquitto` trên `solar-net`.
+  #
+  # Chuẩn bị trước lần chạy đầu (xem infra/mqtt/README.md):
+  #   ./infra/mqtt/mosquitto/bootstrap.sh          # sinh passwd → paste vào .env.Docker
+  #   ./infra/mqtt/scripts/gen-certs.sh mosquitto  # (tuỳ chọn) bật TLS 8883
+  # ==================================================================
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: solar-mosquitto
+    profiles: ["mqtt"]
+    restart: unless-stopped
+    ports:
+      - "${MQTT_HOST_PORT:-21883}:1883"      # plain MQTT
+      - "${MQTT_HOST_TLS_PORT:-28883}:8883"  # TLS — chỉ có listener sau khi chạy gen-certs.sh
+    volumes:
+      - ./infra/mqtt/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mqtt/mosquitto/config/acl.conf:/mosquitto/config/acl.conf:ro
+      # conf.d rỗng khi chưa sinh cert → broker chạy với 1883, KHÔNG fail to start.
+      - ./infra/mqtt/mosquitto/config/conf.d:/mosquitto/config/conf.d:ro
+      - ./infra/mqtt/mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./infra/mqtt/mosquitto/certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    healthcheck:
+      # `nc` không có trong image mosquitto:2.0 → dùng /dev/tcp của sh.
+      test: ["CMD-SHELL", "timeout 2 sh -c '</dev/tcp/127.0.0.1/1883' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks: [solar-net]
 
   rabbitmq:
