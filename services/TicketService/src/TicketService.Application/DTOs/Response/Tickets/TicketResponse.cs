@@ -13,7 +13,6 @@ public class ParticipantBulkActionResponse : CommonResponse<List<TicketParticipa
 public class TicketParticipantsResponse : CommonResponse<List<TicketParticipantDTO>> { }
 public class ParticipantHistoryResponse : CommonResponse<List<ParticipantHistoryDTO>> { }
 public class MyMentionsResponse : CommonResponse<PaginationResponse<TicketChatMentionDTO>> { }
-public class ChatMentionActionResponse : CommonResponse<TicketChatMentionDTO> { }
 public class ChatReactionActionResponse : CommonResponse<TicketChatReactionsAggregateDTO> { }
 public class ChatMarkAsReadResponse : CommonResponse<int> { }
 public class ChatReadersResponse : CommonResponse<List<ChatReaderDTO>> { }

@@ -8,7 +8,6 @@ using SharedContracts.Common.Responses;
 using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.CQRS.Command.Chats;
-using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.CQRS.Query.ChatKbSuggestions;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -805,44 +804,6 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>
-    /// Gửi chat từ template — render nội dung template với variables tùy chọn.
-    /// </summary>
-    [HttpPost("from-template/{templateId}")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SendFromTemplate(
-        Guid ticketId,
-        Guid templateId,
-        [FromBody] ChatFromTemplateCommand command,
-        CancellationToken ct)
-    {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        command.TicketId = ticketId;
-        command.TemplateId = templateId;
-        command.ActorUserId = actorId.Value;
-        command.ActorDisplayName = _currentUser.FullName ?? "Unknown";
-        command.ActorRole = ResolveActorRole(_currentUser.Role);
-        command.ActorRoles = GetCurrentRoles();
-
-        var result = await _mediator.Send(command, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Cursor-based pagination cho chat — không có offset, phù hợp load-more infinite scroll.
-    /// </summary>
-    /// <param name="ticketId">ID của Ticket.</param>
-    /// <param name="cursor">Opaque cursor từ NextCursor của trang trước. Bỏ trống để lấy trang đầu.</param>
-    /// <param name="limit">Số lượng chat mỗi trang (mặc định 20, tối đa 100).</param>
-    /// <param name="ct">Token hủy request.</param>
     [HttpGet("cursor")]
     [ProducesResponseType(typeof(CommonResponse<CursorPaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -957,58 +918,6 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Export chat history of a ticket to PDF. Customer view excludes internal chats. #568.</summary>
-    [HttpGet("export-pdf")]
-    [Authorize(Roles = "Manager,Admin,Staff")]
-    public async Task<IActionResult> ExportChatPdf(Guid ticketId, CancellationToken ct)
-    {
-        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
-        var viewerRole = ResolveActorRole(roleStr);
-
-        Stream pdfStream;
-        try
-        {
-            pdfStream = await _mediator.Send(new ChatExportPdfCommand
-            {
-                TicketId = ticketId,
-                ViewerRole = viewerRole
-            }, ct);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return NotFound(new { isSuccess = false, message = ex.Message });
-        }
-
-        return File(pdfStream, "application/pdf", $"ticket-{ticketId}-chats.pdf");
-    }
-
-    /// <summary>
-    /// Phân tích tone Customer chats và alert Manager via SignalR nếu score &lt; -0.7 (#560).
-    /// Trả về sentiment score [-1,1], label (Positive/Neutral/Negative/Critical), và IsAlertSent.
-    /// </summary>
-    [HttpPost("sentiment-check")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(ChatSentimentCheckResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SentimentCheck(Guid ticketId, CancellationToken ct = default)
-    {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        var result = await _mediator.Send(new ChatSentimentCheckCommand
-        {
-            TicketId = ticketId,
-            CurrentUserId = actorId.Value
-        }, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Tóm tắt toàn bộ chat thread thành 5 dòng bullet cho Staff Tier 3 mới tiếp nhận (#560).
-    /// </summary>
     [HttpPost("summarize")]
     [Authorize(Roles = "Staff,Manager,Admin")]
     [ProducesResponseType(typeof(ChatSummarizeResponse), StatusCodes.Status200OK)]

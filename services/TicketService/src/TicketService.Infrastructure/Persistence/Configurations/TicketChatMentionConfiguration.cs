@@ -28,12 +28,6 @@ public class TicketChatMentionConfiguration : IEntityTypeConfiguration<TicketCha
             .HasColumnName("mentioned_display_name")
             .HasMaxLength(256);
 
-        builder.Property(e => e.IsAcknowledged)
-            .HasColumnName("is_acknowledged");
-
-        builder.Property(e => e.AcknowledgedAt)
-            .HasColumnName("acknowledged_at");
-
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -49,8 +43,8 @@ public class TicketChatMentionConfiguration : IEntityTypeConfiguration<TicketCha
         builder.Property(e => e.DeletedAt)
             .HasColumnName("deleted_at");
 
-        builder.HasIndex(e => new { e.MentionedUserId, e.IsAcknowledged })
-            .HasDatabaseName("ix_ticket_chat_mentions_user_unread");
+        builder.HasIndex(e => e.MentionedUserId)
+            .HasDatabaseName("ix_ticket_chat_mentions_mentioned_user_id");
 
         builder.HasIndex(e => e.ChatId)
             .HasDatabaseName("ix_ticket_chat_mentions_chat_id");

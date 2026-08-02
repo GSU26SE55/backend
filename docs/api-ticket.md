@@ -834,16 +834,13 @@ Base path: `/api/tickets/{ticketId}/chats`
 | `POST` | `/api/tickets/{ticketId}/chats/mark-read` | Mọi role | Mark-read nhiều chat (bulk) |
 | `GET` | `/api/tickets/{ticketId}/chats/{id}/readers` | Staff/Manager/Admin | Danh sách user đã đọc chat |
 | `GET` | `/api/tickets/{ticketId}/chats/unread-count` | Mọi role | Số chat chưa đọc |
-| `POST` | `/api/tickets/{ticketId}/chats/from-template/{templateId}` | Staff/Manager/Admin | Gửi chat từ template |
 | `POST` | `/api/tickets/{ticketId}/chats/{id}/attach-kb` | Staff/Manager/Admin | Gắn KB article vào chat |
 | `POST` | `/api/tickets/{ticketId}/chats/{id}/to-kb-draft` | Staff/Manager/Admin | Chuyển chat thành KB Draft |
 | `GET` | `/api/tickets/{ticketId}/chats/{id}/kb-suggestions` | Staff/Manager/Admin | Gợi ý KB articles |
 | `POST` | `/api/tickets/{ticketId}/chats/suggest` | Staff/Manager/Admin | AI gợi ý nội dung chat |
-| `POST` | `/api/tickets/{ticketId}/chats/sentiment-check` | Staff/Manager/Admin | AI phân tích tone Customer |
 | `POST` | `/api/tickets/{ticketId}/chats/summarize` | Staff/Manager/Admin | AI tóm tắt thread |
 | `POST` | `/api/tickets/{ticketId}/chats/{id}/translate` | Mọi role | Dịch nội dung chat |
 | `POST` | `/api/tickets/{ticketId}/chats/voice` | Mọi role | Upload audio → transcribe → tạo chat |
-| `GET` | `/api/tickets/{ticketId}/chats/export-pdf` | Staff/Manager/Admin | Export PDF toàn bộ chat |
 | `POST` | `/api/tickets/{ticketId}/chats/{id}/escalation-review/ack` | Manager/Admin | ACK escalation review |
 
 ---
@@ -1034,30 +1031,6 @@ Base path: `/api/tickets/{ticketId}/chats`
 
 ---
 
-### `POST /api/tickets/{ticketId}/chats/sentiment-check` (AI)
-
-**Mục đích:** Phân tích tone cảm xúc Customer trong ticket. Nếu score < -0.7 → gửi SignalR alert tới Manager.
-**Auth:** Staff/Manager/Admin
-
-**Request body:** Không cần (ticketId lấy từ path)
-
-**Response `200`:** `CommonResponse<ChatSentimentCheckDTO>`
-
-```json
-{
-  "isSuccess": true,
-  "data": {
-    "score": -0.85,
-    "label": "Critical",
-    "isAlertSent": true
-  }
-}
-```
-
-**Label values:** `Positive` (score > 0.3) · `Neutral` (-0.3 ≤ score ≤ 0.3) · `Negative` (-0.7 < score < -0.3) · `Critical` (score ≤ -0.7)
-
----
-
 ### `POST /api/tickets/{ticketId}/chats/summarize` (AI)
 
 **Mục đích:** Tóm tắt toàn bộ thread thành 5 dòng bullet — cho Staff mới tiếp nhận ticket sau escalation.
@@ -1233,17 +1206,6 @@ export async function reprioritizeTicket(
 
 **Auth:** `Manager` only. FE gửi `{ "priority": "P1Critical", "reason": "..." }`; không gửi `managerId`/`managerName` vì server lấy identity và display name từ JWT. Response `200`: cập nhật priority/SLA nhưng SLA không reset. Nếu deadline mới đã quá hạn, server breach SLA trong transaction. Lỗi: `400` (priority/reason; reason tối đa 1000 ký tự), `404` ticket không tồn tại, `409` trạng thái không cho phép (New/Resolved/Closed/Merged).
 
-### `GET /api/tickets/{ticketId}/chats/export-pdf`
-
-**Mục đích:** Export PDF toàn bộ chat thread của ticket. Customer chat nội bộ bị ẩn.
-**Auth:** Staff/Manager/Admin
-
-**Response:** `application/pdf` — file `ticket-{ticketId}-chats.pdf`
-
-**Lỗi `404`:** Ticket không tồn tại hoặc không có chat.
-
----
-
 ### `GET /api/tickets/{ticketId}/chats/unread-count`
 
 **Mục đích:** Số chat chưa đọc của user hiện tại trên ticket này.
@@ -1366,18 +1328,9 @@ Các endpoint cross-ticket — không gắn với 1 ticket cụ thể.
 **Mục đích:** Danh sách mention của user hiện tại trên mọi ticket.
 **Auth:** Mọi role
 
-**Query params:** `unreadOnly` (bool), `page`, `pageSize`
+**Query params:** `page`, `pageSize`
 
 **Response `200`:** `CommonResponse<PaginationResponse<TicketChatMentionDTO>>`
-
----
-
-### `PATCH /api/chats/mentions/{id}/acknowledge`
-
-**Mục đích:** Xác nhận đã xem 1 mention.
-**Auth:** Mọi role
-
-**Response `200`:** `CommonResponse<object>`
 
 ---
 
@@ -3175,19 +3128,18 @@ Verify toàn bộ doc với codebase TicketService. Enums (16/16) và SignalR Hu
 - Hub notifier class: `SignalRTicketCommentNotifier` → `SignalRTicketChatNotifier`.
 
 **Endpoints mới (TicketChatsController — `/api/tickets/{ticketId}/chats`):**
-32 endpoints thay thế và mở rộng hệ thống comment cũ: CRUD + reply thread + pin + reaction + mark-read + readers + unread-count + template + KB integration + AI (suggest/sentiment-check/summarize/translate/voice) + export PDF + escalation-review ACK.
 
 **Endpoints mới (AdminTicketChatsController — `/api/admin/tickets/{ticketId}/chats`):**
 4 endpoints Admin-only override cho ticket đã Closed: `closed-override` POST/PUT/DELETE, `restore` PATCH.
 
 **Endpoints mới (Chats Utilities — `/api/chats/...`):**
-`GET /api/chats/me`, `POST /api/chats/erase-my-data` (GDPR), `GET /api/chats/search` (Manager/Admin), `GET /api/chats/mentions/me`, `PATCH /api/chats/mentions/{id}/acknowledge`.
+`GET /api/chats/me`, `POST /api/chats/erase-my-data` (GDPR), `GET /api/chats/search` (Manager/Admin), `GET /api/chats/mentions/me`.
 
 **ApiGateway:** Không cần thay đổi — các catch-all routes (`/api/tickets/{**catch-all}`, `/api/admin/tickets/{**catch-all}`, `/api/chats/{**catch-all}`, `/hubs/ticket-chats`) đã cover toàn bộ.
 
 **Enums mới:** `ChatBodyFormatEnum`, `ReactionTypeEnum`, `ChatAiIntentEnum`.
 
-**DTOs mới:** `TicketChatDTO`, `TicketChatReactionsAggregateDTO`, `ChatReactionGroupDTO`, `TicketChatMentionDTO`, `ChatEditHistoryDTO`, `ChatSuggestDTO`, `ChatSentimentCheckDTO`, `ChatSummarizeDTO`, `ChatTranslateDTO`.
+**DTOs mới:** `TicketChatDTO`, `TicketChatReactionsAggregateDTO`, `ChatReactionGroupDTO`, `TicketChatMentionDTO`, `ChatEditHistoryDTO`, `ChatSuggestDTO`, `ChatSummarizeDTO`, `ChatTranslateDTO`.
 
 ---
 

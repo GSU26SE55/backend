@@ -31,16 +31,12 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,
-            ChatPermissionCodes.ChatTemplateCreateGlobal
-        },
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,},
         ["Manager"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,
-            ChatPermissionCodes.ChatTemplateCreateGlobal
-        },
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal,},
         ["Staff"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,

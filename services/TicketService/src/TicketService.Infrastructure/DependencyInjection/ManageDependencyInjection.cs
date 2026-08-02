@@ -165,7 +165,6 @@ public static class ManageDependencyInjection
         services.AddScoped<IBlogGeneratorService, DeepSeekBlogGeneratorService>();
 
         // #568 — PDF exporter
-        services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
 
         // Voice m4a normalization — transcode file voice bất kỳ (web ghi .webm) về m4a để iOS phát được
         services.AddScoped<IAudioTranscoder, FfmpegAudioTranscoder>();

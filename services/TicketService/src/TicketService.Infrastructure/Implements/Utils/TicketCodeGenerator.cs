@@ -42,8 +42,11 @@ public class TicketCodeGenerator : ITicketCodeGenerator
         var monthKey = now.Year % 100 * 100 + now.Month;
 
         // pg_advisory_xact_lock nhả tự động khi transaction kết thúc → serialize việc cấp số.
-        await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        if (_db is not null && _db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({AdvisoryLockNamespace}, {monthKey})");
+        }
 
         var lastTicket = await _uow.Tickets.GetAllAsync()
             .Where(t => t.Code.StartsWith(prefix))
