@@ -53,15 +53,22 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         if (customer.Status != AccountStatusEnum.Active)
             return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.");
 
+        var batterySerialNumbers = new Dictionary<Guid, string>();
+        foreach (var batteryAssetId in request.BatteryAssetIds)
+        {
+            var serialNumber = await _batteryLookup.GetSerialAsync(batteryAssetId, ct);
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                return Fail(403, "Pin được chọn không tồn tại hoặc bạn không có quyền truy cập.");
+
+            batterySerialNumbers[batteryAssetId] = serialNumber;
+        }
+
         var code = await _codeGenerator.GenerateAsync();
 
         var ticketId = Guid.NewGuid();
         var primaryBatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty;
 
-        // Serial snapshot — lookup ĐỒNG BỘ dùng JWT của Customer request. Fail → null (KHÔNG chặn tạo ticket).
-        string? batterySerialNumber = null;
-        if (primaryBatteryAssetId != Guid.Empty)
-            batterySerialNumber = await _batteryLookup.GetSerialAsync(primaryBatteryAssetId, ct);
+        var batterySerialNumber = batterySerialNumbers[primaryBatteryAssetId];
 
         var ticket = new TicketEntity
         {
@@ -77,8 +84,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
             IsIncident = false,
-            IncidentDetectedFrom = request.IncidentDetectedFrom,
-            IncidentDetectedTo = request.IncidentDetectedTo ?? DateTime.UtcNow
+            DetectedAt = request.IncidentDetectedAt
         };
 
         await _uow.Tickets.AddAsync(ticket);
@@ -90,6 +96,24 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
                 Id = Guid.NewGuid(),
                 TicketId = ticketId,
                 BatteryAssetId = batteryId
+            });
+        }
+
+        foreach (var attachment in request.Attachments)
+        {
+            await _uow.TicketAttachments.AddAsync(new TicketAttachment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                UploadedByUserId = request.CustomerId,
+                FileId = attachment.FileId,
+                FileName = attachment.FileName,
+                ContentType = attachment.ContentType,
+                SizeBytes = attachment.SizeBytes,
+                Url = attachment.Url,
+                Source = AttachmentSourceEnum.CustomerSubmission,
+                IsInline = false,
+                Ticket = ticket
             });
         }
 

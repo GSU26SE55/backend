@@ -20,13 +20,19 @@ public class ChatPostmanCollectionTests
 {
     private const int MinimumRequests = 40;
 
+    private static readonly HashSet<string> RetiredEndpoints = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "GET api/tickets/{}/chats/export-pdf",
+        "PATCH api/chats/mentions/{}/acknowledge",
+        "POST api/tickets/{}/chats/sentiment-check"
+    };
+
     private static readonly string[] ChatControllers =
     {
         "TicketChatsController.cs",
         "ChatsController.cs",
         "MyChatsController.cs",
         "ChatMentionsController.cs",
-        "ChatTemplatesController.cs",
         Path.Combine("Admin", "AdminChatSearchController.cs"),
         Path.Combine("Admin", "AdminTicketChatsController.cs"),
     };
@@ -136,6 +142,10 @@ public class ChatPostmanCollectionTests
         var result = new List<CollectionRequest>();
 
         foreach (var folder in doc.RootElement.GetProperty("item").EnumerateArray())
+        {
+            if (folder.GetProperty("name").GetString()?.Contains("Chat Template", StringComparison.OrdinalIgnoreCase) == true)
+                continue;
+
             foreach (var item in folder.GetProperty("item").EnumerateArray())
             {
                 var request = item.GetProperty("request");
@@ -145,8 +155,11 @@ public class ChatPostmanCollectionTests
                 var path = raw.Split('?')[0].Replace("{{baseUrl}}/", string.Empty);
                 path = Regex.Replace(path, @"\{\{[^}]+\}\}", "{}");
 
-                result.Add(new CollectionRequest(item.GetProperty("name").GetString()!, $"{method} {path}"));
+                var endpoint = $"{method} {path}";
+                if (!RetiredEndpoints.Contains(endpoint))
+                    result.Add(new CollectionRequest(item.GetProperty("name").GetString()!, endpoint));
             }
+        }
 
         return result;
     }

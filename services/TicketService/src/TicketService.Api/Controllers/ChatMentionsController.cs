@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Services;
@@ -30,42 +29,21 @@ public class ChatMentionsController : ControllerBase
     [ProducesResponseType(typeof(MyMentionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyMentions(
-        [FromQuery] bool unreadOnly = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(_currentUser.UserId) || !Guid.TryParse(_currentUser.UserId, out var actorId))
+        {
             return Unauthorized();
+        }
 
         var result = await _mediator.Send(new MyMentionsQuery
         {
             ActorUserId = actorId,
-            UnreadOnly = unreadOnly,
+            ActorRoles = string.IsNullOrWhiteSpace(_currentUser.Role) ? new List<string>() : new List<string> { _currentUser.Role },
             PageNumber = page,
             PageSize = pageSize
-        }, ct);
-
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Acknowledge 1 mention — chỉ chính chủ mention được thực hiện.
-    /// </summary>
-    [HttpPatch("{id}/acknowledge")]
-    [ProducesResponseType(typeof(ChatMentionActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AcknowledgeMention(Guid id, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(_currentUser.UserId) || !Guid.TryParse(_currentUser.UserId, out var actorId))
-            return Unauthorized();
-
-        var result = await _mediator.Send(new ChatMentionAcknowledgeCommand
-        {
-            MentionId = id,
-            ActorUserId = actorId
         }, ct);
 
         return StatusCode(result.StatusCode, result);

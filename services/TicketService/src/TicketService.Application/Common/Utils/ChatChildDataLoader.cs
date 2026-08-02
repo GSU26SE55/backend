@@ -19,6 +19,7 @@ public static class ChatChildDataLoader
 
         var mentions = await uow.TicketChatMentions.GetAllAsync()
             .AsNoTracking()
+            .Include(m => m.Chat)
             .Where(m => chatIds.Contains(m.ChatId) && !m.IsDeleted)
             .ToListAsync(ct);
 
@@ -31,8 +32,7 @@ public static class ChatChildDataLoader
                 MentionedUserId = m.MentionedUserId.ToString(),
                 MentionedUserRole = m.MentionedUserRole,
                 MentionedDisplayName = m.MentionedDisplayName,
-                IsAcknowledged = m.IsAcknowledged,
-                AcknowledgedAt = m.AcknowledgedAt,
+                IsInternal = m.Chat.IsInternal,
                 CreatedAt = m.CreatedAt
             }).ToList());
     }

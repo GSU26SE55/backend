@@ -8,6 +8,8 @@ namespace SharedInfrastructure.Caching;
 
 public class RedisCacheService : ICacheService
 {
+    private const string CompareAndExpireScript = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end";
+    private const string CompareAndDeleteScript = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
     private readonly IDistributedCache _cache;
     private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<RedisCacheService>? _logger;
@@ -107,5 +109,46 @@ public class RedisCacheService : ICacheService
             new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = expiration }, cancellationToken);
 
         return next;
+    }
+
+    public async Task<bool> TryRefreshLeaseAsync(
+        string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
+    {
+        if (_redis is not null)
+        {
+            var result = await _redis.GetDatabase().ScriptEvaluateAsync(
+                CompareAndExpireScript,
+                new RedisKey[] { key },
+                new RedisValue[] { ownerToken, (long)expiration.TotalMilliseconds });
+            return (long)result > 0;
+        }
+
+        var existing = await _cache.GetStringAsync(key, cancellationToken);
+        if (!string.Equals(existing, ownerToken, StringComparison.Ordinal))
+            return false;
+
+        await _cache.SetStringAsync(key, ownerToken,
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = expiration }, cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TryReleaseLeaseAsync(
+        string key, string ownerToken, CancellationToken cancellationToken = default)
+    {
+        if (_redis is not null)
+        {
+            var result = await _redis.GetDatabase().ScriptEvaluateAsync(
+                CompareAndDeleteScript,
+                new RedisKey[] { key },
+                new RedisValue[] { ownerToken });
+            return (long)result > 0;
+        }
+
+        var existing = await _cache.GetStringAsync(key, cancellationToken);
+        if (!string.Equals(existing, ownerToken, StringComparison.Ordinal))
+            return false;
+
+        await _cache.RemoveAsync(key, cancellationToken);
+        return true;
     }
 }

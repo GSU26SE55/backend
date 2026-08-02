@@ -63,7 +63,8 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
             Title = "Lifecycle Test",
             Description = "Testing full flow",
             Category = TicketCategoryEnum.Other,
-            IncidentDetectedFrom = DateTime.UtcNow.AddMinutes(-5)
+            BatteryAssetIds = [Guid.NewGuid()],
+            IncidentDetectedAt = DateTime.UtcNow.AddMinutes(-5)
         };
         var createRes = await _client.PostAsJsonAsync("/api/customer/tickets", createCmd);
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);

@@ -7,8 +7,7 @@ using TicketService.Domain.Enums;
 namespace TicketService.Infrastructure.Implements.Services;
 
 /// <summary>
-/// Gọi DeepSeek Chat Completions API (OpenAI-compatible) để phân tích sentiment,
-/// tóm tắt, dịch và phát hiện ngôn ngữ.
+/// Gọi DeepSeek Chat Completions API (OpenAI-compatible) để tóm tắt, dịch và phát hiện ngôn ngữ.
 /// Config: Chat:DeepSeek:ApiKey, Chat:DeepSeek:Model, Chat:DeepSeek:BaseUrl.
 /// </summary>
 public class DeepSeekChatTextAiClient : IChatTextAiClient
@@ -23,15 +22,6 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
     {
         _inner = inner;
         _opts = opts.Value;
-    }
-
-    public async Task<double> AnalyzeSentimentAsync(string chatContext, CancellationToken ct = default)
-    {
-        EnsureApiKey();
-        var rawText = await _inner.CallAsync(_opts.DeepSeek.ApiKey, BuildSentimentPrompt(chatContext), temperature: 0.1, ct);
-
-        using var doc = JsonDocument.Parse(rawText.Trim());
-        return doc.RootElement.GetProperty("score").GetDouble();
     }
 
     public async Task<string> SummarizeAsync(string chatContext, int linesCount, CancellationToken ct = default)
@@ -81,22 +71,6 @@ public class DeepSeekChatTextAiClient : IChatTextAiClient
         if (string.IsNullOrWhiteSpace(_opts.DeepSeek.ApiKey))
             throw new InvalidOperationException("DeepSeek API key is not configured.");
     }
-
-    private static string BuildSentimentPrompt(string context)
-        => $$"""
-            You are a sentiment analysis assistant for a solar lithium-ion battery maintenance support system.
-            Analyze the emotional tone of the customer messages below and return a sentiment score.
-
-            Return ONLY valid JSON in this exact format: {"score": <float>}
-            Where <float> is a number in the range [-1.0, 1.0]:
-            - 1.0 = very positive / highly satisfied
-            - 0.0 = neutral
-            - -1.0 = very negative / angry / frustrated
-
-            Return ONLY the JSON object — no explanations, no extra text.
-
-            {{context}}
-            """;
 
     private static string BuildSummarizePrompt(string context, int linesCount)
         => $$"""

@@ -23,12 +23,15 @@ public class TicketCreateCommandHandlerTests
     {
         // Arrange
         var customerId = Guid.NewGuid();
+        var batteryAssetId = Guid.NewGuid();
         var command = new TicketCreateCommand
         {
             Title = "Battery Overheat",
             Description = "Battery is too hot",
             Category = TicketCategoryEnum.Repair,
-            CustomerId = customerId
+            CustomerId = customerId,
+            BatteryAssetIds = new List<Guid> { batteryAssetId },
+            IncidentDetectedAt = DateTime.UtcNow.AddMinutes(-1)
         };
 
         var customers = new List<CustomerAccount>
@@ -40,7 +43,7 @@ public class TicketCreateCommandHandlerTests
         var (uow, tickets, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
 
         var batteryLookup = new Mock<IBatteryLookupClient>();
-        batteryLookup.Setup(x => x.GetSerialAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        batteryLookup.Setup(x => x.GetSerialAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync("BAT-001");
 
         var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), batteryLookup.Object);
 

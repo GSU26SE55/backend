@@ -10,6 +10,7 @@ namespace TicketService.IntegrationTests.Fixtures;
 internal sealed class StubCacheService : ICacheService
 {
     private readonly ConcurrentDictionary<string, object?> _store = new();
+    private readonly object _leaseLock = new();
 
     public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
         => Task.FromResult(_store.TryGetValue(key, out var value) ? (T?)value : default);
@@ -42,5 +43,31 @@ internal sealed class StubCacheService : ICacheService
         var next = _store.TryGetValue(key, out var v) && v is long current ? current + 1 : 1L;
         _store[key] = next;
         return Task.FromResult(next);
+    }
+
+    public Task<bool> TryRefreshLeaseAsync(
+        string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
+    {
+        lock (_leaseLock)
+        {
+            // The in-memory stub has no TTL, but preserves owner-token comparison semantics.
+            return Task.FromResult(_store.TryGetValue(key, out var value)
+                && string.Equals(value as string, ownerToken, StringComparison.Ordinal));
+        }
+    }
+
+    public Task<bool> TryReleaseLeaseAsync(
+        string key, string ownerToken, CancellationToken cancellationToken = default)
+    {
+        lock (_leaseLock)
+        {
+            if (!_store.TryGetValue(key, out var value)
+                || !string.Equals(value as string, ownerToken, StringComparison.Ordinal))
+            {
+                return Task.FromResult(false);
+            }
+
+            return Task.FromResult(_store.TryRemove(key, out _));
+        }
     }
 }

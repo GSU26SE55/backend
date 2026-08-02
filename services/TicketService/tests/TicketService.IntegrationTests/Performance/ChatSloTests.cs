@@ -52,6 +52,7 @@ public class ChatSloTests : IAsyncLifetime
     private readonly ITestOutputHelper _out;
     public ChatSloTests(ITestOutputHelper output) => _out = output;
 
+    [Obsolete]
     private readonly PostgreSqlContainer _pg = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("ticket_slo")

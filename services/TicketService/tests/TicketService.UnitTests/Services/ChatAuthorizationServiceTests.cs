@@ -196,13 +196,13 @@ public class ChatAuthorizationServiceTests
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal
         },
         ["Admin"] = new[]
         {
             ChatPermissionCodes.ChatCreatePublic, ChatPermissionCodes.ChatCreateInternal,
             ChatPermissionCodes.ChatEditOwn, ChatPermissionCodes.ChatDeleteOwn,
-            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal, ChatPermissionCodes.ChatTemplateCreateGlobal
+            ChatPermissionCodes.ChatPin, ChatPermissionCodes.ChatViewInternal
         }
     };
 

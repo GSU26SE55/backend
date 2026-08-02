@@ -107,12 +107,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .HasColumnName("escalation_reason")
             .HasConversion<int>();
 
-        builder.Property(e => e.IncidentDetectedFrom)
-            .HasColumnName("incident_detected_from");
-
-        builder.Property(e => e.IncidentDetectedTo)
-            .HasColumnName("incident_detected_to");
-
         builder.Property(e => e.IsIncident)
             .HasColumnName("is_incident");
 

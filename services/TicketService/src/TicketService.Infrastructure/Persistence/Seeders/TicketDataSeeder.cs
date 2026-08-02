@@ -25,7 +25,6 @@ public class TicketDataSeeder
         var customers = await SeedCustomerAccountsAsync(ct);
         var staffs = await SeedStaffAccountsAsync(ct);
         var kbArticles = await SeedKnowledgeBaseAsync(staffs.First().AccountId, ct);
-        await SeedChatTemplatesAsync(staffs.First().AccountId, ct);
         var (tickets, ticketAssignments) = await SeedTicketsAsync(customers, staffs, ct);
         if (tickets.Count == 0)
             return;
@@ -794,110 +793,7 @@ public class TicketDataSeeder
 
         Console.WriteLine($"[TicketService] Successfully seeded {articles.Count} KB articles.");
     }
-
-    private async Task SeedChatTemplatesAsync(Guid staffId, CancellationToken ct)
-    {
-        var hasTemplates = await _context.ChatTemplates.AnyAsync(ct);
-        if (hasTemplates)
-            return;
-
-        var now = DateTime.UtcNow;
-        var templates = new List<ChatTemplate>
-        {
-            new ChatTemplate
-            {
-                Id = Guid.Parse("1a5113d0-349c-4f76-90f1-4340798e4d1a"),
-                Name = "Lời chào hỗ trợ kỹ thuật",
-                Content = "Xin chào {{CustomerName}}, tôi là {{StaffName}} từ bộ phận kỹ thuật. Rất tiếc vì sự cố hệ thống pin mặt trời của bạn. Tôi có thể giúp gì cho bạn hôm nay?",
-                Category = ChatTemplateCategoryEnum.Greeting,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 15,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("2b5113d0-349c-4f76-90f1-4340798e4d1b"),
-                Name = "Yêu cầu thông tin thông số kỹ thuật",
-                Content = "Chào bạn, để chẩn đoán chính xác hơn về lỗi pin mặt trời, bạn vui lòng chụp ảnh bảng điện của bộ inverter và gửi kèm chỉ số điện áp đo được lúc này giúp tôi nhé.",
-                Category = ChatTemplateCategoryEnum.RequestInfo,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 42,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("3c5113d0-349c-4f76-90f1-4340798e4d1c"),
-                Name = "Báo cáo cập nhật tiến độ xử lý",
-                Content = "Chào bạn, kỹ thuật viên đã hoàn tất việc thay thế Cell pin bị lỗi tại thực địa. Hệ thống đang được chạy kiểm tra xả sạc trong vòng 15-30 phút tới.",
-                Category = ChatTemplateCategoryEnum.Update,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 8,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("4d5113d0-349c-4f76-90f1-4340798e4d1d"),
-                Name = "Thông báo hoàn thành & Nghiệm thu",
-                Content = "Xin chào {{CustomerName}}, ticket bảo trì pin mã số {{TicketCode}} đã được xử lý hoàn tất. Bạn vui lòng xác nhận nghiệm thu và đánh giá chất lượng phục vụ nhé. Cảm ơn bạn!",
-                Category = ChatTemplateCategoryEnum.Resolution,
-                IsInternalDefault = true,
-                Scope = ChatTemplateScopeEnum.Global,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 29,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("5e5113d0-349c-4f76-90f1-4340798e4d1e"),
-                Name = "Bàn giao nội bộ - Ca tiếp theo",
-                Content = "[NỘI BỘ] Đã kiểm tra dây nối ngoại vi, nghi ngờ mạch BMS bị chập chờn. Nhờ kỹ thuật ca tiếp theo mang theo bo mạch BMS thay thế (Model BMS-A1) để thử nghiệm.",
-                Category = ChatTemplateCategoryEnum.Internal,
-                IsInternalDefault = true,
-                Scope = ChatTemplateScopeEnum.Team,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 3,
-                CreatedAt = now
-            },
-            new ChatTemplate
-            {
-                Id = Guid.Parse("6f5113d0-349c-4f76-90f1-4340798e4d1f"),
-                Name = "Mẫu ghi chú cá nhân nháp",
-                Content = "Nháp: Ghi nhận nhiệt độ tăng cao bất thường khi sạc dòng cao. Cần theo dõi thêm điện áp từng cell.",
-                Category = ChatTemplateCategoryEnum.Other,
-                IsInternalDefault = false,
-                Scope = ChatTemplateScopeEnum.Personal,
-                CreatedByUserId = staffId,
-                IsActive = true,
-                UsageCount = 0,
-                CreatedAt = now
-            }
-        };
-
-        await _context.ChatTemplates.AddRangeAsync(templates, ct);
-        await _context.SaveChangesAsync(ct);
-
-        if (_logger != null)
-        {
-            _logger.LogInformation("[TicketService] Successfully seeded {Count} chat templates.", templates.Count);
-        }
-        else
-        {
-            Console.WriteLine($"[TicketService] Successfully seeded {templates.Count} chat templates.");
-        }
-    }
-
     private static JsonDocument S(string? v) =>
-        string.IsNullOrWhiteSpace(v) ? JsonDocument.Parse("{}") :
-        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(v));
+            string.IsNullOrWhiteSpace(v) ? JsonDocument.Parse("{}") :
+            JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(v));
 }

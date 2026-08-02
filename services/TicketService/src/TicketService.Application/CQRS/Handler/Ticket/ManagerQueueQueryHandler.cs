@@ -27,7 +27,7 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
             .AsNoTracking()
             .Include(t => t.SlaTimer)
             .Include(t => t.BatteryAssets)
-            .Where(t => !t.IsDeleted && t.Status == TicketStatusEnum.Open && t.MergedIntoTicketId == null);
+            .Where(t => !t.IsDeleted && t.Status == TicketStatusEnum.New && t.MergedIntoTicketId == null);
 
         if (request.Priority.HasValue)
             query = query.Where(t => t.Priority == request.Priority.Value);
