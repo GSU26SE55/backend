@@ -65,6 +65,7 @@ public class SignalRBroadcastSloTests : IAsyncLifetime
 
     public SignalRBroadcastSloTests(ITestOutputHelper output) => _out = output;
 
+    [Obsolete]
     public async Task InitializeAsync()
     {
         _redis = new RedisBuilder()

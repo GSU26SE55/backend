@@ -62,7 +62,8 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
             Title = title,
             Description = "E2E scenario",
             Category = TicketCategoryEnum.Other,
-            IncidentDetectedFrom = DateTime.UtcNow.AddMinutes(-5)
+            BatteryAssetIds = [Guid.NewGuid()],
+            IncidentDetectedAt = DateTime.UtcNow.AddMinutes(-5)
         });
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>(_json))!.Data!;

@@ -147,6 +147,10 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.SlaPauseEvents).Returns(slaPauseEvents.Object);
         uow.SetupGet(u => u.TicketChats).Returns(chats.Object);
         uow.SetupGet(u => u.TicketAttachments).Returns(attachments.Object);
+
+        var ticketBatteryAssets = new Mock<IGenericRepository<TicketBatteryAsset>>();
+        ticketBatteryAssets.Setup(r => r.AddAsync(It.IsAny<TicketBatteryAsset>())).Returns(Task.CompletedTask);
+        uow.SetupGet(u => u.TicketBatteryAssets).Returns(ticketBatteryAssets.Object);
         uow.SetupGet(u => u.MaintenanceLogs).Returns(logs.Object);
         uow.SetupGet(u => u.KnowledgeBaseArticles).Returns(kb.Object);
         uow.SetupGet(u => u.KbArticleVersions).Returns(kbVersion.Object);

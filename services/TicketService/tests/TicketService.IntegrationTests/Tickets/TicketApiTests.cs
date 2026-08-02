@@ -52,7 +52,8 @@ public class TicketApiTests : IClassFixture<TicketApiFactory>
             Title = "Integration Test Ticket",
             Description = "Testing ticket creation",
             Category = TicketCategoryEnum.Charging,
-            IncidentDetectedFrom = DateTime.UtcNow.AddMinutes(-5)
+            BatteryAssetIds = [Guid.NewGuid()],
+            IncidentDetectedAt = DateTime.UtcNow.AddMinutes(-5)
         };
 
         // Act

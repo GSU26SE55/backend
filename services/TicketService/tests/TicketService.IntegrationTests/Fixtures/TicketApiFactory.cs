@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
 
 namespace TicketService.IntegrationTests.Fixtures;
@@ -68,6 +69,9 @@ public class TicketApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<SharedContracts.Interfaces.ICacheService>();
             services.AddSingleton<SharedContracts.Interfaces.ICacheService, StubCacheService>();
 
+            services.RemoveAll<IBatteryLookupClient>();
+            services.AddSingleton<IBatteryLookupClient, StubBatteryLookupClient>();
+
             // --- FIX SLOWNESS: Override MassTransit and HostedServices ---
             services.AddMassTransitTestHarness(x =>
             {
@@ -107,4 +111,10 @@ public class TicketApiFactory : WebApplicationFactory<Program>
         }
         base.Dispose(disposing);
     }
+}
+
+internal sealed class StubBatteryLookupClient : IBatteryLookupClient
+{
+    public Task<string?> GetSerialAsync(Guid assetId, CancellationToken ct) =>
+        Task.FromResult<string?>("TEST-BATTERY-001");
 }

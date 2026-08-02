@@ -48,6 +48,16 @@ public class NotificationRateLimiterTests
 
             return Task.FromResult(_counters.AddOrUpdate(key, 1, (_, v) => v + 1));
         }
+
+        public Task<bool> TryRefreshLeaseAsync(string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> TryReleaseLeaseAsync(string key, string ownerToken, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     private static NotificationRateLimiter Sut(NotificationRateLimitOptions options, ICacheService? cache = null) =>

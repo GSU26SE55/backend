@@ -32,4 +32,16 @@ public interface ICacheService
     /// </summary>
     /// <returns>Giá trị bộ đếm sau khi tăng.</returns>
     Task<long> IncrementAsync(string key, TimeSpan expiration, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gia hạn một distributed lease chỉ khi giá trị hiện tại vẫn khớp owner token.
+    /// </summary>
+    Task<bool> TryRefreshLeaseAsync(
+        string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Giải phóng một distributed lease chỉ khi giá trị hiện tại vẫn khớp owner token.
+    /// </summary>
+    Task<bool> TryReleaseLeaseAsync(
+        string key, string ownerToken, CancellationToken cancellationToken = default);
 }

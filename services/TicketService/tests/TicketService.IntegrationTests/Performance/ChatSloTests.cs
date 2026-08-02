@@ -52,6 +52,7 @@ public class ChatSloTests : IAsyncLifetime
     private readonly ITestOutputHelper _out;
     public ChatSloTests(ITestOutputHelper output) => _out = output;
 
+    [Obsolete]
     private readonly PostgreSqlContainer _pg = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("ticket_slo")
@@ -60,6 +61,7 @@ public class ChatSloTests : IAsyncLifetime
         .WithCleanUp(true)
         .Build();
 
+    [Obsolete]
     private TicketDbContext NewContext()
     {
         var currentUser = new Mock<ICurrentUserService>();
@@ -72,6 +74,7 @@ public class ChatSloTests : IAsyncLifetime
         return new TicketDbContext(options, new AuditableEntityInterceptor(currentUser.Object));
     }
 
+    [Obsolete]
     public async Task InitializeAsync()
     {
         await _pg.StartAsync();
@@ -82,6 +85,7 @@ public class ChatSloTests : IAsyncLifetime
         await SeedAsync();
     }
 
+    [Obsolete]
     public async Task DisposeAsync() => await _pg.DisposeAsync();
 
     private async Task SeedAsync()

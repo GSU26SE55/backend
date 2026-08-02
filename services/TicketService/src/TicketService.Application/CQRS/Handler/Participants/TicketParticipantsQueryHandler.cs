@@ -36,6 +36,16 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return Fail(403, "Không có quyền truy cập ticket này.");
 
+        var participantUserIds = activeParticipants.Select(p => p.UserId).Distinct().ToList();
+        var customerNames = await _unitOfWork.CustomerAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => participantUserIds.Contains(a.AccountId) && !a.IsDeleted)
+            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, cancellationToken);
+        var staffNames = await _unitOfWork.StaffAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => participantUserIds.Contains(a.AccountId) && !a.IsDeleted)
+            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, cancellationToken);
+
         var items = activeParticipants
             .OrderBy(p => p.AddedAt)
             .Select(p => new TicketParticipantDTO
@@ -43,6 +53,9 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
                 Id = p.Id.ToString(),
                 TicketId = p.TicketId.ToString(),
                 UserId = p.UserId.ToString(),
+                DisplayName = p.UserRole == ActorRoleEnum.Customer
+                    ? customerNames.GetValueOrDefault(p.UserId, p.UserId.ToString())
+                    : staffNames.GetValueOrDefault(p.UserId, p.UserId.ToString()),
                 UserRole = p.UserRole,
                 ParticipantType = p.ParticipantType,
                 CanPost = p.CanPost,

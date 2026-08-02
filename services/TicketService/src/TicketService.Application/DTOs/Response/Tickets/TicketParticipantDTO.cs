@@ -10,6 +10,7 @@ public class TicketParticipantDTO
     public string Id { get; set; } = string.Empty;
     public string TicketId { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
     /// <summary>
     /// Vai trò của người thực hiện.
     /// </summary>

@@ -83,8 +83,6 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             RatedAt = ticket.RatedAt,
             EscalatedAt = ticket.EscalatedAt,
             EscalationReason = ticket.EscalationReason,
-            IncidentDetectedFrom = ticket.IncidentDetectedFrom,
-            IncidentDetectedTo = ticket.IncidentDetectedTo,
             CreatedAt = ticket.CreatedAt,
             UpdatedAt = ticket.UpdatedAt,
             DetectedAt = ticket.DetectedAt,

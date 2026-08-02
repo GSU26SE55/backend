@@ -109,61 +109,58 @@ public class TicketCommandValidationTests
         result.ListErrors.Should().Contain(x => x.Field == "Title");
         result.ListErrors.Should().Contain(x => x.Field == "Description");
         result.ListErrors.Should().Contain(x => x.Field == "CustomerId");
-        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedFrom");
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
     public async Task TicketCreateCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), IncidentDetectedFrom = DateTime.UtcNow.AddHours(-1) };
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(-1) };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task TicketCreateCommand_MissingIncidentDetectedFrom_ReturnsError()
+    public async Task TicketCreateCommand_DuplicateAttachmentFileId_ReturnsSuccess()
+    {
+        var fileId = Guid.NewGuid();
+        var command = new TicketCreateCommand
+        {
+            Title = "Title",
+            Description = "Desc",
+            CustomerId = Guid.NewGuid(),
+            BatteryAssetIds = new List<Guid> { Guid.NewGuid() },
+            IncidentDetectedAt = DateTime.UtcNow.AddHours(-1),
+            Attachments = new List<TicketAttachmentInput>
+            {
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg"),
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg")
+            }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeTrue();
+        result.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_MissingIncidentDetectedAt_ReturnsError()
     {
         var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid() };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedFrom");
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
-    public async Task TicketCreateCommand_IncidentDetectedFromInFuture_ReturnsError()
+    public async Task TicketCreateCommand_IncidentDetectedAtInFuture_ReturnsError()
     {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), IncidentDetectedFrom = DateTime.UtcNow.AddHours(1) };
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(1) };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedFrom");
-    }
-
-    [Fact]
-    public async Task TicketCreateCommand_IncidentDetectedToInFuture_ReturnsError()
-    {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), IncidentDetectedFrom = DateTime.UtcNow.AddHours(-2), IncidentDetectedTo = DateTime.UtcNow.AddHours(1) };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedTo");
-    }
-
-    [Fact]
-    public async Task TicketCreateCommand_IncidentDetectedFromAfterTo_ReturnsError()
-    {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), IncidentDetectedFrom = DateTime.UtcNow.AddHours(-1), IncidentDetectedTo = DateTime.UtcNow.AddHours(-2) };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedFrom");
-    }
-
-    [Fact]
-    public async Task TicketCreateCommand_ValidRangeWithBothFields_ReturnsSuccess()
-    {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), IncidentDetectedFrom = DateTime.UtcNow.AddHours(-2), IncidentDetectedTo = DateTime.UtcNow.AddHours(-1) };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeTrue();
-        result.ListErrors.Should().BeEmpty();
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]

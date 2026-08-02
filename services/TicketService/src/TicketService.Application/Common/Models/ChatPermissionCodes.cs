@@ -13,5 +13,4 @@ public static class ChatPermissionCodes
     public const string ChatDeleteOwn = "chat.delete.own";
     public const string ChatPin = "chat.pin";
     public const string ChatViewInternal = "chat.view.internal";
-    public const string ChatTemplateCreateGlobal = "chat.template.create.global";
 }
