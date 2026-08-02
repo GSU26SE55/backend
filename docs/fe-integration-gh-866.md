@@ -40,18 +40,30 @@ Every mention includes `isInternal`:
   "chatId": "guid",
   "ticketId": "guid",
   "mentionedUserId": "guid",
-  "mentionedUserRole": 2,
+  "mentionedUserRole": "Staff",
   "mentionedDisplayName": "Staff A",
   "isInternal": false,
   "createdAt": "2026-08-02T13:24:00Z"
 }
 ```
 
+All enums in TicketService responses are serialized as **strings**, not integers — `mentionedUserRole` is `"Staff"`, never `3`. This is registered globally in `Program.cs` and applies to SignalR payloads as well.
+
 Use `ticketId` and `chatId` to open and focus the source conversation. Use `isInternal` to select the public/internal chat view and show the correct visual indicator. It is not an authorization check: the backend filters the mentions and validates access again for every chat API.
 
 - Customers receive only their own mentions from public chats.
 - Staff, Manager, and Admin receive internal mentions only when they are authorized active participants of the ticket.
 - Mention objects embedded in chat responses also include `isInternal`.
+
+## Chat participant dropdown
+
+Use `GET /api/tickets/{ticketId}/participants` to populate the chat mention/typeahead dropdown. The response contains active ticket participants, including `userId`, `displayName`, `userRole`, `participantType`, `canPost`, and `canViewInternal`.
+
+Do not build the dropdown from chat authors: a participant who was added to the ticket but has not posted yet must still be mentionable.
+
+Filter the list before rendering — drop the current user, drop anyone with `canPost == false`, and when composing an internal chat keep only those with `canViewInternal == true`.
+
+See the "Nhóm — Ticket Participants" section of [`api-ticket.md`](api-ticket.md) for the full DTO and the other six participant endpoints.
 
 ## Removed endpoints
 

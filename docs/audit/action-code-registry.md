@@ -8,9 +8,49 @@ Action mới phải PR vào file đó trước khi dùng ở handler.
 - 9 category: Authentication, Authorization, AccountManagement, DataModification, DataAccess, Configuration, Security, Communication, System.
 - 4 severity: Info, Warning, Critical, Security.
 
-## AuthService (auth_audit_logs)
-LoginSucceeded · LoginFailedInvalidCredentials · LoginFailedLocked · LogoutSucceeded · TokenRefreshed · RefreshTokenRevoked · AccountRegistered · AccountActivated · AccountLocked · AccountUnlocked · AccountStatusChanged · AccountMerged · AccountDeleted · AccountCreatedByAdmin · AccountUpdated · AccountDeactivated · PasswordChanged · PasswordReset* · Otp* · TwoFactorEnabled/Disabled/Reset · RoleCreated/Updated/Deleted/Assigned/Unassigned · RoleStatusChanged · PermissionGranted/Revoked · SessionRevoked · AllSessionsRevoked · GoogleLinked/Unlinked · EmailChangeRequested/Confirmed · PhoneVerified · InviteSent/Accepted
-> Wire qua `AuditTrailNotification` (#AUDIT-09/11) — 19 handler.
+## AuthService (auth_audit_logs) — `AuditActionEnum` (58 mã)
+
+> 🔴 **Viết lại 2026-08-02.** Danh sách cũ dùng **tên không tồn tại trong code** (`LoginSucceeded`,
+> `LoginFailedInvalidCredentials`, `LoginFailedLocked`, `LogoutSucceeded`, `RefreshTokenRevoked`,
+> `AccountActivated`, `AccountLocked`, `InviteSent/Accepted`, các dạng rút gọn `Otp*`, `PasswordReset*`)
+> và **thiếu 41 mã**. Dưới đây là danh sách đầy đủ theo `AuthService.Domain/Enums/AuditActionEnum.cs`.
+> Enum **đánh số thưa có chủ ý** — nhóm theo dải, đừng giả định liên tục.
+
+**Đăng nhập & token (1–13):**
+LoginSuccess(1) · LoginFailedWrongPassword(2) · LoginFailedAccountLocked(3) · LoginFailedAccountSuspended(4) ·
+LoginFailedAccountBanned(5) · LoginFailedAccountInactive(6) · LoginFailedNotVerified(7) · AccountAutoLocked(8) ·
+Logout(9) · GoogleLoginSuccess(10) · GoogleLoginFailed(11) · TokenRefreshed(12) · TokenReuseDetected(13)
+
+**Mật khẩu · OTP · email/phone (20–26):**
+PasswordChanged(20) · PasswordReset(21) · OtpVerifySuccess(22) · OtpVerifyFailed(23) ·
+EmailChangeRequested(24) · EmailChangeConfirmed(25) · PhoneVerified(26)
+
+**2FA (40–47):**
+TwoFactorEnabled(40) · TwoFactorDisabled(41) · TwoFactorReset(42) · BackupCodeRedeemed(43) ·
+BackupCodesRegenerated(44) · Admin2FAReset(45) · LoginWith2FA(46) · LoginPending2FA(47)
+
+**Liên kết Google (50–51):** GoogleLinked(50) · GoogleUnlinked(51)
+
+**Vòng đời tài khoản (60–68):**
+AccountRegistered(60) · AccountCreatedByAdmin(61) · AccountUpdated(62) · AccountStatusChanged(63) ·
+AccountUnlocked(64) · AccountDeactivated(65) · AccountDeleted(66) · AccountInviteSent(67) · AccountInviteAccepted(68)
+
+**Phiên (80–83):**
+SessionRevoked(80) · AllSessionsRevoked(81) · AdminForceLogout(82) · SessionLimitExceededOldestRevoked(83)
+
+**Role & permission (90–98):**
+RoleAssigned(90) · RoleRevoked(91) · RoleTemporaryAssigned(92) · RoleCreated(93) · RoleUpdated(94) ·
+RoleStatusChanged(95) · RoleDeleted(96) · PermissionGranted(97) · PermissionRevoked(98)
+
+**Thiết bị tin cậy (110–113):**
+TrustedDeviceAdded(110) · TrustedDeviceRevoked(111) · TrustedDeviceAllRevoked(112) · LoginWithTrustedDevice(113)
+
+**2FA cross-device (120–122):**
+TwoFactorSetupCrossDeviceRequested(120) · TwoFactorSetupCrossDeviceConfirmed(121) · TwoFactorSetupCrossDeviceExpired(122)
+
+**Gộp tài khoản (130–131):** AccountMerged(130) · AccountMergeRejected(131)
+
+> Wire qua `AuditTrailNotification` (#AUDIT-09/11).
 
 ## BatteryService (battery_audit_logs) — `BatteryAuditActionEnum`
 BatteryCreated · BatteryUpdated · BatteryDeleted · AssignedToCustomer · UnassignedFromCustomer · ThresholdConfigChanged · SensorReadingEdited · AlertAcknowledged · AlertSuppressed · StatusChanged · MaintenanceLogged · CalibrationApplied

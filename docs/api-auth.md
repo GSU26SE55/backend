@@ -4,6 +4,16 @@
 > Content-Type mặc định: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>` — xem phần [Cấu trúc Response chung](#cấu-trúc-response-chung)
 
+> **Đối chiếu code 2026-08-02 (rà 2 lượt):** **83/83 route khớp** codebase (không thiếu, không thừa; `POST /api/auth/google` trong code là **code đã comment**, không phải endpoint sống). Lượt 2 sửa thêm: bổ sung field **`skillTier`** vào `StaffAssignmentProfileDto` (bảng cũ thiếu đúng field mà doc trỏ tới), và làm rõ **Nhóm 7 — Roles** phân quyền theo từng endpoint (**Manager đọc được** danh sách/chi tiết role, chỉ Admin mới ghi). `AuditActionEnum` (58 giá trị, đánh số thưa 1–13/20–26/40–44/50–51/60–68/80–83/90–98/110–113/120–122/130–131) và các enum `AccountStatusEnum`, `OtpPurposeEnum`, `RoleStatusEnum`, `AvatarSourceEnum`, `StaffSkillTierEnum` **khớp 100%**. Sửa 1 chỗ: tham chiếu tới `GET /api/accounts/me` — endpoint **không tồn tại**, dùng **`GET /api/auth/me`**.
+>
+> ⚠️ **`AccountStatusEnum` của AuthService bắt đầu từ `0`** (`PendingVerification = 0`, `Active = 1`, …) — khác `AccountStatusEnum` của **TicketService** (read-model, bắt đầu từ `1`: `PendingVerification = 1`, `Active = 2`, …). Hai enum **cùng tên nhưng lệch 1 giá trị**; đừng dùng chung một bảng tra ở FE. Giá trị FE nhận từ AuthService luôn theo bảng 0-based dưới đây.
+>
+> 🐛 **Bẫy đã biết (chưa phát sinh lỗi thật):** `TicketAccountStatusChangedConsumer` cast thẳng
+> `(AccountStatusEnum)@event.NewStatus` từ `AccountStatusChangedEvent` — do 2 enum lệch 1, cast này sẽ
+> **sai một bậc** (`Active=1` của Auth thành `PendingVerification=1` của Ticket). Hiện **vô hại vì
+> `AccountStatusChangedEvent` chưa có producer nào** trong AuthService (rà toàn repo 2026-08-02: 0 chỗ publish).
+> Ai nối producer sau này **phải map tường minh**, không cast trực tiếp.
+
 ---
 
 ## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
@@ -2807,8 +2817,11 @@ Authorization: Bearer {accessToken}
 | `department` | `string?` | Null nếu chưa gán | Phòng ban |
 | `maxConcurrentTickets` | `int` | Không | Số ticket tối đa |
 | `isAvailable` | `bool` | Không | Đang sẵn sàng không |
+| `skillTier` | `int` | Không | Tier kỹ năng (`StaffSkillTierEnum`: `1` Generalist · `2` ModuleSpecialist · `3` SeniorSpecialist). **Kiểu `int` chứ không phải chuỗi enum.** TicketService dùng field này để chặn gán Staff không đủ tier ở `POST /api/admin/tickets/{id}/assign` |
 | `displayAvatarUrl` | `string?` | Null nếu không có avatar | URL avatar FE nên render |
 | `skills` | `StaffSkillDto[]` | Không | Danh sách kỹ năng |
+
+> ⚠️ **Bổ sung 2026-08-02:** bảng cũ **thiếu `skillTier`** — chính là field mà ghi chú ở `StaffProfileDto` bảo "nếu cần tier thì gọi endpoint này".
 
 ---
 
@@ -3059,7 +3072,9 @@ Base route: `/api/admin/accounts`
 
 **Path param:** `id` — Guid của tài khoản
 
-**Response thành công `200`:** `data` là `AccountDto` đầy đủ (cùng shape với `GET /api/accounts/me`), bao gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
+**Response thành công `200`:** `data` là `AccountDto` đầy đủ (cùng shape với `GET /api/auth/me`), bao gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
+
+> ⚠️ Doc cũ tham chiếu `GET /api/accounts/me` — endpoint đó **không tồn tại**. Lấy account của chính mình qua **`GET /api/auth/me`** (hoặc `GET /api/accounts/me/profile` nếu chỉ cần profile).
 
 **Lỗi thường gặp:**
 - `400` — `id` không hợp lệ (không phải Guid)
@@ -3566,7 +3581,14 @@ Base route: `/api/admin/staff`
 ## Nhóm 7 — Admin: Roles
 
 Base route: `/api/admin/roles`
-**Auth:** Admin
+**Auth:** phân quyền **theo từng endpoint** (controller không có `[Authorize]` cấp class, mỗi action tự khai):
+
+| Endpoint | Role được phép |
+|---|---|
+| `GET /api/admin/roles` · `GET /api/admin/roles/{id}` | **Admin hoặc Manager** (đọc) |
+| `POST` · `PUT /{id}` · `PATCH /{id}/status` · `DELETE /{id}` | **Chỉ Admin** (ghi) |
+
+> ⚠️ **Sửa 2026-08-02:** doc cũ ghi gọn "Auth: Admin" cho cả nhóm — **Manager cũng đọc được** danh sách và chi tiết role (`[Authorize(Roles = "Admin,Manager")]` trên 2 action GET).
 
 ---
 

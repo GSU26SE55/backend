@@ -16,7 +16,7 @@ Api (Controller/Hub)
 | Component | File | Purpose |
 |-----------|------|---------|
 | SignalR Hub | `TicketChatHub.cs` | Real-time broadcast |
-| REST | `TicketChatsController.cs` | CRUD + KB + GDPR + PDF |
+| REST | `TicketChatsController.cs` | CRUD + reply + pin + reaction + attachment + KB + AI + voice |
 | Outbox writer | `IntegrationEventOutboxWriter` | Reliable event publish |
 | Saga | `ChatEscalationReviewSagaStateMachine.cs` | P1 escalation flow |
 

@@ -184,7 +184,12 @@ viễn khi retention dọn) hay không.
 | `TicketRatingRequested` | 31 | Ticket | | **Sprint 6.2 NOTI-07** — nhắc Customer đánh giá ticket đang treo |
 | `BatteryAnomalyWarning` | 32 | Battery | | **Sprint 6.2 NOTI-08 (#679)** — bất thường pin mức **Warning** (spec §3.4 T#12) → InApp + Push |
 | `BatteryAnomalyInfo` | 33 | Battery | | **Sprint 6.2 NOTI-08** — bất thường pin mức **Info** (spec §3.4 T#11) → chỉ InApp |
+| `TicketMerged` | **34** | Ticket | | **GH-83** — ticket của Customer bị Manager gộp vào ticket khác (`POST /api/admin/tickets/{id}/merge`). Consumer `TicketMergedConsumer` báo **Customer sở hữu ticket nguồn**; bỏ qua nếu event không có customerId. Không có trong channel map ⇒ dùng mặc định **chỉ InApp** |
 | `System` | 99 | Account | | Notification hệ thống tổng quát (broadcast, maintenance) + **bản tin digest tổng hợp** |
+
+> ⚠️ **GH-83 — `TicketMerged` từng trùng giá trị `27` với `ChatEscalatedToAdmin`.** Vì trùng khoá, `TicketMerged` **không khai báo được** trong `NotificationCategoryMap` và biến mất khỏi `GET /api/notification-preferences/categories`. Đã đổi sang **`34`**. FE/Mobile mirror giá trị `27` cho `TicketMerged` phải sửa; `27` giờ **chỉ** là `ChatEscalatedToAdmin`.
+>
+> Cùng đợt: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước đây **thiếu khai báo** trong `NotificationCategoryMap` — vẫn rơi vào nhánh mặc định `Account` nên runtime không đổi, nhưng chúng **không xuất hiện** trong `GET /categories`. Nay đã khai báo tường minh.
 
 > ⚠️ **FE/Mobile phải mirror đủ 34 giá trị** (1–33 + `System = 99`).
 >
@@ -1811,6 +1816,7 @@ cố hạ tầng phụ trợ sẽ làm câm luôn cả cảnh báo an toàn.
 | `AccountActivated` | InApp + Email |
 | `AdminInvite` | **chỉ Email** |
 | `BatteryAnomalyInfo`, `System` | **chỉ InApp** |
+| `TicketMerged` | **chỉ InApp** (không khai báo trong ma trận ⇒ rơi vào fallback) |
 | Type không khai báo | fallback **chỉ InApp** |
 
 > **Sprint 6.2 NOTI-14 (#685) bổ sung 14 type còn thiếu** vào ma trận — trước đó chúng rơi vào
@@ -2376,6 +2382,20 @@ vẫn phải qua SQL hoặc seeder.
 ---
 
 ## Changelog
+
+### 2026-08-02 — Đối chiếu doc với codebase (audit)
+
+Rà `NotificationTypeEnum` / `NotificationCategoryMap` / `DefaultTypeChannelMatrix` / routes so với code.
+**Routes, 5 enum còn lại và toàn bộ DTO khớp 100%.** Một sai lệch:
+
+- 🔴 **Thiếu `TicketMerged = 34`** trong bảng enum. Type này **đã wired đầy đủ** (`TicketMergedConsumer` +
+  unit test, producer là `POST /api/admin/tickets/{id}/merge` bên TicketService) nhưng chưa có trong doc.
+  Category `Ticket`; **không** khai báo trong `TypeChannelMatrix` ⇒ rơi vào mặc định **chỉ InApp**.
+- ⚠️ **GH-83:** `TicketMerged` trước đây **trùng giá trị `27`** với `ChatEscalatedToAdmin` ⇒ trùng khoá
+  dictionary nên không khai báo được trong `NotificationCategoryMap` và **biến mất khỏi**
+  `GET /api/notification-preferences/categories`. Đã tách sang `34`. **FE/Mobile mirror `TicketMerged = 27` phải sửa.**
+- Cùng đợt GH-83: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước thiếu khai báo trong
+  `NotificationCategoryMap` — runtime không đổi (vẫn fallback `Account`) nhưng không hiện ở `GET /categories`.
 
 ### 2026-07-30 — Sprint 6.3: Notification production-hardening (`#701..#717`, 16/17 task)
 
