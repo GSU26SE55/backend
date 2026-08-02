@@ -42,16 +42,6 @@
       "description": "File đính kèm của tin nhắn"
     },
     {
-      "key": "templateId",
-      "value": "",
-      "description": "Mẫu câu trả lời"
-    },
-    {
-      "key": "mentionId",
-      "value": "",
-      "description": "Bản ghi mention"
-    },
-    {
       "key": "kbArticleId",
       "value": "",
       "description": "Bài viết tri thức"
@@ -500,28 +490,6 @@
               ]
             },
             "description": "Danh sách tin nhắn do chính người đang đăng nhập gửi, xuyên ticket."
-          },
-          "response": []
-        },
-        {
-          "name": "Xuất hội thoại ra PDF",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/export-pdf",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "tickets",
-                "{{ticketId}}",
-                "chats",
-                "export-pdf"
-              ]
-            },
-            "description": "Kết xuất toàn bộ hội thoại của ticket thành PDF. Trả file nhị phân.\n\n**Role yêu cầu:** Staff, Manager, Admin"
           },
           "response": []
         }
@@ -1096,7 +1064,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/chats/mentions/me?unreadOnly=true&page=1&pageSize=10",
+              "raw": "{{baseUrl}}/api/chats/mentions/me?page=1&pageSize=10",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1107,10 +1075,6 @@
                 "me"
               ],
               "query": [
-                {
-                  "key": "unreadOnly",
-                  "value": "true"
-                },
                 {
                   "key": "page",
                   "value": "1"
@@ -1124,228 +1088,11 @@
             "description": "Danh sách mention. `unreadOnly=true` chỉ lấy cái chưa xác nhận."
           },
           "response": []
-        },
-        {
-          "name": "Xác nhận đã xem mention",
-          "request": {
-            "method": "PATCH",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/chats/mentions/{{mentionId}}/acknowledge",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chats",
-                "mentions",
-                "{{mentionId}}",
-                "acknowledge"
-              ]
-            },
-            "description": "Đánh dấu một mention là đã xem."
-          },
-          "response": []
         }
       ]
     },
     {
-      "name": "8. Mẫu câu trả lời (Chat Template)",
-      "description": "Toàn bộ nhóm này yêu cầu role Staff/Manager/Admin ở mức controller.",
-      "item": [
-        {
-          "name": "Danh sách mẫu",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat-templates?pageNumber=1&pageSize=20&category=Greeting&scope=Team&isActive=true&search=chào",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat-templates"
-              ],
-              "query": [
-                {
-                  "key": "pageNumber",
-                  "value": "1"
-                },
-                {
-                  "key": "pageSize",
-                  "value": "20"
-                },
-                {
-                  "key": "category",
-                  "value": "Greeting"
-                },
-                {
-                  "key": "scope",
-                  "value": "Team"
-                },
-                {
-                  "key": "isActive",
-                  "value": "true"
-                },
-                {
-                  "key": "search",
-                  "value": "chào"
-                }
-              ]
-            },
-            "description": "`scope`: Personal | Team | Global. `category`: Greeting | RequestInfo | Update | Resolution | Internal | Other.\n\n**Role yêu cầu:** Staff, Manager, Admin"
-          },
-          "response": []
-        },
-        {
-          "name": "Chi tiết mẫu",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat-templates/{{templateId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat-templates",
-                "{{templateId}}"
-              ]
-            },
-            "description": "Lấy một mẫu theo id.\n\n**Role yêu cầu:** Staff, Manager, Admin"
-          },
-          "response": []
-        },
-        {
-          "name": "Tạo mẫu",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat-templates",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat-templates"
-              ]
-            },
-            "description": "Tạo mẫu mới. Mẫu `Global` cần quyền `chat.template.create.global`.\n\n⚠️ **Cú pháp chỗ-trống của mẫu trùng với cú pháp biến Postman.** `TemplateRendererService` khớp `{{tên}}` — y hệt Postman. Postman chỉ thay thế những biến **đã được định nghĩa**, nên `{{customerName}}` và `{{ticketCode}}` ở đây được gửi nguyên văn (bộ sưu tập cố ý KHÔNG khai hai biến đó). Nếu bạn tự thêm biến trùng tên vào environment, Postman sẽ nuốt mất chỗ-trống và mẫu tạo ra sẽ là văn bản chết.\n\n**Role yêu cầu:** Staff, Manager, Admin",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Chào khách và xác nhận đã tiếp nhận\",\n  \"content\": \"Chào {{customerName}}, chúng tôi đã tiếp nhận yêu cầu {{ticketCode}} và đang xử lý.\",\n  \"category\": \"Greeting\",\n  \"isInternalDefault\": false,\n  \"scope\": \"Team\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Sửa mẫu",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat-templates/{{templateId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat-templates",
-                "{{templateId}}"
-              ]
-            },
-            "description": "Mọi trường đều tuỳ chọn — chỉ gửi trường muốn đổi.\n\n**Role yêu cầu:** Staff, Manager, Admin",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Chào khách (bản 2)\",\n  \"isActive\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Xoá mẫu",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/chat-templates/{{templateId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "chat-templates",
-                "{{templateId}}"
-              ]
-            },
-            "description": "Xoá mềm một mẫu.\n\n**Role yêu cầu:** Staff, Manager, Admin"
-          },
-          "response": []
-        },
-        {
-          "name": "Gửi tin từ mẫu",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/from-template/{{templateId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "tickets",
-                "{{ticketId}}",
-                "chats",
-                "from-template",
-                "{{templateId}}"
-              ]
-            },
-            "description": "Điền biến vào mẫu rồi gửi thành tin nhắn. `variables` là bộ thay thế `{{tên}}` trong nội dung mẫu.\n\n**Role yêu cầu:** Staff, Manager, Admin",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"variables\": {\n    \"customerName\": \"Anh Minh\",\n    \"ticketCode\": \"TKT-2026-0042\"\n  },\n  \"isInternal\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "9. AI & Knowledge Base",
+      "name": "8. AI & Knowledge Base",
       "description": "Gợi ý trả lời, tóm tắt, dịch, và liên kết bài viết tri thức.",
       "item": [
         {
@@ -1403,28 +1150,6 @@
               ]
             },
             "description": "Tóm tắt toàn bộ hội thoại của ticket.\n\n**Role yêu cầu:** Staff, Manager, Admin"
-          },
-          "response": []
-        },
-        {
-          "name": "Phân tích cảm xúc",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/sentiment-check",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "tickets",
-                "{{ticketId}}",
-                "chats",
-                "sentiment-check"
-              ]
-            },
-            "description": "Đánh giá thái độ khách hàng qua hội thoại — dùng để cảnh báo nguy cơ leo thang.\n\n**Role yêu cầu:** Staff, Manager, Admin"
           },
           "response": []
         },
@@ -1563,7 +1288,7 @@
       ]
     },
     {
-      "name": "10. Leo thang & Dữ liệu cá nhân",
+      "name": "9. Leo thang & Dữ liệu cá nhân",
       "description": "Xác nhận rà soát leo thang và quyền xoá dữ liệu của người dùng.",
       "item": [
         {
@@ -1613,7 +1338,7 @@
       ]
     },
     {
-      "name": "11. Admin — ghi đè ticket đã đóng",
+      "name": "10. Admin — ghi đè ticket đã đóng",
       "description": "Toàn bộ nhóm này chỉ Admin. Dùng khi cần sửa hội thoại của ticket đã `Closed` — đường thường sẽ chặn.",
       "item": [
         {

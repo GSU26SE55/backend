@@ -38,18 +38,35 @@ public class ChatReadersQueryHandler : IRequestHandler<ChatReadersQuery, ChatRea
             return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy bình luận." };
         }
 
-        var readers = await _uow.TicketChatReads.GetAllAsync()
+        var reads = await _uow.TicketChatReads.GetAllAsync()
             .AsNoTracking()
             .Where(r => r.ChatId == request.ChatId && !r.IsDeleted)
             .OrderBy(r => r.ReadAt)
+            .ToListAsync(ct);
+
+        // Resolve tên hiển thị — cùng cách TicketParticipantsQueryHandler làm.
+        var readerUserIds = reads.Select(r => r.UserId).Distinct().ToList();
+        var customerNames = await _uow.CustomerAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => readerUserIds.Contains(a.AccountId) && !a.IsDeleted)
+            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, ct);
+        var staffNames = await _uow.StaffAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => readerUserIds.Contains(a.AccountId) && !a.IsDeleted)
+            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, ct);
+
+        var readers = reads
             .Select(r => new ChatReaderDTO
             {
                 ChatId = r.ChatId.ToString(),
                 UserId = r.UserId.ToString(),
+                DisplayName = r.UserRole == ActorRoleEnum.Customer
+                    ? customerNames.GetValueOrDefault(r.UserId, r.UserId.ToString())
+                    : staffNames.GetValueOrDefault(r.UserId, r.UserId.ToString()),
                 Role = r.UserRole,
                 ReadAt = r.ReadAt
             })
-            .ToListAsync(ct);
+            .ToList();
 
         return new ChatReadersResponse
         {

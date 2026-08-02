@@ -5,6 +5,8 @@
 > Response wrapper chuẩn: `CommonResponse<T>`
 > **ID fields:** Tất cả `id` trong response đều là `string` (UUID dạng `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`). Entity C# dùng `Guid` nhưng serialize thành `string` trong JSON — TypeScript dùng `string` cho mọi id field.
 
+> **Đối chiếu code 2026-08-02:** toàn bộ route, 20 enum (`AnomalyTypeEnum` 16 giá trị, `BatteryChemistryEnum`, `IotApiKeyScopeEnum` bitflag, …) và DTO **khớp với codebase**. Bổ sung 2 endpoint AI trước đây thiếu: **`GET /api/v1/anomaly-classifications`** và **`GET /api/v1/soh-predictions`** (cả hai `Admin/Manager/Staff`, xem mục AI cuối tài liệu).
+
 ---
 
 ## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
@@ -3330,6 +3332,63 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `Correct` | 1 | AI phân loại **đúng** |
 | `FalsePositive` | 2 | AI báo bất thường nhưng thực tế **bình thường** (dương tính giả) |
 | `FalseNegative` | 3 | AI **bỏ sót** bất thường thật (âm tính giả) |
+
+### `GET /api/v1/anomaly-classifications`
+
+**Mục đích:** Lịch sử phân loại bất thường của **một pin** (do AI populate qua `SohPredictionBackgroundService`). Dùng cho FE hiển thị timeline phân loại + gắn nút feedback.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được).
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `BatteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử phân loại |
+| `Classification` | `AnomalyClassificationEnum?` | ❌ | Lọc theo kết quả (`1` Normal / `2` Degrading / `3` Failed) |
+| `From` | `DateTime?` | ❌ | UTC — lọc `ClassifiedAt >= from` |
+| `To` | `DateTime?` | ❌ | UTC — lọc `ClassifiedAt <= to` |
+| `PageNumber` / `PageSize` | `int` | ❌ | Phân trang (kế thừa `PaginationRequest`) |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<AnomalyClassificationDto>>` — shape item xem bảng **`AnomalyClassificationDto`** bên dưới.
+
+**Lỗi thường gặp:** `401` chưa đăng nhập · `403` role không hợp lệ.
+
+---
+
+### `GET /api/v1/soh-predictions`
+
+**Mục đích:** Lịch sử **SOH dự đoán** của một pin (AI populate qua `SohPredictionBackgroundService`) — FE dùng để vẽ chart SOH theo thời gian ở trang chi tiết pin.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được).
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `BatteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử dự đoán |
+| `From` | `DateTime?` | ❌ | UTC — lọc `PredictedAt >= from` |
+| `To` | `DateTime?` | ❌ | UTC — lọc `PredictedAt <= to` |
+| `PageNumber` / `PageSize` | `int` | ❌ | Phân trang |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<SohPredictionDto>>`
+
+**Chi tiết `SohPredictionDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `string` (GUID) | Không | ID bản ghi dự đoán |
+| `batteryAssetId` | `string` (GUID) | Không | Pin được dự đoán |
+| `predictedSohPercent` | `decimal` | Không | SOH dự đoán (%) |
+| `confidence` | `decimal` | Không | Độ tự tin 0–1 |
+| `modelVersion` | `string` | Không | Phiên bản model (vd `"1.0"`) |
+| `predictedAt` | `DateTime` (UTC) | Không | Thời điểm dự đoán |
+| `latencyMs` | `int` | Không | Độ trễ inference (ms) — monitor SLA < 100ms |
+
+**Lỗi thường gặp:** `401` chưa đăng nhập · `403` role không hợp lệ.
+
+> ⚠️ Cả 2 bảng `anomaly_classifications` và `soh_predictions` được **AI populate** ở luồng Sprint AI. Nếu pipeline AI chưa chạy, endpoint vẫn trả `200` với `items: []` — không phải lỗi.
+
+---
 
 ### `POST /api/v1/anomaly-classifications/{id}/feedback`
 
