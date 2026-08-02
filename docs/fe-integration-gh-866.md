@@ -28,6 +28,14 @@ Two identical chat bodies from the same user on the same ticket are accepted wit
 
 Concurrent spam checks may return `409` with `CHAT_SPAM_CHECK_IN_PROGRESS`. Clients may retry that response with a short backoff.
 
+## Chat participant dropdown
+
+Use `GET /api/tickets/{ticketId}/participants` to populate the chat mention/typeahead dropdown. The response contains active ticket participants, including `userId`, `displayName`, `userRole`, `participantType`, `canPost`, and `canViewInternal`.
+
+Do **not** use `GET /api/chats/mentions/me` for this dropdown. That endpoint is the current user's paginated mention history across tickets; it is only suitable for an inbox/notification view.
+
+Only show participants returned by the endpoint. The backend enforces ticket access and validates that an individual mention targets an active participant when a chat is sent.
+
 ## Mentions and chat visibility
 
 Use the existing `GET /api/chats/mentions/me` endpoint. It no longer accepts `unreadOnly` and there is no acknowledge endpoint.
