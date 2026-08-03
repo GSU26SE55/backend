@@ -33,6 +33,7 @@ public static class ManageDependencyInjection
         services.AddInboxIdempotency(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
+        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>(); // GH-672 NOTI-01
 
         // Sprint 6.2 NOTI-01 (#672) — worker giao record Pending xuống channel (Push/Email/SMS/InApp).
         // Không có nó thì dispatcher vẫn là dead code và notification chỉ nằm trong DB.

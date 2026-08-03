@@ -35,6 +35,10 @@ public class AlertAutoResolveService : IAlertAutoResolveService
                         && a.BatteryAssetId != null
                         && a.AnomalyType != AnomalyTypeEnum.DeviceOffline
                         && a.AnomalyType != AnomalyTypeEnum.SensorMismatch
+                        // GH-783 — alert do AI sinh: AnomalyRules.Detect() là rule ngưỡng cứng,
+                        // không bao giờ trả về SohDegradation → luôn ra stillAnomaly=false →
+                        // resolve nhầm, phá invariant "1 asset = 1 alert SOH chưa resolve".
+                        && a.AnomalyType != AnomalyTypeEnum.SohDegradation
                         && a.DetectedAt <= cutoff)
             .OrderBy(a => a.DetectedAt)
             .Take(batchSize)
