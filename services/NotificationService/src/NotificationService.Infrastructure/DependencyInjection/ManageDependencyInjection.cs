@@ -33,6 +33,7 @@ public static class ManageDependencyInjection
         services.AddInboxIdempotency(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
+        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>(); // GH-672 NOTI-01
 
         return services;
     }

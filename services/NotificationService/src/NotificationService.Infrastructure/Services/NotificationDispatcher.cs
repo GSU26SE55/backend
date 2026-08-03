@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.DTOs.Request.Notification;
@@ -18,6 +19,9 @@ public class NotificationDispatcher : INotificationDispatcher
     private readonly ILogger<NotificationDispatcher> _logger;
 
     private static readonly NotificationChannelEnum[] _defaultChannels = [NotificationChannelEnum.InApp];
+
+    /// <summary>Khớp NotificationConfiguration: <c>FailureReason</c> HasMaxLength(1000).</summary>
+    private const int FailureReasonMaxLength = 1000;
 
     // overall.md §3.4 — Type → Channel matrix
     private static readonly Dictionary<NotificationTypeEnum, NotificationChannelEnum[]> TypeChannelMatrix = new()
@@ -109,6 +113,148 @@ public class NotificationDispatcher : INotificationDispatcher
             }
         }
     }
+
+    public async Task<bool> DispatchPendingAsync(Notification notification, CancellationToken ct = default)
+    {
+        if (notification.IsDeleted || notification.Status != NotificationStatusEnum.Pending)
+            return false;
+
+        // #673 (NOTI-02) chưa merge → SendNotificationEmailEvent chưa có consumer, message bị bus
+        // drop im lặng. Giữ Pending để gửi lại khi #673 land — GỠ nhánh này lúc đó.
+        if (notification.Channel == NotificationChannelEnum.Email)
+            return false;
+
+        var pref = await LoadPreferenceAsync(notification.UserId, ct);
+
+        if (!IsChannelEnabled(pref, notification.Channel))
+            return await MarkFailedAsync(notification, $"Channel {notification.Channel} disabled by preference", ct);
+
+        bool isCritical = CriticalTypes.Contains(notification.Type) || HasBypassQuietHours(notification.PayloadJson);
+        if (!isCritical && notification.Channel != NotificationChannelEnum.InApp && IsQuietHours(pref))
+            return false;
+
+        var channel = _channels.FirstOrDefault(c => c.ChannelType == notification.Channel);
+        if (channel is null)
+            return await MarkFailedAsync(notification, $"No channel registered for {notification.Channel}", ct);
+
+        if (notification.Channel == NotificationChannelEnum.Push)
+            return await SendPushAsync(notification, channel, isCritical, ct);
+
+        // AccountReadModel có thể chưa sync (null) — chỉ Sms bắt buộc phải có số điện thoại.
+        var account = await _unitOfWork.Accounts.GetAllAsync(false)
+            .FirstOrDefaultAsync(a => a.Id == notification.UserId && !a.IsDeleted, ct);
+
+        if (notification.Channel == NotificationChannelEnum.Sms && string.IsNullOrWhiteSpace(account?.PhoneNumber))
+            return await MarkFailedAsync(notification, "No phone number for recipient", ct);
+
+        var sendReq = BuildSendRequest(notification, isCritical, email: account?.Email, phoneNumber: account?.PhoneNumber);
+        var result = await channel.SendAsync(sendReq, ct);
+
+        return result.Success
+            ? await MarkSentAsync(notification, ct)
+            : await MarkFailedAsync(notification, result.ErrorMessage ?? "Send failed", ct);
+    }
+
+    /// <summary>Fan-out 1 record Push ra toàn bộ device token active — ≥1 token thành công là Sent.</summary>
+    private async Task<bool> SendPushAsync(
+        Notification notification,
+        INotificationChannel pushChannel,
+        bool isCritical,
+        CancellationToken ct)
+    {
+        var tokens = await _unitOfWork.DeviceTokens.GetAllAsync(false)
+            .Where(dt => dt.UserId == notification.UserId && !dt.IsDeleted && dt.IsActive)
+            .ToListAsync(ct);
+
+        if (tokens.Count == 0)
+            return await MarkFailedAsync(notification, "No active device token", ct);
+
+        bool anySuccess = false;
+        string? lastError = null;
+
+        foreach (var token in tokens)
+        {
+            var result = await pushChannel.SendAsync(
+                BuildSendRequest(notification, isCritical, expoToken: token.Token), ct);
+
+            if (result.Success)
+                anySuccess = true;
+            else
+                lastError = result.ErrorMessage;
+        }
+
+        return anySuccess
+            ? await MarkSentAsync(notification, ct)
+            : await MarkFailedAsync(notification, lastError ?? "Push failed", ct);
+    }
+
+    private async Task<bool> MarkSentAsync(Notification notification, CancellationToken ct)
+    {
+        notification.Status = NotificationStatusEnum.Sent;
+        notification.SentAt = DateTime.UtcNow;
+        notification.FailureReason = null;
+        _unitOfWork.Notifications.UpdateAsync(notification);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private async Task<bool> MarkFailedAsync(Notification notification, string reason, CancellationToken ct)
+    {
+        notification.Status = NotificationStatusEnum.Failed;
+        notification.SentAt = null;
+        // reason có thể là ex.Message của channel (không giới hạn độ dài) — cắt theo giới hạn column
+        // để SaveChangesAsync không throw, nếu không row sẽ kẹt Pending và bị worker retry mãi.
+        notification.FailureReason = reason.Length > FailureReasonMaxLength
+            ? reason[..FailureReasonMaxLength]
+            : reason;
+        _unitOfWork.Notifications.UpdateAsync(notification);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        _logger.LogWarning("Dispatcher: notification {NotificationId} ({Channel}) failed: {Reason}",
+            notification.Id, notification.Channel, reason);
+        return true;
+    }
+
+    /// <summary>
+    /// Đọc cờ <c>bypassQuietHours</c> mà CreateNotificationCommandHandler nhét vào PayloadJson.
+    /// Payload không phải JSON hợp lệ → false, không throw.
+    /// </summary>
+    private static bool HasBypassQuietHours(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("bypassQuietHours", out var flag)
+                && flag.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static SendRequest BuildSendRequest(
+        Notification notification,
+        bool isCritical,
+        string? expoToken = null,
+        string? email = null,
+        string? phoneNumber = null) =>
+        new()
+        {
+            NotificationId = notification.Id,
+            UserId = notification.UserId,
+            Title = notification.Title,
+            Body = notification.Body,
+            PayloadJson = notification.PayloadJson,
+            IsCritical = isCritical,
+            ExpoToken = expoToken,
+            Email = email,
+            PhoneNumber = phoneNumber,
+        };
 
     private async Task DispatchPushAsync(
         DispatchRequest request,

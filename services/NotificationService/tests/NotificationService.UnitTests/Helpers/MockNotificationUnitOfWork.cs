@@ -16,7 +16,8 @@ public static class MockNotificationUnitOfWork
                    Mock<IGenericRepository<Notification>> notifications)
         Build(
             IEnumerable<DeviceToken>? deviceTokenSeed = null,
-            IEnumerable<Notification>? notificationSeed = null)
+            IEnumerable<Notification>? notificationSeed = null,
+            IEnumerable<AccountReadModel>? accountSeed = null)
     {
         var deviceTokenData = (deviceTokenSeed ?? Array.Empty<DeviceToken>()).ToArray();
         var deviceTokens = new Mock<IGenericRepository<DeviceToken>>();
@@ -44,7 +45,15 @@ public static class MockNotificationUnitOfWork
         templates.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
             .Returns(Array.Empty<NotificationTemplate>().AsQueryable().BuildMock());
 
+        var accountData = (accountSeed ?? Array.Empty<AccountReadModel>()).ToArray();
+        var accounts = new Mock<IGenericRepository<AccountReadModel>>();
+        accounts.Setup(r => r.GetAllAsync())
+            .Returns(accountData.AsQueryable().BuildMock());
+        accounts.Setup(r => r.GetAllAsync(It.IsAny<bool>()))
+            .Returns(accountData.AsQueryable().BuildMock());
+
         var uow = new Mock<INotificationUnitOfWork>();
+        uow.SetupGet(u => u.Accounts).Returns(accounts.Object);
         uow.SetupGet(u => u.DeviceTokens).Returns(deviceTokens.Object);
         uow.SetupGet(u => u.Notifications).Returns(notifications.Object);
         uow.SetupGet(u => u.NotificationPreferences).Returns(preferences.Object);
