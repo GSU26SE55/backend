@@ -165,20 +165,22 @@ public class SohPredictionBackgroundService : BackgroundService
                 if (result.Classification is AnomalyClassificationEnum.Degrading
                     or AnomalyClassificationEnum.Failed)
                 {
-                    // 3a. Prescription (chỉ Failed=Critical mới tạo ticket → chỉ gọi khi Failed để
-                    //     đính vào ticket). enrich=true → RAG+LLM; AI tự fallback rule-based nếu thiếu key.
+                    // 3a. Prescription (RAG+LLM, enrich=true) — GH-783: KHÔNG gọi ở đây nữa.
+                    //     Truyền xuống dạng delegate và chỉ await ở đúng nhánh ghi Outbox Critical,
+                    //     để "prescribe cho alert sắp bị dedup" là bất khả thi về cấu trúc chứ không
+                    //     phụ thuộc việc người sửa sau nhớ giữ đúng thứ tự lệnh.
                     //     Best-effort: prescribe fail → prescription = null, ticket vẫn tạo (không block).
-                    string? prescriptionText = null;
-                    if (_options.PrescriptionEnabled
-                        && result.Classification == AnomalyClassificationEnum.Failed)
+                    Func<CancellationToken, Task<string?>> prescribeAsync = async token =>
                     {
+                        if (!_options.PrescriptionEnabled)
+                            return null;
                         var presc = await prescriptionClient.PrescribeAsync(
-                            asset.Id.ToString(), readings, enrich: true, packConfig, ct);
-                        prescriptionText = BuildPrescriptionText(presc);
-                    }
+                            asset.Id.ToString(), readings, enrich: true, packConfig, token);
+                        return BuildPrescriptionText(presc);
+                    };
 
                     if (await RaiseSohAlertAsync(uow, asset.Id, asset.CustomerId, asset.SiteId,
-                            asset.SerialNumber, result, prescriptionText, now, ct))
+                            asset.SerialNumber, result, prescribeAsync, now, ct))
                         alerts++;
                 }
             }
@@ -218,11 +220,6 @@ public class SohPredictionBackgroundService : BackgroundService
     }
 
     /// <summary>
-    /// Tạo Alert SohDegradation + Outbox (V1 + V2) nếu chưa có Alert active cùng loại (dedup).
-    /// Dùng dedup đơn giản riêng cho job (FindActiveAlertToMergeAsync của threshold engine là private) —
-    /// cùng bảng Alert, cùng AnomalyType, đủ tránh spam mỗi tick 5 phút. Trả true nếu tạo Alert mới.
-    /// </summary>
-    /// <summary>
     /// Tính pack_config cho AI từ BatteryType: n_series = nominal_voltage_pack / cell_nominal_voltage.
     /// Pin 12.8V LFP (cell 3.2V) → 4S · 48V NMC (cell 3.7V) → ~13S. AI chia voltage per-cell trước
     /// scaler + range guard, nếu không pack 12V/48V bị reject (range per-cell [2.0, 4.5]V).
@@ -258,24 +255,70 @@ public class SohPredictionBackgroundService : BackgroundService
         return text;
     }
 
-    private async Task<bool> RaiseSohAlertAsync(
+    /// <summary>
+    /// Đảm bảo mỗi asset chỉ có ĐÚNG MỘT Alert SohDegradation chưa resolve (GH-783).
+    ///
+    /// Dedup theo <b>Status</b>, KHÔNG theo <c>DedupWindowEndUtc</c>: window chỉ dài 1 giờ nên
+    /// điều kiện cũ <c>DedupWindowEndUtc &gt; now</c> khiến hết giờ là sinh alert mới dù alert cũ
+    /// vẫn Open → 188 alert Open trên 9 asset ở E2E, kèm ticket/SLA/notification nhân bản.
+    ///
+    /// Đã có alert chưa resolve → refresh evidence + window tại chỗ, KHÔNG insert row mới.
+    /// Ngoại lệ duy nhất sinh ticket: alert đang mở là Warning (Degrading) mà prediction lên
+    /// Failed (Critical) — nâng severity + bắn Outbox một lần, nếu không pin chuyển sang hỏng
+    /// sẽ không bao giờ có ticket vì alert Warning đã chiếm chỗ dedup.
+    ///
+    /// <paramref name="prescribeAsync"/> chỉ được await ở nhánh ghi Outbox Critical → alert bị
+    /// dedup KHÔNG tốn RAG/LLM cost. Trả true nếu có ticket event được ghi.
+    /// </summary>
+    private static async Task<bool> RaiseSohAlertAsync(
         IBatteryUnitOfWork uow, Guid assetId, Guid customerId, Guid? siteId, string serial,
-        AiPredictionResult result, string? prescriptionText, DateTime now, CancellationToken ct)
+        AiPredictionResult result, Func<CancellationToken, Task<string?>> prescribeAsync,
+        DateTime now, CancellationToken ct)
     {
         var severity = result.Classification == AnomalyClassificationEnum.Failed
             ? AlertSeverityEnum.Critical
             : AlertSeverityEnum.Warning;
 
-        // Dedup: đã có Alert SohDegradation active (Open/Acknowledged) trong dedup window → skip.
-        var hasActive = await uow.Alerts
+        var existing = await uow.Alerts
             .GetAllAsync()
-            .AnyAsync(a => !a.IsDeleted
-                           && a.BatteryAssetId == assetId
-                           && a.AnomalyType == AnomalyTypeEnum.SohDegradation
-                           && (a.Status == AlertStatusEnum.Open || a.Status == AlertStatusEnum.Acknowledged)
-                           && a.DedupWindowEndUtc > now, ct);
-        if (hasActive)
-            return false;
+            .Where(a => !a.IsDeleted
+                        && a.BatteryAssetId == assetId
+                        && a.AnomalyType == AnomalyTypeEnum.SohDegradation
+                        && (a.Status == AlertStatusEnum.Open || a.Status == AlertStatusEnum.Acknowledged))
+            .OrderByDescending(a => a.DetectedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is not null)
+        {
+            // TicketId != null → alert này đã sinh ticket rồi, không bắn event lần hai.
+            var escalating = severity == AlertSeverityEnum.Critical
+                             && existing.Severity != AlertSeverityEnum.Critical
+                             && existing.TicketId is null;
+
+            // ⚠️ KHÔNG refresh DetectedAt mỗi tick: AlertEscalationService lọc alert cần escalate
+            // bằng `DetectedAt <= now - EscalationAfterMinutes` (5 phút), mà job này chạy mỗi
+            // IntervalMinutes (cũng 5 phút) → đẩy DetectedAt tiến lên liên tục thì alert không bao
+            // giờ đủ già để escalate. DetectedAt = "lần đầu phát hiện", không phải "lần cuối thấy".
+            existing.ActualValue = result.SohPercent;
+            existing.DedupWindowEndUtc = now.AddHours(1);
+            if (escalating)
+            {
+                existing.Severity = AlertSeverityEnum.Critical;
+                // Đúng một lần trong vòng đời alert (tick sau Severity đã Critical → escalating=false),
+                // nên không tái lập vòng lặp trên. Cho giai đoạn Critical một mốc đếm SLA escalation
+                // riêng, giống hệt alert Critical vừa được tạo mới.
+                existing.DetectedAt = now;
+            }
+
+            uow.Alerts.UpdateAsync(existing);
+
+            if (!escalating)
+                return false;
+
+            await WriteCriticalOutboxAsync(
+                uow, existing, customerId, serial, await prescribeAsync(ct), now);
+            return true;
+        }
 
         var alert = new AlertEntity
         {
@@ -294,58 +337,68 @@ public class SohPredictionBackgroundService : BackgroundService
         await uow.Alerts.AddAsync(alert);
 
         // Chỉ Critical (Failed) mới bắn event tạo ticket — khớp convention threshold engine.
-        if (severity == AlertSeverityEnum.Critical)
-        {
-            var v1 = new BatteryAnomalyDetectedEvent(
-                AlertId: alert.Id,
-                BatteryAssetId: assetId,
-                CustomerId: customerId,
-                AssetSerialNumber: serial,
-                AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
-                Severity: (int)severity,
-                ThresholdValue: alert.ThresholdValue ?? 0m,
-                ActualValue: alert.ActualValue ?? 0m,
-                Unit: alert.Unit ?? "%",
-                DetectedAt: alert.DetectedAt);
-            await uow.OutboxMessages.AddAsync(new OutboxEntity
-            {
-                Id = Guid.NewGuid(),
-                AggregateId = alert.Id,
-                Type = nameof(BatteryAnomalyDetectedEvent),
-                Payload = JsonSerializer.Serialize(v1),
-                // V1 sau V2 1ms: relay ORDER BY OccurredAtUtc → V2 (có AiPrescription) tới saga
-                // TRƯỚC → saga Initially hydrate từ V2 → ticket có prescription. V1 tới sau bị
-                // skip (saga đã có instance cùng AlertId). Giữ V1 cho consumer khác còn subscribe V1.
-                OccurredAtUtc = now.AddMilliseconds(1),
-            });
+        if (severity != AlertSeverityEnum.Critical)
+            return true;
 
-            var v2 = new BatteryAnomalyDetectedV2Event(
-                AlertId: alert.Id,
-                BatteryAssetId: assetId,
-                CustomerId: customerId,
-                SiteId: siteId,
-                AssetSerialNumber: serial,
-                AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
-                Severity: (int)severity,
-                ThresholdValue: alert.ThresholdValue ?? 0m,
-                ActualValue: alert.ActualValue ?? 0m,
-                Unit: alert.Unit ?? "%",
-                DetectedAt: alert.DetectedAt,
-                InternalResistanceMilliohm: null,
-                CellVoltageDeltaMv: null,
-                EnvironmentalIncidentId: null,
-                AiPrescription: prescriptionText,
-                AiActionSteps: null);
-            await uow.OutboxMessages.AddAsync(new OutboxEntity
-            {
-                Id = Guid.NewGuid(),
-                AggregateId = alert.Id,
-                Type = nameof(BatteryAnomalyDetectedV2Event),
-                Payload = JsonSerializer.Serialize(v2),
-                OccurredAtUtc = now,
-            });
-        }
-
+        await WriteCriticalOutboxAsync(uow, alert, customerId, serial, await prescribeAsync(ct), now);
         return true;
+    }
+
+    /// <summary>
+    /// Ghi cặp Outbox V1 + V2 cho alert Critical — dùng chung cho nhánh tạo mới và nhánh
+    /// escalate Degrading → Failed, để hai nhánh không lệch nhau về thứ tự/nội dung event.
+    /// </summary>
+    private static async Task WriteCriticalOutboxAsync(
+        IBatteryUnitOfWork uow, AlertEntity alert, Guid customerId, string serial,
+        string? prescriptionText, DateTime now)
+    {
+        var v1 = new BatteryAnomalyDetectedEvent(
+            AlertId: alert.Id,
+            BatteryAssetId: alert.BatteryAssetId ?? Guid.Empty,
+            CustomerId: customerId,
+            AssetSerialNumber: serial,
+            AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
+            Severity: (int)alert.Severity,
+            ThresholdValue: alert.ThresholdValue ?? 0m,
+            ActualValue: alert.ActualValue ?? 0m,
+            Unit: alert.Unit ?? "%",
+            DetectedAt: alert.DetectedAt);
+        await uow.OutboxMessages.AddAsync(new OutboxEntity
+        {
+            Id = Guid.NewGuid(),
+            AggregateId = alert.Id,
+            Type = nameof(BatteryAnomalyDetectedEvent),
+            Payload = JsonSerializer.Serialize(v1),
+            // V1 sau V2 1ms: relay ORDER BY OccurredAtUtc → V2 (có AiPrescription) tới saga
+            // TRƯỚC → saga Initially hydrate từ V2 → ticket có prescription. V1 tới sau bị
+            // skip (saga đã có instance cùng AlertId). Giữ V1 cho consumer khác còn subscribe V1.
+            OccurredAtUtc = now.AddMilliseconds(1),
+        });
+
+        var v2 = new BatteryAnomalyDetectedV2Event(
+            AlertId: alert.Id,
+            BatteryAssetId: alert.BatteryAssetId ?? Guid.Empty,
+            CustomerId: customerId,
+            SiteId: alert.SiteId,
+            AssetSerialNumber: serial,
+            AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
+            Severity: (int)alert.Severity,
+            ThresholdValue: alert.ThresholdValue ?? 0m,
+            ActualValue: alert.ActualValue ?? 0m,
+            Unit: alert.Unit ?? "%",
+            DetectedAt: alert.DetectedAt,
+            InternalResistanceMilliohm: null,
+            CellVoltageDeltaMv: null,
+            EnvironmentalIncidentId: null,
+            AiPrescription: prescriptionText,
+            AiActionSteps: null);
+        await uow.OutboxMessages.AddAsync(new OutboxEntity
+        {
+            Id = Guid.NewGuid(),
+            AggregateId = alert.Id,
+            Type = nameof(BatteryAnomalyDetectedV2Event),
+            Payload = JsonSerializer.Serialize(v2),
+            OccurredAtUtc = now,
+        });
     }
 }
