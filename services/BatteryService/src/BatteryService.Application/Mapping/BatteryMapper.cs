@@ -125,6 +125,7 @@ public static class BatteryMapper
             AcknowledgedAt = alert.AcknowledgedAt,
             ResolvedAt = alert.ResolvedAt,
             DedupWindowEndUtc = alert.DedupWindowEndUtc,
+            AiEvidence = alert.AiEvidence,
             CreatedAt = alert.CreatedAt
         };
     }

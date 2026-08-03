@@ -46,6 +46,12 @@ public class AiPredictionGrpcClient
         var resp = await _client.PredictAsync(
             request, deadline: deadline, cancellationToken: cancellationToken);
 
+        // GH-805 — warnings[] + risk.risk_level/action_code: bằng chứng vì sao alert nổ.
+        // Response cũ không set → list rỗng / null, hành vi lùi về đúng như trước.
+        var warnings = resp.Warnings
+            .Select(w => new AiWarningItem(w.Code, w.Severity, w.Message))
+            .ToList();
+
         // Flat backward-compat fields — cùng payload REST (parity test đảm bảo).
         return new AiPredictionResult(
             SohPercent: (decimal)resp.SohPercent,
@@ -57,6 +63,9 @@ public class AiPredictionGrpcClient
             RulCyclesEstimate: resp.RulCyclesEstimate,
             Priority: resp.Risk?.Priority ?? "None",
             ModelVersion: resp.Metadata?.ModelVersion ?? string.Empty,
-            LatencyMs: (int)Math.Round(resp.InferenceMs));
+            LatencyMs: (int)Math.Round(resp.InferenceMs),
+            RiskLevel: string.IsNullOrEmpty(resp.Risk?.RiskLevel) ? null : resp.Risk.RiskLevel,
+            ActionCode: string.IsNullOrEmpty(resp.Risk?.ActionCode) ? null : resp.Risk.ActionCode,
+            Warnings: warnings);
     }
 }

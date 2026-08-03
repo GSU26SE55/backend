@@ -79,6 +79,11 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .HasColumnName("dedup_window_end_utc")
             .IsRequired();
 
+        // GH-805 — không giới hạn MaxLength: số phần tử warnings[] không cố định.
+        builder.Property(alert => alert.AiEvidence)
+            .HasColumnName("ai_evidence")
+            .HasColumnType("text");
+
         builder.Property(alert => alert.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

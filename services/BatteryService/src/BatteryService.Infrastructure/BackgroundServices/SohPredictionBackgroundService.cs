@@ -161,10 +161,18 @@ public class SohPredictionBackgroundService : BackgroundService
                 });
                 predicted++;
 
-                // 3. Raise Alert nếu pin xuống cấp / hỏng (Failed=Critical, Degrading=Warning).
-                if (result.Classification is AnomalyClassificationEnum.Degrading
-                    or AnomalyClassificationEnum.Failed)
+                // 3. Raise Alert. GH-805 — severity gộp HAI nguồn: classification VÀ risk.priority.
+                //    AI có thể trả Normal kèm priority P1 (VD nhiệt 50°C: SOH vẫn 95% nhưng
+                //    warnings=[TEMP_CRITICAL], risk=Critical) — chỉ xét classification thì sự cố đó
+                //    không bao giờ sinh alert/ticket. null = không tín hiệu nào (Normal + P3/None)
+                //    → skip, giữ nguyên hành vi cũ.
+                var severity = AiPredictionResult.ResolveSeverity(result.Classification, result.Priority);
+                if (severity is not null)
                 {
+                    // GH-805 — AnomalyType suy từ warnings[] thay vì hardcode SohDegradation:
+                    // TicketService map SohDegradation → (SingleAsset, Low) → ticket P3 / SLA 72h,
+                    // sai bản chất cho sự cố nhiệt. Không có warning → fallback SohDegradation.
+                    var anomalyType = AiPredictionResult.MapWarningToAnomalyType(result.Warnings);
                     // 3a. Prescription (RAG+LLM, enrich=true) — GH-783: KHÔNG gọi ở đây nữa.
                     //     Truyền xuống dạng delegate và chỉ await ở đúng nhánh ghi Outbox Critical,
                     //     để "prescribe cho alert sắp bị dedup" là bất khả thi về cấu trúc chứ không
@@ -180,7 +188,8 @@ public class SohPredictionBackgroundService : BackgroundService
                     };
 
                     if (await RaiseSohAlertAsync(uow, asset.Id, asset.CustomerId, asset.SiteId,
-                            asset.SerialNumber, result, prescribeAsync, now, ct))
+                            asset.SerialNumber, result, severity.Value, anomalyType,
+                            prescribeAsync, now, ct))
                         alerts++;
                 }
             }
@@ -256,6 +265,29 @@ public class SohPredictionBackgroundService : BackgroundService
     }
 
     /// <summary>
+    /// GH-805 — bằng chứng vì sao alert nổ, lưu vào <c>Alert.AiEvidence</c>.
+    ///
+    /// Cần thiết vì alert giờ có thể nổ do <c>risk.priority</c> P1/P2 trong khi classification vẫn
+    /// Normal: không có block này thì nhìn alert không thể biết lý do (SOH 95% mà Critical?).
+    /// Trả null khi AI không gửi risk lẫn warning — để cột trống thay vì "{}" vô nghĩa.
+    /// </summary>
+    private static string? BuildAiEvidence(AiPredictionResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.RiskLevel) && result.Warnings.Count == 0)
+            return null;
+
+        return JsonSerializer.Serialize(new
+        {
+            risk_level = result.RiskLevel,
+            priority = result.Priority,
+            action_code = result.ActionCode,
+            warnings = result.Warnings
+                .Select(w => new { code = w.Code, severity = w.Severity, message = w.Message })
+                .ToList(),
+        });
+    }
+
+    /// <summary>
     /// Đảm bảo mỗi asset chỉ có ĐÚNG MỘT Alert SohDegradation chưa resolve (GH-783).
     ///
     /// Dedup theo <b>Status</b>, KHÔNG theo <c>DedupWindowEndUtc</c>: window chỉ dài 1 giờ nên
@@ -272,18 +304,17 @@ public class SohPredictionBackgroundService : BackgroundService
     /// </summary>
     private static async Task<bool> RaiseSohAlertAsync(
         IBatteryUnitOfWork uow, Guid assetId, Guid customerId, Guid? siteId, string serial,
-        AiPredictionResult result, Func<CancellationToken, Task<string?>> prescribeAsync,
+        AiPredictionResult result, AlertSeverityEnum severity, AnomalyTypeEnum anomalyType,
+        Func<CancellationToken, Task<string?>> prescribeAsync,
         DateTime now, CancellationToken ct)
     {
-        var severity = result.Classification == AnomalyClassificationEnum.Failed
-            ? AlertSeverityEnum.Critical
-            : AlertSeverityEnum.Warning;
-
+        // GH-805 — dedup theo CHÍNH anomalyType sắp tạo, không phải hằng SohDegradation: nếu không,
+        // alert Overheat do AI sinh sẽ bị alert SohDegradation đang mở nuốt mất (hai sự cố khác nhau).
         var existing = await uow.Alerts
             .GetAllAsync()
             .Where(a => !a.IsDeleted
                         && a.BatteryAssetId == assetId
-                        && a.AnomalyType == AnomalyTypeEnum.SohDegradation
+                        && a.AnomalyType == anomalyType
                         && (a.Status == AlertStatusEnum.Open || a.Status == AlertStatusEnum.Acknowledged))
             .OrderByDescending(a => a.DetectedAt)
             .FirstOrDefaultAsync(ct);
@@ -299,7 +330,17 @@ public class SohPredictionBackgroundService : BackgroundService
             // bằng `DetectedAt <= now - EscalationAfterMinutes` (5 phút), mà job này chạy mỗi
             // IntervalMinutes (cũng 5 phút) → đẩy DetectedAt tiến lên liên tục thì alert không bao
             // giờ đủ già để escalate. DetectedAt = "lần đầu phát hiện", không phải "lần cuối thấy".
-            existing.ActualValue = result.SohPercent;
+            // GH-805 — ActualValue chỉ có nghĩa với SohDegradation; alert Overheat mà dán số SOH vào
+            // là sai. Chi tiết của các type khác nằm ở AiEvidence.
+            if (anomalyType == AnomalyTypeEnum.SohDegradation)
+            {
+                existing.ActualValue = result.SohPercent;
+            }
+
+            // Chỉ ghi đè khi tick này CÓ bằng chứng mới. AI có thể trả risk/warnings ở tick trước rồi
+            // im lặng ở tick sau; gán thẳng sẽ xoá mất lý do alert đã nổ (alert Critical mà SOH 95%
+            // thành không giải thích được).
+            existing.AiEvidence = BuildAiEvidence(result) ?? existing.AiEvidence;
             existing.DedupWindowEndUtc = now.AddHours(1);
             if (escalating)
             {
@@ -320,19 +361,24 @@ public class SohPredictionBackgroundService : BackgroundService
             return true;
         }
 
+        // GH-805 — ngưỡng/giá trị/đơn vị chỉ có nghĩa với SohDegradation. Alert nhiệt/điện áp do AI
+        // sinh không kèm ngưỡng trong contract (WarningItem chỉ có code/severity/message) → để null
+        // (cả ba cột đều nullable) thay vì dán số SOH gây hiểu nhầm; chi tiết nằm ở AiEvidence.
+        var isSohAlert = anomalyType == AnomalyTypeEnum.SohDegradation;
         var alert = new AlertEntity
         {
             Id = Guid.NewGuid(),
             BatteryAssetId = assetId,
             SiteId = siteId,
-            AnomalyType = AnomalyTypeEnum.SohDegradation,
+            AnomalyType = anomalyType,
             Severity = severity,
-            ThresholdValue = 80m, // EOL threshold — SOH < 80% = Failed
-            ActualValue = result.SohPercent,
-            Unit = "%",
+            ThresholdValue = isSohAlert ? 80m : null, // EOL threshold — SOH < 80% = Failed
+            ActualValue = isSohAlert ? result.SohPercent : null,
+            Unit = isSohAlert ? "%" : null,
             DetectedAt = now,
             Status = AlertStatusEnum.Open,
             DedupWindowEndUtc = now.AddHours(1),
+            AiEvidence = BuildAiEvidence(result),
         };
         await uow.Alerts.AddAsync(alert);
 
@@ -357,11 +403,16 @@ public class SohPredictionBackgroundService : BackgroundService
             BatteryAssetId: alert.BatteryAssetId ?? Guid.Empty,
             CustomerId: customerId,
             AssetSerialNumber: serial,
-            AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
+            // GH-805 — theo type thật của alert: TicketService map AnomalyType → (ImpactScope,
+            // Urgency), gửi cứng SohDegradation thì sự cố nhiệt P1 nhận SLA của ticket P3.
+            AnomalyType: (int)alert.AnomalyType,
             Severity: (int)alert.Severity,
             ThresholdValue: alert.ThresholdValue ?? 0m,
             ActualValue: alert.ActualValue ?? 0m,
-            Unit: alert.Unit ?? "%",
+            // GH-805 — alert nhiệt/điện áp do AI sinh không có Unit (contract WarningItem chỉ có
+            // code/severity/message). Fallback "%" sẽ gửi đơn vị SOH xuống ticket nhiệt → rỗng.
+            // Alert SohDegradation luôn set Unit="%" nên nhánh này không đụng tới nó.
+            Unit: alert.Unit ?? string.Empty,
             DetectedAt: alert.DetectedAt);
         await uow.OutboxMessages.AddAsync(new OutboxEntity
         {
@@ -381,11 +432,16 @@ public class SohPredictionBackgroundService : BackgroundService
             CustomerId: customerId,
             SiteId: alert.SiteId,
             AssetSerialNumber: serial,
-            AnomalyType: (int)AnomalyTypeEnum.SohDegradation,
+            // GH-805 — theo type thật của alert: TicketService map AnomalyType → (ImpactScope,
+            // Urgency), gửi cứng SohDegradation thì sự cố nhiệt P1 nhận SLA của ticket P3.
+            AnomalyType: (int)alert.AnomalyType,
             Severity: (int)alert.Severity,
             ThresholdValue: alert.ThresholdValue ?? 0m,
             ActualValue: alert.ActualValue ?? 0m,
-            Unit: alert.Unit ?? "%",
+            // GH-805 — alert nhiệt/điện áp do AI sinh không có Unit (contract WarningItem chỉ có
+            // code/severity/message). Fallback "%" sẽ gửi đơn vị SOH xuống ticket nhiệt → rỗng.
+            // Alert SohDegradation luôn set Unit="%" nên nhánh này không đụng tới nó.
+            Unit: alert.Unit ?? string.Empty,
             DetectedAt: alert.DetectedAt,
             InternalResistanceMilliohm: null,
             CellVoltageDeltaMv: null,

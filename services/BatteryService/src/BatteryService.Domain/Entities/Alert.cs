@@ -51,6 +51,15 @@ public class Alert : AuditableEntity
 
     public DateTime DedupWindowEndUtc { get; set; }
 
+    /// <summary>
+    /// GH-805 — bằng chứng AI khiến alert nổ, JSON gọn:
+    /// <c>risk_level</c>, <c>priority</c>, <c>action_code</c>, <c>warnings[]</c>.
+    /// Null cho alert sinh từ threshold rule (không có dữ liệu AI).
+    /// Cần thiết vì alert có thể nổ do <c>risk.priority</c> P1/P2 trong khi classification vẫn Normal —
+    /// không có field này thì không thể biết vì sao alert được tạo.
+    /// </summary>
+    public string? AiEvidence { get; set; }
+
     public BatteryAsset? BatteryAsset { get; set; }
 
     public Site? Site { get; set; }

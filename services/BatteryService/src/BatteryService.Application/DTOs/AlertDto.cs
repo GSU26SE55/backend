@@ -58,6 +58,12 @@ public class AlertDto
     /// <summary>Timestamp kết thúc cửa sổ dedup alert.</summary>
     public DateTime DedupWindowEndUtc { get; set; }
 
+    /// <summary>
+    /// GH-805 — bằng chứng AI khiến alert nổ (JSON: <c>risk_level</c>, <c>priority</c>,
+    /// <c>action_code</c>, <c>warnings[]</c>). Null cho alert sinh từ threshold rule.
+    /// </summary>
+    public string? AiEvidence { get; set; }
+
     /// <summary>Timestamp tạo (UTC).</summary>
     public DateTime CreatedAt { get; set; }
 }

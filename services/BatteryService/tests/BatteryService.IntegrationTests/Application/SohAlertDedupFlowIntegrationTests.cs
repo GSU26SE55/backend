@@ -124,8 +124,15 @@ public class SohAlertDedupFlowIntegrationTests
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// GH-805 — <paramref name="priority"/> mặc định "None" để các test dedup ở đây chỉ do
+    /// classification điều khiển. Trước GH-805 fixture hardcode "P1" (vô hại vì priority bị bỏ qua);
+    /// nay severity gộp cả risk.priority nên "P1" sẽ nâng Degrading thành Critical và làm hỏng
+    /// kịch bản escalation Warning → Critical bên dưới.
+    /// </summary>
     private static SohPredictionBackgroundService CreateService(
-        ApplicationDbContext db, AnomalyClassificationEnum classification, decimal sohPercent = 72.5m)
+        ApplicationDbContext db, AnomalyClassificationEnum classification, decimal sohPercent = 72.5m,
+        string priority = "None")
     {
         var prediction = new Mock<IAiPredictionClient>();
         prediction
@@ -139,7 +146,7 @@ public class SohAlertDedupFlowIntegrationTests
                 AnomalyScore: -0.4m,
                 AnomalyConfidence: 0.4m,
                 RulCyclesEstimate: 40,
-                Priority: "P1",
+                Priority: priority,
                 ModelVersion: "1.6",
                 LatencyMs: 87));
 
