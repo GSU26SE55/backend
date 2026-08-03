@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -43,7 +44,11 @@ public sealed class TicketMergedConsumer : IConsumer<TicketMergedEvent>
                 Channel = NotificationChannelEnum.InApp,
                 Title = $"Ticket {evt.SourceTicketCode} đã được gộp",
                 Body = $"Ticket {evt.SourceTicketCode} đã được gộp vào ticket {evt.MasterTicketCode}.",
-                PayloadJson = $"{{\"sourceTicketId\":\"{evt.SourceTicketId}\",\"masterTicketId\":\"{evt.MasterTicketId}\"}}",
+                PayloadJson = JsonSerializer.Serialize(new
+                {
+                    sourceTicketId = evt.SourceTicketId,
+                    masterTicketId = evt.MasterTicketId,
+                }),
                 EntityType = "Ticket",
                 EntityId = evt.MasterTicketId
             }, context.CancellationToken);

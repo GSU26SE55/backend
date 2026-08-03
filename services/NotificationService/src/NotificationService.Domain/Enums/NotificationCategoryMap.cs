@@ -22,6 +22,11 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.TicketClosed] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketApproved] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketRejected] = NotificationCategoryEnum.Ticket,
+            // 03/08/2026 — trước nay KHÔNG có dòng này, và test bao vẫn xanh: TicketMerged mang
+            // giá trị 27 trùng ChatEscalatedToAdmin nên vô tình ăn theo nhóm Sla của loại kia. Tức
+            // là thông báo "ticket đã gộp" bị xếp nhầm nhóm SLA, kéo theo tuỳ chọn nhận thông báo
+            // theo nhóm cũng áp sai. Đổi enum sang 34 làm lộ ra chỗ này.
+            [NotificationTypeEnum.TicketMerged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketReopened] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketRatingRequested] = NotificationCategoryEnum.Ticket,
             // GH-83: trước đây không khai báo được vì TicketMerged trùng giá trị 27 với
@@ -60,7 +65,6 @@ public static class NotificationCategoryMap
 
             // ── Tài khoản & hệ thống ────────────────────────────────────────
             [NotificationTypeEnum.AccountActivated] = NotificationCategoryEnum.Account,
-            [NotificationTypeEnum.AdminInvite] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.System] = NotificationCategoryEnum.Account,
             // GH-83: hai type Blog trước đây thiếu khai báo ⇒ rơi vào nhánh mặc định của Resolve()
             // (cũng là Account) nên hành vi runtime KHÔNG đổi — nhưng test bao vẫn đỏ vì `All` thiếu

@@ -10,160 +10,139 @@ namespace NotificationService.Infrastructure.Persistence.Seeders;
 /// rơi về Title/Body mà consumer ghi cứng trong code — nghĩa là muốn sửa một câu chữ phải sửa code,
 /// build lại, deploy lại. Có template trong DB thì người vận hành sửa được ngay.
 ///
-/// **Locale:** tiếng Việt là mặc định; các type hướng **Customer** có thêm <c>en-US</c> vì khách hàng
-/// có thể không đọc tiếng Việt. Type nội bộ (dành cho Staff/Manager/Admin) chỉ cần tiếng Việt —
-/// dịch thứ không ai đọc chỉ tạo thêm thứ phải bảo trì.
+/// **02/08/2026 — chỉ còn tiếng Việt.** Bản <c>en-US</c> và trường <c>Locale</c> đã bị gỡ: hệ thống
+/// phục vụ tiếng Việt only, giữ thêm một bộ dịch chỉ tạo thứ phải bảo trì mà không ai đọc.
 ///
 /// Tách khỏi <c>NotificationDataSeeder</c> để test bao (mọi ô của ma trận có template chưa) đọc được
 /// danh mục mà không phải dựng DbContext.
 /// </summary>
 public static class NotificationTemplateCatalog
 {
-    public const string DefaultLocale = "vi-VN";
-    public const string EnglishLocale = "en-US";
-
     /// <summary>Một dòng của danh mục.</summary>
     public readonly record struct Entry(
         NotificationTypeEnum Type,
         NotificationChannelEnum Channel,
-        string Locale,
         string Title,
         string Body);
 
     /// <summary>
-    /// Các type hướng Customer — cần bản <c>en-US</c>.
-    /// Type nội bộ (SLA, saga, IoT, chat…) chỉ phục vụ nhân sự vận hành nói tiếng Việt.
+    /// Nội dung tiếng Việt cho từng type — dùng chung cho mọi kênh, biến tấu theo kênh bên dưới.
+    ///
+    /// <para><b>03/08/2026 — viết lại toàn bộ tên biến.</b> Bộ cũ được soạn theo một hợp đồng payload
+    /// <i>tưởng tượng</i>, không khớp khoá mà consumer thật sự ghi: <c>{{ticketCode}}</c> trong khi
+    /// consumer ghi <c>code</c>, <c>{{serialNumber}}</c> trong khi consumer ghi
+    /// <c>assetSerialNumber</c>, <c>{{threshold}}</c> trong khi consumer ghi <c>thresholdValue</c>,
+    /// cùng hàng loạt biến không hề tồn tại (<c>customerName</c>, <c>slaDeadline</c>,
+    /// <c>minutesRemaining</c>, <c>senderName</c>, <c>preview</c>, <c>displayName</c>…). Handlebars
+    /// gặp biến lạ thì render ra rỗng chứ không báo lỗi, nên người nhận đọc phải "Ticket mới " —
+    /// cụt đuôi — suốt nhiều tháng mà không ai hay.</para>
+    ///
+    /// <para>Mọi biến dưới đây phải nằm trong
+    /// <c>NotificationTemplateVariables.AllowedFor(type)</c>; có test bao đối chiếu nên seed sai
+    /// tên biến là CI đỏ ngay.</para>
     /// </summary>
-    public static readonly IReadOnlySet<NotificationTypeEnum> CustomerFacingTypes =
-        new HashSet<NotificationTypeEnum>
-        {
-            NotificationTypeEnum.TicketCreated,
-            NotificationTypeEnum.TicketStatusChanged,
-            NotificationTypeEnum.TicketResolved,
-            NotificationTypeEnum.TicketClosed,
-            NotificationTypeEnum.TicketApproved,
-            NotificationTypeEnum.TicketRejected,
-            NotificationTypeEnum.TicketReopened,
-            NotificationTypeEnum.TicketRatingRequested,
-            NotificationTypeEnum.AccountActivated,
-            NotificationTypeEnum.BatteryAnomalyWarning,
-            NotificationTypeEnum.BatteryAnomalyInfo,
-            NotificationTypeEnum.EnvironmentalIncidentDetected,
-            NotificationTypeEnum.EnvironmentalIncidentResolved,
-        };
-
-    /// <summary>Nội dung tiếng Việt cho từng type — dùng chung cho mọi kênh, biến tấu theo kênh bên dưới.</summary>
     private static readonly IReadOnlyDictionary<NotificationTypeEnum, (string Title, string Body)> Vietnamese =
         new Dictionary<NotificationTypeEnum, (string, string)>
         {
             [NotificationTypeEnum.TicketCreated] =
-                ("Ticket mới {{ticketCode}}", "Khách hàng {{customerName}} vừa tạo ticket {{ticketCode}}: {{title}}"),
+                ("Ticket mới {{code}}", "Ticket {{code}} vừa được tạo, mức ưu tiên {{priority}}."),
             [NotificationTypeEnum.TicketAssigned] =
-                ("Bạn được giao ticket {{ticketCode}}", "{{title}} — Mức ưu tiên {{priority}}. Hạn xử lý {{slaDeadline}}."),
+                ("Bạn được giao ticket {{code}}", "Mức ưu tiên {{priority}}. Mở ticket để xem chi tiết và hạn xử lý."),
             [NotificationTypeEnum.TicketStatusChanged] =
-                ("Ticket {{ticketCode}} đổi trạng thái", "Từ {{oldStatus}} sang {{newStatus}}."),
+                ("Ticket {{code}} đổi trạng thái", "Từ {{oldStatusName}} sang {{newStatusName}}."),
             [NotificationTypeEnum.TicketResolved] =
-                ("Ticket {{ticketCode}} đã xử lý xong", "Ticket {{ticketCode}} đã được xử lý. Vui lòng xác nhận và đánh giá."),
+                ("Ticket {{code}} đã xử lý xong", "Ticket {{code}} đã được xử lý. Vui lòng xác nhận và đánh giá."),
             [NotificationTypeEnum.TicketClosed] =
-                ("Ticket {{ticketCode}} đã đóng", "Cảm ơn bạn đã sử dụng dịch vụ."),
+                ("Ticket {{code}} đã đóng", "Cảm ơn bạn đã sử dụng dịch vụ."),
             [NotificationTypeEnum.TicketEscalated] =
-                ("Ticket {{ticketCode}} đã được leo thang", "Lý do: {{reason}}. Người phụ trách mới: {{assignedStaffName}}."),
+                ("Ticket {{code}} đã được leo thang", "Lý do: {{reason}}. Người phụ trách mới: {{staffName}}."),
             [NotificationTypeEnum.TicketApproved] =
-                ("Kết quả xử lý ticket {{ticketCode}} đã được duyệt", "Vui lòng đánh giá chất lượng dịch vụ để đóng ticket."),
+                ("Kết quả xử lý ticket {{code}} đã được duyệt", "Vui lòng đánh giá chất lượng dịch vụ để đóng ticket."),
             [NotificationTypeEnum.TicketRejected] =
-                ("Ticket {{ticketCode}} bị từ chối", "Lý do: {{reason}}."),
+                ("Ticket {{code}} bị từ chối", "Lý do: {{reason}}."),
             [NotificationTypeEnum.TicketReopened] =
-                ("Ticket {{ticketCode}} được mở lại", "Khách hàng chưa hài lòng với kết quả. Lý do: {{reason}}."),
+                ("Ticket {{code}} được mở lại", "Khách hàng chưa hài lòng với kết quả. Lý do: {{reopenReason}}."),
             [NotificationTypeEnum.TicketRatingRequested] =
-                ("Mời đánh giá ticket {{ticketCode}}", "Ticket đã hoàn tất. Đánh giá của bạn giúp chúng tôi phục vụ tốt hơn."),
+                ("Mời đánh giá ticket {{code}}",
+                 "Ticket đã hoàn tất. Còn {{daysUntilAutoClose}} ngày trước khi ticket tự đóng."),
+            [NotificationTypeEnum.TicketMerged] =
+                ("Ticket của bạn đã được gộp", "Nội dung đã chuyển sang ticket chính để xử lý tập trung."),
 
+            // 03/08/2026 — hai event SLA nay đã mang theo `code`, nên nhắc được đúng ticket. Trước
+            // đó payload chỉ có ticketId (GUID) nên tiêu đề buộc phải chung chung.
             [NotificationTypeEnum.SlaWarning] =
-                ("Cảnh báo SLA: {{ticketCode}}", "Còn {{minutesRemaining}} phút trước khi vỡ SLA {{priority}}."),
+                ("Cảnh báo SLA: {{code}}", "Ticket {{code}} đã dùng {{percentage}}% thời gian SLA. Cần xử lý sớm."),
             [NotificationTypeEnum.SlaBreached] =
-                ("VỠ SLA: {{ticketCode}}", "Ticket đã quá hạn SLA {{priority}}. Cần leo thang ngay."),
+                ("VỠ SLA: {{code}}", "Ticket {{code}} mức ưu tiên {{priority}} đã quá hạn. Cần leo thang ngay."),
             [NotificationTypeEnum.IncidentDeclared] =
-                ("Công bố sự cố nghiêm trọng", "{{incidentType}} — công bố bởi {{declaredBy}} lúc {{declaredAt}}."),
+                ("Công bố sự cố nghiêm trọng", "Ticket {{code}} đã được công bố là sự cố nghiêm trọng."),
             [NotificationTypeEnum.AlertTicketSagaFailed] =
                 ("Saga Alert–Ticket thất bại", "Giai đoạn {{failedAtStage}} — {{errorCode}}. Cần admin xử lý lại."),
             [NotificationTypeEnum.ChatEscalatedToAdmin] =
                 ("Trao đổi được leo thang lên Admin", "Ticket {{ticketCode}}: Manager không phản hồi sau 30 phút."),
 
+            // Dùng cặp {{anomalyTypeName}}/{{severityName}} — bản CHỮ. Hai khoá số
+            // {{anomalyType}}/{{severity}} vẫn còn trong payload cho client lọc, nhưng in ra template
+            // thì thành "Loại: 4 — Mức độ: 3", đúng thứ bản trước 03/08/2026 gửi cho khách.
             [NotificationTypeEnum.BatteryAnomalyDetected] =
-                ("Bất thường pin {{serialNumber}}", "Loại: {{anomalyType}} — Mức độ: {{severity}}."),
+                ("Bất thường pin {{assetSerialNumber}}",
+                 "{{anomalyTypeName}} — mức {{severityName}}. Giá trị đo {{actualValue}}{{unit}}, ngưỡng {{thresholdValue}}{{unit}}."),
             [NotificationTypeEnum.BatteryAnomalyWarning] =
-                ("Cảnh báo pin {{serialNumber}}", "{{anomalyType}}: giá trị {{actualValue}}{{unit}} vượt ngưỡng {{threshold}}{{unit}}."),
+                ("Cảnh báo pin {{assetSerialNumber}}",
+                 "{{anomalyTypeName}} — giá trị đo {{actualValue}}{{unit}}, ngưỡng {{thresholdValue}}{{unit}}."),
             [NotificationTypeEnum.BatteryAnomalyInfo] =
-                ("Ghi nhận thay đổi trên pin {{serialNumber}}", "{{anomalyType}}: giá trị {{actualValue}}{{unit}}."),
+                ("Ghi nhận thay đổi trên pin {{assetSerialNumber}}",
+                 "{{anomalyTypeName}} — giá trị đo {{actualValue}}{{unit}}."),
             [NotificationTypeEnum.BatteryAlertEscalationPending] =
                 ("Cảnh báo pin chưa được tiếp nhận", "Alert {{alertId}} chưa ai xác nhận sau {{minutesSinceDetection}} phút."),
             [NotificationTypeEnum.CascadeRiskHigh] =
-                ("Rủi ro lan truyền cao tại {{siteName}}", "Pin {{serialNumber}} có nguy cơ ảnh hưởng các pin lân cận."),
+                ("Rủi ro lan truyền cao",
+                 "Điểm rủi ro {{cascadeRiskScore}} — pin có nguy cơ ảnh hưởng các pin lân cận."),
             [NotificationTypeEnum.IotDeviceWentOffline] =
                 ("Thiết bị IoT mất kết nối: {{deviceCode}}",
-                 "Thiết bị \"{{displayName}}\" tại {{siteName}} mất heartbeat {{durationMinutes}} phút. Ảnh hưởng {{affectedBatteryCount}} pin."),
+                 "Thiết bị {{deviceCode}} mất heartbeat từ {{lastSeenAt}}. Ảnh hưởng {{affectedBatteryCount}} pin."),
 
             [NotificationTypeEnum.EnvironmentalIncidentDetected] =
                 ("Sự cố môi trường tại {{siteName}}", "Loại: {{incidentType}} — Mức độ: {{severity}}. Phát hiện lúc {{detectedAt}}."),
+            // Consumer của type này KHÔNG ghi payload, nên chỉ được dùng biến builtin.
             [NotificationTypeEnum.EnvironmentalIncidentResolved] =
-                ("Sự cố môi trường đã được xử lý", "Site {{siteName}} — sự cố {{incidentType}} đã kết thúc."),
+                ("Sự cố môi trường đã được xử lý", "Sự cố môi trường tại site của bạn đã kết thúc."),
 
+            // Nhóm chat: payload chỉ có id, KHÔNG có tên người gửi hay trích đoạn nội dung. Viết
+            // câu không cần hai thứ đó thay vì để chỗ trống.
             [NotificationTypeEnum.ChatCreated] =
-                ("Trao đổi mới trên ticket {{ticketCode}}", "{{senderName}}: {{preview}}"),
+                ("Trao đổi mới trên ticket", "Có trao đổi mới. Mở ticket để xem nội dung."),
             [NotificationTypeEnum.ChatMentioned] =
-                ("Bạn được nhắc tới trong ticket {{ticketCode}}", "{{senderName}} đã nhắc tới bạn: {{preview}}"),
+                ("Bạn được nhắc tới trong một trao đổi", "Mở ticket để xem nội dung nhắc tới bạn."),
             [NotificationTypeEnum.ChatReacted] =
-                ("Có phản hồi cho trao đổi của bạn", "{{senderName}} đã bày tỏ cảm xúc {{reaction}}."),
+                ("Có phản hồi cho trao đổi của bạn", "Ai đó đã bày tỏ cảm xúc {{reactionType}}."),
             [NotificationTypeEnum.ParticipantAdded] =
-                ("Bạn được thêm vào ticket {{ticketCode}}", "Vai trò: {{role}}."),
+                ("Bạn được thêm vào một ticket", "Vai trò của bạn: {{newType}}."),
             [NotificationTypeEnum.ParticipantRemoved] =
-                ("Bạn đã rời ticket {{ticketCode}}", "Bạn không còn nhận cập nhật của ticket này."),
+                ("Bạn đã rời ticket", "Bạn không còn nhận cập nhật của ticket này."),
             [NotificationTypeEnum.ParticipantRoleChanged] =
-                ("Vai trò của bạn trong ticket {{ticketCode}} đã đổi", "Vai trò mới: {{role}}."),
+                ("Vai trò của bạn trong ticket đã đổi", "Từ {{oldType}} sang {{newType}}."),
 
             [NotificationTypeEnum.AccountActivated] =
-                ("Tài khoản đã được kích hoạt", "Chào {{fullName}}, tài khoản của bạn đã sẵn sàng sử dụng."),
-            [NotificationTypeEnum.AdminInvite] =
-                ("Lời mời tham gia hệ thống", "Bạn được {{inviterName}} mời làm {{role}}. Bấm liên kết để kích hoạt: {{activationLink}}"),
+                ("Tài khoản đã được kích hoạt", "Tài khoản của bạn đã sẵn sàng sử dụng. Vai trò: {{role}}."),
+            [NotificationTypeEnum.BlogGenerationCompleted] =
+                ("Bài viết đã tạo xong", "Bài viết bạn yêu cầu đã sinh xong và sẵn sàng để duyệt."),
+            [NotificationTypeEnum.BlogGenerationFailed] =
+                ("Tạo bài viết thất bại", "Không sinh được bài viết. Vui lòng thử lại hoặc báo quản trị viên."),
+
+            // System phải là template CHUYỂN TIẾP NGUYÊN VĂN — cả tiêu đề lẫn thân đều lấy biến
+            // builtin, tức chính nội dung admin gõ lúc gửi hàng loạt.
+            //
+            // Đặt tiêu đề cố định ("Thông báo hệ thống") là SAI: từ 03/08/2026 kênh InApp ghi ngược
+            // nội dung đã render vào dòng notification, nên tiêu đề cố định sẽ ĐÈ MẤT tiêu đề admin
+            // vừa nhập — người nhận mở feed lên chỉ thấy "Thông báo hệ thống" thay vì
+            // "Bảo trì hệ thống 22:00". Với System thì nội dung CHÍNH LÀ thông điệp, không có gì để
+            // khuôn mẫu hoá.
             [NotificationTypeEnum.System] =
-                ("Thông báo hệ thống", "{{message}}"),
+                ("{{Title}}", "{{Body}}"),
         };
 
-    /// <summary>Bản tiếng Anh cho các type hướng Customer.</summary>
-    private static readonly IReadOnlyDictionary<NotificationTypeEnum, (string Title, string Body)> English =
-        new Dictionary<NotificationTypeEnum, (string, string)>
-        {
-            [NotificationTypeEnum.TicketCreated] =
-                ("New ticket {{ticketCode}}", "Customer {{customerName}} created ticket {{ticketCode}}: {{title}}"),
-            [NotificationTypeEnum.TicketStatusChanged] =
-                ("Ticket {{ticketCode}} status changed", "From {{oldStatus}} to {{newStatus}}."),
-            [NotificationTypeEnum.TicketResolved] =
-                ("Ticket {{ticketCode}} resolved", "Ticket {{ticketCode}} has been resolved. Please confirm and rate."),
-            [NotificationTypeEnum.TicketClosed] =
-                ("Ticket {{ticketCode}} closed", "Thank you for using our service."),
-            [NotificationTypeEnum.TicketApproved] =
-                ("Ticket {{ticketCode}} resolution approved", "Please rate the service to close this ticket."),
-            [NotificationTypeEnum.TicketRejected] =
-                ("Ticket {{ticketCode}} rejected", "Reason: {{reason}}."),
-            [NotificationTypeEnum.TicketReopened] =
-                ("Ticket {{ticketCode}} reopened", "The customer was not satisfied. Reason: {{reason}}."),
-            [NotificationTypeEnum.TicketRatingRequested] =
-                ("Please rate ticket {{ticketCode}}", "Your feedback helps us serve you better."),
-            [NotificationTypeEnum.AccountActivated] =
-                ("Your account is active", "Hi {{fullName}}, your account is ready to use."),
-            [NotificationTypeEnum.BatteryAnomalyWarning] =
-                ("Battery warning {{serialNumber}}", "{{anomalyType}}: {{actualValue}}{{unit}} exceeded threshold {{threshold}}{{unit}}."),
-            [NotificationTypeEnum.BatteryAnomalyInfo] =
-                ("Battery update {{serialNumber}}", "{{anomalyType}}: current value {{actualValue}}{{unit}}."),
-            [NotificationTypeEnum.EnvironmentalIncidentDetected] =
-                ("Environmental incident at {{siteName}}", "Type: {{incidentType}} — Severity: {{severity}}. Detected at {{detectedAt}}."),
-            [NotificationTypeEnum.EnvironmentalIncidentResolved] =
-                ("Environmental incident resolved", "Site {{siteName}} — incident {{incidentType}} has ended."),
-        };
-
-    /// <summary>
-    /// Dựng toàn bộ danh mục: mỗi ô của ma trận type × channel một dòng, cộng bản <c>en-US</c>
-    /// cho các type hướng Customer.
-    /// </summary>
+    /// <summary>Dựng toàn bộ danh mục: mỗi ô của ma trận type × channel đúng một dòng tiếng Việt.</summary>
     public static IReadOnlyList<Entry> Build(
         IReadOnlyDictionary<NotificationTypeEnum, NotificationChannelEnum[]> typeChannelMatrix)
     {
@@ -177,13 +156,7 @@ public static class NotificationTemplateCatalog
             foreach (var channel in channels)
             {
                 var (title, body) = Adapt(channel, vi.Title, vi.Body);
-                entries.Add(new Entry(type, channel, DefaultLocale, title, body));
-
-                if (CustomerFacingTypes.Contains(type) && English.TryGetValue(type, out var en))
-                {
-                    var (enTitle, enBody) = Adapt(channel, en.Title, en.Body);
-                    entries.Add(new Entry(type, channel, EnglishLocale, enTitle, enBody));
-                }
+                entries.Add(new Entry(type, channel, title, body));
             }
         }
 

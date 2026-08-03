@@ -147,6 +147,29 @@ public static class ActionCodes
         /// nhập địa chỉ tự do (R-46), vẫn cần dấu vết ai gửi thử cái gì, lúc nào.
         /// </summary>
         public const string TemplateTestSent = "TemplateTestSent";
+
+        // 02/08/2026 — vòng đời template soạn từ giao diện quản trị. Nội dung template quyết định
+        // câu chữ gửi tới hàng trăm khách; đổi một chữ mà không có dấu vết ai đổi, đổi lúc nào, từ
+        // bản nào sang bản nào thì không truy trách nhiệm được.
+        public const string TemplateCreated = "TemplateCreated";
+        public const string TemplateRevised = "TemplateRevised";
+        public const string TemplateActivated = "TemplateActivated";
+        public const string TemplateDeleted = "TemplateDeleted";
+
+        // Sprint 6.4 — nhóm người nhận và gửi hàng loạt. Nhóm quyết định AI nhận được thông báo nội
+        // bộ; thêm nhầm một người vào nhóm "Quản lý" là rò rỉ thông tin, mà không có dấu vết thì
+        // không truy được ai thêm và lúc nào.
+        public const string GroupCreated = "NotificationGroupCreated";
+        public const string GroupUpdated = "NotificationGroupUpdated";
+        public const string GroupDeleted = "NotificationGroupDeleted";
+        public const string GroupMembersAdded = "NotificationGroupMembersAdded";
+        public const string GroupMemberRemoved = "NotificationGroupMemberRemoved";
+
+        /// <summary>
+        /// Gửi thông báo hàng loạt. Một lệnh có thể chạm tới toàn bộ người dùng hệ thống — luôn là
+        /// hành động cần nổi lên trong bộ lọc audit.
+        /// </summary>
+        public const string BroadcastSent = "NotificationBroadcastSent";
     }
 
     /// <summary>SmsService — 3 action bổ sung (<c>#AUDIT-35</c>).</summary>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -53,7 +54,7 @@ public class ChatCreatedConsumer : IConsumer<ChatCreatedEvent>
                     Channel = channel,
                     Title = "Tin nhắn mới trên ticket",
                     Body = $"{evt.AuthorDisplayName}: {Truncate(evt.Body)}",
-                    PayloadJson = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\"}}",
+                    PayloadJson = JsonSerializer.Serialize(new { chatId = evt.ChatId, ticketId = evt.TicketId }),
                     EntityType = "Chat",
                     EntityId = evt.ChatId
                 };

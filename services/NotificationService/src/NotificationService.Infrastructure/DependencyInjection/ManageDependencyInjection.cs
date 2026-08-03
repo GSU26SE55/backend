@@ -29,6 +29,7 @@ public static class ManageDependencyInjection
         services.AddMessageBus(configuration, typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly);
 
         services.AddScoped<NotificationDataSeeder>();
+        services.AddScoped<NotificationGroupSeeder>();   // Sprint 6.4 NOTI4-04
         services.AddNotificationChannels();
         services.AddInboxIdempotency(configuration);
 

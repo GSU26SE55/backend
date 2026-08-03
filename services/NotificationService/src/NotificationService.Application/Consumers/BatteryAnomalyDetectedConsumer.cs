@@ -6,6 +6,8 @@ using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 
+using NotificationService.Application.Templates;
+
 namespace NotificationService.Application.Consumers;
 
 /// <summary>
@@ -50,8 +52,13 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
 
         var recipientIds = new[] { evt.CustomerId };
 
+        // 03/08/2026 — chữ đọc được thay cho số trần. Trước đó thân tin nhắn ghi "mức 3" và template
+        // ghi "Loại: 4" vì hai enum này thuộc BatteryService.Domain, phía đây không tham chiếu được.
+        var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
+        var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
+
         var title = $"⚠️ Bất thường pin {evt.AssetSerialNumber}";
-        var body = $"Phát hiện bất thường (mức {evt.Severity}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
+        var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
         var payload = JsonSerializer.Serialize(new
         {
             alertId = evt.AlertId,
@@ -60,6 +67,9 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
             assetSerialNumber = evt.AssetSerialNumber,
             anomalyType = evt.AnomalyType,
             severity = evt.Severity,
+            // Giữ CẢ số lẫn chữ: số cho phía client lọc/so sánh, chữ cho template dựng câu.
+            anomalyTypeName = anomalyLabel,
+            severityName = severityLabel,
             thresholdValue = evt.ThresholdValue,
             actualValue = evt.ActualValue,
             unit = evt.Unit,

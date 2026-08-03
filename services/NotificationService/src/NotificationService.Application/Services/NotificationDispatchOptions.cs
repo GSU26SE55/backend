@@ -45,12 +45,12 @@ public class NotificationDispatchOptions
 
     /// <summary>
     /// Ưu tiên render Title/Body từ bảng <c>notification_templates</c> nếu có template active khớp
-    /// (Type × Channel × Locale); không có thì dùng Title/Body inline mà consumer đã ghi sẵn.
+    /// (Type × Channel); không có thì dùng Title/Body inline mà consumer đã ghi sẵn.
     /// Đây là "1 pattern" chốt cho NOTI-14: DB template thắng, inline là fallback.
     /// </summary>
     public bool UseDbTemplates { get; set; } = true;
 
-    public string DefaultLocale { get; set; } = "vi-VN";
+    // 02/08/2026 — bỏ DefaultLocale: template không còn locale nên không còn gì để chọn.
 
     /// <summary>Override ma trận Type → Channel. Key/value là TÊN enum (không phân biệt hoa thường).</summary>
     public Dictionary<string, string[]> TypeChannelMatrix { get; set; } = new();
@@ -74,12 +74,16 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.TicketEscalated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaWarning] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaBreached] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-            [NotificationTypeEnum.BatteryAnomalyDetected] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
+            // Sms bổ sung 03/08/2026: BatteryAnomalyDetectedConsumer gửi bằng
+            // NotificationWriter.AllChannels (có Sms) nên thực tế đã sinh 98 dòng SMS, trong khi ma
+            // trận này lại thiếu Sms — mà seeder template dựng theo ma trận. Hệ quả: SMS gửi đi
+            // không có template nào khớp, âm thầm rơi về nội dung hardcode. Khai đúng để hai đường
+            // khớp nhau.
+            [NotificationTypeEnum.BatteryAnomalyDetected] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
             [NotificationTypeEnum.EnvironmentalIncidentDetected] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
             [NotificationTypeEnum.EnvironmentalIncidentResolved] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.IncidentDeclared] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
             [NotificationTypeEnum.AccountActivated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Email],
-            [NotificationTypeEnum.AdminInvite] = [NotificationChannelEnum.Email],
             [NotificationTypeEnum.BatteryAlertEscalationPending] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.AlertTicketSagaFailed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.IotDeviceWentOffline] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
@@ -99,6 +103,13 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.TicketRatingRequested] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.BatteryAnomalyWarning] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.BatteryAnomalyInfo] = [NotificationChannelEnum.InApp],
+
+            // Bổ sung 03/08/2026 — ba type dưới đây có consumer ghi thật (đều Channel=InApp) nhưng
+            // trước nay vắng mặt ở ma trận, nên seeder không dựng template cho chúng và thông báo
+            // gửi đi luôn dùng chuỗi hardcode. Khai vào đây là chúng có template như mọi type khác.
+            [NotificationTypeEnum.TicketMerged] = [NotificationChannelEnum.InApp],
+            [NotificationTypeEnum.BlogGenerationCompleted] = [NotificationChannelEnum.InApp],
+            [NotificationTypeEnum.BlogGenerationFailed] = [NotificationChannelEnum.InApp],
 
             [NotificationTypeEnum.System] = [NotificationChannelEnum.InApp],
         };

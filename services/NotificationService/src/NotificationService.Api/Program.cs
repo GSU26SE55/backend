@@ -55,6 +55,13 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<NotificationService.Infrastructure.Persistence.Seeders.NotificationDataSeeder>();
     await seeder.SeedAsync();
+
+    // Sprint 6.4 NOTI4-04 — 4 nhóm hệ thống theo vai trò. PHẢI chạy mỗi lần khởi động: sau
+    // NOTI4-05, RecipientResolver phân giải "toàn bộ Manager/Admin" qua chính các nhóm này;
+    // thiếu một cái là thông báo tự động cho vai trò đó im lặng biến mất.
+    var groupSeeder = scope.ServiceProvider.GetRequiredService<NotificationService.Infrastructure.Persistence.Seeders.NotificationGroupSeeder>();
+    await groupSeeder.SeedAsync();
+
     Console.WriteLine("Notification seed data checked.");
 }
 

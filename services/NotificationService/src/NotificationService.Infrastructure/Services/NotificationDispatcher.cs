@@ -364,41 +364,56 @@ public class NotificationDispatcher : INotificationDispatcher
 
     /// <summary>
     /// NOTI-14 (#685) — chốt 1 pattern template: nếu DB có template active khớp
-    /// (Type × Channel × Locale) thì render nó với PayloadJson; không có thì dùng Title/Body inline
+    /// (Type × Channel) thì render nó với PayloadJson; không có thì dùng Title/Body inline
     /// mà consumer đã ghi. Template hỏng KHÔNG chặn gửi — rơi về inline.
+    ///
+    /// <para>02/08/2026 — bỏ nhánh chọn locale (kèm bước lùi về locale mặc định): hệ thống tiếng Việt
+    /// only nên mỗi cặp (Type × Channel) chỉ còn đúng một template active.</para>
     /// </summary>
     private async Task<(string Title, string Body)> RenderContentAsync(Notification notification, CancellationToken ct)
     {
         if (!_options.UseDbTemplates)
             return (notification.Title, notification.Body);
 
+        // 03/08/2026 — nội dung của lần gửi hàng loạt THỦ CÔNG là do admin tự gõ, KHÔNG được đem
+        // khuôn mẫu đè lên.
+        //
+        // Màn hình gửi hàng loạt cho chọn bất kỳ loại thông báo nào (loại quyết định nhóm tuỳ chọn
+        // nhận tin, nên không thể ép về mỗi System). Chọn "Ticket mới" rồi gõ tay tiêu đề thì tới
+        // lượt dispatcher, template (TicketCreated × kênh) khớp và render — nhưng payload của một
+        // lần gửi tay KHÔNG có `code`/`priority`, nên ra "Ticket mới " với chỗ trống, và chữ admin
+        // vừa gõ biến mất sạch.
+        //
+        // Lỗi này có từ khi có tính năng gửi hàng loạt và đã âm thầm áp cho Email/Push/SMS; riêng
+        // InApp thì trước 03/08 kết quả render bị vứt đi nên không ai thấy — tới khi InApp ghi ngược
+        // nội dung vào dòng notification thì nó lộ ra ngay trên feed.
+        //
+        // Chỉ chặn lần gửi THỦ CÔNG (`Manual`) mà admin KHÔNG chọn dùng mẫu. Hai trường hợp còn lại
+        // vẫn render như thường:
+        //   • lần gửi sinh tự động từ sự kiện — mẫu chính là chỗ đặt câu chữ của nó;
+        //   • lần gửi thủ công có bật "dùng mẫu" — admin cố ý chọn, và đã điền biến vào PayloadJson.
+        //     Đây là lý do phải render lúc gửi chứ không đổ sẵn chữ vào ô soạn: mỗi kênh có mẫu
+        //     riêng (bản SMS nén ngắn), nên một lần gửi 3 kênh phải ra 3 nội dung khác nhau.
+        if (notification.BatchId is not null)
+        {
+            var boQuaMau = await _unitOfWork.NotificationBatches.GetAllAsync(false)
+                .AnyAsync(b => b.Id == notification.BatchId
+                               && b.Source == NotificationBatchSourceEnum.Manual
+                               && !b.UseTemplate, ct);
+
+            if (boQuaMau)
+                return (notification.Title, notification.Body);
+        }
+
         try
         {
-            // Sprint 6.3 NOTI3-12 (#712) — chọn ngôn ngữ theo người nhận, bỏ hardcode "vi-VN".
-            var locale = await ResolveLocaleAsync(notification.UserId, ct);
-
             var template = await _unitOfWork.NotificationTemplates.GetAllAsync()
                 .Where(t => !t.IsDeleted
                             && t.IsActive
                             && t.Type == notification.Type
-                            && t.Channel == notification.Channel
-                            && t.Locale == locale)
+                            && t.Channel == notification.Channel)
                 .OrderByDescending(t => t.Version)
                 .FirstOrDefaultAsync(ct);
-
-            // Sprint 6.3 NOTI3-12 (#712) — locale người nhận không có template thì lùi về mặc định,
-            // KHÔNG bỏ template: thà tiếng Việt còn hơn rơi về chuỗi hardcode trong consumer.
-            if (template is null && locale != _options.DefaultLocale)
-            {
-                template = await _unitOfWork.NotificationTemplates.GetAllAsync()
-                    .Where(t => !t.IsDeleted
-                                && t.IsActive
-                                && t.Type == notification.Type
-                                && t.Channel == notification.Channel
-                                && t.Locale == _options.DefaultLocale)
-                    .OrderByDescending(t => t.Version)
-                    .FirstOrDefaultAsync(ct);
-            }
 
             if (template is null)
                 return (notification.Title, notification.Body);
@@ -591,18 +606,6 @@ public class NotificationDispatcher : INotificationDispatcher
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// Sprint 6.3 NOTI3-12 (#712) — locale của người nhận, lấy từ read-model account.
-    /// Không có thì dùng <c>Notification:Dispatch:DefaultLocale</c>.
-    /// </summary>
-    private async Task<string> ResolveLocaleAsync(Guid userId, CancellationToken ct)
-    {
-        var account = await LoadAccountAsync(userId, ct);
-        var locale = account?.PreferredLocale;
-
-        return string.IsNullOrWhiteSpace(locale) ? _options.DefaultLocale : locale;
     }
 
     private async Task<NotificationPreference> LoadPreferenceAsync(Guid userId, CancellationToken ct)

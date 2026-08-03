@@ -3,7 +3,7 @@ using AuthService.Application.DTOs.Response.Role;
 using AuthService.Application.Interfaces.Repositories;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace AuthService.Application.CQRS.Handler.Role;
 
@@ -34,12 +34,9 @@ public class GetRolesQueryHandler : IRequestHandler<GetRolesQuery, RoleListRespo
         if (request.IsSystemRole.HasValue)
             query = query.Where(r => r.IsSystemRole == request.IsSystemRole.Value);
 
-        var total = await query.CountAsync(cancellationToken);
-
-        var items = await query
+        var page = await query
             .OrderByDescending(r => r.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(r => r.Id) // tie-breaker cố định — pagination ổn định
             .Select(r => new RoleDto
             {
                 Id = r.Id,
@@ -51,19 +48,13 @@ public class GetRolesQueryHandler : IRequestHandler<GetRolesQuery, RoleListRespo
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new RoleListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<RoleDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

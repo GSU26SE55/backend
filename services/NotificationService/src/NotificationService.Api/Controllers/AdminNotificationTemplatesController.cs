@@ -1,16 +1,10 @@
 using System.Security.Claims;
-using System.Text.Json;
-using MassTransit;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NotificationService.Application.Interfaces.Repositories;
-using NotificationService.Application.Services;
-using NotificationService.Application.Templates;
-using NotificationService.Domain.Enums;
-using SharedContracts.Common.Responses;
-using SharedContracts.Events;
-using SharedContracts.Interfaces;
+using NotificationService.Application.CQRS.Command.NotificationTemplate;
+using NotificationService.Application.CQRS.Query.NotificationTemplate;
+using NotificationService.Application.DTOs.Response.Notification;
 
 namespace NotificationService.Api.Controllers;
 
@@ -23,6 +17,14 @@ namespace NotificationService.Api.Controllers;
 /// <item><b>Gửi thử</b> — kiểm chứng bản dựng thật trong hộp thư, không phải đoán qua HTML.</item>
 /// <item><b>Quay lui</b> — bản mới sai chính tả gửi cho hàng trăm khách thì phải sửa tay lại.</item>
 /// </list>
+///
+/// <para><b>02/08/2026 — bổ sung soạn thảo (tạo / sửa / xoá).</b> Trước đó controller chỉ có 4
+/// endpoint đọc-và-bật, không có đường nào tạo hay sửa template: nội dung CHỈ đến từ seeder, mà
+/// seeder lại idempotent theo cặp (Type × Channel) nên sửa catalog rồi deploy lại cũng KHÔNG ghi đè
+/// bản đã có. Hệ quả là mục tiêu của chính tính năng này — "có template trong DB thì người vận hành
+/// sửa được ngay, khỏi build lại" — chưa bao giờ đạt được, và toàn bộ cơ chế phiên bản (cột
+/// <c>Version</c>, index unique có điều kiện, endpoint <c>activate</c>, nút "Kích hoạt" trên giao
+/// diện) là code chết vì không gì tạo ra được phiên bản thứ hai.</para>
 /// </summary>
 [ApiController]
 [Route("api/admin/notification-templates")]
@@ -34,378 +36,223 @@ namespace NotificationService.Api.Controllers;
 [Produces("application/json")]
 public class AdminNotificationTemplatesController : ControllerBase
 {
-    /// <summary>Trần gửi thử mỗi admin mỗi giờ — xem ghi chú ở <c>TestSend</c> (R-46).</summary>
-    private const int TestSendPerHourLimit = 5;
+    private readonly IMediator _mediator;
 
-    private readonly INotificationUnitOfWork _unitOfWork;
-    private readonly ITemplateRenderer _renderer;
-    private readonly IPublishEndpoint _publishEndpoint;
-    private readonly ICacheService _cache;
-    private readonly INotificationAuditWriter _auditWriter;
-    private readonly ILogger<AdminNotificationTemplatesController> _logger;
+    public AdminNotificationTemplatesController(IMediator mediator) => _mediator = mediator;
 
-    public AdminNotificationTemplatesController(
-        INotificationUnitOfWork unitOfWork,
-        ITemplateRenderer renderer,
-        IPublishEndpoint publishEndpoint,
-        ICacheService cache,
-        INotificationAuditWriter auditWriter,
-        ILogger<AdminNotificationTemplatesController> logger)
-    {
-        _unitOfWork = unitOfWork;
-        _renderer = renderer;
-        _publishEndpoint = publishEndpoint;
-        _cache = cache;
-        _auditWriter = auditWriter;
-        _logger = logger;
-    }
-
-    /// <summary>Danh sách template, lọc theo type/channel/locale.</summary>
-    /// <remarks>**Quyền:** `AdminOnly`. Bao gồm cả bản không active để thấy lịch sử phiên bản.</remarks>
-    /// <response code="200">Trả về danh sách template.</response>
-    [HttpGet]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> List(
-        [FromQuery] NotificationTypeEnum? type,
-        [FromQuery] NotificationChannelEnum? channel,
-        [FromQuery] string? locale,
-        CancellationToken cancellationToken)
-    {
-        var query = _unitOfWork.NotificationTemplates.GetAllAsync(false).Where(t => !t.IsDeleted);
-
-        if (type.HasValue)
-            query = query.Where(t => t.Type == type.Value);
-        if (channel.HasValue)
-            query = query.Where(t => t.Channel == channel.Value);
-        if (!string.IsNullOrWhiteSpace(locale))
-            query = query.Where(t => t.Locale == locale);
-
-        var items = await query
-            .OrderBy(t => t.Type).ThenBy(t => t.Channel).ThenBy(t => t.Locale).ThenByDescending(t => t.Version)
-            .Select(t => new
-            {
-                id = t.Id,
-                type = t.Type.ToString(),
-                channel = t.Channel.ToString(),
-                t.Locale,
-                t.Version,
-                t.IsActive,
-                t.TitleTemplate,
-                t.BodyTemplate,
-                t.CreatedAt,
-                t.UpdatedAt,
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(new CommonResponse<object> { IsSuccess = true, Data = items });
-    }
-
-    /// <summary>
-    /// Dựng thử template với dữ liệu mẫu — **KHÔNG gửi đi đâu cả**.
-    /// </summary>
+    /// <summary>Danh sách template có phân trang, lọc theo type/channel.</summary>
     /// <remarks>
-    /// **Quyền:** `AdminOnly`.
+    /// **Quyền:** Admin. Mặc định bao gồm cả bản không active để thấy lịch sử phiên bản;
+    /// truyền `activeOnly=true` để chỉ lấy bản đang dùng của mỗi cặp.
     ///
-    /// Trả về `title`/`body` sau khi render. Placeholder không có trong `sampleData` sẽ rỗng —
-    /// đó chính là cách phát hiện template gọi tên biến sai.
+    /// Phân trang theo `pageNumber`/`pageSize` (`PaginationRequest` tự kẹp: `pageNumber &lt; 1` → 1,
+    /// `pageSize` ngoài khoảng `1..100` → 10 hoặc 100).
     ///
-    /// Template hỏng cú pháp trả **400** kèm thông báo lỗi, thay vì ném 500.
+    /// `type`/`channel` trong response trả về dạng **SỐ** — client tự ánh xạ sang nhãn hiển thị.
+    /// </remarks>
+    /// <response code="200">Trả về một trang template.</response>
+    [HttpGet]
+    [ProducesResponseType(typeof(NotificationTemplateListResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetList(
+        [FromQuery] NotificationTemplateGetListQuery query, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Biến dùng được cho từng loại thông báo.</summary>
+    /// <remarks>
+    /// **Quyền:** Admin. Không chạm DB — trả về hợp đồng tĩnh giữa consumer (bên ghi payload) và
+    /// template (bên đọc `{{bien}}`).
+    ///
+    /// Dùng để trình soạn template gợi ý đúng tên biến. Trước khi có endpoint này người soạn phải
+    /// tự đoán, và đoán sai thì Handlebars render ra rỗng chứ không báo lỗi — đó là cách
+    /// `{{ticketCode}}` tồn tại hàng tháng trong khi consumer ghi khoá `code`.
+    ///
+    /// `builtin` giống nhau ở mọi loại; `payload` rỗng nghĩa là consumer của loại đó không ghi
+    /// payload nên chỉ dùng được `builtin`.
+    /// </remarks>
+    /// <response code="200">Trả về danh mục biến theo từng loại.</response>
+    [HttpGet("variables")]
+    [ProducesResponseType(typeof(NotificationTemplateVariableListResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetVariables(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new NotificationTemplateVariableListQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Độ phủ template so với thông báo thật đã sinh.</summary>
+    /// <remarks>
+    /// **Quyền:** Admin. Gom mọi cặp (loại × kênh) **đã từng sinh thông báo thật** rồi đối chiếu với
+    /// template đang hoạt động.
+    ///
+    /// - `hasActiveTemplate = false` ⇒ mọi thông báo của cặp đó đang dùng chuỗi hardcode trong
+    ///   consumer; muốn sửa câu chữ phải sửa code rồi deploy lại.
+    /// - `unknownVariables` không rỗng ⇒ template có tồn tại nhưng đang gọi biến không có trong dữ
+    ///   liệu, chỗ đó sẽ render ra rỗng.
+    ///
+    /// Sắp xếp sẵn: thiếu template lên đầu, rồi tới template có biến hỏng, rồi theo lượng thông báo.
+    /// </remarks>
+    /// <response code="200">Trả về bảng độ phủ.</response>
+    [HttpGet("coverage")]
+    [ProducesResponseType(typeof(NotificationTemplateCoverageResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCoverage(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new NotificationTemplateCoverageQuery(), cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Chi tiết một template theo Id (kể cả bản không active).</summary>
+    /// <response code="200">Trả về template.</response>
+    /// <response code="404">Không tìm thấy template.</response>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(NotificationTemplateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplateResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new NotificationTemplateGetByIdQuery { Id = id }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Tạo template đầu tiên cho một cặp (Type × Channel) chưa có.</summary>
+    /// <remarks>
+    /// Cặp đã có template thì trả **409** — dùng `PUT` (sửa) để sinh phiên bản mới thay vì ghi đè,
+    /// nhờ vậy còn quay lui được khi bản mới sai.
+    ///
+    /// Cú pháp Handlebars được kiểm ngay lúc lưu: hỏng thì trả **400**. Không kiểm ở đây thì template
+    /// hỏng vẫn lưu được, và lúc gửi thật dispatcher lặng lẽ rơi về chuỗi hardcode trong consumer.
+    /// </remarks>
+    /// <response code="201">Đã tạo, `data` là Id bản mới.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc template hỏng cú pháp.</response>
+    /// <response code="409">Cặp (Type × Channel) đã có template.</response>
+    [HttpPost]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Create(
+        [FromBody] NotificationTemplateCreateCommand command, CancellationToken cancellationToken)
+    {
+        command.ActorUserId = GetActorUserId();
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Sửa nội dung: sinh **phiên bản mới** rồi bật lên, không ghi đè bản cũ.</summary>
+    /// <remarks>
+    /// `id` là bản bất kỳ của cặp cần sửa — Type/Channel lấy từ nó, KHÔNG nhận từ body để không ai
+    /// biến bản ghi này thành template của một cặp khác và phá chuỗi phiên bản của cả hai cặp.
+    /// </remarks>
+    /// <response code="200">Đã tạo phiên bản mới và bật lên, `data` là Id bản mới.</response>
+    /// <response code="400">Dữ liệu không hợp lệ hoặc template hỏng cú pháp.</response>
+    /// <response code="404">Không tìm thấy template.</response>
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Revise(
+        Guid id, [FromBody] NotificationTemplateReviseCommand command, CancellationToken cancellationToken)
+    {
+        command.Id = id;
+        command.ActorUserId = GetActorUserId();
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Xoá mềm một phiên bản không còn dùng.</summary>
+    /// <remarks>
+    /// **Không xoá được bản đang dùng** (trả 409): cặp mất bản active thì dispatcher lặng lẽ rơi về
+    /// chuỗi hardcode trong consumer — thông báo vẫn gửi nhưng mất nội dung tuỳ biến. Muốn bỏ bản
+    /// đang dùng thì kích hoạt một phiên bản khác trước.
+    /// </remarks>
+    /// <response code="200">Đã xoá.</response>
+    /// <response code="404">Không tìm thấy template.</response>
+    /// <response code="409">Đang là bản active.</response>
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new NotificationTemplateDeleteCommand { Id = id, ActorUserId = GetActorUserId() };
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Dựng thử template với dữ liệu mẫu — **KHÔNG gửi đi đâu cả**.</summary>
+    /// <remarks>
+    /// Trả `title`/`body` sau khi render. Placeholder không có trong `sampleData` sẽ rỗng — đó chính
+    /// là cách phát hiện template gọi tên biến sai.
     /// </remarks>
     /// <response code="200">Render thành công.</response>
     /// <response code="400">Template hỏng cú pháp Handlebars.</response>
     /// <response code="404">Không tìm thấy template.</response>
     [HttpPost("{id:guid}/preview")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(NotificationTemplatePreviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplatePreviewResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(NotificationTemplatePreviewResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Preview(
-        Guid id, [FromBody] TemplatePreviewRequest? request, CancellationToken cancellationToken)
+        Guid id, [FromBody] NotificationTemplatePreviewQuery? query, CancellationToken cancellationToken)
     {
-        var template = await _unitOfWork.NotificationTemplates.GetAllAsync(false)
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, cancellationToken);
-
-        if (template is null)
-            return NotFound(new CommonResponse<object> { IsSuccess = false, Message = "Không tìm thấy template." });
-
-        var model = BuildModel(request?.SampleData);
-
-        try
-        {
-            return Ok(new CommonResponse<object>
-            {
-                IsSuccess = true,
-                Data = new
-                {
-                    type = template.Type.ToString(),
-                    channel = template.Channel.ToString(),
-                    template.Locale,
-                    template.Version,
-                    title = _renderer.RenderInline(template.TitleTemplate, model),
-                    body = _renderer.RenderInline(template.BodyTemplate, model),
-                },
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Preview template {TemplateId} lỗi cú pháp.", id);
-            return BadRequest(new CommonResponse<object>
-            {
-                IsSuccess = false,
-                Message = $"Template hỏng cú pháp: {ex.Message}",
-            });
-        }
+        var request = query ?? new NotificationTemplatePreviewQuery();
+        request.Id = id;
+        var result = await _mediator.Send(request, cancellationToken);
+        return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>
-    /// Gửi thử template tới **chính admin đang đăng nhập**.
-    /// </summary>
+    /// <summary>Gửi thử template tới **chính admin đang đăng nhập**.</summary>
     /// <remarks>
-    /// **Quyền:** `AdminOnly`.
-    ///
     /// **Không nhận địa chỉ tự do** (R-46): endpoint nhận địa chỉ tuỳ ý sẽ biến hệ thống thành cổng
-    /// gửi thư rác có xác thực — kẻ chiếm được một tài khoản admin có thể bắn nội dung tự soạn từ
-    /// domain có SPF/DKIM hợp lệ của chúng ta. Địa chỉ nhận LUÔN lấy từ read-model của chính người
-    /// gọi, không bao giờ từ body.
+    /// gửi thư rác có xác thực. Địa chỉ nhận LUÔN lấy từ danh tính người gọi.
     ///
-    /// Giới hạn **5 lần/giờ mỗi admin** và ghi audit mỗi lần gửi.
-    ///
-    /// Chỉ hỗ trợ template kênh **Email**; kênh khác trả 400 (gửi thử SMS tốn tiền thật, push cần
-    /// device token của admin).
+    /// Giới hạn **5 lần/giờ mỗi admin**, ghi audit mỗi lần. Chỉ hỗ trợ template kênh **Email**.
     /// </remarks>
     /// <response code="200">Đã xếp hàng gửi tới email của admin.</response>
     /// <response code="400">Template không phải kênh Email, hoặc admin chưa có email.</response>
     /// <response code="404">Không tìm thấy template.</response>
     /// <response code="429">Vượt 5 lần/giờ.</response>
     [HttpPost("{id:guid}/test-send")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(NotificationTemplateTestSendResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplateTestSendResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(NotificationTemplateTestSendResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(NotificationTemplateTestSendResponse), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> TestSend(
-        Guid id, [FromBody] TemplatePreviewRequest? request, CancellationToken cancellationToken)
+        Guid id, [FromBody] NotificationTemplateTestSendCommand? command, CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out var adminId))
-            return BadRequest(new CommonResponse<object> { IsSuccess = false, Message = "Không xác định được UserId từ token." });
+        var request = command ?? new NotificationTemplateTestSendCommand();
+        request.Id = id;
+        request.ActorUserId = GetActorUserId();
+        request.ActorEmailFromClaim = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
 
-        var template = await _unitOfWork.NotificationTemplates.GetAllAsync(false)
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, cancellationToken);
-
-        if (template is null)
-            return NotFound(new CommonResponse<object> { IsSuccess = false, Message = "Không tìm thấy template." });
-
-        if (template.Channel != NotificationChannelEnum.Email)
-        {
-            return BadRequest(new CommonResponse<object>
-            {
-                IsSuccess = false,
-                Message = "Chỉ gửi thử được template kênh Email.",
-            });
-        }
-
-        // Địa chỉ nhận LUÔN thuộc về chính người gọi — không bao giờ lấy từ body (R-46).
-        //
-        // Hai nguồn, theo thứ tự:
-        //   1) read-model account — chuẩn nhất, có đầy đủ thông tin;
-        //   2) claim `email` trong JWT — dự phòng.
-        //
-        // Vì sao cần nguồn thứ 2: read-model chỉ được điền từ `AccountActivatedEvent`/
-        // `AccountProfileUpdatedEvent`. Tài khoản admin seed thẳng vào `auth_db` (không đi qua
-        // luồng kích hoạt) sẽ KHÔNG BAO GIỜ có mặt ở đây — phát hiện khi test E2E 30/07/2026:
-        // mọi lần gọi test-send đều trả 400 dù người gọi là Admin hợp lệ.
-        //
-        // Lấy từ claim vẫn an toàn với R-46: đó là danh tính đã được JWT xác thực, không phải
-        // địa chỉ tuỳ ý người gọi nhập vào.
-        var admin = await _unitOfWork.Accounts.GetAllAsync(false)
-            .FirstOrDefaultAsync(a => a.Id == adminId && !a.IsDeleted, cancellationToken);
-
-        var recipient = admin?.Email;
-        var recipientSource = "read-model";
-
-        if (string.IsNullOrWhiteSpace(recipient))
-        {
-            recipient = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
-            recipientSource = "jwt-claim";
-        }
-
-        if (string.IsNullOrWhiteSpace(recipient))
-        {
-            return BadRequest(new CommonResponse<object>
-            {
-                IsSuccess = false,
-                Message = "Không xác định được email của admin đang đăng nhập (thiếu cả read-model lẫn claim email).",
-            });
-        }
-
-        var quotaKey = $"tpl_test_send:{adminId:N}:{DateTime.UtcNow:yyyyMMddHH}";
-        var used = await _cache.IncrementAsync(quotaKey, TimeSpan.FromHours(2), cancellationToken);
-
-        if (used > TestSendPerHourLimit)
-        {
-            _logger.LogWarning("Test-send: admin {AdminId} vượt trần {Limit}/giờ.", adminId, TestSendPerHourLimit);
-            return StatusCode(StatusCodes.Status429TooManyRequests, new CommonResponse<object>
-            {
-                IsSuccess = false,
-                Message = $"Đã dùng hết {TestSendPerHourLimit} lượt gửi thử trong giờ này.",
-            });
-        }
-
-        var model = BuildModel(request?.SampleData);
-        string subject, body;
-
-        try
-        {
-            subject = _renderer.RenderInline(template.TitleTemplate, model);
-            body = _renderer.RenderInline(template.BodyTemplate, model);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new CommonResponse<object>
-            {
-                IsSuccess = false,
-                Message = $"Template hỏng cú pháp: {ex.Message}",
-            });
-        }
-
-        var notificationId = Guid.NewGuid();
-
-        await _publishEndpoint.Publish(
-            new SendNotificationEmailEvent(
-                NotificationId: notificationId,
-                ToEmail: recipient,
-                Subject: $"[GỬI THỬ] {subject}",
-                Body: body,
-                SourceService: "notification-template-test",
-                // Email gửi thử KHÔNG có link hủy: nó không phải thư gửi hàng loạt, và link hủy
-                // trong bản thử sẽ tắt nhầm thông báo thật của chính admin.
-                UnsubscribeUrl: null),
-            cancellationToken);
-
-        await _auditWriter.WriteAsync(
-            NotificationAuditActionEnum.TemplateTestSent,
-            notificationId,
-            adminId,
-            isSuccess: true,
-            reason: "Gửi thử template",
-            metadata: new Dictionary<string, object?>
-            {
-                ["templateId"] = template.Id,
-                ["type"] = template.Type.ToString(),
-                ["locale"] = template.Locale,
-                ["version"] = template.Version,
-                ["quotaUsed"] = used,
-                ["recipientSource"] = recipientSource,
-            },
-            ct: cancellationToken);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Test-send template {TemplateId} tới {Email} (nguồn {Source}, admin {AdminId}, lượt {Used}/{Limit}).",
-            template.Id, recipient, recipientSource, adminId, used, TestSendPerHourLimit);
-
-        return Ok(new CommonResponse<object>
-        {
-            IsSuccess = true,
-            Message = $"Đã gửi thử tới {recipient}.",
-            Data = new { remainingThisHour = Math.Max(0, TestSendPerHourLimit - used) },
-        });
+        var result = await _mediator.Send(request, cancellationToken);
+        return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>
-    /// Quay lui: kích hoạt lại một phiên bản template cũ.
-    /// </summary>
+    /// <summary>Quay lui: kích hoạt lại một phiên bản template cũ.</summary>
     /// <remarks>
-    /// **Quyền:** `AdminOnly`.
-    ///
-    /// Trong cùng bộ ba (Type × Channel × Locale) chỉ được có đúng một bản active, nên thao tác này
-    /// tắt bản đang dùng rồi bật bản được chọn — trong **một** lần lưu, để không có khoảnh khắc nào
-    /// bộ ba đó không có bản nào active (khoảnh khắc ấy dispatcher sẽ rơi về chuỗi hardcode).
+    /// Trong cùng cặp (Type × Channel) chỉ được có đúng một bản active, nên thao tác này tắt bản đang
+    /// dùng rồi bật bản được chọn trong **một giao dịch**. Idempotent: bản vốn đã active thì trả 200
+    /// và không làm gì.
     /// </remarks>
     /// <response code="200">Đã chuyển sang phiên bản được chọn.</response>
     /// <response code="404">Không tìm thấy template.</response>
     [HttpPost("{id:guid}/activate")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationTemplateActionResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Activate(Guid id, CancellationToken cancellationToken)
     {
-        var target = await _unitOfWork.NotificationTemplates.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, cancellationToken);
-
-        if (target is null)
-            return NotFound(new CommonResponse<object> { IsSuccess = false, Message = "Không tìm thấy template." });
-
-        var siblings = await _unitOfWork.NotificationTemplates.GetAllAsync()
-            .Where(t => !t.IsDeleted
-                        && t.Type == target.Type
-                        && t.Channel == target.Channel
-                        && t.Locale == target.Locale)
-            .ToListAsync(cancellationToken);
-
-        var now = DateTime.UtcNow;
-        foreach (var sibling in siblings)
-        {
-            var shouldBeActive = sibling.Id == target.Id;
-            if (sibling.IsActive == shouldBeActive)
-                continue;
-
-            sibling.IsActive = shouldBeActive;
-            sibling.UpdatedAt = now;
-            _unitOfWork.NotificationTemplates.UpdateAsync(sibling);
-        }
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        _logger.LogWarning(
-            "Template {Type}/{Channel}/{Locale} chuyển sang phiên bản {Version}.",
-            target.Type, target.Channel, target.Locale, target.Version);
-
-        return Ok(new CommonResponse<object>
-        {
-            IsSuccess = true,
-            Message = $"Đã kích hoạt phiên bản {target.Version}.",
-        });
+        var command = new NotificationTemplateActivateCommand { Id = id, ActorUserId = GetActorUserId() };
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>
-    /// Dữ liệu mẫu do người dùng gửi lên là JSON tuỳ ý; quy về dictionary phẳng để Handlebars đọc
-    /// được. Không gửi gì thì render với model rỗng — placeholder sẽ trống, đúng ý đồ kiểm tra.
+    /// Danh tính người thực hiện, lấy từ JWT. Trả <c>Guid.Empty</c> khi không đọc được — command tự
+    /// từ chối ở <c>ValidateAsync</c> để lỗi hiện ra dưới dạng 400 có thông báo, thay vì ghi audit
+    /// với actor rỗng.
     /// </summary>
-    private static Dictionary<string, object?> BuildModel(JsonElement? sampleData)
-    {
-        var model = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        if (sampleData is not { ValueKind: JsonValueKind.Object } element)
-            return model;
-
-        foreach (var property in element.EnumerateObject())
-        {
-            model[property.Name] = property.Value.ValueKind switch
-            {
-                JsonValueKind.String => property.Value.GetString(),
-                JsonValueKind.Number => property.Value.TryGetInt64(out var l) ? l : property.Value.GetDouble(),
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Null => null,
-                _ => property.Value.GetRawText(),
-            };
-        }
-
-        return model;
-    }
-
-    private bool TryGetUserId(out Guid userId)
+    private Guid GetActorUserId()
     {
         var raw = User.FindFirstValue("UserId") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(raw, out userId);
+        return Guid.TryParse(raw, out var userId) ? userId : Guid.Empty;
     }
-}
-
-/// <summary>Sprint 6.3 NOTI3-12 (#712) — dữ liệu mẫu dùng để dựng thử template.</summary>
-public class TemplatePreviewRequest
-{
-    /// <summary>
-    /// Cặp khoá–giá trị ứng với placeholder trong template
-    /// (vd <c>{ "ticketCode": "TK-001", "priority": "P1" }</c>).
-    /// </summary>
-    public JsonElement? SampleData { get; set; }
 }

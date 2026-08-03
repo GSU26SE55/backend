@@ -83,6 +83,17 @@ public class SlaTimerBackgroundService : BackgroundService
         {
             var timer = await dbContext.SlaTimers
                 .Include(value => value.Ticket)
+                // 03/08/2026 — thêm ThenInclude(Assignments).
+                //
+                // `SlaWarningEvent.StaffId` bên dưới đọc `timer.Ticket?.Assignments.FirstOrDefault(...)`,
+                // nhưng truy vấn này chỉ Include mỗi Ticket. Dự án KHÔNG bật lazy loading và
+                // `Assignments` khởi tạo sẵn là danh sách rỗng, nên FirstOrDefault luôn trả null ⇒
+                // `StaffId` **luôn null**, âm thầm, không lỗi.
+                //
+                // Hệ quả: cảnh báo sắp vỡ SLA chỉ tới Manager, KHÔNG tới Staff đang phụ trách —
+                // đúng thứ mà NOTI-05 (#676) thêm trường `StaffId` để chữa. Trường đã thêm, dữ liệu
+                // thì chưa bao giờ được nạp.
+                .ThenInclude(ticket => ticket.Assignments)
                 .SingleOrDefaultAsync(value => value.Id == timerId && !value.IsDeleted, cancellationToken);
 
             if (timer is null
@@ -108,7 +119,9 @@ public class SlaTimerBackgroundService : BackgroundService
                 {
                     TicketId = timer.TicketId,
                     BreachedAt = currentTime,
-                    Priority = timer.Ticket.Priority?.ToString() ?? string.Empty
+                    Priority = timer.Ticket.Priority?.ToString() ?? string.Empty,
+                    // Ticket đã được .Include ở truy vấn trên nên lấy Code không tốn thêm lượt đọc.
+                    Code = timer.Ticket.Code
                 }, cancellationToken);
             }
             else
@@ -127,7 +140,8 @@ public class SlaTimerBackgroundService : BackgroundService
                         TicketId = timer.TicketId,
                         WarningAt = timer.WarningSentAt.Value,
                         Percentage = percentage,
-                        StaffId = timer.Ticket?.Assignments.FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId
+                        StaffId = timer.Ticket?.Assignments.FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId,
+                        Code = timer.Ticket?.Code ?? string.Empty
                     }, cancellationToken);
                 }
             }

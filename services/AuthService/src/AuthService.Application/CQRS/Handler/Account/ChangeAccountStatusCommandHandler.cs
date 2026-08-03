@@ -5,24 +5,43 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
+/// <summary>
+/// Đổi trạng thái account (khoá / đình chỉ / cấm / mở lại) và thu hồi refresh token nếu cần.
+///
+/// 02/08/2026 — phát thêm <see cref="AccountSyncSnapshotEvent"/>. Trước đó handler này không phát
+/// event tích hợp nào: <c>AccountStatusChangedEvent</c> có sẵn trong SharedContracts và cả
+/// TicketService lẫn BatteryService đều đã viết consumer cho nó, nhưng KHÔNG NƠI NÀO trong code
+/// chạy thật publish event đó — nên khoá tài khoản xong, read-model bên NotificationService vẫn
+/// <c>IsActive = true</c> và người bị khoá vẫn tiếp tục được đưa vào danh sách nhận thông báo.
+/// </summary>
 public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountStatusCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
 
-    public ChangeAccountStatusCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
+    public ChangeAccountStatusCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IPublisher publisher,
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(ChangeAccountStatusCommand request, CancellationToken cancellationToken)
     {
+        // Include(Role) để dựng snapshot — RoleId nullable (account Google OAuth chưa onboard),
+        // khi đó Role = chuỗi rỗng và không nhóm nào resolve trúng account này.
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
@@ -94,6 +113,18 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
                 ["newStatusName"] = request.Status.ToString(),
                 ["revokedSessions"] = revokedCount
             }), cancellationToken);
+
+        // Outbox: INSERT vào OutboxMessages của cùng DbContext → atomic với SaveChangesAsync bên dưới.
+        await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            account.Role?.Name ?? string.Empty,
+            IsActive: request.Status.IsNotifiable(),
+            IsDeleted: false,
+            SnapshotAtUtc: DateTime.UtcNow,
+            Reason: "StatusChanged"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

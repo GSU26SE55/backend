@@ -81,7 +81,8 @@ public sealed class TicketReprioritizeCommandHandler : IRequestHandler<TicketRep
                     {
                         TicketId = ticket.Id,
                         BreachedAt = timer.BreachAt.Value,
-                        Priority = request.Priority.ToString()
+                        Priority = request.Priority.ToString(),
+                        Code = ticket.Code
                     }, token);
                 }
 

@@ -65,6 +65,71 @@ public class QueryableExtensionsTests
     }
 
     [Fact]
+    public async Task ToPagedEntityListAsync_PageBeyondData_ReturnsEmptyPage_NotError()
+    {
+        var src = Seed(5).AsQueryable().BuildMock();
+
+        var result = await src.ToPagedEntityListAsync(pageNumber: 99, pageSize: 10);
+
+        result.Items.Should().BeEmpty();
+        result.TotalItems.Should().Be(5);
+        result.PageNumber.Should().Be(99);
+        result.HasNextPage.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Trước 02/08/2026 phép nhân chạy bằng int nên (pageNumber-1)*pageSize tràn và quấn thành số ÂM,
+    /// đẩy xuống Postgres thành "OFFSET must not be negative" → HTTP 500 trên 7 endpoint đang chạy.
+    /// 300000000 chọn có chủ đích: (300000000-1)*10 quấn thành -1294967306.
+    /// </summary>
+    [Theory]
+    [InlineData(300000000, 10)]
+    [InlineData(250000000, 10)]
+    [InlineData(int.MaxValue, 100)]
+    [InlineData(int.MaxValue, int.MaxValue)]
+    public async Task ToPagedEntityListAsync_HugePageNumber_DoesNotOverflowIntoNegativeSkip(int pageNumber, int pageSize)
+    {
+        var src = Seed(5).AsQueryable().BuildMock();
+
+        var result = await src.ToPagedEntityListAsync(pageNumber, pageSize);
+
+        result.Items.Should().BeEmpty();
+        result.TotalItems.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ToPagedEntityListAsync_EmptySource_ReturnsEmptyPage()
+    {
+        var src = Seed(0).AsQueryable().BuildMock();
+
+        var result = await src.ToPagedEntityListAsync(pageNumber: 1, pageSize: 10);
+
+        result.Items.Should().BeEmpty();
+        result.TotalItems.Should().Be(0);
+        result.TotalPages.Should().Be(0);
+        result.HasNextPage.Should().BeFalse();
+        result.HasPreviousPage.Should().BeFalse();
+    }
+
+    /// <summary>Không trang nào được chồng lấn hay bỏ sót phần tử khi duyệt hết.</summary>
+    [Fact]
+    public async Task ToPagedEntityListAsync_WalkingAllPages_CoversEveryItemExactlyOnce()
+    {
+        var seed = Seed(23);
+        var seen = new List<int>();
+
+        for (var page = 1; page <= 8; page++)
+        {
+            var result = await seed.AsQueryable().BuildMock().ToPagedEntityListAsync(page, 3);
+            seen.AddRange(result.Items.Select(i => i.Order));
+        }
+
+        seen.Should().HaveCount(23);
+        seen.Should().OnlyHaveUniqueItems();
+        seen.Should().BeEquivalentTo(seed.Select(i => i.Order));
+    }
+
+    [Fact]
     public async Task ToPagedListAsync_AppliesMapper_AndShapesFields()
     {
         var src = Seed(3).AsQueryable().BuildMock();

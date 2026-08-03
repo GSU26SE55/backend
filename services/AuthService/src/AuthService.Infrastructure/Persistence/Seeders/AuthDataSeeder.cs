@@ -4,6 +4,8 @@ using AuthService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Infrastructure.Persistence.Seeders;
 
@@ -12,17 +14,27 @@ public class AuthDataSeeder
     private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IMessageProducerService _messageProducer;
     private readonly ILogger<AuthDataSeeder> _logger;
+
+    /// <summary>
+    /// Account do CHÍNH lượt seed này tạo ra, kèm tên role. Chỉ những account ở đây mới cần phát
+    /// snapshot: account đã tồn tại từ lượt trước thì lượt trước đã phát rồi, phát lại mỗi lần khởi
+    /// động chỉ tạo rác. Muốn đối soát chủ động thì dùng <c>POST /api/admin/accounts/resync</c>.
+    /// </summary>
+    private readonly List<(Account Account, string RoleName)> _createdAccounts = new();
 
     public AuthDataSeeder(
         ApplicationDbContext dbContext,
         IConfiguration configuration,
         IPasswordHasher passwordHasher,
+        IMessageProducerService messageProducer,
         ILogger<AuthDataSeeder> logger)
     {
         _dbContext = dbContext;
         _configuration = configuration;
         _passwordHasher = passwordHasher;
+        _messageProducer = messageProducer;
         _logger = logger;
     }
 
@@ -36,6 +48,49 @@ public class AuthDataSeeder
         await SeedAccountProfilesAsync(adminAccount, sampleAccounts, cancellationToken);
         await SeedStaffProfilesAsync(sampleAccounts, cancellationToken);
         await SeedLoginAttemptsAsync(adminAccount, sampleAccounts, cancellationToken);
+        await PublishSeededAccountSnapshotsAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 02/08/2026 — Phát <see cref="AccountSyncSnapshotEvent"/> cho account vừa được seed tạo.
+    ///
+    /// Seeder ghi thẳng <see cref="ApplicationDbContext"/>, không đi qua CQRS handler nào, nên
+    /// trước bản vá này KHÔNG có event tích hợp nào được phát cho account seed. Hậu quả đo được
+    /// trên môi trường đang chạy: 6 account seed (1 Admin, 1 Manager, 3 Staff, 1 Customer) không hề
+    /// tồn tại trong read-model của NotificationService, khiến
+    /// <c>GetActiveByRoleAsync("Admin")</c> trả rỗng và mọi thông báo gửi cho nhóm Admin bị bỏ qua
+    /// im lặng.
+    ///
+    /// Đi qua Outbox nên an toàn kể cả khi RabbitMQ chưa sẵn sàng lúc service khởi động: event nằm
+    /// trong <c>outbox_messages</c> cùng transaction, <c>OutboxRelayBackgroundService</c> phát sau.
+    /// </summary>
+    private async Task PublishSeededAccountSnapshotsAsync(CancellationToken cancellationToken)
+    {
+        if (_createdAccounts.Count == 0)
+            return;
+
+        // Một mốc chung cho cả lượt seed — consumer dùng mốc này để loại snapshot về trễ.
+        var snapshotAtUtc = DateTime.UtcNow;
+
+        foreach (var (account, roleName) in _createdAccounts)
+        {
+            await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
+                account.Id,
+                account.Email,
+                account.FullName,
+                account.PhoneNumber,
+                roleName,
+                IsActive: account.Status.IsNotifiable(),
+                IsDeleted: false,
+                SnapshotAtUtc: snapshotAtUtc,
+                Reason: "Seed"), cancellationToken);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Seeded {Count} account snapshot(s) vào outbox để các service khác dựng read-model.",
+            _createdAccounts.Count);
     }
 
     private async Task SeedLoginAttemptsAsync(
@@ -275,6 +330,7 @@ public class AuthDataSeeder
             };
 
             _dbContext.Users.Add(adminAccount);
+            _createdAccounts.Add((adminAccount, adminRole.Name));
             _logger.LogInformation("Seeded admin account {Email}.", adminEmail);
         }
         else
@@ -344,6 +400,7 @@ public class AuthDataSeeder
                 IsDeleted = false
             };
             _dbContext.Users.Add(account);
+            _createdAccounts.Add((account, role.Name));
             added.Add(account);
         }
 

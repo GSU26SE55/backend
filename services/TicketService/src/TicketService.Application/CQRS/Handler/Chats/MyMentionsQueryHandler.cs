@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
@@ -35,12 +36,12 @@ public class
                 && activeParticipants.Any(p => p.TicketId == m.Chat.TicketId)
                 && (!m.Chat.IsInternal || canViewInternal));
 
-        var total = await query.CountAsync(ct);
-        var rawMentions = await query
+        // Phân trang trên entity: sau đó còn nạp dữ liệu con (mention/reaction) theo lô rồi mới dựng DTO.
+        var page = await query
             .OrderByDescending(m => m.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(ct);
+            .ThenBy(m => m.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, ct);
+        var rawMentions = page.Items;
 
         var items = rawMentions.Select(m => new TicketChatMentionDTO
         {
@@ -58,13 +59,7 @@ public class
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketChatMentionDTO>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.WithItems(items)
         };
     }
 }

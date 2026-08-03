@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -50,7 +51,7 @@ public class ParticipantChangeConsumer :
                 NotificationTypeEnum.ParticipantAdded,
                 "Bạn đã được thêm vào ticket",
                 "Bạn vừa được thêm làm participant của 1 ticket.",
-                $"{{\"ticketId\":\"{evt.TicketId}\"}}",
+                JsonSerializer.Serialize(new { ticketId = evt.TicketId }),
                 evt.TicketId);
         });
 
@@ -64,7 +65,7 @@ public class ParticipantChangeConsumer :
                 NotificationTypeEnum.ParticipantRemoved,
                 "Bạn đã bị xóa khỏi ticket",
                 "Bạn không còn là participant của 1 ticket.",
-                $"{{\"ticketId\":\"{evt.TicketId}\"}}",
+                JsonSerializer.Serialize(new { ticketId = evt.TicketId }),
                 evt.TicketId);
         });
 
@@ -78,7 +79,12 @@ public class ParticipantChangeConsumer :
                 NotificationTypeEnum.ParticipantRoleChanged,
                 "Vai trò của bạn trên ticket đã thay đổi",
                 "Vai trò participant của bạn trên 1 ticket vừa được cập nhật.",
-                $"{{\"ticketId\":\"{evt.TicketId}\",\"oldType\":{evt.OldType},\"newType\":{evt.NewType}}}",
+                JsonSerializer.Serialize(new
+                {
+                    ticketId = evt.TicketId,
+                    oldType = evt.OldType,
+                    newType = evt.NewType,
+                }),
                 evt.TicketId);
         });
 

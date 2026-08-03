@@ -2,8 +2,8 @@ using AuditAggregatorService.Application.CQRS.Query.Audit;
 using AuditAggregatorService.Application.DTOs;
 using AuditAggregatorService.Application.Interfaces;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace AuditAggregatorService.Application.CQRS.Handler.Audit;
 
@@ -30,27 +30,18 @@ public class AuditSearchQueryHandler
 
         var query = _unitOfWork.AuditAggregates.GetAllAsync(tracking: false).ApplyFilters(request);
 
-        var total = await query.CountAsync(ct);
-        var items = await query
+        // Phân trang trên entity rồi mới map: AuditAggregateDto.FromEntity là method call, EF không
+        // dịch được sang SQL — chiếu trước khi cắt trang sẽ làm Skip/Take mất khả năng dịch.
+        var page = await query
             .OrderByDescending(x => x.OccurredAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(x => AuditAggregateDto.FromEntity(x))
-            .ToListAsync(ct);
-
-        var page = new PaginationResponse<AuditAggregateDto>
-        {
-            Items = items,
-            TotalItems = total,
-            PageNumber = request.PageNumber,
-            PageSize = request.PageSize,
-        };
+            .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, ct);
 
         return new CommonResponse<PaginationResponse<AuditAggregateDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = page,
+            Data = page.Map(AuditAggregateDto.FromEntity),
         };
     }
 }

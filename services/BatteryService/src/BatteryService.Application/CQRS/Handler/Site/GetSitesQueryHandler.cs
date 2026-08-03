@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.Site;
 
@@ -40,8 +41,6 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
             .AsNoTracking()
             .Where(account => !account.IsDeleted);
 
-        var total = await query.CountAsync(cancellationToken);
-
         // Join account TRƯỚC sort/paginate để sort được theo customerName (join 1:1 nên total không đổi).
         var joined = from site in query
                      join account in customerAccounts on site.CustomerId equals account.Id into accountJoin
@@ -60,10 +59,8 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
             _ => descending ? joined.OrderByDescending(x => x.site.CreatedAt) : joined.OrderBy(x => x.site.CreatedAt),
         };
 
-        var items = await ordered
+        var page = await ordered
             .ThenBy(x => x.site.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
             .Select(x => new SiteDto
             {
                 Id = x.site.Id.ToString(),
@@ -80,19 +77,14 @@ public class GetSitesQueryHandler : IRequestHandler<GetSitesQuery, CommonRespons
                 BatteryAssetCount = x.site.BatteryAssets.Count(asset => !asset.IsDeleted),
                 ActiveBatteryAssetCount = x.site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = x.site.CreatedAt
-            }).ToListAsync(cancellationToken);
+            })
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<SiteDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<SiteDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 

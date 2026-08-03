@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using FirmwareEntity = BatteryService.Domain.Entities.IotFirmwareRelease;
 
 namespace BatteryService.Application.CQRS.Handler.IotFirmware;
@@ -118,8 +119,6 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
         if (request.PublishedOnly == true)
             query = query.Where(f => f.IsPublished && !f.IsArchived);
 
-        var total = await query.CountAsync(ct);
-
         var descending = SortHelper.IsDescending(request.SortDir);
         // Whitelist: version | hardwareRevision | channel | status(rank) | artifactSizeBytes | createdAt (default).
         // status rank: Draft=0 < Published=1 < Archived=2 (lifecycle) — derived vì entity không có field Status đơn.
@@ -135,21 +134,16 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
             _ => descending ? query.OrderByDescending(f => f.CreatedAt) : query.OrderBy(f => f.CreatedAt),
         };
 
-        var items = await ordered
+        // IotDeviceMapper.ToDto là method call → EF không dịch sang SQL, phân trang trên entity trước.
+        var paged = await ordered
             .ThenBy(f => f.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((page - 1) * size).Take(size).ToListAsync(ct);
+            .ToPagedEntityListAsync(page, size, ct);
 
         return new CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<IotFirmwareReleaseDto>
-            {
-                Items = items.Select(IotDeviceMapper.ToDto).ToList(),
-                TotalItems = total,
-                PageNumber = page,
-                PageSize = size
-            }
+            Data = paged.Map(IotDeviceMapper.ToDto)
         };
     }
 }

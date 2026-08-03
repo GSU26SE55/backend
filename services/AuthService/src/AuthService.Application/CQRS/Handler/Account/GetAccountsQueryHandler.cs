@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
@@ -44,8 +45,6 @@ public class GetAccountsQueryHandler : IRequestHandler<GetAccountsQuery, Account
             query = query.Where(a => a.RoleId == roleId);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-
         var descending = SortHelper.IsDescending(request.SortDir);
         var included = query
             .Include(a => a.Role)
@@ -62,25 +61,17 @@ public class GetAccountsQueryHandler : IRequestHandler<GetAccountsQuery, Account
             _ => descending ? included.OrderByDescending(a => a.CreatedAt) : included.OrderBy(a => a.CreatedAt),
         };
 
-        var accounts = await ordered
+        // Phân trang trên entity rồi mới map: AccountProfileMapper.ToAccountDto là method call, EF không
+        // dịch được sang SQL — chiếu trước khi cắt trang sẽ làm Skip/Take mất khả năng dịch.
+        var page = await ordered
             .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
-
-        var items = accounts.Select(AccountProfileMapper.ToAccountDto).ToList();
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new AccountListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AccountDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.Map(AccountProfileMapper.ToAccountDto)
         };
     }
 }

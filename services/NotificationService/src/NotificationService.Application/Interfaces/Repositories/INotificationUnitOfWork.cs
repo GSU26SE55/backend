@@ -18,4 +18,16 @@ public interface INotificationUnitOfWork : IUnitOfWork
 
     /// <summary>Sprint 6.3 NOTI3-04 (#704) — tuỳ chọn theo nhóm × kênh.</summary>
     IGenericRepository<NotificationCategoryPreference> NotificationCategoryPreferences { get; }
+
+    /// <summary>Sprint 6.4 NOTI4-01 — nhóm người nhận để gửi hàng loạt.</summary>
+    IGenericRepository<NotificationGroup> NotificationGroups { get; }
+
+    /// <summary>Sprint 6.4 NOTI4-01 — bảng nối nhiều-nhiều người ↔ nhóm.</summary>
+    IGenericRepository<NotificationGroupMember> NotificationGroupMembers { get; }
+
+    /// <summary>Sprint 6.4 NOTI4-06 — nội dung một lần gửi, lưu đúng một lần.</summary>
+    IGenericRepository<NotificationBatch> NotificationBatches { get; }
+
+    /// <summary>Sprint 6.4 NOTI4-06 — bảng nối nhiều-nhiều lần gửi ↔ nhóm.</summary>
+    IGenericRepository<NotificationBatchTarget> NotificationBatchTargets { get; }
 }

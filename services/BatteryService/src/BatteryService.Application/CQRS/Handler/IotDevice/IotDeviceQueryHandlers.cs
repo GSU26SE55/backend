@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.IotDevice;
 
@@ -53,22 +54,15 @@ public class GetIotDevicesQueryHandler : IRequestHandler<GetIotDevicesQuery, Com
         };
         query = ordered.ThenBy(d => d.Id); // tie-breaker cố định — pagination ổn định
 
-        var total = await query.CountAsync(ct);
-        var items = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct);
-
-        var dtos = items.Select(d => IotDeviceMapper.ToDto(d, d.Site?.Name, d.TargetFirmwareRelease?.Version)).ToList();
+        // IotDeviceMapper.ToDto là method call (còn nhận thêm navigation Site/TargetFirmwareRelease đã
+        // Include sẵn) → không dịch sang SQL được, nên phân trang trên entity rồi mới đổi kiểu.
+        var paged = await query.ToPagedEntityListAsync(page, size, ct);
 
         return new CommonResponse<PaginationResponse<IotDeviceDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<IotDeviceDto>
-            {
-                Items = dtos,
-                TotalItems = total,
-                PageNumber = page,
-                PageSize = size
-            }
+            Data = paged.Map(d => IotDeviceMapper.ToDto(d, d.Site?.Name, d.TargetFirmwareRelease?.Version))
         };
     }
 }

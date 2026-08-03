@@ -5,6 +5,7 @@ using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.EnvironmentalIncident;
 
@@ -32,23 +33,17 @@ public class GetEnvironmentalIncidentsQueryHandler
         if (request.To.HasValue)
             query = query.Where(i => i.DetectedAt <= request.To.Value);
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        // Map là method call → EF không dịch sang SQL được, nên phân trang trên entity rồi mới đổi kiểu.
+        var page = await query
             .OrderByDescending(i => i.DetectedAt)
-            .Skip((pageNumber - 1) * pageSize).Take(pageSize)
-            .ToListAsync(cancellationToken);
+            .ThenBy(i => i.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(pageNumber, pageSize, cancellationToken);
 
         return new EnvironmentalIncidentListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<EnvironmentalIncidentDto>
-            {
-                Items = items.Select(ReportEnvironmentalIncidentCommandHandler.Map).ToList(),
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            }
+            Data = page.Map(ReportEnvironmentalIncidentCommandHandler.Map)
         };
     }
 }

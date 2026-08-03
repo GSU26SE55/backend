@@ -1,31 +1,39 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NotificationService.Application.Interfaces.Repositories;
+using Microsoft.Extensions.Options;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.BackgroundJobs;
-using NotificationService.UnitTests.Helpers;
+using NotificationService.Infrastructure.Persistence;
 
 namespace NotificationService.UnitTests.BackgroundJobs;
 
 /// <summary>
-/// GH-672 NOTI-01 — worker poll 5s nên mỗi test phải chờ đúng 1 tick.
-/// Dùng TaskCompletionSource thay vì Task.Delay cố định để test kết thúc ngay khi tick chạy xong.
+/// GH-672 NOTI-01 — kiểm tra trực tiếp một batch bằng EF InMemory để không phụ thuộc timer.
 /// </summary>
 public class NotificationDispatchBackgroundServiceTests
 {
-    private static readonly TimeSpan TickTimeout = TimeSpan.FromSeconds(20);
+    private static ApplicationDbContext NewDb(string name)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(name)
+            .ConfigureWarnings(w => w.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        return new ApplicationDbContext(options, null!);
+    }
 
     private static NotificationDispatchBackgroundService BuildSut(
-        INotificationUnitOfWork unitOfWork,
+        ApplicationDbContext db,
         INotificationDispatcher dispatcher)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => unitOfWork);
-        services.AddScoped(_ => dispatcher);
+        services.AddSingleton(db);
+        services.AddSingleton(dispatcher);
         var provider = services.BuildServiceProvider();
 
         var cache = new Mock<IDistributedCache>();
@@ -38,6 +46,7 @@ public class NotificationDispatchBackgroundServiceTests
         return new NotificationDispatchBackgroundService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             cache.Object,
+            Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
     }
 
@@ -59,22 +68,8 @@ public class NotificationDispatchBackgroundServiceTests
             IsDeleted = isDeleted,
         };
 
-    private static async Task RunOneTickAsync(NotificationDispatchBackgroundService sut, Task processed)
-    {
-        await sut.StartAsync(CancellationToken.None);
-        try
-        {
-            var finished = await Task.WhenAny(processed, Task.Delay(TickTimeout));
-            finished.Should().Be(processed, "worker phải xử lý batch trong vòng 1 tick");
-        }
-        finally
-        {
-            await sut.StopAsync(CancellationToken.None);
-        }
-    }
-
     [Fact]
-    public async Task Tick_DispatchesOnlyPendingRows_OldestFirst()
+    public async Task ProcessBatch_DispatchesOnlyPendingRows_OldestFirst()
     {
         var now = DateTime.UtcNow;
         var oldest = Seed(NotificationStatusEnum.Pending, now.AddMinutes(-10));
@@ -82,22 +77,17 @@ public class NotificationDispatchBackgroundServiceTests
         var alreadySent = Seed(NotificationStatusEnum.Sent, now.AddMinutes(-5));
         var softDeleted = Seed(NotificationStatusEnum.Pending, now.AddMinutes(-5), isDeleted: true);
 
-        var (uow, _, _) = MockNotificationUnitOfWork.Build(
-            notificationSeed: [oldest, newest, alreadySent, softDeleted]);
+        await using var db = NewDb(nameof(ProcessBatch_DispatchesOnlyPendingRows_OldestFirst));
+        db.Notifications.AddRange(oldest, newest, alreadySent, softDeleted);
+        await db.SaveChangesAsync();
 
         var dispatched = new ConcurrentQueue<Guid>();
-        var processed = new TaskCompletionSource();
         var dispatcher = new Mock<INotificationDispatcher>();
         dispatcher.Setup(d => d.DispatchPendingAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(true)
-                  .Callback<Notification, CancellationToken>((n, _) =>
-                  {
-                      dispatched.Enqueue(n.Id);
-                      if (dispatched.Count == 2)
-                          processed.TrySetResult();
-                  });
+                  .ReturnsAsync(DispatchOutcome.Sent)
+                  .Callback<Notification, CancellationToken>((n, _) => dispatched.Enqueue(n.Id));
 
-        await RunOneTickAsync(BuildSut(uow.Object, dispatcher.Object), processed.Task);
+        await BuildSut(db, dispatcher.Object).ProcessBatchAsync(CancellationToken.None);
 
         dispatched.Should().Equal(oldest.Id, newest.Id);
         dispatcher.Verify(d => d.DispatchPendingAsync(
@@ -106,58 +96,51 @@ public class NotificationDispatchBackgroundServiceTests
     }
 
     /// <summary>
-    /// Regression: row Email luôn bị hoãn tới khi #673 merge. Nếu chúng lọt vào batch,
-    /// chỉ cần tích đủ BatchSize row Email là chiếm sạch chỗ và row Push/InApp mới không
-    /// bao giờ tới lượt — worker chết im lặng.
+    /// Sau #673, Email phải được xử lý cùng các channel khác và vẫn giữ đúng thứ tự cũ nhất trước.
     /// </summary>
     [Fact]
-    public async Task Tick_EmailRowsExcludedFromBatch_DoNotStarveOtherChannels()
+    public async Task ProcessBatch_EmailRowsAreDispatchedWithOtherChannels_OldestFirst()
     {
         var now = DateTime.UtcNow;
-        // Email cũ hơn → nếu không loại khỏi query sẽ đứng đầu OrderBy(CreatedAt).
         var oldEmail1 = Seed(NotificationStatusEnum.Pending, now.AddHours(-3), channel: NotificationChannelEnum.Email);
         var oldEmail2 = Seed(NotificationStatusEnum.Pending, now.AddHours(-2), channel: NotificationChannelEnum.Email);
         var newerInApp = Seed(NotificationStatusEnum.Pending, now.AddMinutes(-1));
 
-        var (uow, _, _) = MockNotificationUnitOfWork.Build(
-            notificationSeed: [oldEmail1, oldEmail2, newerInApp]);
+        await using var db = NewDb(nameof(ProcessBatch_EmailRowsAreDispatchedWithOtherChannels_OldestFirst));
+        db.Notifications.AddRange(oldEmail1, oldEmail2, newerInApp);
+        await db.SaveChangesAsync();
 
         var dispatched = new ConcurrentQueue<Guid>();
-        var processed = new TaskCompletionSource();
         var dispatcher = new Mock<INotificationDispatcher>();
         dispatcher.Setup(d => d.DispatchPendingAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(true)
-                  .Callback<Notification, CancellationToken>((n, _) =>
-                  {
-                      dispatched.Enqueue(n.Id);
-                      processed.TrySetResult();
-                  });
+                  .ReturnsAsync(DispatchOutcome.Sent)
+                  .Callback<Notification, CancellationToken>((n, _) => dispatched.Enqueue(n.Id));
 
-        await RunOneTickAsync(BuildSut(uow.Object, dispatcher.Object), processed.Task);
+        await BuildSut(db, dispatcher.Object).ProcessBatchAsync(CancellationToken.None);
 
-        dispatched.Should().Equal(newerInApp.Id);
+        dispatched.Should().Equal(oldEmail1.Id, oldEmail2.Id, newerInApp.Id);
     }
 
     [Fact]
-    public async Task Tick_OneRowThrows_RemainingRowsStillDispatched()
+    public async Task ProcessBatch_OneRowThrows_RemainingRowsStillDispatched()
     {
         var now = DateTime.UtcNow;
         var failing = Seed(NotificationStatusEnum.Pending, now.AddMinutes(-10));
         var healthy = Seed(NotificationStatusEnum.Pending, now.AddMinutes(-1));
 
-        var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: [failing, healthy]);
+        await using var db = NewDb(nameof(ProcessBatch_OneRowThrows_RemainingRowsStillDispatched));
+        db.Notifications.AddRange(failing, healthy);
+        await db.SaveChangesAsync();
 
-        var processed = new TaskCompletionSource();
         var dispatcher = new Mock<INotificationDispatcher>();
         dispatcher.Setup(d => d.DispatchPendingAsync(
                       It.Is<Notification>(n => n.Id == failing.Id), It.IsAny<CancellationToken>()))
                   .ThrowsAsync(new InvalidOperationException("channel exploded"));
         dispatcher.Setup(d => d.DispatchPendingAsync(
                       It.Is<Notification>(n => n.Id == healthy.Id), It.IsAny<CancellationToken>()))
-                  .ReturnsAsync(true)
-                  .Callback(() => processed.TrySetResult());
+                  .ReturnsAsync(DispatchOutcome.Sent);
 
-        await RunOneTickAsync(BuildSut(uow.Object, dispatcher.Object), processed.Task);
+        await BuildSut(db, dispatcher.Object).ProcessBatchAsync(CancellationToken.None);
 
         dispatcher.Verify(d => d.DispatchPendingAsync(
             It.Is<Notification>(n => n.Id == healthy.Id), It.IsAny<CancellationToken>()), Times.Once);
