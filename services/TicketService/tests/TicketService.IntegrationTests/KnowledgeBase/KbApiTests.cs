@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
@@ -130,9 +131,9 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
     }
 
     [Fact]
-    public async Task UpdateKbArticle_ValidData_Returns200AndPendingStatus()
+    public async Task UpdateKbArticle_ByCreator_AppliesContentDirectly()
     {
-        // Setup seed database
+        // Setup seed database — bài viết do chính người đang đăng nhập tạo.
         var articleId = Guid.NewGuid();
         var creatorId = Guid.Parse(TestAuthHandler.UserId);
         using (var scope = _factory.Services.CreateScope())
@@ -163,11 +164,75 @@ public class KbApiTests : IClassFixture<TicketApiFactory>
         // Act
         var response = await _client.PutAsJsonAsync($"/api/internal/knowledge-base/{articleId}", command);
 
-        // Assert
+        // Assert — chủ sở hữu cập nhật trực tiếp, không chuyển sang chờ duyệt.
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDTO>>(_jsonOptions);
+        result!.IsSuccess.Should().BeTrue();
+        result.Data!.Status.Should().NotBe(KbArticleStatusEnum.PendingReview);
+        result.Data!.Title.Should().Be("New Title");
+
+        // Nội dung mới phải được ghi thẳng vào article trong DB.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var article = await db.KnowledgeBaseArticles.FirstAsync(a => a.Id == articleId);
+            article.Title.Should().Be("New Title");
+            article.ReviewRequired.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task UpdateKbArticle_ByNonCreatorStaff_Returns200AndPendingStatus()
+    {
+        // Setup seed database — bài viết của người khác, Staff sửa phải chờ duyệt.
+        var articleId = Guid.NewGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            db.KnowledgeBaseArticles.Add(new KnowledgeBaseArticle
+            {
+                Id = articleId,
+                Code = "KB-004B",
+                Title = "Old Title",
+                Content = JsonDocument.Parse("\"Old Symptoms\""),
+                Status = KbArticleStatusEnum.Published,
+                CreatedByUserId = Guid.NewGuid(),
+                IsDeleted = false
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var command = new UpdateKbArticleCommand
+        {
+            ArticleId = articleId,
+            Title = "New Title",
+            Content = "New Symptoms. New Steps. New Solution.",
+            Category = TicketCategoryEnum.Overheat,
+            Tags = new List<string> { "battery" },
+        };
+
+        var request = new HttpRequestMessage(HttpMethod.Put, $"/api/internal/knowledge-base/{articleId}")
+        {
+            Content = JsonContent.Create(command)
+        };
+        request.Headers.Add(TestAuthHandler.RolesHeader, "Staff");
+
+        // Act
+        var response = await _client.SendAsync(request);
+
+        // Assert — thay đổi được lưu thành version chờ duyệt, article giữ nội dung cũ.
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<CommonResponse<KbArticleDTO>>(_jsonOptions);
         result!.IsSuccess.Should().BeTrue();
         result.Data!.Status.Should().Be(KbArticleStatusEnum.PendingReview);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var article = await db.KnowledgeBaseArticles.FirstAsync(a => a.Id == articleId);
+            article.Title.Should().Be("Old Title");
+            article.ReviewRequired.Should().BeTrue();
+        }
     }
 
     [Fact]

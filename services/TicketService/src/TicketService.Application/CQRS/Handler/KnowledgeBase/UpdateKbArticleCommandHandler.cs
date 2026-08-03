@@ -46,6 +46,10 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             return Fail(403, "Bạn không có quyền cập nhật bài viết này.");
         }
 
+        // Manager/Admin hoặc chủ sở hữu bài viết cập nhật trực tiếp, không qua phê duyệt lại.
+        if (isCreator || isManagerOrAdmin)
+            return await HandleDirectUpdate(article, command, ct);
+
         // Determine next version numbers
         var nextMajor = article.Version + 1;
         var lastMinor = await _uow.KbArticleVersions.GetAllAsync()
@@ -84,6 +88,56 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             IsSuccess = true,
             StatusCode = 200,
             Message = "Bản thảo thay đổi đã được lưu và đang chờ phê duyệt.",
+            Data = KnowledgeBaseMapper.ToDto(article)
+        };
+    }
+
+    /// <summary>
+    /// Cập nhật trực tiếp cho Manager/Admin hoặc chủ sở hữu bài viết: ghi thẳng nội dung mới vào
+    /// article, đồng thời lưu 1 bản ghi version đã Approved để giữ lịch sử thay đổi.
+    /// </summary>
+    private async Task<CommonResponse<KbArticleDTO>> HandleDirectUpdate(
+        KnowledgeBaseArticle article, UpdateKbArticleCommand command, CancellationToken ct)
+    {
+        var nextMajor = article.Version + 1;
+
+        await _uow.BeginTransactionAsync();
+        try
+        {
+            var newVersion = new KbArticleVersion
+            {
+                Id = Guid.NewGuid(),
+                ArticleId = article.Id,
+                MajorVersion = nextMajor,
+                MinorVersion = 0,
+                Status = KbVersionStatusEnum.Approved,
+                ChangeDescription = command.ChangeDescription ?? "Cập nhật trực tiếp",
+                ChangedBy = command.CurrentUserId
+            };
+            ApplyContentToVersion(newVersion, command);
+            await _uow.KbArticleVersions.AddAsync(newVersion);
+
+            ApplyContentToArticle(article, command);
+            article.Category = command.Category;
+            article.Version = nextMajor;
+            article.ReviewRequired = false;
+            article.PendingReviewBy = null;
+            article.ManagerRejectReason = null;
+
+            _uow.KnowledgeBaseArticles.UpdateAsync(article);
+            await _uow.CommitTransactionAsync();
+        }
+        catch
+        {
+            await _uow.RollbackTransactionAsync();
+            throw;
+        }
+
+        return new CommonResponse<KbArticleDTO>
+        {
+            IsSuccess = true,
+            StatusCode = 200,
+            Message = "Cập nhật bài viết thành công.",
             Data = KnowledgeBaseMapper.ToDto(article)
         };
     }
