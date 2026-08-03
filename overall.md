@@ -140,6 +140,7 @@
 | **Sprint Bonus** (newsprint — Min/Max streaming + audit pipeline fixes) | 🟢 bonus | §17 Sprint Bonus + `newsprint.md` | 27 task `#NS-01..27` — 25 issue BE đã tạo GitHub `#646..#670` (milestone Sprint Bonus). ✅ **22/22 task active DONE 2026-07-31**, merged `dev` qua PR `#689`; `#646..#667` đã ở **cột In Review**, `#668/#669/#670` giữ cột Plan (deferred cách ly pin), 2 FE (NS-05/NS-19) ở repo `frontend`. 6 phase active ~22 dev-day + deferred cách ly pin ~9.5. Feature min/max streaming (PA-2/3/4) + vá noise N1–N6 / cascade R1–R8 / môi trường E1–E4 / classification F1–F2. Quyết định chốt 2026-07-14 (Q1–Q13) — xem `newsprint.md`. |
 | **Sprint 6.2** (Notification pipeline completion — review 2026-07-14) | 🔴 P1 | §17 Sprint 6.2 + `reviewnotification.md` | 17 task `#NOTI-01..17` = GitHub `#672..#688` (milestone Sprint 6.2), ~14 dev-day. ✅ **17/17 DONE 2026-07-31**, merged `dev` qua PR `#718`; toàn bộ đã ở **cột In Review**. Vấn đề gốc: `NotificationDispatcher` dead code (0 caller) → Push/Email/SMS không bao giờ gửi; + orphan events (publish nhưng 0 consumer) + gap routing matrix §3.4. **THÊM 6 · SỬA 8 · XOÁ 1 · 2 fork THÊM/XOÁ; 5 điểm cần chốt.** Nguồn: `reviewnotification.md` §7. |
 | **Sprint 6.3** (Notification production-hardening — benchmark 2026-07-30) | 🔴 P1 | §17 Sprint 6.3 (§17.6.3.1–17.6.3.5) | **16/17 task** `#NOTI3-01..17` = GitHub `#701..#717` (milestone `Sprint 6.3`, assign `@Alexdev257`), **~17 dev-day** — ✅ **16/16 active DONE 2026-07-31**, merged `dev` qua PR `#718`; 16 issue đã ở **cột In Review**, riêng `#703` (huỷ) giữ cột Plan — 🚫 **NOTI3-03 (#703) đã HUỶ 30/07** sau khi implement xong (xem §17.6.3.5 mục 5). Đứng trên Sprint 6.2 (phải merge trước). Vấn đề gốc: pipeline đã "gửi được" nhưng chưa "vận hành được" — feed in-app nhân bản 2–4 lần (`GetNotificationsQuery` không lọc channel), không đối soát Expo receipt, 1 metric duy nhất toàn service, không rate-limit, không retry/DLQ ở tầng bus. **THÊM 10 · SỬA 6.** ✅ 4 fork **đã chốt 30/07** (01→A · 05→B · 10→B · 12→A) — decision log + đánh đổi chấp nhận: §17.6.3.5; sinh thêm R-45/R-46. Thi công bắt đầu từ NOTI3-07. Benchmark: Knock · Courier · Novu. |
+| **Sprint 6.4** (Notification audience — nhóm người nhận & quan hệ DB cho gửi hàng loạt, khảo sát 2026-08-02) | 🔴 P1 | §17 Sprint 6.4 (§17.6.4.0–17.6.4.6) + [`notigroup.md`](notigroup.md) | **15 task** `#NOTI4-01..15` = GitHub `#1006..#1020` (milestone `Sprint 6.4`, assign `@Alexdev257`, tạo 03/08/2026, cột Plan). **~13.5 dev-day** · **THÊM 12 · SỬA 3** · **KHÔNG cross-service** (trừ seed permission ở AuthService). Vấn đề gốc: hệ thống chỉ gửi được cho **đúng 1 người mỗi lệnh** — không bảng nhóm nào, **0 foreign key / 0 navigation property** trong toàn NotificationService, `notifications` chép lại `title`/`body` từng dòng, không có `batch_id` nên không truy vết được lần gửi (đo được: 1.282 dòng / 9 người / 242 lần gửi gom mò). ✅ **Điều kiện cần `NOTI4-00` ĐÃ XONG 02/08/2026** — read-model tài khoản từ 2/10 dòng lên đủ 10, 4 nguyên nhân độc lập đã sửa; không có nó thì nhóm rỗng và sprint này vô nghĩa. ✅ **15/15 task DONE 03/08/2026** — BE + FE đã implement, kiểm chứng đầu-cuối trên docker (gom trùng: 2 nhóm giao nhau → mỗi người đúng 1 dòng/kênh; 2 bất biến DB = 0). 1 điểm đi chệch kế hoạch có chủ đích ở NOTI4-05 — xem §17.6.4.2. 5 fork đã chốt khi khảo sát — §17.6.4.5; sinh R-47..R-52. 5 câu hỏi cần Leader chốt trước khi code — §17.6.4.6. Phase A và B **độc lập ship được**. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -2474,11 +2475,115 @@ public enum NotificationCategoryEnum {
 #### `NotificationTemplate` — bảng `notification_templates`
 | Field | Type | Ghi chú |
 |-------|------|---------|
-| `Type` / `Channel` / `Locale` | enum / enum / `string(16)` | `vi-VN` mặc định, `en-US` cho type hướng Customer |
+| `Type` / `Channel` | enum / enum | ⚠️ **02/08/2026 — `Locale` ĐÃ BỊ XOÁ.** Dự án tiếng Việt only; cột này chưa bao giờ có giá trị khác `vi-VN` trong thực tế. Khoá định danh giảm từ (Type × Channel × Locale) xuống **(Type × Channel)** |
 | `Version` | `int` | **Sprint 6.3 NOTI3-12** — sửa là tạo bản mới, không ghi đè ⇒ rollback được |
-| `IsActive` | `bool` | chỉ **một** bản active mỗi bộ ba (partial unique index) |
+| `IsActive` | `bool` | chỉ **một** bản active mỗi **cặp** (partial unique index, không deferrable) |
 | `TitleTemplate` | `string(500)` | cú pháp Handlebars |
 | `BodyTemplate` | `string(4000)` | — |
+
+#### `AccountReadModel` — bảng `account_read_models`
+
+Bản sao tài khoản đồng bộ từ AuthService qua message bus. **Nguồn duy nhất** để
+`RecipientResolver` quyết định "gửi cho nhóm Manager/Admin" gồm những ai ⇒ là nền móng của toàn bộ
+Sprint 6.4.
+
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `Id` | `Guid` | = `AccountId` bên AuthService, **không** tự sinh |
+| `Email` / `FullName` / `PhoneNumber` | `string` | email chuẩn hoá về chữ thường |
+| `Role` | `string(64)` | `Admin` \| `Manager` \| `Staff` \| `Customer` (1 account = 1 role) |
+| `IsActive` | `bool` | "còn nhận thông báo không" = `Status is Active or Locked` — xem ghi chú dưới |
+| `LastSyncedAtUtc` | `DateTime` | thời điểm **consume** |
+| `LastSnapshotAtUtc` | `DateTime?` | **02/08/2026** — mốc **của event**, dùng chặn snapshot về ngược thứ tự |
+
+**4 nguồn đồng bộ:** `AccountActivatedEvent` · `AccountProfileUpdatedEvent` · `AccountDeletedEvent`
+· **`AccountSyncSnapshotEvent`** (02/08/2026 — nguồn **duy nhất** cập nhật được `Role` và `IsActive`
+sau khi dòng đã tồn tại).
+
+> **`IsActive` bao gồm `Locked` là có chủ đích.** `Locked` là khoá **tạm** do sai mật khẩu 5 lần, tự
+> hết hạn — coi nó là ngừng nhận thì một Manager gõ nhầm mật khẩu sẽ không nhận được email/SMS cảnh
+> báo SLA P1. Hệ quả tốt kèm theo: cặp `Active ↔ Locked` không làm đổi giá trị này, nên
+> `LoginCommandHandler` (đường nóng nhất hệ thống) và `UnlockAccountCommandHandler` **không cần phát
+> event** mà read-model vẫn không lệch. Quy tắc gom ở `AccountStatusEnumExtensions.IsNotifiable()`.
+
+> ⚠️ **Không so bằng `LastSyncedAtUtc`** để chặn message về trễ: cột đó ghi thời điểm *consume* và
+> bị cả 3 consumer vòng đời ghi chung, nên luôn mới hơn mốc của event và sẽ loại nhầm **mọi** snapshot
+> hợp lệ. Đó là lý do phải có `LastSnapshotAtUtc` riêng.
+
+**Đối soát:** `POST /api/admin/accounts/resync` (AuthService, AdminOnly) — mỗi service một database
+nên NotificationService **không thể** tự sửa lệch; bắt buộc AuthService phát lại. Chạy lại bao nhiêu
+lần cũng được (upsert thuần, không sinh notification).
+
+---
+
+#### 🔜 Sprint 6.4 — 4 entity nhóm & lần gửi *(kế hoạch, chưa implement — §17 Sprint 6.4)*
+
+Nguồn thiết kế đầy đủ (ERD, index, ràng buộc, lý do từng quyết định): [`notigroup.md`](notigroup.md) §3.
+
+```
+notification_groups ──1─┬─N── notification_group_members ──N─── (account_read_models.id)
+                        │                                        ↑ KHÔNG đặt FK — xem dưới
+                        └─N── notification_batch_targets ──N─1── notification_batches
+                                                                      │ 1
+                                                                      N
+                                                                 notifications
+```
+
+**`NotificationGroup` — `notification_groups`**
+
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `Name` / `Description` | `string(128)` / `string(512)?` | |
+| `Kind` | `NotificationGroupKindEnum` | `Static = 1` (liệt kê thành viên) \| `Role = 2` (suy ra lúc gửi) |
+| `RoleFilter` | `string(64)?` | bắt buộc khi `Kind = Role`, NULL khi `Static` (CHECK constraint) |
+| `IsSystem` | `bool` | 4 nhóm seed theo role — không cho sửa/xoá (409) |
+
+**`NotificationGroupMember` — `notification_group_members`** — quan hệ **nhiều-nhiều người ↔ nhóm**
+
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `GroupId` | `Guid` | **FK** → `notification_groups`, `ON DELETE CASCADE` |
+| `UserId` | `Guid` | **KHÔNG** đặt FK — xem ghi chú dưới |
+| `AddedBy` | `Guid?` | |
+
+**`NotificationBatch` — `notification_batches`** — nội dung một lần gửi, lưu **một lần**
+
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `Type` / `Title` / `Body` / `PayloadJson` | enum / `string(200)` / `string(2000)` / `jsonb?` | |
+| `EntityType` / `EntityId` | `string(100)?` / `Guid?` | |
+| `Channels` | `int[]` | các kênh dự định gửi |
+| `Source` | `NotificationBatchSourceEnum` | `Event = 1` (consumer) \| `Manual = 2` (admin bấm gửi) |
+| `Status` | `NotificationBatchStatusEnum` | `Pending = 1` \| `FannedOut = 2` \| `Failed = 3` |
+| `RecipientCount` / `NotificationCount` | `int` | số người **sau gom trùng** / số dòng đã sinh |
+
+**`NotificationBatchTarget` — `notification_batch_targets`** — quan hệ **nhiều-nhiều nhóm ↔ lần gửi**
+
+| Field | Type | Ghi chú |
+|-------|------|---------|
+| `BatchId` | `Guid` | **FK** → `notification_batches`, `ON DELETE CASCADE` |
+| `TargetKind` | int | `Group = 1` \| `User = 2` (CHECK: đúng một trong `GroupId`/`UserId` khác NULL) |
+| `GroupId` / `UserId` | `Guid?` / `Guid?` | cho phép **cả hai loại trong cùng một batch** ⇒ "gửi nhóm Quản lý **và** thêm anh A" là một lần gửi |
+
+**Sửa `Notification`:** thêm **một** cột `BatchId` (`Guid?`, FK `ON DELETE SET NULL`).
+
+```sql
+CREATE INDEX ix_notifications_batch ON notifications (batch_id) WHERE batch_id IS NOT NULL;
+-- Lưới an toàn cứng: trong một lần gửi, mỗi người mỗi kênh đúng MỘT dòng
+CREATE UNIQUE INDEX ux_notifications_batch_user_channel
+  ON notifications (batch_id, user_id, channel) WHERE batch_id IS NOT NULL;
+```
+
+> **Nullable có chủ đích:** 1.282 dòng đang có không thuộc batch nào (**cấm** gom theo thời gian để
+> gán — sẽ bịa ra lần gửi chưa từng tồn tại, xem R-52); `NotificationDigestBackgroundService` và
+> `NotificationDispatcher` cũng sinh dòng không thuộc lần gửi nào.
+
+> **Vì sao `user_id` không đặt FK còn `group_id` thì có:** `user_id` trỏ sang **read-model** đồng bộ
+> qua bus — message tới **sau** thao tác dùng `user_id` (thứ tự không bảo đảm) sẽ làm insert vỡ vì
+> FK rồi retry, có khi hết lượt vẫn hỏng; mà nguồn sự thật ở `auth_db` service khác nên FK nội bộ
+> không bảo vệ được gì trước sai lệch xuyên service. Lọc người không hoạt động làm bằng **JOIN lúc
+> gửi**, không bằng ràng buộc DB. Ngược lại `group_id` cùng nằm trong `notification_db`, cùng
+> transaction ⇒ có FK. Bất đối xứng này là **có chủ đích**.
 
 ### 3.4. Notification routing logic (`NotificationDispatcher`)
 
@@ -2575,14 +2680,41 @@ GET    /api/notification-unsubscribe?token=...      # xem trước, KHÔNG thay 
 POST   /api/notification-unsubscribe?token=...      # Gmail/Yahoo gọi tự động
 
 # Quản trị template (AdminOnly) — Sprint 6.3 NOTI3-12
-GET    /api/admin/notification-templates?type=&channel=&locale=
+GET    /api/admin/notification-templates?type=&channel=&activeOnly=&pageNumber=1&pageSize=10   # phân trang + bỏ locale, type/channel trả dạng SỐ (02/08/2026)
+GET    /api/admin/notification-templates/{id}             # chi tiết 1 phiên bản (02/08/2026)
+POST   /api/admin/notification-templates                  # TẠO mẫu cho cặp chưa có; trùng cặp → 409 (02/08/2026)
+PUT    /api/admin/notification-templates/{id}             # SỬA = sinh phiên bản mới rồi bật lên (02/08/2026)
+DELETE /api/admin/notification-templates/{id}             # xoá mềm 1 phiên bản; bản đang dùng → 409 (02/08/2026)
 POST   /api/admin/notification-templates/{id}/preview     # render thử, KHÔNG gửi
 POST   /api/admin/notification-templates/{id}/test-send   # chỉ gửi tới email của CHÍNH admin, 5 lần/giờ
 POST   /api/admin/notification-templates/{id}/activate    # rollback về phiên bản cũ
 
 # Realtime (SignalR) — Sprint 6.3 NOTI3-13
 WS     /hubs/notifications        # sự kiện: NotificationCreated, UnreadCountChanged
+
+# 🔜 Nhóm người nhận (AdminOnly) — Sprint 6.4 NOTI4-02/03, CHƯA IMPLEMENT
+GET    /api/admin/notification-groups?kind=&search=&pageNumber=1&pageSize=10
+GET    /api/admin/notification-groups/{id}                      # chi tiết + số thành viên
+POST   /api/admin/notification-groups                           # tạo; trùng tên → 409
+PUT    /api/admin/notification-groups/{id}                      # nhóm is_system → 409
+DELETE /api/admin/notification-groups/{id}                      # xoá mềm; nhóm is_system → 409
+GET    /api/admin/notification-groups/{id}/members?pageNumber=&pageSize=
+POST   /api/admin/notification-groups/{id}/members              # body { userIds: [...] } — nhóm Role → 409
+DELETE /api/admin/notification-groups/{id}/members/{userId}     # nhóm Role → 409
+
+# 🔜 Gửi hàng loạt + lịch sử gửi (AdminOnly) — Sprint 6.4 NOTI4-07/09, CHƯA IMPLEMENT
+POST   /api/admin/notifications/broadcast                       # { type, channels[], title, body, groupIds[], userIds[] }
+GET    /api/admin/notifications/batches?pageNumber=&pageSize=
+GET    /api/admin/notifications/batches/{id}                    # + thống kê đã gửi/đã đọc/thất bại
 ```
+
+> **`POST /broadcast` trả 400 khi tập người nhận rỗng** (sau khi gom trùng và lọc `is_active`), và
+> **không** tạo batch mồ côi. Đây là điểm rút kinh nghiệm trực tiếp từ `NOTI4-00`: nhánh
+> `if (recipientIds.Count == 0) { log warning; return; }` khiến lỗi ẩn mình suốt vì nhìn từ ngoài y
+> hệt như đã gửi thành công.
+
+> **Đối soát read-model tài khoản** nằm ở **AuthService**, không phải ở đây:
+> `POST /api/admin/accounts/resync` — xem `docs/api-auth.md`.
 
 ### 3.6. Expo Push integration
 
@@ -4747,6 +4879,44 @@ Mọi migration step phải pass rollback test trước khi apply step kế ti�
 
 # Migration
 /run-migration NotificationService InitialNotificationSchema
+
+# ── Sprint 6.4 — nhóm người nhận & lần gửi (§17 Sprint 6.4, CHƯA IMPLEMENT) ──
+# Phase A — nhóm
+/scaffold-entity NotificationService NotificationGroup
+/scaffold-entity NotificationService NotificationGroupMember
+/scaffold-cqrs-command NotificationService NotificationGroup Create
+/scaffold-cqrs-command NotificationService NotificationGroup Update
+/scaffold-cqrs-command NotificationService NotificationGroup Delete
+/scaffold-cqrs-command NotificationService NotificationGroup AddMembers
+/scaffold-cqrs-command NotificationService NotificationGroup RemoveMember
+/scaffold-cqrs-query   NotificationService NotificationGroup GetList
+/scaffold-cqrs-query   NotificationService NotificationGroup GetById
+/scaffold-controller   NotificationService NotificationGroup
+
+# Phase B — lần gửi (batch) + broadcast
+/scaffold-entity NotificationService NotificationBatch
+/scaffold-entity NotificationService NotificationBatchTarget
+/scaffold-cqrs-command NotificationService Notification Broadcast
+/scaffold-cqrs-query   NotificationService NotificationBatch GetList
+/scaffold-cqrs-query   NotificationService NotificationBatch GetById
+
+/scaffold-unit-tests NotificationService NotificationGroup
+/scaffold-unit-tests NotificationService NotificationBatch
+
+# HAI migration, mỗi phase một cái — Phase A phải ship độc lập được:
+/run-migration NotificationService AddNotificationGroups     # Phase A: 2 bảng nhóm
+/run-migration NotificationService AddNotificationBatches    # Phase B: 2 bảng batch + notifications.batch_id
+
+# Làm TAY (không có scaffold):
+# - GetMembers query (JOIN account_read_models để trả kèm tên/email/role)
+# - NotificationGroupSeeder (4 nhóm hệ thống kind=Role, idempotent theo role_filter)
+# - Sửa IRecipientResolver + RecipientResolver (thêm GetGroupRecipientsAsync, đổi ruột GetActiveByRoleAsync)
+# - Sửa NotificationWriter.WriteAsync (thêm Guid? batchId = null — TUỲ CHỌN để 20 lời gọi cũ vẫn hợp lệ)
+# (Thi công 03/08 đính chính: EF Core 8 SINH ĐƯỢC partial unique index qua HasFilter(...) và CHECK
+#  qua ToTable(t => t.HasCheckConstraint(...)) — KHÔNG phải sửa migration tay. Thứ EF không diễn đạt
+#  được là functional index trên lower(name); đã thay bằng cột normalized_name, đúng khuôn
+#  Role.NormalizedName mà AuthService dùng sẵn.)
+# - Seed 4 permission mới ở AuthService/AuthDataSeeder (§20) — điểm cross-service duy nhất
 ```
 
 ### 16.4. Sprint audit — AuditAggregatorService + per-service onboard (Sprint audit)
@@ -4830,7 +5000,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3 + Sprint 6.4
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -6300,6 +6470,492 @@ guard trong `EmailSenderService` + 2 endpoint vận hành + migration + 23 unit 
 
 ---
 
+### Sprint 6.4 (Notification audience — nhóm người nhận & quan hệ DB cho gửi hàng loạt, khảo sát 2026-08-02)
+
+> **Nguồn đầy đủ:** [`notigroup.md`](notigroup.md) — mục này là bản rút gọn có cấu trúc sprint.
+> Khi hai bên lệch nhau, `notigroup.md` là bản chi tiết, mục này là bản dùng để lập issue.
+
+**Goal:** Sprint 6.2 đưa pipeline từ "không gửi gì" lên "gửi được", Sprint 6.3 lên "vận hành được".
+Sprint 6.4 trả lời câu hỏi còn lại: **gửi cho ai** — hiện hệ thống chỉ gửi được cho **đúng một người
+mỗi lệnh**, và không có mô hình dữ liệu nào cho "một thông báo tới nhiều người".
+
+**Bối cảnh:** khảo sát ngày 02/08/2026 trên môi trường đang chạy, trả lời hai câu hỏi nghiệp vụ:
+(1) đã có nhóm người dùng để gửi hàng loạt chưa, (2) đã có quan hệ DB tối ưu cho **1 thông báo →
+nhiều người (nhiều nhóm)** và **1 người (1 nhóm) → nhiều thông báo** chưa. Kết quả: **chưa, cả hai.**
+
+**Owner:** Thắng (`@Alexdev257`) — đã gán toàn bộ 15 issue.
+**Trạng thái (03/08/2026): ✅ 15/15 task DONE.** Backend + Frontend đã implement và kiểm chứng đầu-cuối trên docker; 527 unit test NotificationService (20 test mới), 2.782 test toàn hệ thống; FE sạch cả 4 cổng (`tsc -b` · `eslint --max-warnings=0` · `npm run build` · `prettier --check`). Evidence: `notification-test-evidence/20260803-notification-groups/`.
+**Issue numbers:** ✅ **đã tạo 03/08/2026** — GitHub `#1006..#1020` (milestone `Sprint 6.4`, assign `@Alexdev257`, cột Plan). Bản đồ NOTI4-01→#1006 … NOTI4-15→#1020 (liệt kê tại §17.6.4.2).
+**Quy mô:** **15 task** (`#NOTI4-01..15`) · **~13.5 dev-day** · **THÊM 12 · SỬA 3**.
+
+**Phụ thuộc:**
+- ✅ **Điều kiện cần ĐÃ XONG 02/08/2026** — xem `NOTI4-00` bên dưới. Không có nó thì toàn bộ sprint
+  này vô nghĩa: nhóm dù thiết kế đẹp đến đâu cũng vô dụng nếu bảng người dùng phía sau thiếu người.
+- Sprint 6.3 (`#701..#717`) đã merge `dev` qua PR `#718`.
+
+**⚠️ Cross-service:** **KHÔNG có.** Toàn bộ nằm trong NotificationService + FE. Đây là điểm khác biệt
+lớn so với 6.2/6.3 và là lý do sprint này rủi ro thấp hơn hẳn.
+
+---
+
+#### 17.6.4.0. Điều kiện cần — đã hoàn thành trước sprint
+
+**`NOTI4-00` [ĐÃ XONG 02/08/2026] — Read-model tài khoản thiếu 8/10 người ⇒ nhóm rỗng.**
+
+`RecipientResolver.GetActiveByRoleAsync` là nguồn **duy nhất** quyết định "gửi cho nhóm
+Manager/Admin" gồm những ai, và nó đọc bảng `account_read_models`. Bảng đó chỉ có **2 dòng** trong
+khi `auth_db` có **10 tài khoản**, và **không có Admin nào**:
+
+| Role | `auth_db` | `account_read_models` (trước) | (sau) |
+|---|---|---|---|
+| Admin | 1 | **0** | 1 |
+| Manager | 1 | 1 | 1 |
+| Staff | 3 | **0** | 3 |
+| Customer | 5 | 1 | 5 |
+| **Tổng** | **10** | **2** | **10** |
+
+Mọi consumer gọi `GetActiveByRoleAsync("Admin")` đều rơi vào
+`if (recipientIds.Count == 0) { log warning; return; }` — **không ai nhận được gì**, mà nhìn từ ngoài
+y hệt như đã gửi thành công.
+
+Bốn nguyên nhân độc lập, đã sửa hết: (1) `AuthDataSeeder` ghi thẳng DbContext nên không phát event;
+(2) `ChangeAccountRoleCommandHandler` không phát event nào ⇒ đổi role thì read-model giữ role cũ
+vĩnh viễn; (3) `ChangeAccountStatusCommandHandler` không phát gì — `AccountStatusChangedEvent` có
+sẵn và Ticket/Battery đã viết consumer nhưng **không nơi nào publish**; (4) `DeactivateMe` +
+`ReactivateVerify` không phát gì, khiến tài khoản khôi phục **vĩnh viễn** không nhận thông báo nữa.
+
+Cách sửa: `AccountSyncSnapshotEvent` (ảnh chụp trạng thái, tách khỏi event vòng đời) + consumer
+`AccountSnapshotSyncConsumer` + endpoint đối soát `POST /api/admin/accounts/resync`. Chi tiết đầy đủ:
+`CHANGELOG.md` mục 02/08/2026 · evidence: `notification-test-evidence/20260802-account-readmodel-sync/`.
+
+> ⚠️ **Còn treo, cố ý không đụng:** `AccountStatusChangedEvent` vẫn không ai publish, nên
+> `TicketAccountStatusChangedConsumer` (TicketService) và `AccountStatusChangedConsumer`
+> (BatteryService) vẫn là **code chết**. Hai service đó có read-model account riêng
+> (`customer_accounts`, `staff_accounts`) và nhiều khả năng lệch theo cùng một kiểu. Bật một đường
+> code chưa từng chạy ở hai service khác là thay đổi hành vi ngoài phạm vi — **cần kiểm tra riêng**
+> (đề xuất tách thành task Sprint 6.5 hoặc issue độc lập).
+
+---
+
+#### 17.6.4.1. Bảng đối chiếu: cần gì vs hiện trạng
+
+Chú thích mức: 🔴 P0 = chặn nghiệp vụ · 🟠 P1 = thiếu so với chuẩn ngành · 🟡 P2 = nợ vận hành.
+
+| # | Hạng mục | Cần gì | Hiện trạng (bằng chứng đo 02/08/2026) | Mức |
+|---|---|---|---|---|
+| 1 | **Nhóm người dùng** | Bảng nhóm quản lý được: tạo/sửa/xoá/đặt tên, thêm/bớt thành viên | **Không bảng nào.** NotificationService có đúng 9 entity / 10 bảng; AuthService 15 entity — không cái nào là group/segment/audience. Thứ gần nhất là 4 role **viết cứng chuỗi trong code tại 15 chỗ** | 🔴 |
+| 2 | **API gửi hàng loạt** | Một lệnh gửi cho nhiều nhóm + nhiều người | `POST /api/notifications` nhận đúng **một** `Guid UserId`; form web cũng chỉ chọn 1 người. **Không** command/query nào nhận `List<Guid>`/`UserIds`/`Roles` | 🔴 |
+| 3 | **Quan hệ 1 thông báo → nhiều người** | Nội dung lưu một lần, người nhận là bảng riêng | **0 foreign key, 0 navigation property** trong toàn bộ NotificationService (grep `HasOne\|HasMany\|WithMany\|ForeignKey` ra rỗng). `notifications` = 1 dòng/người/kênh, `title`/`body`/`payload_json` **chép lại từng dòng** | 🔴 |
+| 4 | **Quan hệ 1 người → nhiều thông báo** | Index đúng chiều đọc | ✅ **ĐÃ CÓ** — `IX_notifications_user_id_status (user_id, status)`. Chiều này không cần làm gì | ✅ |
+| 5 | **Người thuộc nhiều nhóm** | Bảng nối nhiều-nhiều | Không có | 🔴 |
+| 6 | **Nhóm nhận nhiều thông báo** | Bảng nối nhiều-nhiều | Không có | 🔴 |
+| 7 | **Gom trùng người nhận** | Người ở 2 nhóm cùng được nhắm chỉ nhận **một** lần | Không có bước gom, không có ràng buộc DB. Hiện chưa lộ vì chưa gửi nhóm được bao giờ | 🟠 |
+| 8 | **Truy vết một lần gửi** | "Thông báo X tới ai, bao nhiêu người đã đọc" | Không có `batch_id`/`campaign_id`. Đo được: **1.282 dòng / 9 người nhận / 242 "lần gửi" gom mò** theo `(type, entity_id, giây)`. `IX_notifications_entity_type_entity_id` gom theo *thực thể nghiệp vụ*, KHÔNG theo *lần gửi* — cùng `type=9` + cùng `entity_id` có tới **50 dòng trong 1 giây** | 🟠 |
+| 9 | **Sửa / thu hồi một lần gửi** | Một khoá để tìm tất cả dòng của lần gửi đó | Phải `UPDATE` N dòng mà không có khoá nào để tìm chúng | 🟡 |
+
+---
+
+#### 17.6.4.2. Tasks (nhãn hành động THÊM / SỬA)
+
+**Phase A — Nhóm (nền móng, chưa đụng bảng `notifications`):**
+
+- [x] **NOTI4-01** (#1006) [THÊM] Entity + migration nhóm: `NotificationGroup`, `NotificationGroupMember` +
+  `NotificationGroupKindEnum` (`Static = 1`, `Role = 2`). Kèm 2 partial unique index
+  (`lower(name)` và `lower(role_filter) WHERE kind = 2`, đều `WHERE is_deleted = false`) + CHECK
+  `(kind = 2 ∧ role_filter ≠ NULL) ∨ (kind = 1 ∧ role_filter = NULL)`.
+  ⚠️ Partial unique index **không deferrable** (Postgres không hỗ trợ) — thao tác nào vừa nhả tên cũ
+  vừa chiếm tên mới phải **lưu hai lần riêng** trong cùng transaction, nhả trước. Bài học đã trả giá
+  ở `ux_notification_templates_active_per_key`. ~0.5d
+- [x] **NOTI4-02** (#1007) [THÊM] CRUD nhóm (CQRS + controller `AdminNotificationGroupsController`):
+  `Create` · `Update` · `Delete` (mềm) · `GetList` (phân trang) · `GetById` (kèm số thành viên).
+  Chặn sửa/xoá nhóm `is_system` → **409**. Phân trang **bắt buộc** dùng `PaginationRequest` +
+  `QueryableExtensions.ToPagedEntityListAsync` trong `SharedInfrastructure` — không tự viết
+  Skip/Take. ~1d
+- [x] **NOTI4-03** (#1008) [THÊM] Quản lý thành viên: `AddMembers` (nhận **mảng** `userIds`, bỏ qua id đã có
+  thay vì lỗi cả lô) · `RemoveMember` · `GetMembers` (phân trang, JOIN `account_read_models` để trả
+  kèm tên/email/role). Nhóm `kind = Role` → thành viên **suy ra**, thêm/bớt tay trả **409**. ~1d
+- [x] **NOTI4-04** (#1009) [THÊM] `NotificationGroupSeeder` — 4 nhóm hệ thống `kind = Role`
+  (`Admin`/`Manager`/`Staff`/`Customer`, `is_system = true`). Idempotent theo `role_filter`, chạy
+  cùng `NotificationDataSeeder` lúc khởi động. ~0.5d
+- [x] **NOTI4-05** (#1010) [SỬA] `IRecipientResolver`: thêm
+  `GetGroupRecipientsAsync(IEnumerable<Guid> groupIds, CancellationToken)`, gom trùng sẵn.
+  ⚠️ **ĐI CHỆCH KẾ HOẠCH CÓ CHỦ ĐÍCH (03/08/2026).** Bản kế hoạch định đổi phần ruột
+  `GetActiveByRoleAsync` sang tra nhóm `kind = Role`, với lý do "biến 15 chỗ hard-code thành dữ
+  liệu". Khi thi công thì thấy **lợi ích đó không có thật**: nhóm `Role` gắn cứng đúng một tên role,
+  nên đổi "sự kiện này báo cho ai" vẫn phải sửa code y như cũ — chỉ thêm một tầng gián tiếp. Đổi lại
+  cái giá thì có thật: toàn bộ thông báo tự động (SLA, ticket, cảnh báo pin) sẽ phụ thuộc vào 4 dòng
+  seed; thiếu hoặc lỡ xoá một dòng là hàm trả rỗng và mọi thông báo cho vai trò đó **im lặng** biến
+  mất — đúng lớp lỗi mà NOTI4-00 vừa phải đi sửa. Nay `GetActiveByRoleAsync` **giữ nguyên** cách đọc
+  thẳng read-model; hai phương thức chỉ dùng chung định nghĩa "ai đủ điều kiện nhận"
+  (`NotificationGroupMembership.NotifiableAccounts`). Nhóm `Role` vẫn có giá trị — ở chỗ khác: để
+  admin **chọn** "toàn bộ Quản lý" trên màn hình gửi hàng loạt. ~0.5d
+
+**Phase B — Batch + broadcast (giải trọn bài toán):**
+
+- [x] **NOTI4-06** (#1011) [THÊM] Entity + migration batch: `NotificationBatch`, `NotificationBatchTarget`,
+  `NotificationBatchSourceEnum` (`Event = 1`, `Manual = 2`), `NotificationBatchStatusEnum`
+  (`Pending = 1`, `FannedOut = 2`, `Failed = 3`), và thêm **một** cột `notifications.batch_id`
+  (**nullable**, FK `ON DELETE SET NULL`).
+  Kèm `CREATE UNIQUE INDEX ux_notifications_batch_user_channel ON notifications (batch_id, user_id, channel) WHERE batch_id IS NOT NULL`
+  — lưới an toàn cứng cho việc gom trùng. ~0.5d
+- [x] **NOTI4-07** (#1012) [THÊM] `NotificationBroadcastCommand` + handler — **trái tim của sprint**.
+  Thứ tự bắt buộc: validate (thu **tất cả** lỗi, không fail sớm) → `BeginTransactionAsync` → tạo
+  batch `Pending` → tạo targets → **nở người nhận** → cập nhật `recipient_count`/`notification_count`
+  → `status = FannedOut` → `CommitTransactionAsync`.
+  Ba chi tiết ở bước nở, thiếu cái nào cũng thành lỗi thật:
+  1. **Gom trùng** bằng `DISTINCT user_id` — người ở 2 nhóm cùng được nhắm chỉ nhận **một** lần.
+  2. **Lọc `is_active`** bằng JOIN `account_read_models` — chỉ đúng được nhờ `NOTI4-00`.
+  3. **Tập rỗng → rollback + trả 400 tường minh**, KHÔNG tạo batch mồ côi và KHÔNG
+     `log warning; return` — đó đúng là cách lỗi `NOTI4-00` ẩn mình suốt. ~2d
+- [x] **NOTI4-08** (#1013) [SỬA] `NotificationWriter.WriteAsync` nhận thêm `Guid? batchId`; consumer sự kiện
+  tạo batch `source = Event` trước khi fan-out.
+  📌 Toàn hệ thống chỉ có **4 nơi** INSERT vào `notifications` (đã grep kiểm chứng):
+  `NotificationWriter` (20 lời gọi / 13 file) · `CreateNotificationCommandHandler` ·
+  `NotificationDigestBackgroundService` · `NotificationDispatcher`. Vì 20 lời gọi broadcast đều đi
+  qua **đúng một helper**, task này **chỉ sửa 1 file**. Ba nơi còn lại giữ nguyên
+  (`batch_id = NULL`). ~0.5d
+- [x] **NOTI4-09** (#1014) [THÊM] Lịch sử gửi: `NotificationBatchGetListQuery` (phân trang) +
+  `NotificationBatchGetByIdQuery` kèm thống kê `tổng dòng / số người / đã gửi / đã đọc / thất bại`
+  — thứ hiện nay không truy vấn được vì không có `batch_id`. ~1d
+- [x] **NOTI4-10** (#1015) [THÊM] Permission + seed: `NotificationGroupView` · `NotificationGroupManage` ·
+  `NotificationBroadcast` · `NotificationBatchView`; cập nhật §20 và `AuthDataSeeder` role→permission.
+  ⚠️ Seed permission nằm ở **AuthService** — đây là điểm cross-service **duy nhất** của sprint. ~0.5d
+
+**Phase C — Frontend + chất lượng:**
+
+- [x] **NOTI4-11** (#1016) [THÊM] FE: mục sidebar "Nhóm nhận thông báo" — danh sách nhóm
+  (`useUrlFilters` + `DataPagination`), dialog tạo/sửa, màn hình thành viên có tìm kiếm.
+  Nhóm `kind = Role` chỉ xem, không cho sửa thành viên. ~1.5d
+- [x] **NOTI4-12** (#1017) [SỬA] FE màn "Gửi thông báo": đổi ô chọn **một** người thành chọn **nhiều nhóm +
+  nhiều người**, có **xem trước số người nhận sau khi gom trùng** trước khi bấm gửi.
+  ⚠️ **Không** dùng kiểu `pageSize: 100` rồi coi là đầy đủ — khoảng **15 dropdown** hiện có đang làm
+  vậy và sẽ âm thầm mất người khi vượt 100. Ô chọn người nhận phải tìm kiếm phía server hoặc cuộn
+  vô hạn. ~1.5d
+- [x] **NOTI4-13** (#1018) [THÊM] FE: màn hình "Lịch sử gửi" — danh sách batch + thống kê đã gửi/đã đọc/
+  thất bại. Ghi rõ trên UI *"chỉ hiển thị các lần gửi từ khi bật tính năng"* (xem §17.6.4.5 fork 3). ~1d
+- [x] **NOTI4-14** (#1019) [THÊM] Test: unit (gom trùng · lọc `is_active` · tập rỗng → 400 không batch mồ côi
+  · nhóm `Role` resolve từ read-model · nhóm hệ thống → 409 · thêm thành viên trùng · đếm
+  `recipient_count`) + integration (2 nhóm giao nhau → số dòng = `|hợp| × số kênh`; xoá nhóm →
+  cascade thành viên nhưng **batch cũ vẫn còn**; migration rollback → apply lại) + **2 truy vấn bất
+  biến DB** phải luôn ra 0 (xem §17.6.4.3). ~1d
+- [x] **NOTI4-15** (#1020) [THÊM] Doc sync: §3.3 (4 entity mới + `Notification.BatchId`) · §3.5 (endpoint
+  mới) · `docs/api-notification.md` **×3 bản** (backend/frontend/mobile giữ đồng bộ) · CHANGELOG. ~0.5d
+
+**📌 KHÔNG làm trong sprint này (hoãn có chủ đích, không huỷ):**
+
+Bỏ `title`/`body`/`payload_json` khỏi `notifications` và đọc qua batch — xem §17.6.4.5 fork 2.
+Đây là hướng chuẩn về mặt mô hình nhưng bắt `GET /api/notifications` (truy vấn **nóng nhất**) phải
+JOIN thêm một bảng, và ép 3 nguồn INSERT còn lại vào mô hình batch mà chúng không tự nhiên thuộc về.
+Với 1.282 dòng hiện tại, đổi chác này chưa đáng. Chờ số đo thật.
+
+---
+
+#### 17.6.4.3. Acceptance
+
+- **Phase A:** tạo được nhóm "Trực sự cố cuối tuần", thêm 3 người, đổi tên, xoá. 4 nhóm hệ thống
+  hiện sẵn sau khi khởi động và **không** sửa/xoá được (409). `GetActiveByRoleAsync("Manager")` sau
+  khi đổi sang đọc nhóm trả **đúng cùng tập người** như trước khi sửa (regression: bắn lại một
+  `IotDeviceWentOfflineEvent` thật, số dòng notification sinh ra không đổi).
+- **Phase B:** gửi cho 2 nhóm **giao nhau** → người ở cả hai nhận **đúng 1 dòng mỗi kênh**. Gửi cho
+  nhóm chỉ toàn người `is_active = false` → **400** kèm thông báo rõ, và **không** có batch nào được
+  tạo. Màn lịch sử gửi hiện đúng số người nhận và số đã đọc.
+- **Phase C:** ô chọn người nhận tìm được người thứ 101 trở đi. `tsc --noEmit` +
+  `eslint --max-warnings=0` + `npm run build` + `prettier --check` sạch cả 4.
+
+**Bất biến DB — kiểm sau MỌI kịch bản, cả hai truy vấn phải ra 0:**
+
+```sql
+-- Một người nhận trùng trong cùng một lần gửi
+SELECT count(*) FROM (
+  SELECT batch_id, user_id, channel FROM notifications
+  WHERE batch_id IS NOT NULL GROUP BY 1,2,3 HAVING count(*) > 1) t;
+
+-- Batch báo đã fan-out mà không sinh dòng nào
+SELECT count(*) FROM notification_batches b WHERE b.status = 2
+  AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.batch_id = b.id);
+```
+
+---
+
+#### 17.6.4.4. Rủi ro
+
+| ID | Rủi ro | Ảnh hưởng | Giảm thiểu |
+|----|--------|-----------|------------|
+| R-47 | Người ở 2 nhóm cùng được nhắm **nhận trùng** | User thấy 2 thông báo y hệt — mất niềm tin vào hệ thống báo động | `DISTINCT` ở tầng ứng dụng (NOTI4-07) **+** unique index `(batch_id, user_id, channel)` (NOTI4-06) làm lưới an toàn cứng. Hai lớp, vì tầng ứng dụng sai thì DB vẫn chặn |
+| R-48 | Gửi cho người đã nghỉ / bị đình chỉ | Rò rỉ thông tin nội bộ ra tài khoản đáng lẽ đã ngừng phục vụ | JOIN `account_read_models` lọc `is_active` lúc gửi. **Chỉ đúng được nhờ `NOTI4-00`** — trước 02/08 cột này không bao giờ được cập nhật |
+| R-49 | Read-model tài khoản **lệch trở lại** sau này | Nhóm thiếu người ⇒ quay lại đúng lỗi `NOTI4-00`, và vẫn im lặng như cũ | `POST /api/admin/accounts/resync` (đã có, chạy lại bao nhiêu lần cũng được). **Nên thêm** alert khi số dòng `account_read_models` lệch với `auth_db` — hiện chưa có, đề xuất gộp vào NOTI4-14 |
+| R-50 | `NotificationWriter` đổi chữ ký làm vỡ 20 lời gọi ở 13 file | Consumer không compile hoặc fan-out sai | Tham số `batchId` để **tuỳ chọn** (`Guid? batchId = null`) ⇒ 20 lời gọi cũ vẫn hợp lệ, sửa dần từng consumer. Regression: chạy đủ 506 unit test NotificationService |
+| R-51 | Fan-out đồng bộ làm treo request khi nhóm lớn | `POST /broadcast` timeout, admin bấm lại → gửi 2 lần | Quy mô hiện tại 10 tài khoản ⇒ 40 dòng, không chạm ngưỡng. Đã ghi sẵn **ngưỡng chuyển sang chạy nền** (~2.000 dòng hoặc >2s) và schema đã chừa `status`/`recipient_count` để chuyển mà **không đổi schema** — xem §17.6.4.5 fork 1 |
+| R-52 | Bịa `batch_id` cho 1.282 dòng cũ | Sinh ra "lần gửi" chưa từng tồn tại, **không phát hiện được về sau** | **Cấm gom theo thời gian.** Dòng cũ để `batch_id = NULL`; UI ghi rõ chỉ hiện lần gửi từ khi bật tính năng — xem §17.6.4.5 fork 3 |
+
+---
+
+#### 17.6.4.5. Decision log (chốt 02/08/2026, khi khảo sát)
+
+| Fork | Chọn | Lý do | Đánh đổi phải chấp nhận | Ảnh hưởng công |
+|------|------|-------|--------------------------|----------------|
+| **1. Fan-out đồng bộ hay chạy nền?** | **Đồng bộ** trong handler | Hệ thống có **10 tài khoản** ⇒ 10 người × 4 kênh = 40 dòng, một transaction là xong. Thêm background service + bảng trạng thái + đường retry lúc này là phức tạp không đổi lấy gì — trái "Simplicity First" | Nhóm lớn sẽ làm request chậm (R-51). Ngưỡng chuyển đã ghi sẵn: **~2.000 dòng** hoặc `POST /broadcast` **>2s** | 0d (thay vì +1.5d) |
+| **2. Nội dung nằm ở batch hay giữ trên `notifications`?** | **Giữ trên `notifications`** (giai đoạn C hoãn) | Bỏ hẳn thì `GET /api/notifications` — truy vấn nóng nhất — phải JOIN thêm, và ép `Digest`/`Dispatcher` vào mô hình batch mà chúng không thuộc về | **Nội dung vẫn nhân bản** từng dòng. Đây chính là điều người dùng phàn nàn, nên phải nói rõ là *hoãn*, không phải *đã giải quyết* | 0d (thay vì +2d) |
+| **3. Di trú 1.282 dòng cũ?** | **Để `batch_id = NULL`** | Dữ liệu cũ **không có** thông tin để gom thành lần gửi. Gom theo `(type, entity_id, giây)` là **suy đoán**, và §17.6.4.1 mục 8 đã chứng minh nó gom nhầm (50 dòng/giây thực chất là rác test tải) | Màn lịch sử gửi không thấy dữ liệu trước sprint này. Chấp nhận — thà thiếu còn hơn bịa | 0d |
+| **4. Chỉ nhóm tĩnh, hay có cả nhóm động theo role?** | **Cả hai** (`kind = Static \| Role`) | Nhóm `Role` không phải để cho đủ bộ — nó là **đường di trú** cho 15 chỗ hard-code. Có nó thì `IRecipientResolver` đổi ruột mà 13 file consumer không phải sửa | Thêm một CHECK constraint và một nhánh rẽ trong resolver | +0.5d, đổi lại **tiết kiệm** việc sửa 13 file |
+| **5. `user_id` có đặt khoá ngoại không?** | **KHÔNG** | Trỏ sang **read-model** đồng bộ qua bus. Message tới **sau** thao tác dùng `user_id` (thứ tự không bảo đảm) ⇒ insert vỡ vì FK ⇒ retry, có khi hết lượt vẫn hỏng. Mà nguồn sự thật ở `auth_db` service khác — FK nội bộ không bảo vệ được gì trước sai lệch xuyên service | Không có ràng buộc DB chặn `user_id` rác | 0d |
+
+> `group_id` **có** FK (`ON DELETE CASCADE`) — cả hai bảng cùng `notification_db`, cùng transaction,
+> không có gì bất định. Sự bất đối xứng này là **có chủ đích**, không phải quên.
+
+**Tổng:** ~13.5 dev-day = Phase A **3.5d** (01–05) + Phase B **4.5d** (06–10) + Phase C **5.5d** (11–15).
+Sau Phase A + B (**8d**) thì **cả hai câu hỏi ban đầu đều đã trả lời được "rồi"** — phần còn lại là
+giao diện và chất lượng.
+
+---
+
+#### 17.6.4.6. Cần chốt trước khi code
+
+| # | Câu hỏi | Mặc định của kế hoạch | Nếu đổi thì phát sinh gì |
+|---|---|---|---|
+| 1 | **Nhóm lồng nhau** (nhóm chứa nhóm)? | **Không hỗ trợ** | Kéo theo phát hiện chu trình + đệ quy lúc nở người nhận ⇒ +2d và rủi ro vòng lặp vô hạn |
+| 2 | **Ai được tạo nhóm?** | Chỉ **Admin** | Cho Manager thì phải bàn phạm vi nhìn thấy: Manager có thấy nhóm của Manager khác không |
+| 3 | **Người dùng tự vào/ra nhóm?** | **Không** — chỉ Admin | Cần thêm khái niệm "nhóm mở" + endpoint tự đăng ký |
+| 4 | **Batch có hẹn giờ gửi?** | **Gửi ngay** | Thêm cột `scheduled_at` + background service quét. Cột thêm sau được, **không phá schema** |
+| 5 | **Broadcast có tôn trọng `notification_preferences` / quiet hours?** | Đi qua `NotificationDispatcher` như mọi notification khác ⇒ **có** | Nếu muốn thông báo bảo trì hệ thống **vượt** quiet hours thì cần cờ `bypassQuietHours` + quy tắc ai được dùng |
+
+---
+
+**Thứ tự thi công đề xuất:** 01 → 02 → 03 → 04 → 05 *(hết Phase A, đã chạy được và regression được)*
+→ 06 → 07 → 08 → 09 → 10 *(hết Phase B, giải trọn bài toán)* → 11 → 12 → 13 → 14 → 15.
+
+Phase A và Phase B **độc lập triển khai được** — có thể ship A trước, lấy phản hồi rồi làm B.
+
+---
+
+### Sprint 6.5 (Notification template — cho template thật sự có tác dụng, khảo sát + thi công 2026-08-03)
+
+**Trạng thái: ✅ ĐÃ IMPLEMENT XONG 03/08/2026.** 560/560 unit test xanh.
+
+#### 17.6.5.0. Câu hỏi mở đầu và điều thực sự tìm thấy
+
+Câu hỏi ban đầu chỉ là *"template đang được áp dụng vào đâu"*. Khảo sát cho ra **đúng một** điểm dùng
+lúc chạy: `NotificationDispatcher.RenderContentAsync`, tra theo `(Type × Channel)`, bật mặc định qua
+`UseDbTemplates = true`, không có template thì rơi về `Title`/`Body` inline mà consumer ghi cứng.
+
+Nhưng khi đo tiếp trên dữ liệu thật thì lộ ra **sáu lỗi độc lập, tất cả đều im lặng** — không log,
+không metric, không test nào bắt:
+
+| # | Lỗi | Đo được | Vì sao im lặng |
+|---|---|---|---|
+| 1 | **Template sai tên biến hàng loạt** | `{{ticketCode}}` trong khi consumer ghi khoá `code`; `{{serialNumber}}` trong khi consumer ghi `assetSerialNumber`; `{{threshold}}` ↔ `thresholdValue`; và 6 biến **không tồn tại ở bất kỳ loại nào** (`customerName`, `slaDeadline`, `minutesRemaining`, `senderName`, `preview`, `displayName`) | Handlebars gặp biến lạ **render ra chuỗi rỗng chứ không ném** |
+| 2 | **Kênh InApp render xong rồi vứt đi** | `InAppChannel` dùng `request.Title`/`Body` **0 lần**; 548/1285 dòng (43%) tốn 1 truy vấn + 1 lượt render mỗi dòng mà kết quả không đi đâu | Feed vẫn hiện chữ inline nên nhìn ngoài không thấy sai |
+| 3 | **Enum trùng giá trị** | `TicketMerged = 27` **trùng nguyên vẹn** `ChatEscalatedToAdmin = 27` | `Enum.IsDefined(27)` vẫn đúng; `ToString()` vẫn trả về một tên |
+| 4 | **`NotificationCategoryMap` thiếu `TicketMerged`** | Thông báo "ticket đã gộp" bị xếp nhóm **Sla** | Ăn theo mục của `ChatEscalatedToAdmin` nhờ lỗi #3 ⇒ **test bao vẫn xanh** |
+| 5 | **Template lệch type do enum đánh số lại** | Type 25 mang câu của 27, 26 mang câu của 28, 30 mang câu của 32… lệch đúng **2 bậc** | Blog `GH-671` chiếm 25/26 đẩy nhóm sau lên 2; các dòng seed cũ giữ nguyên số |
+| 6 | **Ma trận kênh lệch consumer** | Consumer pin gửi `AllChannels` (có SMS) → **98 tin SMS đã gửi**, nhưng ma trận không khai SMS nên seeder **không dựng template SMS nào** | Rơi về inline, mà inline lại đang đúng nên không ai để ý |
+
+> **Quan hệ nhân quả cần nhớ:** lỗi #3 **che** lỗi #4, và lỗi #2 **che** lỗi #1 trên kênh InApp.
+> Nếu chỉ làm mỗi việc "cho InApp dùng template" (đề xuất ban đầu) mà không sửa #1 trước thì
+> **1.229 thông báo pin sẽ hiện "Bất thường pin " với chỗ trống** — biến một lỗi vô hại thành lỗi
+> nhìn thấy được. Thứ tự thi công vì thế là bắt buộc, không phải tuỳ chọn.
+
+#### 17.6.5.1. Căn nguyên
+
+Không có **hợp đồng** nào giữa bên ghi payload (consumer) và bên đọc payload (template).
+
+Consumer dựng payload bằng anonymous object (`JsonSerializer.Serialize(new { code = evt.Code, … })`)
+— không có kiểu để phản chiếu, không có hằng dùng chung. Người soạn template phải **tự đoán** tên
+khoá. Đoán sai thì Handlebars im lặng trả rỗng. Màn hình xem trước lại nhận dữ liệu mẫu **do chính
+client gõ vào**, nên gõ `{"ticketCode":"TK-1"}` là xem trước hiện ra đẹp đẽ trong khi gửi thật ra
+chỗ trống — *"xem trước thấy đúng nhưng gửi đi lại khác"*.
+
+#### 17.6.5.2. Đã làm
+
+| # | Việc | File |
+|---|---|---|
+| NOTI5-01 | **Danh mục biến** theo từng type, trích từ code sinh payload — nguồn sự thật cho cả validate, xem trước lẫn gợi ý trên FE | `Application/Templates/NotificationTemplateVariables.cs` (mới) |
+| NOTI5-02 | **Bộ chặn tên biến** — bóc `{{bien}}` (bỏ qua chú thích/thẻ đóng/partial/helper), đối chiếu danh mục, **gợi ý tên đúng** bằng quan hệ chứa nhau + khoảng cách Levenshtein | `Application/Templates/TemplateVariableGuard.cs` (mới) |
+| NOTI5-03 | Nối bộ chặn vào **tạo** và **sửa** template ⇒ trả `400` kèm gợi ý. Nhánh sửa lấy type từ **bản gốc** (người sửa không truyền type lên) | 2 handler |
+| NOTI5-04 | **Viết lại toàn bộ tên biến** trong danh mục seed cho khớp payload thật (~30 loại) | `Infrastructure/Persistence/Seeders/NotificationTemplateCatalog.cs` |
+| NOTI5-05 | `TicketMerged` **27 → 34**, hoàn tất `GH-83` mà mobile đã chốt từ trước | `Domain/Enums/NotificationTypeEnum.cs` |
+| NOTI5-06 | Khai tường minh `TicketMerged → Ticket` (trước bị xếp nhầm nhóm `Sla`) | `Domain/Enums/NotificationCategoryMap.cs` |
+| NOTI5-07 | **InApp ghi ngược** nội dung đã render vào chính dòng notification, kèm 3 chốt: chỉ ghi một lần · rỗng thì giữ nguyên · cắt theo giới hạn cột | `Infrastructure/Channels/InAppChannel.cs` |
+| NOTI5-08 | **Seeder tự hội tụ** bản đã trôi khỏi danh mục — luật cố ý hẹp để không giẫm lên công sức người vận hành | `Infrastructure/Persistence/Seeders/NotificationDataSeeder.cs` |
+| NOTI5-09 | Xem trước + gửi thử nạp sẵn **đúng khoá thật** (`«tênKhoá»`), biến gọi sai hiện rỗng ngay trên màn hình | `TemplateSampleModel.BuildFor` + 2 handler |
+| NOTI5-10 | Ma trận kênh khớp consumer: `BatteryAnomalyDetected` += `Sms`; thêm `TicketMerged`, `BlogGenerationCompleted/Failed` | `Application/Services/NotificationDispatchOptions.cs` |
+| NOTI5-11 | 2 endpoint mới: `GET .../variables` (biến hợp lệ) · `GET .../coverage` (độ phủ theo **dữ liệu thật**) | Query + Handler + DTO + Controller |
+| NOTI5-12 | 3 màn hình FE: ô gợi ý biến trong trình soạn · báo lỗi biến sai · bảng độ phủ | xem §28 |
+
+**Luật hội tụ của seeder (NOTI5-08)** — cố ý hẹp:
+
+| Tình huống | Hành động |
+|---|---|
+| Chưa có template cho cặp đó | Thêm bản v1 |
+| Bản đang dùng **do seeder tạo** (`created_by` rỗng) mà khác danh mục | Sinh phiên bản mới theo danh mục, hạ cờ bản cũ — nội dung seed suy ra được từ code, không phải công sức của ai |
+| Bản đang dùng **do người vận hành soạn** mà gọi biến không tồn tại | Cũng sinh phiên bản mới; bản hỏng **vẫn nằm nguyên trong lịch sử** |
+| Bản do người vận hành soạn và biến đều hợp lệ | **Không đụng tới** |
+
+Tự dừng: sau khi hội tụ, bản đang dùng khớp danh mục nên lần khởi động sau không sinh thêm gì.
+
+#### 17.6.5.3. Ba lớp chặn tái diễn
+
+1. **Lúc soạn** — `GET .../variables` cho trình soạn hiện sẵn biến hợp lệ, khỏi phải đoán.
+2. **Lúc lưu** — `POST`/`PUT` trả `400` kèm gợi ý tên đúng.
+3. **Lúc build** — 3 test bao giữ danh mục không trôi: template seed chỉ dùng biến có thật · mọi khoá
+   khai báo đều xuất hiện ở một consumer/background job · mọi khoá consumer ghi đều đã khai báo.
+   Cộng thêm test *"không có hai type nào trùng giá trị"*.
+
+#### 17.6.5.4. Bằng chứng test bắt được lỗi
+
+Không nhận test xanh làm bằng chứng. Tái tạo lại từng bug rồi xác nhận **đúng** test tương ứng đỏ,
+không có test nào đỏ oan:
+
+| Bug tái tạo | Test đỏ | Thông báo |
+|---|---|---|
+| Trả `{{ticketCode}}` vào danh mục seed | `MoiTemplateSeed_ChiDungBienCoThat` | `TicketCreated/InApp: … {{ticketCode}} (ý bạn là {{code}}?)` |
+| Gỡ lời gọi guard khỏi handler tạo | `Create_BienKhongTonTai_Tra400VaKhongLuu` | — |
+| Gỡ phần ghi ngược của `InAppChannel` | `SendAsync_GhiNguocNoiDungDaRender…` + `SendAsync_NoiDungDaiHonCot…` | — |
+| Trả `TicketMerged` về 27 | `KhongCoHaiTypeNaoTrungGiaTri` | — |
+
+#### 17.6.5.5. Decision log
+
+| # | Chốt | Vì sao |
+|---|---|---|
+| 1 | **Chỉ InApp ghi ngược**, không áp cho Email/Push/SMS | Với 3 kênh kia dòng DB chỉ là **biên bản**, thứ người dùng nhận là gói tin đã gửi. Áp cho Email còn nguy: `body_template` tối đa 4000 mà cột `body` chỉ 2000 ⇒ Postgres ném lỗi, dòng kẹt retry vĩnh viễn |
+| 2 | Biến lạ ⇒ **chặn** chứ không cảnh báo | Lưu xong là có hiệu lực ngay cho mọi thông báo của cặp đó. Một cảnh báo bị bỏ qua sẽ thành hàng trăm tin nhắn cụt |
+| 3 | Danh mục biến **khai tay**, không sinh tự động | Consumer dùng anonymous object, không có kiểu để phản chiếu. Bù lại bằng 3 test bao đối chiếu với chính mã nguồn consumer |
+| 4 | Seeder **hội tụ** thay vì migration xoá dữ liệu | Không xoá dòng nào; bản cũ giữ nguyên trong lịch sử phiên bản, đúng tinh thần cơ chế versioning sẵn có |
+| 5 | `{{severity}}`/`{{anomalyType}}` giữ nguyên dạng **số** | Event từ BatteryService không gửi kèm tên đọc được. Đặt sau nhãn tiếng Việt ("Mức độ {{severity}}") để câu vẫn xuôi. Muốn hiện chữ thì phải đổi hợp đồng event — ngoài phạm vi |
+| 6 | `SlaWarning`/`SlaBreached` **không** có mã ticket trong tiêu đề | Payload hai loại này chỉ có `ticketId`, không có `code`. Thà tiêu đề chung chung còn hơn một chỗ trống. *(Đáng bổ sung `code` vào 2 consumer đó — ghi nhận, chưa làm)* |
+
+#### 17.6.5.6. Đợt 2 — dọn nốt 5 mục còn treo (03/08/2026, ĐÃ XONG)
+
+Năm mục ghi nhận ở cuối đợt 1 đã làm hết. Ba trong số đó phải **đổi hợp đồng event giữa service**,
+nên chép lại đầy đủ lý do:
+
+| # | Mục | Đã làm | Vì sao làm vậy |
+|---|---|---|---|
+| 1 | `{{severity}}`/`{{anomalyType}}` hiện ra **số** | Hai event pin mang thêm `AnomalyTypeName`/`SeverityName`; `BatteryAnomalyLabels` quy tên enum về tiếng Việt; template dùng cặp `*Name` | Hai enum thuộc `BatteryService.Domain` nên subscriber **không tham chiếu được**. Tự dựng bảng tra **theo số** ở phía nhận là sai: BatteryService chèn một giá trị vào giữa enum là mọi nhãn dịch lệch — đúng tai nạn `NotificationTypeEnum` đã dính khi Blog chiếm 25/26. Nên bên **sở hữu** enum gửi kèm tên, phía nhận tra **theo tên** |
+| 2 | `SlaWarning`/`SlaBreached` thiếu mã ticket | Hai event mang thêm `Code`; 3 chỗ phát ở TicketService điền; 2 consumer ghi vào payload và dùng trong câu + template | Payload chỉ có `TicketId` (GUID) nên thông báo vỡ SLA **không nhắc được ticket nào**, trong khi đây đúng là loại cần biết ngay để mở ra xử lý |
+| 3 | `AdminInvite (13)` không có producer | **Gỡ hẳn** khỏi enum, `NotificationCategoryMap`, ma trận kênh, danh mục template, và cả FE + mobile | Thư mời đi thẳng `AuthService → EmailService` (`SendAdminInviteEvent` → `SendAdminInviteConsumer`). Người được mời **chưa có tài khoản** nên không thể nhận thông báo in-app. Nối consumer vào đây sẽ **gửi trùng email**. Đây đúng thứ mà ghi chú NOTI-04 trong chính file enum đã chốt tránh — "không đẻ enum không producer" — chỉ là lúc đó bỏ sót dòng này |
+| 4 | `BuildBody` của digest không cắt | Dựng dần theo dòng, dừng khi dòng kế tiếp làm vượt trần, luôn chừa chỗ cho dòng "… và N thông báo khác"; cắt cứng ở cuối làm chốt chặn | Mỗi mục con được phép dài 2000, mà cột `body` cũng chỉ 2000 ⇒ chỉ **hai mục dài** là Postgres ném lỗi và hỏng cả vòng gom. Cắt ở ranh giới dòng, không cắt giữa câu |
+| 5 | 5 consumer dựng payload bằng **chuỗi nội suy** | Chuyển sang `JsonSerializer.Serialize` | ⚠️ **Đính chính:** đợt 1 tôi ghi "không escape, tên có dấu nháy sẽ làm hỏng JSON" — **nói quá**. Kiểm lại: mọi trường nội suy chỉ là `Guid`/`int`/`bool`, JSON **chưa từng** có thể vỡ. Đây là dọn **độ bền**, không phải sửa lỗi: nó đúng nhờ may, người sau thêm một trường chữ mà quên escape là hỏng, và payload hỏng thì mọi biến template của loại đó im lặng render ra rỗng. 26/31 consumer khác vốn đã dùng `JsonSerializer` |
+
+**Bằng chứng trên hệ thống thật** (sau khi build lại 3 service):
+
+```
+type 9 → "Bất thường pin BAT-KT3-001" / "Quá nhiệt — mức Nghiêm trọng. Giá trị đo 72.5°C, ngưỡng 60°C."
+type 7 → "Cảnh báo SLA: TKT-KT4-0009" / "Ticket TKT-KT4-0009 đã dùng 85% thời gian SLA. Cần xử lý sớm."
+```
+
+Seeder hội tụ **13 bản** (4 SLA + 9 pin) và hạ cờ **1 bản mồ côi** (`AdminInvite × Email`); khởi động
+lại lần nữa → không sinh thêm gì. Độ phủ giữ **17/17 cặp, 0 biến hỏng**. Endpoint biến trả **34 loại**,
+`AdminInvite` đã biến mất. **575/575 test xanh** (NotificationService) + 455 (BatteryService) +
+941 (TicketService).
+
+**Tương thích ngược:** cả ba trường mới đều **nullable / mặc định rỗng**. Event cũ còn nằm trong
+Outbox và hàng đợi deserialize ra `null`, phía nhận tự lùi — `BatteryAnomalyLabels` trả về con số,
+câu SLA lược phần mã đi thay vì hiện `"Ticket  "`. Không cần dừng hệ thống để nâng cấp. Đã kiểm:
+**0 dòng type 9/32/33 còn ở trạng thái Pending**, nên không dòng cũ nào bị render lại.
+
+#### 17.6.5.7. Hai lỗi tìm thấy ngoài danh sách
+
+**Lỗi thứ sáu — tìm thấy khi đang sửa mục 2.**
+
+Khi rà 3 chỗ phát event SLA để điền `Code`, phát hiện `SlaTimerBackgroundService` đọc
+`timer.Ticket?.Assignments.FirstOrDefault(...)` để lấy `StaffId`, nhưng truy vấn chỉ có
+`.Include(t => t.Ticket)` — **không** `ThenInclude(Assignments)`.
+
+Dự án không bật lazy loading và `Assignments` khởi tạo sẵn là danh sách rỗng, nên `FirstOrDefault`
+luôn trả `null` ⇒ **`StaffId` luôn null**, âm thầm, không lỗi, không log.
+
+Hệ quả: cảnh báo sắp vỡ SLA chỉ tới Manager, **không tới Staff đang phụ trách** — đúng thứ mà
+NOTI-05 (#676) thêm trường `StaffId` để chữa. Trường đã thêm từ Sprint 6.2, dữ liệu thì chưa bao giờ
+được nạp. Đã thêm `.ThenInclude(ticket => ticket.Assignments)`; 941 test TicketService vẫn xanh.
+
+**Lỗi thứ bảy — gửi hàng loạt thủ công bị template đè mất nội dung.** Tìm thấy khi bạn hỏi
+*"phần gửi thông báo này có đang kéo template không"*.
+
+Màn hình gửi hàng loạt cho admin chọn **bất kỳ** loại thông báo nào (loại quyết định nhóm tuỳ chọn
+nhận tin, nên không ép về mỗi `System` được). Dòng sinh ra ở trạng thái `Pending` nên **có** đi qua
+dispatcher, và dispatcher tra template theo `(Type × Channel)`. Chọn "Ticket mới" rồi gõ tay tiêu đề
+thì template `TicketCreated` khớp và render — nhưng payload của một lần gửi tay **không có** `code`,
+nên ra `"Ticket mới "` với chỗ trống, và chữ admin vừa gõ **biến mất sạch**.
+
+Đo trên hệ thống thật: admin gõ `"KTMPL Tiêu đề admin tự gõ"`, người nhận thấy `"Ticket mới "`.
+
+**Lỗi có từ khi có tính năng gửi hàng loạt** và đã âm thầm áp cho Email/Push/SMS — `RenderContentAsync`
+chạy cho mọi kênh. Riêng InApp thì kết quả render vốn bị vứt đi nên không ai thấy; tới khi InApp ghi
+ngược nội dung vào dòng notification (NOTI5-07) thì nó lộ ngay trên feed. Tức là thay đổi của đợt 1
+**không tạo ra** lỗi này, nhưng biến nó từ vô hình thành phá dữ liệu.
+
+Sửa: `RenderContentAsync` bỏ qua template khi dòng thuộc một lần gửi có `Source = Manual`. Nội dung
+do người viết ra là thứ có thẩm quyền, không có gì để khuôn mẫu hoá. Lần gửi sinh **tự động từ sự
+kiện** vẫn qua template như thường — có test riêng khoá đúng ranh giới đó.
+
+#### 17.6.5.8. Tuỳ chọn "dùng mẫu" cho gửi hàng loạt thủ công (03/08/2026)
+
+Sau khi §17.6.5.7 chặn mẫu đè lên nội dung viết tay, câu hỏi tiếp theo là ngược lại: **muốn** dùng
+mẫu thì làm sao. Nay có tuỳ chọn bật/tắt.
+
+| | `useTemplate = false` (mặc định) | `useTemplate = true` |
+|---|---|---|
+| Nội dung gửi đi | Chữ admin gõ, y nguyên | Dispatcher render mẫu `(Loại × Kênh)` với biến admin điền |
+| `title`/`body` | Chính là nội dung | **Nội dung dự phòng** cho kênh không có mẫu |
+| Kênh không có mẫu | — | Rơi về `title`/`body`, không chặn gửi |
+
+**Vì sao phải render lúc gửi chứ không đổ sẵn chữ vào ô soạn.** Mẫu khoá theo cặp `(Loại × Kênh)` và
+bản SMS được nén ngắn lại (tính tiền theo đoạn), nên một lần gửi 3 kênh cho ra **3 nội dung khác
+nhau**. Một ô nhập duy nhất không tạo ra được ba bản đó. Đo thật với loại `BatteryAnomalyDetected`:
+
+```
+InApp/Push → "Bất thường pin BAT-2026-777" / "Quá nhiệt — mức Nghiêm trọng. Giá trị đo 72.5°C…"
+SMS        → "[Solar Battery]"              / "Bất thường pin BAT-2026-777. Quá nhiệt — mức…"
+```
+
+**Vì sao là cờ riêng `use_template` chứ không suy ra từ `template_id`.** Cột `template_id` đã có sẵn
+từ Sprint 6.4 nhưng chỉ chứa **một** id, trong khi một lần gửi nhắm 3 kênh dùng **3 mẫu**. Không có
+"một" template id để ghi. Cờ boolean trả lời đúng câu hỏi có/không; dispatcher vẫn tra mẫu theo từng
+kênh như thường.
+
+**Ba lớp bảo vệ để admin không gửi mù:**
+
+1. **Xem trước theo từng kênh** — `POST /broadcast/template-preview` trả một dòng mỗi kênh, dựng
+   model **đúng khuôn** `NotificationDispatcher.BuildTemplateModel` nên chữ xem trước bằng đúng chữ
+   gửi thật. (Bài học đắt nhất của sprint này: màn hình xem trước cũ nhận dữ liệu mẫu do client tự
+   gõ nên "xem trước thấy đúng nhưng gửi đi lại khác".)
+2. **Báo biến chưa có giá trị** — `missingVariables` từng kênh, hiện ngay dưới bản xem trước. Admin
+   thấy chỗ trống *trước khi* bấm gửi.
+3. **Chặn biến lạ khi gửi** — khai biến không thuộc loại đó ⇒ 400 kèm danh sách biến hợp lệ.
+
+**Giao diện:** ô điền biến lấy từ **chính mẫu của các kênh đang chọn**, không phải toàn bộ khoá
+payload của loại đó. Khác biệt này thấy rõ ở loại `System`: danh mục khai 5 khoá
+(`digest`/`count`/`from`/`to`/`notificationIds`) nhưng đó là của **bản tin gom** do máy sinh — mẫu
+`System` lại chỉ chuyển tiếp nguyên văn nên **không cần ô nào**. Bày 5 ô ra chỉ khiến người dùng
+tưởng phải điền gì đó.
+
+#### 17.6.5.8bis. Xem nhanh thành viên ngay trên form gửi (03/08/2026)
+
+Ô chọn nhóm trước đây chỉ hiện tên và một con số. Admin sắp gửi cho "Toàn bộ Khách hàng" không có
+cách nào biết 2 người đó là ai nếu không mở sang màn hình khác — mà gửi thông báo là việc **không
+thu hồi được**.
+
+Nay mỗi nhóm có nút mở/đóng danh sách người, mặc định đóng.
+
+| Quyết định | Vì sao |
+|---|---|
+| Nút mở nằm **ngoài** `<label>` | Đặt trong thì bấm xem sẽ tick luôn ô chọn nhóm — người dùng chỉ muốn xem có những ai, chưa chắc muốn chọn |
+| Chỉ gọi API **khi mở** | Component chỉ render lúc mở nên hook cũng chỉ chạy lúc đó; mở sẵn cả 5 nhóm là 5 lượt gọi thừa |
+| **Vẫn hiện** người đã ngừng hoạt động, làm mờ | Họ còn trong nhóm nhưng KHÔNG nhận thông báo — đó chính là lý do số dòng nhiều hơn con số người nhận bên cạnh tên nhóm. Ẩn đi thì admin không hiểu vì sao hai số lệch, và cũng không biết để dọn |
+| Nói thẳng phần chênh lệch | *"3 người đang ngừng hoạt động sẽ không nhận thông báo — đó là lý do con số bên cạnh tên nhóm (2) nhỏ hơn số dòng ở đây."* |
+
+File: `GroupMemberPeek.tsx` (mới) + sửa ô chọn nhóm trong `BroadcastNotificationForm.tsx`.
+
+#### 17.6.5.9. Còn treo
+
+Không còn mục nào của Sprint 6.5. Một điểm **ngoài phạm vi** ghi nhận để theo dõi riêng:
+
+- `AccountStatusChangedEvent` vẫn **không ai publish** (ghi nhận từ Sprint 6.4) ⇒ consumer tương ứng
+  ở TicketService + BatteryService là code chết.
+
+---
+
 ## 18. Definition of Done
 
 ### 18.1. Per ticket (theo `workflow.md`)
@@ -6455,6 +7111,12 @@ public static class PermissionCodes {
     public const string DeviceTokenManage = "notification.device.manage";
     public const string PreferenceManage = "notification.preference.manage";
 
+    // Notification audience (Sprint 6.4 NOTI4-10 — CHƯA IMPLEMENT)
+    public const string NotificationGroupView = "notification.group_view";
+    public const string NotificationGroupManage = "notification.group_manage";
+    public const string NotificationBroadcast = "notification.broadcast";
+    public const string NotificationBatchView = "notification.batch_view";
+
     // Chat (Sprint Chat Phase 2 — #516)
     public const string ChatCreatePublic = "chat.create.public";
     public const string ChatCreateInternal = "chat.create.internal";   // Staff/Manager/Admin only
@@ -6533,6 +7195,10 @@ public static class PermissionCodes {
 | NotificationViewOwn | ✅ | ✅ | ✅ | ✅ |
 | DeviceTokenManage | ✅ | ✅ | ✅ | ✅ |
 | PreferenceManage | ✅ | ✅ | ✅ | ✅ |
+| NotificationGroupView 🔜 | ✅ | ✅ (read-only) | — | — |
+| NotificationGroupManage 🔜 | ✅ | — | — | — |
+| NotificationBroadcast 🔜 | ✅ | — | — | — |
+| NotificationBatchView 🔜 | ✅ | ✅ (read-only) | — | — |
 | ChatCreatePublic | ✅ | ✅ | ✅ | ✅ |
 | ChatCreateInternal | ✅ | ✅ | ✅ | — |
 | ChatEditOwn | ✅ | ✅ | ✅ | ✅ |
@@ -6635,13 +7301,19 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 ## 23. Risk register
 
-> **35 risk items** chia 6 nhóm chính:
+> **41 risk items** chia 7 nhóm chính:
 > - **R-01..R-13**: Technical baseline (state machine, SLA, dedup, migration, performance, security)
 > - **R-14..R-18**: Sprint 5B Saga design (forward recovery, duplicate, scope creep, cutover, restart)
 > - **R-19..R-22**: Sprint 5B operational (preflight cleanup, mapping, Quartz schema, notification spam)
 > - **R-23..R-27**: Capacity + planning + external (Thắng solo owner Sprint 5B + IoT-1, bus factor, ext quota, mentor schedule)
 > - **R-28..R-29**: IoT v2 pivot (ESP32 firmware codebase mới, BMS procurement / register map — xem §52, `overall.iot.md` §D)
 > - **R-30..R-35**: Sprint audit (migration backfill duration, AuditAggregatorService SPOF, causation chain break, schema versioning, GeoIP rate limit, multi-instance relay duplicate)
+> - **R-47..R-52**: Sprint 6.4 notification audience (nhận trùng, gửi cho người đã nghỉ, read-model lệch lại, đổi chữ ký helper, fan-out treo request, bịa batch cho dữ liệu cũ)
+>
+> *(R-36..R-39 là risk cục bộ của **Sprint Chat** — xem §17 Sprint Chat và §70. R-40..R-46 là risk
+> cục bộ của **Sprint 6.3** — xem §17.6.3.4. Cả hai nhóm không lặp lại ở bảng dưới.
+> ⚠️ Số hiệu **R-40 đang bị dùng trùng** ở hai nơi: Sprint Chat (PII mask fail, §70) và Sprint 6.3
+> (lọc `Channel=InApp` làm mất type chỉ ghi Push, §17.6.3.4). Cần Leader chốt đánh lại số một bên.)*
 >
 > Mỗi risk có owner cụ thể. Leader review weekly trong daily standup, escalate Sev-High risk khi likelihood tăng.
 
@@ -6682,6 +7354,12 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-33 | **Schema event versioning** — thay đổi `AuditCreatedEventV1` không bump version → consumer cũ + mới deserialize lỗi → DLQ overflow | Med | Med | Phụ lục B §B.5 enforce: thay đổi schema = bump version (`V1` → `V2`), giữ `V1` consumer chạy song song 1 sprint trước khi remove; code review checklist | Thắng |
 | R-34 | **GeoIP service rate limit** (MaxMind / IP2Location free tier) → consumer chậm + queue lag | Med | Med | **Chốt MaxMind GeoLite2 free (`.mmdb` local, không rate-limit, D11)** + LRU cache 10k entry + fallback null nếu lookup fail; Phụ lục B §B.11 pitfall #19; monitor cache hit rate ≥ 80% | Thắng |
 | R-35 | **Multi-instance OutboxRelay duplicate publish** — không leader election → cùng event publish 2 lần (vẫn idempotent ở consumer nhưng waste resource) | Low | Low | **Chốt 2026-06-24: Redis leader election** (`IDistributedCache` lease key `audit_outbox_leader`, Phụ lục B §B.10 option 1, D12); idempotent consumer là last-line defense | Thắng |
+| R-47 | **Người ở 2 nhóm cùng được nhắm nhận trùng** (Sprint 6.4) | Med | High | Hai lớp: `DISTINCT user_id` ở tầng ứng dụng (NOTI4-07) **+** unique index `(batch_id, user_id, channel)` (NOTI4-06). Hai lớp vì tầng ứng dụng sai thì DB vẫn chặn | Thắng |
+| R-48 | **Gửi thông báo cho người đã nghỉ / bị đình chỉ** (Sprint 6.4) | Med | High | JOIN `account_read_models` lọc `is_active` lúc gửi. **Chỉ đúng được nhờ NOTI4-00** — trước 02/08/2026 cột này không bao giờ được cập nhật | Thắng |
+| R-49 | **Read-model tài khoản lệch trở lại** ⇒ nhóm thiếu người, im lặng như lỗi cũ | Med | High | `POST /api/admin/accounts/resync` (đã có, idempotent). **Còn thiếu:** alert khi số dòng `account_read_models` lệch với `auth_db` — đề xuất gộp vào NOTI4-14 | Thắng |
+| R-50 | **Đổi chữ ký `NotificationWriter` làm vỡ 20 lời gọi ở 13 file** (Sprint 6.4) | Low | Med | Tham số `batchId` để **tuỳ chọn** (`Guid? batchId = null`) ⇒ lời gọi cũ vẫn hợp lệ, sửa dần từng consumer; regression bằng 506 unit test NotificationService | Thắng |
+| R-51 | **Fan-out đồng bộ treo request khi nhóm lớn** ⇒ admin bấm lại, gửi 2 lần | Low | Med | Quy mô hiện tại 10 tài khoản ⇒ 40 dòng, chưa chạm ngưỡng. Ngưỡng chuyển sang chạy nền đã ghi sẵn (~2.000 dòng hoặc >2s) và schema đã chừa `status`/`recipient_count` để chuyển **không đổi schema** | Thắng |
+| R-52 | **Bịa `batch_id` cho 1.282 dòng cũ** khi di trú | Med | High | **Cấm gom theo thời gian** — dữ liệu cũ không có thông tin để gom, và đã chứng minh gom nhầm (50 dòng/giây cùng entity thực chất là rác test tải). Để `batch_id = NULL`, UI ghi rõ chỉ hiện lần gửi từ khi bật tính năng | Thắng |
 
 ---
 
@@ -7189,6 +7867,111 @@ docs/architecture/                                  ← 3 Mermaid diagram mới 
 docs/onboarding/be-newcomer.md                      ← cập nhật 3 section: Saga local setup, Debug Saga, Common mistakes (xem §40.6)
 .claude/CLAUDE.md / .claude/rules/tech/be.md        ← cập nhật pattern "Orchestrated Saga" + EF Consumer Outbox/Inbox (xem §0bis.2)
 .github/workflows/ci.yml                            ← thêm step "Energy/CO2 scope guard (ADR-017)" (xem §53.2bis)
+```
+
+### Sprint 6.5 — Notification template (files, ĐÃ IMPLEMENT 03/08/2026 — §17 Sprint 6.5)
+
+```
+services/NotificationService/src/NotificationService.Application/
+├── Templates/NotificationTemplateVariables.cs      ← MỚI — danh mục biến theo type (hợp đồng
+│                                                      consumer ↔ template, nguồn sự thật)
+├── Templates/TemplateVariableGuard.cs              ← MỚI — bóc {{bien}} + đối chiếu + gợi ý tên đúng
+├── Templates/TemplateSampleModel.cs                ← + BuildFor(type, …) nạp sẵn khoá THẬT
+├── CQRS/Query/NotificationTemplate/NotificationTemplateVariableQueries.cs      ← MỚI — 2 query
+├── CQRS/Handler/NotificationTemplate/NotificationTemplateVariableQueryHandlers.cs ← MỚI
+├── DTOs/Response/Notification/NotificationTemplateVariableDtos.cs              ← MỚI
+├── CQRS/Handler/NotificationTemplate/{Create,Revise}CommandHandler.cs          ← nối guard
+├── CQRS/Handler/NotificationTemplate/{Preview,TestSend}…Handler.cs             ← dùng BuildFor
+└── Services/NotificationDispatchOptions.cs         ← ma trận khớp consumer (+Sms type 9, +3 type)
+
+services/NotificationService/src/NotificationService.Domain/
+├── Enums/NotificationTypeEnum.cs                   ← TicketMerged 27 → 34 (hết trùng)
+└── Enums/NotificationCategoryMap.cs                ← + TicketMerged → Ticket (trước bị xếp nhầm Sla)
+
+services/NotificationService/src/NotificationService.Infrastructure/
+├── Channels/InAppChannel.cs                        ← ghi ngược nội dung đã render (+ cắt theo cột)
+├── Persistence/Seeders/NotificationTemplateCatalog.cs ← viết lại tên biến ~30 loại
+└── Persistence/Seeders/NotificationDataSeeder.cs   ← hội tụ bản đã trôi + hạ cờ bản mồ côi
+
+services/NotificationService/src/NotificationService.Api/
+└── Controllers/AdminNotificationTemplatesController.cs ← + GET /variables, GET /coverage
+
+services/NotificationService/tests/NotificationService.UnitTests/
+├── Templates/TemplateVariableGuardTests.cs         ← MỚI — 15 test bóc biến + phát hiện biến lạ
+├── Templates/NotificationTemplateVariableCatalogTests.cs ← MỚI — 3 test chống trôi hợp đồng
+│                                                      + enum không trùng + System phải passthrough
+├── Templates/NotificationTemplateCatalogTests.cs   ← miễn trừ template chuyển tiếp nguyên văn
+├── Channels/InAppChannelTests.cs                   ← + 4 test ghi ngược (đè/rỗng/cắt/idempotent)
+└── Handlers/NotificationTemplate/…CommandHandlersTests.cs ← + 3 test guard, sửa biến mẫu
+
+frontend/src/
+├── features/admin/components/notification/TemplateVariablePalette.tsx  ← MỚI — bấm để chèn +
+│                                                      cảnh báo biến sai NGAY LÚC GÕ
+├── features/admin/components/notification/TemplateCoveragePanel.tsx    ← MỚI — bảng độ phủ
+├── features/admin/components/notification/NotificationTemplateFormDialog.tsx ← nối bảng biến,
+│                                                      thay 2 ví dụ đang dạy sai tên biến
+├── features/admin/pages/NotificationTemplatesPage.tsx  ← gắn bảng độ phủ
+├── features/admin/{types,services,hooks}/notification/notification-template.*  ← 2 endpoint mới
+├── features/admin/utils/handlebars.ts              ← + insertPlaceholder
+├── shared/enums/notification/notification.enum.ts  ← + TicketMerged: 34 (mirror BE)
+├── shared/constants/notificationLabels.ts          ← + nhãn "Ticket đã được gộp"
+└── shared/utils/{endpoints,queryKeys}.ts           ← VARIABLES + COVERAGE
+```
+
+### Sprint 6.4 — Notification audience (files mới, CHƯA IMPLEMENT — §17 Sprint 6.4)
+```
+services/NotificationService/src/NotificationService.Domain/
+├── Entities/NotificationGroup.cs                   ← : AuditableEntity
+├── Entities/NotificationGroupMember.cs             ← : AuditableEntity — nhiều-nhiều người ↔ nhóm
+├── Entities/NotificationBatch.cs                   ← : AuditableEntity — nội dung 1 lần gửi
+├── Entities/NotificationBatchTarget.cs             ← : AuditableEntity — nhiều-nhiều nhóm ↔ lần gửi
+├── Enums/NotificationGroupKindEnum.cs              ← Static = 1, Role = 2
+├── Enums/NotificationBatchSourceEnum.cs            ← Event = 1, Manual = 2
+└── Enums/NotificationBatchStatusEnum.cs            ← Pending = 1, FannedOut = 2, Failed = 3
+                                                       ⚠️ enum bắt đầu từ 1, KHÔNG phải 0
+
+services/NotificationService/src/NotificationService.Infrastructure/
+├── Persistence/Configurations/NotificationGroupConfiguration.cs
+├── Persistence/Configurations/NotificationGroupMemberConfiguration.cs
+├── Persistence/Configurations/NotificationBatchConfiguration.cs
+├── Persistence/Configurations/NotificationBatchTargetConfiguration.cs
+├── Persistence/Seeders/NotificationGroupSeeder.cs  ← 4 nhóm hệ thống kind=Role, idempotent theo role_filter
+└── Persistence/Migrations/*AddNotificationGroupsAndBatches*
+                                                       ← 4 bảng + notifications.batch_id (NULLABLE)
+                                                       + ux_notifications_batch_user_channel
+                                                       + 2 partial unique index nhóm + 2 CHECK constraint
+
+services/NotificationService/src/NotificationService.Application/
+├── CQRS/Command/NotificationGroup/{Create,Update,Delete,AddMembers,RemoveMember}Command.cs + Handler
+├── CQRS/Query/NotificationGroup/{GetList,GetById,GetMembers}Query.cs + Handler
+├── CQRS/Command/Notification/NotificationBroadcastCommand.cs + Handler   ← trái tim: gom trùng + lọc is_active
+├── CQRS/Query/Notification/{NotificationBatchGetList,NotificationBatchGetById}Query.cs + Handler
+├── DTOs/Response/Notification/{NotificationGroupDto,NotificationGroupMemberDto,NotificationBatchDto}.cs
+├── DTOs/Response/Notification/NotificationGroupResponses.cs      ← các lớp bọc CommonResponse<>
+├── Services/IRecipientResolver.cs                  ← [SỬA] + GetGroupRecipientsAsync(groupIds)
+└── Consumers/NotificationWriter.cs                 ← [SỬA] + tham số Guid? batchId = null (TUỲ CHỌN)
+                                                       ⚠️ chỉ 1 file — 20 lời gọi / 13 consumer KHÔNG đổi
+
+services/NotificationService/src/NotificationService.Api/Controllers/
+├── AdminNotificationGroupsController.cs
+└── AdminNotificationsController.cs                 ← broadcast + batches
+
+services/AuthService/src/AuthService.Infrastructure/Persistence/Seeders/AuthDataSeeder.cs
+                                                    ← [SỬA] seed 4 permission mới (§20) — điểm
+                                                      cross-service DUY NHẤT của sprint
+
+frontend/src/features/admin/                        ← NOTI4-11/12/13
+├── pages/NotificationGroupsPage.tsx · NotificationBatchesPage.tsx
+├── components/notification/{NotificationGroupFormDialog,NotificationGroupMembersDialog}.tsx
+├── components/notification/CreateNotificationForm.tsx   ← [SỬA] 1 người → nhiều nhóm + nhiều người
+├── hooks/notification/{useNotificationGroups,useNotificationBatches}.ts
+├── services/notification/{notification-group,notification-batch}.service.ts
+├── types/notification/{notification-group,notification-batch}.types.ts
+└── schemas/notification/{notification-group,notification-broadcast}.schema.ts
+
+docs/api-notification.md                            ← [SỬA] giữ đồng bộ ĐỦ 3 BẢN:
+                                                      backend/ · frontend/ · mobile/
+notigroup.md                                        ← nguồn thiết kế đầy đủ (ERD, index, lý do)
 ```
 
 ### Scripts
@@ -17405,6 +18188,10 @@ SLA + KB + Mobile + Export (21+22+23+24)
 ---
 
 **End of OVERALL.md (Final Complete Edition)**
+- v5.7 (2026-08-03): **Sprint 6.5 — tuỳ chọn "dùng mẫu" cho gửi hàng loạt thủ công** (§17.6.5.8). Sau khi v5.6 chặn mẫu đè lên nội dung viết tay, đây là chiều ngược lại: admin **muốn** dùng mẫu thì bật cờ. `useTemplate = false` (mặc định) ⇒ chữ admin gõ đi y nguyên; `true` ⇒ dispatcher tra mẫu `(Loại × Kênh)` và render với biến admin điền, còn `title`/`body` trở thành **nội dung dự phòng** cho kênh không có mẫu khớp. **Vì sao phải render lúc gửi chứ không đổ sẵn chữ vào ô soạn:** mẫu khoá theo cặp `(Loại × Kênh)` và bản SMS được nén ngắn lại (tính tiền theo đoạn), nên một lần gửi 3 kênh cho ra **3 nội dung khác nhau** — một ô nhập duy nhất không tạo ra được ba bản đó (đo thật với `BatteryAnomalyDetected`: InApp/Push ra *"Bất thường pin BAT-2026-777 / Quá nhiệt — mức Nghiêm trọng…"* còn SMS ra *"[Solar Battery]"* + bản gộp nén). **Vì sao thêm cờ `use_template` chứ không suy ra từ `template_id`:** cột `template_id` có sẵn từ Sprint 6.4 nhưng chỉ chứa **một** id, trong khi một lần gửi 3 kênh dùng **3 mẫu** — không có "một" template id để ghi; cờ boolean trả lời đúng câu hỏi có/không, dispatcher vẫn tra theo từng kênh. Migration `AddNotificationBatchUseTemplate` (mặc định `false` nên 2 lần gửi cũ giữ nguyên hành vi). **Ba lớp để admin không gửi mù:** (1) endpoint mới `POST /broadcast/template-preview` trả **một dòng mỗi kênh**, dựng model **đúng khuôn** `NotificationDispatcher.BuildTemplateModel` nên chữ xem trước bằng đúng chữ gửi thật — trực tiếp rút từ bài học đắt nhất của sprint ("xem trước thấy đúng nhưng gửi đi lại khác" vì model cũ nhận dữ liệu mẫu do client tự gõ); (2) `missingVariables` từng kênh hiện ngay dưới bản xem trước, admin thấy chỗ trống **trước khi** bấm gửi; (3) khai biến không thuộc loại đó ⇒ **400** kèm danh sách biến hợp lệ. **Giao diện** (`BroadcastTemplateSection.tsx` mới): công tắc "Dùng mẫu thông báo có sẵn" + ô điền biến + xem trước theo kênh. Ô điền biến lấy từ **chính mẫu của các kênh đang chọn**, không phải toàn bộ khoá payload của loại — khác biệt thấy rõ ở `System`: danh mục khai 5 khoá (`digest`/`count`/`from`/`to`/`notificationIds`) nhưng đó là của **bản tin gom** do máy sinh, mẫu `System` lại chuyển tiếp nguyên văn nên **không cần ô nào**. **580/580 test** (thêm 3: bật mẫu vẫn render · bật mẫu mà kênh thiếu mẫu thì lùi về chữ admin · gửi tay không bật thì giữ nguyên chữ), đã **tái tạo bug chặn-nhầm-cả-nhánh-bật-mẫu** để chứng minh test bắt đúng. Verify trên hệ thống thật: gửi cùng loại 9 với `useTemplate` bật/tắt cho ra đúng hai kết quả khác nhau; baseline DB `1285 | 5 | 10 | 2` nguyên vẹn. FE `tsc`+`eslint` sạch, kiểm trên trình duyệt bằng Playwright. Docs `api-notification.md` cập nhật **cả 3 bản**. KHÔNG đụng section khác.
+- v5.6 (2026-08-03): **Sprint 6.5 đợt 2 — dọn nốt 5 mục còn treo, kèm hai lỗi tìm thấy ngoài danh sách** (§17.6.5.6–17.6.5.8). Ba mục phải **đổi hợp đồng event giữa service**. **(1)** `BatteryAnomalyDetectedEvent` + `BatteryAnomalyWarningDetectedEvent` mang thêm `AnomalyTypeName`/`SeverityName`: `AnomalyTypeEnum`/`AlertSeverityEnum` thuộc `BatteryService.Domain` nên subscriber **không tham chiếu được**, chỉ nhận số trần ⇒ thông báo gửi khách ghi *"Loại: 4 — Mức độ: 3"*. Tự dựng bảng tra **theo số** ở phía nhận là sai — BatteryService chèn một giá trị vào giữa enum là mọi nhãn dịch lệch, đúng tai nạn `NotificationTypeEnum` đã dính khi Blog chiếm 25/26 — nên bên **sở hữu** enum gửi kèm tên (cùng khuôn `OldStatusName`/`NewStatusName` của `TicketStatusChangedEvent`) và `BatteryAnomalyLabels` phía nhận tra **theo tên**, quy về tiếng Việt (`Overheat` → *Quá nhiệt*), tên lạ thì hiện chính tên đó chứ không ra số. **(2)** `SlaWarningEvent` + `SlaBreachedEvent` mang thêm `Code` (3 chỗ phát ở TicketService điền): trước đó payload chỉ có `TicketId` (GUID) nên thông báo vỡ SLA **không nhắc được ticket nào**, trong khi đây đúng loại cần biết ngay để mở ra xử lý. **(3)** **Gỡ hẳn `AdminInvite = 13`** khỏi enum + `NotificationCategoryMap` + ma trận kênh + danh mục template + FE + mobile: thư mời đi thẳng `AuthService → EmailService` (`SendAdminInviteEvent` → `SendAdminInviteConsumer`), người được mời **chưa có tài khoản** nên không thể nhận thông báo in-app, và nối consumer vào đây sẽ **gửi trùng email**. Đây đúng thứ ghi chú NOTI-04 trong chính file enum đã chốt tránh ("không đẻ enum không producer"), chỉ là lúc đó bỏ sót dòng này. Số 13 để trống vĩnh viễn. **(4)** `BuildBody` của digest nay dựng dần theo dòng và dừng khi dòng kế tiếp làm vượt trần, luôn chừa chỗ cho dòng "… và N thông báo khác", cắt cứng ở cuối làm chốt chặn: mỗi mục con được phép dài 2000 mà cột `body` cũng chỉ 2000 ⇒ chỉ **hai mục dài** là Postgres ném lỗi và hỏng cả vòng gom. **(5)** 5 consumer chat/participant/blog chuyển từ chuỗi nội suy sang `JsonSerializer.Serialize` — ⚠️ **đính chính v5.5**: mô tả cũ "không escape, tên có dấu nháy sẽ làm hỏng JSON" là **nói quá**; kiểm lại thì mọi trường nội suy chỉ là `Guid`/`int`/`bool` nên JSON **chưa từng** có thể vỡ. Đây là dọn **độ bền** chứ không phải sửa lỗi. **Lỗi thứ sáu (§17.6.5.7)** — tìm thấy khi rà 3 chỗ phát event SLA: `SlaTimerBackgroundService` đọc `timer.Ticket?.Assignments.FirstOrDefault(...)` để lấy `StaffId` nhưng truy vấn chỉ `.Include(t => t.Ticket)`, **không** `ThenInclude(Assignments)`. Dự án không bật lazy loading và `Assignments` khởi tạo sẵn là danh sách rỗng ⇒ **`StaffId` luôn null**, âm thầm. Hệ quả: cảnh báo sắp vỡ SLA chỉ tới Manager, **không tới Staff đang phụ trách** — đúng thứ mà NOTI-05 (#676) thêm trường đó để chữa; trường đã thêm từ Sprint 6.2, dữ liệu chưa bao giờ được nạp. **Lỗi thứ bảy (§17.6.5.7)** — tìm thấy khi người dùng hỏi "phần gửi thông báo có kéo template không": màn hình gửi hàng loạt cho chọn **bất kỳ** loại nào, dòng sinh ra ở trạng thái `Pending` nên **có** đi qua dispatcher và bị tra template theo `(Type × Channel)`. Chọn "Ticket mới" rồi gõ tay tiêu đề thì template `TicketCreated` khớp và render, nhưng payload một lần gửi tay **không có** `code` ⇒ ra `"Ticket mới "` với chỗ trống và **chữ admin biến mất sạch** (đo thật: gõ `"KTMPL Tiêu đề admin tự gõ"` → nhận `"Ticket mới "`). Lỗi có từ khi có tính năng gửi hàng loạt và đã âm thầm áp cho **Email/Push/SMS**; riêng InApp thì kết quả render vốn bị vứt đi nên không ai thấy, tới khi InApp ghi ngược nội dung (NOTI5-07) thì nó lộ ngay trên feed — tức đợt 1 **không tạo ra** lỗi này nhưng biến nó từ vô hình thành phá dữ liệu. Sửa: `RenderContentAsync` bỏ qua template khi dòng thuộc lần gửi `Source = Manual`; lần gửi sinh tự động từ sự kiện vẫn qua template như thường, có test khoá đúng ranh giới. **Tương thích ngược**: cả ba trường mới đều nullable/mặc định rỗng, event cũ trong Outbox và hàng đợi deserialize ra `null` và phía nhận tự lùi (`BatteryAnomalyLabels` trả về số, câu SLA lược phần mã thay vì hiện `"Ticket  "`) — không cần dừng hệ thống; đã kiểm **0 dòng type 9/32/33 còn Pending** nên không dòng cũ nào bị render lại. **Bằng chứng trên hệ thống thật**: type 9 → *"Bất thường pin BAT-KT3-001" / "Quá nhiệt — mức Nghiêm trọng. Giá trị đo 72.5°C, ngưỡng 60°C."*; type 7 → *"Cảnh báo SLA: TKT-KT4-0009" / "Ticket TKT-KT4-0009 đã dùng 85% thời gian SLA."*. Seeder hội tụ **13 bản** (4 SLA + 9 pin) và hạ cờ **1 bản mồ côi** (`AdminInvite × Email`), khởi động lại lần nữa không sinh thêm gì; độ phủ giữ **17/17 cặp, 0 biến hỏng**; endpoint biến trả **34 loại**. **575/575 test NotificationService** (thêm 14: 6 nhãn pin + 2 digest cắt + 1 khoá template pin phải dùng tên chữ) + **455 BatteryService** + **941 TicketService**, và đã **tái tạo 2 bug mới để chứng minh test bắt đúng** (digest không cắt → thân 11.024 ký tự vs trần 2.000; template pin quay về khoá số → liệt kê đủ 8 vi phạm). FE `tsc`+`eslint`+`build` sạch. Docs `api-notification.md` cập nhật **cả 3 bản**: hàng `AdminInvite` gạch ngang kèm lý do, bảng 3 thay đổi hợp đồng event, và sửa số lượng enum phải mirror **35 → 34**. KHÔNG đụng section khác.
+- v5.5 (2026-08-03): **Sprint 6.5 — Notification template: cho template thật sự có tác dụng** (§17.6.5.0–17.6.5.6). Xuất phát từ câu hỏi *"template đang được áp dụng vào đâu"*; khảo sát ra **đúng một** điểm dùng lúc chạy (`NotificationDispatcher.RenderContentAsync`, khoá `(Type × Channel)`, `UseDbTemplates = true`, không khớp thì rơi về Title/Body inline), rồi lộ ra **6 lỗi độc lập, tất cả đều im lặng**. **(1) Sai tên biến hàng loạt**: `{{ticketCode}}` trong khi consumer ghi khoá `code`, `{{serialNumber}}` trong khi consumer ghi `assetSerialNumber`, `{{threshold}}` ↔ `thresholdValue`, cộng 6 biến **không tồn tại ở bất kỳ loại nào** (`customerName`, `slaDeadline`, `minutesRemaining`, `senderName`, `preview`, `displayName`) — Handlebars gặp biến lạ **render ra rỗng chứ không ném**, nên 37 thông báo TicketCreated và 1.229 thông báo pin đã gửi đi với chỗ trống giữa câu. **(2) Kênh InApp render xong rồi vứt đi**: `InAppChannel` dùng `request.Title`/`Body` **0 lần**, tức 548/1285 dòng (43%) tốn 1 truy vấn + 1 lượt render mỗi dòng mà kết quả không đi đâu, còn 33 template InApp thì sửa/xem trước/gửi thử được nhưng **sửa xong không đổi được chữ nào** trên màn hình. **(3) Enum trùng giá trị**: `TicketMerged = 27` trùng nguyên vẹn `ChatEscalatedToAdmin = 27` ⇒ `ToString()` chỉ trả một tên và khoá duy nhất `(type, channel)` khiến hai loại **không thể** có template riêng. **(4)** Lỗi #3 **che** lỗi #4: `NotificationCategoryMap` chưa từng khai `TicketMerged`, nó ăn theo nhóm `Sla` của loại kia nên thông báo "ticket đã gộp" bị xếp nhầm nhóm SLA **mà test bao vẫn xanh**. **(5) Template lệch type 2 bậc**: Blog `GH-671` chiếm 25/26 đẩy nhóm sau lên 2, các dòng seed cũ giữ số cũ ⇒ type 30 (`TicketReopened`) mang câu "Cảnh báo pin", type 25 mang câu của `ChatEscalatedToAdmin`. **(6) Ma trận kênh lệch consumer**: consumer pin gửi `AllChannels` (có SMS) nên **98 tin SMS đã gửi**, nhưng ma trận không khai SMS mà seeder lại dựng template theo ma trận ⇒ SMS không template nào phủ. **Căn nguyên**: không có hợp đồng nào giữa bên ghi payload (consumer dùng anonymous object, không kiểu để phản chiếu) và bên đọc payload (template), người soạn phải **tự đoán** tên khoá; màn hình xem trước lại nhận dữ liệu mẫu **do chính client gõ**, nên *"xem trước thấy đúng nhưng gửi đi lại khác"*. **Đã làm (NOTI5-01..12)**: `NotificationTemplateVariables` (danh mục biến theo type, trích từ code sinh payload) + `TemplateVariableGuard` (bóc `{{bien}}` bỏ qua chú thích/thẻ đóng/partial/helper, đối chiếu danh mục, **gợi ý tên đúng** bằng quan hệ chứa nhau + Levenshtein) nối vào cả `create` lẫn `revise` (nhánh revise lấy type từ **bản gốc**) ⇒ trả 400 kèm gợi ý; viết lại toàn bộ tên biến của ~30 loại trong `NotificationTemplateCatalog`; `TicketMerged` 27→34 (hoàn tất `GH-83` mà **mobile đã chốt từ trước**, backend nay mới theo kịp — an toàn vì chưa từng có dòng `notifications` nào mang type 27); khai tường minh `TicketMerged → Ticket`; **InApp ghi ngược** nội dung đã render vào chính dòng notification kèm 3 chốt (chỉ ghi một lần nhờ dispatcher chỉ nhặt `Pending` + chốt idempotent · render rỗng thì giữ nguyên · **cắt theo cột** vì `title_template` 500 / `body_template` 4000 mà cột `title` chỉ 200 / `body` 2000, không cắt thì Postgres ném lỗi và dòng kẹt retry vĩnh viễn); **seeder tự hội tụ** bản đã trôi theo luật cố ý hẹp (seeder-origin khác danh mục ⇒ thay · người vận hành soạn mà hỏng biến ⇒ thay, bản hỏng vẫn nằm trong lịch sử · người vận hành soạn mà biến hợp lệ ⇒ **không đụng**), tự dừng sau khi hội tụ; xem trước + gửi thử nạp sẵn **đúng khoá thật** (`«tênKhoá»`) nên biến gọi sai hiện rỗng ngay trên màn hình; ma trận kênh khớp consumer (`BatteryAnomalyDetected` += `Sms`, thêm `TicketMerged`/`BlogGeneration*`); 2 endpoint mới `GET .../variables` và `GET .../coverage` (độ phủ tính theo **dữ liệu thật đã sinh** chứ không theo ma trận, vì chính hai thứ đó từng lệch nhau); 3 màn hình FE (ô gợi ý biến · báo lỗi biến sai · bảng độ phủ). **Ba lớp chặn tái diễn**: lúc soạn (endpoint variables) · lúc lưu (400 kèm gợi ý) · lúc build (3 test bao đối chiếu danh mục ↔ mã nguồn consumer + test không-trùng-giá-trị-enum). **Thứ tự thi công là bắt buộc**: lỗi #2 che lỗi #1 trên InApp, nên nếu chỉ làm mỗi "cho InApp dùng template" mà không sửa #1 trước thì 1.229 thông báo pin sẽ hiện "Bất thường pin " với chỗ trống — biến lỗi vô hại thành lỗi nhìn thấy được. **560/560 unit test xanh**, và đã **tái tạo lại 4 bug để chứng minh test bắt đúng chỗ** (§17.6.5.4), không có test nào đỏ oan. Docs `api-notification.md` cập nhật **cả 3 bản** (backend/frontend/mobile): thêm hàng `TicketMerged = 34`, ghi chú 27→34 kèm 3 hệ quả, khối **Hợp đồng tên biến** với bảng đối chiếu template-viết ↔ consumer-thật-sự-ghi, 2 endpoint mới, và mô tả phạm vi hiệu lực của template theo từng kênh; **sửa luôn drift giữa 3 bản** — bản frontend còn ghi đánh số **sai cũ** "32 giá trị, 25–31". **Còn treo** (§17.6.5.6): `{{severity}}`/`{{anomalyType}}` hiện ra **số** vì event BatteryService không gửi tên đọc được · `SlaWarning`/`SlaBreached` thiếu `code` trong payload nên template không nhắc được mã ticket · `AdminInvite (13)` **không có consumer nào** ⇒ template chỉ là trang trí · `BuildBody` của digest **không cắt độ dài**, gom nhiều mục có thể vượt `body varchar(2000)` (chưa xảy ra, 0 bản tin digest) · 5 consumer chat/participant/blog dựng payload bằng **chuỗi nội suy không escape**. KHÔNG đụng section khác.
+- v5.4 (2026-08-02): **Sprint 6.4 — Notification audience (nhóm người nhận & quan hệ DB cho gửi hàng loạt)** — đưa toàn bộ kế hoạch `notigroup.md` vào §17 thành **Sprint 6.4** (`#NOTI4-01..15`, ~13.5 dev-day, THÊM 12 · SỬA 3, chia 3 phase độc lập ship được: A nhóm → B batch+broadcast → C frontend+chất lượng), cấu trúc §17.6.4.0–17.6.4.6 theo đúng khuôn Sprint 6.3. Vấn đề gốc đo được 02/08/2026: hệ thống chỉ gửi được cho **đúng 1 người mỗi lệnh** (`CreateNotificationCommand` có duy nhất `Guid UserId`), **không bảng nhóm nào** (9 entity / 10 bảng, 4 role viết cứng chuỗi tại 15 chỗ), **0 foreign key / 0 navigation property** trong toàn NotificationService, `notifications` chép lại `title`/`body`/`payload_json` từng dòng, không có `batch_id` nên không truy vết được lần gửi (1.282 dòng / 9 người / 242 lần gửi gom mò). Chiều "1 người → nhiều thông báo" **đã có sẵn** index `(user_id, status)` — không cần làm gì. **§17.6.4.0 ghi nhận điều kiện cần ĐÃ XONG 02/08/2026**: read-model tài khoản từ **2/10 dòng lên đủ 10** (Admin từ **0** lên 1, Staff từ **0** lên 3) sau khi sửa 4 nguyên nhân độc lập — seeder không phát event, `ChangeAccountRole`/`ChangeAccountStatus`/`DeactivateMe`/`ReactivateVerify` không phát event nào; thêm `AccountSyncSnapshotEvent` + `AccountSnapshotSyncConsumer` + `POST /api/admin/accounts/resync`; không có nó thì nhóm rỗng và toàn sprint vô nghĩa. Cập nhật kèm theo: **§3.3** thêm `AccountReadModel` (trước đây **chưa từng được tài liệu hoá** dù là nguồn duy nhất resolve người nhận) + 4 entity Sprint 6.4 + ERD + lý do bất đối xứng FK (`group_id` có FK, `user_id` không — vì trỏ sang read-model đồng bộ qua bus) + **sửa drift `NotificationTemplate.Locale`** (cột đã bị xoá 02/08/2026 nhưng doc vẫn mô tả); **§3.5** thêm 11 endpoint (8 nhóm + 3 broadcast/batches) + ghi chú `POST /broadcast` phải trả **400** khi tập người nhận rỗng thay vì `log warning; return` — rút kinh nghiệm trực tiếp từ NOTI4-00; **§20** thêm 4 permission (`notification.group.view/manage`, `notification.broadcast`, `notification.batch_view`); **§23** thêm **R-47..R-52** + sửa chú thích nhóm risk (R-36..R-39 thuộc Sprint Chat chứ không phải 6.2/6.3, và ghi nhận **R-40 đang bị dùng trùng** ở Sprint Chat lẫn Sprint 6.3 — cần Leader chốt đánh lại số); **§28** thêm cây file Sprint 6.4 (7 file Domain + 6 Infrastructure + ~20 Application + 2 Controller + 9 FE + doc ×3 bản). 5 fork đã chốt khi khảo sát (§17.6.4.5): fan-out **đồng bộ** (ngưỡng chuyển nền ~2.000 dòng, schema đã chừa sẵn `status`/`recipient_count` để chuyển **không đổi schema**) · nội dung **vẫn giữ trên `notifications`**, hoãn giai đoạn C vì bỏ đi thì `GET /api/notifications` phải JOIN thêm · 1.282 dòng cũ để `batch_id = NULL`, **cấm gom theo thời gian** vì sẽ bịa ra lần gửi chưa từng tồn tại · có **cả** nhóm tĩnh lẫn nhóm động theo role (nhóm động là đường di trú cho 15 chỗ hard-code, đổi ruột resolver mà 13 file consumer không phải sửa) · `user_id` **không** đặt FK. 5 câu hỏi cần Leader chốt trước khi code (§17.6.4.6): nhóm lồng nhau · ai được tạo nhóm · người dùng tự vào/ra · batch hẹn giờ · broadcast có tôn trọng quiet hours. ⚠️ Còn treo ngoài phạm vi: `AccountStatusChangedEvent` vẫn **không ai publish** ⇒ consumer tương ứng ở TicketService + BatteryService là code chết, hai service đó có read-model account riêng và nhiều khả năng lệch theo cùng kiểu — cần kiểm tra riêng. Nguồn thiết kế đầy đủ giữ ở `notigroup.md` (ERD, index, ràng buộc, lệnh đo lại hiện trạng); evidence bản vá NOTI4-00: `notification-test-evidence/20260802-account-readmodel-sync/`. KHÔNG đụng section khác.
 - v5.3 (2026-07-31): **Voice/gRPC contract correction** — các mô tả cũ về `#CHAT-67` multipart/synchronous Whisper flow được thay thế. FileStorageService chạy gRPC **server** với `FILE_STORAGE_SERVICE_GRPC_SERVER_PORT`; endpoint client tái sử dụng dùng `FILE_STORAGE_GRPC_CLIENT_ADDRESS` (TicketService là consumer hiện tại). Docker Compose map biến service-scoped vào key runtime tương ứng và fail-fast nếu thiếu; không còn fallback hardcode port/address cho FileStorage voice gRPC. API/FE contract chuẩn ở `docs/api-ticket.md`: upload trước lên FileStorage, queue `POST /api/tickets/{ticketId}/chats/voice`, nhận `202`, poll `voiceTranscriptionStatus`, retry khi `Failed`. `POST /api/admin/tickets/{id}/re-prioritize` Manager-only, display name từ JWT `FullName`, SLA không reset và breach được xử lý atomically trong transaction.
 - v5.2 (2026-07-31): **TicketService integration status** — tích hợp gRPC audio-to-text bất đồng bộ: FileStorageService expose internal gRPC metadata lookup; TicketService tạo voice-chat placeholder, ghi `VoiceTranscriptionRequestedEvent` qua `IIntegrationEventOutboxWriter.WriteAsync`, consumer xử lý lifecycle/retry và migration `AddVoiceTranscriptionLifecycle`. Bổ sung `POST /api/admin/tickets/{id}/re-prioritize` Manager-only: controller lấy `ManagerName` từ JWT `FullName` (không hardcode display name); handler cập nhật SLA trong transaction, chuyển atomic `Running → Breached` và ghi `SlaBreachedEvent` vào Outbox khi due date mới đã quá hạn; kiểm tra skill tier và escalation. Ticket merge phát `TicketMergedEvent`, NotificationService có `TicketMergedConsumer`/`NotificationTypeEnum.TicketMerged`. TicketService dùng PostgreSQL `xmin` (`IsConcurrencyToken`) và middleware `DbUpdateConcurrencyException` cho optimistic concurrency. Command/consumer flows sử dụng `IIntegrationEventOutboxWriter.WriteAsync`; `IPublishEndpoint` còn lại chỉ ở Outbox relay và MassTransit saga activities. Build `TicketService.Api` pass (warnings tồn tại: NU1902 và XML docs).
 

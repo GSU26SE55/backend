@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.AnomalyClassification;
 
@@ -39,11 +40,9 @@ public class GetAnomalyClassificationsQueryHandler
             query = query.Where(c => c.ClassifiedAt <= to);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(c => c.ClassifiedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(c => c.Id) // tie-breaker cố định — pagination ổn định
             .Select(c => new AnomalyClassificationDto
             {
                 Id = c.Id.ToString(),
@@ -59,19 +58,13 @@ public class GetAnomalyClassificationsQueryHandler
                 StaffFeedbackByUserId = c.StaffFeedbackByUserId.HasValue ? c.StaffFeedbackByUserId.Value.ToString() : null,
                 StaffFeedbackAt = c.StaffFeedbackAt,
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<AnomalyClassificationDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AnomalyClassificationDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-            },
+            Data = page,
         };
     }
 

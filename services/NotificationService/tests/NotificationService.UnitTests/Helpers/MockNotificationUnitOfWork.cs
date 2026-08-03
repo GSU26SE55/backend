@@ -1,6 +1,7 @@
 using MockQueryable.Moq;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Entities;
+using SharedKernels.Domain;
 using SharedKernels.Interfaces;
 
 namespace NotificationService.UnitTests.Helpers;
@@ -20,7 +21,12 @@ public static class MockNotificationUnitOfWork
             IEnumerable<AccountReadModel>? accountSeed = null,
             IEnumerable<NotificationTemplate>? templateSeed = null,
             IEnumerable<PushReceipt>? pushReceiptSeed = null,
-            IEnumerable<NotificationCategoryPreference>? categoryPreferenceSeed = null)
+            IEnumerable<NotificationCategoryPreference>? categoryPreferenceSeed = null,
+            // Sprint 6.4 — thêm ở CUỐI và đều tuỳ chọn, nên mọi lời gọi cũ vẫn hợp lệ nguyên vẹn.
+            IEnumerable<NotificationGroup>? groupSeed = null,
+            IEnumerable<NotificationGroupMember>? groupMemberSeed = null,
+            IEnumerable<NotificationBatch>? batchSeed = null,
+            IEnumerable<NotificationBatchTarget>? batchTargetSeed = null)
     {
         var deviceTokenData = (deviceTokenSeed ?? Array.Empty<DeviceToken>()).ToArray();
         var deviceTokens = new Mock<IGenericRepository<DeviceToken>>();
@@ -83,7 +89,18 @@ public static class MockNotificationUnitOfWork
         var auditLogs = new Mock<IGenericRepository<NotificationAuditLog>>();
         var auditOutboxes = new Mock<IGenericRepository<NotificationAuditOutbox>>();
 
+        // Sprint 6.4 — nhóm người nhận và lần gửi. AddAsync phải THẬT SỰ thêm vào tập dữ liệu,
+        // nếu không test kiểu "đã tạo đúng mấy dòng chưa" luôn thấy rỗng.
+        var groups = BuildRepo(groupSeed);
+        var groupMembers = BuildRepo(groupMemberSeed);
+        var batches = BuildRepo(batchSeed);
+        var batchTargets = BuildRepo(batchTargetSeed);
+
         var uow = new Mock<INotificationUnitOfWork>();
+        uow.SetupGet(u => u.NotificationGroups).Returns(groups.Object);
+        uow.SetupGet(u => u.NotificationGroupMembers).Returns(groupMembers.Object);
+        uow.SetupGet(u => u.NotificationBatches).Returns(batches.Object);
+        uow.SetupGet(u => u.NotificationBatchTargets).Returns(batchTargets.Object);
         uow.SetupGet(u => u.DeviceTokens).Returns(deviceTokens.Object);
         uow.SetupGet(u => u.Notifications).Returns(notifications.Object);
         uow.SetupGet(u => u.NotificationPreferences).Returns(preferences.Object);
@@ -99,5 +116,27 @@ public static class MockNotificationUnitOfWork
         uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
         return (uow, deviceTokens, notifications);
+    }
+
+    /// <summary>
+    /// Sprint 6.4 — mock repository có trạng thái: <c>AddAsync</c> thêm thật, <c>DeleteAsync</c> đánh
+    /// dấu xoá mềm (giống <c>AuditableEntityInterceptor</c> ngoài đời), <c>GetAllAsync</c> đọc lại từ
+    /// chính tập đó. Nhờ vậy test khẳng định được kết quả cuối thay vì chỉ đếm số lần gọi.
+    /// </summary>
+    private static Mock<IGenericRepository<T>> BuildRepo<T>(IEnumerable<T>? seed) where T : AuditableEntity
+    {
+        var data = (seed ?? Array.Empty<T>()).ToList();
+        var repo = new Mock<IGenericRepository<T>>();
+
+        repo.Setup(r => r.GetAllAsync()).Returns(() => data.AsQueryable().BuildMock());
+        repo.Setup(r => r.GetAllAsync(It.IsAny<bool>())).Returns(() => data.AsQueryable().BuildMock());
+        repo.Setup(r => r.AddAsync(It.IsAny<T>())).Callback<T>(data.Add).Returns(Task.CompletedTask);
+        repo.Setup(r => r.DeleteAsync(It.IsAny<T>())).Callback<T>(e =>
+        {
+            e.IsDeleted = true;
+            e.DeletedAt = DateTime.UtcNow;
+        });
+
+        return repo;
     }
 }

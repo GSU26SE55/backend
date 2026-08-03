@@ -4,6 +4,7 @@ using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
+using SharedContracts.Interfaces;
 
 namespace AuthService.UnitTests.Handlers.Accounts;
 
@@ -14,6 +15,11 @@ namespace AuthService.UnitTests.Handlers.Accounts;
 /// </summary>
 public class ChangeAccountRoleCommandHandlerTests
 {
+    // 02/08/2026 — handler nay publish AccountSyncSnapshotEvent để read-model account bên
+    // NotificationService cập nhật role mới. Xem test dedicated ở
+    // Handlers/Events/AccountSyncSnapshotPublishTests.cs.
+    private readonly Mock<IMessageProducerService> _producer = new();
+
     [Fact]
     public async Task ChangeRole_ValidRole_UpdatesAccountRoleId_PublishesAudit()
     {
@@ -35,7 +41,7 @@ public class ChangeAccountRoleCommandHandlerTests
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { newRole });
         var publisher = MockPublisher.NoOp();
-        var handler = new ChangeAccountRoleCommandHandler(uow.Object, publisher.Object);
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountRoleCommand
         {
@@ -57,7 +63,7 @@ public class ChangeAccountRoleCommandHandlerTests
     public async Task ChangeRole_AccountNotFound_Returns404()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object);
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountRoleCommand
         {
@@ -80,7 +86,7 @@ public class ChangeAccountRoleCommandHandlerTests
             RoleId = Guid.NewGuid()
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object);
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountRoleCommand
         {
@@ -112,7 +118,7 @@ public class ChangeAccountRoleCommandHandlerTests
         };
         var originalAssignedAt = account.RoleAssignedAt;
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { role });
-        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object);
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountRoleCommand
         {
@@ -188,7 +194,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>(), new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeactivateMeCommand { AccountId = account.Id }, CancellationToken.None);
 
@@ -232,7 +238,7 @@ public class DeactivateAndDeleteMeCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new DeactivateMeCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>(), new Mock<IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new DeactivateMeCommand { AccountId = Guid.NewGuid() }, CancellationToken.None);
 

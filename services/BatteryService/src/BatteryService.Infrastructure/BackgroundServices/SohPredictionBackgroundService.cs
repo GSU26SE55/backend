@@ -362,7 +362,9 @@ public class SohPredictionBackgroundService : BackgroundService
             ThresholdValue: alert.ThresholdValue ?? 0m,
             ActualValue: alert.ActualValue ?? 0m,
             Unit: alert.Unit ?? "%",
-            DetectedAt: alert.DetectedAt);
+            DetectedAt: alert.DetectedAt,
+            AnomalyTypeName: nameof(AnomalyTypeEnum.SohDegradation),
+            SeverityName: alert.Severity.ToString());
         await uow.OutboxMessages.AddAsync(new OutboxEntity
         {
             Id = Guid.NewGuid(),

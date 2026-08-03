@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.SohPrediction;
 
@@ -36,11 +37,9 @@ public class GetSohPredictionsQueryHandler
             query = query.Where(p => p.PredictedAt <= to);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(p => p.PredictedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(p => p.Id) // tie-breaker cố định — pagination ổn định
             .Select(p => new SohPredictionDto
             {
                 Id = p.Id.ToString(),
@@ -51,19 +50,13 @@ public class GetSohPredictionsQueryHandler
                 PredictedAt = p.PredictedAt,
                 LatencyMs = p.LatencyMs,
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<SohPredictionDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<SohPredictionDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-            },
+            Data = page,
         };
     }
 

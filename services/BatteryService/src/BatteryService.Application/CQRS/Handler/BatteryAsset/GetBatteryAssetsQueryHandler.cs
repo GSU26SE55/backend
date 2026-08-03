@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
 
@@ -53,8 +54,6 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
             .AsNoTracking()
             .Where(account => !account.IsDeleted);
 
-        var total = await query.CountAsync(cancellationToken);
-
         // Join account TRƯỚC sort/paginate để sort được theo customerName (join 1:1 nên total không đổi).
         var joined = from asset in query
                      join account in customerAccounts on asset.CustomerId equals account.Id into accountJoin
@@ -74,10 +73,8 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
             _ => descending ? joined.OrderByDescending(x => x.asset.CreatedAt) : joined.OrderBy(x => x.asset.CreatedAt),
         };
 
-        var items = await ordered
+        var page = await ordered
             .ThenBy(x => x.asset.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
             .Select(x => new BatteryAssetDto
             {
                 Id = x.asset.Id.ToString(),
@@ -98,19 +95,14 @@ public class GetBatteryAssetsQueryHandler : IRequestHandler<GetBatteryAssetsQuer
                 Notes = x.asset.Notes,
                 LastSensorReadingAt = x.asset.LastSensorReadingAt,
                 CreatedAt = x.asset.CreatedAt
-            }).ToListAsync(cancellationToken);
+            })
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<BatteryAssetDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<BatteryAssetDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

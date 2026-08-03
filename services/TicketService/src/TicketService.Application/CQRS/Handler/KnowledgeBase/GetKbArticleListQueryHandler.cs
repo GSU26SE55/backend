@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -56,8 +57,6 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
             dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search));
         }
 
-        var totalItems = await dbQuery.CountAsync(ct);
-
         var descending = SortHelper.IsDescending(query.SortDir);
         // Whitelist switch-case: code | title | category | status | viewCount | helpfulCount | createdAt (default).
         var ordered = (query.SortBy?.Trim().ToLowerInvariant()) switch
@@ -71,23 +70,16 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
             _ => descending ? dbQuery.OrderByDescending(a => a.CreatedAt) : dbQuery.OrderBy(a => a.CreatedAt),
         };
 
-        var items = await ordered
+        // ToListItemDto là method call → EF không dịch sang SQL, phân trang trên entity trước.
+        var page = await ordered
             .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((query.PageNumber - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToListAsync(ct);
+            .ToPagedEntityListAsync(query.PageNumber, query.PageSize, ct);
 
         return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<KbArticleListItemDTO>
-            {
-                Items = items.Select(KnowledgeBaseMapper.ToListItemDto).ToList(),
-                TotalItems = totalItems,
-                PageNumber = query.PageNumber,
-                PageSize = query.PageSize
-            }
+            Data = page.Map(KnowledgeBaseMapper.ToListItemDto)
         };
     }
 }

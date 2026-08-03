@@ -6,11 +6,18 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
 
 /// <summary>
 /// #AUTH-50: verify OTP rồi restore account (clear soft-delete flags + set Status=Active).
+///
+/// 02/08/2026 — phát thêm <see cref="AccountSyncSnapshotEvent"/>. Đây là đường DUY NHẤT hồi sinh
+/// một account đã xoá mềm. Trước bản vá này nó không phát event nào, nên read-model bên
+/// NotificationService vẫn giữ dòng đã xoá mềm + <c>IsActive = false</c>: tài khoản khôi phục xong
+/// nhưng vĩnh viễn không nhận được thông báo nào nữa.
 /// </summary>
 public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCommand, CommonResponse<string>>
 {
@@ -18,11 +25,16 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
 
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
+    private readonly IMessageProducerService _messageProducer;
 
-    public ReactivateVerifyCommandHandler(IAuthUnitOfWork unitOfWork, IPublisher publisher)
+    public ReactivateVerifyCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IPublisher publisher,
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _messageProducer = messageProducer;
     }
 
     public async Task<CommonResponse<string>> Handle(ReactivateVerifyCommand request, CancellationToken cancellationToken)
@@ -33,6 +45,7 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .IgnoreQueryFilters()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a =>
                 a.Email.ToLower() == normalizedEmail
                 && a.IsDeleted
@@ -65,6 +78,19 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
         await _publisher.Publish(new AuditTrailNotification(
             AuditActionEnum.AccountStatusChanged, account.Id, true, TargetEmail: account.Email,
             Metadata: new Dictionary<string, object?> { ["newStatus"] = "Active", ["reason"] = "Reactivated" }), cancellationToken);
+
+        // Outbox: atomic với SaveChangesAsync bên dưới. IsDeleted=false để read-model bỏ soft-delete
+        // đã đánh dấu lúc account bị xoá.
+        await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            account.Role?.Name ?? string.Empty,
+            IsActive: AccountStatusEnum.Active.IsNotifiable(),
+            IsDeleted: false,
+            SnapshotAtUtc: DateTime.UtcNow,
+            Reason: "Reactivated"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

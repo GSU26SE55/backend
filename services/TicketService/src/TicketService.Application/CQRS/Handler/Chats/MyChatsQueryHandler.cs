@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
@@ -24,12 +25,12 @@ public class MyChatsQueryHandler : IRequestHandler<MyChatsQuery, CommonResponse<
             .AsNoTracking()
             .Where(c => c.AuthorUserId == request.ActorUserId && !c.IsDeleted);
 
-        var total = await query.CountAsync(cancellationToken);
-        var rawChats = await query
+        // Phân trang trên entity: sau đó còn nạp dữ liệu con (mention/reaction) theo lô rồi mới dựng DTO.
+        var page = await query
             .OrderByDescending(c => c.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
+            .ThenBy(c => c.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
+        var rawChats = page.Items;
 
         var chatIds = rawChats.Select(c => c.Id).ToList();
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
@@ -65,13 +66,7 @@ public class MyChatsQueryHandler : IRequestHandler<MyChatsQuery, CommonResponse<
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketChatDTO>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.WithItems(items)
         };
     }
 }

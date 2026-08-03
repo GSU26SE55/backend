@@ -1,8 +1,8 @@
 using FileStorageService.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace FileStorageService.Api.Controllers;
 
@@ -76,9 +76,8 @@ public class AdminAuditLogsController : ControllerBase
         if (to.HasValue)
             q = q.Where(x => x.OccurredAt <= to.Value);
 
-        var total = await q.CountAsync(ct);
-        var items = await q.OrderByDescending(x => x.OccurredAt)
-            .Skip((pageNumber - 1) * pageSize).Take(pageSize)
+        var page = await q.OrderByDescending(x => x.OccurredAt)
+            .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
             .Select(x => new FileAuditLogDto
             {
                 Id = x.Id.ToString(),
@@ -91,18 +90,10 @@ public class AdminAuditLogsController : ControllerBase
                 IsSuccess = x.IsSuccess,
                 Reason = x.Reason,
                 OccurredAt = x.OccurredAt,
-            }).ToListAsync(ct);
+            })
+            .ToPagedEntityListAsync(pageNumber, pageSize, ct);
 
-        return Ok(new CommonResponse<PaginationResponse<FileAuditLogDto>>
-        {
-            Data = new PaginationResponse<FileAuditLogDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            },
-        });
+        return Ok(new CommonResponse<PaginationResponse<FileAuditLogDto>> { Data = page });
     }
 }
 

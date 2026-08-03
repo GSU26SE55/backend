@@ -61,11 +61,18 @@ public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
         }
 
         var pct = evt.Percentage.ToString("0.#", CultureInfo.InvariantCulture);
-        var title = "⏰ Cảnh báo SLA sắp hết hạn";
-        var body = $"Ticket đã dùng {pct}% thời gian SLA (hạn {evt.WarningAt:dd/MM HH:mm}). Cần xử lý sớm.";
+        // 03/08/2026 — nhắc luôn mã ticket. Trước đó payload chỉ có TicketId (một GUID) nên cả câu
+        // lẫn template đều phải nói chung chung "Ticket đã dùng …%", đúng loại thông báo mà người
+        // nhận cần biết NGAY là ticket nào để mở ra xử lý. Event cũ trong hàng đợi không có Code ⇒
+        // chuỗi rỗng, câu tự lược phần mã đi thay vì hiện "Ticket  ".
+        var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
+
+        var title = $"⏰ Cảnh báo SLA sắp hết hạn{codeSuffix}";
+        var body = $"Ticket{codeSuffix} đã dùng {pct}% thời gian SLA (hạn {evt.WarningAt:dd/MM HH:mm}). Cần xử lý sớm.";
         var payload = JsonSerializer.Serialize(new
         {
             ticketId = evt.TicketId,
+            code = evt.Code,
             warningAt = evt.WarningAt,
             percentage = evt.Percentage,
             staffId = evt.StaffId,

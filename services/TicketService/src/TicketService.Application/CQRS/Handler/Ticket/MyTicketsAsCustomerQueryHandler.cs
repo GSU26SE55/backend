@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Services;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -41,13 +42,13 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
 
-        query = query.OrderByDescending(t => t.CreatedAt);
+        query = query.OrderByDescending(t => t.CreatedAt)
+            .ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
-        var total = await query.CountAsync(cancellationToken);
-        var rawItems = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
+        // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,
+        // nên không chiếu sang DTO trong SQL được.
+        var page = await query.ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
+        var rawItems = page.Items;
 
         var ticketIds = rawItems.Select(t => t.Id).ToList();
         HashSet<Guid> unreadTicketIds;
@@ -72,13 +73,7 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketDTO>
-            {
-                Items = rawItems.Select(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id))).ToList(),
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id)))
         };
     }
 }

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.CQRS.Query.Blog;
 using TicketService.Application.DTOs.Response.Blog;
 using TicketService.Application.Interfaces.Repositories;
@@ -26,16 +27,10 @@ public class GetBlogPostListQueryHandler : IRequestHandler<GetBlogPostListQuery,
         if (request.Origin.HasValue)
             query = query.Where(x => x.Origin == request.Origin.Value);
 
-        var totalItems = await query.CountAsync(ct);
-
         // PaginationRequest đã clamp: PageNumber >= 1, PageSize trong [1, 100]
-        var page = request.PageNumber;
-        var pageSize = request.PageSize;
-
-        var items = await query
+        var page = await query
             .OrderByDescending(x => x.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
             .Select(x => new BlogPostListItemDTO
             {
                 Id = x.Id.ToString(),
@@ -49,19 +44,13 @@ public class GetBlogPostListQueryHandler : IRequestHandler<GetBlogPostListQuery,
                 CreatedAt = x.CreatedAt,
                 UpdatedAt = x.UpdatedAt,
             })
-            .ToListAsync(ct);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, ct);
 
         return new CommonResponse<PaginationResponse<BlogPostListItemDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<BlogPostListItemDTO>
-            {
-                Items = items,
-                TotalItems = totalItems,
-                PageNumber = page,
-                PageSize = pageSize,
-            }
+            Data = page
         };
     }
 }

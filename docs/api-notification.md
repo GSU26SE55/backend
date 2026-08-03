@@ -163,7 +163,7 @@ viễn khi retention dọn) hay không.
 | `EnvironmentalIncidentDetected` | 10 | Environmental | ✅ | Sự cố môi trường tại site (nhiệt độ/độ ẩm/ngập) |
 | `EnvironmentalIncidentResolved` | 11 | Environmental | | Sự cố môi trường đã giải quyết (clear banner) |
 | `AccountActivated` | 12 | Account | | Account được kích hoạt thành công |
-| `AdminInvite` | 13 | Account | | Admin gửi lời mời tạo account cho Staff/Manager |
+| ~~`AdminInvite`~~ | ~~13~~ | — | | **ĐÃ GỠ 03/08/2026** — thư mời đi thẳng `AuthService → EmailService` (`SendAdminInviteEvent` → `SendAdminInviteConsumer`), **không qua NotificationService**. Ở đây nó là enum không có producer: không consumer nào ghi, không dòng `notifications` nào mang type 13. **Không dùng lại số 13.** |
 | `IncidentDeclared` | 14 | SLA | ✅ | Major Incident chính thức được declare |
 | `CascadeRiskHigh` | 15 | Battery | | Sprint Bonus NS-14 (#658) — cascade risk ≥ 0.7 trên 1 pin → Manager/Admin |
 | `BatteryAlertEscalationPending` | 16 | Battery | ✅ | Sprint 5B #238 — Critical Alert chưa ack > 5 phút |
@@ -184,14 +184,38 @@ viễn khi retention dọn) hay không.
 | `TicketRatingRequested` | 31 | Ticket | | **Sprint 6.2 NOTI-07** — nhắc Customer đánh giá ticket đang treo |
 | `BatteryAnomalyWarning` | 32 | Battery | | **Sprint 6.2 NOTI-08 (#679)** — bất thường pin mức **Warning** (spec §3.4 T#12) → InApp + Push |
 | `BatteryAnomalyInfo` | 33 | Battery | | **Sprint 6.2 NOTI-08** — bất thường pin mức **Info** (spec §3.4 T#11) → chỉ InApp |
-| `TicketMerged` | **34** | Ticket | | **GH-83** — ticket của Customer bị Manager gộp vào ticket khác (`POST /api/admin/tickets/{id}/merge`). Consumer `TicketMergedConsumer` báo **Customer sở hữu ticket nguồn**; bỏ qua nếu event không có customerId. Không có trong channel map ⇒ dùng mặc định **chỉ InApp** |
+| `TicketMerged` | **34** | Ticket | | **GH-83 / GH-699.1** — ticket nguồn đã được Manager gộp vào ticket khác (`POST /api/admin/tickets/{id}/merge`). Consumer báo Customer sở hữu ticket nguồn; bỏ qua nếu event không có `customerId`. Không có trong channel map ⇒ mặc định **chỉ InApp**. **Số hiệu 34, không phải 27** |
 | `System` | 99 | Account | | Notification hệ thống tổng quát (broadcast, maintenance) + **bản tin digest tổng hợp** |
 
-> ⚠️ **GH-83 — `TicketMerged` từng trùng giá trị `27` với `ChatEscalatedToAdmin`.** Vì trùng khoá, `TicketMerged` **không khai báo được** trong `NotificationCategoryMap` và biến mất khỏi `GET /api/notification-preferences/categories`. Đã đổi sang **`34`**. FE/Mobile mirror giá trị `27` cho `TicketMerged` phải sửa; `27` giờ **chỉ** là `ChatEscalatedToAdmin`.
+> ⚠️ **FE/Mobile phải mirror đủ 34 giá trị**: 1–33 **trừ 13** (`AdminInvite` đã gỡ) + `TicketMerged = 34` + `System = 99`.
 >
-> Cùng đợt: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước đây **thiếu khai báo** trong `NotificationCategoryMap` — vẫn rơi vào nhánh mặc định `Account` nên runtime không đổi, nhưng chúng **không xuất hiện** trong `GET /categories`. Nay đã khai báo tường minh.
-
-> ⚠️ **FE/Mobile phải mirror đủ 34 giá trị** (1–33 + `System = 99`).
+> **GH-83 — `TicketMerged` từng trùng giá trị `27` với `ChatEscalatedToAdmin`.** Hai type khác nhau
+> nhưng chung số khiến `ToString()` chỉ trả một tên, `TicketMerged` không thể có khoá riêng trong
+> `NotificationCategoryMap`, biến mất khỏi `GET /api/notification-preferences/categories`, và hai
+> loại tranh cùng khoá template `(type, channel)`. Nay `TicketMerged = 34`; giá trị `27` chỉ còn là
+> `ChatEscalatedToAdmin`. Mobile đã chốt 34 và không dùng lại 27. An toàn vì chưa từng có dòng
+> notification nào mang type 27.
+>
+> Cùng đợt: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước đây thiếu khai báo
+> trong `NotificationCategoryMap` — runtime vẫn fallback về `Account`, nhưng chúng không xuất hiện
+> trong `GET /categories`. Nay cả hai đã được khai báo tường minh.
+>
+> **2026-08-03 — ba thay đổi hợp đồng event để template dựng được câu tử tế.**
+>
+> | Event | Thêm | Vì sao |
+> |---|---|---|
+> | `BatteryAnomalyDetectedEvent`<br>`BatteryAnomalyWarningDetectedEvent` | `AnomalyTypeName`, `SeverityName` | `AnomalyTypeEnum`/`AlertSeverityEnum` thuộc `BatteryService.Domain` nên subscriber **không tham chiếu được**, chỉ nhận số trần ⇒ thông báo gửi khách ghi *"Loại: 4 — Mức độ: 3"*. Bên sở hữu enum gửi kèm tên là chỗ duy nhất luôn đúng. Cùng khuôn `OldStatusName`/`NewStatusName` của `TicketStatusChangedEvent` |
+> | `SlaWarningEvent`<br>`SlaBreachedEvent` | `Code` | Trước đó payload chỉ có `TicketId` (một GUID) nên thông báo vỡ SLA **không nhắc được ticket nào** — trong khi đây đúng là loại cần biết ngay để mở ra xử lý |
+>
+> Cả ba đều **nullable / mặc định rỗng**: event cũ đã nằm trong Outbox và hàng đợi không có các trường
+> này, deserialize ra `null` và phía nhận tự lùi — `BatteryAnomalyLabels` trả về con số, câu SLA lược
+> phần mã đi thay vì hiện `"Ticket  "`. Không cần dừng hệ thống để nâng cấp.
+>
+> Phía NotificationService, `BatteryAnomalyLabels` quy tên enum về tiếng Việt (`Overheat` → *Quá nhiệt*,
+> `Critical` → *Nghiêm trọng*). Tra theo **TÊN** chứ không theo số: BatteryService chèn thêm một giá trị
+> vào giữa enum sẽ không làm nhãn ở đây dịch sai — đúng tai nạn đã xảy ra với `NotificationTypeEnum` khi
+> module Blog chiếm mất 25/26. Tên lạ ⇒ hiện chính tên đó (tiếng Anh, vẫn hiểu được) chứ không ra số.
+>
 >
 > **Sửa 2026-07-31 — số hiệu ĐÃ ĐỔI:** 7 giá trị của Sprint 6.2 là **27–33**, KHÔNG phải 25–31 như
 > bản trước ghi. Module Blog (`GH-671`) chiếm mất **25** và **26**, đẩy toàn bộ nhóm Sprint 6.2 lên
@@ -1335,65 +1359,246 @@ Ba việc trước sprint này không làm được:
 > `InvalidOperationException` → **HTTP 500 ở mọi request, kể cả của Admin**. Phát hiện khi test E2E 30/07/2026.
 
 **Mô hình phiên bản:** sửa template là **tạo bản mới** với `version` tăng dần, KHÔNG ghi đè bản cũ.
-Trong cùng bộ ba `(Type × Channel × Locale)` chỉ được có **đúng một** bản `isActive = true`;
+Trong cùng cặp `(Type × Channel)` chỉ được có **đúng một** bản `isActive = true`;
 dispatcher luôn lấy bản đó. Có 2 unique index ràng buộc ở DB — xem [Database schema](#database-schema).
+
+---
+
+#### ⚠️ Hợp đồng tên biến (2026-08-03)
+
+Template gọi biến bằng cú pháp Handlebars `{{tenBien}}`. **Tên biến phải khớp đúng khoá mà consumer
+ghi vào `payload_json`** — không phải một tên nghe hợp lý.
+
+Handlebars gặp biến không tồn tại thì **render ra chuỗi rỗng chứ không báo lỗi**. Không log, không
+metric, không test nào bắt. Đó là lý do bộ template của dự án từng chạy nhiều tháng với:
+
+| Template viết | Consumer thật sự ghi | Người nhận đọc được |
+|---|---|---|
+| `{{ticketCode}}` | `code` | `Ticket mới ` |
+| `{{serialNumber}}` | `assetSerialNumber` | `Bất thường pin ` |
+| `{{threshold}}` | `thresholdValue` | `vượt ngưỡng ` |
+| `{{customerName}}`, `{{slaDeadline}}`, `{{minutesRemaining}}`, `{{senderName}}`, `{{preview}}`, `{{displayName}}` | *(không tồn tại ở bất kỳ loại nào)* | chỗ trống |
+
+Ba lớp chặn hiện có:
+
+1. **`GET .../variables`** — trình soạn hiện sẵn danh sách biến hợp lệ, khỏi phải đoán.
+2. **`POST` / `PUT` trả 400** nếu template gọi biến ngoài danh mục, kèm gợi ý tên đúng.
+3. **`GET .../coverage`** — soi các template đã nằm sẵn trong DB xem có biến hỏng không.
+
+Nguồn sự thật là `NotificationTemplateVariables` (Application/Templates). Ba test bao giữ nó không
+trôi: template seed chỉ dùng biến có thật · mọi khoá khai báo đều xuất hiện ở một consumer · mọi
+khoá consumer ghi đều đã khai báo.
+
+---
+
+---
+
+### `POST /api/admin/notifications/broadcast/template-preview`
+
+**Mục đích:** Xem trước nội dung một lần gửi hàng loạt **khi bật "dùng mẫu"** — trả về **một dòng
+cho mỗi kênh**. Không gửi gì.
+
+**Vì sao phải tách theo kênh:** mẫu khoá theo cặp `(Loại × Kênh)` và bản SMS được nén ngắn lại (tính
+tiền theo đoạn), nên cùng một lần gửi 3 kênh cho ra **3 nội dung khác nhau**. Một ô xem trước duy
+nhất sẽ nói dối về 2 trong 3 kênh. Đây cũng chính là lý do phải render lúc gửi chứ không đổ sẵn chữ
+vào ô soạn.
+
+Model dựng theo **đúng khuôn** `NotificationDispatcher.BuildTemplateModel`, nên nội dung ở đây bằng
+đúng nội dung lúc gửi thật.
+
+**Request:**
+```json
+{
+  "type": 9,
+  "channels": [4, 1, 3],
+  "title": "Chữ dự phòng",
+  "body": "Thân dự phòng",
+  "payloadJson": "{\"assetSerialNumber\":\"BAT-2026-777\",\"anomalyTypeName\":\"Quá nhiệt\"}"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "data": [
+    { "channel": 4, "hasTemplate": true,
+      "title": "Bất thường pin BAT-2026-777",
+      "body": "Quá nhiệt — mức . Giá trị đo , ngưỡng .",
+      "missingVariables": ["actualValue", "severityName", "thresholdValue", "unit"],
+      "renderError": null },
+    { "channel": 3, "hasTemplate": true,
+      "title": "[Solar Battery]",
+      "body": "Bất thường pin BAT-2026-777. Quá nhiệt — mức ...",
+      "missingVariables": ["actualValue", "severityName", "thresholdValue", "unit"] }
+  ]
+}
+```
+
+| Trường | Ý nghĩa |
+|---|---|
+| `hasTemplate = false` | Cặp này không có mẫu ⇒ kênh đó dùng tiêu đề/nội dung admin gõ |
+| `missingVariables` | Mẫu gọi biến mà payload không có giá trị ⇒ chỗ đó render ra rỗng |
+| `renderError` | Mẫu hỏng cú pháp ⇒ lúc gửi thật rơi về nội dung dự phòng |
+
+> **`POST /broadcast` nhận thêm hai trường (03/08/2026):** `useTemplate` (mặc định `false`) và
+> `payloadJson`.
+>
+> - `useTemplate = false` ⇒ chữ admin gõ được gửi đi **y nguyên**. Dispatcher **bỏ qua** mẫu.
+> - `useTemplate = true` ⇒ dispatcher tra mẫu theo `(Loại × Kênh)` và render với `payloadJson`.
+>   `title`/`body` vẫn bắt buộc và trở thành **nội dung dự phòng** cho kênh không có mẫu khớp.
+>
+> Cột `notification_batches.use_template` ghi lại lựa chọn này. Là **cờ riêng** chứ không suy ra từ
+> `template_id`: một lần gửi nhắm 3 kênh dùng **3 mẫu khác nhau**, không có "một" template id để ghi.
+>
+> Khai biến không thuộc loại đó ⇒ **400** kèm danh sách biến hợp lệ — cùng cơ chế chặn với trình soạn
+> mẫu, vì Handlebars gặp biến lạ chỉ render ra rỗng chứ không báo lỗi.
+
+### `GET /api/admin/notification-templates/variables`
+
+**Mục đích:** Biến dùng được cho từng loại thông báo. Không chạm DB.
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": [
+    {
+      "type": 1,
+      "typeName": "TicketCreated",
+      "builtin": ["Body", "CreatedAt", "EntityId", "EntityType", "Title", "UserId"],
+      "payload": ["ticketId", "code", "customerId", "priority", "screen"]
+    }
+  ]
+}
+```
+
+- `builtin` — sáu biến `NotificationDispatcher` luôn nạp, giống nhau ở mọi loại.
+- `payload` — khoá riêng của loại đó. **Rỗng** nghĩa là consumer không ghi payload
+  (`EnvironmentalIncidentResolved`, `AdminInvite`), template chỉ dùng được `builtin`.
+
+---
+
+### `GET /api/admin/notification-templates/coverage`
+
+**Mục đích:** Đối chiếu template đang có với **thông báo thật đã sinh**.
+
+Lấy theo dữ liệu thật chứ không theo ma trận cấu hình, vì hai thứ này từng lệch nhau: consumer pin
+gửi bằng `NotificationWriter.AllChannels` (có SMS) trong khi ma trận không khai SMS — 98 tin SMS đã
+gửi đi mà không template nào phủ. Chỉ dữ liệu thật mới lộ ra khoảng trống đó.
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": [
+    { "type": 9, "typeName": "BatteryAnomalyDetected", "channel": 3,
+      "notificationCount": 98, "hasActiveTemplate": false, "unknownVariables": [] },
+    { "type": 1, "typeName": "TicketCreated", "channel": 4,
+      "notificationCount": 20, "hasActiveTemplate": true, "unknownVariables": ["ticketCodeeeeeee"] }
+  ]
+}
+```
+
+| Trường | Ý nghĩa |
+|---|---|
+| `hasActiveTemplate = false` | Mọi thông báo của cặp này đang dùng chuỗi ghi cứng trong consumer — sửa câu chữ phải sửa code rồi deploy lại |
+| `unknownVariables` không rỗng | Template có tồn tại nhưng gọi biến không có trong dữ liệu ⇒ chỗ đó render ra rỗng |
+
+Sắp xếp sẵn: thiếu template lên đầu, rồi tới template có biến hỏng, rồi theo lượng thông báo.
 
 ---
 
 ### `GET /api/admin/notification-templates`
 
-**Mục đích:** Danh sách template, lọc theo type/channel/locale. **Bao gồm cả bản không active** để
-thấy lịch sử phiên bản.
+**Mục đích:** Danh sách template **có phân trang**, lọc theo type/channel.
+**Bao gồm cả bản không active** để thấy lịch sử phiên bản.
 
 **Auth:** Admin.
 
+> ⚠️ **Breaking change (02/08/2026) — đợt 2, hai thay đổi:**
+> 1. **`type`/`channel` trả về dạng SỐ**, không còn là tên enum (`8` thay cho `"SlaBreached"`). Tên
+>    enum là tiếng Anh, dán thẳng lên màn hình tiếng Việt thì sai; việc dịch thuộc về client. Nay
+>    endpoint này giống mọi DTO notification khác, hết ngoại lệ.
+> 2. **Bỏ hẳn trường `locale`** khỏi response và bỏ query param `locale`. Hệ thống tiếng Việt only;
+>    cột `locale` đã bị drop khỏi bảng và các bản `en-US` đã bị xoá (121 → **82 dòng**). Khoá nghiệp
+>    vụ rút từ bộ ba (Type × Channel × Locale) xuống **cặp (Type × Channel)**.
+>
+> ⚠️ **Breaking change (02/08/2026) — đợt 1:** `data` từ mảng phẳng `object[]` đổi thành khối phân
+> trang `PaginationResponse<NotificationTemplateDto>` — client cũ đọc `data[0]` phải đổi sang
+> `data.items[0]`.
+
 **Query parameters:**
 
-| Param | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `type` | `NotificationTypeEnum?` | Không | Lọc theo loại notification |
-| `channel` | `NotificationChannelEnum?` | Không | Lọc theo kênh |
-| `locale` | `string?` | Không | Lọc theo locale (`vi-VN`, `en-US`). Rỗng/whitespace bị bỏ qua |
+| Param | Type | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|---|
+| `type` | `NotificationTypeEnum?` | Không | — | Lọc theo loại notification. Nhận cả tên enum (`SlaBreached`) lẫn số (`8`) |
+| `channel` | `NotificationChannelEnum?` | Không | — | Lọc theo kênh. Nhận cả tên enum (`Email`) lẫn số (`3`) |
+| `pageNumber` | `int` | Không | `1` | Trang hiện tại. `<= 0` → tự về `1` |
+| `pageSize` | `int` | Không | `10` | Số dòng mỗi trang. `<= 0` → `10`; `> 100` → kẹp còn `100` |
 
-**Sắp xếp:** `type` → `channel` → `locale` → `version` **giảm dần** (bản mới nhất lên đầu mỗi bộ ba).
+Quy tắc kẹp `pageNumber`/`pageSize` đến từ `SharedContracts.Common.Requests.PaginationRequest` —
+giống mọi endpoint phân trang khác của hệ thống, không có trần riêng.
 
-**Response `200`:** `CommonResponse<object[]>`.
+**Sắp xếp:** `type` → `channel` → `version` **giảm dần** → `id`.
+`id` là chốt chặn cuối cho **thứ tự toàn phần**: 3 khoá đầu đã unique nên trên lý thuyết không hoà,
+nhưng thứ tự không toàn phần thì Postgres được phép trả khác nhau giữa các lần chạy — khi đó một
+dòng có thể xuất hiện ở 2 trang hoặc biến mất hẳn.
+
+**Trang vượt quá dữ liệu** (`pageNumber` lớn hơn `totalPages`) trả **`200`** với `items: []`,
+không phải `404`. `pageNumber` trong response là **giá trị client gửi lên**, không bị kẹp về trang cuối.
+
+**Response `200`:** `CommonResponse<PaginationResponse<NotificationTemplateDto>>`.
 
 ```json
 {
   "isSuccess": true,
   "statusCode": 200,
   "message": null,
-  "data": [
-    {
-      "id": "b1f5c0aa-1111-2222-3333-444455556666",
-      "type": "SlaBreached",
-      "channel": "Email",
-      "locale": "vi-VN",
-      "version": 2,
-      "isActive": true,
-      "titleTemplate": "🔴 SLA vi phạm — ticket {{ticketCode}}",
-      "bodyTemplate": "Ticket {{ticketCode}} đã vượt hạn {{slaDeadline}}. Cần xử lý ngay.",
-      "createdAt": "2026-07-30T09:32:20Z",
-      "updatedAt": "2026-07-30T10:05:11Z"
-    }
-  ],
+  "data": {
+    "items": [
+      {
+        "id": "b1f5c0aa-1111-2222-3333-444455556666",
+        "type": 8,
+        "channel": 2,
+        "version": 2,
+        "isActive": true,
+        "titleTemplate": "VỠ SLA: {{ticketCode}}",
+        "bodyTemplate": "Ticket {{ticketCode}} đã vượt hạn {{slaDeadline}}. Cần leo thang ngay.",
+        "createdAt": "2026-07-30T09:32:20Z",
+        "updatedAt": "2026-07-30T10:05:11Z"
+      }
+    ],
+    "totalItems": 82,
+    "pageNumber": 1,
+    "pageSize": 10,
+    "totalPages": 9,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  },
   "listErrors": null
 }
 ```
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data[].id` | `Guid` | Không | ID template |
-| `data[].type` | `string` | Không | **Tên** `NotificationTypeEnum` (không phải số) |
-| `data[].channel` | `string` | Không | **Tên** `NotificationChannelEnum` |
-| `data[].locale` | `string` | Không | BCP-47 (`vi-VN` / `en-US`) |
-| `data[].version` | `int` | Không | Số phiên bản trong cùng bộ ba (bắt đầu từ `1`) |
-| `data[].isActive` | `bool` | Không | Bản đang được dispatcher dùng |
-| `data[].titleTemplate` | `string` | Không | Template tiêu đề (cú pháp Handlebars `{{var}}`) |
-| `data[].bodyTemplate` | `string` | Không | Template nội dung |
-| `data[].createdAt` | `DateTime` | Không | UTC |
-| `data[].updatedAt` | `DateTime?` | **Có** | `null` nếu chưa sửa lần nào |
+| `data.items[].id` | `Guid` | Không | ID template |
+| `data.items[].type` | `int` | Không | Giá trị **số** của `NotificationTypeEnum` — client tự ánh xạ sang nhãn hiển thị |
+| `data.items[].channel` | `int` | Không | Giá trị **số** của `NotificationChannelEnum` |
+| `data.items[].version` | `int` | Không | Số phiên bản trong cùng cặp (bắt đầu từ `1`) |
+| `data.items[].isActive` | `bool` | Không | Bản đang được dispatcher dùng |
+| `data.items[].titleTemplate` | `string` | Không | Template tiêu đề (cú pháp Handlebars `{{var}}`) |
+| `data.items[].bodyTemplate` | `string` | Không | Template nội dung |
+| `data.items[].createdAt` | `DateTime` | Không | UTC |
+| `data.items[].updatedAt` | `DateTime?` | **Có** | `null` nếu chưa sửa lần nào |
+| `data.totalItems` | `int` | Không | Tổng số template **khớp bộ lọc** (không phải tổng toàn bảng) |
+| `data.pageNumber` | `int` | Không | Trang đang trả (đúng giá trị client gửi, sau khi kẹp `<= 0` → 1) |
+| `data.pageSize` | `int` | Không | Số dòng mỗi trang sau khi kẹp |
+| `data.totalPages` | `int` | Không | `ceil(totalItems / pageSize)` |
+| `data.hasNextPage` | `bool` | Không | `pageNumber < totalPages` |
+| `data.hasPreviousPage` | `bool` | Không | `pageNumber > 1` |
 
 **Seed:** `NotificationTemplateCatalog` seed **đủ 32 type × mọi kênh** trong `DefaultTypeChannelMatrix`
 (trước Sprint 6.3 chỉ 5/32 type có template). Các type **hướng Customer** có thêm bản `en-US`:
@@ -1406,8 +1611,8 @@ phải bảo trì.
 Bản SMS được **biến tấu tự động**: gộp tiêu đề vào thân và cắt còn tối đa **300 ký tự**
 (`"[Solar Battery]"` làm tiêu đề) — SMS tính tiền theo đoạn 160 ký tự và không có tiêu đề riêng.
 
-Seeder **idempotent theo bộ ba** `(Type × Channel × Locale)`: đã có bản nào cho bộ ba đó thì KHÔNG
-thêm. Cố ý **không ghi đè** — người vận hành có thể đã sửa nội dung trong DB.
+Seeder **idempotent theo cặp** `(Type × Channel)`: đã có bản nào cho cặp đó thì KHÔNG thêm.
+Cố ý **không ghi đè** — người vận hành có thể đã sửa nội dung trong DB.
 
 ---
 
@@ -1453,12 +1658,11 @@ Content-Type: application/json
   "statusCode": 200,
   "message": null,
   "data": {
-    "type": "SlaBreached",
-    "channel": "Email",
-    "locale": "vi-VN",
+    "type": 8,
+    "channel": 2,
     "version": 2,
-    "title": "🔴 SLA vi phạm — ticket TK-001",
-    "body": "Ticket TK-001 đã vượt hạn 30/07/2026 18:00. Cần xử lý ngay."
+    "title": "VỠ SLA: TK-001",
+    "body": "Ticket TK-001 đã quá hạn SLA P1Critical. Cần leo thang ngay."
   },
   "listErrors": null
 }
@@ -1466,8 +1670,7 @@ Content-Type: application/json
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data.type` / `data.channel` | `string` | Không | Tên enum |
-| `data.locale` | `string` | Không | Locale của template |
+| `data.type` / `data.channel` | `int` | Không | Giá trị **số** của enum (02/08/2026 — trước là tên enum) |
 | `data.version` | `int` | Không | Phiên bản |
 | `data.title` | `string` | Không | Tiêu đề **sau khi render** |
 | `data.body` | `string` | Không | Nội dung **sau khi render** |
@@ -1514,7 +1717,7 @@ Content-Type: application/json
 - **Rate limit 5 lần/giờ mỗi admin.** Đếm bằng Redis key `tpl_test_send:{adminId:N}:{yyyyMMddHH}`
   (TTL 2 giờ). Vượt → `429`.
 - **Ghi audit** `TemplateTestSent` (Severity **Warning**) mỗi lần gửi, metadata gồm `templateId`,
-  `type`, `locale`, `version`, `quotaUsed`, `recipientSource` (`"read-model"` | `"jwt-claim"`).
+  `type`, `version`, `quotaUsed`, `recipientSource` (`"read-model"` | `"jwt-claim"`).
 
 **Hành vi:** render title/body → publish `SendNotificationEmailEvent` với
 `Subject = "[GỬI THỬ] {title}"`, `SourceService = "notification-template-test"`,
@@ -1554,6 +1757,126 @@ Content-Type: application/json
 
 ---
 
+---
+
+### `POST /api/admin/notification-templates` — tạo mẫu mới
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** tạo template ĐẦU TIÊN cho một cặp `(Type × Channel)` chưa có template nào.
+
+> **Vì sao đến giờ mới có:** trước ngày này controller chỉ có 4 endpoint đọc-và-bật, không có đường
+> nào tạo hay sửa. Nội dung template CHỈ đến từ seeder, mà seeder lại idempotent theo cặp
+> `(Type × Channel)` nên sửa catalog rồi deploy lại cũng **không** ghi đè bản đã có — cách duy nhất
+> để đổi câu chữ là chạy SQL tay. Hệ quả kéo theo: cả cơ chế phiên bản (cột `version`, partial unique
+> index, endpoint `activate`, nút "Kích hoạt" trên giao diện) là **code chết**, vì không gì tạo ra
+> được phiên bản thứ hai để mà quay lui.
+
+**Auth:** Admin.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `type` | `NotificationTypeEnum` | Có | Nhận cả tên enum (`SlaBreached`) lẫn số (`8`) |
+| `channel` | `NotificationChannelEnum` | Có | Nhận cả tên enum (`Email`) lẫn số (`2`) |
+| `titleTemplate` | `string` | Có | 1–500 ký tự, cú pháp Handlebars `{{var}}` |
+| `bodyTemplate` | `string` | Có | 1–4000 ký tự |
+
+Giới hạn độ dài khớp đúng cột DB (`title_template` 500, `body_template` 4000).
+
+**Hành vi:** tạo bản `isActive = true`. Số `version` = `max(version) + 1` tính trên **cả bản đã xoá
+mềm** của cặp đó — index `ux_notification_templates_type_channel_version` không lọc `is_deleted`,
+dùng lại số version của một bản đã xoá sẽ vi phạm khoá.
+
+**Cú pháp Handlebars được kiểm ngay lúc lưu.** Không kiểm thì template hỏng vẫn lưu được, và lúc gửi
+thật dispatcher bắt exception rồi lặng lẽ rơi về chuỗi hardcode trong consumer — thông báo vẫn gửi
+nhưng mất nội dung tuỳ biến, không ai hay.
+
+| Mã | Khi nào |
+|---|---|
+| `201` | Đã tạo. `data` = Id bản mới |
+| `400` | Sai dữ liệu (thu thập **tất cả** lỗi vào `listErrors`, không dừng ở lỗi đầu) hoặc template hỏng cú pháp |
+| `409` | Cặp `(Type × Channel)` đã có template — dùng `PUT` để tạo phiên bản mới |
+
+---
+
+### `PUT /api/admin/notification-templates/{id}` — sửa nội dung
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** sửa nội dung = **sinh phiên bản mới rồi bật lên**, KHÔNG ghi đè bản cũ.
+
+**Auth:** Admin. **Path param:** `id` — bản bất kỳ của cặp cần sửa.
+
+**Request body:** `titleTemplate`, `bodyTemplate` (cùng ràng buộc như khi tạo).
+
+> **Không nhận `type`/`channel`** — lấy từ bản gốc. Cho đổi cặp khi "sửa" nghĩa là biến bản ghi này
+> thành template của một cặp khác, phá vỡ chuỗi phiên bản của **cả hai** cặp.
+
+**Hành vi (một giao dịch):** tắt bản đang dùng → thêm bản mới `version = max + 1`, `isActive = true`.
+
+> **Thứ tự hai bước là bắt buộc.** `ux_notification_templates_active_per_key` là partial unique index
+> trên `(type, channel)` với filter `is_active AND NOT is_deleted`, và **không deferrable** — Postgres
+> kiểm ngay ở từng câu lệnh. Gộp INSERT bản mới và UPDATE tắt bản cũ vào một lần `SaveChanges` thì thứ
+> tự câu lệnh do EF quyết định: INSERT chạy trước là vi phạm khoá ngay. Vì vậy tắt bản cũ được lưu ở
+> một lần riêng, **trước**, trong cùng transaction.
+
+| Mã | Khi nào |
+|---|---|
+| `200` | Đã tạo phiên bản mới và bật lên. `data` = Id bản mới |
+| `400` | Sai dữ liệu hoặc hỏng cú pháp |
+| `404` | Không tìm thấy template |
+
+---
+
+### `DELETE /api/admin/notification-templates/{id}` — xoá mềm một phiên bản
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** dọn lịch sử — xoá mềm một phiên bản không còn dùng.
+
+**Auth:** Admin.
+
+> **KHÔNG xoá được bản đang dùng (409).** Cặp mất bản active thì dispatcher lặng lẽ rơi về chuỗi
+> hardcode trong consumer. Muốn bỏ bản đang dùng thì `activate` một bản khác trước. Nhờ luật này, mỗi
+> cặp **luôn** có đúng một bản active — giao diện cũng ẩn luôn nút Xoá ở dòng đang dùng thay vì để
+> bấm rồi báo lỗi.
+
+Xoá **mềm** (`AuditableEntityInterceptor` đặt `is_deleted`/`deleted_at`), giữ lại dấu vết nội dung cũ.
+
+| Mã | Khi nào |
+|---|---|
+| `200` | Đã xoá |
+| `404` | Không tìm thấy (hoặc đã xoá trước đó) |
+| `409` | Đang là bản active |
+
+---
+
+### `GET /api/admin/notification-templates/{id}` — chi tiết một phiên bản
+
+*(MỚI — 02/08/2026)* Trả `NotificationTemplateDto` của đúng bản đó, kể cả bản không active (xem lại
+phiên bản cũ). `404` nếu không tìm thấy hoặc đã xoá mềm.
+
+---
+
+### Audit của vòng đời template
+
+Bốn action code mới, ghi qua `INotificationAuditWriter` **trong cùng transaction** với thay đổi nghiệp
+vụ (audit và dữ liệu cùng sống cùng chết):
+
+| Action | Severity | Metadata |
+|---|---|---|
+| `TemplateCreated` | Info | `type`, `channel`, `version` |
+| `TemplateRevised` | Warning | `type`, `channel`, `fromVersion`, `toVersion` |
+| `TemplateActivated` | Warning | `type`, `channel`, `fromVersion`, `toVersion` |
+| `TemplateDeleted` | Warning | `type`, `channel`, `version` |
+
+`TemplateCreated` là Info vì tạo mẫu cho cặp chưa có là tốt lên (trước đó đang rơi về hardcode); ba
+action còn lại đổi câu chữ đang gửi cho khách nên là Warning.
+
+---
+
 ### `POST /api/admin/notification-templates/{id}/activate`
 
 **Mục đích:** **Quay lui** — kích hoạt lại một phiên bản template cũ.
@@ -1564,9 +1887,9 @@ Content-Type: application/json
 
 **Request body:** không có.
 
-**Hành vi:** trong cùng bộ ba `(Type × Channel × Locale)` chỉ được có đúng một bản active, nên thao
-tác này **tắt bản đang dùng rồi bật bản được chọn trong MỘT lần lưu** — để không có khoảnh khắc nào
-bộ ba đó không có bản active (khoảnh khắc ấy dispatcher sẽ rơi về chuỗi hardcode trong consumer).
+**Hành vi:** trong cùng cặp `(Type × Channel)` chỉ được có đúng một bản active, nên thao tác này
+**tắt bản đang dùng rồi bật bản được chọn trong MỘT lần lưu** — để không có khoảnh khắc nào cặp đó
+không có bản active (khoảnh khắc ấy dispatcher sẽ rơi về chuỗi hardcode trong consumer).
 Bản đã đúng trạng thái mong muốn thì bỏ qua (không ghi thừa).
 
 **Response `200`:**
@@ -1779,7 +2102,7 @@ await conn.start();   // không cần gọi thêm method nào — server tự gh
 | 3 | **Quiet hours** — không-critical, kênh ≠ InApp | → **Deferred** tới khi hết quiet hours (+1 phút đệm) | `quiet_hours` |
 | 4 | **Địa chỉ nhận** — Email cần `account_read_models.email`, SMS cần `phoneNumber` | → `Failed` | `no_email` / `no_phone` |
 | 4b | **Device token** — kênh Push cần ≥ 1 token `IsActive` | → `Failed` | `no_device_token` |
-| 5 | **Render nội dung** — ưu tiên DB template `(Type × Channel × Locale)` active, `OrderByDescending(Version)`; không có → lùi về `DefaultLocale`; vẫn không có → dùng Title/Body inline. **Template hỏng KHÔNG chặn gửi** | (không chặn) | — |
+| 5 | **Render nội dung** — ưu tiên DB template `(Type × Channel)` active, `OrderByDescending(Version)`; không có → dùng Title/Body inline. **Template hỏng KHÔNG chặn gửi** | (không chặn) | — |
 | 6 | **`channel.SendAsync`** | Lỗi → tăng `DispatchAttemptCount`, đặt `NextAttemptAt` theo backoff, vẫn `Pending`. Chạm `MaxAttempts` → `Failed` | `max_attempts_exceeded` |
 
 **Kết quả (`DispatchOutcome`):**
@@ -2120,7 +2443,30 @@ Nguồn: `env.prod.example`, `deploy/helm/solar-battery/values.yaml`,
 | `BaseBackoffSeconds` | `int` | `30` | Backoff cơ sở; lần thứ *n* hoãn `Base × 2^(n−1)` |
 | `MaxBackoffSeconds` | `int` | `900` | Trần backoff |
 | `UseDbTemplates` | `bool` | `true` | Ưu tiên render từ bảng `notification_templates`; không có template thì dùng Title/Body inline |
-| `DefaultLocale` | `string` | `"vi-VN"` | Locale lùi về khi người nhận không có `PreferredLocale` hoặc locale đó chưa có template |
+
+> **Template có hiệu lực tới đâu — sửa 2026-08-03.**
+>
+> Dispatcher render `(Type × Channel)` một lần cho mỗi dòng rồi giao xuống kênh. Với **Email / Push /
+> SMS**, nội dung đã render đi vào gói tin gửi ra ngoài; dòng trong `notifications` chỉ là biên bản
+> nên giữ nguyên chữ inline mà consumer ghi.
+>
+> Với **InApp thì ngược lại — dòng trong DB CHÍNH LÀ thứ người dùng đọc**, vì cả feed REST lẫn
+> SignalR đều lấy từ đó. Trước 2026-08-03 `InAppChannel` **không hề đọc** `request.Title`/`Body`: nó
+> chỉ đặt `Status = Sent` rồi đẩy realtime. Hệ quả: dispatcher vẫn tra template và render cho
+> **548/1285 dòng (43%)** rồi vứt kết quả đi, còn 33 template InApp thì sửa được, xem trước được,
+> gửi thử được — nhưng sửa xong không đổi được chữ nào trên màn hình.
+>
+> Nay `InAppChannel` **ghi ngược** nội dung đã render vào chính dòng đó trước khi lưu, nên realtime
+> cũng mang nội dung cuối cùng. Ba chốt an toàn:
+>
+> - **Chỉ ghi một lần** — dispatcher chỉ nhặt dòng `Pending`, cộng chốt idempotent "đã `Sent` thì
+>   thôi". Không có chuyện thông báo cũ đổi chữ dưới tay người đọc.
+> - **Rỗng thì không ghi** — render ra rỗng thì giữ nguyên nội dung gốc, không xoá trắng.
+> - **Cắt theo cột** — `title_template` tối đa 500 và `body_template` tối đa 4000, trong khi cột
+>   `title` chỉ 200 và `body` chỉ 2000. Không cắt thì Postgres ném lỗi và dòng đó kẹt retry vĩnh viễn.
+>
+> Bản tin gom (digest) **không** đi đường này: nó tự đánh `Sent` cho các mục con nên chúng giữ
+> nguyên nội dung gốc, còn bản tổng hợp thì đi qua dispatch như mọi dòng khác.
 | `TypeChannelMatrix` | `object` | `{}` | Override ma trận Type → Channel. Key/value là **tên enum**, không phân biệt hoa-thường. **Merge lên default theo từng key** |
 | `CriticalTypes` | `string[]` | `[]` | Override danh sách critical. Khai báo ⇒ **thay thế hoàn toàn** default (không cộng dồn); khai báo toàn giá trị không parse được ⇒ rơi về default |
 
@@ -2269,22 +2615,61 @@ Một `Notification` push tới người dùng có N thiết bị sẽ sinh **N 
 
 ---
 
-### `notification_templates` + `account_read_models` (migration `20260730093220_AddTemplateVersioningAndAccountLocale`)
+### `notification_templates` + `account_read_models`
 
-| Bảng | Cột | Kiểu | Null | Default | Ý nghĩa |
-|---|---|---|---|---|---|
-| `notification_templates` | `version` | `integer` | Không | `1` | **Sprint 6.3 NOTI3-12** — số phiên bản trong cùng bộ ba |
-| `account_read_models` | `preferred_locale` | `varchar(16)` | **Có** | `null` | **Sprint 6.3 NOTI3-12** — locale BCP-47 ưa dùng của người nhận |
+**Migration `20260730093220_AddTemplateVersioningAndAccountLocale`** — thêm `version` cho template
+và `preferred_locale` cho account read-model.
 
-**Index đổi:**
-- **DROP** `IX_notification_templates_type_channel_locale` (unique cũ trên bộ ba — chặn versioning).
-- **ADD** `ux_notification_templates_active_per_key` unique trên `(type, channel, locale)`
-  **có filter `is_active = true AND is_deleted = false`** ⇒ DB tự bảo đảm mỗi bộ ba chỉ có đúng 1 bản active.
-- **ADD** `ux_notification_templates_type_channel_locale_version` unique trên `(type, channel, locale, version)`.
+**Migration `20260802113005_RemoveTemplateLocale` (02/08/2026) — gỡ toàn bộ locale:**
 
-> `preferred_locale` **UserService chưa publish** ⇒ hiện luôn `null` và rơi về
-> `Notification:Dispatch:DefaultLocale`. Cột có sẵn để khi UserService bổ sung thì chỉ cần map, không
-> phải đổi migration.
+| Bảng | Thao tác | Ghi chú |
+|---|---|---|
+| `notification_templates` | **DELETE** dòng `locale <> 'vi-VN'` | 39/121 dòng. **Phải chạy TRƯỚC khi drop cột** — nếu không, unique index mới `(type, channel, version)` sẽ vi phạm ở 39 cặp |
+| `notification_templates` | **DROP COLUMN** `locale` | |
+| `account_read_models` | **DROP COLUMN** `preferred_locale` | Cột chưa bao giờ có giá trị: không consumer nào ghi vào, 100% dòng đang `null` |
+| index | **DROP** `ux_notification_templates_type_channel_locale_version` → **ADD** `ux_notification_templates_type_channel_version` | |
+| index | `ux_notification_templates_active_per_key` dựng lại trên `(type, channel)` | vẫn giữ filter `is_active = true AND is_deleted = false` ⇒ DB tự bảo đảm mỗi cặp đúng 1 bản active |
+
+> **Rollback dựng lại được schema nhưng KHÔNG dựng lại dữ liệu** — 39 bản `en-US` đã bị xoá cứng
+> (soft-delete không đủ: index `(type, channel, version)` không lọc `is_deleted` nên vẫn trùng khoá).
+> Sau khi rollback phải chạy lại seeder của bản code cũ để sinh lại chúng.
+
+---
+
+### Sprint 6.4 — nhóm người nhận & lần gửi (migration `AddNotificationGroups` + `AddNotificationBatches`)
+
+**4 bảng mới + 1 cột thêm.** Đây là lần đầu tiên NotificationService có **khoá ngoại** — trước đó
+toàn service không có FK nào, cũng không có navigation property nào.
+
+| Bảng | Vai trò | Ràng buộc đáng chú ý |
+|---|---|---|
+| `notification_groups` | Nhóm người nhận | `ux_notification_groups_normalized_name` UNIQUE trên `normalized_name` `WHERE is_deleted = false` · `ux_notification_groups_role_filter` UNIQUE `WHERE kind = 2 AND is_deleted = false` · CHECK `ck_notification_groups_role_filter` |
+| `notification_group_members` | **Nhiều-nhiều người ↔ nhóm** | FK `group_id` → `notification_groups` **CASCADE** · `ux_notification_group_members_pair` UNIQUE `(group_id, user_id) WHERE is_deleted = false` · `ix_notification_group_members_user` |
+| `notification_batches` | Nội dung **một lần gửi**, lưu một lần | `channels integer[]` · `ix_notification_batches_created_at` DESC |
+| `notification_batch_targets` | **Nhiều-nhiều lần gửi ↔ nhóm** | FK `batch_id` → `notification_batches` **CASCADE** · FK `group_id` → `notification_groups` **RESTRICT** · CHECK `ck_notification_batch_targets_shape` |
+| `notifications` | +1 cột `batch_id uuid NULL` | FK → `notification_batches` **SET NULL** · `ux_notifications_batch_user_channel` UNIQUE `(batch_id, user_id, channel) WHERE batch_id IS NOT NULL` |
+
+**Ba quyết định về khoá ngoại, đều có chủ đích:**
+
+- `group_id` **có** FK — cùng `notification_db`, cùng transaction, không có gì bất định.
+- `user_id` **không** FK — trỏ sang read-model đồng bộ qua message bus. Message tới *sau* thao tác
+  dùng `user_id` (thứ tự không bảo đảm) sẽ làm insert vỡ vì vi phạm khoá rồi retry, có khi hết lượt
+  vẫn hỏng; mà nguồn sự thật ở `auth_db` service khác nên FK nội bộ không bảo vệ được gì trước sai
+  lệch xuyên service. Lọc người không hoạt động làm bằng **JOIN lúc gửi**, không bằng ràng buộc DB.
+- `notification_batch_targets.group_id` dùng **RESTRICT chứ không CASCADE** — xoá nhóm KHÔNG được
+  xoá lịch sử đã gửi cho nhóm đó. Nhóm chỉ xoá mềm nên ràng buộc này không chặn thao tác thật.
+
+> **Nhóm đã xoá vẫn hiện KÈM TÊN trong lịch sử gửi.** `GET /batches/{id}` cố ý LEFT JOIN sang
+> `notification_groups` mà **không lọc `is_deleted`** — lọc bỏ thì tên thành rỗng và người xem chỉ
+> còn thấy "một nhóm nào đó", mất luôn thông tin đáng giá nhất. `groupName` chỉ `null` nếu dòng nhóm
+> bị xoá **cứng** khỏi DB, điều không xảy ra qua API.
+
+> `ux_notifications_batch_user_channel` là **lớp chống nhận trùng thứ hai**. Lớp thứ nhất là
+> `DISTINCT` ở tầng ứng dụng; hai lớp vì tầng ứng dụng sai thì DB vẫn chặn.
+
+> `batch_id` **nullable có chủ đích**: 1.282 dòng có trước sprint này không thuộc lần gửi nào (dữ
+> liệu cũ không mang thông tin để gom, gom theo thời gian là suy đoán đã chứng minh sai), và
+> `NotificationDigestBackgroundService` / `NotificationDispatcher` cũng sinh dòng ngoài mô hình batch.
 
 ---
 
@@ -2383,6 +2768,40 @@ vẫn phải qua SQL hoặc seeder.
 
 ## Changelog
 
+### 2026-08-03 — Sprint 6.4: Nhóm người nhận & gửi hàng loạt (`#1006..#1020`, 15 task)
+
+**Vấn đề gốc:** hệ thống chỉ gửi được cho **đúng một người mỗi lệnh** (`CreateNotificationCommand`
+có duy nhất một `Guid UserId`); "nhóm" chỉ là 4 chuỗi role viết cứng tại 15 chỗ trong code; toàn
+service **0 khoá ngoại / 0 navigation property**; `notifications` chép lại `title`/`body` từng dòng
+và không có khoá nào gom một lần gửi lại (đo được: 1.282 dòng / 9 người / 242 lần gửi chỉ gom được
+bằng cách đoán theo `(type, entity_id, giây)` — cách đoán đó sai, cùng một `entity_id` có tới 50
+dòng trong một giây).
+
+**Endpoint mới (11):**
+- `GET|POST /api/admin/notification-groups`, `GET|PUT|DELETE .../{id}`
+- `GET|POST .../{id}/members`, `DELETE .../{id}/members/{userId}`
+- `POST /api/admin/notifications/broadcast/preview` — **không gửi gì**, chỉ trả số người nhận sau khi gom trùng
+- `POST /api/admin/notifications/broadcast`
+- `GET /api/admin/notifications/batches`, `GET .../batches/{id}`
+
+**Ba luật ở bước nở người nhận** — thiếu cái nào cũng hỏng theo kiểu *im lặng*:
+1. **Gom trùng** — người ở hai nhóm cùng được nhắm chỉ nhận **một** lần.
+2. **Lọc người còn hoạt động** — JOIN read-model tài khoản; chỉ đúng được nhờ bản vá 02/08/2026.
+3. **Tập rỗng trả 400 tường minh**, không tạo lần gửi mồ côi và không "ghi log rồi lặng lẽ trả về".
+
+**Đi chệch kế hoạch có chủ đích:** `IRecipientResolver.GetActiveByRoleAsync` **giữ nguyên** cách đọc
+thẳng read-model, KHÔNG định tuyến qua nhóm `Role` như dự kiến ban đầu. Lý do: đi qua nhóm không làm
+việc định tuyến trở thành dữ liệu (nhóm gắn cứng đúng một role) nên lợi ích là ảo, trong khi cái giá
+có thật — toàn bộ thông báo tự động sẽ phụ thuộc vào 4 dòng seed, thiếu một dòng là im lặng mất
+người nhận. Nhóm `Role` vẫn dùng để admin **chọn** "toàn bộ Quản lý" trên màn hình gửi.
+
+**Đã hoãn có chủ đích:** bỏ `title`/`body`/`payload_json` khỏi `notifications` để đọc qua batch —
+nó bắt `GET /api/notifications` (truy vấn nóng nhất) phải JOIN thêm. Nghĩa là sprint này giải quyết
+bài toán **truy vết và gom nhóm**, chưa giải quyết **trùng lặp dung lượng**.
+
+**Permission mới (4):** `notification.group_view` · `notification.group_manage` ·
+`notification.broadcast` · `notification.batch_view`. Manager chỉ có 2 quyền đọc.
+
 ### 2026-08-02 — Đối chiếu doc với codebase (audit)
 
 Rà `NotificationTypeEnum` / `NotificationCategoryMap` / `DefaultTypeChannelMatrix` / routes so với code.
@@ -2425,8 +2844,8 @@ Rà `NotificationTypeEnum` / `NotificationCategoryMap` / `DefaultTypeChannelMatr
 - Retention 90 ngày (xoá mềm, giữ critical vĩnh viễn, `Pending` không bao giờ bị dọn).
 - Retry 3 lần + DLQ monitor ở tầng bus — **ảnh hưởng cả 8 service**.
 - Dedup chuyển sang `SET NX EX` atomic.
-- Template: seed đủ **32 type × mọi kênh** (trước 5/32), có `version` + rollback, locale `en-US` cho
-  13 type hướng Customer.
+- Template: seed đủ **32 type × mọi kênh** (trước 5/32), có `version` + rollback.
+  (Bản `en-US` cho 13 type hướng Customer đã bị gỡ ngày 02/08/2026 — hệ thống tiếng Việt only.)
 - **XSS:** bỏ `NoEscape = true` ở `HandlebarsTemplateRenderer`, thay bằng `HtmlOnlyTextEncoder` —
   escape đúng 5 ký tự HTML, **giữ nguyên tiếng Việt** ở mọi kênh (encoder mặc định của Handlebars.NET
   mã hoá cả ký tự ngoài ASCII: "Nguyễn" → `Nguy&#7877;n`, đúng cho email HTML nhưng ra chuỗi rác ở
