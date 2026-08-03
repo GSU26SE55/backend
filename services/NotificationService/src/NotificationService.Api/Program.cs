@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NotificationService.Infrastructure.DependencyInjection;
 using NotificationService.Infrastructure.Persistence;
+using NotificationService.Infrastructure.Realtime;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
@@ -26,6 +27,9 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddNotificationServiceInfrastructure(builder.Configuration);
 builder.Services.AddIdempotencyKey(builder.Configuration);
+
+// Sprint 6.3 NOTI3-13 (#713) — realtime feed in-app. Polling REST vẫn giữ nguyên làm đường dự phòng.
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -72,12 +76,16 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseIdempotencyKey();
 
 app.MapControllers();
+
+// Sprint 6.3 NOTI3-13 (#713) — bắt buộc đăng nhập: hub phát thông báo riêng của từng người.
+app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
+
 app.MapMetrics();
 
 app.Run();

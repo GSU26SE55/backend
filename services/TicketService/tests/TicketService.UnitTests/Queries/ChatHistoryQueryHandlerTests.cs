@@ -92,7 +92,7 @@ public class ChatHistoryQueryHandlerTests
         var customerId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
         var ticket = MakeTicket(ticketId, customerId);
-        ticket.AssignedStaffId = staffId;
+        ticket.PrimaryHandlerStaffId = staffId;
         var chat = MakeChat(Guid.NewGuid(), ticketId, staffId, ActorRoleEnum.Staff, ticket);
 
         SetupTickets([ticket]);
@@ -117,7 +117,7 @@ public class ChatHistoryQueryHandlerTests
         var customerId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
         var ticket = MakeTicket(ticketId, customerId);
-        ticket.AssignedStaffId = staffId;
+        ticket.PrimaryHandlerStaffId = staffId;
         var chat = MakeChat(Guid.NewGuid(), ticketId, customerId, ActorRoleEnum.Customer, ticket);
 
         SetupTickets([ticket]);

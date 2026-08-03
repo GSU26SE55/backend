@@ -27,7 +27,19 @@ global:
   domain: capstonegsu26se55.mooo.com
 
   # ASP.NET environment — Development / Staging / Production
+  # ⚠️ Đặt `Production` thì CORS whitelist trở thành BẮT BUỘC (#AUTH-05): thiếu
+  # `Cors__AllowedOrigins__0` là mọi pod CrashLoopBackOff. Chart tự sinh origin từ `domain`
+  # ở trên nên mặc định đã có 1 origin — chỉ cần thêm origin phụ vào `extraCorsOrigins`.
   aspnetEnvironment: Development
+
+  # #AUTH-05 — origin PHỤ được phép gọi API (ngoài "https://{domain}" chart tự thêm).
+  # Dùng cho: cổng dev của FE, domain quản trị riêng, WebView mobile có origin riêng…
+  # Origin = scheme + host (+ port nếu khác 443/80). KHÔNG kèm path, KHÔNG kèm '/' cuối.
+  # Ví dụ:
+  #   extraCorsOrigins:
+  #     - "https://admin.capstonegsu26se55.mooo.com"
+  #     - "http://localhost:5173"
+  extraCorsOrigins: []
 
   # cert-manager ClusterIssuer — staging dùng letsencrypt-staging (rate limit cao),
   # production dùng letsencrypt-prod.
@@ -272,6 +284,19 @@ config:
   RabbitMQ__Host: rabbitmq
   RabbitMQ__Username: guest
 
+  # ---------- Sprint BE-IoT-Realtime — SSE telemetry (overall.md §34.10) ----------
+  Realtime__Enabled: "true"
+  Realtime__HeartbeatSeconds: "30"
+  Realtime__SummaryIntervalSeconds: "4"
+  # #614 — phát bù khi client reconnect kèm header Last-Event-ID.
+  # CHỈ áp cho scope 1 pin (event `reading`); summary/stats/ping không phát bù.
+  # Bộ đệm là Redis Stream key `telemetry:replay:asset:{id}` — dùng CHUNG Redis với cache/backplane,
+  # nên nhân N pin đang phát số liệu là N key. 200 bản ghi/pin ≈ vài phút dữ liệu.
+  # ReplayMaxEvents=0 => TẮT phát bù (không sinh dòng `id:`). ReplayTtlMinutes=0 => không đặt hạn sống
+  # (⚠️ để 0 thì key của pin đã ngừng gửi sẽ nằm lại Redis vĩnh viễn).
+  Realtime__ReplayMaxEvents: "200"
+  Realtime__ReplayTtlMinutes: "5"
+
   MailJet__FromEmail: thangbpse180445@fpt.edu.vn
   MailJet__DisplayName: Solar Panel Battery Maintainance
   MailJet__SendEndpoint: https://api.mailjet.com/v3.1/send
@@ -293,6 +318,25 @@ config:
   Outbox__BatchSize: "50"
   Outbox__PollIntervalSeconds: "2"
   Outbox__MaxRetries: "10"
+
+  # ----- Sprint 6.3 — worker vận hành của NotificationService -----
+  # Đều có mặc định trong code; đưa ra đây để chỉnh được mà không phải build lại image.
+  # (`Notification__Unsubscribe__PublicBaseUrl` nằm ở configmap.yaml vì cần nội suy domain,
+  #  `Notification__Unsubscribe__Secret` nằm ở solar-secrets.)
+  Notification__ExpoReceipt__Enabled: "true"
+  Notification__ExpoReceipt__MinAgeMinutes: "15"
+  Notification__ExpoReceipt__PollIntervalSeconds: "300"
+  Notification__Fallback__Enabled: "true"
+  # PHẢI >= MinAgeMinutes(15) + chu kỳ quét(5) + biên(5) = 25. Thấp hơn thì fallback bắn SMS
+  # trước khi worker đối soát kịp biết biên nhận ⇒ MỌI push critical lãnh thêm 1 SMS thừa,
+  # không kèm lỗi kỹ thuật nào để lần ra. Service ghi LogError lúc khởi động nếu đặt sai.
+  Notification__Fallback__PushReceiptTimeoutMinutes: "30"
+  Notification__RateLimit__Enabled: "true"
+  Notification__RateLimit__MaxPerUserPerHour: "20"
+  Notification__RateLimit__MaxPerUserPerType: "8"
+  Notification__Retention__Enabled: "true"
+  Notification__Retention__Days: "90"
+  Notification__Unsubscribe__TokenLifetimeDays: "180"
 
   # ----- Sprint additional-auth #AUTH-32 / #AUTH-59 — JWT refresh TTL + key rotation -----
   JwtSettings__RefreshTokenExpirationDays: "7"

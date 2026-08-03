@@ -1,3 +1,4 @@
+using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events.Chats;
@@ -5,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
@@ -18,6 +20,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatAddCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private IReadOnlyList<string> NoMatches = Array.Empty<string>();
     private static readonly List<string> PublicCreatePermission = new() { ChatPermissionCodes.ChatCreatePublic };
     private static readonly List<string> InternalCreatePermission = new() { ChatPermissionCodes.ChatCreateInternal };
@@ -38,6 +42,14 @@ public class ChatAddCommandHandlerTests
 
     public ChatAddCommandHandlerTests()
     {
+        _spamDetector.Setup(x => x.TryAcquireLeaseAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SpamLease("test-spam-lease", "test-owner"));
+        _spamDetector.Setup(x => x.RenewLeaseAsync(It.IsAny<SpamLease>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _spamDetector.Setup(x => x.ReleaseLeaseAsync(It.IsAny<SpamLease>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _spamDetector.Setup(x => x.RecordAcceptedMessageAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         _spamDetector.Setup(x => x.IsSpamAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _profanityFilter.Setup(x => x.ContainsProfanity(It.IsAny<string>(), out NoMatches)).Returns(false);
@@ -51,7 +63,7 @@ public class ChatAddCommandHandlerTests
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object);
+            _slaService.Object, _publisher.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -93,6 +105,11 @@ public class ChatAddCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.created phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatCreated)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(201);
 
         chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>
@@ -341,7 +358,7 @@ public class ChatAddCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SpamDetected_ReturnsBadRequestAndLogsFlagged()
+    public async Task Handle_SpamDetected_ReturnsStableDuplicateErrorWithoutRecordingAttempt()
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -380,7 +397,7 @@ public class ChatAddCommandHandlerTests
 
         _activityLogger.Verify(x => x.LogAsync(
             ticketId, userId, ActorRoleEnum.Customer, "Customer",
-            ActivityActionEnum.ChatFlagged, null, null, It.IsAny<string>()), Times.Once);
+            ActivityActionEnum.ChatFlagged, null, null, It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -625,8 +642,7 @@ public class ChatAddCommandHandlerTests
         mentionsRepo.Verify(r => r.AddAsync(It.Is<TicketChatMention>(m =>
             m.MentionedUserId == managerId &&
             m.MentionedUserRole == ActorRoleEnum.Manager &&
-            m.MentionedDisplayName == "Manager A" &&
-            m.IsAcknowledged == false)), Times.Once);
+            m.MentionedDisplayName == "Manager A")), Times.Once);
 
         _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<ChatMentionedEvent>(e =>

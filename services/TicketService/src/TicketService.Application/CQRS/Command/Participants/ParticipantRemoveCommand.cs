@@ -24,11 +24,15 @@ public class ParticipantRemoveCommand : IRequest<ParticipantActionResponse>, IVa
 
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+
     /// <summary>
     /// Actor role.
     /// </summary>
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
+
+    [JsonIgnore]
+    public string? ActorName { get; set; }
 
     public Task<ParticipantActionResponse> ValidateAsync()
     {

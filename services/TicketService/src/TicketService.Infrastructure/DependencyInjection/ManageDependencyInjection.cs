@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
@@ -27,11 +28,13 @@ namespace TicketService.Infrastructure.DependencyInjection;
 
 public static class ManageDependencyInjection
 {
+    [Obsolete]
     public static IServiceCollection AddTicketServiceInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDatabase(configuration);
         services.AddRepositories();
         services.AddHelpers();
+        services.AddAiVerify(configuration);
         services.AddOutbox(configuration);
 
         services.AddSharedInfrastructure(configuration, "TicketService.Application", "Ticket Service API");
@@ -42,6 +45,16 @@ public static class ManageDependencyInjection
         services.AddAlertTicketSaga(configuration);
 
         // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
+        // FIX duplicate-ticket — khi Saga bật, consumer cũ BatteryAnomalyDetectedConsumer
+        // ([Obsolete] #238) PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
+        // (gây trùng mã ticket → 23505 duplicate key IX_tickets_code).
+        var sagaEnabled = configuration.GetValue(
+            $"{AlertTicketSagaOptions.SectionName}:{nameof(AlertTicketSagaOptions.AlertTicketSagaEnabled)}",
+            true);
+        var excludedConsumers = sagaEnabled
+            ? new[] { typeof(Consumers.BatteryAnomalyDetectedConsumer) }
+            : Array.Empty<Type>();
+
         services.AddMessageBus(
             configuration,
             configure: bus =>
@@ -49,8 +62,14 @@ public static class ManageDependencyInjection
                 SagaServiceCollectionExtensions.ConfigureAlertTicketSaga(bus);
                 SagaServiceCollectionExtensions.ConfigureChatEscalationReviewSaga(bus);
             },
+            // FIX saga-scheduler — bật UseMessageScheduler cho saga timer (.Schedule/.Unschedule).
+            configureBus: SagaServiceCollectionExtensions.ConfigureAlertTicketSagaBus,
+            excludedConsumerTypes: excludedConsumers,
             typeof(ManageDependencyInjection).Assembly,
             typeof(TicketService.Application.DependencyInjection.ManageDependencyInjection).Assembly);
+
+        // Command handlers write through IIntegrationEventOutboxWriter. The relay uses
+        // IIntegrationEventTransport to publish to RabbitMQ after the transaction commits.
 
         // Sprint 5B #238 — feature flag override cho cutover.
         services.Configure<AlertTicketSagaOptions>(configuration.GetSection(AlertTicketSagaOptions.SectionName));
@@ -60,10 +79,19 @@ public static class ManageDependencyInjection
 
     private static void AddOutbox(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
-        services.AddScoped<IMessageProducerService, OutboxMessagePublisher>();
+        services.AddOptions<OutboxOptions>()
+            .Bind(configuration.GetSection(OutboxOptions.SectionName))
+            .Validate(options => options.IntervalSeconds > 0, "Outbox:IntervalSeconds phải lớn hơn 0.")
+            .Validate(options => options.BatchSize > 0, "Outbox:BatchSize phải lớn hơn 0.")
+            .Validate(options => options.MaxRetryCount > 0, "Outbox:MaxRetryCount phải lớn hơn 0.")
+            .Validate(options => options.PublishTimeoutSeconds > 0, "Outbox:PublishTimeoutSeconds phải lớn hơn 0.")
+            .Validate(options => options.LeaseDurationSeconds >= options.PublishTimeoutSeconds + 5,
+                "Outbox:LeaseDurationSeconds phải lớn hơn PublishTimeoutSeconds ít nhất 5 giây safety buffer.")
+            .ValidateOnStart();
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        services.AddScoped<IOutboxClaimService, OutboxClaimService>();
+        services.AddSingleton<IOutboxLeaseOwner, OutboxLeaseOwner>();
         services.AddScoped<IAlertTicketSagaQueryService, AlertTicketSagaQueryService>();
         // Sprint 7 #114 (§5.2) — saga failed-rate report reader.
         services.AddScoped<TicketService.Application.Interfaces.Services.ISagaReportService,
@@ -85,6 +113,9 @@ public static class ManageDependencyInjection
         services.AddHostedService<VirusScanWorker>();
         services.AddHostedService<SlaGaugeBackgroundService>();
         services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
+
+        // Sprint 6.2 NOTI-07 (#678) — nhắc Customer đánh giá ticket treo ở CLOSED_PENDING_RATE.
+        services.AddHostedService<BackgroundJobs.RatingRequestBackgroundService>();
     }
 
     private static void AddHelpers(this IServiceCollection services)
@@ -134,7 +165,6 @@ public static class ManageDependencyInjection
         services.AddScoped<IBlogGeneratorService, DeepSeekBlogGeneratorService>();
 
         // #568 — PDF exporter
-        services.AddScoped<IPdfExporter, QuestPdfChatExporter>();
 
         // Voice m4a normalization — transcode file voice bất kỳ (web ghi .webm) về m4a để iOS phát được
         services.AddScoped<IAudioTranscoder, FfmpegAudioTranscoder>();
@@ -170,16 +200,60 @@ public static class ManageDependencyInjection
 
         // #567 — Gemini voice transcription client (multimodal, timeout từ Chat:Voice:TranscribeTimeoutSeconds)
         services.AddHttpClient<IVoiceTranscriptionService, GeminiVoiceTranscriptionService>((sp, http) =>
+               {
+                   var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
+                   http.Timeout = TimeSpan.FromSeconds(Math.Max(15, opts.Voice.TranscribeTimeoutSeconds));
+               });
+
+        services.AddGrpcClient<SharedContracts.Grpc.FileInternal.FileInternal.FileInternalClient>((sp, options) =>
         {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.Timeout = TimeSpan.FromSeconds(Math.Max(15, opts.Voice.TranscribeTimeoutSeconds));
+            var address = sp.GetRequiredService<IConfiguration>()["FILE_STORAGE_GRPC_CLIENT_ADDRESS"]
+                ?? sp.GetRequiredService<IOptions<ChatOptions>>().Value.Voice.FileStorageGrpcAddress;
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("Chat:Voice:FileStorageGrpcAddress must be an absolute URI.");
+            options.Address = uri;
         });
 
         // #567 — FileStorageService upload client (dùng Bearer token forwarded từ original request)
-        services.AddHttpClient<IFileUploadClient, FileStorageApiClient>((_, http) =>
+    }
+
+    /// <summary>
+    /// GH-ticket-verify — battery serial lookup (HTTP, JWT forward) + AI verify (gRPC).
+    /// </summary>
+    private static void AddAiVerify(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<TicketAiOptions>(configuration.GetSection(TicketAiOptions.SectionName));
+        var aiOptions = configuration.GetSection(TicketAiOptions.SectionName).Get<TicketAiOptions>() ?? new TicketAiOptions();
+
+        // Battery serial lookup — typed HttpClient, base url = BatteryService (JWT forward trong client).
+        services.AddHttpClient<IBatteryLookupClient, BatteryLookupHttpClient>((_, http) =>
         {
-            http.Timeout = TimeSpan.FromSeconds(60);
+            http.BaseAddress = new Uri(aiOptions.BatteryServiceBaseUrl);
+            http.Timeout = TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds));
         });
+
+        // gRPC AiService client (VerifyTicket) — insecure, nội bộ docker network.
+        services.AddGrpcClient<AiModule.V1.AiService.AiServiceClient>(o =>
+        {
+            o.Address = new Uri(aiOptions.AiGrpcAddress);
+        });
+        services.AddScoped<IAiTicketVerifyClient>(sp => new AiTicketVerifyGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiTicketVerifyGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
+        // GH-verify-sensor-grpc — gRPC BatteryService client (đọc sensor pin verify), nội bộ, không JWT.
+        services.AddGrpcClient<BatteryService.Grpc.BatteryInternal.BatteryInternalClient>(o =>
+        {
+            o.Address = new Uri(aiOptions.BatteryGrpcAddress);
+        });
+        services.AddScoped<IBatterySensorClient>(sp => new BatterySensorGrpcClient(
+            sp.GetRequiredService<BatteryService.Grpc.BatteryInternal.BatteryInternalClient>(),
+            sp.GetRequiredService<ILogger<BatterySensorGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
+        // Logic verify dùng chung consumer (async) + re-verify thủ công (đồng bộ).
+        services.AddScoped<ITicketVerifyRunner, TicketVerifyRunner>();
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)

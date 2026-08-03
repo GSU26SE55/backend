@@ -45,17 +45,17 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketAssignCommand_InvalidData_ReturnsErrors()
     {
-        var command = new TicketAssignCommand { TicketId = Guid.Empty, StaffId = Guid.Empty };
+        var command = new TicketAssignCommand { TicketId = Guid.Empty, PrimaryHandlerStaffId = Guid.Empty };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "StaffId");
+        result.ListErrors.Should().Contain(x => x.Field == "PrimaryHandlerStaffId");
     }
 
     [Fact]
     public async Task TicketAssignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketAssignCommand { TicketId = Guid.NewGuid(), StaffId = Guid.NewGuid() };
+        var command = new TicketAssignCommand { TicketId = Guid.NewGuid(), PrimaryHandlerStaffId = Guid.NewGuid() };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -109,15 +109,58 @@ public class TicketCommandValidationTests
         result.ListErrors.Should().Contain(x => x.Field == "Title");
         result.ListErrors.Should().Contain(x => x.Field == "Description");
         result.ListErrors.Should().Contain(x => x.Field == "CustomerId");
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
     public async Task TicketCreateCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid() };
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(-1) };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_DuplicateAttachmentFileId_ReturnsSuccess()
+    {
+        var fileId = Guid.NewGuid();
+        var command = new TicketCreateCommand
+        {
+            Title = "Title",
+            Description = "Desc",
+            CustomerId = Guid.NewGuid(),
+            BatteryAssetIds = new List<Guid> { Guid.NewGuid() },
+            IncidentDetectedAt = DateTime.UtcNow.AddHours(-1),
+            Attachments = new List<TicketAttachmentInput>
+            {
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg"),
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg")
+            }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeTrue();
+        result.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_MissingIncidentDetectedAt_ReturnsError()
+    {
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid() };
+        var result = await command.ValidateAsync();
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_IncidentDetectedAtInFuture_ReturnsError()
+    {
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(1) };
+        var result = await command.ValidateAsync();
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
@@ -215,18 +258,18 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketReassignCommand_EmptyIds_ReturnsErrors()
     {
-        var command = new TicketReassignCommand { TicketId = Guid.Empty, NewStaffId = Guid.Empty, Reason = "" };
+        var command = new TicketReassignCommand { TicketId = Guid.Empty, NewPrimaryHandlerStaffId = Guid.Empty, Reason = "" };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "NewStaffId");
+        result.ListErrors.Should().Contain(x => x.Field == "NewPrimaryHandlerStaffId");
         result.ListErrors.Should().Contain(x => x.Field == "Reason");
     }
 
     [Fact]
     public async Task TicketReassignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketReassignCommand { TicketId = Guid.NewGuid(), NewStaffId = Guid.NewGuid(), Reason = "Valid reassign reason" };
+        var command = new TicketReassignCommand { TicketId = Guid.NewGuid(), NewPrimaryHandlerStaffId = Guid.NewGuid(), Reason = "Valid reassign reason" };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();

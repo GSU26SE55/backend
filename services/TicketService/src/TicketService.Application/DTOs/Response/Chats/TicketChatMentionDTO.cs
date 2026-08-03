@@ -16,10 +16,6 @@ public class TicketChatMentionDTO
     public string MentionedUserId { get; set; } = string.Empty;
     public ActorRoleEnum MentionedUserRole { get; set; }
     public string? MentionedDisplayName { get; set; }
-    /// <summary>
-    /// Is acknowledged.
-    /// </summary>
-    public bool IsAcknowledged { get; set; }
-    public DateTime? AcknowledgedAt { get; set; }
+    public bool IsInternal { get; set; }
     public DateTime CreatedAt { get; set; }
 }

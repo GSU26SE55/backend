@@ -77,14 +77,10 @@ public class ChatOptions
 
         public int MaxSuggestionsPerCall { get; set; } = 3;
 
-        /// <summary>Ngưỡng sentiment score để alert Manager (#560). Âm = tiêu cực; default -0.7.</summary>
-        public double SentimentAlertThreshold { get; set; } = -0.7;
 
         /// <summary>Số dòng tóm tắt cho summarize endpoint (#560).</summary>
         public int SummarizeLinesCount { get; set; } = 5;
 
-        /// <summary>Số chat Customer gần nhất để phân tích sentiment (#560).</summary>
-        public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
 
     public class DeepSeekSection
@@ -116,8 +112,8 @@ public class ChatOptions
         /// <summary>Tên model Gemini multimodal cho audio — ví dụ: "gemini-2.5-flash".</summary>
         public string ModelName { get; set; } = "gemini-1.5-flash";
 
-        /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
-        public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";
+        /// <summary>Private HTTP/2 endpoint exposed by FileStorageService for transcription workers.</summary>
+        public string FileStorageGrpcAddress { get; set; } = string.Empty;
 
         public int TranscribeTimeoutSeconds { get; set; } = 30;
     }

@@ -57,16 +57,21 @@ public class ConcurrentPublishTests : IAsyncLifetime
             new SendOtpRegisterEvent($"mixed-r-{Guid.NewGuid():N}@x.com", $"MR{i}-{Random.Shared.Next(100000, 999999)}")).ToList();
         var resets = Enumerable.Range(0, eachType).Select(i =>
             new SendPasswordResetOtpEvent($"mixed-p-{Guid.NewGuid():N}@x.com", $"MP{i}-{Random.Shared.Next(100000, 999999)}")).ToList();
-        var phones = Enumerable.Range(0, eachType).Select(i =>
-            new SendPhoneOtpEvent($"+8412{Random.Shared.Next(1000000, 9999999)}-{i}", $"MH{i}")).ToList();
+        // Sprint 6.2 NOTI-15 (#686) — SendPhoneOtpEvent đã bỏ khỏi EmailService (stub consumer bị xoá).
+        // Thay bằng email đổi địa chỉ để vẫn kiểm tra routing nhiều loại event cùng lúc.
+        var emailChanges = Enumerable.Range(0, eachType).Select(i =>
+            new SendEmailChangeOtpEvent($"mixed-c-{Guid.NewGuid():N}@x.com", $"MC{i}-{Random.Shared.Next(100000, 999999)}")).ToList();
 
         var publishTasks = new List<Task>();
         publishTasks.AddRange(registers.Select(e => _harness.Bus.Publish(e)));
         publishTasks.AddRange(resets.Select(e => _harness.Bus.Publish(e)));
-        publishTasks.AddRange(phones.Select(e => _harness.Bus.Publish(e)));
+        publishTasks.AddRange(emailChanges.Select(e => _harness.Bus.Publish(e)));
         await Task.WhenAll(publishTasks);
 
-        // Đợi mọi register + reset render xong (phone consumer là stub không render).
+        foreach (var e in emailChanges)
+            await _factory.WaitForRenderCallAsync(e.Otp, timeoutMs: 10000);
+
+        // Đợi mọi register + reset render xong.
         foreach (var e in registers)
             await _factory.WaitForRenderCallAsync(e.Otp, timeoutMs: 10000);
         foreach (var e in resets)

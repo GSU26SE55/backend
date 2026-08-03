@@ -68,7 +68,12 @@ public class Sprint3AnomalyFlowIntegrationTests
     }
 
     [Fact]
-    public async Task EndToEnd_WarningAnomaly_NoOutbox()
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — anomaly Warning nay publish <c>BatteryAnomalyWarningDetectedEvent</c>
+    /// để NotificationService báo Customer (spec §3.4 T#12). Điều kiện bất biến quan trọng: KHÔNG được
+    /// publish <c>BatteryAnomalyDetectedEvent</c> ở mức Warning — đó là event auto-tạo ticket.
+    /// </summary>
+    public async Task EndToEnd_WarningAnomaly_PublishesWarningNotifyEventOnly()
     {
         await using var db = CreateDbContext();
         await SeedAsync(db);
@@ -85,6 +90,41 @@ public class Sprint3AnomalyFlowIntegrationTests
 
         var svc = new AnomalyDetectionService(
             new UnitOfWork(db), Options.Create(new AnomalyEngineOptions { DedupWindowMinutes = 30 }));
+
+        await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
+
+        (await db.Alerts.SingleAsync()).Severity.Should().Be(AlertSeverityEnum.Warning);
+
+        var outbox = await db.OutboxMessages.ToListAsync();
+        outbox.Should().ContainSingle();
+        outbox[0].Type.Should().Be(nameof(SharedContracts.Events.BatteryAnomalyWarningDetectedEvent));
+        outbox.Should().NotContain(m => m.Type == nameof(SharedContracts.Events.BatteryAnomalyDetectedEvent));
+    }
+
+    /// <summary>Tắt cờ config → giữ nguyên hành vi cũ: Warning chỉ ghi alert, không publish gì.</summary>
+    [Fact]
+    public async Task EndToEnd_WarningAnomaly_WhenNotifyDisabled_NoOutbox()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        db.SensorReadings.Add(new SensorReading
+        {
+            Time = DateTime.UtcNow.AddSeconds(-10),
+            BatteryAssetId = AssetId,
+            Voltage = 12,
+            Current = 0,
+            Temperature = 53,
+            SocPercent = 60
+        });
+        await db.SaveChangesAsync();
+
+        var svc = new AnomalyDetectionService(
+            new UnitOfWork(db),
+            Options.Create(new AnomalyEngineOptions
+            {
+                DedupWindowMinutes = 30,
+                PublishWarningNotifications = false
+            }));
 
         await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
 

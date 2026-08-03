@@ -108,6 +108,41 @@ public static class ManageDependencyInjection
                 .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(200 * Math.Pow(2, attempt))));
         services.AddHostedService<WeatherSyncBackgroundService>();
 
+        // BE-AI — AI bridge (gRPC primary → HTTP fallback) + SohPredictionBackgroundService.
+        services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
+        var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
+
+        // gRPC channel (primary) — 1 AiServiceClient dùng chung cho Predict + Prescribe wrapper.
+        services.AddGrpcClient<AiModule.V1.AiService.AiServiceClient>(o =>
+        {
+            o.Address = new Uri(aiOptions.GrpcAddress);
+        });
+        services.AddScoped<Implements.Ai.AiPredictionGrpcClient>();
+        services.AddScoped<Implements.Ai.AiPrescriptionGrpcClient>();
+
+        // HTTP clients (fallback) — Polly retry giống OpenMeteo. BaseUrl = FastAPI :8000.
+        var aiRetry = HttpPolicyExtensions.HandleTransientHttpError()
+            .OrResult(r => (int)r.StatusCode == 429)
+            .WaitAndRetryAsync(2, attempt => TimeSpan.FromMilliseconds(200 * Math.Pow(2, attempt)));
+        services.AddHttpClient<Implements.Ai.AiPredictionHttpClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(aiOptions.HttpBaseUrl);
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds));
+            })
+            .AddPolicyHandler(aiRetry);
+        services.AddHttpClient<Implements.Ai.AiPrescriptionHttpClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(aiOptions.HttpBaseUrl);
+                // Prescribe enrich=true có thể chạy vài giây (RAG+LLM) — timeout rộng hơn Predict.
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(30, aiOptions.TimeoutSeconds));
+            })
+            .AddPolicyHandler(aiRetry);
+
+        // Composite fallback clients — cái được inject vào job.
+        services.AddScoped<IAiPredictionClient, Implements.Ai.FallbackAiPredictionClient>();
+        services.AddScoped<IAiPrescriptionClient, Implements.Ai.FallbackAiPrescriptionClient>();
+        services.AddHostedService<SohPredictionBackgroundService>();
+
         // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.
         services.AddHostedService<NoiseBreachRetentionBackgroundService>();
 

@@ -1,0 +1,37 @@
+// BatteryService internal gRPC — GSU26SE55 (GH-verify-sensor-grpc)
+//
+// Service-to-service ONLY (nội bộ solar-net, KHÔNG expose ra host, KHÔNG JWT).
+// TicketService verify consumer gọi GetSensorSnapshot để lấy snapshot sensor
+// mới nhất của pin → truyền cho AI verify đối chiếu mô tả với thực tế.
+//
+// Contract này là NGUỒN GỐC ở BatteryService (server). TicketService copy proto
+// này với GrpcServices="Client".
+
+syntax = "proto3";
+
+package batteryinternal.v1;
+
+option csharp_namespace = "BatteryService.Grpc";
+
+service BatteryInternal {
+  // Lấy snapshot sensor MỚI NHẤT của 1 BatteryAsset (theo asset_id).
+  rpc GetSensorSnapshot(SensorSnapshotRequest) returns (SensorSnapshotResponse);
+}
+
+message SensorSnapshotRequest {
+  // Guid BatteryAsset (dạng string "d3b0...").
+  string asset_id = 1;
+}
+
+message SensorSnapshotResponse {
+  // false nếu asset không tồn tại HOẶC chưa có reading nào — verify bỏ qua sensor.
+  bool found = 1;
+  string serial = 2;
+  double soh_percent = 3;
+  double voltage = 4;
+  double current = 5;
+  double temperature = 6;
+  double soc_percent = 7;
+  // true nếu pin đang có alert chưa resolved (ActiveAlerts > 0).
+  bool has_active_alert = 8;
+}

@@ -1,3 +1,4 @@
+using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -6,6 +7,7 @@ using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
@@ -18,6 +20,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatDeleteCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
@@ -37,7 +41,7 @@ public class ChatDeleteCommandHandlerTests
         _uow.SetupChatTranslations();
         _uow.SetupChatHides();
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
-        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object);
+        return new ChatDeleteCommandHandler(_uow.Object, _activityLogger.Object, chatAuthorizationService, _chatOptions, _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object, _publisher.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -85,6 +89,11 @@ public class ChatDeleteCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.deleted phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatDeleted)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(200);
         chat.IsDeleted.Should().BeTrue();
         chat.DeletedAt.Should().NotBeNull();

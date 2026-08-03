@@ -1,0 +1,1484 @@
+{
+  "info": {
+    "_postman_id": "9f3a1c40-5f6b-4c2e-8d21-chatsprint0001",
+    "name": "GSU26SE55 — TicketService Chat API",
+    "description": "Bộ sưu tập API module Chat của TicketService (Sprint Chat).\n\n## Cách dùng\n1. Đặt biến `baseUrl` (mặc định `http://localhost:5002`).\n2. Đăng nhập ở AuthService, dán access token vào biến `accessToken`.\n3. Điền `ticketId` của một ticket bạn có quyền truy cập, rồi chạy request đầu tiên để lấy `chatId`.\n\nXác thực Bearer khai ở cấp bộ sưu tập — mọi request kế thừa, không cần thêm header.\n\n## Vài điều dễ vấp\n- **Enum gửi bằng CHUỖI**, không phải số (`\"Acknowledged\"` chứ không phải `2`). API bật `JsonStringEnumConverter`.\n- **Trường định danh trong body bị server ghi đè** từ JWT (`userId`, `userRole`, `userDisplayName`, `userPermissions`). Gửi hay không cũng vậy.\n- **Ghi chú nội bộ** (`isInternal=true`) Customer không bao giờ thấy — cả ở API lẫn SignalR.\n- **Rate limit** áp cho các endpoint GHI (policy `chat-write`). Bắn liên tục sẽ nhận 429.\n- **Realtime KHÔNG nằm trong bộ này.** Postman không nói được SignalR; xem `docs/chat/signalr-client-guide.md`. Client phải cấu hình JSON protocol khớp server (camelCase + enum dạng chuỗi), thiếu là callback im lặng không chạy.\n\n## Nguồn\nSinh từ các controller thật trên nhánh `dev` ngày 2026-08-01:\n`TicketChatsController`, `ChatsController`, `MyChatsController`, `ChatMentionsController`, `ChatTemplatesController`, `Admin/AdminChatSearchController`, `Admin/AdminTicketChatsController`.\nSửa endpoint thì phải cập nhật lại file này.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5002",
+      "description": "Gốc URL của TicketService"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "description": "JWT lấy từ AuthService sau khi đăng nhập"
+    },
+    {
+      "key": "ticketId",
+      "value": "",
+      "description": "Ticket đang thao tác"
+    },
+    {
+      "key": "chatId",
+      "value": "",
+      "description": "Tin nhắn đang thao tác"
+    },
+    {
+      "key": "attachmentId",
+      "value": "",
+      "description": "File đính kèm của tin nhắn"
+    },
+    {
+      "key": "kbArticleId",
+      "value": "",
+      "description": "Bài viết tri thức"
+    },
+    {
+      "key": "fileId",
+      "value": "",
+      "description": "File đã upload ở FileStorageService"
+    },
+    {
+      "key": "mentionUserId",
+      "value": "",
+      "description": "Người được nhắc tên trong tin nhắn"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Vòng đời tin nhắn",
+      "description": "Tạo / sửa / xoá / xem một tin nhắn trong ticket.",
+      "item": [
+        {
+          "name": "Gửi tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats"
+              ]
+            },
+            "description": "Gửi tin nhắn mới vào ticket. `isInternal=true` là ghi chú nội bộ — Customer KHÔNG thấy.\n\nCác trường định danh (`userId`, `userRole`, `userDisplayName`, `userPermissions`) do server lấy từ JWT và **ghi đè** giá trị trong body, nên không cần gửi.\n\nCó rate limit `chat-write`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Xin chào, tôi đã kiểm tra pin và thấy điện áp tụt bất thường.\",\n  \"isInternal\": false,\n  \"requestCustomerInfo\": false,\n  \"bodyFormat\": \"PlainText\",\n  \"attachments\": [],\n  \"mentions\": [],\n  \"groupMentions\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Gửi tin nhắn — Markdown + mention + đính kèm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats"
+              ]
+            },
+            "description": "Biến thể đầy đủ: body Markdown, mention cá nhân, mention theo nhóm, và đính kèm file đã upload sẵn qua FileStorageService.\n\n`groupMentions.groupType`: `role` | `team`. Với `role` thì `groupIdentifier` ∈ admin|manager|staff|customer; với `team` thì ∈ tier1-staff|tier2-staff|tier3-staff.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"**Cần xử lý gấp** — xem log đính kèm.\\n\\n- Điện áp: 2.9V\\n- Nhiệt độ: 58°C\",\n  \"isInternal\": true,\n  \"bodyFormat\": \"Markdown\",\n  \"attachments\": [\n    {\n      \"fileId\": \"{{fileId}}\",\n      \"fileName\": \"battery-log.txt\",\n      \"contentType\": \"text/plain\",\n      \"sizeBytes\": 20480,\n      \"url\": null\n    }\n  ],\n  \"mentions\": [\n    {\n      \"userId\": \"{{mentionUserId}}\",\n      \"displayName\": \"Nguyễn Văn A\"\n    }\n  ],\n  \"groupMentions\": [\n    {\n      \"groupType\": \"team\",\n      \"groupIdentifier\": \"tier2-staff\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sửa tin nhắn",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}"
+              ]
+            },
+            "description": "Chỉ tác giả sửa được, trong cửa sổ 15 phút kể từ lúc tạo. Mỗi lần sửa ghi 1 bản ghi lịch sử.\n\nBị chặn khi ticket đã `Closed`. Có rate limit `chat-write`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Xin lỗi, điện áp đo lại là 3.1V chứ không phải 2.9V.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Xoá tin nhắn (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}"
+              ]
+            },
+            "description": "Xoá mềm — tin vẫn nằm trong timeline nhưng body thay bằng `\"Tin nhắn này đã bị xóa.\"`. Body request là tuỳ chọn.\n\nCó rate limit `chat-write`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Xoá nhiều tin nhắn",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/bulk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "bulk"
+              ]
+            },
+            "description": "Xoá mềm hàng loạt trong một lượt. Có rate limit `chat-write`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatIds\": [\n    \"{{chatId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Xem 1 tin nhắn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}"
+              ]
+            },
+            "description": "Lấy chi tiết một tin nhắn, kèm mentions / reactions / bản dịch đang bật."
+          },
+          "response": []
+        },
+        {
+          "name": "Lịch sử chỉnh sửa",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "history"
+              ]
+            },
+            "description": "Toàn bộ các lần sửa của tin nhắn (body cũ → body mới, ai sửa, lúc nào)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Đọc danh sách & tìm kiếm",
+      "description": "Các đường lấy danh sách tin nhắn. Xem ghi chú cache ở mô tả từng request.",
+      "item": [
+        {
+          "name": "Danh sách tin nhắn (phân trang)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats?pageNumber=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats"
+              ],
+              "query": [
+                {
+                  "key": "pageNumber",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Đường FE dùng khi mở tab chat.\n\n**Cache:** chỉ trang 1 + `pageSize=10` + KHÔNG filter nào mới đi qua cache Redis. Thêm bất kỳ tham số lọc nào là xuống thẳng DB.\n\nCustomer tự động bị lọc bỏ tin `isInternal=true`."
+          },
+          "response": []
+        },
+        {
+          "name": "Danh sách — lọc đầy đủ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats?pageNumber=1&pageSize=20&search=điện áp&authorRole=Staff&isInternal=false&isPinned=false&hasAttachments=true&mentionedMe=false&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-12-31T23:59:59Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats"
+              ],
+              "query": [
+                {
+                  "key": "pageNumber",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "điện áp"
+                },
+                {
+                  "key": "authorRole",
+                  "value": "Staff"
+                },
+                {
+                  "key": "isInternal",
+                  "value": "false"
+                },
+                {
+                  "key": "isPinned",
+                  "value": "false"
+                },
+                {
+                  "key": "hasAttachments",
+                  "value": "true"
+                },
+                {
+                  "key": "mentionedMe",
+                  "value": "false"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2026-01-01T00:00:00Z"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2026-12-31T23:59:59Z"
+                }
+              ]
+            },
+            "description": "Bộ lọc mở rộng (#549). Lưu ý: khi có filter, tin đã xoá mềm bị loại khỏi kết quả — chúng chỉ xuất hiện ở timeline không lọc."
+          },
+          "response": []
+        },
+        {
+          "name": "Danh sách theo con trỏ (cursor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/cursor?cursor=&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "cursor"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Cuộn vô hạn. Dùng `cursor` trả về từ lần gọi trước; bỏ trống để lấy từ đầu."
+          },
+          "response": []
+        },
+        {
+          "name": "Tìm kiếm chat toàn hệ thống",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/search?q=điện áp&pageNumber=1&pageSize=20&dateFrom=2026-01-01T00:00:00Z&authorRole=Staff&isInternal=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "điện áp"
+                },
+                {
+                  "key": "pageNumber",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2026-01-01T00:00:00Z"
+                },
+                {
+                  "key": "authorRole",
+                  "value": "Staff"
+                },
+                {
+                  "key": "isInternal",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Tìm xuyên mọi ticket. Chỉ Manager/Admin.\n\nChuỗi tìm kiếm đi qua LINQ `Contains` → EF tham số hoá, không có bề mặt SQL injection.\n\n**Role yêu cầu:** Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Chat của tôi (mọi ticket)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/me?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Danh sách tin nhắn do chính người đang đăng nhập gửi, xuyên ticket."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Tệp đính kèm",
+      "description": "File đã upload qua FileStorageService rồi mới gắn vào tin nhắn bằng `fileId`.",
+      "item": [
+        {
+          "name": "Gắn 1 file vào tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attachments"
+              ]
+            },
+            "description": "Gắn một file đã upload sẵn. `fileId` lấy từ FileStorageService.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"fileName\": \"battery-log.txt\",\n  \"contentType\": \"text/plain\",\n  \"sizeBytes\": 20480,\n  \"url\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Gắn nhiều file",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attachments/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attachments",
+                "batch"
+              ]
+            },
+            "description": "Gắn nhiều file trong một lượt.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"fileId\": \"{{fileId}}\",\n      \"fileName\": \"log-1.txt\",\n      \"contentType\": \"text/plain\",\n      \"sizeBytes\": 20480,\n      \"url\": null\n    },\n    {\n      \"fileId\": \"{{fileId}}\",\n      \"fileName\": \"anh-pin.jpg\",\n      \"contentType\": \"image/jpeg\",\n      \"sizeBytes\": 512000,\n      \"url\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Danh sách file của 1 tin nhắn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attachments"
+              ]
+            },
+            "description": "Liệt kê file đính kèm của một tin nhắn."
+          },
+          "response": []
+        },
+        {
+          "name": "Tổng hợp file của cả ticket",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "files"
+              ]
+            },
+            "description": "Tất cả file đính kèm trong toàn bộ hội thoại của ticket — dùng cho tab 'Tệp'."
+          },
+          "response": []
+        },
+        {
+          "name": "Tải file đính kèm",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attachments/{{attachmentId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attachments",
+                "{{attachmentId}}",
+                "download"
+              ]
+            },
+            "description": "Trả link tải hoặc nội dung file. File chưa quét virus xong có thể bị từ chối."
+          },
+          "response": []
+        },
+        {
+          "name": "Gỡ file khỏi tin nhắn",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attachments/{{attachmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attachments",
+                "{{attachmentId}}"
+              ]
+            },
+            "description": "Gỡ liên kết file khỏi tin nhắn."
+          },
+          "response": []
+        },
+        {
+          "name": "Tạo tin nhắn thoại từ file đã upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/voice",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "voice"
+              ]
+            },
+            "description": "Tạo chat audio placeholder từ metadata của file đã upload lên FileStorageService, sau đó xếp hàng chuyển giọng nói thành văn bản bất đồng bộ.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"fileName\": \"ghi-am-bao-tri.m4a\",\n  \"contentType\": \"audio/m4a\",\n  \"sizeBytes\": 1048576,\n  \"url\": \"https://storage.example.com/ticket-audio/ghi-am-bao-tri.m4a\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Thử lại chuyển văn bản cho tin nhắn thoại",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/voice/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "voice",
+                "retry"
+              ]
+            },
+            "description": "Xếp hàng chuyển giọng nói thành văn bản lại cho một chat audio đang ở trạng thái lỗi."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Thread & Ghim",
+      "description": "Trả lời theo luồng và ghim tin quan trọng lên đầu.",
+      "item": [
+        {
+          "name": "Trả lời một tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/replies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "replies"
+              ]
+            },
+            "description": "Tạo tin trả lời gắn vào tin cha. `replyCount` của tin cha tăng lên.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Đúng rồi, tôi sẽ tới kiểm tra chiều nay.\",\n  \"isInternal\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Danh sách trả lời",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/replies?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "replies"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Các tin trả lời trong luồng của một tin cha."
+          },
+          "response": []
+        },
+        {
+          "name": "Ghim tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "pin"
+              ]
+            },
+            "description": "Tin được ghim luôn nằm đầu danh sách (`ORDER BY isPinned DESC, createdAt DESC`).\n\nCó rate limit `chat-write`.\n\n**Role yêu cầu:** Staff, Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Bỏ ghim",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "pin"
+              ]
+            },
+            "description": "Gỡ ghim. Có rate limit `chat-write`.\n\n**Role yêu cầu:** Staff, Manager, Admin"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Reaction",
+      "description": "Thả cảm xúc lên tin nhắn. Mỗi người mỗi loại chỉ một lần.",
+      "item": [
+        {
+          "name": "Thả reaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/reactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "reactions"
+              ]
+            },
+            "description": "`reactionType`: ThumbsUp | Acknowledged | Resolved | NeedMoreInfo | Disagree.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reactionType\": \"Acknowledged\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Gỡ reaction",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/reactions?type=Acknowledged",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "reactions"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "Acknowledged"
+                }
+              ]
+            },
+            "description": "Gỡ reaction của chính mình. Loại truyền qua query, không qua body."
+          },
+          "response": []
+        },
+        {
+          "name": "Thống kê reaction",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/reactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "reactions"
+              ]
+            },
+            "description": "Tổng hợp reaction của một tin nhắn (đếm theo loại + ai đã thả)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Đã đọc / Chưa đọc",
+      "description": "Đánh dấu đã đọc và các bộ đếm chưa đọc.",
+      "item": [
+        {
+          "name": "Đánh dấu đã đọc",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/mark-read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "mark-read"
+              ]
+            },
+            "description": "Đánh dấu một loạt tin là đã đọc. Ghi nhận đi qua bộ ghi gộp nền (`ChatReadReceiptBulkWriter`) nên số liệu cập nhật gần-tức-thì chứ không tức thì tuyệt đối.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatIds\": [\n    \"{{chatId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ai đã đọc tin này",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/readers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "readers"
+              ]
+            },
+            "description": "Danh sách người đã đọc một tin nhắn.\n\n**Role yêu cầu:** Staff, Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Số chưa đọc của ticket",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "unread-count"
+              ]
+            },
+            "description": "Số tin chưa đọc của người đang đăng nhập trong ticket này."
+          },
+          "response": []
+        },
+        {
+          "name": "Số chưa đọc toàn bộ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "unread-count"
+              ]
+            },
+            "description": "Tổng số tin chưa đọc trên mọi ticket — dùng cho badge trên thanh điều hướng."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Mention",
+      "description": "Các tin nhắn có nhắc tên người đang đăng nhập.",
+      "item": [
+        {
+          "name": "Mention của tôi",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/mentions/me?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "mentions",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Danh sách mention. `unreadOnly=true` chỉ lấy cái chưa xác nhận."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. AI & Knowledge Base",
+      "description": "Gợi ý trả lời, tóm tắt, dịch, và liên kết bài viết tri thức.",
+      "item": [
+        {
+          "name": "Gợi ý câu trả lời",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/suggest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "suggest"
+              ]
+            },
+            "description": "`intent`: RequestInfo | TechnicalAnswer | Resolution | FollowUp.\n\n**Role yêu cầu:** Staff, Manager, Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"TechnicalAnswer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tóm tắt hội thoại",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/summarize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "summarize"
+              ]
+            },
+            "description": "Tóm tắt toàn bộ hội thoại của ticket.\n\n**Role yêu cầu:** Staff, Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Dịch tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/translate?to=en",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "translate"
+              ],
+              "query": [
+                {
+                  "key": "to",
+                  "value": "en"
+                }
+              ]
+            },
+            "description": "Dịch một tin nhắn. Bỏ trống `to` để dùng ngôn ngữ mặc định của người đang đăng nhập."
+          },
+          "response": []
+        },
+        {
+          "name": "Gợi ý bài viết tri thức",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/kb-suggestions?topN=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "kb-suggestions"
+              ],
+              "query": [
+                {
+                  "key": "topN",
+                  "value": "3"
+                }
+              ]
+            },
+            "description": "Gợi ý bài KB liên quan tới nội dung tin nhắn.\n\n**Role yêu cầu:** Staff, Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Gắn bài KB vào tin nhắn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/attach-kb",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "attach-kb"
+              ]
+            },
+            "description": "`referenceType`: ConsultedDuringResolve | ProvidedToCustomer | GeneratedAfterResolve.\n\n**Role yêu cầu:** Staff, Manager, Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kbArticleId\": \"{{kbArticleId}}\",\n  \"referenceType\": \"ProvidedToCustomer\",\n  \"note\": \"Đã gửi hướng dẫn này cho khách.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chuyển tin nhắn thành bản nháp KB",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/to-kb-draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "to-kb-draft"
+              ]
+            },
+            "description": "Biến một câu trả lời hay thành bản nháp bài viết tri thức.\n\n**Role yêu cầu:** Staff, Manager, Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Cách xử lý pin tụt áp đột ngột\",\n  \"category\": \"Technical\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "9. Leo thang & Dữ liệu cá nhân",
+      "description": "Xác nhận rà soát leo thang và quyền xoá dữ liệu của người dùng.",
+      "item": [
+        {
+          "name": "Xác nhận đã rà soát leo thang",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/chats/{{chatId}}/escalation-review/ack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "escalation-review",
+                "ack"
+              ]
+            },
+            "description": "Manager xác nhận đã xem lại tin nhắn bị đánh dấu nguy cơ leo thang.\n\n**Role yêu cầu:** Manager, Admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Xoá dữ liệu chat của tôi (GDPR)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/erase-my-data",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "erase-my-data"
+              ]
+            },
+            "description": "Ẩn danh hoá toàn bộ tin nhắn của người đang đăng nhập (#569).\n\n**Không hoàn tác được.** Nội dung bị che, không phải xoá cứng — timeline ticket vẫn liền mạch."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "10. Admin — ghi đè ticket đã đóng",
+      "description": "Toàn bộ nhóm này chỉ Admin. Dùng khi cần sửa hội thoại của ticket đã `Closed` — đường thường sẽ chặn.",
+      "item": [
+        {
+          "name": "Thêm tin vào ticket đã đóng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/chats/closed-override",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "closed-override"
+              ]
+            },
+            "description": "Ghi đè quy tắc chặn ghi khi ticket đã đóng.\n\n**Role yêu cầu:** Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Bổ sung theo yêu cầu kiểm toán.\",\n  \"isInternal\": true,\n  \"bodyFormat\": \"PlainText\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sửa tin của ticket đã đóng",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/chats/{{chatId}}/closed-override",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "closed-override"
+              ]
+            },
+            "description": "Sửa nội dung bỏ qua cửa sổ 15 phút và trạng thái ticket.\n\n**Role yêu cầu:** Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Sửa theo biên bản kiểm toán ngày 2026-08-01.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Xoá tin của ticket đã đóng",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/chats/{{chatId}}/closed-override",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "closed-override"
+              ]
+            },
+            "description": "Xoá mềm bỏ qua trạng thái ticket.\n\n**Role yêu cầu:** Admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Khôi phục tin đã xoá",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets/{{ticketId}}/chats/{{chatId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tickets",
+                "{{ticketId}}",
+                "chats",
+                "{{chatId}}",
+                "restore"
+              ]
+            },
+            "description": "Đưa tin đã xoá mềm trở lại. Chỉ Admin.\n\n**Role yêu cầu:** Admin"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

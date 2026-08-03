@@ -17,8 +17,27 @@ public class PublishSagaFailedActivity : IStateMachineActivity<AlertTicketSagaSt
 
     public async Task Execute(BehaviorContext<AlertTicketSagaState> context, IBehavior<AlertTicketSagaState> next)
     {
-        var saga = context.Saga;
+        await PublishFailedAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// FIX (cùng lỗi với SendCreateTicketActivity / SendLinkAlertActivity): overload GENERIC
+    /// được MassTransit gọi khi activity chạy trong behavior có message data — vd
+    /// <c>When(TicketCreationRejected).Activity(...)</c>. Trước đây không publish → saga vào
+    /// Failed nhưng AlertTicketSagaFailedEvent không được gửi → NotificationService không
+    /// bao giờ báo Admin/Manager biết saga hỏng (fail âm thầm).
+    /// </summary>
+    public async Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
+        where T : class
+    {
+        await PublishFailedAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>Build + publish <see cref="AlertTicketSagaFailedEvent"/> từ state saga.</summary>
+    private static async Task PublishFailedAsync(IPublishEndpoint publishEndpoint, AlertTicketSagaState saga)
+    {
         var evt = new AlertTicketSagaFailedEvent(
             CorrelationId: saga.CorrelationId,
             AlertId: saga.AlertId,
@@ -32,13 +51,8 @@ public class PublishSagaFailedActivity : IStateMachineActivity<AlertTicketSagaSt
             FailedAt: saga.FailedAt ?? DateTime.UtcNow
         );
 
-        await context.Publish(evt);
-        await next.Execute(context).ConfigureAwait(false);
+        await publishEndpoint.Publish(evt);
     }
-
-    public Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
-        where T : class
-        => next.Execute(context);
 
     public Task Faulted<TException>(BehaviorExceptionContext<AlertTicketSagaState, TException> context, IBehavior<AlertTicketSagaState> next)
         where TException : Exception

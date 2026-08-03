@@ -4,6 +4,7 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using TicketService.Api.Extensions;
+using TicketService.Api.Middleware;
 using TicketService.Application.DependencyInjection;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
@@ -127,6 +128,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseSharedInfrastructure();
+app.UseMiddleware<TicketConcurrencyExceptionMiddleware>();
 
 // UseHttpMetrics
 app.UseHttpMetrics();
@@ -143,7 +145,7 @@ if (!app.Environment.IsProduction())
 if (!app.Environment.IsEnvironment("Docker"))
     app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

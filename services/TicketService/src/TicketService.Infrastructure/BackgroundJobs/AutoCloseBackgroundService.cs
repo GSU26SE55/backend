@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -43,6 +45,7 @@ public class AutoCloseBackgroundService : BackgroundService
         {
             var unitOfWork = scope.ServiceProvider.GetRequiredService<ITicketUnitOfWork>();
             var logger = scope.ServiceProvider.GetRequiredService<ILogger<AutoCloseBackgroundService>>();
+            var producer = scope.ServiceProvider.GetRequiredService<IMessageProducerService>();
 
             try
             {
@@ -76,6 +79,12 @@ public class AutoCloseBackgroundService : BackgroundService
                     };
 
                     await unitOfWork.TicketActivities.AddAsync(activity);
+
+                    // Sprint 6.2 NOTI-07 (#678) — báo Customer + Manager ticket đã tự đóng vì
+                    // quá 7 ngày không đánh giá (IsAutoClosed = true, Rating = null).
+                    await producer.PublishAsync(new TicketClosedEvent(
+                        ticket.Id, ticket.Code, ticket.CustomerId, ticket.ClosedAt.Value,
+                        IsAutoClosed: true, Rating: null), stoppingToken);
                 }
 
                 await unitOfWork.CommitTransactionAsync();

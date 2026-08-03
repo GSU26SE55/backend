@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -21,7 +22,7 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly ISlaService _slaService;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketHoldCommandHandler(
@@ -29,14 +30,14 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         ISlaService slaService,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _slaService = slaService;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -47,6 +48,14 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
 
         if (ticket == null)
             return Fail(404, "Ticket not found.");
+
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
 
         var targetStatus = request.Reason switch
         {
@@ -65,7 +74,7 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
+            ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason }, { "Note", request.Note } }
         }, ct);
 
@@ -76,15 +85,18 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
             ticket.Id,
             request.StaffId,
             ActorRoleEnum.Staff,
-            request.StaffName ?? "Staff",
+            request.StaffName!,
             ActivityActionEnum.SlaPaused,
             oldValue: oldStatus.ToString(),
             newValue: targetStatus.ToString(),
             reason: request.Note);
 
         // Outbox: Status Changed & Ticket Held
-        await _producer.PublishAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
-        await _producer.PublishAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, targetStatus), ct);
+        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
+            (int)oldStatus, (int)targetStatus, oldStatus.ToString(), targetStatus.ToString()), ct);
+        await _outboxWriter.WriteAsync(new TicketHeldIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

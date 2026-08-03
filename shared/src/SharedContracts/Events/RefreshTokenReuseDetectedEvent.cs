@@ -10,8 +10,14 @@ namespace SharedContracts.Events;
 /// Response: revoke TOÀN BỘ active refresh token của account → buộc user re-login.
 /// NotificationService consume để alert user "phiên đăng nhập đáng ngờ — đổi mật khẩu ngay".
 /// </summary>
+/// <remarks>
+/// Sprint 6.2 NOTI-04 (#675) — bổ sung <c>Email</c>: consumer bên EmailService cần địa chỉ nhận,
+/// mà EmailService không có DB account nên không tra ngược được từ <c>AccountId</c>.
+/// <see cref="SuspiciousLoginDetectedEvent"/> đã mang sẵn Email theo cùng lý do.
+/// </remarks>
 public record RefreshTokenReuseDetectedEvent(
     Guid AccountId,
+    string Email,
     Guid ReusedTokenId,
     string? IpAddress,
     string? UserAgent,

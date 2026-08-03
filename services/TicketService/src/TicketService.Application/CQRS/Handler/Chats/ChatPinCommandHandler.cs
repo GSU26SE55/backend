@@ -18,12 +18,14 @@ public class ChatPinCommandHandler : IRequestHandler<ChatPinCommand, TicketActio
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly IChatAuthorizationService _chatAuthorizationService;
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.pin
 
-    public ChatPinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService)
+    public ChatPinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService, IPublisher publisher)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
+        _publisher = publisher;
     }
 
     public async Task<TicketActionResponse> Handle(ChatPinCommand request, CancellationToken ct)
@@ -72,6 +74,12 @@ public class ChatPinCommandHandler : IRequestHandler<ChatPinCommand, TicketActio
                 ActivityActionEnum.ChatPinned,
                 null,
                 ChatTextHelper.Truncate(chat.Body));
+
+            // Sprint Chat DoD — audit ChatPinned. Publish TRƯỚC SaveChanges để entry audit +
+            // outbox đi cùng transaction với thay đổi nghiệp vụ (#AUDIT-25/26).
+            await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+                TicketService.Domain.Enums.TicketAuditActionEnum.ChatPinned, ticket.Id, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
 
             await _uow.CommitTransactionAsync();
         }

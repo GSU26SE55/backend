@@ -98,6 +98,9 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
         // Push + Email + SMS, BypassQuietHours = true (Critical bypass).
         var channels = new[]
         {
+            // Sprint 6.3 NOTI3-01 (#701) — InApp bắt buộc: feed lọc theo Channel=InApp,
+            // thiếu row này thì sự cố môi trường không hiện trong app (R-40).
+            NotificationChannelEnum.InApp,
             NotificationChannelEnum.Push,
             NotificationChannelEnum.Email,
             NotificationChannelEnum.Sms

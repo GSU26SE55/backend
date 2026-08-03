@@ -9,7 +9,7 @@ namespace NotificationService.UnitTests.Consumers;
 public class BatteryAnomalyDetectedConsumerTests
 {
     [Fact]
-    public async Task BatteryAnomaly_Writes_To_CustomerId_InAppPush()
+    public async Task BatteryAnomaly_Critical_Writes_To_CustomerId_AllFourChannels()
     {
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<BatteryAnomalyDetectedConsumer>();
         var customerId = Guid.NewGuid();
@@ -28,10 +28,15 @@ public class BatteryAnomalyDetectedConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<BatteryAnomalyDetectedEvent>()).Should().BeTrue();
 
-        written.Should().HaveCount(2);
+        // Sprint 6.2 NOTI-08 (#679) — spec §3.4 T#13: Customer nhận InApp + Push + Email + SMS.
+        // Preference/quiet hours lọc lại ở tầng dispatcher, không phải ở consumer.
+        written.Should().HaveCount(4);
         written.Select(n => n.Channel).Should().BeEquivalentTo(new[]
         {
-            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+            NotificationChannelEnum.InApp,
+            NotificationChannelEnum.Push,
+            NotificationChannelEnum.Email,
+            NotificationChannelEnum.Sms
         });
         written.Should().AllSatisfy(n =>
         {

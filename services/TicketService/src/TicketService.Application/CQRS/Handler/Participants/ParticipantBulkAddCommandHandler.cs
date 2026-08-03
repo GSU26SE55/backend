@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -14,12 +15,17 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkAddCommand, ParticipantBulkActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
 
-    public ParticipantBulkAddCommandHandler(ITicketUnitOfWork uow, IMessageProducerService producer)
+    public ParticipantBulkAddCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IActivityLogger activityLogger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = outboxWriter;
+        _activityLogger = activityLogger;
     }
 
     public async Task<ParticipantBulkActionResponse> Handle(ParticipantBulkAddCommand request, CancellationToken ct)
@@ -60,28 +66,33 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
             AddedAt = DateTime.UtcNow
         }).ToList();
 
-        await _uow.BeginTransactionAsync();
         try
         {
-            foreach (var participant in participants)
-                await _uow.TicketParticipants.AddAsync(participant);
+            await _uow.ExecuteInTransactionAsync(async transactionCt =>
+            {
+                foreach (var participant in participants)
+                {
+                    await _uow.TicketParticipants.AddAsync(participant);
+                    await _outboxWriter.WriteAsync(new ParticipantAddedEvent(
+                        ticket.Id,
+                        participant.UserId,
+                    (int)participant.UserRole,
+                    (int)participant.ParticipantType,
+                    request.ActorUserId), transactionCt);
 
-            await _uow.CommitTransactionAsync();
+                    await _activityLogger.LogAsync(
+                        ticket.Id,
+                        request.ActorUserId,
+                        request.ActorRole,
+                        request.ActorName,
+                        ActivityActionEnum.ParticipantAdded,
+                        newValue: $"User {participant.UserId} added as {participant.ParticipantType}.");
+                }
+            }, ct);
         }
         catch (Exception ex)
         {
-            await _uow.RollbackTransactionAsync();
             return Fail(500, $"Thêm participant theo lô thất bại: {ex.Message}");
-        }
-
-        foreach (var participant in participants)
-        {
-            await _producer.PublishAsync(new ParticipantAddedEvent(
-                ticket.Id,
-                participant.UserId,
-                (int)participant.UserRole,
-                (int)participant.ParticipantType,
-                request.ActorUserId), ct);
         }
 
         return new ParticipantBulkActionResponse

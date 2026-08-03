@@ -45,6 +45,7 @@ public class AlertTicketSagaStateConfiguration : IEntityTypeConfiguration<AlertT
         builder.Property(s => s.InternalResistanceMilliohm).HasColumnName("internal_resistance_milliohm").HasPrecision(10, 3);
         builder.Property(s => s.CellVoltageDeltaMv).HasColumnName("cell_voltage_delta_mv").HasPrecision(10, 3);
         builder.Property(s => s.EnvironmentalIncidentId).HasColumnName("environmental_incident_id");
+        builder.Property(s => s.AiPrescription).HasColumnName("ai_prescription");  // BE-AI (nullable)
 
         builder.Property(s => s.TicketId).HasColumnName("ticket_id");
         builder.Property(s => s.TicketCode).HasColumnName("ticket_code").HasMaxLength(50);

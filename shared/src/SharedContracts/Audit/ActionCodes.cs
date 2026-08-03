@@ -73,7 +73,7 @@ public static class ActionCodes
         public const string AlertManuallyResolved = "AlertManuallyResolved";
     }
 
-    /// <summary>TicketService — 21 action (<c>#AUDIT-24</c>).</summary>
+    /// <summary>TicketService — 28 action (<c>#AUDIT-24</c> 21 + Sprint Chat DoD 7).</summary>
     public static class Ticket
     {
         public const string TicketCreated = "TicketCreated";
@@ -97,6 +97,15 @@ public static class ActionCodes
         public const string FalseAlarmMarked = "FalseAlarmMarked";
         public const string CustomerRated = "CustomerRated";
         public const string AutoCreatedFromAnomaly = "AutoCreatedFromAnomaly";
+
+        // Sprint Chat DoD (2026-07-31) — audit module Chat.
+        public const string ChatCreated = "ChatCreated";
+        public const string ChatEdited = "ChatEdited";
+        public const string ChatDeleted = "ChatDeleted";
+        public const string ChatPinned = "ChatPinned";
+        public const string ChatUnpinned = "ChatUnpinned";
+        public const string ChatReacted = "ChatReacted";
+        public const string ChatMentioned = "ChatMentioned";
     }
 
     /// <summary>FileStorageService — 6 action (<c>#AUDIT-29</c>).</summary>
@@ -120,7 +129,7 @@ public static class ActionCodes
         public const string EmailRejected = "EmailRejected";
     }
 
-    /// <summary>NotificationService — 7 action (<c>#AUDIT-34</c>).</summary>
+    /// <summary>NotificationService — 7 action (<c>#AUDIT-34</c>) + 1 bổ sung Sprint 6.3 (NOTI3-12).</summary>
     public static class Notification
     {
         public const string PushSent = "PushSent";
@@ -130,6 +139,14 @@ public static class ActionCodes
         public const string InAppCreated = "InAppCreated";
         public const string InAppRead = "InAppRead";
         public const string InAppDismissed = "InAppDismissed";
+
+        /// <summary>
+        /// Sprint 6.3 NOTI3-12 (#712) — admin bấm "gửi thử" một template.
+        ///
+        /// Phải ghi audit: endpoint này gửi email thật từ domain của hệ thống. Dù đã chặn không cho
+        /// nhập địa chỉ tự do (R-46), vẫn cần dấu vết ai gửi thử cái gì, lúc nào.
+        /// </summary>
+        public const string TemplateTestSent = "TemplateTestSent";
     }
 
     /// <summary>SmsService — 3 action bổ sung (<c>#AUDIT-35</c>).</summary>

@@ -20,7 +20,9 @@ public class TicketParticipantsController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ITicketCurrentUserService _currentUser;
 
-    public TicketParticipantsController(IMediator mediator, ITicketCurrentUserService currentUser)
+    public TicketParticipantsController(
+        IMediator mediator,
+        ITicketCurrentUserService currentUser)
     {
         _mediator = mediator;
         _currentUser = currentUser;
@@ -37,12 +39,9 @@ public class TicketParticipantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AddParticipant(Guid ticketId, [FromBody] ParticipantAddCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
         command.TicketId = ticketId;
-        command.ActorUserId = actorId.Value;
+        command.ActorUserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName!;
         command.ActorRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -58,16 +57,12 @@ public class TicketParticipantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveParticipant(Guid ticketId, Guid userId, [FromBody] ParticipantRemoveCommand? command, CancellationToken ct)
+    public async Task<IActionResult> RemoveParticipant(Guid ticketId, Guid userId, [FromBody] ParticipantRemoveCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        command ??= new ParticipantRemoveCommand();
         command.TicketId = ticketId;
         command.UserId = userId;
-        command.ActorUserId = actorId.Value;
+        command.ActorUserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName!;
         command.ActorRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -85,12 +80,9 @@ public class TicketParticipantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> BulkAddParticipants(Guid ticketId, [FromBody] ParticipantBulkAddCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
         command.TicketId = ticketId;
-        command.ActorUserId = actorId.Value;
+        command.ActorUserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName;
         command.ActorRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -106,15 +98,12 @@ public class TicketParticipantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SelfLeave(Guid ticketId, [FromBody] ParticipantSelfLeaveCommand? command, CancellationToken ct)
+    public async Task<IActionResult> SelfLeave(Guid ticketId, [FromBody] ParticipantSelfLeaveCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        command ??= new ParticipantSelfLeaveCommand();
         command.TicketId = ticketId;
-        command.ActorUserId = actorId.Value;
+        command.ActorUserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName!;
+        command.ActorRole = _currentUser.Role ?? string.Empty;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -131,13 +120,10 @@ public class TicketParticipantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateParticipantRole(Guid ticketId, Guid userId, [FromBody] ParticipantUpdateRoleCommand command, CancellationToken ct)
     {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
         command.TicketId = ticketId;
         command.UserId = userId;
-        command.ActorUserId = actorId.Value;
+        command.ActorUserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName!;
         command.ActorRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -172,6 +158,7 @@ public class TicketParticipantsController : ControllerBase
     /// Lấy toàn bộ lịch sử participant (bao gồm đã bị xóa) — chỉ Staff/Manager/Admin.
     /// </summary>
     [HttpGet("history")]
+    [Authorize(Roles = "Staff,Manager,Admin")]
     [ProducesResponseType(typeof(ParticipantHistoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -198,19 +185,16 @@ public class TicketParticipantsController : ControllerBase
         return Guid.TryParse(raw, out var actorId) ? actorId : null;
     }
 
+    private static ActorRoleEnum ResolveActorRole(string? role) => role switch
+    {
+        "Admin" => ActorRoleEnum.Admin,
+        "Manager" => ActorRoleEnum.Manager,
+        "Staff" => ActorRoleEnum.Staff,
+        _ => ActorRoleEnum.Customer
+    };
+
     private string[] GetCurrentRoles()
     {
         return User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
-    }
-
-    private static ActorRoleEnum ResolveActorRole(string? roleStr)
-    {
-        return roleStr switch
-        {
-            "Customer" => ActorRoleEnum.Customer,
-            "Manager" => ActorRoleEnum.Manager,
-            "Admin" => ActorRoleEnum.Admin,
-            _ => ActorRoleEnum.Staff
-        };
     }
 }

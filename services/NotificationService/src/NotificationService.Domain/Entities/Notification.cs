@@ -41,4 +41,22 @@ public class Notification : AuditableEntity
 
     /// <summary>Lý do lỗi (nếu Status = Failed).</summary>
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-01 (#672) — số lần <c>NotificationDispatchBackgroundService</c> đã thử gửi
+    /// record này xuống channel. Chạm ngưỡng <c>Notification:Dispatch:MaxAttempts</c> → chuyển
+    /// <see cref="NotificationStatusEnum.Failed"/> (dừng retry vô hạn).
+    /// </summary>
+    public int DispatchAttemptCount { get; set; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-01 (#672) — thời điểm sớm nhất worker được phép thử lại (UTC).
+    /// Null = có thể gửi ngay. Dùng cho 2 trường hợp:
+    /// <list type="bullet">
+    /// <item>Backoff sau lần gửi lỗi.</item>
+    /// <item>Hoãn tới hết quiet hours / hết cửa sổ digest — nếu để nguyên Pending không mốc thời gian
+    /// thì batch (order by CreatedAt) sẽ bị các record hoãn chiếm chỗ, chặn record mới phía sau.</item>
+    /// </list>
+    /// </summary>
+    public DateTime? NextAttemptAt { get; set; }
 }

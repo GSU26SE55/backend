@@ -20,9 +20,23 @@
     <PackageReference Include="Markdig" Version="0.37.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.2" />
-    <PackageReference Include="QuestPDF" Version="2025.1.0" />
     <PackageReference Include="SearchPioneer.Lingua" Version="1.0.5" />
     <PackageReference Include="FFMpegCore" Version="5.1.0" />
+    <!-- BE-AI — gRPC client tới AI module (VerifyTicket). Contract: Protos/ai_service.proto
+         (copy từ repo ai-module — mọi thay đổi contract phải qua ai-module trước). -->
+    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.63.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.64.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Gen C# client (namespace AiModule.V1) từ proto — GrpcServices="Client" chỉ sinh stub client. -->
+    <Protobuf Include="Protos\ai_service.proto" GrpcServices="Client" />
+    <!-- GH-verify-sensor-grpc — client stub BatteryInternal (đọc sensor pin verify). -->
+    <Protobuf Include="Protos\battery_internal.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <ItemGroup>

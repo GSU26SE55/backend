@@ -61,4 +61,7 @@ public class TicketChatDTO
     public ChatTranslateDTO? ActiveTranslation { get; set; }
 
     public bool IsDeleted { get; set; }
+    public VoiceTranscriptionStatusEnum? VoiceTranscriptionStatus { get; set; }
+    public string? VoiceTranscriptionError { get; set; }
+    public DateTime? TranscribedAt { get; set; }
 }

@@ -47,6 +47,7 @@ public static class AccountProfileMapper
             Department = staffProfile.Department,
             MaxConcurrentTickets = staffProfile.MaxConcurrentTickets,
             IsAvailable = staffProfile.IsAvailable,
+            SkillTier = (int)staffProfile.SkillTier,
             DisplayAvatarUrl = ResolveDisplayAvatarUrl(staffProfile.Account.Profile),
             Skills = staffProfile.Skills
                 .OrderBy(skill => skill.SkillCode)
@@ -84,6 +85,7 @@ public static class AccountProfileMapper
             Department = staffProfile.Department,
             MaxConcurrentTickets = staffProfile.MaxConcurrentTickets,
             IsAvailable = staffProfile.IsAvailable,
+            SkillTier = (int)staffProfile.SkillTier,
             Notes = staffProfile.Notes,
             Skills = staffProfile.Skills
                 .OrderBy(skill => skill.SkillCode)

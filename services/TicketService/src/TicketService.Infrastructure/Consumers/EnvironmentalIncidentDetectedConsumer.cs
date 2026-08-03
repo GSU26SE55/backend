@@ -33,7 +33,7 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly ISlaCalculator _slaCalculator;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ILogger<EnvironmentalIncidentDetectedConsumer> _logger;
 
     public EnvironmentalIncidentDetectedConsumer(
@@ -41,14 +41,14 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
         ITicketCodeGenerator codeGenerator,
         ISlaCalculator slaCalculator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         ILogger<EnvironmentalIncidentDetectedConsumer> logger)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _slaCalculator = slaCalculator;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _logger = logger;
     }
 
@@ -109,7 +109,8 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
             ActivityActionEnum.Created,
             newValue: $"Auto-created from environmental incident {evt.IncidentId} (site {evt.SiteName})");
 
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        await _outboxWriter.WriteAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _uow.SaveChangesAsync(ct);
 

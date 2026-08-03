@@ -50,12 +50,19 @@ public class TicketCreatedConsumer : IConsumer<TicketCreatedEvent>
             return;
         }
 
-        var title = $"Ticket mới: {evt.Code}";
-        var body = $"Ticket {evt.Code} vừa được tạo và đang chờ phân công.";
+        // Sprint 6.2 NOTI-05 (#676) — payload nay có Priority nên Manager biết ngay ticket ưu tiên gì.
+        var title = string.IsNullOrWhiteSpace(evt.Priority)
+            ? $"Ticket mới: {evt.Code}"
+            : $"Ticket mới: {evt.Code} (ưu tiên {evt.Priority})";
+        var body = string.IsNullOrWhiteSpace(evt.Priority)
+            ? $"Ticket {evt.Code} vừa được tạo và đang chờ triage."
+            : $"Ticket {evt.Code} (ưu tiên {evt.Priority}) vừa được tạo và đang chờ phân công.";
         var payload = JsonSerializer.Serialize(new
         {
             ticketId = evt.TicketId,
             code = evt.Code,
+            customerId = evt.CustomerId,
+            priority = evt.Priority,
             screen = "TicketDetail"
         });
 

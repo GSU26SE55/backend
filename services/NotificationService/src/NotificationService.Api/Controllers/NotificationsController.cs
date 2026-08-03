@@ -31,11 +31,17 @@ public class NotificationsController : ControllerBase
     /// <remarks>
     /// **Quyền:** mọi user đã đăng nhập.
     ///
+    /// **Mặc định chỉ trả feed in-app** (`Channel = InApp`) — Sprint 6.3 NOTI3-01 (#701).
+    /// Mỗi sự kiện nghiệp vụ được ghi thành nhiều record, mỗi channel một record; record của
+    /// Push/Email/Sms là bản ghi GIAO NHẬN chứ không phải mục hiển thị. Trước đây endpoint trả hết
+    /// nên cùng một thông báo hiện lặp 2–4 lần.
+    ///
     /// **Filter (optional):**
     /// - `type`: loại notification (TicketCreated=1, TicketAssigned=2, …).
-    /// - `channel`: 1=Push, 2=Email, 3=Sms, 4=InApp.
+    /// - `channel`: 1=Push, 2=Email, 3=Sms, 4=InApp — truyền tường minh để soi riêng 1 kênh giao nhận.
     /// - `status`: 1=Pending, 2=Sent, 3=Failed, 4=Read.
     /// - `unreadOnly=true`: chỉ lấy notification chưa đọc.
+    /// - `includeAllChannels=true`: bỏ bộ lọc feed, trả record của mọi channel (màn hình chẩn đoán).
     ///
     /// Sắp xếp theo `CreatedAt` giảm dần.
     /// </remarks>
@@ -55,6 +61,7 @@ public class NotificationsController : ControllerBase
         [FromQuery] NotificationChannelEnum? channel = null,
         [FromQuery] NotificationStatusEnum? status = null,
         [FromQuery] bool? unreadOnly = null,
+        [FromQuery] bool includeAllChannels = false,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -73,7 +80,8 @@ public class NotificationsController : ControllerBase
             Type = type,
             Channel = channel,
             Status = status,
-            UnreadOnly = unreadOnly
+            UnreadOnly = unreadOnly,
+            IncludeAllChannels = includeAllChannels
         };
 
         var result = await _mediator.Send(query, cancellationToken);
@@ -91,10 +99,13 @@ public class NotificationsController : ControllerBase
     /// `IotDeviceWentOfflineConsumer` (xem `NotificationService.Application/Consumers/`).
     /// Endpoint này dùng cho test, backfill thủ công, hoặc các integration event chưa có consumer riêng.
     /// </remarks>
-    /// <param name="command">Notification payload — UserId, Type (enum), Channel (Push/Email/Sms/InApp), Title, Body, PayloadJson tự do.</param>
+    /// <param name="command">
+    /// Notification payload. **`userId` là bắt buộc** — Admin chỉ định người nhận qua body.
+    /// Kèm Type (enum), Channel (Push/Email/Sms/InApp), Title, Body, PayloadJson tự do.
+    /// </param>
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <response code="201">Tạo notification thành công.</response>
-    /// <response code="400">Field validation lỗi (UserId rỗng / Type không hợp lệ / Title quá dài / ...).</response>
+    /// <response code="400">Field validation lỗi — `userId` rỗng, Type/Channel không hợp lệ, Title/Body quá dài…</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     [HttpPost]
@@ -148,6 +159,46 @@ public class NotificationsController : ControllerBase
             });
 
         var command = new MarkNotificationReadCommand { Id = id, UserId = userId };
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Sprint 6.3 NOTI3-14 (#714) — client báo user đã **mở** notification (bấm push / deep link).
+    /// </summary>
+    /// <remarks>
+    /// **Quyền:** chủ sở hữu notification.
+    ///
+    /// Khác `PATCH {id}/read`: `Read` chỉ là "đã xem trên feed", `Opened` là "đã bấm mở nội dung" —
+    /// tách ra để đo open rate thật của kênh push. Ghi audit `PushOpened`.
+    ///
+    /// Idempotent: gọi lại vẫn **200**. Notification của user khác → **404** (không leak existence).
+    /// </remarks>
+    /// <param name="id">Id notification (route).</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Đánh dấu đã mở thành công (kể cả idempotent).</response>
+    /// <response code="400">Thiếu claim UserId trong token.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="404">Không tìm thấy notification của user hiện tại.</response>
+    /// <response code="500">Lỗi server không xử lý được (GlobalExceptionMiddleware).</response>
+    [HttpPatch("{id:guid}/opened")]
+    [Authorize]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(NotificationActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> MarkOpened(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return BadRequest(new NotificationActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Không xác định được user."
+            });
+
+        var command = new MarkNotificationOpenedCommand { Id = id, UserId = userId };
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }

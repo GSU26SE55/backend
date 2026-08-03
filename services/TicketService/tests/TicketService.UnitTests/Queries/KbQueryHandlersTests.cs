@@ -222,10 +222,22 @@ public class KbQueryHandlersTests
         result.StatusCode.Should().Be(404);
     }
 
+    /// <summary>
+    /// ĐẢO NGƯỢC 2026-07-31 — trước đây case này tên <c>Handle_CopyTemplate_NotTemplateTag_Returns400</c>
+    /// và khẳng định "bài không phải template thì trả 400". Hợp đồng đó **đã bị bỏ có chủ đích** ở commit
+    /// <c>ebfc17e</c> ("Relax CopyKbArticleTemplate: drop the IsTemplate and Published checks so any
+    /// article can be copied as a template source") — FE cần copy bài bất kỳ làm nguồn template.
+    ///
+    /// Test không được cập nhật cùng lúc, và lỗi bị che suốt vì <c>TicketService.UnitTests</c> không
+    /// compile được từ commit ngay sau đó (<c>3466761</c>) cho tới 2026-07-31.
+    ///
+    /// ⚠️ Nợ kỹ thuật còn lại: 2 guard trong <c>CopyKbArticleTemplateQueryHandler</c> đang bị **comment**
+    /// chứ không xoá hẳn — nên xoá để tránh người sau tưởng là bug và bỏ comment trở lại.
+    /// </summary>
     [Fact]
-    public async Task Handle_CopyTemplate_NotTemplateTag_Returns400()
+    public async Task Handle_CopyTemplate_NonTemplateArticle_StillSucceeds()
     {
-        // Arrange
+        // Arrange — bài thường, KHÔNG phải template, KHÔNG ở trạng thái Published.
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
@@ -244,9 +256,10 @@ public class KbQueryHandlersTests
         // Act
         var result = await handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
+        // Assert — sau khi nới ràng buộc: bài bất kỳ (chưa xoá) đều copy được.
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Data.Should().NotBeNull();
     }
 
     [Fact]

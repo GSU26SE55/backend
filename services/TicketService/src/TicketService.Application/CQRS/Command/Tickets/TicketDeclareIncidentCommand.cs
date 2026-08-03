@@ -15,6 +15,9 @@ public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IVal
     public Guid TicketId { get; set; }
     [JsonIgnore]
     public Guid UserId { get; set; }
+
+    [JsonIgnore]
+    public string? UserDisplayName { get; set; }
     /// <summary>
     /// Incident description.
     /// </summary>

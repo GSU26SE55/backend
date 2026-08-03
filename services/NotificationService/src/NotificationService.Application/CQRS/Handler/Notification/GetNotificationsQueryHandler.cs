@@ -26,14 +26,23 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
         if (request.Type.HasValue)
             query = query.Where(n => n.Type == request.Type.Value);
 
+        // Sprint 6.3 NOTI3-01 (#701) — feed = 1 dòng / sự kiện.
+        // Record của các channel khác (Push/Email/Sms) là bản ghi GIAO NHẬN, không phải mục hiển thị;
+        // trả hết ra sẽ khiến user thấy cùng một thông báo lặp 2–4 lần.
         if (request.Channel.HasValue)
             query = query.Where(n => n.Channel == request.Channel.Value);
+        else if (!request.IncludeAllChannels)
+            query = query.Where(n => n.Channel == NotificationChannelEnum.InApp);
 
         if (request.Status.HasValue)
             query = query.Where(n => n.Status == request.Status.Value);
 
         if (request.UnreadOnly == true)
-            query = query.Where(n => n.Status != NotificationStatusEnum.Read);
+        {
+            // Sprint 6.3 NOTI3-14 (#714) — Opened cũng là "đã xem", không được trả về ở filter chưa đọc.
+            query = query.Where(n => n.Status != NotificationStatusEnum.Read
+                                     && n.Status != NotificationStatusEnum.Opened);
+        }
 
         var total = await query.CountAsync(cancellationToken);
 

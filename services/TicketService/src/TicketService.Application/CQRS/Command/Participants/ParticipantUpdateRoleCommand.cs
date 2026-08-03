@@ -29,8 +29,12 @@ public class ParticipantUpdateRoleCommand : IRequest<ParticipantActionResponse>,
     /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
+
+    [JsonIgnore]
+    public string? ActorName { get; set; }
 
     private static readonly ParticipantTypeEnum[] ManuallyAssignableTypes =
     {

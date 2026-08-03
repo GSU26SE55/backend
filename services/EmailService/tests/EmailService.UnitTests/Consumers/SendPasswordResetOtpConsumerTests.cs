@@ -50,9 +50,14 @@ public class SendPasswordResetOtpConsumerTests : IAsyncLifetime
         services.AddSingleton(new HttpClient(_fakeHandler));
         services.AddSingleton<EmailSenderService>(sp => new EmailSenderService(
             sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<HttpClient>()));
+        // Sprint 6.3 NOTI3-05 (#705) — consumer nay phụ thuộc IEmailProvider (seam cho provider thứ 2).
+        services.AddSingleton<IEmailProvider>(sp => sp.GetRequiredService<EmailSenderService>());
 
         services.AddMassTransitTestHarness(x =>
         {
+            // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+            // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+            x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
             x.AddConsumer<SendPasswordResetOtpConsumer>();
         });
 

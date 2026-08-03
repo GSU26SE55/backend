@@ -16,13 +16,29 @@ public class SendRequest
 {
     public Guid NotificationId { get; set; }
     public Guid UserId { get; set; }
+
+    /// <summary>
+    /// Sprint 6.3 NOTI3-15 (#715) — loại notification. Cần để dựng link hủy đăng ký theo đúng NHÓM
+    /// (người dùng hủy vì chat làm phiền không nên mất luôn cảnh báo SLA).
+    /// </summary>
+    public NotificationTypeEnum Type { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public string? PayloadJson { get; set; }
     public bool IsCritical { get; set; }
 
-    /// <summary>Expo push token — dùng cho ExpoPushChannel.</summary>
+    /// <summary>
+    /// Expo push token đơn — giữ cho caller cũ. Khi <see cref="ExpoTokens"/> có giá trị thì
+    /// <c>ExpoPushChannel</c> ưu tiên dùng danh sách đó.
+    /// </summary>
     public string? ExpoToken { get; set; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-16 (#687) — TẤT CẢ device token đang hoạt động của người nhận.
+    /// <c>ExpoPushChannel</c> gộp tối đa 100 message / HTTP call (giới hạn của Expo Push API)
+    /// thay vì mỗi token một request.
+    /// </summary>
+    public IReadOnlyList<string>? ExpoTokens { get; set; }
 
     /// <summary>Địa chỉ email người nhận — dùng cho EmailBusChannel.</summary>
     public string? Email { get; set; }

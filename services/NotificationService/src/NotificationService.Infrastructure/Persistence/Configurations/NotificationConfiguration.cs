@@ -34,6 +34,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.Property(n => n.ReadAt).HasColumnName("read_at");
         builder.Property(n => n.FailureReason).HasColumnName("failure_reason").HasMaxLength(1000);
 
+        // Sprint 6.2 NOTI-01 (#672) — trạng thái retry/hoãn của dispatch worker.
+        builder.Property(n => n.DispatchAttemptCount)
+            .HasColumnName("dispatch_attempt_count").HasDefaultValue(0).IsRequired();
+        builder.Property(n => n.NextAttemptAt).HasColumnName("next_attempt_at");
+
         builder.Property(n => n.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(n => n.CreatedBy).HasColumnName("created_by");
         builder.Property(n => n.UpdatedAt).HasColumnName("updated_at");
@@ -43,6 +48,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.HasIndex(n => new { n.UserId, n.Status });
         builder.HasIndex(n => n.CreatedAt);
         builder.HasIndex(n => new { n.EntityType, n.EntityId });
+
+        // Sprint 6.2 NOTI-01 (#672) — index cho vòng quét của dispatch worker
+        // (WHERE status = Pending AND next_attempt_at <= now ORDER BY created_at).
+        builder.HasIndex(n => new { n.Status, n.NextAttemptAt, n.CreatedAt })
+            .HasDatabaseName("ix_notifications_dispatch_queue");
 
         builder.Ignore(n => n.DomainEvents);
     }

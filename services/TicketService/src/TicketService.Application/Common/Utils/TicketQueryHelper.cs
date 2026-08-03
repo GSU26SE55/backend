@@ -16,7 +16,10 @@ public static class TicketQueryHelper
         BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
         BatteryAssetIds = t.BatteryAssets.Select(b => b.BatteryAssetId.ToString()).ToList(),
         CustomerId = t.CustomerId.ToString(),
-        AssignedStaffId = t.AssignedStaffId.HasValue ? t.AssignedStaffId.Value.ToString() : null,
+        Assignments = t.Assignments
+            .Where(a => !a.IsDeleted)
+            .Select(a => new TicketAssignmentDTO { StaffId = a.StaffId.ToString(), Role = a.Role })
+            .ToList(),
         Title = t.Title,
         Category = t.Category,
         Priority = t.Priority,
@@ -29,7 +32,16 @@ public static class TicketQueryHelper
         CreatedAt = t.CreatedAt,
         UpdatedAt = t.UpdatedAt,
         SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
-        HasUnreadChat = hasUnreadChat
+        HasUnreadChat = hasUnreadChat,
+        DetectedAt = t.DetectedAt,
+        BatterySerialNumber = t.BatterySerialNumber,
+        AiVerifyStatus = t.AiVerifyStatus,
+        AiVerifyScore = t.AiVerifyScore,
+        AiVerifyReason = t.AiVerifyReason,
+        SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
+        DuplicateReason = t.DuplicateReason,
+        MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
+        CloseReason = t.CloseReason
     };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)
@@ -64,7 +76,7 @@ public static class TicketQueryHelper
 
     public static bool CanAccessTicket(
         Guid customerId,
-        Guid? assignedStaffId,
+        Guid? primaryHandlerStaffId,
         Guid? actorUserId,
         IReadOnlyCollection<string> actorRoles)
     {
@@ -74,18 +86,18 @@ public static class TicketQueryHelper
             return false;
         if (HasRole(actorRoles, "Customer") && customerId == actorUserId.Value)
             return true;
-        return HasRole(actorRoles, "Staff") && assignedStaffId == actorUserId.Value;
+        return HasRole(actorRoles, "Staff") && primaryHandlerStaffId == actorUserId.Value;
     }
 
     /// <summary>Overload có xét active participant row (#522) — actor có row active trên ticket cũng được truy cập dù không phải Customer chính/Staff assigned.</summary>
     public static bool CanAccessTicket(
         Guid customerId,
-        Guid? assignedStaffId,
+        Guid? primaryHandlerStaffId,
         Guid? actorUserId,
         IReadOnlyCollection<string> actorRoles,
         IReadOnlyCollection<Guid> activeParticipantUserIds)
     {
-        if (CanAccessTicket(customerId, assignedStaffId, actorUserId, actorRoles))
+        if (CanAccessTicket(customerId, primaryHandlerStaffId, actorUserId, actorRoles))
             return true;
         return actorUserId.HasValue && activeParticipantUserIds.Contains(actorUserId.Value);
     }

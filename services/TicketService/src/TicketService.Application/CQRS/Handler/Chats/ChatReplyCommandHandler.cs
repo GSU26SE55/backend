@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
@@ -54,6 +55,14 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         if (ticket.Status == TicketStatusEnum.Closed)
             return Fail(400, "Không thể trả lời bình luận khi ticket đã đóng.");
 
@@ -71,34 +80,39 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             ThreadRootId = parent.ThreadRootId ?? parent.Id
         };
 
-        await _uow.TicketChats.AddAsync(reply);
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
+        {
+            await _uow.TicketChats.AddAsync(reply);
 
-        parent.ReplyCount += 1;
-        _uow.TicketChats.UpdateAsync(parent);
+            var affectedRows = await _uow.IncrementChatReplyCountAsync(parent.Id, transactionCt);
+            if (affectedRows == 0)
+            {
+                throw new DbUpdateConcurrencyException(
+                    "Tin nhắn gốc đã bị thay đổi hoặc xóa trong khi đang trả lời.");
+            }
 
-        await _activityLogger.LogAsync(
-            ticket.Id,
-            request.UserId,
-            request.UserRole,
-            request.UserDisplayName,
-            ActivityActionEnum.ChatReplied,
-            null,
-            request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-            $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+            await _activityLogger.LogAsync(
+                ticket.Id,
+                request.UserId,
+                request.UserRole,
+                request.UserDisplayName,
+                ActivityActionEnum.ChatReplied,
+                null,
+                request.IsInternal ? "[Nội bộ]" : "[Công khai]",
+                $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
-        await _outboxWriter.WriteAsync(new ChatCreatedEvent(
-            reply.Id,
-            reply.TicketId,
-            reply.AuthorUserId,
-            (int)reply.AuthorRole,
-            reply.AuthorDisplayName,
-            reply.Body,
-            reply.IsInternal,
-            reply.AttachmentFileIds,
-            ticket.CustomerId,
-            ticket.AssignedStaffId), ct);
-
-        await _uow.SaveChangesAsync(ct);
+            await _outboxWriter.WriteAsync(new ChatCreatedEvent(
+                reply.Id,
+                reply.TicketId,
+                reply.AuthorUserId,
+                (int)reply.AuthorRole,
+                reply.AuthorDisplayName,
+                reply.Body,
+                reply.IsInternal,
+                reply.AttachmentFileIds,
+                ticket.CustomerId,
+                ticket.PrimaryHandlerStaffId), transactionCt);
+        }, ct);
 
         try
         {

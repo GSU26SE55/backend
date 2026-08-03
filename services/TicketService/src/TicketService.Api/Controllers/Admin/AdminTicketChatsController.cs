@@ -49,7 +49,7 @@ public class AdminTicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -79,7 +79,7 @@ public class AdminTicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -109,7 +109,7 @@ public class AdminTicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -143,7 +143,7 @@ public class AdminTicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ActorRoleEnum.Admin
         };
 

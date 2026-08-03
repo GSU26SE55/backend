@@ -4,7 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -19,7 +18,7 @@ public class SlaTimerBackgroundService : BackgroundService
     public SlaTimerBackgroundService(
         ILogger<SlaTimerBackgroundService> logger,
         IServiceScopeFactory scopeFactory,
-        TimeProvider? timeProvider = null) // Inject TimeProvider
+        TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
@@ -36,9 +35,13 @@ public class SlaTimerBackgroundService : BackgroundService
             {
                 await CheckSlaViolations(stoppingToken);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "An error occurred while checking SLA violations.");
+                break;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "An error occurred while checking SLA violations.");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
@@ -49,47 +52,99 @@ public class SlaTimerBackgroundService : BackgroundService
 
     public async Task CheckSlaViolations(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Checking for SLA violations...");
-
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-        var producer = scope.ServiceProvider.GetRequiredService<IMessageProducerService>();
-
-        var currentTime = _timeProvider.GetUtcNow().UtcDateTime; // Dùng TimeProvider thay vì DateTime.UtcNow
-
-        var runningTimers = await dbContext.SlaTimers
-            .Include(st => st.Ticket)
-            .Where(st => st.Status == SlaTimerStatusEnum.Running && !st.IsDeleted)
-            .ToListAsync(stoppingToken);
-
-        foreach (var timer in runningTimers)
+        List<Guid> timerIds;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
         {
-            var timeToBreach = timer.DueAt - currentTime;
+            var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            timerIds = await dbContext.SlaTimers
+                .AsNoTracking()
+                .Where(timer => timer.Status == SlaTimerStatusEnum.Running && !timer.IsDeleted)
+                .OrderBy(timer => timer.DueAt)
+                .Select(timer => timer.Id)
+                .ToListAsync(stoppingToken);
+        }
 
+        foreach (var timerId in timerIds)
+        {
+            await ProcessTimerAsync(timerId, stoppingToken);
+        }
+    }
+
+    private async Task ProcessTimerAsync(Guid timerId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var producer = scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>();
+        await using var transaction = dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
+            ? null
+            : await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var timer = await dbContext.SlaTimers
+                .Include(value => value.Ticket)
+                .SingleOrDefaultAsync(value => value.Id == timerId && !value.IsDeleted, cancellationToken);
+
+            if (timer is null
+                || timer.Status != SlaTimerStatusEnum.Running
+                || timer.Ticket.IsDeleted
+                || timer.Ticket.Status == TicketStatusEnum.Closed
+                || timer.Ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
+            {
+                if (transaction is not null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                return;
+            }
+
+            var currentTime = _timeProvider.GetUtcNow().UtcDateTime;
+            var timeToBreach = timer.DueAt - currentTime;
             if (timeToBreach <= TimeSpan.Zero)
             {
-                // SLA is breached
-                _logger.LogWarning("SLA breached for ticket {TicketId}", timer.TicketId);
                 timer.Status = SlaTimerStatusEnum.Breached;
                 timer.BreachAt = currentTime;
-                await producer.PublishAsync(new SlaBreachedEvent { TicketId = timer.TicketId, BreachedAt = timer.BreachAt.Value, Priority = timer.Ticket?.Priority.ToString() ?? string.Empty }, stoppingToken);
+                await producer.WriteAsync(new SlaBreachedEvent
+                {
+                    TicketId = timer.TicketId,
+                    BreachedAt = currentTime,
+                    Priority = timer.Ticket.Priority?.ToString() ?? string.Empty
+                }, cancellationToken);
             }
             else
             {
                 var totalSlaDuration = timer.DueAt - timer.StartedAt;
                 var elapsedTime = currentTime - timer.StartedAt;
-                var percentage = (elapsedTime.TotalMinutes / totalSlaDuration.TotalMinutes) * 100;
+                var percentage = totalSlaDuration.TotalMinutes <= 0
+                    ? 100
+                    : elapsedTime.TotalMinutes / totalSlaDuration.TotalMinutes * 100;
 
-                if (percentage >= 80 && timer.WarningSentAt == null)
+                if (percentage >= 80 && timer.WarningSentAt is null)
                 {
-                    // SLA warning
-                    _logger.LogWarning("SLA warning for ticket {TicketId}", timer.TicketId);
                     timer.WarningSentAt = currentTime;
-                    await producer.PublishAsync(new SlaWarningEvent { TicketId = timer.TicketId, WarningAt = timer.WarningSentAt.Value, Percentage = percentage }, stoppingToken);
+                    await producer.WriteAsync(new SlaWarningEvent
+                    {
+                        TicketId = timer.TicketId,
+                        WarningAt = timer.WarningSentAt.Value,
+                        Percentage = percentage,
+                        StaffId = timer.Ticket?.Assignments.FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId
+                    }, cancellationToken);
                 }
             }
-        }
 
-        await dbContext.SaveChangesAsync(stoppingToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+            _logger.LogInformation(exception, "SLA timer {TimerId} changed concurrently; skipped until next poll.", timerId);
+        }
     }
 }

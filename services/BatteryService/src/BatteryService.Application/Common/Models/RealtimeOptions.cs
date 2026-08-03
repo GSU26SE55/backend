@@ -16,4 +16,18 @@ public class RealtimeOptions
 
     /// <summary>Throttle gom <c>summary</c> cho scope customer/site (giây) — §34.10.5.</summary>
     public int SummaryIntervalSeconds { get; set; } = 4;
+
+    /// <summary>
+    /// Sprint BE-IoT-Realtime <c>#614</c> — số reading gần nhất giữ lại MỖI PIN để phát lại khi
+    /// client reconnect kèm <c>Last-Event-ID</c>. Dùng <c>MAXLEN ~</c> nên Redis cắt xấp xỉ (rẻ hơn
+    /// cắt chính xác). 200 ≈ vài phút dữ liệu ở nhịp ingest thường — đủ cứu các lần rớt mạng vài
+    /// chục giây của app mobile, mà tốn rất ít RAM.
+    /// </summary>
+    public int ReplayMaxEvents { get; set; } = 200;
+
+    /// <summary>
+    /// Hạn sống của stream replay (phút). Refresh mỗi lần ghi. Pin ngừng gửi số liệu thì key tự dọn,
+    /// không để rác tồn đọng trong Redis. 0 = không đặt TTL.
+    /// </summary>
+    public int ReplayTtlMinutes { get; set; } = 5;
 }

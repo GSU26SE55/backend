@@ -12,14 +12,14 @@ public class SendPasswordResetOtpConsumer : IConsumer<SendPasswordResetOtpEvent>
 {
     private const int OtpExpireMinutes = 10;
 
-    private readonly EmailSenderService _emailSender;
+    private readonly IEmailProvider _emailSender;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SendPasswordResetOtpConsumer> _logger;
     private readonly IInboxStore _inboxStore;
 
     public SendPasswordResetOtpConsumer(
-        EmailSenderService emailSender,
+        IEmailProvider emailSender,
         IEmailTemplateRenderer templateRenderer,
         IConfiguration configuration,
         ILogger<SendPasswordResetOtpConsumer> logger,

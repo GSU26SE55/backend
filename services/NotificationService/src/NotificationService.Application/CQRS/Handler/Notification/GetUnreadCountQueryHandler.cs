@@ -19,8 +19,17 @@ public class GetUnreadCountQueryHandler : IRequestHandler<GetUnreadCountQuery, N
     public async Task<NotificationCountResponse> Handle(GetUnreadCountQuery request, CancellationToken cancellationToken)
     {
         // Read-only → no-tracking.
+        // Sprint 6.3 NOTI3-01 (#701) — chỉ đếm record feed (InApp). Trước đó đếm cả record
+        // giao nhận Push/Email/Sms nên badge phồng 2–4 lần so với số dòng user thực sự nhìn thấy.
         var count = await _unitOfWork.Notifications.GetAllAsync(false)
-            .Where(n => n.UserId == request.UserId && !n.IsDeleted && n.Status != NotificationStatusEnum.Read)
+            .Where(n => n.UserId == request.UserId
+                        && !n.IsDeleted
+                        && n.Channel == NotificationChannelEnum.InApp
+                        // Sprint 6.3 NOTI3-14 (#714) — Opened mạnh hơn Read (user bấm hẳn vào
+                        // notification), nên cũng phải trừ khỏi badge. Thiếu vế này thì noti đã mở
+                        // vẫn hiện chưa đọc.
+                        && n.Status != NotificationStatusEnum.Read
+                        && n.Status != NotificationStatusEnum.Opened)
             .CountAsync(cancellationToken);
 
         return new NotificationCountResponse

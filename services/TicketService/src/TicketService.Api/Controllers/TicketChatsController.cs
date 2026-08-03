@@ -8,7 +8,6 @@ using SharedContracts.Common.Responses;
 using TicketService.Api.Extensions;
 using TicketService.Application.CQRS.Command.ChatAi;
 using TicketService.Application.CQRS.Command.Chats;
-using TicketService.Application.CQRS.Command.ChatTemplates;
 using TicketService.Application.CQRS.Query.ChatKbSuggestions;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.CQRS.Query.Ticket;
@@ -61,7 +60,7 @@ public class TicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -106,7 +105,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -152,7 +151,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
 
         var roleStr = _currentUser.Role;
         var userRole = ActorRoleEnum.Staff; // Default
@@ -508,7 +507,7 @@ public class TicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ParentChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ResolveActorRole(_currentUser.Role);
 
         var result = await _mediator.Send(command, ct);
@@ -580,7 +579,7 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ResolveActorRole(_currentUser.Role),
             UserPermissions = _currentUser.Permissions.ToList()
         };
@@ -614,7 +613,7 @@ public class TicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ResolveActorRole(_currentUser.Role),
             UserPermissions = _currentUser.Permissions.ToList()
         };
@@ -805,44 +804,6 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>
-    /// Gửi chat từ template — render nội dung template với variables tùy chọn.
-    /// </summary>
-    [HttpPost("from-template/{templateId}")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SendFromTemplate(
-        Guid ticketId,
-        Guid templateId,
-        [FromBody] ChatFromTemplateCommand command,
-        CancellationToken ct)
-    {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        command.TicketId = ticketId;
-        command.TemplateId = templateId;
-        command.ActorUserId = actorId.Value;
-        command.ActorDisplayName = _currentUser.FullName ?? "Unknown";
-        command.ActorRole = ResolveActorRole(_currentUser.Role);
-        command.ActorRoles = GetCurrentRoles();
-
-        var result = await _mediator.Send(command, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Cursor-based pagination cho chat — không có offset, phù hợp load-more infinite scroll.
-    /// </summary>
-    /// <param name="ticketId">ID của Ticket.</param>
-    /// <param name="cursor">Opaque cursor từ NextCursor của trang trước. Bỏ trống để lấy trang đầu.</param>
-    /// <param name="limit">Số lượng chat mỗi trang (mặc định 20, tối đa 100).</param>
-    /// <param name="ct">Token hủy request.</param>
     [HttpGet("cursor")]
     [ProducesResponseType(typeof(CommonResponse<CursorPaginationResponse<TicketChatDTO>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -957,58 +918,6 @@ public class TicketChatsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    /// <summary>Export chat history of a ticket to PDF. Customer view excludes internal chats. #568.</summary>
-    [HttpGet("export-pdf")]
-    [Authorize(Roles = "Manager,Admin,Staff")]
-    public async Task<IActionResult> ExportChatPdf(Guid ticketId, CancellationToken ct)
-    {
-        var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
-        var viewerRole = ResolveActorRole(roleStr);
-
-        Stream pdfStream;
-        try
-        {
-            pdfStream = await _mediator.Send(new ChatExportPdfCommand
-            {
-                TicketId = ticketId,
-                ViewerRole = viewerRole
-            }, ct);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return NotFound(new { isSuccess = false, message = ex.Message });
-        }
-
-        return File(pdfStream, "application/pdf", $"ticket-{ticketId}-chats.pdf");
-    }
-
-    /// <summary>
-    /// Phân tích tone Customer chats và alert Manager via SignalR nếu score &lt; -0.7 (#560).
-    /// Trả về sentiment score [-1,1], label (Positive/Neutral/Negative/Critical), và IsAlertSent.
-    /// </summary>
-    [HttpPost("sentiment-check")]
-    [Authorize(Roles = "Staff,Manager,Admin")]
-    [ProducesResponseType(typeof(ChatSentimentCheckResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SentimentCheck(Guid ticketId, CancellationToken ct = default)
-    {
-        var actorId = GetCurrentUserId();
-        if (!actorId.HasValue)
-            return Unauthorized();
-
-        var result = await _mediator.Send(new ChatSentimentCheckCommand
-        {
-            TicketId = ticketId,
-            CurrentUserId = actorId.Value
-        }, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Tóm tắt toàn bộ chat thread thành 5 dòng bullet cho Staff Tier 3 mới tiếp nhận (#560).
-    /// </summary>
     [HttpPost("summarize")]
     [Authorize(Roles = "Staff,Manager,Admin")]
     [ProducesResponseType(typeof(ChatSummarizeResponse), StatusCodes.Status200OK)]
@@ -1077,7 +986,7 @@ public class TicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ResolveActorRole(_currentUser.Role);
         command.UserPermissions = _currentUser.Permissions.ToList();
 
@@ -1106,32 +1015,44 @@ public class TicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Upload audio và transcribe sang text — tạo chat với nội dung transcribed + đính kèm audio vào ticket_attachments (#567).
-    /// Sử dụng Google Gemini 1.5 Flash multimodal. Hỗ trợ: mp3, wav, ogg, webm, m4a, flac. Giới hạn: 20MB.
+    /// Tạo chat audio placeholder từ metadata file đã upload và xếp hàng transcribe bất đồng bộ.
     /// </summary>
     [HttpPost("voice")]
-    [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status201Created)]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VoiceTranscribe(
         Guid ticketId,
-        IFormFile audioFile,
+        [FromBody] ChatVoiceTranscribeCommand command,
         CancellationToken ct)
     {
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = ticketId,
-            AudioFile = audioFile,
-            AuthorizationHeader = Request.Headers.Authorization.ToString(),
-            UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty,
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
-            UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value),
-            UserPermissions = _currentUser.Permissions.ToList()
-        };
+        command.TicketId = ticketId;
+        command.UserId = _currentUser.UserId is { Length: > 0 } uid && Guid.TryParse(uid, out var parsed) ? parsed : Guid.Empty;
+        command.UserDisplayName = _currentUser.FullName!;
+        command.UserRole = ResolveActorRole(User.FindFirst(ClaimTypes.Role)?.Value);
+        command.UserPermissions = _currentUser.Permissions.ToList();
 
         var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("{id}/voice/retry")]
+    [EnableRateLimiting(ChatRateLimitingExtensions.ChatWritePolicy)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> RetryVoiceTranscription(Guid ticketId, Guid id, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+        var result = await _mediator.Send(new ChatVoiceTranscriptionRetryCommand
+        {
+            TicketId = ticketId,
+            ChatId = id,
+            UserId = userId.Value,
+            UserRole = ResolveActorRole(_currentUser.Role)
+        }, ct);
         return StatusCode(result.StatusCode, result);
     }
 

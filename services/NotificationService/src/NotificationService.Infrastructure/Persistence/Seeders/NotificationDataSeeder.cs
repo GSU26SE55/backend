@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 
@@ -34,92 +35,41 @@ public class NotificationDataSeeder
         await SeedSampleNotificationsAsync(sampleUserIds, cancellationToken);
     }
 
+    /// <summary>
+    /// Sprint 6.3 NOTI3-12 (#712) — seed từ <see cref="NotificationTemplateCatalog"/>, phủ đủ
+    /// 32 type × mọi kênh (trước đây chỉ 5/32 type có template, phần còn lại phải sửa code mới đổi
+    /// được câu chữ).
+    ///
+    /// Idempotent theo bộ ba (Type × Channel × Locale): đã có bản nào cho bộ ba đó thì KHÔNG thêm.
+    /// Cố ý không ghi đè — người vận hành có thể đã sửa nội dung trong DB, seeder không được xoá công
+    /// sức đó mỗi lần khởi động.
+    /// </summary>
     private async Task SeedTemplatesAsync(CancellationToken ct)
     {
-        var existing = await _dbContext.NotificationTemplates
-            .Select(t => new { t.Type, t.Channel, t.Locale })
-            .ToListAsync(ct);
-        var existingKeys = existing.Select(k => (k.Type, k.Channel, k.Locale)).ToHashSet();
+        var existingKeys = (await _dbContext.NotificationTemplates
+                .Select(t => new { t.Type, t.Channel, t.Locale })
+                .ToListAsync(ct))
+            .Select(k => (k.Type, k.Channel, k.Locale))
+            .ToHashSet();
 
         var now = DateTime.UtcNow;
-        var templates = new List<NotificationTemplate>();
 
-        void Add(NotificationTypeEnum type, NotificationChannelEnum channel, string locale, string title, string body)
-        {
-            if (existingKeys.Contains((type, channel, locale)))
-                return;
-            templates.Add(new NotificationTemplate
+        var templates = NotificationTemplateCatalog
+            .Build(NotificationDispatchOptions.DefaultTypeChannelMatrix)
+            .Where(e => !existingKeys.Contains((e.Type, e.Channel, e.Locale)))
+            .Select(e => new NotificationTemplate
             {
                 Id = Guid.NewGuid(),
-                Type = type,
-                Channel = channel,
-                Locale = locale,
-                TitleTemplate = title,
-                BodyTemplate = body,
+                Type = e.Type,
+                Channel = e.Channel,
+                Locale = e.Locale,
+                TitleTemplate = e.Title,
+                BodyTemplate = e.Body,
+                Version = 1,
                 IsActive = true,
-                CreatedAt = now
-            });
-        }
-
-        // Ticket lifecycle
-        Add(NotificationTypeEnum.TicketCreated, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket mới {{ticketCode}}", "Khách hàng {{customerName}} vừa tạo ticket {{ticketCode}}: {{title}}");
-        Add(NotificationTypeEnum.TicketCreated, NotificationChannelEnum.Email, "vi-VN",
-            "[{{ticketCode}}] Ticket mới được tạo", "Ticket {{ticketCode}} - {{title}} đã được tạo bởi {{customerName}}. Truy cập hệ thống để xử lý.");
-        Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "vi-VN",
-            "Bạn được giao ticket {{ticketCode}}", "{{title}} — Priority {{priority}}");
-        Add(NotificationTypeEnum.TicketStatusChanged, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket {{ticketCode}} đổi trạng thái", "Từ {{oldStatus}} → {{newStatus}}");
-        Add(NotificationTypeEnum.TicketResolved, NotificationChannelEnum.Email, "vi-VN",
-            "[{{ticketCode}}] Đã xử lý xong", "Ticket {{ticketCode}} đã được xử lý. Vui lòng xác nhận và đánh giá.");
-        Add(NotificationTypeEnum.TicketClosed, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket {{ticketCode}} đã đóng", "Cảm ơn bạn đã sử dụng dịch vụ.");
-        Add(NotificationTypeEnum.TicketEscalated, NotificationChannelEnum.Push, "vi-VN",
-            "Ticket {{ticketCode}} đã escalate", "Lý do: {{reason}}");
-
-        // SLA
-        Add(NotificationTypeEnum.SlaWarning, NotificationChannelEnum.Push, "vi-VN",
-            "Cảnh báo SLA: {{ticketCode}}", "Còn {{minutesRemaining}} phút trước khi breach SLA {{priority}}.");
-        Add(NotificationTypeEnum.SlaBreached, NotificationChannelEnum.Push, "vi-VN",
-            "SLA breach: {{ticketCode}}", "Ticket đã quá hạn SLA. Cần escalate ngay.");
-
-        // Battery / Environmental
-        Add(NotificationTypeEnum.BatteryAnomalyDetected, NotificationChannelEnum.Push, "vi-VN",
-            "Bất thường pin {{serialNumber}}", "Loại: {{anomalyType}} — Severity: {{severity}}");
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Push, "vi-VN",
-            "Cảnh báo môi trường tại {{siteName}}", "Loại: {{incidentType}} — Severity: {{severity}}");
-        // Sprint IoT-2 #IoT2-31 — Email + SMS template (Critical channel, bypass quiet hours).
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Email, "vi-VN",
-            "[CRITICAL] Sự cố môi trường tại {{siteName}}",
-            "Phát hiện sự cố môi trường (IncidentType={{incidentType}}, Severity={{severity}}) tại site \"{{siteName}}\". Detected at {{detectedAt}}. Yêu cầu xử lý NGAY.\n\n{{description}}");
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Sms, "vi-VN",
-            "[CRITICAL]",
-            "ENV INCIDENT {{incidentType}} tại {{siteName}}. Severity {{severity}}. Vào hệ thống xử lý NGAY.");
-        Add(NotificationTypeEnum.EnvironmentalIncidentResolved, NotificationChannelEnum.InApp, "vi-VN",
-            "Sự cố môi trường đã xử lý", "Site {{siteName}} — incident {{incidentType}} đã được resolved.");
-
-        // Account
-        Add(NotificationTypeEnum.AccountActivated, NotificationChannelEnum.Email, "vi-VN",
-            "Tài khoản đã kích hoạt", "Chào {{fullName}}, tài khoản của bạn đã được kích hoạt thành công.");
-        Add(NotificationTypeEnum.AdminInvite, NotificationChannelEnum.Email, "vi-VN",
-            "Lời mời tham gia hệ thống", "Bạn được {{inviter}} mời làm {{role}}. Bấm link để kích hoạt: {{activationLink}}");
-
-        // Sprint IoT-1 (#249) — IoT device offline.
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "vi-VN",
-            "Device offline: {{deviceCode}}",
-            "Device \"{{displayName}}\" tại site {{siteName}} mất heartbeat {{durationMinutes}} phút. Ảnh hưởng {{affectedBatteryCount}} pin.");
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.InApp, "vi-VN",
-            "IoT device offline: {{deviceCode}}",
-            "Last seen {{lastSeenAt}}. Kiểm tra nguồn điện / mạng cho device tại site {{siteName}}.");
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "en-US",
-            "Device offline: {{deviceCode}}",
-            "Device \"{{displayName}}\" at site {{siteName}} lost heartbeat for {{durationMinutes}} min. {{affectedBatteryCount}} battery affected.");
-
-        // English fallbacks for high-priority types
-        Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "en-US",
-            "Ticket {{ticketCode}} assigned to you", "{{title}} — Priority {{priority}}");
-        Add(NotificationTypeEnum.SlaBreached, NotificationChannelEnum.Push, "en-US",
-            "SLA breached: {{ticketCode}}", "Ticket exceeded SLA. Immediate escalation required.");
+                CreatedAt = now,
+            })
+            .ToList();
 
         if (templates.Count == 0)
             return;

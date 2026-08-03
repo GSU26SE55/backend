@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
 using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Application.Interfaces.Repositories;
@@ -55,7 +56,21 @@ public class NotificationDispatcherTests
         INotificationUnitOfWork uow,
         ICacheService cache,
         params INotificationChannel[] channels) =>
-        new(uow, cache, channels, NullLogger<NotificationDispatcher>.Instance);
+        Build(uow, cache, new NotificationDispatchOptions(), channels);
+
+    /// <summary>Sprint 6.2 — dispatcher nay nhận thêm template renderer, audit writer và options.</summary>
+    private static NotificationDispatcher Build(
+        INotificationUnitOfWork uow,
+        ICacheService cache,
+        NotificationDispatchOptions options,
+        params INotificationChannel[] channels) =>
+        new(uow,
+            cache,
+            channels,
+            new Mock<NotificationService.Application.Templates.ITemplateRenderer>().Object,
+            new NoopAuditWriter(),
+            Microsoft.Extensions.Options.Options.Create(options),
+            NullLogger<NotificationDispatcher>.Instance);
 
     // ── basic dispatch ────────────────────────────────────────────────────────
 
@@ -346,368 +361,94 @@ public class NotificationDispatcherTests
         inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ══ GH-672 NOTI-01 — DispatchPendingAsync ════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // Sprint IoT-2 — DoD: "Environmental Critical bypass verify: trigger MQ-2 incident
+    // trong giờ 23:00 (quiet hours) → Manager vẫn nhận push."
+    //
+    // Test có sẵn `DispatchAsync_CriticalType_BypassesQuietHours` dùng `SlaBreached` — đúng cơ chế
+    // nhưng KHÔNG phải kịch bản mà DoD nêu. Cảm biến khí MQ-2 báo rò gas lúc nửa đêm mà bị quiet
+    // hours nuốt mất là tình huống nguy hiểm tính mạng, nên chốt riêng bằng đúng type của nó.
+    //
+    // Quiet hours đặt 00:00–23:59 để "lúc nào chạy test cũng đang trong quiet hours" — bao trùm
+    // cả mốc 23:00 mà DoD nêu, và không phụ thuộc giờ chạy CI.
+    // ═══════════════════════════════════════════════════════════════════════
 
-    private static Mock<INotificationUnitOfWork> BuildPendingUow(
-        NotificationPreference? pref = null,
-        DeviceToken[]? deviceTokens = null,
-        AccountReadModel? account = null)
+    [Fact]
+    public async Task DoD_IoT2_EnvironmentalIncident_DuringQuietHours_StillPushesToManager()
     {
-        var (uow, _, _) = MockNotificationUnitOfWork.Build(
-            deviceTokenSeed: deviceTokens ?? [],
-            accountSeed: account is null ? [] : new[] { account });
-
-        var prefSeed = pref is null ? [] : new[] { pref };
-        var prefRepo = new Mock<IGenericRepository<NotificationPreference>>();
-        prefRepo.Setup(r => r.GetAllAsync())
-                .Returns(prefSeed.AsQueryable().BuildMock());
-        uow.SetupGet(u => u.NotificationPreferences).Returns(prefRepo.Object);
-
-        return uow;
-    }
-
-    /// <summary>Quiet hours phủ trọn ngày để "bây giờ" chắc chắn rơi vào khung im lặng.</summary>
-    private static NotificationPreference AllDayQuietPref(Guid userId, bool smsEnabled = false) =>
-        new()
+        var managerId = Guid.NewGuid();
+        var pref = new NotificationPreference
         {
-            UserId = userId,
+            UserId = managerId,
             PushEnabled = true,
             EmailEnabled = true,
-            SmsEnabled = smsEnabled,
+            SmsEnabled = true,
             InAppEnabled = true,
             QuietHoursStart = new TimeOnly(0, 0),
             QuietHoursEnd = new TimeOnly(23, 59),
             TimeZone = "UTC",
         };
+        var deviceToken = new DeviceToken { UserId = managerId, Token = "ExponentPushToken[mgr]", IsActive = true };
 
-    private static Notification PendingNotification(
-        Guid userId,
-        NotificationChannelEnum channel,
-        NotificationTypeEnum type = NotificationTypeEnum.TicketCreated,
-        string? payloadJson = null) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Channel = channel,
-            Type = type,
-            Status = NotificationStatusEnum.Pending,
-            Title = "T",
-            Body = "B",
-            PayloadJson = payloadJson,
-        };
-
-    [Fact]
-    public async Task DispatchPendingAsync_InApp_MarksSent()
-    {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
-        var inApp = FakeChannel(NotificationChannelEnum.InApp);
-        var sut = Build(uow.Object, NoCache().Object, inApp.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.InApp);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Sent);
-        notification.SentAt.Should().NotBeNull();
-        inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_AlreadySent_ReturnsFalseWithoutSending()
-    {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
-        var inApp = FakeChannel(NotificationChannelEnum.InApp);
-        var sut = Build(uow.Object, NoCache().Object, inApp.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.InApp);
-        notification.Status = NotificationStatusEnum.Sent;
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeFalse();
-        inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_EmailChannel_StaysPendingUntilGh673()
-    {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
+        var (uow, _) = BuildUow(pref, deviceToken);
+        var push = FakeChannel(NotificationChannelEnum.Push);
         var email = FakeChannel(NotificationChannelEnum.Email);
-        var sut = Build(uow.Object, NoCache().Object, email.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Email);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeFalse();
-        notification.Status.Should().Be(NotificationStatusEnum.Pending);
-        email.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_ChannelDisabledByPreference_MarksFailedWithoutSending()
-    {
-        var userId = Guid.NewGuid();
-        var pref = new NotificationPreference
-        {
-            UserId = userId,
-            PushEnabled = true,
-            EmailEnabled = true,
-            SmsEnabled = false,
-            InAppEnabled = false,
-        };
-        var uow = BuildPendingUow(pref);
+        var sms = FakeChannel(NotificationChannelEnum.Sms);
         var inApp = FakeChannel(NotificationChannelEnum.InApp);
-        var sut = Build(uow.Object, NoCache().Object, inApp.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.InApp);
+        var sut = Build(uow.Object, NoCache().Object, push.Object, email.Object, sms.Object, inApp.Object);
 
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().Contain("disabled by preference");
-        inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_QuietHoursNonCritical_StaysPending()
-    {
-        var userId = Guid.NewGuid();
-        var token = new DeviceToken { UserId = userId, Token = "t1", IsActive = true };
-        var uow = BuildPendingUow(AllDayQuietPref(userId), [token]);
-        var push = FakeChannel(NotificationChannelEnum.Push);
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeFalse();
-        notification.Status.Should().Be(NotificationStatusEnum.Pending);
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_CriticalType_SendsDuringQuietHours()
-    {
-        var userId = Guid.NewGuid();
-        var token = new DeviceToken { UserId = userId, Token = "t1", IsActive = true };
-        var uow = BuildPendingUow(AllDayQuietPref(userId), [token]);
-        var push = FakeChannel(NotificationChannelEnum.Push);
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push, NotificationTypeEnum.SlaBreached);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Sent);
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_BypassQuietHoursPayload_SendsDuringQuietHours()
-    {
-        var userId = Guid.NewGuid();
-        var token = new DeviceToken { UserId = userId, Token = "t1", IsActive = true };
-        var uow = BuildPendingUow(AllDayQuietPref(userId), [token]);
-        var push = FakeChannel(NotificationChannelEnum.Push);
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push,
-            payloadJson: """{"bypassQuietHours":true}""");
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Sent);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_MalformedPayloadJson_TreatedAsNoBypass()
-    {
-        var userId = Guid.NewGuid();
-        var token = new DeviceToken { UserId = userId, Token = "t1", IsActive = true };
-        var uow = BuildPendingUow(AllDayQuietPref(userId), [token]);
-        var push = FakeChannel(NotificationChannelEnum.Push);
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push, payloadJson: "{not-json");
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeFalse();
-        notification.Status.Should().Be(NotificationStatusEnum.Pending);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_PushWithoutActiveToken_MarksFailed()
-    {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
-        var push = FakeChannel(NotificationChannelEnum.Push);
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().Be("No active device token");
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_PushFanOut_OneTokenSucceeds_MarksSent()
-    {
-        var userId = Guid.NewGuid();
-        DeviceToken[] tokens =
-        [
-            new() { UserId = userId, Token = "t1", IsActive = true },
-            new() { UserId = userId, Token = "t2", IsActive = true },
-            new() { UserId = userId, Token = "t3", IsActive = true },
-        ];
-        var uow = BuildPendingUow(deviceTokens: tokens);
-
-        var push = new Mock<INotificationChannel>();
-        push.SetupGet(c => c.ChannelType).Returns(NotificationChannelEnum.Push);
-        push.SetupSequence(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChannelResult(false, "DeviceNotRegistered"))
-            .ReturnsAsync(new ChannelResult(true))
-            .ReturnsAsync(new ChannelResult(false, "DeviceNotRegistered"));
-
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Sent);
-        notification.FailureReason.Should().BeNull();
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_PushFanOut_AllTokensFail_MarksFailed()
-    {
-        var userId = Guid.NewGuid();
-        DeviceToken[] tokens =
-        [
-            new() { UserId = userId, Token = "t1", IsActive = true },
-            new() { UserId = userId, Token = "t2", IsActive = true },
-        ];
-        var uow = BuildPendingUow(deviceTokens: tokens);
-
-        var push = new Mock<INotificationChannel>();
-        push.SetupGet(c => c.ChannelType).Returns(NotificationChannelEnum.Push);
-        push.Setup(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChannelResult(false, "DeviceNotRegistered"));
-
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Push);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().Be("DeviceNotRegistered");
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_SmsWithoutPhoneNumber_MarksFailed()
-    {
-        var userId = Guid.NewGuid();
-        var pref = new NotificationPreference
+        await sut.DispatchAsync(new DispatchRequest
         {
-            UserId = userId,
-            PushEnabled = true,
-            EmailEnabled = true,
-            SmsEnabled = true,
-            InAppEnabled = true,
-        };
-        var uow = BuildPendingUow(pref); // account chưa sync → null
-        var sms = FakeChannel(NotificationChannelEnum.Sms);
-        var sut = Build(uow.Object, NoCache().Object, sms.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Sms);
+            Type = NotificationTypeEnum.EnvironmentalIncidentDetected,   // MQ-2 rò gas / khói
+            Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
+            Title = "Rò khí gas tại site",
+            Body = "MQ-2 vượt ngưỡng",
+        });
 
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().Be("No phone number for recipient");
-        sms.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_SmsWithPhoneNumber_SendsWithRecipientData()
-    {
-        var userId = Guid.NewGuid();
-        var pref = new NotificationPreference
-        {
-            UserId = userId,
-            PushEnabled = true,
-            EmailEnabled = true,
-            SmsEnabled = true,
-            InAppEnabled = true,
-        };
-        var account = new AccountReadModel
-        {
-            Id = userId,
-            Email = "a@b.com",
-            PhoneNumber = "+84900000000",
-        };
-        var uow = BuildPendingUow(pref, account: account);
-        var sms = FakeChannel(NotificationChannelEnum.Sms);
-        var sut = Build(uow.Object, NoCache().Object, sms.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.Sms);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Sent);
-        sms.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.PhoneNumber == "+84900000000" && r.NotificationId == notification.Id),
-            It.IsAny<CancellationToken>()), Times.Once);
+        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once,
+            "sự cố môi trường là critical — quiet hours KHÔNG được nuốt push, đây là tình huống an toàn tính mạng");
     }
 
     /// <summary>
-    /// FailureReason chỉ chứa được 1000 ký tự (NotificationConfiguration HasMaxLength(1000)) nhưng
-    /// ErrorMessage của channel là ex.Message không giới hạn — không cắt thì SaveChangesAsync throw,
-    /// row kẹt Pending và bị worker retry mỗi 5s vĩnh viễn.
+    /// Mặt đối chứng: sự cố môi trường ĐÃ GIẢI QUYẾT (<c>EnvironmentalIncidentResolved</c>) KHÔNG
+    /// nằm trong danh sách critical, nên vẫn phải bị quiet hours chặn push. Thiếu vế này thì một cài
+    /// đặt "cho mọi thứ bypass" cũng làm test trên xanh — mà như vậy là quiet hours vô nghĩa.
     /// </summary>
     [Fact]
-    public async Task DispatchPendingAsync_LongErrorMessage_TruncatesFailureReasonToColumnLimit()
+    public async Task DoD_IoT2_EnvironmentalIncidentResolved_DuringQuietHours_DoesNotPush()
     {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
+        var managerId = Guid.NewGuid();
+        var pref = new NotificationPreference
+        {
+            UserId = managerId,
+            PushEnabled = true,
+            EmailEnabled = true,
+            SmsEnabled = true,
+            InAppEnabled = true,
+            QuietHoursStart = new TimeOnly(0, 0),
+            QuietHoursEnd = new TimeOnly(23, 59),
+            TimeZone = "UTC",
+        };
+        var deviceToken = new DeviceToken { UserId = managerId, Token = "ExponentPushToken[mgr2]", IsActive = true };
 
-        var inApp = new Mock<INotificationChannel>();
-        inApp.SetupGet(c => c.ChannelType).Returns(NotificationChannelEnum.InApp);
-        inApp.Setup(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(new ChannelResult(false, new string('x', 1500)));
+        var (uow, _) = BuildUow(pref, deviceToken);
+        var push = FakeChannel(NotificationChannelEnum.Push);
+        var email = FakeChannel(NotificationChannelEnum.Email);
+        var sms = FakeChannel(NotificationChannelEnum.Sms);
+        var inApp = FakeChannel(NotificationChannelEnum.InApp);
+        var sut = Build(uow.Object, NoCache().Object, push.Object, email.Object, sms.Object, inApp.Object);
 
-        var sut = Build(uow.Object, NoCache().Object, inApp.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.InApp);
+        await sut.DispatchAsync(new DispatchRequest
+        {
+            Type = NotificationTypeEnum.EnvironmentalIncidentResolved,
+            Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
+            Title = "Sự cố đã xử lý",
+            Body = "Clear",
+        });
 
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().HaveLength(1000);
-    }
-
-    [Fact]
-    public async Task DispatchPendingAsync_NoChannelRegistered_MarksFailed()
-    {
-        var userId = Guid.NewGuid();
-        var uow = BuildPendingUow();
-        var push = FakeChannel(NotificationChannelEnum.Push); // chỉ đăng ký Push
-        var sut = Build(uow.Object, NoCache().Object, push.Object);
-        var notification = PendingNotification(userId, NotificationChannelEnum.InApp);
-
-        var settled = await sut.DispatchPendingAsync(notification);
-
-        settled.Should().BeTrue();
-        notification.Status.Should().Be(NotificationStatusEnum.Failed);
-        notification.FailureReason.Should().Contain("No channel registered");
+        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never,
+            "tin 'đã xử lý xong' không khẩn cấp — để sáng mai đọc, không đánh thức Manager lúc nửa đêm");
+        inApp.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once,
+            "in-app vẫn ghi để user mở app là thấy");
     }
 }

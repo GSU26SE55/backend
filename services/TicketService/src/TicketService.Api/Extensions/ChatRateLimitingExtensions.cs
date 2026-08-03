@@ -39,7 +39,7 @@ public static class ChatRateLimitingExtensions
                         partitionKey: $"customer:{ticketId}:{userId}",
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 10,
+                            PermitLimit = 30,
                             Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                             QueueProcessingOrder = QueueProcessingOrder.OldestFirst
@@ -52,7 +52,7 @@ public static class ChatRateLimitingExtensions
                         partitionKey: $"manager:{userId}",
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 60,
+                            PermitLimit = 90,
                             Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                             QueueProcessingOrder = QueueProcessingOrder.OldestFirst
@@ -64,7 +64,7 @@ public static class ChatRateLimitingExtensions
                     partitionKey: $"staff:{userId}",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 30,
+                        PermitLimit = 60,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst

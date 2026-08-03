@@ -13,7 +13,7 @@ public class TicketDeclareIncidentCommandHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _unitOfWorkMock;
     private readonly Mock<IGenericRepository<Ticket>> _ticketRepositoryMock;
-    private readonly Mock<IMessageProducerService> _producerMock;
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriterMock;
     private readonly Mock<IActivityLogger> _activityLoggerMock;
     private readonly TicketDeclareIncidentCommandHandler _handler;
 
@@ -21,12 +21,12 @@ public class TicketDeclareIncidentCommandHandlerTests
     {
         _unitOfWorkMock = new Mock<ITicketUnitOfWork>();
         _ticketRepositoryMock = new Mock<IGenericRepository<Ticket>>();
-        _producerMock = new Mock<IMessageProducerService>();
+        _outboxWriterMock = new Mock<IIntegrationEventOutboxWriter>();
         _activityLoggerMock = new Mock<IActivityLogger>();
 
         _unitOfWorkMock.Setup(u => u.Tickets).Returns(_ticketRepositoryMock.Object);
 
-        _handler = new TicketDeclareIncidentCommandHandler(_unitOfWorkMock.Object, _producerMock.Object, _activityLoggerMock.Object);
+        _handler = new TicketDeclareIncidentCommandHandler(_unitOfWorkMock.Object, _outboxWriterMock.Object, _activityLoggerMock.Object);
     }
 
     [Fact]
@@ -48,6 +48,7 @@ public class TicketDeclareIncidentCommandHandlerTests
         {
             TicketId = ticketId,
             UserId = userId,
+            UserDisplayName = "Nguyễn Văn Manager",
             IncidentDescription = "Serious issue"
         };
 
@@ -65,7 +66,7 @@ public class TicketDeclareIncidentCommandHandlerTests
             ticketId,
             userId,
             ActorRoleEnum.Manager,
-            "Manager",
+                "Nguyễn Văn Manager",
             ActivityActionEnum.IncidentDeclared,
             null,
             null,

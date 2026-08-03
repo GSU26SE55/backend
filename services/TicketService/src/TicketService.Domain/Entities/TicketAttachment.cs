@@ -6,6 +6,7 @@ namespace TicketService.Domain.Entities;
 public class TicketAttachment : AuditableEntity
 {
     public Guid TicketId { get; set; }
+    public Guid? SourceTicketId { get; set; }
     public Guid UploadedByUserId { get; set; }
     public Guid FileId { get; set; }
     public required string FileName { get; set; }

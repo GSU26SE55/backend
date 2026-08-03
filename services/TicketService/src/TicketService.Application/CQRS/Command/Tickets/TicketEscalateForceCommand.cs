@@ -22,6 +22,7 @@ public class TicketEscalateForceCommand : IRequest<TicketActionResponse>, IValid
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+
     /// <summary>
     /// Tên của Manager.
     /// </summary>

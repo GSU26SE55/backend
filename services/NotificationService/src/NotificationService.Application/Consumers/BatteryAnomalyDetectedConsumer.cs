@@ -9,8 +9,17 @@ using SharedContracts.Interfaces;
 namespace NotificationService.Application.Consumers;
 
 /// <summary>
-/// GH-107 — Bất thường pin được phát hiện → notify Customer sở hữu pin (CustomerId có sẵn trong event).
-/// Channel InApp + Push. (TicketService cũng consume event này để auto-tạo ticket — pub-sub độc lập.)
+/// GH-107 — Bất thường pin CRITICAL được phát hiện → notify Customer sở hữu pin
+/// (CustomerId có sẵn trong event). TicketService cũng consume event này để auto-tạo ticket —
+/// pub-sub độc lập.
+///
+/// Sprint 6.2 NOTI-08 (#679) — bổ sung Email + SMS ngoài InApp + Push, đúng spec §3.4 T#13
+/// ("Customer nhận InApp+Push+Email+SMS", SMS theo preference). Trước đó chỉ ghi InApp + Push
+/// (reviewnotification.md §4.3). Việc tôn trọng preference (SmsEnabled/EmailEnabled), quiet hours
+/// và thiếu email/số điện thoại đã do <c>NotificationDispatcher</c> xử lý ở tầng gửi —
+/// record ghi ra ở đây chỉ là "ý định gửi".
+///
+/// Mức Warning/Info đi qua <see cref="BatteryAnomalyWarningConsumer"/> (event riêng, không đẻ ticket).
 /// </summary>
 public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
 {
@@ -59,7 +68,7 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
         });
 
         await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.InAppPush,
+            _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.AllChannels,
             title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
     }
 }

@@ -2,67 +2,77 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Idempotency;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.BackgroundJobs;
 
-public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
+/// <summary>Escalates an eligible ticket once after the SLA timer has atomically breached.</summary>
+public sealed class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IInboxStore _inboxStore;
 
     public EscalationBackgroundService(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer)
-    {
-        _uow = uow;
-        _stateMachine = stateMachine;
-        _activityLogger = activityLogger;
-        _producer = producer;
-    }
+        IIntegrationEventOutboxWriter outboxWriter,
+        IInboxStore inboxStore)
+        => (_uow, _stateMachine, _activityLogger, _outboxWriter, _inboxStore) =
+            (uow, stateMachine, activityLogger, outboxWriter, inboxStore);
 
     public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
     {
-        var message = context.Message;
-
-        var ticket = await _uow.Tickets.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.Id == message.TicketId && !t.IsDeleted, context.CancellationToken);
-
-        if (ticket == null)
-            return;
-
-        // Per design: P1/P2 breach -> auto escalate. P3 -> only log
-        if (ticket.Priority == TicketPriorityEnum.P1Critical || ticket.Priority == TicketPriorityEnum.P2High)
+        await context.ProcessOnceAsync(_inboxStore, nameof(EscalationBackgroundService), async () =>
         {
-            if (ticket.Status == TicketStatusEnum.Escalated)
-                return;
-
-            ticket.EscalationReason = EscalationReasonEnum.SlaBreach;
-            ticket.EscalatedAt = DateTime.UtcNow;
-
-            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
+            await _uow.ExecuteInTransactionAsync(async ct =>
             {
-                ActorUserId = Guid.Empty, // System
-                ActorRole = ActorRoleEnum.System, // System Actor
-                ActorDisplayName = "System (SLA Breach)",
-                Payload = new Dictionary<string, object?> { { "EscalationReason", EscalationReasonEnum.SlaBreach }, { "BreachedAt", message.BreachedAt } }
+                var ticket = await _uow.Tickets.GetAllAsync()
+                    .FirstOrDefaultAsync(x => x.Id == context.Message.TicketId && !x.IsDeleted, ct);
+                if (ticket is null || ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate ||
+                    ticket.Status is not (TicketStatusEnum.Assigned or TicketStatusEnum.InProgress or TicketStatusEnum.Escalated))
+                    return;
+
+                var nextPriority = ticket.Priority switch
+                {
+                    TicketPriorityEnum.P3Normal => TicketPriorityEnum.P2High,
+                    TicketPriorityEnum.P2High => TicketPriorityEnum.P1Critical,
+                    _ => (TicketPriorityEnum?)null
+                };
+                if (nextPriority is null)
+                    return;
+
+                var oldPriority = ticket.Priority;
+                ticket.Priority = nextPriority.Value;
+                ticket.EscalationReason = EscalationReasonEnum.SlaBreach;
+                ticket.EscalatedAt = DateTime.UtcNow;
+
+                if (ticket.Status != TicketStatusEnum.Escalated)
+                {
+                    await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
+                    {
+                        ActorUserId = Guid.Empty,
+                        ActorRole = ActorRoleEnum.System,
+                        ActorDisplayName = "System (SLA Breach)",
+                        Payload = new Dictionary<string, object?> { ["EscalationReason"] = EscalationReasonEnum.SlaBreach, ["BreachedAt"] = context.Message.BreachedAt }
+                    }, ct);
+                }
+
+                _uow.Tickets.UpdateAsync(ticket);
+                await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System",
+                    ActivityActionEnum.Escalated, oldValue: oldPriority?.ToString(), newValue: nextPriority.Value.ToString(), reason: "SLA breached");
+                await _outboxWriter.WriteAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code,
+                    (int)EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), ct);
+                await _uow.SaveChangesAsync(ct);
             }, context.CancellationToken);
-
-            await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: EscalationReasonEnum.SlaBreach.ToString(), reason: "SLA breached");
-
-            // Outbox: Ticket Escalated
-            await _producer.PublishAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code, (int)EscalationReasonEnum.SlaBreach, "SLA breached", null, "System"), context.CancellationToken);
-
-            await _uow.SaveChangesAsync(context.CancellationToken);
-        }
+        });
     }
 }

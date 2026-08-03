@@ -17,7 +17,7 @@ public class TicketTriageCommandHandlerTests
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IPriorityCalculator> _priorityCalc = new();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     #region Happy Path
     [Fact]
@@ -50,21 +50,21 @@ public class TicketTriageCommandHandlerTests
         _priorityCalc.Setup(x => x.Calculate(ImpactScopeEnum.Site, UrgencyLevelEnum.High))
             .Returns(TicketPriorityEnum.P1Critical);
 
-        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Approved);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
         ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         ticket.ImpactScope.Should().Be(ImpactScopeEnum.Site);
         ticket.UrgencyLevel.Should().Be(UrgencyLevelEnum.High);
 
-        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Approved, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Open, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager A", ActivityActionEnum.TriageApproved, It.IsAny<string>(), It.IsAny<string>(), "Urgent site issue"), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -88,7 +88,7 @@ public class TicketTriageCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -97,7 +97,7 @@ public class TicketTriageCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         _priorityCalc.Verify(x => x.Calculate(It.IsAny<ImpactScopeEnum>(), It.IsAny<UrgencyLevelEnum>()), Times.Never);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketStatusChangedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
     #endregion
@@ -112,10 +112,10 @@ public class TicketTriageCommandHandlerTests
         var command = new TicketTriageCommand { TicketId = ticketId };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
-        _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Approved, It.IsAny<ActorRoleEnum>(), It.IsAny<Guid>()))
+        _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Open, It.IsAny<ActorRoleEnum>(), It.IsAny<Guid>()))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Ticket is closed" });
 
-        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -132,7 +132,7 @@ public class TicketTriageCommandHandlerTests
         var command = new TicketTriageCommand { TicketId = Guid.NewGuid() };
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: Enumerable.Empty<Ticket>());
 
-        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _producer.Object);
+        var handler = new TicketTriageCommandHandler(uow.Object, _stateMachine.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.StatusCode.Should().Be(404);

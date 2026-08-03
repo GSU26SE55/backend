@@ -4,6 +4,16 @@
 > Content-Type mặc định: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>` — xem phần [Cấu trúc Response chung](#cấu-trúc-response-chung)
 
+> **Đối chiếu code 2026-08-02 (rà 2 lượt):** **83/83 route khớp** codebase (không thiếu, không thừa; `POST /api/auth/google` trong code là **code đã comment**, không phải endpoint sống). Lượt 2 sửa thêm: bổ sung field **`skillTier`** vào `StaffAssignmentProfileDto` (bảng cũ thiếu đúng field mà doc trỏ tới), và làm rõ **Nhóm 7 — Roles** phân quyền theo từng endpoint (**Manager đọc được** danh sách/chi tiết role, chỉ Admin mới ghi). `AuditActionEnum` (58 giá trị, đánh số thưa 1–13/20–26/40–44/50–51/60–68/80–83/90–98/110–113/120–122/130–131) và các enum `AccountStatusEnum`, `OtpPurposeEnum`, `RoleStatusEnum`, `AvatarSourceEnum`, `StaffSkillTierEnum` **khớp 100%**. Sửa 1 chỗ: tham chiếu tới `GET /api/accounts/me` — endpoint **không tồn tại**, dùng **`GET /api/auth/me`**.
+>
+> ⚠️ **`AccountStatusEnum` của AuthService bắt đầu từ `0`** (`PendingVerification = 0`, `Active = 1`, …) — khác `AccountStatusEnum` của **TicketService** (read-model, bắt đầu từ `1`: `PendingVerification = 1`, `Active = 2`, …). Hai enum **cùng tên nhưng lệch 1 giá trị**; đừng dùng chung một bảng tra ở FE. Giá trị FE nhận từ AuthService luôn theo bảng 0-based dưới đây.
+>
+> 🐛 **Bẫy đã biết (chưa phát sinh lỗi thật):** `TicketAccountStatusChangedConsumer` cast thẳng
+> `(AccountStatusEnum)@event.NewStatus` từ `AccountStatusChangedEvent` — do 2 enum lệch 1, cast này sẽ
+> **sai một bậc** (`Active=1` của Auth thành `PendingVerification=1` của Ticket). Hiện **vô hại vì
+> `AccountStatusChangedEvent` chưa có producer nào** trong AuthService (rà toàn repo 2026-08-02: 0 chỗ publish).
+> Ai nối producer sau này **phải map tường minh**, không cast trực tiếp.
+
 ---
 
 ## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
@@ -2807,8 +2817,11 @@ Authorization: Bearer {accessToken}
 | `department` | `string?` | Null nếu chưa gán | Phòng ban |
 | `maxConcurrentTickets` | `int` | Không | Số ticket tối đa |
 | `isAvailable` | `bool` | Không | Đang sẵn sàng không |
+| `skillTier` | `int` | Không | Tier kỹ năng (`StaffSkillTierEnum`: `1` Generalist · `2` ModuleSpecialist · `3` SeniorSpecialist). **Kiểu `int` chứ không phải chuỗi enum.** TicketService dùng field này để chặn gán Staff không đủ tier ở `POST /api/admin/tickets/{id}/assign` |
 | `displayAvatarUrl` | `string?` | Null nếu không có avatar | URL avatar FE nên render |
 | `skills` | `StaffSkillDto[]` | Không | Danh sách kỹ năng |
+
+> ⚠️ **Bổ sung 2026-08-02:** bảng cũ **thiếu `skillTier`** — chính là field mà ghi chú ở `StaffProfileDto` bảo "nếu cần tier thì gọi endpoint này".
 
 ---
 
@@ -3059,7 +3072,9 @@ Base route: `/api/admin/accounts`
 
 **Path param:** `id` — Guid của tài khoản
 
-**Response thành công `200`:** `data` là `AccountDto` đầy đủ (cùng shape với `GET /api/accounts/me`), bao gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
+**Response thành công `200`:** `data` là `AccountDto` đầy đủ (cùng shape với `GET /api/auth/me`), bao gồm `profile`, `staffProfile` nếu có, và `displayAvatarUrl`.
+
+> ⚠️ Doc cũ tham chiếu `GET /api/accounts/me` — endpoint đó **không tồn tại**. Lấy account của chính mình qua **`GET /api/auth/me`** (hoặc `GET /api/accounts/me/profile` nếu chỉ cần profile).
 
 **Lỗi thường gặp:**
 - `400` — `id` không hợp lệ (không phải Guid)
@@ -3566,7 +3581,14 @@ Base route: `/api/admin/staff`
 ## Nhóm 7 — Admin: Roles
 
 Base route: `/api/admin/roles`
-**Auth:** Admin
+**Auth:** phân quyền **theo từng endpoint** (controller không có `[Authorize]` cấp class, mỗi action tự khai):
+
+| Endpoint | Role được phép |
+|---|---|
+| `GET /api/admin/roles` · `GET /api/admin/roles/{id}` | **Admin hoặc Manager** (đọc) |
+| `POST` · `PUT /{id}` · `PATCH /{id}/status` · `DELETE /{id}` | **Chỉ Admin** (ghi) |
+
+> ⚠️ **Sửa 2026-08-02:** doc cũ ghi gọn "Auth: Admin" cho cả nhóm — **Manager cũng đọc được** danh sách và chi tiết role (`[Authorize(Roles = "Admin,Manager")]` trên 2 action GET).
 
 ---
 
@@ -4420,7 +4442,7 @@ Pipeline (`Program.cs` line 130-148):
 
 ```
 HTTPS redirection (skip nếu env=Docker)
-  → CORS "AllowAll"
+  → CORS "AppCors"   (đổi tên 2026-08-01, trước là "AllowAll")
   → Rate limiter (per-endpoint policies)
   → JwtBearer Authentication
   → TokenRevocationMiddleware (#AUTH-54)
@@ -4470,15 +4492,56 @@ Mọi entity extend `AuditableEntity` (Account, Role, Permission, RolePermission
 - Repository `GetAllAsync()` mặc định KHÔNG filter `IsDeleted` (project không dùng global query filter, xem `CLAUDE.md`) → handler PHẢI explicit `.Where(x => !x.IsDeleted)`.
 - Reactivate flow (`/reactivate-request`/`/reactivate-verify`) dùng `IgnoreQueryFilters()` để bypass — nhưng project không có global query filter nên `IgnoreQueryFilters()` ở reactivate handler thực ra **no-op**. Vẫn safe vì code logic check `IsDeleted = true` explicit.
 
-### CORS policy `"AllowAll"`
+### CORS policy `"AppCors"` — ĐÃ SỬA `#AUTH-05` (2026-08-01)
 
-Hiện tại config CORS = **AllowAll** — permissive cho mọi origin/method/header. **Production lock down** qua config:
-- Whitelist origins (vd `https://app.solarbattery.com`, `https://admin.solarbattery.com`)
-- Allow methods: `GET, POST, PUT, PATCH, DELETE`
-- Allow headers: `Authorization, Content-Type, Idempotency-Key, X-Challenge-Token, X-Correlation-Id`
-- Allow credentials: `true` (cho cookie-based auth nếu có)
+> ⚠️ **Mục này trước đây mô tả `AllowAll` và xếp vào "cần lock down cho production". Lỗ hổng đó đã
+> được vá.** Tên policy đổi từ `"AllowAll"` → **`"AppCors"`** (`AddCORS.PolicyName`).
 
-> **SECURITY review checkpoint**: AllowAll cho mọi cross-origin browser request bypass được CORS, nhưng KHÔNG bypass được auth (vẫn cần `Authorization` header). Tuy vậy enable cross-origin malicious sites đọc response 401/403 → có thể infer user state.
+`AddCorsExtentions(configuration, environment)` đọc danh sách origin từ config `Cors:AllowedOrigins`:
+
+| Môi trường | `Cors:AllowedOrigins` | Hành vi |
+|---|---|---|
+| Bất kỳ | **có giá trị** | `WithOrigins(<danh sách>)` + `AllowAnyMethod()` + `AllowAnyHeader()` + `AllowCredentials()`. Origin ngoài danh sách **bị chặn** |
+| `Development` | rỗng | Vẫn cho **mọi** origin (để FE chạy cổng bất kỳ) + in cảnh báo ra console |
+| `Production` | rỗng | **NÉM `InvalidOperationException` — service TỪ CHỐI KHỞI ĐỘNG** |
+
+**Vì sao ném chứ không chỉ log:** cảnh báo trong log thì không ai đọc, và lỗ hổng P0 sẽ sống tiếp.
+Thà service không lên còn hơn lên với CORS mở toang.
+
+**Cách khai** — biến môi trường dạng mảng (xem `.env.Docker`):
+
+```
+Cors__AllowedOrigins__0=https://app.solarbattery.site
+Cors__AllowedOrigins__1=https://admin.solarbattery.site
+```
+
+**Ba điều dễ vấp:**
+
+- **Dấu `/` cuối được tự cắt khi nạp.** `https://x.com/` và `https://x.com` là cùng một origin, nhưng
+  `WithOrigins` so khớp **chuỗi nguyên văn** — không cắt là whitelist trượt mà không có thông báo nào.
+- **Origin phân biệt scheme và cổng.** `http://app.x` ≠ `https://app.x`; `https://app.x:3000` ≠ `https://app.x`.
+  FE chạy cổng khác ở staging thì phải khai riêng dòng cho cổng đó.
+- **Method và header vẫn mở hoàn toàn** (`AllowAnyMethod` + `AllowAnyHeader`). Việc siết nằm ở **origin**,
+  không ở method/header — không cần liệt kê `Authorization`, `Idempotency-Key`, `X-Correlation-Id`… vào đâu cả.
+
+**Chốt ở tầng triển khai (2026-08-01):** `docker-compose.prod.yml` khai `Cors__AllowedOrigins__0`
+cho **8 service** (mọi service trừ `emailservice` — service này không dùng CORS) bằng cú pháp bắt buộc
+`${Cors__AllowedOrigins__0:?...}`. Thiếu khoá thì **`docker compose up` DỪNG NGAY** kèm thông báo,
+thay vì để 8 container khởi động rồi cùng crash-loop. Giá trị đặt trong `/opt/solar/.env.prod`.
+
+**Còn treo:** danh sách domain production thật do **Leader chốt** rồi điền vào biến môi trường.
+Phần cơ chế đã xong và có 5 test bao ở
+`shared/tests/SharedInfrastructure.UnitTests/DependencyInjection/CorsExtensionsTests.cs`.
+
+> ⚠️ **ApiGateway từng bị bỏ sót và đã sửa 2026-08-01.** Gateway KHÔNG gọi `AddSharedInfrastructure`
+> nên không tự có policy; nó tự khai một policy tên `"AllowAll"` riêng. Khi `app.UseCors(...)` đổi
+> sang `AddCORS.PolicyName` (`"AppCors"`) thì tên không khớp ⇒ `CorsMiddleware` ném
+> `InvalidOperationException: The CORS policy 'AppCors' was not found` trên **mọi request** qua cửa
+> trước của hệ thống. Nay gateway gọi thẳng `AddCorsExtentions(builder.Configuration, builder.Environment)`
+> — cùng whitelist với 7 service phía sau.
+
+> Bộ test cũ của file này từng khẳng định "mọi origin đều được phép" — tức nó **đang bảo vệ chính lỗ
+> hổng cần sửa**. Đã viết lại.
 
 ### Debug console output trong production code
 
@@ -4785,7 +4848,7 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 6. **`Redis:ConnectionString`** reachable từ pod — verify qua `/ready` probe.
 7. **`RabbitMQ:*`** config + reachable — verify qua `/ready`.
 8. **`Outbox:PollIntervalSeconds`** = 2 (production), có thể tăng cho dev.
-9. **CORS** policy không phải `AllowAll` cho production — whitelist origins cụ thể.
+9. **`Cors__AllowedOrigins__0..n`** — **BẮT BUỘC ở Production**. Thiếu là service **ném ngay lúc khởi động**, không phải cảnh báo. Đây là chốt tự động của `#AUTH-05`, không còn là mục "nhớ siết bằng tay".
 10. **DataProtection key store** persist (Redis/file mount) — TRÁNH user bị mất 2FA sau restart.
 11. **`Idempotency:Enabled`** = true cho production.
 12. **`Session:MaxConcurrentSessions`** = 5 (default) hoặc theo policy.
@@ -4804,16 +4867,101 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 
 | Event | Payload fields | Published bởi handler | Consumed bởi (downstream) |
 |---|---|---|---|
-| `SendOtpRegisterEvent` | `ToEmail`, `Otp` | `RegisterCommandHandler`, `ResendOtpCommandHandler` | NotificationService (gửi email) |
-| `SendPasswordResetOtpEvent` | `ToEmail`, `Otp` | `ForgotPasswordCommandHandler`, `ResendResetOtpCommandHandler`, **`ReactivateRequestCommandHandler`** (re-use enum) | NotificationService |
-| `SendEmailChangeOtpEvent` | `ToNewEmail`, `Otp` | `ChangeEmailCommandHandler` | NotificationService → gửi tới email **mới** |
+| `SendOtpRegisterEvent` | `ToEmail`, `Otp` | `RegisterCommandHandler`, `ResendOtpCommandHandler` | **EmailService** → `SendOtpRegisterConsumer` (template `OtpRegister.html`) |
+| `SendPasswordResetOtpEvent` | `ToEmail`, `Otp` | `ForgotPasswordCommandHandler`, `ResendResetOtpCommandHandler`, **`ReactivateRequestCommandHandler`** (re-use enum) | **EmailService** → `SendPasswordResetOtpConsumer` (template **`OtpPasswordReset.html`** — mới có từ Sprint 6.2 NOTI-09) |
+| `SendEmailChangeOtpEvent` | `ToNewEmail`, `Otp` | `ChangeEmailCommandHandler` | **EmailService** → `SendEmailChangeOtpConsumer`, gửi tới email **mới** (template **`OtpEmailChange.html`** — mới có từ Sprint 6.2 NOTI-09) |
 | `SendSmsCommand` | `PhoneNumber`, `Message`, `SourceService`, `CorrelationId`, `Category` | `Request2FASmsCommandHandler` (`category="2fa_sms"`), `SendPhoneOtpCommandHandler` (`category="phone_verify"`) | SmsService |
-| `SendAdminInviteEvent` | (admin invite details + token) | `InviteAccountCommandHandler` | NotificationService → gửi email invite |
-| `AccountActivatedEvent` | `AccountId`, `Email`, `FullName`, `PhoneNumber`, `Role`, `CreationSource` | `VerifyOtpCommandHandler` (`SelfRegister`), `AcceptInviteCommandHandler` (`AdminInvite`), `GoogleAuthCommandHandler` (`GoogleOAuth`) | NotificationService (welcome email), UserDirectory sync |
-| `AccountDeletedEvent` | `AccountId`, `Email`, `DeletionSource` | `DeleteMeCommandHandler` (`SelfDelete`), `DeleteAccountCommandHandler` (`AdminDelete`) | NotificationService (confirm email), UserDirectory unsync |
-| `RefreshTokenReuseDetectedEvent` | `AccountId`, `ReusedTokenId`, `IpAddress`, `UserAgent`, `DetectedAt`, `RevokedFamilyCount` | `RefreshTokenCommandHandler` (#AUTH-79) | NotificationService (security alert email), Grafana |
-| `SuspiciousLoginDetectedEvent` | `AccountId`, `Email`, `IpAddress`, `UserAgent`, `Reason`, `DetectedAt` | `AuthTokenIssuer` (#AUTH-52, từ `LoginCommandHandler` + `Verify2FALoginCommandHandler`) | NotificationService (security alert) |
+| `SendAdminInviteEvent` | (admin invite details + token) | `InviteAccountCommandHandler` | **EmailService** → `SendAdminInviteConsumer` (template `AdminInvite.html`) |
+| `AccountActivatedEvent` | `AccountId`, `Email`, `FullName`, `PhoneNumber`, `Role`, `CreationSource` | `VerifyOtpCommandHandler` (`SelfRegister`), `AcceptInviteCommandHandler` (`AdminInvite`), `GoogleAuthCommandHandler` (`GoogleOAuth`) | NotificationService (`AccountActivatedConsumer` → in-app; `AccountActivatedSyncConsumer` → read-model) |
+| `AccountDeletedEvent` | `AccountId`, `Email`, `DeletionSource` | `DeleteMeCommandHandler` (`SelfDelete`), `DeleteAccountCommandHandler` (`AdminDelete`) | NotificationService (`AccountDeletedSyncConsumer` → xoá read-model) — ✅ **NOTI-17 (#688) đã verify 30/07/2026: publisher tồn tại thật ở cả 2 handler, consumer giữ nguyên, không phải orphan** |
+| `RefreshTokenReuseDetectedEvent` | `AccountId`, **`Email`** ⬅ *Sprint 6.2*, `ReusedTokenId`, `IpAddress`, `UserAgent`, `DetectedAt`, `RevokedFamilyCount` | `RefreshTokenCommandHandler` (#AUTH-79) | **EmailService** → `RefreshTokenReuseDetectedConsumer` (Sprint 6.2 NOTI-04), Grafana |
+| `SuspiciousLoginDetectedEvent` | `AccountId`, `Email`, `IpAddress`, `UserAgent`, `Reason`, `DetectedAt` | `AuthTokenIssuer` (#AUTH-52, từ `LoginCommandHandler` + `Verify2FALoginCommandHandler`) | **EmailService** → `SuspiciousLoginDetectedConsumer` (Sprint 6.2 NOTI-04) |
 | `StaffProfileUpdatedEvent` | (staff profile fields) | `UpdateStaffProfileCommandHandler` | TicketService (sync staff routing config), ManagerDashboard |
+
+> ⚠️ **Sửa 30/07/2026 — cột "Consumed bởi" của 5 event email trước đây ghi nhầm `NotificationService`.**
+> Toàn bộ email **giao dịch** (OTP đăng ký / đặt lại mật khẩu / đổi email / mời admin) đi thẳng
+> **AuthService → EmailService**, KHÔNG qua NotificationService. Chỉ email **thông báo nghiệp vụ**
+> (SLA, pin, chat, saga…) mới đi qua NotificationService rồi publish `SendNotificationEmailEvent`.
+
+#### Sprint 6.2 NOTI-09 (#680) — 2 template email thiếu, gây email SAI NGỮ CẢNH
+
+`EmailTemplates.OtpPasswordReset` và `EmailTemplates.OtpEmailChange` đã được tham chiếu trong code từ
+lâu, nhưng **2 file HTML tương ứng chưa tồn tại** trong
+`EmailService.Api/wwwroot/email-templates/`. Renderer không tìm thấy file ⇒ rơi về
+`OtpRegister.html`, nên:
+
+- user bấm **"Quên mật khẩu"** nhận email có nội dung **"đăng ký tài khoản"**;
+- user **đổi email** cũng nhận đúng email đó.
+
+Sai ngữ cảnh kiểu này **dễ bị nghi là phishing** và làm người dùng bỏ dở luồng.
+
+**Đã thêm:** `OtpPasswordReset.html`, `OtpEmailChange.html`.
+`SendEmailChangeOtpConsumer` truyền thêm placeholder **`PendingEmail` = `ToNewEmail`** để email hiển
+thị rõ địa chỉ đích — thiếu key này thì placeholder hiện nguyên văn trong thư gửi đi.
+
+> Ảnh hưởng tới endpoint: `POST /api/auth/forgot-password`, `POST /api/auth/resend-reset-otp`,
+> `POST /api/auth/reactivate-request` (dùng chung `SendPasswordResetOtpEvent`) và
+> `POST /api/accounts/me/change-email` (`SendEmailChangeOtpEvent`). **Contract REST không đổi** —
+> chỉ nội dung email user nhận được là đúng ngữ cảnh.
+
+#### Sprint 6.3 NOTI3-05 (#705) — `IEmailProvider`
+
+6 consumer email của EmailService nay phụ thuộc **`IEmailProvider`** thay vì lớp cụ thể
+`EmailSenderService`. Hành vi **không đổi** (Mailjet vẫn là hiện thực duy nhất, `ProviderName = "mailjet"`);
+mục đích là tách sẵn ranh giới để cắm provider thứ hai sau này chỉ cần đổi một dòng đăng ký DI, không
+phải mở lại business logic. Đăng ký:
+`builder.Services.AddTransient<IEmailProvider>(sp => sp.GetRequiredService<EmailSenderService>())`.
+
+Giới hạn ghi nhận có chủ đích (R-44): **Mailjet vẫn là single point of failure** — không mua provider
+thứ hai vì ngoài ngân sách đồ án.
+
+Interface có **2 overload `SendAsync`**: bản cũ (không header) và bản mới nhận
+`IReadOnlyDictionary<string,string>? headers` — dùng cho `List-Unsubscribe` (Sprint 6.3 NOTI3-15).
+Tách overload thay vì đổi chữ ký cũ để **6 consumer email giao dịch không phải sửa gì**, và để việc
+"email này có nút huỷ" là một quyết định hiện rõ ở chỗ gọi. Mailjet v3.1 nhận header tuỳ ý qua trường
+`Headers`; khi không có header, payload gửi đi **giữ nguyên như cũ**.
+
+> **Email giao dịch của AuthService (OTP, reset, đổi email, mời admin) KHÔNG có `List-Unsubscribe`** —
+> người dùng không thể "huỷ đăng ký" khỏi mã xác thực do chính họ yêu cầu. Chỉ email thông báo nghiệp
+> vụ đi qua NotificationService mới có.
+
+#### Sprint 6.2 NOTI-04 (#675) — cảnh báo bảo mật nay THỰC SỰ tới hộp thư user
+
+**Trước sprint này:** `AuthTokenIssuer` phát hiện login từ IP/User-Agent lạ (đối chiếu 50 session gần
+nhất) và `RefreshTokenCommandHandler` phát hiện replay attack — cả hai publish event đúng, đã revoke
+token đúng — nhưng **KHÔNG service nào consume**. Công detect bỏ đi: nạn nhân chỉ thấy mình "bị
+logout" không rõ lý do và **mất cơ hội đổi mật khẩu kịp thời**.
+
+| Event | Consumer mới (EmailService) | Template | Tiêu đề email |
+|---|---|---|---|
+| `SuspiciousLoginDetectedEvent` | `SuspiciousLoginDetectedConsumer` | `SuspiciousLogin.html` | `[Cảnh báo bảo mật] Đăng nhập mới trên tài khoản của bạn - {AppName}` |
+| `RefreshTokenReuseDetectedEvent` | `RefreshTokenReuseDetectedConsumer` | `RefreshTokenReuse.html` | `[Cảnh báo bảo mật] Phiên đăng nhập đáng ngờ - {AppName}` |
+
+**Vì sao đi thẳng EmailService (không qua NotificationService):** đây là email **bảo mật**, phải tới
+ngay và **không được phụ thuộc preference / quiet hours / digest / hạn mức** của user. Cũng vì vậy
+**cố ý KHÔNG thêm giá trị `NotificationTypeEnum`** cho 2 loại này — tránh đẻ thêm enum không producer.
+
+**⚠️ Breaking — `RefreshTokenReuseDetectedEvent` thêm field `Email` (vị trí thứ 2):**
+record positional nên chữ ký constructor đổi. Lý do: EmailService **không có DB account** nên không
+tra ngược được địa chỉ từ `AccountId`. `RefreshTokenCommandHandler` nay truy vấn
+`Accounts.Where(a => a.Id == existing.AccountId && !a.IsDeleted).Select(a => a.Email)` trước khi
+publish; không tìm thấy → truyền `string.Empty` và consumer **bỏ qua + log Warning** (không gửi email
+mù). `SuspiciousLoginDetectedEvent` đã mang sẵn `Email` từ trước theo cùng lý do.
+
+**Dedup:** cả 2 consumer dùng Redis inbox `ProcessOnceAsync(IInboxStore, consumerName, …)` như 4
+consumer OTP (key `inbox:{consumerName}:{messageId:N}`, TTL 7 ngày).
+
+**Nội dung `Reason` được diễn giải sang tiếng Việt** trong email:
+
+| `reason` (event) | Hiển thị |
+|---|---|
+| `new_ip` | "địa chỉ IP lạ" |
+| `new_user_agent` | "thiết bị / trình duyệt lạ" |
+| `new_ip_and_user_agent` | "cả địa chỉ IP lẫn thiết bị đều lạ" |
+| khác / null | "dấu hiệu bất thường" |
+
+`DetectedAt` format `dd/MM/yyyy HH:mm:ss 'UTC'`. Email `RefreshTokenReuse` hiển thị thêm
+`RevokedSessions` = `RevokedFamilyCount` (số phiên bị thu hồi).
 
 ### Events CONSUMED bởi AuthService ← RabbitMQ
 
@@ -4836,7 +4984,7 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 | Event | Status | Note |
 |---|---|---|
 | `AccountStatusChangedEvent` | Defined nhưng unused | `ChangeAccountStatusCommandHandler` chỉ publish `AuditTrailNotification`, không publish event ra outbox. Downstream services muốn react tới status change phải poll DB hoặc dùng audit log subscription. |
-| `SendPhoneOtpEvent` | **Deprecated** | Code comment trong `SendPhoneOtpCommandHandler.cs:66` xác nhận: *"SendPhoneOtpEvent đã được xoá khỏi flow này — backward-compat"*. Hiện publish `SendSmsCommand` thay thế. |
+| `SendPhoneOtpEvent` | **Deprecated — nay hoàn toàn CHẾT** | Code comment trong `SendPhoneOtpCommandHandler.cs:66` xác nhận: *"SendPhoneOtpEvent đã được xoá khỏi flow này — backward-compat"*. Hiện publish `SendSmsCommand` thay thế. **Sprint 6.2 NOTI-15 (#686) đã xoá nốt 2 consumer backward-compat cuối cùng** (`SendPhoneOtpConsumer` ở SmsService và stub cùng tên ở EmailService) ⇒ event này giờ **không còn consumer nào**, publish sẽ bị RabbitMQ drop im lặng. |
 | `StaffSkillsUpdatedEvent` | Defined, không publish trong handler nào của AuthService hiện tại | Reserved cho future `AddStaffSkillCommandHandler` integration (chưa wire up). |
 | `SmsDeliveryReportEvent`, `SmsFailedEvent` | Defined trong SharedContracts | AuthService **không consume** — đây là events SmsService publish cho ManagerDashboard/CustomerNotification consumer. AuthService chỉ publish `SendSmsCommand` request. |
 

@@ -100,7 +100,7 @@ public class HandlebarsTemplateRendererTests
         var act = () => _renderer.Render("non-existent-template", new { });
 
         act.Should().Throw<InvalidOperationException>()
-           .WithMessage("*non-existent-template.hbs*");
+           .WithMessage("*non-existent-template.html*");
     }
 
     [Fact]

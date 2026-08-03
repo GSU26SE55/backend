@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -20,21 +21,24 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly IBatteryLookupClient _batteryLookup;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
-        IPublisher publisher)
+        IIntegrationEventOutboxWriter producer,
+        IPublisher publisher,
+        IBatteryLookupClient batteryLookup)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
+        _batteryLookup = batteryLookup;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
@@ -49,9 +53,23 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         if (customer.Status != AccountStatusEnum.Active)
             return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.");
 
+        var batterySerialNumbers = new Dictionary<Guid, string>();
+        foreach (var batteryAssetId in request.BatteryAssetIds)
+        {
+            var serialNumber = await _batteryLookup.GetSerialAsync(batteryAssetId, ct);
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                return Fail(403, "Pin được chọn không tồn tại hoặc bạn không có quyền truy cập.");
+
+            batterySerialNumbers[batteryAssetId] = serialNumber;
+        }
+
         var code = await _codeGenerator.GenerateAsync();
 
         var ticketId = Guid.NewGuid();
+        var primaryBatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty;
+
+        var batterySerialNumber = batterySerialNumbers[primaryBatteryAssetId];
+
         var ticket = new TicketEntity
         {
             Id = ticketId,
@@ -60,11 +78,13 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             Description = request.Description,
             Category = request.Category,
             CustomerId = request.CustomerId,
-            BatteryAssetId = request.BatteryAssetIds.Count > 0 ? request.BatteryAssetIds[0] : Guid.Empty,
-            Status = TicketStatusEnum.Open,
+            BatteryAssetId = primaryBatteryAssetId,
+            BatterySerialNumber = batterySerialNumber,
+            Status = TicketStatusEnum.New,
             Origin = TicketOriginEnum.ManualByCustomer,
             ReopenCount = 0,
-            IsIncident = false
+            IsIncident = false,
+            DetectedAt = request.IncidentDetectedAt
         };
 
         await _uow.Tickets.AddAsync(ticket);
@@ -76,6 +96,24 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
                 Id = Guid.NewGuid(),
                 TicketId = ticketId,
                 BatteryAssetId = batteryId
+            });
+        }
+
+        foreach (var attachment in request.Attachments)
+        {
+            await _uow.TicketAttachments.AddAsync(new TicketAttachment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                UploadedByUserId = request.CustomerId,
+                FileId = attachment.FileId,
+                FileName = attachment.FileName,
+                ContentType = attachment.ContentType,
+                SizeBytes = attachment.SizeBytes,
+                Url = attachment.Url,
+                Source = AttachmentSourceEnum.CustomerSubmission,
+                IsInline = false,
+                Ticket = ticket
             });
         }
 
@@ -94,8 +132,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             AddedAt = DateTime.UtcNow
         });
 
-        // Outbox: Ticket Created
-        await _producer.PublishAsync(new TicketCreatedEvent(ticket.Id, ticket.Code), ct);
+        await _outboxWriter.WriteAsync(
+            new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,

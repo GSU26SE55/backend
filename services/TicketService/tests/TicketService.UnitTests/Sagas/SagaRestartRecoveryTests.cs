@@ -37,6 +37,9 @@ public class SagaRestartRecoveryTests
                     new SharedInfrastructure.Services.CurrentUserService(new Microsoft.AspNetCore.Http.HttpContextAccessor())))
             .AddMassTransitTestHarness(x =>
             {
+                // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+                // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
                 x.AddSagaStateMachine<AlertTicketSagaStateMachine, AlertTicketSagaState>()
                     .EntityFrameworkRepository(r =>
                     {
@@ -61,14 +64,21 @@ public class SagaRestartRecoveryTests
             var harness1 = firstProvider.GetRequiredService<ITestHarness>();
             await harness1.Start();
 
-            await harness1.Bus.Publish(new BatteryAnomalyDetectedEvent(
+            // Sửa 2026-07-31: dùng V2 — `Initially` của saga chỉ nhận `BatteryAnomalyDetectedV2Event`
+            // (V1 bị bỏ khỏi Initially để tránh 2 message cùng AlertId tranh nhau tạo instance,
+            // xem comment trong AlertTicketSagaStateMachine). V1 nay chỉ được DuringAny dedup.
+            await harness1.Bus.Publish(new BatteryAnomalyDetectedV2Event(
                 AlertId: alertId,
                 BatteryAssetId: Guid.NewGuid(),
                 CustomerId: Guid.NewGuid(),
+                SiteId: Guid.NewGuid(),
                 AssetSerialNumber: "BMS-RR-1",
                 AnomalyType: 1, Severity: 3,
                 ThresholdValue: 60m, ActualValue: 75m, Unit: "C",
-                DetectedAt: DateTime.UtcNow));
+                DetectedAt: DateTime.UtcNow,
+                InternalResistanceMilliohm: null,
+                CellVoltageDeltaMv: null,
+                EnvironmentalIncidentId: null));
 
             var saga1 = harness1.GetSagaStateMachineHarness<AlertTicketSagaStateMachine, AlertTicketSagaState>();
             (await saga1.Exists(alertId, x => x.TicketRequested)).Should().NotBeNull();
@@ -133,11 +143,16 @@ public class SagaRestartRecoveryTests
             var h1 = provider1.GetRequiredService<ITestHarness>();
             await h1.Start();
 
-            await h1.Bus.Publish(new BatteryAnomalyDetectedEvent(
+            // Sửa 2026-07-31: V2 mới khởi tạo được saga (xem chú thích ở test trên).
+            await h1.Bus.Publish(new BatteryAnomalyDetectedV2Event(
                 AlertId: alertId, BatteryAssetId: Guid.NewGuid(), CustomerId: Guid.NewGuid(),
+                SiteId: Guid.NewGuid(),
                 AssetSerialNumber: "BMS-F", AnomalyType: 1, Severity: 3,
                 ThresholdValue: 60m, ActualValue: 75m, Unit: "C",
-                DetectedAt: DateTime.UtcNow));
+                DetectedAt: DateTime.UtcNow,
+                InternalResistanceMilliohm: null,
+                CellVoltageDeltaMv: null,
+                EnvironmentalIncidentId: null));
 
             var saga1 = h1.GetSagaStateMachineHarness<AlertTicketSagaStateMachine, AlertTicketSagaState>();
             await saga1.Exists(alertId, x => x.TicketRequested);

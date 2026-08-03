@@ -110,6 +110,15 @@ public class CrossSourceValidationService : ICrossSourceValidationService
 
                 await _unitOfWork.Alerts.AddAsync(new Alert
                 {
+                    // `BaseEntity.Id` KHÔNG có giá trị khởi tạo và `Alert.Id` KHÔNG được EF cấu hình
+                    // ValueGeneratedOnAdd ⇒ bỏ trống thì mọi Alert dựng trong vòng lặp đều mang
+                    // Guid.Empty. EF gom chúng vào cùng một khoá trong identity map và ném ngay ở lần
+                    // AddAsync thứ hai:
+                    //   "The instance of entity type 'Alert' cannot be tracked because another
+                    //    instance with the same key value for {'Id'} is already being tracked."
+                    // Quét ra đúng 1 mismatch thì không lộ; từ 2 trở lên là hỏng cả lượt quét.
+                    // Cùng khuôn với MqttBridgeBackgroundService + IotDeviceOfflineDetectionService.
+                    Id = Guid.NewGuid(),
                     BatteryAssetId = assetId,
                     SiteId = asset.SiteId,
                     AnomalyType = AnomalyTypeEnum.SensorMismatch,
