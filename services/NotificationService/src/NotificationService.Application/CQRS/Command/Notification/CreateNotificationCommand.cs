@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using MediatR;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Domain.Enums;
@@ -13,7 +12,27 @@ namespace NotificationService.Application.CQRS.Command.Notification;
 /// </summary>
 public class CreateNotificationCommand : IRequest<NotificationActionResponse>, IValidatable<NotificationActionResponse>
 {
-    [JsonIgnore]
+    /// <summary>
+    /// Người nhận notification (AccountId).
+    ///
+    /// <para>
+    /// <b>Sửa 30/07/2026 — gỡ <c>[JsonIgnore]</c>.</b> Trường này từng bị đánh <c>[JsonIgnore]</c>
+    /// (sao chép nhầm từ <c>MarkNotificationReadCommand</c>, nơi UserId lấy từ claim JWT), trong khi
+    /// <c>NotificationsController.Create</c> KHÔNG hề gán nó từ token. Hệ quả:
+    /// <c>POST /api/notifications</c> luôn tạo bản ghi với <c>UserId = Guid.Empty</c> ⇒ dispatch worker
+    /// đánh <c>Failed</c> với lý do <c>empty_user_id</c>, endpoint vô dụng cho đúng mục đích mà tài liệu
+    /// của chính nó mô tả ("test, backfill thủ công"). Phát hiện khi test E2E 30/07/2026.
+    /// </para>
+    /// <para>
+    /// Gỡ <c>[JsonIgnore]</c> KHÔNG ảnh hưởng 9 consumer đang dùng command này: chúng gán UserId bằng
+    /// code C# (<c>_mediator.Send(new CreateNotificationCommand { UserId = ... })</c>), mà thuộc tính
+    /// này chỉ chi phối việc deserialize JSON.
+    /// </para>
+    /// <para>
+    /// An toàn: endpoint gọi nó là <c>[Authorize(Roles = "Admin")]</c> — chỉ Admin chỉ định được
+    /// người nhận, đúng vai trò.
+    /// </para>
+    /// </summary>
     public Guid UserId { get; set; }
     public NotificationTypeEnum Type { get; set; }
     public NotificationChannelEnum Channel { get; set; }
@@ -34,10 +53,26 @@ public class CreateNotificationCommand : IRequest<NotificationActionResponse>, I
     {
         var response = new NotificationActionResponse();
 
-        // GH-594: KHÔNG reject UserId == Guid.Empty. Consumer phát notification "broadcast"
-        // với recipient placeholder Guid.Empty (recipient thật resolve sau qua dispatcher /
-        // AccountSyncReadModel — Sprint 6). Reject ở đây khiến ValidationBehavior short-circuit
-        // → notification không bao giờ được tạo. Vẫn validate Type/Channel/Title/Body bên dưới.
+        // Sửa 30/07/2026 — ĐẢO NGƯỢC ghi chú GH-594 cũ ("không reject Guid.Empty vì consumer phát
+        // broadcast với recipient placeholder, dispatcher resolve sau").
+        //
+        // Thiết kế đó KHÔNG tồn tại trong code: đã rà đủ 9 consumer dùng command này — tất cả đều
+        // resolve recipient THẬT trước khi gửi (qua IRecipientResolver hoặc id lấy thẳng từ event),
+        // và ChatCreatedConsumer còn chặn tường minh `recipientId == Guid.Empty`. Không đường nào
+        // phát placeholder cả. Dispatcher (Sprint 6.2) cũng không resolve broadcast — nó đánh Failed
+        // ngay với lý do `empty_user_id`.
+        //
+        // Vì vậy bản ghi UserId rỗng là bản ghi CHẮC CHẮN thất bại. Từ chối sớm kèm thông báo rõ
+        // ràng tốt hơn nhiều so với tạo ra một dòng rác rồi để worker đánh Failed.
+        // Consumer chỉ log warning khi Send() trả IsSuccess=false (đã kiểm) ⇒ không gây vòng retry.
+        if (UserId == Guid.Empty)
+        {
+            response.ListErrors.Add(new Errors
+            {
+                Field = "UserId",
+                Detail = "UserId là bắt buộc — notification không có người nhận sẽ không bao giờ gửi được.",
+            });
+        }
 
         if (!Enum.IsDefined(typeof(NotificationTypeEnum), Type))
             response.ListErrors.Add(new Errors { Field = "Type", Detail = "Type không hợp lệ." });

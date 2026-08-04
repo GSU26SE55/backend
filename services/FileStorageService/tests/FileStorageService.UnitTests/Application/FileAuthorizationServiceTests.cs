@@ -42,6 +42,47 @@ public class FileAuthorizationServiceTests
             CreatedBy = createdBy
         };
 
+    // ── CanUpload ──
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Manager")]
+    [InlineData("Staff")]
+    public void CanUpload_KbImage_InternalRoles_ReturnsTrue(string role)
+    {
+        // Staff là người soạn bài Knowledge Base chính nên phải chèn được ảnh vào bài.
+        var service = BuildService(role);
+
+        service.CanUpload(FilePurposeEnum.KbImage).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanUpload_KbImage_Customer_ReturnsFalse()
+    {
+        var service = BuildService("Customer");
+
+        service.CanUpload(FilePurposeEnum.KbImage).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Staff")]
+    [InlineData("Customer")]
+    public void CanUpload_Firmware_NonAdmin_ReturnsFalse(string role)
+    {
+        var service = BuildService(role);
+
+        service.CanUpload(FilePurposeEnum.Firmware).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanUpload_Firmware_Admin_ReturnsTrue()
+    {
+        var service = BuildService("Admin");
+
+        service.CanUpload(FilePurposeEnum.Firmware).Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(FilePurposeEnum.TicketAttachment)]
     [InlineData(FilePurposeEnum.MaintenancePhoto)]

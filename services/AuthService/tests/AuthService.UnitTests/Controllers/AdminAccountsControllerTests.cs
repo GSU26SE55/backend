@@ -23,7 +23,7 @@ public class AdminAccountsControllerTests
             .ReturnsAsync(new AccountListResponse { IsSuccess = true, StatusCode = 200 });
 
         await NewCtrl().GetAll(pageNumber: 2, pageSize: 25, keyword: "alice", status: AccountStatusEnum.Active,
-            roleId: Guid.NewGuid(), emailConfirmed: true, CancellationToken.None);
+            roleId: Guid.NewGuid(), emailConfirmed: true, cancellationToken: CancellationToken.None);
 
         _mediator.Verify(m => m.Send(
             It.Is<GetAccountsQuery>(q =>

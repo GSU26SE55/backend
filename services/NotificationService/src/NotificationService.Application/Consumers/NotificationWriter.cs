@@ -27,6 +27,40 @@ internal static class NotificationWriter
         NotificationChannelEnum.InApp
     };
 
+    /// <summary>
+    /// Sprint Bonus NS-14 (#658) — cảnh báo an toàn cấp cao (vd cascade risk): in-app + push + email.
+    /// </summary>
+    public static readonly NotificationChannelEnum[] InAppPushEmail =
+    {
+        NotificationChannelEnum.InApp,
+        NotificationChannelEnum.Push,
+        NotificationChannelEnum.Email
+    };
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — cảnh báo Critical hướng Customer: đủ 4 kênh theo spec §3.4 T#13.
+    /// Preference/quiet hours lọc lại ở <c>NotificationDispatcher</c>, nên bật đủ kênh ở đây là
+    /// "ý định gửi" chứ không phải ép gửi.
+    /// </summary>
+    public static readonly NotificationChannelEnum[] AllChannels =
+    {
+        NotificationChannelEnum.InApp,
+        NotificationChannelEnum.Push,
+        NotificationChannelEnum.Email,
+        NotificationChannelEnum.Sms
+    };
+
+    /// <summary>
+    /// Ghi notification cho từng (người nhận × kênh).
+    ///
+    /// <para><b>Sprint 6.4 NOTI4-08 — <paramref name="batchId"/> là tham số TUỲ CHỌN.</b> Để tuỳ
+    /// chọn chứ không bắt buộc là có chủ đích: 20 lời gọi ở 13 file consumer vẫn hợp lệ nguyên vẹn,
+    /// nên chuyển sang mô hình "lần gửi" làm được từng consumer một thay vì phải sửa cả 13 file
+    /// trong một PR rồi không ai review nổi.</para>
+    ///
+    /// <para>Truyền <paramref name="batchId"/> thì các dòng sinh ra gom được thành một lần gửi và
+    /// thống kê được; để trống thì hành vi y hệt trước đây.</para>
+    /// </summary>
     public static async Task WriteAsync(
         INotificationUnitOfWork unitOfWork,
         IReadOnlyCollection<Guid> recipientIds,
@@ -37,7 +71,8 @@ internal static class NotificationWriter
         string? payloadJson,
         string entityType,
         Guid? entityId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? batchId = null)
     {
         foreach (var userId in recipientIds)
         {
@@ -47,6 +82,7 @@ internal static class NotificationWriter
                 {
                     Id = Guid.NewGuid(),
                     UserId = userId,
+                    BatchId = batchId,
                     Type = type,
                     Channel = channel,
                     Status = NotificationStatusEnum.Pending,
@@ -60,5 +96,51 @@ internal static class NotificationWriter
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Sprint 6.4 NOTI4-08 — tạo bản ghi "lần gửi" cho một fan-out do sự kiện sinh ra, rồi ghi
+    /// notification kèm khoá gom.
+    ///
+    /// <para>Dùng thay cho <see cref="WriteAsync"/> ở consumer nào muốn thống kê được. Không đổi
+    /// hành vi gửi: vẫn là mỗi (người nhận × kênh) một dòng <c>Pending</c>, vẫn đi qua đúng đường
+    /// giao cũ.</para>
+    /// </summary>
+    public static async Task WriteBatchedAsync(
+        INotificationUnitOfWork unitOfWork,
+        IReadOnlyCollection<Guid> recipientIds,
+        NotificationTypeEnum type,
+        IReadOnlyCollection<NotificationChannelEnum> channels,
+        string title,
+        string body,
+        string? payloadJson,
+        string entityType,
+        Guid? entityId,
+        CancellationToken cancellationToken)
+    {
+        var distinctRecipients = recipientIds.Distinct().ToList();
+        var distinctChannels = channels.Distinct().ToList();
+
+        var batch = new NotificationBatch
+        {
+            Id = Guid.NewGuid(),
+            Type = type,
+            Title = title,
+            Body = body,
+            PayloadJson = payloadJson,
+            EntityType = entityType,
+            EntityId = entityId,
+            Channels = distinctChannels.ToArray(),
+            Source = NotificationBatchSourceEnum.Event,
+            Status = NotificationBatchStatusEnum.FannedOut,
+            RecipientCount = distinctRecipients.Count,
+            NotificationCount = distinctRecipients.Count * distinctChannels.Count,
+        };
+
+        await unitOfWork.NotificationBatches.AddAsync(batch);
+
+        await WriteAsync(
+            unitOfWork, distinctRecipients, type, distinctChannels,
+            title, body, payloadJson, entityType, entityId, cancellationToken, batch.Id);
     }
 }

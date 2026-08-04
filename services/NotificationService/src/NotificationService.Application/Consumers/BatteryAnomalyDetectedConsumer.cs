@@ -6,11 +6,22 @@ using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 
+using NotificationService.Application.Templates;
+
 namespace NotificationService.Application.Consumers;
 
 /// <summary>
-/// GH-107 — Bất thường pin được phát hiện → notify Customer sở hữu pin (CustomerId có sẵn trong event).
-/// Channel InApp + Push. (TicketService cũng consume event này để auto-tạo ticket — pub-sub độc lập.)
+/// GH-107 — Bất thường pin CRITICAL được phát hiện → notify Customer sở hữu pin
+/// (CustomerId có sẵn trong event). TicketService cũng consume event này để auto-tạo ticket —
+/// pub-sub độc lập.
+///
+/// Sprint 6.2 NOTI-08 (#679) — bổ sung Email + SMS ngoài InApp + Push, đúng spec §3.4 T#13
+/// ("Customer nhận InApp+Push+Email+SMS", SMS theo preference). Trước đó chỉ ghi InApp + Push
+/// (reviewnotification.md §4.3). Việc tôn trọng preference (SmsEnabled/EmailEnabled), quiet hours
+/// và thiếu email/số điện thoại đã do <c>NotificationDispatcher</c> xử lý ở tầng gửi —
+/// record ghi ra ở đây chỉ là "ý định gửi".
+///
+/// Mức Warning/Info đi qua <see cref="BatteryAnomalyWarningConsumer"/> (event riêng, không đẻ ticket).
 /// </summary>
 public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
 {
@@ -41,8 +52,13 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
 
         var recipientIds = new[] { evt.CustomerId };
 
+        // 03/08/2026 — chữ đọc được thay cho số trần. Trước đó thân tin nhắn ghi "mức 3" và template
+        // ghi "Loại: 4" vì hai enum này thuộc BatteryService.Domain, phía đây không tham chiếu được.
+        var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
+        var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
+
         var title = $"⚠️ Bất thường pin {evt.AssetSerialNumber}";
-        var body = $"Phát hiện bất thường (mức {evt.Severity}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
+        var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
         var payload = JsonSerializer.Serialize(new
         {
             alertId = evt.AlertId,
@@ -51,6 +67,9 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
             assetSerialNumber = evt.AssetSerialNumber,
             anomalyType = evt.AnomalyType,
             severity = evt.Severity,
+            // Giữ CẢ số lẫn chữ: số cho phía client lọc/so sánh, chữ cho template dựng câu.
+            anomalyTypeName = anomalyLabel,
+            severityName = severityLabel,
             thresholdValue = evt.ThresholdValue,
             actualValue = evt.ActualValue,
             unit = evt.Unit,
@@ -59,7 +78,7 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
         });
 
         await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.InAppPush,
+            _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.AllChannels,
             title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
     }
 }

@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Participants;
@@ -13,12 +14,17 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantSelfLeaveCommandHandler : IRequestHandler<ParticipantSelfLeaveCommand, ParticipantActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
 
-    public ParticipantSelfLeaveCommandHandler(ITicketUnitOfWork uow, IMessageProducerService producer)
+    public ParticipantSelfLeaveCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IActivityLogger activityLogger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = outboxWriter;
+        _activityLogger = activityLogger;
     }
 
     public async Task<ParticipantActionResponse> Handle(ParticipantSelfLeaveCommand request, CancellationToken ct)
@@ -38,13 +44,22 @@ public class ParticipantSelfLeaveCommandHandler : IRequestHandler<ParticipantSel
         participant.RemoveReason = request.LeaveReason;
         _uow.TicketParticipants.UpdateAsync(participant);
 
-        await _uow.SaveChangesAsync(ct);
-
-        await _producer.PublishAsync(new ParticipantRemovedEvent(
+        await _outboxWriter.WriteAsync(new ParticipantRemovedEvent(
             request.TicketId,
             participant.UserId,
             request.ActorUserId,
             request.LeaveReason ?? string.Empty), ct);
+
+        await _activityLogger.LogAsync(
+            request.TicketId,
+            request.ActorUserId,
+            participant.UserRole,
+            request.ActorName,
+            ActivityActionEnum.ParticipantRemoved,
+            oldValue: participant.ParticipantType.ToString(),
+            newValue: $"User {participant.UserId} left the ticket.",
+            reason: request.LeaveReason);
+        await _uow.SaveChangesAsync(ct);
 
         return new ParticipantActionResponse
         {

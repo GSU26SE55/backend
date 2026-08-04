@@ -19,6 +19,9 @@ public static class AnomalyRules
 {
     private const decimal OverheatCriticalDeltaC = 5m;
 
+    // Sprint Bonus NS-25 (#665, F1) — dưới TemperatureMin quá 5°C → Critical (mirror Overheat delta).
+    private const decimal UndertempCriticalDeltaC = 5m;
+
     public static IReadOnlyList<AnomalyDetection> Detect(SensorReading reading, ThresholdConfig threshold)
     {
         var anomalies = new List<AnomalyDetection>();
@@ -31,6 +34,20 @@ public static class AnomalyRules
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.Overheat, severity,
                 threshold.TemperatureMax, reading.Temperature, "°C"));
+        }
+
+        // Sprint Bonus NS-25 (#665, F1, Q11=A) — Undertemp. Trước fix, TemperatureMin (seed −10°C
+        // cho cả 3 loại pin) là field CHẾT: không rule nào dùng. Sạc pin lithium dưới 0°C gây lithium
+        // plating (kim loại lithium bám lên anode → mất dung lượng + nguy cơ short) — nguy hiểm thật,
+        // citation B2 (Feng et al., J. Power Sources 2018).
+        if (reading.Temperature < threshold.TemperatureMin)
+        {
+            var severity = reading.Temperature < threshold.TemperatureMin - UndertempCriticalDeltaC
+                ? AlertSeverityEnum.Critical
+                : AlertSeverityEnum.Warning;
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.Undertemp, severity,
+                threshold.TemperatureMin, reading.Temperature, "°C"));
         }
 
         if (reading.Voltage > threshold.VoltageMax)
@@ -211,14 +228,27 @@ public static class AnomalyRules
                 SensorMismatchVoltageDeltaV, voltageDelta, "V");
         }
 
-        var tempDelta = Math.Abs(bms.Temperature - iot.Temperature);
-        if (tempDelta > SensorMismatchTemperatureDeltaC)
+        // Sprint Bonus NS-09 (#653, N5) — nguồn `redundant` (INA226) KHÔNG đo nhiệt độ:
+        // firmware set cứng temp=0 và kỳ vọng backend skip so sánh nhiệt (contract firmware
+        // ina226.cpp). Không skip → BMS 25°C vs 0°C = mismatch giả liên tục trên mọi pin.
+        if (MeasuresTemperature(bms) && MeasuresTemperature(iot))
         {
-            return new AnomalyDetection(
-                AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
-                SensorMismatchTemperatureDeltaC, tempDelta, "°C");
+            var tempDelta = Math.Abs(bms.Temperature - iot.Temperature);
+            if (tempDelta > SensorMismatchTemperatureDeltaC)
+            {
+                return new AnomalyDetection(
+                    AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
+                    SensorMismatchTemperatureDeltaC, tempDelta, "°C");
+            }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Sprint Bonus NS-09 (#653, N5) — nguồn <c>redundant</c> (INA226, shunt dòng) không có
+    /// cảm biến nhiệt → temp trong payload là 0 cứng, không được dùng để so sánh cross-source.
+    /// </summary>
+    public static bool MeasuresTemperature(SensorReading reading) =>
+        !string.Equals(reading.SensorSourceCode, "redundant", StringComparison.OrdinalIgnoreCase);
 }

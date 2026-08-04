@@ -24,7 +24,7 @@ public class GetKbArticleByIdQueryHandler : IRequestHandler<GetKbArticleByIdQuer
 
     public async Task<CommonResponse<KbArticleDTO>> Handle(GetKbArticleByIdQuery query, CancellationToken ct)
     {
-        if (!Guid.TryParse(_currentUserService.UserId, out var customerId))
+        if (!Guid.TryParse(_currentUserService.UserId, out _))
             return Fail(401, "Chưa đăng nhập.");
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
@@ -33,14 +33,9 @@ public class GetKbArticleByIdQueryHandler : IRequestHandler<GetKbArticleByIdQuer
         if (article == null || article.IsDeleted)
             return Fail(404, "Không tìm thấy bài viết.");
 
-        // Role-based access control
-        if (_currentUserService.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase))
-        {
-            if (article.IsInternalOnly || article.Status != KbArticleStatusEnum.Published)
-            {
-                return Fail(404, "Không tìm thấy bài viết.");
-            }
-        }
+        // Block template access on Customer-facing endpoints
+        if (query.RequireNonTemplate && article.IsTemplate)
+            return Fail(404, "Không tìm thấy bài viết.");
 
         return new CommonResponse<KbArticleDTO>
         {

@@ -45,17 +45,17 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketAssignCommand_InvalidData_ReturnsErrors()
     {
-        var command = new TicketAssignCommand { TicketId = Guid.Empty, StaffId = Guid.Empty };
+        var command = new TicketAssignCommand { TicketId = Guid.Empty, PrimaryHandlerStaffId = Guid.Empty };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "StaffId");
+        result.ListErrors.Should().Contain(x => x.Field == "PrimaryHandlerStaffId");
     }
 
     [Fact]
     public async Task TicketAssignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketAssignCommand { TicketId = Guid.NewGuid(), StaffId = Guid.NewGuid() };
+        var command = new TicketAssignCommand { TicketId = Guid.NewGuid(), PrimaryHandlerStaffId = Guid.NewGuid() };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -109,15 +109,58 @@ public class TicketCommandValidationTests
         result.ListErrors.Should().Contain(x => x.Field == "Title");
         result.ListErrors.Should().Contain(x => x.Field == "Description");
         result.ListErrors.Should().Contain(x => x.Field == "CustomerId");
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
     public async Task TicketCreateCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid() };
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(-1) };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_DuplicateAttachmentFileId_ReturnsSuccess()
+    {
+        var fileId = Guid.NewGuid();
+        var command = new TicketCreateCommand
+        {
+            Title = "Title",
+            Description = "Desc",
+            CustomerId = Guid.NewGuid(),
+            BatteryAssetIds = new List<Guid> { Guid.NewGuid() },
+            IncidentDetectedAt = DateTime.UtcNow.AddHours(-1),
+            Attachments = new List<TicketAttachmentInput>
+            {
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg"),
+                new(fileId, "photo.jpg", "image/jpeg", 1024, "https://files.example/photo.jpg")
+            }
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeTrue();
+        result.ListErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_MissingIncidentDetectedAt_ReturnsError()
+    {
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid() };
+        var result = await command.ValidateAsync();
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
+    }
+
+    [Fact]
+    public async Task TicketCreateCommand_IncidentDetectedAtInFuture_ReturnsError()
+    {
+        var command = new TicketCreateCommand { Title = "Title", Description = "Desc", CustomerId = Guid.NewGuid(), BatteryAssetIds = new List<Guid> { Guid.NewGuid() }, IncidentDetectedAt = DateTime.UtcNow.AddHours(1) };
+        var result = await command.ValidateAsync();
+        result.IsSuccess.Should().BeFalse();
+        result.ListErrors.Should().Contain(x => x.Field == "IncidentDetectedAt");
     }
 
     [Fact]
@@ -215,18 +258,18 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketReassignCommand_EmptyIds_ReturnsErrors()
     {
-        var command = new TicketReassignCommand { TicketId = Guid.Empty, NewStaffId = Guid.Empty, Reason = "" };
+        var command = new TicketReassignCommand { TicketId = Guid.Empty, NewPrimaryHandlerStaffId = Guid.Empty, Reason = "" };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "NewStaffId");
+        result.ListErrors.Should().Contain(x => x.Field == "NewPrimaryHandlerStaffId");
         result.ListErrors.Should().Contain(x => x.Field == "Reason");
     }
 
     [Fact]
     public async Task TicketReassignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketReassignCommand { TicketId = Guid.NewGuid(), NewStaffId = Guid.NewGuid(), Reason = "Valid reassign reason" };
+        var command = new TicketReassignCommand { TicketId = Guid.NewGuid(), NewPrimaryHandlerStaffId = Guid.NewGuid(), Reason = "Valid reassign reason" };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -506,40 +549,31 @@ public class TicketCommandValidationTests
         var command = new CreateKbArticleCommand
         {
             Title = "",
-            Symptoms = "",
-            DiagnosisSteps = "",
-            SolutionSteps = "",
+            Content = "",
             Category = (TicketCategoryEnum)99,
             Tags = new List<string> { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" } // 11 tags
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
+        result.ListErrors.Should().Contain(x => x.Field == "Content");
         result.ListErrors.Should().Contain(x => x.Field == "Category");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
     [Fact]
-    public async Task CreateKbArticleCommand_ValuesTooLong_ReturnsErrors()
+    public async Task CreateKbArticleCommand_TitleTooLong_ReturnsErrors()
     {
         var command = new CreateKbArticleCommand
         {
             Title = new string('a', 201),
-            Symptoms = new string('b', 2001),
-            DiagnosisSteps = new string('c', 4001),
-            SolutionSteps = new string('d', 4001),
+            Content = "valid content",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
@@ -549,9 +583,7 @@ public class TicketCommandValidationTests
         var command = new CreateKbArticleCommand
         {
             Title = "Valid Title",
-            Symptoms = "Valid Symptoms",
-            DiagnosisSteps = "Valid Diagnosis",
-            SolutionSteps = "Valid Solution",
+            Content = "Valid content for KB article.",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { "valid" }
         };
@@ -567,9 +599,7 @@ public class TicketCommandValidationTests
         {
             ArticleId = Guid.Empty,
             Title = "",
-            Symptoms = "",
-            DiagnosisSteps = "",
-            SolutionSteps = "",
+            Content = "",
             Category = (TicketCategoryEnum)99,
             Tags = new List<string> { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" }
         };
@@ -577,32 +607,25 @@ public class TicketCommandValidationTests
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "ArticleId");
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
+        result.ListErrors.Should().Contain(x => x.Field == "Content");
         result.ListErrors.Should().Contain(x => x.Field == "Category");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
     [Fact]
-    public async Task UpdateKbArticleCommand_ValuesTooLong_ReturnsErrors()
+    public async Task UpdateKbArticleCommand_TitleTooLong_ReturnsErrors()
     {
         var command = new UpdateKbArticleCommand
         {
             ArticleId = Guid.NewGuid(),
             Title = new string('a', 201),
-            Symptoms = new string('b', 2001),
-            DiagnosisSteps = new string('c', 4001),
-            SolutionSteps = new string('d', 4001),
+            Content = "valid content",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { new string('x', 51) }
         };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(x => x.Field == "Title");
-        result.ListErrors.Should().Contain(x => x.Field == "Symptoms");
-        result.ListErrors.Should().Contain(x => x.Field == "DiagnosisSteps");
-        result.ListErrors.Should().Contain(x => x.Field == "SolutionSteps");
         result.ListErrors.Should().Contain(x => x.Field == "Tags");
     }
 
@@ -613,9 +636,7 @@ public class TicketCommandValidationTests
         {
             ArticleId = Guid.NewGuid(),
             Title = "Valid Title",
-            Symptoms = "Valid Symptoms",
-            DiagnosisSteps = "Valid Diagnosis",
-            SolutionSteps = "Valid Solution",
+            Content = "Valid content for KB article.",
             Category = (TicketCategoryEnum)1,
             Tags = new List<string> { "valid" }
         };

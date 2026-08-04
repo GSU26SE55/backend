@@ -12,6 +12,21 @@ public class Notification : AuditableEntity
     /// <summary>User nhận notification (AccountId từ AuthService).</summary>
     public Guid UserId { get; set; }
 
+    /// <summary>
+    /// Sprint 6.4 NOTI4-06 — lần gửi đã sinh ra dòng này. Cho phép trả lời "thông báo X đã tới ai,
+    /// bao nhiêu người đã đọc" — thứ trước đây không truy vấn được vì không có khoá gom nào.
+    ///
+    /// <para><b>Nullable có chủ đích</b>, ba nhóm dòng hợp lệ mà không thuộc lần gửi nào:
+    /// <list type="bullet">
+    /// <item>1.282 dòng đã có trước sprint này. Dữ liệu cũ KHÔNG có thông tin để gom thành lần gửi —
+    /// gom theo thời gian là suy đoán và đã chứng minh là gom sai, nên để trống thay vì bịa (R-52).</item>
+    /// <item><c>NotificationDigestBackgroundService</c> gộp nhiều thông báo thành một bản digest
+    /// riêng cho từng người; bản digest tự sinh nội dung, không thuộc lần gửi nào.</item>
+    /// <item><c>NotificationDispatcher</c> sinh dòng theo từng kênh trong lúc giao.</item>
+    /// </list></para>
+    /// </summary>
+    public Guid? BatchId { get; set; }
+
     public NotificationTypeEnum Type { get; set; }
 
     public NotificationChannelEnum Channel { get; set; }
@@ -41,4 +56,22 @@ public class Notification : AuditableEntity
 
     /// <summary>Lý do lỗi (nếu Status = Failed).</summary>
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-01 (#672) — số lần <c>NotificationDispatchBackgroundService</c> đã thử gửi
+    /// record này xuống channel. Chạm ngưỡng <c>Notification:Dispatch:MaxAttempts</c> → chuyển
+    /// <see cref="NotificationStatusEnum.Failed"/> (dừng retry vô hạn).
+    /// </summary>
+    public int DispatchAttemptCount { get; set; }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-01 (#672) — thời điểm sớm nhất worker được phép thử lại (UTC).
+    /// Null = có thể gửi ngay. Dùng cho 2 trường hợp:
+    /// <list type="bullet">
+    /// <item>Backoff sau lần gửi lỗi.</item>
+    /// <item>Hoãn tới hết quiet hours / hết cửa sổ digest — nếu để nguyên Pending không mốc thời gian
+    /// thì batch (order by CreatedAt) sẽ bị các record hoãn chiếm chỗ, chặn record mới phía sau.</item>
+    /// </list>
+    /// </summary>
+    public DateTime? NextAttemptAt { get; set; }
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NotificationService.Infrastructure.DependencyInjection;
 using NotificationService.Infrastructure.Persistence;
+using NotificationService.Infrastructure.Realtime;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
@@ -27,6 +28,9 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddNotificationServiceInfrastructure(builder.Configuration);
 builder.Services.AddIdempotencyKey(builder.Configuration);
 
+// Sprint 6.3 NOTI3-13 (#713) — realtime feed in-app. Polling REST vẫn giữ nguyên làm đường dự phòng.
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -51,6 +55,13 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<NotificationService.Infrastructure.Persistence.Seeders.NotificationDataSeeder>();
     await seeder.SeedAsync();
+
+    // Sprint 6.4 NOTI4-04 — 4 nhóm hệ thống theo vai trò. PHẢI chạy mỗi lần khởi động: sau
+    // NOTI4-05, RecipientResolver phân giải "toàn bộ Manager/Admin" qua chính các nhóm này;
+    // thiếu một cái là thông báo tự động cho vai trò đó im lặng biến mất.
+    var groupSeeder = scope.ServiceProvider.GetRequiredService<NotificationService.Infrastructure.Persistence.Seeders.NotificationGroupSeeder>();
+    await groupSeeder.SeedAsync();
+
     Console.WriteLine("Notification seed data checked.");
 }
 
@@ -72,12 +83,16 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseIdempotencyKey();
 
 app.MapControllers();
+
+// Sprint 6.3 NOTI3-13 (#713) — bắt buộc đăng nhập: hub phát thông báo riêng của từng người.
+app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
+
 app.MapMetrics();
 
 app.Run();

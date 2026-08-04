@@ -23,13 +23,13 @@ public class TicketGetByIdQueryHandlerTests
         _handler = new TicketGetByIdQueryHandler(_mockUow.Object);
     }
 
-    private static Ticket MakeTicket(Guid? customerId = null, Guid? assignedStaffId = null) => new()
+    private static Ticket MakeTicket(Guid? customerId = null, Guid? PrimaryHandlerStaffId = null) => new()
     {
         Id = Guid.NewGuid(),
         Code = "T-001",
         BatteryAssetId = Guid.NewGuid(),
         CustomerId = customerId ?? Guid.NewGuid(),
-        AssignedStaffId = assignedStaffId,
+        PrimaryHandlerStaffId = PrimaryHandlerStaffId,
         Title = "Test Ticket",
         Description = "desc",
         Category = TicketCategoryEnum.Other,
@@ -118,7 +118,7 @@ public class TicketGetByIdQueryHandlerTests
     public async Task Handle_StaffCanReadAssignedTicket_Returns200()
     {
         var staffId = Guid.NewGuid();
-        var ticket = MakeTicket(assignedStaffId: staffId);
+        var ticket = MakeTicket(PrimaryHandlerStaffId: staffId);
         SetupMock([ticket]);
 
         var result = await _handler.Handle(new TicketGetByIdQuery
@@ -135,7 +135,7 @@ public class TicketGetByIdQueryHandlerTests
     [Fact]
     public async Task Handle_StaffCannotReadUnassignedTicket_Returns403()
     {
-        var ticket = MakeTicket(assignedStaffId: Guid.NewGuid());
+        var ticket = MakeTicket(PrimaryHandlerStaffId: Guid.NewGuid());
         SetupMock([ticket]);
 
         var result = await _handler.Handle(new TicketGetByIdQuery

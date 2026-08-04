@@ -4,6 +4,7 @@ using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Mapping;
 using TicketService.Domain.Entities;
 
 namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
@@ -50,20 +51,16 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             toVersionLabel = $"v{toVersion.MajorVersion}.{toVersion.MinorVersion}";
         }
 
+        var fromContent = KnowledgeBaseMapper.J(fromVersion.Content);
+        var toContent = KnowledgeBaseMapper.J(toVersion?.Content ?? currentArticle!.Content);
+        var toTitle = toVersion?.Title ?? currentArticle!.Title;
+
         var diff = new KbArticleDiffDTO
         {
             FromVersion = $"v{fromVersion.MajorVersion}.{fromVersion.MinorVersion}",
             ToVersion = toVersionLabel,
-            TitleDiff = new DiffSection { OldValue = fromVersion.Title, NewValue = toVersion?.Title ?? currentArticle!.Title, IsChanged = fromVersion.Title != (toVersion?.Title ?? currentArticle!.Title) },
-            SymptomsDiff = new DiffSection { OldValue = fromVersion.Symptoms, NewValue = toVersion?.Symptoms ?? currentArticle!.Symptoms, IsChanged = fromVersion.Symptoms != (toVersion?.Symptoms ?? currentArticle!.Symptoms) },
-            DiagnosisStepsDiff = new DiffSection { OldValue = fromVersion.DiagnosisSteps, NewValue = toVersion?.DiagnosisSteps ?? currentArticle!.DiagnosisSteps, IsChanged = fromVersion.DiagnosisSteps != (toVersion?.DiagnosisSteps ?? currentArticle!.DiagnosisSteps) },
-            SolutionStepsDiff = new DiffSection { OldValue = fromVersion.SolutionSteps, NewValue = toVersion?.SolutionSteps ?? currentArticle!.SolutionSteps, IsChanged = fromVersion.SolutionSteps != (toVersion?.SolutionSteps ?? currentArticle!.SolutionSteps) },
-            RecommendedPartsDiff = new DiffSection
-            {
-                OldValue = fromVersion.RecommendedParts != null ? string.Join(", ", fromVersion.RecommendedParts) : "",
-                NewValue = (toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts) != null ? string.Join(", ", toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts!) : "",
-                IsChanged = !(fromVersion.RecommendedParts ?? new List<string>()).SequenceEqual(toVersion?.RecommendedParts ?? currentArticle!.RecommendedParts ?? new List<string>())
-            },
+            TitleDiff = new DiffSection { OldValue = fromVersion.Title, NewValue = toTitle, IsChanged = fromVersion.Title != toTitle },
+            ContentDiff = new DiffSection { OldValue = fromContent, NewValue = toContent, IsChanged = fromContent != toContent },
             TagsDiff = new DiffSection { OldValue = string.Join(", ", fromVersion.Tags), NewValue = string.Join(", ", toVersion?.Tags ?? currentArticle!.Tags), IsChanged = !fromVersion.Tags.SequenceEqual(toVersion?.Tags ?? currentArticle!.Tags) }
         };
 

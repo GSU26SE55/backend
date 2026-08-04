@@ -85,6 +85,20 @@ public class TicketChatConfiguration : IEntityTypeConfiguration<TicketChat>
             .HasColumnName("original_language")
             .HasMaxLength(5);
 
+        builder.Property(e => e.VoiceTranscriptionStatus)
+            .HasColumnName("voice_transcription_status")
+            .HasConversion<int>();
+
+        builder.Property(e => e.VoiceTranscriptionError)
+            .HasColumnName("voice_transcription_error")
+            .HasMaxLength(2000);
+
+        builder.Property(e => e.TranscriptionStartedAt)
+            .HasColumnName("transcription_started_at");
+
+        builder.Property(e => e.TranscribedAt)
+            .HasColumnName("transcribed_at");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 

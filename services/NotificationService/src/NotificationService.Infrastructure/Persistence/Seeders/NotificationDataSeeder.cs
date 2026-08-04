@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NotificationService.Application.Services;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 
@@ -34,100 +36,146 @@ public class NotificationDataSeeder
         await SeedSampleNotificationsAsync(sampleUserIds, cancellationToken);
     }
 
+    /// <summary>
+    /// Sprint 6.3 NOTI3-12 (#712) — seed từ <see cref="NotificationTemplateCatalog"/>, phủ đủ
+    /// 32 type × mọi kênh (trước đây chỉ 5/32 type có template, phần còn lại phải sửa code mới đổi
+    /// được câu chữ).
+    ///
+    /// Idempotent theo cặp (Type × Channel): đã có bản nào cho cặp đó thì KHÔNG thêm.
+    /// Cố ý không ghi đè — người vận hành có thể đã sửa nội dung trong DB, seeder không được xoá công
+    /// sức đó mỗi lần khởi động.
+    ///
+    /// <para><b>03/08/2026 — thêm bước hội tụ.</b> Chỉ "có bản nào thì thôi" là chưa đủ: bản đang có
+    /// trong DB đã trôi khỏi danh mục theo hai đường, và cả hai đều âm thầm.</para>
+    ///
+    /// <list type="number">
+    ///   <item><description><b>Enum đánh số lại.</b> Khi <c>BlogGenerationCompleted(25)</c> và
+    ///   <c>BlogGenerationFailed(26)</c> được chèn vào giữa, mọi type từ 27 trở đi dịch lên 2. Các
+    ///   dòng template seed trước đó giữ nguyên số cũ, thành ra nội dung của type này nằm dưới số
+    ///   của type khác — <c>TicketReopened(30)</c> mang câu "Cảnh báo pin", <c>BlogGenerationCompleted(25)</c>
+    ///   mang câu "Trao đổi được leo thang lên Admin".</description></item>
+    ///   <item><description><b>Tên biến sai.</b> Bộ template cũ soạn theo hợp đồng payload tưởng
+    ///   tượng (<c>{{ticketCode}}</c> trong khi consumer ghi <c>code</c>). Handlebars render biến lạ
+    ///   ra rỗng chứ không báo lỗi.</description></item>
+    /// </list>
+    ///
+    /// <para><b>Luật hội tụ — cố ý hẹp, để không giẫm lên công sức người vận hành:</b></para>
+    /// <list type="bullet">
+    ///   <item><description>Chưa có template cho cặp đó ⇒ thêm bản v1.</description></item>
+    ///   <item><description>Bản đang dùng <b>do seeder tạo</b> mà nội dung khác danh mục ⇒ sinh
+    ///   phiên bản mới theo danh mục, hạ cờ bản cũ. Nội dung seed là dữ liệu suy ra được từ code,
+    ///   không phải công sức của ai.</description></item>
+    ///   <item><description>Bản đang dùng <b>do người vận hành soạn</b> mà gọi biến không tồn tại
+    ///   ⇒ cũng sinh phiên bản mới theo danh mục. Bản hỏng vẫn nằm nguyên trong lịch sử phiên bản.
+    ///   Sửa vì template hỏng biến là hỏng thật, không phải lựa chọn biên tập.</description></item>
+    ///   <item><description>Bản do người vận hành soạn và biến đều hợp lệ ⇒ <b>không đụng tới</b>.</description></item>
+    /// </list>
+    ///
+    /// <para>Tự dừng: sau khi hội tụ, bản đang dùng khớp danh mục nên lần khởi động sau không sinh
+    /// thêm phiên bản nào.</para>
+    /// </summary>
     private async Task SeedTemplatesAsync(CancellationToken ct)
     {
-        var existing = await _dbContext.NotificationTemplates
-            .Select(t => new { t.Type, t.Channel, t.Locale })
-            .ToListAsync(ct);
-        var existingKeys = existing.Select(k => (k.Type, k.Channel, k.Locale)).ToHashSet();
+        var existing = await _dbContext.NotificationTemplates.ToListAsync(ct);
+        var byPair = existing.ToLookup(t => (t.Type, t.Channel));
 
         var now = DateTime.UtcNow;
-        var templates = new List<NotificationTemplate>();
+        var added = new List<NotificationTemplate>();
+        var repaired = 0;
 
-        void Add(NotificationTypeEnum type, NotificationChannelEnum channel, string locale, string title, string body)
+        var catalog = NotificationTemplateCatalog.Build(
+            NotificationDispatchOptions.DefaultTypeChannelMatrix);
+
+        // Hạ cờ template "mồ côi": cặp (type × channel) đã RỜI khỏi ma trận nhưng dòng seed cũ còn
+        // nằm lại và vẫn bật. Vòng hội tụ bên dưới duyệt theo danh mục nên không bao giờ đi qua
+        // chúng — sót lại 5 bản như vậy sau lần chạy đầu, gồm cả (TicketCreated × Email) mang
+        // {{ticketCode}}. Hôm nay vô hại vì cặp đó không sinh thông báo nào, nhưng ngày nào cặp ấy
+        // được bật lại thì một template hỏng biến sẽ có hiệu lực ngay.
+        //
+        // Chỉ hạ cờ bản DO SEEDER TẠO và chỉ HẠ CỜ, không xoá: bản người vận hành soạn cho cặp ngoài
+        // ma trận là lựa chọn có chủ đích của họ, còn hạ cờ thì bật lại được bằng endpoint activate.
+        var trongDanhMuc = catalog.Select(e => (e.Type, e.Channel)).ToHashSet();
+        var moCoi = existing
+            .Where(t => t.IsActive && !t.IsDeleted)
+            .Where(t => !trongDanhMuc.Contains((t.Type, t.Channel)))
+            .Where(t => t.CreatedBy is null || t.CreatedBy == Guid.Empty)
+            .ToList();
+
+        foreach (var t in moCoi)
+            t.IsActive = false;
+
+        foreach (var entry in catalog)
         {
-            if (existingKeys.Contains((type, channel, locale)))
-                return;
-            templates.Add(new NotificationTemplate
+            var siblings = byPair[(entry.Type, entry.Channel)].ToList();
+
+            if (siblings.Count == 0)
             {
-                Id = Guid.NewGuid(),
-                Type = type,
-                Channel = channel,
-                Locale = locale,
-                TitleTemplate = title,
-                BodyTemplate = body,
-                IsActive = true,
-                CreatedAt = now
-            });
+                added.Add(NewTemplate(entry, version: 1, now));
+                continue;
+            }
+
+            var active = siblings.FirstOrDefault(t => t.IsActive && !t.IsDeleted);
+            if (active is null)
+                continue;
+
+            if (!NeedsConvergence(active, entry))
+                continue;
+
+            // Version phải tính trên CẢ bản đã xoá mềm: unique index (type, channel, version)
+            // không lọc is_deleted nên dùng lại số cũ là vi phạm khoá.
+            var nextVersion = siblings.Max(t => t.Version) + 1;
+
+            active.IsActive = false;
+            added.Add(NewTemplate(entry, nextVersion, now));
+            repaired++;
         }
 
-        // Ticket lifecycle
-        Add(NotificationTypeEnum.TicketCreated, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket mới {{ticketCode}}", "Khách hàng {{customerName}} vừa tạo ticket {{ticketCode}}: {{title}}");
-        Add(NotificationTypeEnum.TicketCreated, NotificationChannelEnum.Email, "vi-VN",
-            "[{{ticketCode}}] Ticket mới được tạo", "Ticket {{ticketCode}} - {{title}} đã được tạo bởi {{customerName}}. Truy cập hệ thống để xử lý.");
-        Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "vi-VN",
-            "Bạn được giao ticket {{ticketCode}}", "{{title}} — Priority {{priority}}");
-        Add(NotificationTypeEnum.TicketStatusChanged, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket {{ticketCode}} đổi trạng thái", "Từ {{oldStatus}} → {{newStatus}}");
-        Add(NotificationTypeEnum.TicketResolved, NotificationChannelEnum.Email, "vi-VN",
-            "[{{ticketCode}}] Đã xử lý xong", "Ticket {{ticketCode}} đã được xử lý. Vui lòng xác nhận và đánh giá.");
-        Add(NotificationTypeEnum.TicketClosed, NotificationChannelEnum.InApp, "vi-VN",
-            "Ticket {{ticketCode}} đã đóng", "Cảm ơn bạn đã sử dụng dịch vụ.");
-        Add(NotificationTypeEnum.TicketEscalated, NotificationChannelEnum.Push, "vi-VN",
-            "Ticket {{ticketCode}} đã escalate", "Lý do: {{reason}}");
-
-        // SLA
-        Add(NotificationTypeEnum.SlaWarning, NotificationChannelEnum.Push, "vi-VN",
-            "Cảnh báo SLA: {{ticketCode}}", "Còn {{minutesRemaining}} phút trước khi breach SLA {{priority}}.");
-        Add(NotificationTypeEnum.SlaBreached, NotificationChannelEnum.Push, "vi-VN",
-            "SLA breach: {{ticketCode}}", "Ticket đã quá hạn SLA. Cần escalate ngay.");
-
-        // Battery / Environmental
-        Add(NotificationTypeEnum.BatteryAnomalyDetected, NotificationChannelEnum.Push, "vi-VN",
-            "Bất thường pin {{serialNumber}}", "Loại: {{anomalyType}} — Severity: {{severity}}");
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Push, "vi-VN",
-            "Cảnh báo môi trường tại {{siteName}}", "Loại: {{incidentType}} — Severity: {{severity}}");
-        // Sprint IoT-2 #IoT2-31 — Email + SMS template (Critical channel, bypass quiet hours).
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Email, "vi-VN",
-            "[CRITICAL] Sự cố môi trường tại {{siteName}}",
-            "Phát hiện sự cố môi trường (IncidentType={{incidentType}}, Severity={{severity}}) tại site \"{{siteName}}\". Detected at {{detectedAt}}. Yêu cầu xử lý NGAY.\n\n{{description}}");
-        Add(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationChannelEnum.Sms, "vi-VN",
-            "[CRITICAL]",
-            "ENV INCIDENT {{incidentType}} tại {{siteName}}. Severity {{severity}}. Vào hệ thống xử lý NGAY.");
-        Add(NotificationTypeEnum.EnvironmentalIncidentResolved, NotificationChannelEnum.InApp, "vi-VN",
-            "Sự cố môi trường đã xử lý", "Site {{siteName}} — incident {{incidentType}} đã được resolved.");
-
-        // Account
-        Add(NotificationTypeEnum.AccountActivated, NotificationChannelEnum.Email, "vi-VN",
-            "Tài khoản đã kích hoạt", "Chào {{fullName}}, tài khoản của bạn đã được kích hoạt thành công.");
-        Add(NotificationTypeEnum.AdminInvite, NotificationChannelEnum.Email, "vi-VN",
-            "Lời mời tham gia hệ thống", "Bạn được {{inviter}} mời làm {{role}}. Bấm link để kích hoạt: {{activationLink}}");
-
-        // Sprint IoT-1 (#249) — IoT device offline.
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "vi-VN",
-            "Device offline: {{deviceCode}}",
-            "Device \"{{displayName}}\" tại site {{siteName}} mất heartbeat {{durationMinutes}} phút. Ảnh hưởng {{affectedBatteryCount}} pin.");
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.InApp, "vi-VN",
-            "IoT device offline: {{deviceCode}}",
-            "Last seen {{lastSeenAt}}. Kiểm tra nguồn điện / mạng cho device tại site {{siteName}}.");
-        Add(NotificationTypeEnum.IotDeviceWentOffline, NotificationChannelEnum.Push, "en-US",
-            "Device offline: {{deviceCode}}",
-            "Device \"{{displayName}}\" at site {{siteName}} lost heartbeat for {{durationMinutes}} min. {{affectedBatteryCount}} battery affected.");
-
-        // English fallbacks for high-priority types
-        Add(NotificationTypeEnum.TicketAssigned, NotificationChannelEnum.Push, "en-US",
-            "Ticket {{ticketCode}} assigned to you", "{{title}} — Priority {{priority}}");
-        Add(NotificationTypeEnum.SlaBreached, NotificationChannelEnum.Push, "en-US",
-            "SLA breached: {{ticketCode}}", "Ticket exceeded SLA. Immediate escalation required.");
-
-        if (templates.Count == 0)
+        if (added.Count == 0 && moCoi.Count == 0)
             return;
 
-        _dbContext.NotificationTemplates.AddRange(templates);
+        _dbContext.NotificationTemplates.AddRange(added);
         await _dbContext.SaveChangesAsync(ct);
-        _logger?.LogInformation("Seeded {Count} notification templates.", templates.Count);
+
+        _logger?.LogInformation(
+            "Seeded {New} notification templates, converged {Repaired} bản đã trôi khỏi danh mục, "
+          + "hạ cờ {Orphan} bản mồ côi (cặp đã rời ma trận).",
+            added.Count - repaired, repaired, moCoi.Count);
     }
+
+    /// <summary>
+    /// Bản đang dùng có cần thay bằng nội dung danh mục không. Xem chú thích luật hội tụ ở
+    /// <see cref="SeedTemplatesAsync"/>.
+    /// </summary>
+    private static bool NeedsConvergence(NotificationTemplate active, NotificationTemplateCatalog.Entry entry)
+    {
+        var matchesCatalog = active.TitleTemplate == entry.Title && active.BodyTemplate == entry.Body;
+        if (matchesCatalog)
+            return false;
+
+        // CreatedBy rỗng = do seeder tạo (seeder chạy ngoài ngữ cảnh người dùng nên interceptor để
+        // trống). Nội dung seed suy ra được từ code nên thay thoải mái.
+        var isSeederOwned = active.CreatedBy is null || active.CreatedBy == Guid.Empty;
+        if (isSeederOwned)
+            return true;
+
+        // Người vận hành soạn: chỉ can thiệp khi template hỏng thật — gọi biến không tồn tại.
+        return TemplateVariableGuard.FindUnknownVariables(
+            active.Type, active.TitleTemplate, active.BodyTemplate) is not null;
+    }
+
+    private static NotificationTemplate NewTemplate(
+        NotificationTemplateCatalog.Entry entry, int version, DateTime now) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Type = entry.Type,
+            Channel = entry.Channel,
+            TitleTemplate = entry.Title,
+            BodyTemplate = entry.Body,
+            Version = version,
+            IsActive = true,
+            CreatedAt = now,
+        };
 
     private async Task<List<Guid>> SeedPreferencesAsync(CancellationToken ct)
     {
@@ -249,7 +297,9 @@ public class NotificationDataSeeder
                 Status = NotificationStatusEnum.Sent,
                 Title = "Bạn được giao ticket TKT-2602-0001",
                 Body = "Battery not charging — Priority P1Critical",
-                PayloadJson = "{\"ticketCode\":\"TKT-2602-0001\",\"priority\":\"P1Critical\"}",
+                // Khoá phải khớp TicketAssignedConsumer: `code`, KHÔNG phải `ticketCode`. Dữ liệu mẫu
+                // sai hợp đồng thì dạy người soạn template một tên biến không tồn tại.
+                PayloadJson = "{\"code\":\"TKT-2602-0001\",\"priority\":\"P1Critical\"}",
                 EntityType = "Ticket",
                 EntityId = Guid.NewGuid(),
                 SentAt = now.AddMinutes(-30),
@@ -264,7 +314,8 @@ public class NotificationDataSeeder
                 Status = NotificationStatusEnum.Read,
                 Title = "Cảnh báo SLA: TKT-2602-0001",
                 Body = "Còn 30 phút trước khi breach SLA P1Critical.",
-                PayloadJson = "{\"ticketCode\":\"TKT-2602-0001\",\"minutesRemaining\":30}",
+                // SlaWarningConsumer ghi `percentage`, không có `ticketCode` lẫn `minutesRemaining`.
+                PayloadJson = "{\"percentage\":85,\"screen\":\"TicketDetail\"}",
                 EntityType = "Ticket",
                 EntityId = Guid.NewGuid(),
                 SentAt = now.AddMinutes(-20),

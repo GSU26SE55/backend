@@ -220,6 +220,54 @@ public class SensorReadingsController : ControllerBase
     }
 
     /// <summary>
+    /// Sprint Bonus NS-06 (#650, PA-4) — aggregate cố định bucket <b>1 giờ</b> min/max dòng nạp/xả (+ V/T + avg) của 1 pin, đọc từ TimescaleDB continuous aggregate; dùng cho chart range dài (tháng/năm).
+    /// </summary>
+    /// <remarks>
+    /// Đọc từ materialized view <c>sensor_readings_agg_1h</c> (TimescaleDB continuous aggregate, tự refresh mỗi phút, bật real-time aggregation nên bao gồm cả dữ liệu gần đây chưa materialize).
+    ///
+    /// Query parameters:
+    /// - <c>batteryAssetId</c>: bắt buộc trên route.
+    /// - <c>From</c>: tùy chọn, UTC, lọc <c>bucket &gt;= From</c>.
+    /// - <c>To</c>: tùy chọn, UTC, lọc <c>bucket &lt;= To</c>.
+    /// - KHÔNG có <c>Interval</c> — cố định 1h.
+    ///
+    /// Cách hoạt động:
+    /// - Chỉ tính trên reading source <c>primary</c> (bỏ redundant/external-temp — tránh đếm 3 lần).
+    /// - Mỗi bucket 1h: AVG các metric + MIN/MAX Voltage/Temperature + MIN/MAX/AVG dòng tách 2 chiều nạp (current &gt; 0) / xả (current &lt; 0, trả trị tuyệt đối dương) + <c>chargeSampleCount</c>/<c>dischargeSampleCount</c>.
+    /// - Trả danh sách bucket sắp xếp tăng dần theo thời gian.
+    ///
+    /// Use case:
+    /// - FE/Mobile vẽ chart min/max nạp/xả range dài mà <c>/aggregate</c> (in-memory, bounded ~7 ngày) sẽ chậm/hết RAM.
+    /// - Range ngắn hoặc cần interval linh hoạt (1m/5m/15m/1d) → dùng <c>/aggregate</c> thay endpoint này.
+    ///
+    /// Lưu ý:
+    /// - Các field min/max nạp/xả (<c>maxChargeCurrent</c>, <c>minDischargeCurrent</c>, …) và min/max V/T là <c>nullable</c>: trả <c>null</c> nếu bucket không có mẫu chiều đó. LUÔN trả giá trị dương cho cả 2 chiều. KHÔNG trả <c>0</c> (0A là giá trị đo hợp lệ ≠ không có dữ liệu).
+    /// - <c>batteryAssetId</c> lấy từ route (không bind qua query/body — chống client override).
+    /// </remarks>
+    /// <param name="batteryAssetId">Id BatteryAsset (route).</param>
+    /// <param name="query">Filter thời gian (<c>From</c>/<c>To</c>, UTC).</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <returns><see cref="CommonResponse{T}"/> chứa danh sách <see cref="SensorReadingAggregateDto"/> (mỗi phần tử là 1 bucket 1h).</returns>
+    /// <response code="200">Trả aggregate 1h data (mảng bucket tăng dần theo thời gian).</response>
+    /// <response code="400">Query không hợp lệ — <c>batteryAssetId</c> rỗng (field-level <c>listErrors</c>).</response>
+    /// <response code="422">Cross-field: <c>From &gt; To</c> (field-level <c>listErrors</c>).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff/Customer.</response>
+    [HttpGet("{batteryAssetId:guid}/aggregate/hourly")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<List<SensorReadingAggregateDto>>), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetHourlyAggregate(Guid batteryAssetId, [FromQuery] GetSensorReadingHourlyAggregateQuery query, CancellationToken cancellationToken)
+    {
+        query.BatteryAssetId = batteryAssetId;
+        var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Lấy SensorReading mới nhất của 1 BatteryAsset (snapshot tức thời) — dùng cho Customer mobile app widget hiển thị voltage/current/SOC real-time; TimescaleDB index hỗ trợ.
     /// </summary>
     /// <remarks>

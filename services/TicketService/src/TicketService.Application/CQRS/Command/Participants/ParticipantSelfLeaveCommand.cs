@@ -22,6 +22,12 @@ public class ParticipantSelfLeaveCommand : IRequest<ParticipantActionResponse>, 
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
 
+    [JsonIgnore]
+    public string? ActorRole { get; set; }
+
+    [JsonIgnore]
+    public string? ActorName { get; set; }
+
     public Task<ParticipantActionResponse> ValidateAsync()
     {
         var response = new ParticipantActionResponse();

@@ -12,7 +12,20 @@ namespace AuditAggregatorService.Infrastructure.BackgroundJobs;
 /// </summary>
 public class AuditRetentionBackgroundService : BackgroundService
 {
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
+    /// <summary>
+    /// Nhịp kiểm tra. Khai <c>protected virtual</c> thay vì hằng số <b>chỉ để test lớp con rút ngắn
+    /// được nhịp</b> — chờ 6 giờ thì thân vòng lặp không thể chạy trong test. Giá trị production
+    /// KHÔNG đổi.
+    /// </summary>
+    protected virtual TimeSpan CheckInterval => TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// Có phải cửa sổ được phép dọn dẹp không (mặc định 03:00–04:00 UTC, giờ thấp điểm).
+    /// Tách ra thành <c>protected virtual</c> vì nếu không, test chỉ chạy đúng nếu tình cờ chạy vào
+    /// lúc 3 giờ sáng UTC — một test phụ thuộc giờ chạy là test đỏ ngẫu nhiên.
+    /// </summary>
+    protected virtual bool IsWithinMaintenanceWindow(DateTime utcNow) => utcNow.Hour is >= 3 and <= 4;
+
     private static readonly TimeSpan RetentionWindow = TimeSpan.FromDays(180); // ~6 tháng
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -39,7 +52,7 @@ public class AuditRetentionBackgroundService : BackgroundService
             {
                 var now = DateTime.UtcNow;
                 // Chỉ chạy quanh 03:00 UTC (CheckInterval 6h đảm bảo trúng cửa sổ này 1 lần/ngày).
-                if (now.Hour is < 3 or > 4)
+                if (!IsWithinMaintenanceWindow(now))
                     continue;
 
                 await using var scope = _scopeFactory.CreateAsyncScope();

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TicketService.Application.CQRS.Handler.KnowledgeBase;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.Interfaces.Services;
@@ -17,7 +18,7 @@ public class KbQueryHandlersTests
         // Arrange
         var userId = Guid.NewGuid().ToString();
         _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
+        _currentUserService.SetupGet(c => c.Role).Returns("Staff");
 
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
@@ -25,7 +26,6 @@ public class KbQueryHandlersTests
             Id = articleId,
             Title = "Trouble",
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             IsDeleted = false
         };
 
@@ -42,65 +42,6 @@ public class KbQueryHandlersTests
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().NotBeNull();
         result.Data!.Title.Should().Be("Trouble");
-    }
-
-    [Fact]
-    public async Task GetById_InternalOnlyForCustomer_Returns404()
-    {
-        // Arrange
-        var userId = Guid.NewGuid().ToString();
-        _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
-
-        var articleId = Guid.NewGuid();
-        var article = new KnowledgeBaseArticle
-        {
-            Id = articleId,
-            Title = "Secret",
-            Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = true,
-            IsDeleted = false
-        };
-
-        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
-        var uow = resultExtended.uow;
-
-        var handler = new GetKbArticleByIdQueryHandler(uow.Object, _currentUserService.Object);
-        var query = new GetKbArticleByIdQuery { ArticleId = articleId };
-
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(404);
-    }
-
-    [Fact]
-    public async Task GetList_Customer_ReturnsOnlyPublishedPublic()
-    {
-        // Arrange
-        var userId = Guid.NewGuid().ToString();
-        _currentUserService.SetupGet(c => c.UserId).Returns(userId);
-        _currentUserService.SetupGet(c => c.Role).Returns("Customer");
-
-        var article1 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "A", Status = KbArticleStatusEnum.Published, IsInternalOnly = false };
-        var article2 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "B", Status = KbArticleStatusEnum.Draft, IsInternalOnly = false };
-        var article3 = new KnowledgeBaseArticle { Id = Guid.NewGuid(), Title = "C", Status = KbArticleStatusEnum.Published, IsInternalOnly = true };
-
-        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article1, article2, article3 });
-        var uow = resultExtended.uow;
-
-        var handler = new GetKbArticleListQueryHandler(uow.Object, _currentUserService.Object);
-        var query = new GetKbArticleListQuery { PageNumber = 1, PageSize = 10 };
-
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Data!.Items.Should().HaveCount(1);
-        result.Data.Items.First().Title.Should().Be("A");
     }
 
     [Fact]
@@ -123,7 +64,6 @@ public class KbQueryHandlersTests
             Title = "Overheat Fix",
             Category = TicketCategoryEnum.Overheat,
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             HelpfulCount = 5,
             ViewCount = 10
         };
@@ -134,7 +74,6 @@ public class KbQueryHandlersTests
             Title = "Charging Fix",
             Category = TicketCategoryEnum.Charging,
             Status = KbArticleStatusEnum.Published,
-            IsInternalOnly = false,
             HelpfulCount = 10,
             ViewCount = 20
         };
@@ -172,10 +111,7 @@ public class KbQueryHandlersTests
             MajorVersion = 1,
             MinorVersion = 0,
             Title = "Title A",
-            Symptoms = "Symptoms A",
-            DiagnosisSteps = "Diagnosis A",
-            SolutionSteps = "Solution A",
-            RecommendedParts = new List<string> { "Part A" },
+            Content = JsonDocument.Parse("\"Symptoms A\""),
             Tags = new List<string> { "Tag A" }
         };
 
@@ -186,10 +122,7 @@ public class KbQueryHandlersTests
             MajorVersion = 2,
             MinorVersion = 0,
             Title = "Title B",
-            Symptoms = "Symptoms B",
-            DiagnosisSteps = "Diagnosis B",
-            SolutionSteps = "Solution B",
-            RecommendedParts = new List<string> { "Part B" },
+            Content = JsonDocument.Parse("\"Symptoms B\""),
             Tags = new List<string> { "Tag B" }
         };
 
@@ -249,8 +182,10 @@ public class KbQueryHandlersTests
         {
             Id = articleId,
             Title = "Template Title",
-            Symptoms = "Template Symptoms",
-            Tags = new List<string> { "template", "general" },
+            Content = JsonDocument.Parse("\"Template Symptoms\""),
+            Tags = new List<string> { "general" },
+            IsTemplate = true,
+            Status = KbArticleStatusEnum.Published,
             IsDeleted = false
         };
 
@@ -266,7 +201,7 @@ public class KbQueryHandlersTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().NotBeNull();
-        result.Data!.Symptoms.Should().Be("Template Symptoms");
+        result.Data!.Content.Should().Be("Template Symptoms");
     }
 
     [Fact]
@@ -287,10 +222,22 @@ public class KbQueryHandlersTests
         result.StatusCode.Should().Be(404);
     }
 
+    /// <summary>
+    /// ĐẢO NGƯỢC 2026-07-31 — trước đây case này tên <c>Handle_CopyTemplate_NotTemplateTag_Returns400</c>
+    /// và khẳng định "bài không phải template thì trả 400". Hợp đồng đó **đã bị bỏ có chủ đích** ở commit
+    /// <c>ebfc17e</c> ("Relax CopyKbArticleTemplate: drop the IsTemplate and Published checks so any
+    /// article can be copied as a template source") — FE cần copy bài bất kỳ làm nguồn template.
+    ///
+    /// Test không được cập nhật cùng lúc, và lỗi bị che suốt vì <c>TicketService.UnitTests</c> không
+    /// compile được từ commit ngay sau đó (<c>3466761</c>) cho tới 2026-07-31.
+    ///
+    /// ⚠️ Nợ kỹ thuật còn lại: 2 guard trong <c>CopyKbArticleTemplateQueryHandler</c> đang bị **comment**
+    /// chứ không xoá hẳn — nên xoá để tránh người sau tưởng là bug và bỏ comment trở lại.
+    /// </summary>
     [Fact]
-    public async Task Handle_CopyTemplate_NotTemplateTag_Returns400()
+    public async Task Handle_CopyTemplate_NonTemplateArticle_StillSucceeds()
     {
-        // Arrange
+        // Arrange — bài thường, KHÔNG phải template, KHÔNG ở trạng thái Published.
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
@@ -309,9 +256,10 @@ public class KbQueryHandlersTests
         // Act
         var result = await handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
+        // Assert — sau khi nới ràng buộc: bài bất kỳ (chưa xoá) đều copy được.
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Data.Should().NotBeNull();
     }
 
     [Fact]

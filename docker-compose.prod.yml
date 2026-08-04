@@ -184,6 +184,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -239,6 +247,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -267,6 +283,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       # Override để dùng internal minio hostname (container-to-container)
@@ -294,6 +318,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -310,6 +342,14 @@ services:
       # Sprint 5B #235 — MassTransit endpoint runtime (PrefetchCount / ConcurrentMessageLimit)
       MessageBus__PrefetchCount: ${MESSAGE_BUS_PREFETCH_COUNT:-32}
       MessageBus__ConcurrentMessageLimit: ${MESSAGE_BUS_CONCURRENT_LIMIT:-16}
+      # Sprint BE-IoT-Realtime — SSE telemetry (overall.md §34.10)
+      Realtime__Enabled: ${Realtime__Enabled:-true}
+      Realtime__HeartbeatSeconds: ${Realtime__HeartbeatSeconds:-30}
+      Realtime__SummaryIntervalSeconds: ${Realtime__SummaryIntervalSeconds:-4}
+      # #614 — phát bù khi client reconnect kèm header Last-Event-ID (chỉ scope 1 pin, event `reading`).
+      # ReplayMaxEvents=0 => TẮT phát bù (không sinh dòng `id:`). TtlMinutes=0 => không đặt hạn sống.
+      Realtime__ReplayMaxEvents: ${Realtime__ReplayMaxEvents:-200}
+      Realtime__ReplayTtlMinutes: ${Realtime__ReplayTtlMinutes:-5}
       # Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService
       Iot__OfflineCheckIntervalSeconds: ${Iot__OfflineCheckIntervalSeconds:-120}
       Iot__OfflineAfterSeconds: ${Iot__OfflineAfterSeconds:-300}
@@ -372,6 +412,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -398,14 +446,36 @@ services:
     networks: [solar-net]
     restart: unless-stopped
 
+  # mem_limit nâng 384m → 512m (30/07/2026).
+  #
+  # Service này chạy **7 background worker** thường trú — nhiều nhất hệ thống:
+  #   AuditOutboxRelay · Dispatch · Digest · DlqMonitor
+  #   + ExpoReceiptReconcile · Fallback · Retention   ← 3 cái thêm ở Sprint 6.3
+  #
+  # Đo thực tế lúc rảnh (docker stats, đủ 7 worker chạy): **329 MiB = 86% của 384m**.
+  # Chỉ còn ~55 MiB đệm, trong khi các đợt tốn bộ nhớ nhất lại chưa xảy ra lúc đo —
+  # bão alert, gom digest theo lô, purge retention. Chạm trần thì kernel OOM-kill container,
+  # mất luôn thông báo đang chờ trong hàng đợi chứ không phải chỉ chậm đi.
+  #
+  # 512m ⇒ đệm ~36%, ngang mức ticketservice (512m, đo 283 MiB).
+  # Ghi chú: mem_limit là TRẦN chứ không phải phần đặt trước, nên tổng trần vượt RAM máy
+  # không tự gây lỗi — thực đo cả stack chỉ ~4.1 GiB.
   notificationservice:
     image: ghcr.io/gsu26se55/notificationservice:${IMAGE_TAG:-staging}
     container_name: solar-notificationservice
-    mem_limit: 384m
+    mem_limit: 512m
     cpus: "0.40"
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -435,6 +505,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -467,6 +545,14 @@ services:
     env_file:
       - /opt/solar/.env.prod
     environment:
+      # ---- #AUTH-05 (P0) — CORS whitelist. BẮT BUỘC ở Production. ----
+      # Thiếu Cors__AllowedOrigins__0 => `docker compose up` DỪNG NGAY với thông báo bên dưới,
+      # thay vì để 8 container khởi động rồi cùng crash-loop vì InvalidOperationException.
+      # Khai giá trị trong /opt/solar/.env.prod (file đã dùng cho cả --env-file lẫn env_file).
+      # Origin = scheme + host + port, KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+      Cors__AllowedOrigins__0: "${Cors__AllowedOrigins__0:?BAT BUOC o Production (AUTH-05). Dat Cors__AllowedOrigins__0 trong /opt/solar/.env.prod, neu khong service se tu choi khoi dong}"
+      Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
+      Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
@@ -558,5 +644,139 @@ services:
       - alertmanager-data:/alertmanager
     ports:
       - "9095:9093"
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # Relay Alertmanager → Discord.
+  #
+  # BẮT BUỘC phải có: `monitoring/alertmanager/config.yml` (mount y hệt ở dev lẫn prod) cho CẢ BA
+  # receiver — default / critical / warning — đều trỏ tới `http://alertmanager-discord:9094`.
+  # Thiếu service này thì Alertmanager vẫn nhận alert từ Prometheus rồi gọi webhook vào một host
+  # không tồn tại: alert **chết im lặng**, không ai được báo, và không có dấu hiệu nào ngoài log
+  # của chính Alertmanager. Trước đây prod thiếu hẳn service này dù `DISCORD_WEBHOOK` đã nằm sẵn
+  # trong `env.prod.example` — tức là sót lúc dựng file prod, không phải chủ ý bỏ.
+  #
+  # Phạm vi ảnh hưởng gồm cả 5 rule nhóm `notification-delivery` thêm ở Sprint 6.3 (NOTI3-07).
+  alertmanager-discord:
+    image: benjojo/alertmanager-discord:latest
+    platform: linux/amd64
+    container_name: solar-alertmanager-discord
+    profiles: ["monitoring"]
+    mem_limit: 64m
+    cpus: "0.10"
+    env_file:
+      - /opt/solar/.env.prod   # cần DISCORD_WEBHOOK
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # Exporter — prod trước đây thiếu cả 6, trong khi Prometheus dùng CHUNG
+  # `./monitoring/prometheus/prometheus.yml` với dev nên vẫn scrape đủ 17 job.
+  #
+  # Thiếu chúng KHÔNG sinh alert rác (không rule nào dùng `up{job=...}`), mà gây ra thứ tệ hơn:
+  # cảnh báo im lặng. Hai rule dưới đây chưa từng có khả năng nổ trên prod —
+  #   · ContainerMemoryHigh    cần container_* của cadvisor
+  #   · PostgresConnectionsHigh cần pg_* của postgres-exporter
+  # ContainerMemoryHigh chính là cảnh báo lẽ ra phải bắt được vụ notificationservice chạm
+  # 86% giới hạn RAM ở trên. Volume `loki-data` cũng đã khai sẵn trong file này mà không
+  # service nào dùng — dấu hiệu rõ là sót lúc dựng bản prod chứ không phải cắt có chủ đích.
+  #
+  # KHÔNG publish cổng ra host: Prometheus gọi qua mạng nội bộ `solar-net`, mở cổng chỉ thêm
+  # bề mặt tấn công. mem_limit đặt theo số đo thật ở dev (xem chú thích từng service).
+  # Tất cả đều nằm trong profile `monitoring`, không ảnh hưởng khi chạy stack lõi.
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: solar-node-exporter
+    profiles: ["monitoring"]
+    mem_limit: 64m          # đo thật 15 MiB
+    cpus: "0.10"
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks: [solar-net]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: solar-cadvisor
+    profiles: ["monitoring"]
+    mem_limit: 192m         # đo thật 82 MiB — nặng nhất trong nhóm exporter
+    cpus: "0.30"
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [solar-net]
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: solar-postgres-exporter
+    profiles: ["monitoring"]
+    mem_limit: 64m          # đo thật 14.5 MiB
+    cpus: "0.10"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-postgres}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: solar-redis-exporter
+    profiles: ["monitoring"]
+    mem_limit: 64m          # đo thật 17 MiB
+    cpus: "0.10"
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # Loki + Promtail — Grafana đã khai sẵn datasource `Loki → http://loki:3100` trong
+  # monitoring/grafana/provisioning (mount chung dev/prod). Thiếu 2 service này thì datasource
+  # trỏ vào hư không: dashboard logs-overview và phần log của iot-fleet báo lỗi trên prod.
+  loki:
+    image: grafana/loki:latest
+    container_name: solar-loki
+    profiles: ["monitoring"]
+    mem_limit: 256m         # đo thật 102 MiB
+    cpus: "0.30"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./monitoring/loki:/etc/loki:ro
+      - loki-data:/loki
+    networks: [solar-net]
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: solar-promtail
+    profiles: ["monitoring"]
+    mem_limit: 160m         # đo thật 67 MiB
+    cpus: "0.20"
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./monitoring/promtail:/etc/promtail:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on: [loki]
     networks: [solar-net]
     restart: unless-stopped

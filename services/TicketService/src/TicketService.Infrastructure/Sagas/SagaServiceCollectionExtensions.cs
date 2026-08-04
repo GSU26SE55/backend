@@ -68,12 +68,58 @@ public static class SagaServiceCollectionExtensions
                 r.UsePostgres();
             });
 
-        // Quartz scheduler endpoint cho persistent timeout (xem #237).
+        // ── Persistent timeout cho saga (xem #237) ──────────────────────────────────
+        //
+        // Cần ĐỦ BA mảnh, thiếu một là hỏng im lặng:
+        //   1. AddQuartz + AddQuartzHostedService  → scheduler Quartz + bảng qrtz_ (ở AddAlertTicketSaga)
+        //   2. AddPublishMessageScheduler          → phía DI: saga publish ScheduleMessage<T>
+        //   3. AddQuartzConsumers                  → phía tiêu thụ: ai đó phải NHẬN ScheduleMessage<T>
+        //      và nạp vào Quartz. Thiếu mảnh này thì lệnh hẹn giờ bay vào hư không.
+        //
+        // Kèm theo, bus factory phải gọi `cfg.UsePublishMessageScheduler()` để bơm
+        // MessageSchedulerContext vào pipe (đã thêm ở SharedInfrastructure/Bus/MassTransitExtensions).
+        //
+        // **Sửa 30/07/2026:** trước đây thiếu mảnh (3) và lời gọi ở bus factory ⇒ mọi transition có
+        // hẹn giờ ném `PayloadNotFoundException: MassTransit.MessageSchedulerContext`, dồn 1662
+        // message vào `AlertTicketSagaState_error` và `qrtz_triggers` rỗng suốt.
         x.AddPublishMessageScheduler();
+        x.AddQuartzConsumers();
     }
 
     /// <summary>
-    /// Đăng ký ChatEscalationReview saga (#566). Reuse Quartz scheduler đã có.
+    /// Configurator cho <c>AddMessageBus(configureBus: ...)</c> — chạy trong <c>UsingRabbitMq</c>.
+    /// Bật publish scheduler để saga dùng được <c>.Schedule(...)</c> / <c>.Unschedule(...)</c>.
+    /// </summary>
+    public static void ConfigureAlertTicketSagaBus(
+        IBusRegistrationContext context,
+        IRabbitMqBusFactoryConfigurator cfg)
+    {
+        // Phải ghép cặp với AddPublishMessageScheduler/AddQuartzConsumers ở trên.
+        cfg.UsePublishMessageScheduler();
+
+        // FIX saga-race: retry các va chạm timing tạm thời của saga.
+        cfg.UseMessageRetry(r =>
+        {
+            r.Interval(5, TimeSpan.FromMilliseconds(200));
+            r.Handle<DbUpdateConcurrencyException>();
+            r.Handle<UnhandledEventException>();
+        });
+    }
+
+    /// <summary>
+    /// Đăng ký ChatEscalationReview saga (#566). Dùng chung Quartz scheduler đã khai ở
+    /// <see cref="ConfigureAlertTicketSaga"/>.
+    ///
+    /// <para>
+    /// Cố ý KHÔNG gọi lại <c>AddPublishMessageScheduler</c>/<c>AddQuartzConsumers</c> ở đây: cả hai
+    /// saga đăng ký trên **cùng một bus** (xem <c>ManageDependencyInjection</c> — hai lời gọi
+    /// Configure liên tiếp trong cùng một <c>AddMessageBus</c>), nên một lần khai là đủ cho cả hai.
+    /// Gọi lặp sẽ đẻ thêm endpoint quartz thừa.
+    /// </para>
+    /// <para>
+    /// Saga này cũng dùng <c>.Schedule(EscalationTimer, ...)</c> (chờ Manager ACK 30 phút) ⇒ nó
+    /// chịu chung lỗi thiếu scheduler trước ngày 30/07/2026, và được bản sửa đó chữa luôn.
+    /// </para>
     /// </summary>
     public static void ConfigureChatEscalationReviewSaga(IBusRegistrationConfigurator x)
     {

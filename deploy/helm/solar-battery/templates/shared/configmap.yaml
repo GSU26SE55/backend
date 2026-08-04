@@ -35,9 +35,33 @@ data:
   # Admin invite email link — EmailService append ?token=...
   AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
 
+  # Sprint 6.3 NOTI3-15 — gốc URL cho link hủy đăng ký một chạm trong email.
+  # Gmail/Yahoo POST thẳng vào URL này (List-Unsubscribe-Post), nên phải là domain công khai
+  # thật. Ingress của apigateway phục vụ host api.{domain} ở path "/", còn controller nằm tại
+  # /api/notification-unsubscribe ⇒ base đúng là https://api.{domain}.
+  # Thiếu biến này thì EmailBusChannel vẫn gửi email nhưng bỏ header List-Unsubscribe và chỉ
+  # ghi 1 dòng LogWarning — im lặng về phía người dùng.
+  Notification__Unsubscribe__PublicBaseUrl: "https://api.{{ .Values.global.domain }}"
+
   # #AUTH-51 — Frontend Web app base URL (cross-device 2FA confirm email link).
   # AuthService dùng `Frontend:WebBaseUrl` để build URL "https://{domain}/2fa/cross-device-confirm?token=..."
   Frontend__WebBaseUrl: "https://{{ .Values.global.domain }}"
+
+  # ---------- #AUTH-05 (P0) — CORS whitelist ----------
+  # Origin mặc định = chính domain phục vụ FE Web, dựng từ `global.domain` giống
+  # `Frontend__WebBaseUrl` ở trên để không bao giờ lệch nhau.
+  #
+  # ⚠️ BẮT BUỘC khi `global.aspnetEnvironment: Production` — thiếu khoá này thì `AddCorsExtentions`
+  # ném `InvalidOperationException` và **cả 9 pod CrashLoopBackOff**, không phải chỉ cảnh báo.
+  # Ở Development/Staging thì thiếu chỉ ra cảnh báo + mở cho mọi origin, nhưng cụm staging đã có
+  # Ingress công khai + cert thật nên vẫn nên siết.
+  #
+  # Origin = scheme + host (+ port nếu khác 443/80). KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+  # Thêm origin khác (mobile web, cổng dev, domain phụ) qua `global.extraCorsOrigins` trong values.
+  Cors__AllowedOrigins__0: "https://{{ .Values.global.domain }}"
+  {{- range $i, $origin := .Values.global.extraCorsOrigins }}
+  Cors__AllowedOrigins__{{ add $i 1 }}: {{ $origin | quote }}
+  {{- end }}
 
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}

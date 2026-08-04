@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.Ambient;
 
@@ -24,11 +25,11 @@ public class GetAmbientReadingHistoryQueryHandler
         if (request.To.HasValue)
             query = query.Where(r => r.Time <= request.To.Value);
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        // KHÔNG cần .ThenBy(Id): AmbientReading là hypertable TimescaleDB, không kế thừa AuditableEntity
+        // nên không có Id. Khoá chính là (Time, SiteId) mà query đã lọc cứng theo một SiteId — trong
+        // phạm vi đó Time tự nó đã duy nhất, thứ tự dưới đây là toàn phần.
+        var page = await query
             .OrderByDescending(r => r.Time)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
             .Select(r => new AmbientReadingDto
             {
                 Time = r.Time,
@@ -39,19 +40,13 @@ public class GetAmbientReadingHistoryQueryHandler
                 Source = r.Source,
                 SourceDeviceId = r.SourceDeviceId
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(pageNumber, pageSize, cancellationToken);
 
         return new AmbientReadingListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AmbientReadingDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            }
+            Data = page
         };
     }
 }

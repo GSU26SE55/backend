@@ -15,16 +15,16 @@ namespace TicketService.Application.CQRS.Handler.Tickets;
 public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclareIncidentCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IActivityLogger _activityLogger;
 
     public TicketDeclareIncidentCommandHandler(
         ITicketUnitOfWork unitOfWork,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IActivityLogger activityLogger)
     {
         _unitOfWork = unitOfWork;
-        _producer = producer;
+        _outboxWriter = producer;
         _activityLogger = activityLogger;
     }
 
@@ -49,12 +49,12 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             ticket.Id,
             request.UserId,
             ActorRoleEnum.Manager,
-            "Manager", // Should be from context but following existing pattern
+            request.UserDisplayName!,
             ActivityActionEnum.IncidentDeclared,
             reason: request.IncidentDescription);
 
         // Outbox: Incident Declared
-        await _producer.PublishAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
+        await _outboxWriter.WriteAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, request.UserId), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

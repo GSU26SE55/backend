@@ -78,6 +78,8 @@ public class AdminAccountsController : ControllerBase
         [FromQuery] AccountStatusEnum? status = null,
         [FromQuery] Guid? roleId = null,
         [FromQuery] bool? emailConfirmed = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
         CancellationToken cancellationToken = default)
     {
         var query = new GetAccountsQuery
@@ -87,10 +89,39 @@ public class AdminAccountsController : ControllerBase
             Keyword = keyword,
             Status = status,
             RoleId = roleId,
-            EmailConfirmed = emailConfirmed
+            EmailConfirmed = emailConfirmed,
+            SortBy = sortBy,
+            SortDir = sortDir
         };
 
         var result = await _mediator.Send(query, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Snapshot thống kê account (total + count theo role) — donut "Người dùng theo vai trò" trên Dashboard Admin.
+    /// </summary>
+    /// <remarks>
+    /// Thay cho việc FE tự đếm role trên 1 trang list (bị cap theo pageSize).
+    ///
+    /// Cách hoạt động:
+    /// - <c>Total</c>: tổng account chưa xóa — có thể lớn hơn tổng <c>CountByRole</c> nếu có account chưa gán role.
+    /// - <c>CountByRole</c>: đếm theo tên role, zero-fill đủ mọi role đang có trong hệ thống.
+    /// - Snapshot hiện tại — KHÔNG nhận from/to. FE nên cache ~1 phút (staleTime).
+    /// </remarks>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
+    /// <returns>Thống kê account.</returns>
+    /// <response code="200">Lấy thống kê thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin hoặc Manager.</response>
+    [HttpGet("stats")]
+    [Authorize(Roles = "Admin,Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountStatsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStats(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAccountStatsQuery(), cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -420,6 +451,47 @@ public class AdminAccountsController : ControllerBase
     {
         command.AccountId = id;
         var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Đối soát read-model tài khoản của các service khác: phát lại <c>AccountSyncSnapshotEvent</c>
+    /// cho toàn bộ account (hoặc một account chỉ định).
+    /// </summary>
+    /// <remarks>
+    /// Read-model account ở các service khác (rõ nhất là NotificationService — nơi quyết định
+    /// "gửi thông báo cho nhóm Manager/Admin" gồm những ai) chỉ được nuôi bằng integration event.
+    /// Có ba đường làm nó lệch mà bản thân service kia không tự phát hiện được:
+    ///
+    /// - Account tạo bằng <c>AuthDataSeeder</c> ghi thẳng DbContext, không đi qua handler nào nên
+    ///   không phát event ⇒ không bao giờ có mặt trong read-model.
+    /// - Event bị mất/hỏng trong lúc service tiêu thụ đang chết.
+    /// - Read-model bị xoá/dựng lại khi reset môi trường.
+    ///
+    /// Mỗi service một database nên không thể tự đối soát từ phía bên kia — bắt buộc AuthService
+    /// phải phát lại. Endpoint này an toàn khi gọi lại nhiều lần: snapshot là upsert thuần ở phía
+    /// consumer, KHÔNG kèm tác dụng phụ nghiệp vụ (không gửi welcome, không sinh notification).
+    ///
+    /// Event đi qua Outbox nên vẫn tới nơi kể cả khi RabbitMQ hoặc service tiêu thụ đang tạm chết.
+    ///
+    /// Quyền truy cập: chỉ role <c>Admin</c>.
+    /// </remarks>
+    /// <param name="accountId">Bỏ trống = đối soát toàn bộ. Có giá trị = chỉ phát lại cho account đó.</param>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
+    /// <returns>Số snapshot đã phát, kèm phân rã theo trạng thái để đối chiếu với read-model.</returns>
+    /// <response code="200">Đã phát snapshot.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="404">Có truyền accountId nhưng không tìm thấy account.</response>
+    [HttpPost("resync")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(AccountResyncResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountResyncResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Resync([FromQuery] Guid? accountId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AccountResyncCommand { AccountId = accountId }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 

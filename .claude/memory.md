@@ -59,3 +59,16 @@
 - IoT module là **tùy chọn** — chỉ triển khai Sprint 8 nếu core software đã xong
 - Ưu tiên 60–70% effort cho core software trước
 - GVHD: Trương Long (longt5@fe.edu.vn)
+
+---
+
+## Quyết định non-obvious — trỏ sang `docs/`
+
+> ⚠️ **KHÔNG ghi quyết định dự án vào file này nữa.**
+> `.claude/` được GitHub Action đồng bộ **ghi đè** từ repo `workflow-ai`. Sprint additional-auth
+> từng ghi 59 dòng quyết định vào đây (commit `a5efee9`); commit sync `744b0c0` ngày 2026-06-20
+> **xoá sạch cả 59 dòng** và không ai phát hiện cho tới 2026-08-01.
+
+Toàn bộ quyết định non-obvious của backend (Sprint additional-auth đã khôi phục + Sprint audit +
+Sprint Chat) nay nằm ở **`docs/non-obvious-decisions.md`** trong repo backend — nơi đồng bộ không
+với tới.

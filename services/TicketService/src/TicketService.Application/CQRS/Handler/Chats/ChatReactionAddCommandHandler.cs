@@ -9,6 +9,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -19,12 +20,16 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<ChatReactionAddCommandHandler> _logger;
 
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.reaction
+
     public ChatReactionAddCommandHandler(
         ITicketUnitOfWork uow,
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
-        ILogger<ChatReactionAddCommandHandler> logger)
+        ILogger<ChatReactionAddCommandHandler> logger,
+        IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
@@ -36,12 +41,22 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            // Sprint Chat DoD — thêm `t.Code` vào projection để audit có targetDisplay giống các
+            // handler khác. Cùng 1 query đang chạy, không phát sinh round-trip.
+            .Select(t => new
+            {
+                t.Code,
+                t.CustomerId,
+                PrimaryHandlerStaffId = t.Assignments
+                    .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                    .Select(a => (Guid?)a.StaffId)
+                    .FirstOrDefault()
+            })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.UserId, request.ActorRoles))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
             return Fail(403, "Không có quyền truy cập ticket.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
@@ -80,6 +95,12 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
                 false,
                 chat.AuthorUserId), ct);
 
+            // Sprint Chat DoD — audit chat.reaction. Có 2 nhánh (tạo mới / khôi phục bản
+            // đã soft-delete) nên publish ở cả hai, ngay trước SaveChanges của nhánh đó.
+            await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+                TicketService.Domain.Enums.TicketAuditActionEnum.ChatReacted, request.TicketId, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id, ["reactionType"] = request.ReactionType.ToString() }), ct);
+
             await _uow.SaveChangesAsync(ct);
         }
         else if (existing.IsDeleted)
@@ -96,6 +117,12 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
                 (int)request.ReactionType,
                 false,
                 chat.AuthorUserId), ct);
+
+            // Sprint Chat DoD — audit chat.reaction. Có 2 nhánh (tạo mới / khôi phục bản
+            // đã soft-delete) nên publish ở cả hai, ngay trước SaveChanges của nhánh đó.
+            await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+                TicketService.Domain.Enums.TicketAuditActionEnum.ChatReacted, request.TicketId, targetDisplay: ticket.Code,
+                metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id, ["reactionType"] = request.ReactionType.ToString() }), ct);
 
             await _uow.SaveChangesAsync(ct);
         }

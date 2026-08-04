@@ -3,7 +3,7 @@ using AuthService.Application.DTOs.Response.Audit;
 using AuthService.Application.Interfaces.Repositories;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace AuthService.Application.CQRS.Handler.Audit;
 
@@ -48,12 +48,9 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Audit
         if (request.ToUtc.HasValue)
             query = query.Where(a => a.CreatedAt < request.ToUtc.Value);
 
-        var totalItems = await query.CountAsync(cancellationToken);
-
-        var items = await query
+        var page = await query
             .OrderByDescending(a => a.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
             .Select(a => new AuditLogDto
             {
                 Id = a.Id.ToString(),
@@ -71,19 +68,13 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Audit
                 CorrelationId = a.CorrelationId,
                 CreatedAt = a.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new AuditLogListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AuditLogDto>
-            {
-                Items = items,
-                TotalItems = totalItems,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

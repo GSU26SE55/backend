@@ -8,22 +8,19 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
-    /// <summary>
-    /// ID của Ticket liên quan.
-    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
-    public Guid NewStaffId { get; set; }
+
     /// <summary>
-    /// Lý do thực hiện hành động.
+    /// Staff mới được chỉ định làm PrimaryHandler — phải đủ tier theo priority của ticket.
     /// </summary>
+    public Guid NewPrimaryHandlerStaffId { get; set; }
+
     public string Reason { get; set; } = string.Empty;
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
-    /// <summary>
-    /// Tên của Manager.
-    /// </summary>
+
     [JsonIgnore]
     public string? ManagerName { get; set; }
 
@@ -34,8 +31,8 @@ public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatabl
         if (TicketId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
 
-        if (NewStaffId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "NewStaffId", Detail = "NewStaffId không hợp lệ." });
+        if (NewPrimaryHandlerStaffId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "NewPrimaryHandlerStaffId", Detail = "NewPrimaryHandlerStaffId không hợp lệ." });
 
         if (string.IsNullOrWhiteSpace(Reason))
             response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Lý do điều chuyển không được để trống." });

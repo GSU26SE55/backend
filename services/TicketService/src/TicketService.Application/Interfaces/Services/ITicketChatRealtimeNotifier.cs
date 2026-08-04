@@ -26,6 +26,4 @@ public interface ITicketChatRealtimeNotifier
     // #557 — Force disconnect participant bị xóa khỏi ticket
     Task ForceDisconnectFromTicketAsync(Guid ticketId, Guid userId, CancellationToken cancellationToken = default);
 
-    // #560 — Sentiment alert khi Customer chat có tone tiêu cực (score < threshold)
-    Task NotifySentimentAlertAsync(Guid ticketId, double score, string label, CancellationToken cancellationToken = default);
 }

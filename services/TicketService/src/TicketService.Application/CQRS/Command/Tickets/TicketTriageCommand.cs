@@ -32,6 +32,7 @@ public class TicketTriageCommand : IRequest<TicketActionResponse>, IValidatable<
     /// </summary>
     [JsonIgnore]
     public Guid ManagerId { get; set; }
+
     [JsonIgnore]
     public string? ManagerName { get; set; }
 

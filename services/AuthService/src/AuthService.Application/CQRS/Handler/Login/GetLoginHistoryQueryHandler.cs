@@ -4,7 +4,8 @@ using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Common.Responses;
+using SharedContracts.Common.Requests;
+using SharedInfrastructure.Extensions;
 
 namespace AuthService.Application.CQRS.Handler.Login;
 
@@ -55,12 +56,18 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
         if (request.ToUtc.HasValue)
             query = query.Where(la => la.CreatedAt < request.ToUtc.Value);
 
-        var totalItems = await query.CountAsync(cancellationToken);
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist switch-case: createdAt (default) | result | method | ipAddress. Không dynamic LINQ.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "result" => descending ? query.OrderByDescending(la => la.Result) : query.OrderBy(la => la.Result),
+            "method" => descending ? query.OrderByDescending(la => la.Method) : query.OrderBy(la => la.Method),
+            "ipaddress" => descending ? query.OrderByDescending(la => la.IpAddress) : query.OrderBy(la => la.IpAddress),
+            _ => descending ? query.OrderByDescending(la => la.CreatedAt) : query.OrderBy(la => la.CreatedAt),
+        };
 
-        var items = await query
-            .OrderByDescending(la => la.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+        var page = await ordered
+            .ThenBy(la => la.Id) // tie-breaker cố định — pagination ổn định
             .Select(la => new LoginAttemptDto
             {
                 Id = la.Id.ToString(),
@@ -75,19 +82,13 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
                 Note = la.Note,
                 CreatedAt = la.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new LoginAttemptListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<LoginAttemptDto>
-            {
-                Items = items,
-                TotalItems = totalItems,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

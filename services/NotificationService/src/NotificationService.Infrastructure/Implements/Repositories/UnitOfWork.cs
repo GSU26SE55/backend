@@ -24,6 +24,12 @@ public class UnitOfWork : INotificationUnitOfWork
     public IGenericRepository<NotificationPreference> NotificationPreferences => new GenericRepository<NotificationPreference>(_context);
     public IGenericRepository<NotificationTemplate> NotificationTemplates => new GenericRepository<NotificationTemplate>(_context);
     public IGenericRepository<AccountReadModel> Accounts => new GenericRepository<AccountReadModel>(_context);
+    public IGenericRepository<PushReceipt> PushReceipts => new GenericRepository<PushReceipt>(_context); // Sprint 6.3 NOTI3-02 (#702)
+    public IGenericRepository<NotificationCategoryPreference> NotificationCategoryPreferences => new GenericRepository<NotificationCategoryPreference>(_context); // Sprint 6.3 NOTI3-04 (#704)
+    public IGenericRepository<NotificationGroup> NotificationGroups => new GenericRepository<NotificationGroup>(_context);                   // Sprint 6.4 NOTI4-01
+    public IGenericRepository<NotificationGroupMember> NotificationGroupMembers => new GenericRepository<NotificationGroupMember>(_context); // Sprint 6.4 NOTI4-01
+    public IGenericRepository<NotificationBatch> NotificationBatches => new GenericRepository<NotificationBatch>(_context);                  // Sprint 6.4 NOTI4-06
+    public IGenericRepository<NotificationBatchTarget> NotificationBatchTargets => new GenericRepository<NotificationBatchTarget>(_context); // Sprint 6.4 NOTI4-06
 
     public async Task BeginTransactionAsync()
     {

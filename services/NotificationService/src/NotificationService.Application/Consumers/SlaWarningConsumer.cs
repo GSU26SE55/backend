@@ -12,8 +12,10 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — SLA timer sắp hết (warning threshold) → notify Manager. GH-604: recipient resolve qua
-/// <see cref="IRecipientResolver"/> (broadcast Manager). Staff phụ trách cụ thể bị DEFER
-/// (event chỉ mang TicketId, không có AssignedStaffId) — follow-up enrich event sau.
+/// <see cref="IRecipientResolver"/> (broadcast Manager).
+///
+/// Sprint 6.2 NOTI-05 (#676) — <c>SlaWarningEvent</c> nay mang <c>StaffId</c> nên Staff đang phụ
+/// trách cũng được báo, đúng spec §3.4 (trước đó phải defer vì payload thiếu StaffId).
 /// Ghi trực tiếp qua UnitOfWork (InApp + Push).
 /// </summary>
 public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
@@ -46,26 +48,39 @@ public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
 
         var evt = context.Message;
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+        var recipientIds = (await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager")).ToList();
+
+        // Sprint 6.2 NOTI-05 (#676) — spec §3.4 yêu cầu báo CẢ Staff đang phụ trách, không chỉ Manager.
+        if (evt.StaffId is { } staffId && staffId != Guid.Empty)
+            recipientIds.Add(staffId);
+
         if (recipientIds.Count == 0)
         {
-            _logger.LogWarning("No Manager recipient resolved for SlaWarning ticket={TicketId} — skip.", evt.TicketId);
+            _logger.LogWarning("No recipient resolved for SlaWarning ticket={TicketId} — skip.", evt.TicketId);
             return;
         }
 
         var pct = evt.Percentage.ToString("0.#", CultureInfo.InvariantCulture);
-        var title = "⏰ Cảnh báo SLA sắp hết hạn";
-        var body = $"Ticket đã dùng {pct}% thời gian SLA (hạn {evt.WarningAt:dd/MM HH:mm}). Cần xử lý sớm.";
+        // 03/08/2026 — nhắc luôn mã ticket. Trước đó payload chỉ có TicketId (một GUID) nên cả câu
+        // lẫn template đều phải nói chung chung "Ticket đã dùng …%", đúng loại thông báo mà người
+        // nhận cần biết NGAY là ticket nào để mở ra xử lý. Event cũ trong hàng đợi không có Code ⇒
+        // chuỗi rỗng, câu tự lược phần mã đi thay vì hiện "Ticket  ".
+        var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
+
+        var title = $"⏰ Cảnh báo SLA sắp hết hạn{codeSuffix}";
+        var body = $"Ticket{codeSuffix} đã dùng {pct}% thời gian SLA (hạn {evt.WarningAt:dd/MM HH:mm}). Cần xử lý sớm.";
         var payload = JsonSerializer.Serialize(new
         {
             ticketId = evt.TicketId,
+            code = evt.Code,
             warningAt = evt.WarningAt,
             percentage = evt.Percentage,
+            staffId = evt.StaffId,
             screen = "TicketDetail"
         });
 
         await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.SlaWarning, NotificationWriter.InAppPush,
+            _unitOfWork, recipientIds.Distinct().ToList(), NotificationTypeEnum.SlaWarning, NotificationWriter.InAppPush,
             title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

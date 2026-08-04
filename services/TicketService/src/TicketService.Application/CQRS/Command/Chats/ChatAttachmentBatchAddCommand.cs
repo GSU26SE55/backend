@@ -64,4 +64,5 @@ public class AttachmentItem
     /// Kích thước file tính bằng byte.
     /// </summary>
     public long SizeBytes { get; set; }
+    public string? Url { get; set; }
 }

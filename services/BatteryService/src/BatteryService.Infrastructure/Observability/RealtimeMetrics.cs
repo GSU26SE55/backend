@@ -17,6 +17,6 @@ public static class RealtimeMetrics
     /// <summary>Tổng số event SSE đã đẩy xuống client (counter), label theo loại event.</summary>
     public static readonly Counter EventsPushed = Metrics.CreateCounter(
         "sse_events_pushed_total",
-        "Tổng số event SSE telemetry đã đẩy. Label scope: asset|customer|site; event: reading|summary|ping.",
+        "Tổng số event SSE telemetry đã đẩy. Label scope: asset|customer|site; event: reading|summary|stats|ping.",
         new CounterConfiguration { LabelNames = new[] { "scope", "event" } });
 }

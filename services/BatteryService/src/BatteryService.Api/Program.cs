@@ -22,6 +22,27 @@ EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// GH-verify-sensor-grpc — Kestrel 2 listener tách biệt để KHÔNG phá REST hiện có:
+//   :8080 → HTTP/1 (REST controllers)
+//   :8081 → HTTP/2 (gRPC BatteryInternal, nội bộ solar-net)
+// gRPC bắt buộc HTTP/2; tách port riêng tránh phải cấu hình Http1AndHttp2 cho REST.
+// LƯU Ý: ConfigureKestrel + Listen* GHI ĐÈ hoàn toàn ASPNETCORE_URLS → phải bind LẠI
+// :8080 ở đây (nếu không REST mất binding). httpPort đọc từ ASPNETCORE_URLS hoặc mặc định 8080.
+if (!EF.IsDesignTime)
+{
+    var grpcPort = builder.Configuration.GetValue("Grpc:Port", 8081);
+    var httpPort = builder.Configuration.GetValue("Http:Port", 8080);
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        // REST — HTTP/1.1 (giữ nguyên hành vi cũ của :8080).
+        options.ListenAnyIP(httpPort, listen => listen.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2);
+        // gRPC — HTTP/2 thuần.
+        options.ListenAnyIP(grpcPort, listen => listen.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2);
+    });
+}
+
+builder.Services.AddGrpc();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -38,6 +59,11 @@ builder.Services.AddSwaggerGen(options =>
         if (File.Exists(xmlPath))
             options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
     }
+
+    // Bọc enum $ref trong allOf để giữ được <summary> mô tả của property enum.
+    // OpenAPI 3.0 bỏ qua description đứng cạnh $ref trần → không có option này thì
+    // các field enum (classification, staffFeedback, feedback...) mất mô tả trên Swagger.
+    options.UseAllOfToExtendReferenceSchemas();
 
     options.AddSecurityDefinition(ApiKeyAuthenticationHandler.SchemeName, new OpenApiSecurityScheme
     {
@@ -107,7 +133,7 @@ if (!EF.IsDesignTime)
         && !builder.Configuration.GetValue("DisableHttpsRedirection", false))
         app.UseHttpsRedirection();
 
-    app.UseCors("AllowAll");
+    app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 
     // Sprint IoT-2 #IoT2-35 — serve firmware binary đã upload (multipart) qua static path.
     var firmwareRoot = builder.Configuration["Firmware:StorageRoot"];
@@ -127,6 +153,9 @@ if (!EF.IsDesignTime)
 
     app.MapControllers();
     app.MapMetrics();
+
+    // GH-verify-sensor-grpc — gRPC endpoint chỉ bind trên listener HTTP/2 (:8081).
+    app.MapGrpcService<BatteryService.Api.Grpc.BatteryInternalService>();
 
     app.Run();
 }

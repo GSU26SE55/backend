@@ -33,8 +33,15 @@ public class IotDevice : AuditableEntity
 
     public IotFirmwareRelease? TargetFirmwareRelease { get; set; }
 
-    /// <summary>Hash SHA-256 của API key. Plaintext chỉ trả 1 lần khi rotate/issue.</summary>
+    /// <summary>Hash SHA-256 của API key. Dùng để verify constant-time khi device gọi API.</summary>
     public string ApiKeyHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Plaintext API key đầy đủ (prefix <c>iotk_</c>) — lưu để Admin xem lại trên
+    /// <c>GET /api/admin/iot-devices/{id}</c>. <c>null</c> cho device tạo trước khi bật lưu plaintext
+    /// (rotate-key để populate). Set/replace mỗi lần create + rotate.
+    /// </summary>
+    public string? ApiKeyPlaintext { get; set; }
 
     /// <summary>4 ký tự cuối của key — hiển thị trong UI để admin nhận diện ("…ab12").</summary>
     public string ApiKeyLastFour { get; set; } = string.Empty;

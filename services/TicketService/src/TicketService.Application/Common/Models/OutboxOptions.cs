@@ -7,4 +7,6 @@ public class OutboxOptions
     public int IntervalSeconds { get; set; } = 5;
     public int BatchSize { get; set; } = 100;
     public int MaxRetryCount { get; set; } = 5;
+    public int PublishTimeoutSeconds { get; set; } = 30;
+    public int LeaseDurationSeconds { get; set; } = 45;
 }

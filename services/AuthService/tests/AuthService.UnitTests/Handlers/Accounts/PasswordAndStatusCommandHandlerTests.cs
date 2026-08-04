@@ -4,6 +4,7 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
+using SharedContracts.Interfaces;
 using MediatR;
 
 namespace AuthService.UnitTests.Handlers.Accounts;
@@ -15,6 +16,11 @@ namespace AuthService.UnitTests.Handlers.Accounts;
 public class ChangeAccountStatusCommandHandlerTests
 {
     private readonly Mock<IPublisher> _publisher = MockPublisher.NoOp();
+
+    // 02/08/2026 — handler nay publish AccountSyncSnapshotEvent để read-model account bên
+    // NotificationService biết tài khoản vừa bị khoá/mở. Xem test dedicated ở
+    // Handlers/Events/AccountSyncSnapshotPublishTests.cs.
+    private readonly Mock<IMessageProducerService> _producer = new();
 
     private static global::AuthService.Domain.Entities.Account WithStatus(AccountStatusEnum status, int failed = 3) => new()
     {
@@ -32,7 +38,7 @@ public class ChangeAccountStatusCommandHandlerTests
     {
         var account = WithStatus(AccountStatusEnum.Locked);
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
 
@@ -56,7 +62,7 @@ public class ChangeAccountStatusCommandHandlerTests
             ExpiredAt = DateTime.UtcNow.AddDays(7)
         };
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, tokenSeed: new[] { token });
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Locked, Reason = "violation" }, CancellationToken.None);
 
@@ -70,7 +76,7 @@ public class ChangeAccountStatusCommandHandlerTests
     {
         var account = WithStatus(AccountStatusEnum.Active);
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
 
@@ -83,7 +89,7 @@ public class ChangeAccountStatusCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object);
+        var handler = new ChangeAccountStatusCommandHandler(uow.Object, _publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = Guid.NewGuid(), Status = AccountStatusEnum.Active }, CancellationToken.None);
 

@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - heading "NotificationHub — kiểm thử realtime" [level=1] [ref=e2]
+  - generic [ref=e3]: Sprint 6.3 · NOTI3-13 (#713) — SignalR đẩy notification mới + badge count
+  - generic [ref=e4]:
+    - text: "Trạng thái:"
+    - generic [ref=e5]: đang kết nối…
+  - table [ref=e6]:
+    - rowgroup [ref=e7]:
+      - row [ref=e8]:
+        - cell "Hub URL" [ref=e9]
+        - cell "http://localhost:4001/hubs/notifications" [ref=e10]
+      - row [ref=e11]:
+        - cell "Transport" [ref=e12]
+        - cell "—" [ref=e13]
+      - row [ref=e14]:
+        - cell "NotificationCreated" [ref=e15]
+        - cell "0" [ref=e16]
+      - row [ref=e17]:
+        - cell "UnreadCountChanged" [ref=e18]
+        - cell "0" [ref=e19]
+      - row [ref=e20]:
+        - cell "Badge mới nhất" [ref=e21]
+        - cell "—" [ref=e22]
+  - generic [ref=e23]: "[15:15:50.809] Bắt đầu — token có (1347 ký tự)"

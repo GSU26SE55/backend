@@ -49,4 +49,23 @@ public static class IotMetrics
     public static readonly Counter CrossSourceMismatchAlertsTotal = Metrics.CreateCounter(
         "iot_cross_source_mismatch_alerts_total",
         "Alert SensorMismatch sinh ra do reading BMS vs IoT lệch vượt ngưỡng.");
+
+    // ===== MQTT bridge =====
+    //
+    // Alert `MqttBridgeDisconnected` (monitoring/prometheus/alert-rules.yml, nhóm iot-mqtt-bridge)
+    // đã tồn tại từ trước với expr:
+    //     mqtt_bridge_connected == 0 and on() mqtt_bridge_enabled == 1
+    // nhưng KHÔNG file .cs nào phát ra hai series này. Vế nào cũng là vector rỗng nên phép `and`
+    // cho vector rỗng ⇒ alert không bao giờ nổ, dù bridge có chết hẳn. Bổ sung ở đây để rule đó
+    // thật sự hoạt động.
+    //
+    // Cần CẢ HAI: chỉ có `connected` thì lúc tắt bridge có chủ đích (Mqtt:Enabled=false) sẽ báo
+    // động giả mãi mãi; `enabled` là điều kiện chặn đúng cho tình huống đó.
+    public static readonly Gauge MqttBridgeEnabled = Metrics.CreateGauge(
+        "mqtt_bridge_enabled",
+        "1 = MQTT bridge được bật (Mqtt:Enabled=true), 0 = tắt có chủ đích.");
+
+    public static readonly Gauge MqttBridgeConnected = Metrics.CreateGauge(
+        "mqtt_bridge_connected",
+        "1 = đang kết nối tới broker, 0 = mất kết nối.");
 }

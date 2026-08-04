@@ -111,15 +111,16 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> GetSagaHealth([FromServices] IAlertTicketSagaQueryService sagaQuery)
     {
         // Health derived từ counters — chi tiết metrics ở Prometheus /metrics endpoint.
-        var (failedPage, failedTotal) = await sagaQuery.QueryAsync(
+        // Chỉ cần con số tổng; pageSize=1 để không kéo dữ liệu thừa.
+        var failedTotal = (await sagaQuery.QueryAsync(
             state: "Failed", alertId: null, batteryAssetId: null, customerId: null,
             startedFrom: DateTime.UtcNow.AddHours(-24), startedTo: null,
-            isFailed: true, pageNumber: 1, pageSize: 1, isDescending: true, default);
+            isFailed: true, pageNumber: 1, pageSize: 1, isDescending: true, default)).TotalItems;
 
-        var (stuckPage, stuckTotal) = await sagaQuery.QueryAsync(
+        var stuckTotal = (await sagaQuery.QueryAsync(
             state: "TicketRequested", alertId: null, batteryAssetId: null, customerId: null,
             startedFrom: null, startedTo: DateTime.UtcNow.AddMinutes(-15),
-            isFailed: false, pageNumber: 1, pageSize: 1, isDescending: true, default);
+            isFailed: false, pageNumber: 1, pageSize: 1, isDescending: true, default)).TotalItems;
 
         var status = failedTotal > 20 || stuckTotal > 50 ? "Degraded"
                     : failedTotal > 5 || stuckTotal > 10 ? "Warning"

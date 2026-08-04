@@ -1,0 +1,6 @@
+# Sprint IoT-1 #253 — không commit secret MQTT.
+passwd
+certs/*
+!certs/.gitkeep
+# TLS listener sinh bởi scripts/gen-certs.sh — phụ thuộc cert cục bộ.
+config/conf.d/*.conf

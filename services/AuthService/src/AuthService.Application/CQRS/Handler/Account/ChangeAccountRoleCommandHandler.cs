@@ -8,26 +8,36 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 /// <summary>
 /// Đổi role của account sang role mới. Quan hệ 1-N: mỗi account chỉ có 1 role.
 /// Nếu role mới trùng role hiện tại → 200 OK nhưng không phát sinh thay đổi.
+///
+/// 02/08/2026 — phát thêm <see cref="AccountSyncSnapshotEvent"/>. Trước đó handler này không phát
+/// event tích hợp nào, nên read-model account bên NotificationService giữ role CŨ vĩnh viễn; mà
+/// <c>RecipientResolver</c> lại resolve người nhận theo đúng trường role đó, nên đổi role xong là
+/// thông báo nhóm gửi sai người cho tới khi có ai đó đối soát thủ công.
 /// </summary>
 public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRoleCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public ChangeAccountRoleCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPublisher publisher,
+        IMessageProducerService messageProducer,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _messageProducer = messageProducer;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -79,7 +89,12 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
 
         // #AUTH-34: retry trên DbUpdateConcurrencyException — race với ChangePassword / Disable / admin khác.
         var auditPublished = false;
+        var snapshotPublished = false;
         var accountInvalidAfterReload = false;
+
+        // Tính MỘT LẦN ngoài vòng retry: mốc này là khoá chống-về-trễ ở consumer, retry mà đổi mốc
+        // thì hai lần thử của cùng một thao tác sẽ trông như hai thao tác khác nhau.
+        var snapshotAtUtc = DateTime.UtcNow;
 
         await ConcurrencyRetryHelper.ExecuteAsync<bool>(
             operation: async (attempt, ct) =>
@@ -114,6 +129,23 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
                             ["newRoleName"] = role.Name
                         }), ct);
                     auditPublished = true;
+                }
+
+                if (!snapshotPublished)
+                {
+                    // Outbox: INSERT vào OutboxMessages của cùng DbContext → atomic với việc đổi role
+                    // ở SaveChangesAsync bên dưới. Role vừa gán là role.Name (đã kiểm tra Active).
+                    await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
+                        account.Id,
+                        account.Email,
+                        account.FullName,
+                        account.PhoneNumber,
+                        role.Name,
+                        IsActive: account.Status.IsNotifiable(),
+                        IsDeleted: false,
+                        SnapshotAtUtc: snapshotAtUtc,
+                        Reason: "RoleChanged"), ct);
+                    snapshotPublished = true;
                 }
 
                 await _unitOfWork.SaveChangesAsync(ct);

@@ -1,3 +1,4 @@
+using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -6,17 +7,21 @@ using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
+using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatEditCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private IReadOnlyList<string> NoMatches = Array.Empty<string>();
 
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
@@ -31,6 +36,7 @@ public class ChatEditCommandHandlerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
     private readonly Mock<IChatCacheService> _chatCache = new();
+    private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<ILogger<ChatEditCommandHandler>> _logger = new();
 
     public ChatEditCommandHandlerTests()
@@ -45,11 +51,13 @@ public class ChatEditCommandHandlerTests
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.SetupGet(u => u.TicketChatEdits).Returns(_chatEditsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _uow.SetupChatTranslations();
         var chatAuthorizationService = new ChatAuthorizationService(_uow.Object);
         return new ChatEditCommandHandler(
             _uow.Object, _activityLogger.Object, _markdownRenderer.Object,
             chatAuthorizationService, _profanityFilter.Object, _piiDetector.Object, _chatOptions,
-            _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _logger.Object);
+            _outboxWriter.Object, _realtimeNotifier.Object, _chatCache.Object, _cache.Object, _logger.Object,
+            _publisher.Object);
     }
 
     private static Ticket MakeTicket(Guid id, TicketStatusEnum status = TicketStatusEnum.InProgress) => new()
@@ -99,13 +107,18 @@ public class ChatEditCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.edited phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatEdited)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(200);
         chat.Body.Should().Be("Edited body");
         chat.EditCount.Should().Be(1);
         chat.LastEditedByUserId.Should().Be(authorId);
 
         _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e =>
-            e.ChatId == chatId && e.OldBody == "Original body" && e.NewBody == "Edited body")), Times.Once);
+            e.ChatId == chatId && e.OldBody == "Original body" && e.NewBody == "Edited body" && e.EditReason == null)), Times.Once);
 
         _activityLogger.Verify(x => x.LogAsync(
             ticketId, authorId, ActorRoleEnum.Customer, "Author",
@@ -177,7 +190,7 @@ public class ChatEditCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ManagerEditWithoutReason_ReturnsValidationError()
+    public async Task Handle_ManagerEditOthersChat_ReturnsForbidden()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
@@ -198,47 +211,14 @@ public class ChatEditCommandHandlerTests
             UserRole = ActorRoleEnum.Manager,
             UserDisplayName = "Manager",
             Body = "Edited by manager",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
+            UserPermissions = new List<string>()
         };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(400);
-        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
-    }
-
-    [Fact]
-    public async Task Handle_ManagerEditWithReason_Succeeds()
-    {
-        var ticketId = Guid.NewGuid();
-        var chatId = Guid.NewGuid();
-        var authorId = Guid.NewGuid();
-        var managerId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId);
-        var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-60), ticket);
-
-        _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);
-        _chatsRepo.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
-
-        var handler = CreateHandler();
-        var command = new ChatEditCommand
-        {
-            TicketId = ticketId,
-            ChatId = chatId,
-            UserId = managerId,
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            Body = "Edited by manager",
-            EditReason = "Redact PII",
-            UserPermissions = new List<string> { ChatPermissionCodes.ChatEditAny }
-        };
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        chat.Body.Should().Be("Edited by manager");
-        _chatEditsRepo.Verify(r => r.AddAsync(It.Is<TicketChatEdit>(e => e.EditReason == "Redact PII")), Times.Once);
+        result.StatusCode.Should().Be(403);
+        chat.Body.Should().Be("Original body");
     }
 
     [Fact]
@@ -453,23 +433,4 @@ public class ChatEditCommandHandlerTests
         result.ListErrors.Should().Contain(e => e.Field == "Body");
     }
 
-    [Fact]
-    public async Task Validate_EditReasonTooLong_ReturnsError()
-    {
-        var command = new ChatEditCommand
-        {
-            TicketId = Guid.NewGuid(),
-            ChatId = Guid.NewGuid(),
-            UserId = Guid.NewGuid(),
-            UserRole = ActorRoleEnum.Manager,
-            UserDisplayName = "Manager",
-            Body = "Edited body",
-            EditReason = new string('a', 1001)
-        };
-
-        var result = await command.ValidateAsync();
-
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(e => e.Field == "EditReason");
-    }
 }

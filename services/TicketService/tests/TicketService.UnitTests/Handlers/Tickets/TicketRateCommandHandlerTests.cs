@@ -16,7 +16,7 @@ public class TicketRateCommandHandlerTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     [Fact]
     public async Task Handle_ValidRate_ClosesTicket()
@@ -45,7 +45,7 @@ public class TicketRateCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketRateCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketRateCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,7 +55,7 @@ public class TicketRateCommandHandlerTests
         result.Data!.Status.Should().Be(TicketStatusEnum.Closed);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Closed, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketRatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketRatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -87,7 +87,7 @@ public class TicketRateCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketRateCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketRateCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

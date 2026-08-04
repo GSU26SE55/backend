@@ -223,4 +223,61 @@ else
   echo "PASS: AUDIT003 no new Console.Write* (outside Program.cs)"
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 8: hai bản alert rules phải trùng khít.
+#
+# docker-compose mount `monitoring/prometheus/alert-rules.yml`; Helm chỉ đọc được file nằm
+# TRONG thư mục chart nên phải giữ bản sao `deploy/helm/solar-battery/files/alert-rules.yml`.
+# Hai bản này từng trôi rất xa nhau — Helm chỉ có 26/40 alert, thiếu trọn 3 nhóm auth-security,
+# chat_hub_alerts, notification-delivery. Cảnh báo chạy ở docker nhưng không tồn tại trên K8s,
+# và không có gì báo cho ai biết.
+#
+# Đây là luật chạy trên TOÀN CÂY (không theo diff): lệch là đỏ, bất kể ai gây ra.
+# ---------------------------------------------------------------------------
+ALERT_SRC="monitoring/prometheus/alert-rules.yml"
+ALERT_HELM="deploy/helm/solar-battery/files/alert-rules.yml"
+
+if [ ! -f "$ALERT_SRC" ] || [ ! -f "$ALERT_HELM" ]; then
+  echo "FAIL: thiếu file alert rules ($ALERT_SRC hoặc $ALERT_HELM)."
+  FAILED=1
+elif diff -q "$ALERT_SRC" "$ALERT_HELM" >/dev/null 2>&1; then
+  echo "PASS: alert rules đồng bộ giữa compose và Helm ($(grep -c '^[[:space:]]*- alert:' "$ALERT_SRC") alert)"
+else
+  echo "FAIL: $ALERT_SRC và $ALERT_HELM đã lệch nhau — alert sẽ chạy ở docker mà không có trên K8s:"
+  diff "$ALERT_SRC" "$ALERT_HELM" || true
+  echo "Fix: make sync-alert-rules"
+  FAILED=1
+fi
+
+# ---------------------------------------------------------------------------
+# Rule 9: template Helm đặt tên `_*` mà không phải partial.
+#
+# Helm bỏ qua MỌI file trong templates/ bắt đầu bằng dấu gạch dưới — nó coi đó là partial
+# (chỗ chứa `define`). File manifest lỡ đặt tên như vậy sẽ không bao giờ render, không lỗi,
+# không cảnh báo. Repo này đã dính hai lần:
+#   · _servicemonitor.yaml → K8s không scrape bất kỳ service ứng dụng nào
+#   · _autoscaling.yaml    → HPA/PDB chưa từng được tạo
+# Cả hai đều không chứa `define` — dấu hiệu nhận biết chắc chắn.
+# ---------------------------------------------------------------------------
+HELM_TPL_DIR="deploy/helm/solar-battery/templates"
+UNDERSCORE_HITS=""
+if [ -d "$HELM_TPL_DIR" ]; then
+  for f in $(find "$HELM_TPL_DIR" -type f -name '_*' 2>/dev/null); do
+    case "$f" in *.tpl) continue;; esac          # *.tpl là partial theo quy ước, bỏ qua
+    if ! grep -qE '\{\{-?[[:space:]]*define' "$f"; then
+      UNDERSCORE_HITS="${UNDERSCORE_HITS}  $f
+"
+    fi
+  done
+fi
+
+if [ -n "$UNDERSCORE_HITS" ]; then
+  echo "FAIL: template Helm tên '_*' nhưng không có block define — Helm sẽ BỎ QUA, không render:"
+  printf '%s' "$UNDERSCORE_HITS"
+  echo "Fix: đổi tên bỏ dấu gạch dưới, hoặc chuyển thành partial thật (.tpl + define)."
+  FAILED=1
+else
+  echo "PASS: không có template Helm bị bỏ qua vì đặt tên '_*'"
+fi
+
 exit "$FAILED"

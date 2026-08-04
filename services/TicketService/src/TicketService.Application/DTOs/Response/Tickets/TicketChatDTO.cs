@@ -59,4 +59,9 @@ public class TicketChatDTO
 
     /// <summary>Bản dịch user hiện tại đã yêu cầu — null nếu chưa dịch.</summary>
     public ChatTranslateDTO? ActiveTranslation { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public VoiceTranscriptionStatusEnum? VoiceTranscriptionStatus { get; set; }
+    public string? VoiceTranscriptionError { get; set; }
+    public DateTime? TranscribedAt { get; set; }
 }

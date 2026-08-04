@@ -2,9 +2,9 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -14,6 +14,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
@@ -27,7 +28,10 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IChatCacheService _chatCache;
+    private readonly ICacheService _cache;
     private readonly ILogger<ChatDeleteCommandHandler> _logger;
+
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.delete
 
     public ChatDeleteCommandHandler(
         ITicketUnitOfWork uow,
@@ -37,8 +41,11 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
         IChatCacheService chatCache,
-        ILogger<ChatDeleteCommandHandler> logger)
+        ICacheService cache,
+        ILogger<ChatDeleteCommandHandler> logger,
+        IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
@@ -46,6 +53,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
         _chatCache = chatCache;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -70,23 +78,36 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         var authResult = _chatAuthorizationService.CanDeleteChat(
             chat,
             request.UserId,
-            request.UserPermissions,
-            !string.IsNullOrWhiteSpace(request.DeleteReason));
-
-        if (authResult == ChatAuthorizationResult.ReasonRequired)
-        {
-            var response = new TicketActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Dữ liệu đầu vào không hợp lệ."
-            };
-            response.ListErrors.Add(new Errors { Field = "DeleteReason", Detail = "Bắt buộc nhập lý do khi xóa bình luận của người khác." });
-            return response;
-        }
+            request.UserPermissions);
 
         if (authResult == ChatAuthorizationResult.Forbidden)
-            return Fail(403, "Không có quyền xóa bình luận này.");
+        {
+            // Non-owner: hide for caller only instead of true delete
+            var alreadyHidden = await _uow.TicketChatHides
+                .AnyAsync(h => h.ChatId == chat.Id && h.UserId == request.UserId && !h.IsDeleted);
+            if (!alreadyHidden)
+            {
+                await _uow.TicketChatHides.AddAsync(new TicketChatHide
+                {
+                    ChatId = chat.Id,
+                    UserId = request.UserId
+                });
+                await _uow.SaveChangesAsync(ct);
+            }
+            return new TicketActionResponse
+            {
+                IsSuccess = true,
+                StatusCode = 200,
+                Message = "Đã ẩn bình luận.",
+                Data = new TicketActionDTO
+                {
+                    Id = chat.Id.ToString(),
+                    TicketId = ticket.Id.ToString(),
+                    Code = ticket.Code,
+                    Status = ticket.Status
+                }
+            };
+        }
 
         var oldBody = chat.Body;
 
@@ -102,7 +123,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             ActivityActionEnum.ChatDeleted,
             ChatTextHelper.Truncate(oldBody),
             null,
-            request.DeleteReason);
+            null);
 
         await _outboxWriter.WriteAsync(new ChatDeletedEvent(
             chat.Id,
@@ -110,7 +131,30 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             request.UserId,
             (int)request.UserRole), ct);
 
+        // #633 — Soft-delete stale translations atomically with the chat delete save
+        var translations = await _uow.TicketChatTranslations
+            .GetAllAsync()
+            .Where(t => !t.IsDeleted && t.ChatId == chat.Id)
+            .ToListAsync(ct);
+
+        foreach (var t in translations)
+        {
+            t.IsDeleted = true;
+            t.DeletedAt = DateTime.UtcNow;
+            _uow.TicketChatTranslations.UpdateAsync(t);
+        }
+
+        // Sprint Chat DoD — audit ChatDeleted. Publish TRƯỚC SaveChanges để entry audit +
+        // outbox đi cùng transaction với thay đổi nghiệp vụ (#AUDIT-25/26).
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.ChatDeleted, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
+
         await _uow.SaveChangesAsync(ct);
+
+        // Clear Redis only after DB is committed
+        foreach (var t in translations)
+            await _cache.RemoveAsync($"chat-translation:{chat.Id}:{t.TargetLanguage}", ct);
 
         await _chatCache.InvalidateAsync(ticket.Id, ct);
 

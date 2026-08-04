@@ -9,8 +9,6 @@ public class TicketChatMention : AuditableEntity
     public Guid MentionedUserId { get; set; }
     public ActorRoleEnum MentionedUserRole { get; set; }
     public string? MentionedDisplayName { get; set; }
-    public bool IsAcknowledged { get; set; }
-    public DateTime? AcknowledgedAt { get; set; }
 
     public required TicketChat Chat { get; set; }
 }

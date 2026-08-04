@@ -24,7 +24,13 @@ public class EnvironmentalIncidentDetectedConsumerTests
     private static async Task<ITestHarness> StartHarness(IMediator mediator, ICacheService? cache = null)
     {
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<EnvironmentalIncidentDetectedConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<EnvironmentalIncidentDetectedConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>()
             .AddSingleton(Resolver())
@@ -71,7 +77,9 @@ public class EnvironmentalIncidentDetectedConsumerTests
         await harness.Bus.Publish(MakeEvent());
         (await harness.Consumed.Any<EnvironmentalIncidentDetectedEvent>()).Should().BeTrue();
 
-        calls.Should().HaveCount(3);
+        // Sprint 6.3 NOTI3-01 (#701) — thêm row InApp để notification hiện trong feed (feed lọc Channel=InApp).
+        calls.Should().HaveCount(4);
+        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Email);
         calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Sms);

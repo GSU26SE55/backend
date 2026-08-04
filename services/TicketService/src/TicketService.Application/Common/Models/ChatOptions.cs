@@ -41,13 +41,7 @@ public class ChatOptions
     /// <summary>ClamAV virus scan config (#514).</summary>
     public VirusScanSection VirusScan { get; set; } = new();
 
-    /// <summary>
-    /// Provider cho AI text/suggestion clients: "Gemini" (default) hoặc "DeepSeek".
-    /// Voice transcription luôn dùng Gemini — DeepSeek không hỗ trợ audio.
-    /// </summary>
-    public string Provider { get; set; } = "Gemini";
-
-    /// <summary>Cấu hình AI suggest endpoint (#559).</summary>
+    /// <summary>Cấu hình Gemini API key (voice transcription) + DeepSeek operational params.</summary>
     public AiSection Ai { get; set; } = new();
 
     /// <summary>Cấu hình DeepSeek Chat Completions API.</summary>
@@ -78,32 +72,15 @@ public class ChatOptions
 
     public class AiSection
     {
-        /// <summary>Gemini API key.</summary>
+        /// <summary>Gemini API key — dùng cho voice transcription (GeminiVoiceTranscriptionService).</summary>
         public string ApiKey { get; set; } = string.Empty;
-
-        /// <summary>Tên model Gemini — ví dụ: "gemini-2.0-flash-lite", "gemini-2.5-flash". Code tự build URL.</summary>
-        public string ModelName { get; set; } = "gemini-2.0-flash-lite";
-
-        /// <summary>Full generateContent endpoint được tính từ ModelName.</summary>
-        public string SuggestModelEndpoint =>
-            $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent";
 
         public int MaxSuggestionsPerCall { get; set; } = 3;
 
-        /// <summary>Timeout gọi LLM API (giây).</summary>
-        public int TimeoutSeconds { get; set; } = 15;
-
-        /// <summary>TTL cache mask map PII trong Redis (giờ).</summary>
-        public int PiiMaskTtlHours { get; set; } = 1;
-
-        /// <summary>Ngưỡng sentiment score để alert Manager (#560). Âm = tiêu cực; default -0.7.</summary>
-        public double SentimentAlertThreshold { get; set; } = -0.7;
 
         /// <summary>Số dòng tóm tắt cho summarize endpoint (#560).</summary>
         public int SummarizeLinesCount { get; set; } = 5;
 
-        /// <summary>Số chat Customer gần nhất để phân tích sentiment (#560).</summary>
-        public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
 
     public class DeepSeekSection
@@ -135,8 +112,8 @@ public class ChatOptions
         /// <summary>Tên model Gemini multimodal cho audio — ví dụ: "gemini-2.5-flash".</summary>
         public string ModelName { get; set; } = "gemini-1.5-flash";
 
-        /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
-        public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";
+        /// <summary>Private HTTP/2 endpoint exposed by FileStorageService for transcription workers.</summary>
+        public string FileStorageGrpcAddress { get; set; } = string.Empty;
 
         public int TranscribeTimeoutSeconds { get; set; } = 30;
     }

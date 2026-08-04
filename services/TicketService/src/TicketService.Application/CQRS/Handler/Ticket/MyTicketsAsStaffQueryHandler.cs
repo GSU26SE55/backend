@@ -1,11 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
 
@@ -32,34 +34,65 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
             };
         }
 
+        var assignedTicketIds = _unitOfWork.TicketAssignments != null
+            ? _unitOfWork.TicketAssignments.GetAllAsync()
+                .Where(a => a.StaffId == staffId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                .Select(a => a.TicketId)
+            : Enumerable.Empty<Guid>().AsQueryable();
+
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
-            .Where(t => !t.IsDeleted && t.AssignedStaffId == staffId);
+            .Include(t => t.BatteryAssets)
+            .Where(t => !t.IsDeleted && assignedTicketIds.Contains(t.Id));
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
 
-        // Sort by SLA urgency: P1 first, then by remaining time
-        query = query.OrderBy(t => t.Priority).ThenByDescending(t => t.CreatedAt);
+        // Bảng SLA Monitor: chỉ lấy ticket đang trong vòng theo dõi SLA (server-side, không cap theo pageSize)
+        if (request.SlaOpen == true)
+            query = query.Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status) && t.SlaTimer != null);
 
-        var total = await query.CountAsync(cancellationToken);
-        var rawItems = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
+        // sortBy=slaRemaining: DueAt tăng dần ≙ thời gian SLA còn lại tăng dần (gần breach lên đầu);
+        // ticket không có timer xếp cuối (MaxValue thay cho NULL để tường minh trên mọi provider).
+        // .ThenBy(Id) ở cả hai nhánh: tie-breaker cố định — pagination ổn định.
+        query = string.Equals(request.SortBy, "slaRemaining", StringComparison.OrdinalIgnoreCase)
+            ? query.OrderBy(t => t.SlaTimer == null ? DateTime.MaxValue : t.SlaTimer.DueAt).ThenBy(t => t.Priority).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Priority).ThenByDescending(t => t.CreatedAt).ThenBy(t => t.Id);
+
+        // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,
+        // nên không chiếu sang DTO trong SQL được.
+        var page = await query.ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
+        var rawItems = page.Items;
+
+        var ticketIds = rawItems.Select(t => t.Id).ToList();
+        HashSet<Guid> unreadTicketIds;
+        if (ticketIds.Count == 0)
+        {
+            unreadTicketIds = new HashSet<Guid>();
+        }
+        else
+        {
+            var actorRoles = new[] { _currentUserService.Role ?? "Staff" };
+            bool canViewInternal = TicketQueryHelper.CanViewInternalChats(actorRoles);
+            var readChatIds = _unitOfWork.TicketChatReads.GetAllAsync().AsNoTracking()
+                .Where(r => r.UserId == staffId && !r.IsDeleted).Select(r => r.ChatId);
+            var chatsBase = _unitOfWork.TicketChats.GetAllAsync().AsNoTracking()
+                .Where(c => ticketIds.Contains(c.TicketId) && !c.IsDeleted && c.AuthorUserId != staffId);
+            if (!canViewInternal)
+                chatsBase = chatsBase.Where(c => !c.IsInternal);
+            var unreadList = await chatsBase
+                .Where(c => !readChatIds.Contains(c.Id))
+                .Select(c => c.TicketId).Distinct()
+                .ToListAsync(cancellationToken);
+            unreadTicketIds = unreadList.ToHashSet();
+        }
 
         return new CommonResponse<PaginationResponse<TicketDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketDTO>
-            {
-                Items = rawItems.Select(TicketQueryHelper.MapToTicketDTO).ToList(),
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id)))
         };
     }
 }

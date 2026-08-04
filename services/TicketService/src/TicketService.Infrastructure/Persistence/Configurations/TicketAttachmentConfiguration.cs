@@ -17,6 +17,8 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
 
         builder.Property(e => e.TicketId)
             .HasColumnName("ticket_id");
+        builder.Property(e => e.SourceTicketId)
+            .HasColumnName("source_ticket_id");
 
         builder.Property(e => e.UploadedByUserId)
             .HasColumnName("uploaded_by_user_id");
@@ -45,6 +47,10 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.Property(e => e.ThumbnailUrl)
             .HasColumnName("thumbnail_url")
             .HasMaxLength(1000);
+
+        builder.Property(e => e.Url)
+            .HasColumnName("url")
+            .HasMaxLength(2000);
 
         builder.Property(e => e.IsInline)
             .HasColumnName("is_inline")
@@ -77,6 +83,7 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.FileId);
         builder.HasIndex(e => e.ChatId);
+        builder.HasIndex(e => e.SourceTicketId);
 
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Attachments)

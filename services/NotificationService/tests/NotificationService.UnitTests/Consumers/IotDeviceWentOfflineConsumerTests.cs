@@ -27,7 +27,13 @@ public class IotDeviceWentOfflineConsumerTests
             .ReturnsAsync(recipients ?? new[] { Guid.NewGuid() });
 
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<IotDeviceWentOfflineConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<IotDeviceWentOfflineConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton(resolver.Object)
             .AddSingleton(cache ?? ConsumerTestHarness.ProceedCache())

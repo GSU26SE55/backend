@@ -27,16 +27,24 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         // KIỂM TRA PHÂN QUYỀN:
         // - Admin/Manager được gán bài viết cho bất kỳ ticket nào.
-        // - Staff phải là người được gán vào Ticket (AssignedStaffId == CurrentUserId).
+        // - Staff phải là PrimaryHandler của Ticket.
         // - Các trường hợp khác bị chặn.
         var userRole = _currentUser.Role;
         if (userRole != "Admin" && userRole != "Manager")
         {
             if (userRole == "Staff")
             {
-                if (ticket.AssignedStaffId != command.CurrentUserId)
+                if (ticket.PrimaryHandlerStaffId != command.CurrentUserId)
                 {
                     return Fail(403, "Chỉ nhân viên kỹ thuật được phân công xử lý Ticket này mới được phép gán tài liệu tham khảo.");
                 }
@@ -47,12 +55,17 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
             }
         }
 
-        // KIỂM TRA LOCK LOGIC: Không cho gán bài viết khi đã báo Resolved hoặc đã Closed
-        if (ticket.Status == TicketStatusEnum.Resolved ||
-            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
-            ticket.Status == TicketStatusEnum.Closed)
+        // KIỂM TRA LOCK LOGIC: Không cho gán bài viết khi đã báo Resolved hoặc đã Closed.
+        // Ngoại lệ: 2 type "after-resolve" (GeneratedAfterResolve, ProvidedToCustomer) về ngữ nghĩa
+        // xảy ra lúc/sau khi Resolved nên vẫn cho gán ở state Resolved; từ ClosedPendingRate trở đi chặn tất cả.
+        var isAfterResolveType = command.ReferenceType == KbReferenceTypeEnum.GeneratedAfterResolve ||
+                                 command.ReferenceType == KbReferenceTypeEnum.ProvidedToCustomer;
+        if (ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+            ticket.Status == TicketStatusEnum.Closed ||
+            (ticket.Status == TicketStatusEnum.Resolved && !isAfterResolveType))
         {
-            return Fail(403, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể gán thêm tài liệu tham khảo.");
+            // 409: xung đột với trạng thái hiện tại của ticket (không phải lỗi quyền)
+            return Fail(409, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể gán thêm tài liệu tham khảo.");
         }
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()

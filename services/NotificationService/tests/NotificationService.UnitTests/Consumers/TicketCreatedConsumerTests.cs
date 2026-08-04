@@ -13,7 +13,7 @@ public class TicketCreatedConsumerTests
     public async Task TicketCreated_Writes_InAppPush_ResolvedRecipient()
     {
         var (harness, written, uow) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>();
-        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-001");
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-001", Guid.NewGuid(), "P2High");
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
@@ -42,7 +42,7 @@ public class TicketCreatedConsumerTests
     {
         // Resolver trả rỗng (chưa có Manager nào trong read-model) → consumer skip, không ghi notification.
         var (harness, written, uow) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>(Array.Empty<Guid>());
-        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-002");
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-002", Guid.NewGuid(), "P2High");
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
@@ -59,7 +59,7 @@ public class TicketCreatedConsumerTests
         // Simulate MassTransit retry: cache đã có key cho MessageId → consumer bỏ qua, không ghi DB.
         var (harness, written, uow) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>(
             cache: ConsumerTestHarness.AlreadySeenCache());
-        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-003");
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-003", Guid.NewGuid(), "P2High");
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
@@ -76,10 +76,11 @@ public class TicketCreatedConsumerTests
         var cache = new Mock<ICacheService>();
         cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
+        cache.Setup(x => x.TrySetIfNotExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketCreatedConsumer>(
             cache: cache.Object);
-        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-004");
+        var evt = new TicketCreatedEvent(Guid.NewGuid(), "TKT-004", Guid.NewGuid(), "P2High");
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketCreatedEvent>()).Should().BeTrue();
@@ -87,11 +88,12 @@ public class TicketCreatedConsumerTests
         // Notification ghi ra bình thường
         written.Should().HaveCount(2);
 
-        // SetAsync phải được gọi với window 30 phút (MessageWindow)
-        cache.Verify(x => x.SetAsync(
+        // Sprint 6.3 NOTI3-09 (#709) — debounce chiếm key bằng 1 lệnh atomic SET NX EX,
+        // không còn cặp GetAsync/SetAsync. Window vẫn phải là 30 phút (MessageWindow).
+        cache.Verify(x => x.TrySetIfNotExistsAsync(
             It.Is<string>(k => k.StartsWith("notif_msg:")),
             It.IsAny<string>(),
-            It.Is<TimeSpan?>(t => t == TimeSpan.FromMinutes(30)),
+            It.Is<TimeSpan>(t => t == TimeSpan.FromMinutes(30)),
             It.IsAny<CancellationToken>()), Times.Once);
 
         await harness.Stop();

@@ -55,6 +55,18 @@ Files cần đổi:
 - `deploy/jenkins/values.yaml` (hostName)
 - `deploy/k8s/01-cert-manager-issuer.yaml` (email × 2)
 
+> ⚠️ **`global.domain` nay còn quyết định CORS.** Chart tự sinh
+> `Cors__AllowedOrigins__0 = "https://{{ global.domain }}"` (xem `templates/shared/configmap.yaml`).
+> Đặt sai domain thì trình duyệt bị chặn ở **mọi** lời gọi API, dù pod hoàn toàn khoẻ và
+> `/health` vẫn xanh — triệu chứng chỉ hiện ở console trình duyệt.
+>
+> FE chạy ở domain/cổng khác (trang quản trị riêng, cổng dev, WebView mobile) thì thêm vào
+> `global.extraCorsOrigins` — danh sách chuỗi, chart tự đánh số tiếp từ `__1`.
+>
+> ⚠️ **Đặt `global.aspnetEnvironment: Production` thì CORS trở thành BẮT BUỘC** (`#AUTH-05`):
+> thiếu origin nào hợp lệ là `AddCorsExtentions` ném `InvalidOperationException` và **cả 9 pod
+> CrashLoopBackOff**. Đây là hành vi cố ý — thà không lên còn hơn lên với CORS mở toang.
+
 ### C. Cài cluster
 
 ```bash

@@ -66,7 +66,7 @@ public class AdminIotDevicesController : ControllerBase
     ///
     /// Lưu ý:
     /// <list type="bullet">
-    ///   <item><description><b>RawApiKey không bao giờ xuất hiện trong list</b> — chỉ trả về 1 lần khi create/rotate-key.</description></item>
+    ///   <item><description><b>Full API key không xuất hiện trong list</b> — chỉ có <c>ApiKeyLastFour</c>. Xem full plaintext key qua <c>GET /api/admin/iot-devices/{id}</c> (field <c>apiKey</c>).</description></item>
     ///   <item><description><c>ApiKeyLastFour</c> hiển thị 4 ký tự cuối để Admin nhận diện key đang dùng mà không lộ key gốc.</description></item>
     /// </list>
     /// </remarks>
@@ -87,7 +87,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết 1 IoT device theo Id — bao gồm Site/TargetFirmwareRelease + ApiKeyLastFour + LastSeenAt + heartbeat stats. KHÔNG trả raw API key (chỉ 1 lần lúc create).
+    /// Lấy chi tiết 1 IoT device theo Id — bao gồm Site/TargetFirmwareRelease + LastSeenAt + heartbeat stats, kèm <b>full plaintext <c>apiKey</c></b> để Admin xem lại và flash vào ESP32.
     /// </summary>
     /// <remarks>
     /// Route parameter:
@@ -99,6 +99,14 @@ public class AdminIotDevicesController : ControllerBase
     /// <list type="bullet">
     ///   <item><description>Include <c>Site</c> + <c>TargetFirmwareRelease</c> để DTO có <c>SiteName</c>, <c>TargetFirmwareVersion</c>.</description></item>
     ///   <item><description>404 nếu Id không khớp hoặc device đã soft-delete.</description></item>
+    ///   <item><description>Trả <see cref="IotDeviceDetailDto"/> — giống <see cref="IotDeviceDto"/> nhưng có thêm field <c>apiKey</c> (plaintext đầy đủ).</description></item>
+    /// </list>
+    ///
+    /// Về <c>apiKey</c> (khác các endpoint khác):
+    /// <list type="bullet">
+    ///   <item><description>Đây là endpoint <b>duy nhất</b> trả full plaintext key ngoài lúc create/rotate — endpoint <c>list</c> chỉ trả <c>apiKeyLastFour</c>.</description></item>
+    ///   <item><description><c>apiKey = null</c> nếu device được tạo <b>trước</b> khi bật lưu plaintext (không backfill được vì DB cũ chỉ giữ hash). Gọi <c>POST /{id}/rotate-key</c> để sinh key mới + lưu plaintext.</description></item>
+    ///   <item><description>Chỉ role <c>Admin</c> gọi được (đã có <c>[Authorize(Roles = "Admin")]</c> ở controller).</description></item>
     /// </list>
     ///
     /// Lưu ý:
@@ -109,16 +117,16 @@ public class AdminIotDevicesController : ControllerBase
     /// </remarks>
     /// <param name="id">Id IoT device.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="IotDeviceDto"/>.</returns>
-    /// <response code="200">Trả device.</response>
+    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="IotDeviceDetailDto"/> (kèm full <c>apiKey</c>).</returns>
+    /// <response code="200">Trả device kèm full plaintext <c>apiKey</c> (hoặc <c>null</c> nếu device cũ chưa có).</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDetailDto>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetIotDeviceByIdQuery { Id = id }, ct);

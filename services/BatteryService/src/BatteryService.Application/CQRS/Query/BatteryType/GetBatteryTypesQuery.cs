@@ -12,4 +12,13 @@ public class GetBatteryTypesQuery : PaginationRequest, IRequest<CommonResponse<P
 
     /// <summary>Bao gồm soft-deleted records.</summary>
     public bool IncludeDeleted { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: name | manufacturer | chemistry | nominalCapacityAh | nominalVoltage | maxCycleCount.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

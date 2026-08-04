@@ -16,7 +16,7 @@ public class TicketResolveCommandHandlerTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     [Fact]
     public async Task Handle_ValidRequest_ResolvesTicket()
@@ -31,7 +31,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId
+            PrimaryHandlerStaffId = staffId
         };
 
         var command = new TicketResolveCommand
@@ -44,7 +44,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,7 +55,7 @@ public class TicketResolveCommandHandlerTests
         result.Data.Status.Should().Be(TicketStatusEnum.Resolved);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Resolved, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketResolvedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketResolvedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -72,7 +72,7 @@ public class TicketResolveCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Desc",
-            AssignedStaffId = escalatedStaffId,
+            PrimaryHandlerStaffId = escalatedStaffId,
             EscalatedAt = DateTime.UtcNow
         };
 
@@ -84,7 +84,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -107,7 +107,7 @@ public class TicketResolveCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Desc",
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalationReason = EscalationReasonEnum.SkillGap
         };
 
@@ -119,7 +119,7 @@ public class TicketResolveCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -143,7 +143,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalatedAt = DateTime.UtcNow
         };
 
@@ -157,7 +157,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -180,7 +180,7 @@ public class TicketResolveCommandHandlerTests
             Title = "Test",
             Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            AssignedStaffId = staffId,
+            PrimaryHandlerStaffId = staffId,
             EscalationReason = EscalationReasonEnum.SkillGap,
             EscalatedAt = DateTime.UtcNow
         };
@@ -199,7 +199,7 @@ public class TicketResolveCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

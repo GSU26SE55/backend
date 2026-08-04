@@ -11,7 +11,19 @@
 
 **Connection string env var:** `ConnectionStrings__SmsDb` (PostgreSQL). Fallback đọc thêm `SmsDb`, `Sms_Db`, `SMS_DB` (xem `Program.cs:30-35`) — thiếu cả 4 → throw `InvalidOperationException` khi startup.
 
-**CORS:** Policy `"AllowAll"` (xem `SharedInfrastructure/.../AddCORS.cs`) — `SetIsOriginAllowed(_ => true) + AllowAnyMethod + AllowAnyHeader + AllowCredentials`. Mọi origin (Flutter, web admin, mobile, Postman) gọi được. **Production NÊN siết** lại whitelist domain.
+**CORS:** Policy **`"AppCors"`** (xem `SharedInfrastructure/.../AddCORS.cs`). ⚠️ **Đổi 2026-08-01 — mô tả cũ (`"AllowAll"` + `SetIsOriginAllowed(_ => true)`) KHÔNG còn đúng** (`#AUTH-05`):
+
+| Môi trường | `Cors:AllowedOrigins` | Hành vi |
+|---|---|---|
+| Bất kỳ | **có giá trị** | `WithOrigins(<danh sách>)` + `AllowAnyMethod` + `AllowAnyHeader` + `AllowCredentials`. Origin ngoài danh sách bị chặn |
+| `Development` | rỗng | Vẫn cho **mọi** origin + in cảnh báo ra console |
+| `Production` | rỗng | **NÉM `InvalidOperationException` — service KHÔNG khởi động** |
+
+- Khai bằng biến môi trường `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (xem `.env.Docker`).
+- Dấu `/` cuối được **tự cắt** khi nạp: `https://x.com/` và `https://x.com` là một. `WithOrigins` so khớp
+  chuỗi nguyên văn nên không cắt là whitelist trượt **im lặng**.
+- So khớp origin phân biệt **scheme và cổng**: `http://app.x` ≠ `https://app.x`, `https://app.x:3000` ≠ `https://app.x`.
+- **Còn treo:** danh sách domain production thật do **Leader chốt** — phần cơ chế đã xong.
 
 **Ops endpoints (không bọc CommonResponse, không cần auth):**
 
@@ -309,19 +321,98 @@ SmsService publish khi SMS exhaust retry → state Failed final. **Retry trung g
 | `failedAt` | `DateTime` | Không | UTC timestamp final failure |
 | `finalFailure` | `bool` | Không | Luôn `true` ở event này (placeholder cho future use) |
 
-### `SendPhoneOtpEvent` (inbound — DEPRECATED, backward-compat)
+> ### ✅ Sprint 6.2 NOTI-11 (#682) — event này NAY ĐÃ CÓ CONSUMER
+>
+> Trước đó `SmsFailedEvent` là **orphan event**: publish nhưng **0 consumer**. Hệ quả cụ thể:
+> `NotificationService.SmsBusChannel` publish `SendSmsCommand` rồi đánh dấu record notification là
+> `Sent` **ngay khi đẩy được lên bus**. SMS gửi thất bại thật → record **kẹt vĩnh viễn ở `Sent`** dù
+> tin nhắn không bao giờ tới. Báo cáo tỷ lệ giao nhận vì thế là con số dối.
+>
+> **Consumer mới:** `NotificationService.Application.Consumers.SmsFailedConsumer`.
+>
+> | Bước | Hành vi |
+> |---|---|
+> | 1 | **Chỉ xử lý** event có `sourceService == "notification"` (không phân biệt hoa-thường). SMS của service khác (auth OTP, battery alert…) **không có** record notification tương ứng → return ngay |
+> | 2 | `correlationId == Guid.Empty` → bỏ qua |
+> | 3 | Tra record `Notification` theo `Id == correlationId` **và `Channel == Sms`** và `!IsDeleted`. Không thấy (có thể đã bị retention dọn) → log Information rồi bỏ qua |
+> | 4 | Record đang `Read`/`Opened` → **KHÔNG hạ cấp** (tránh ghi đè hành vi người dùng) |
+> | 5 | Ngược lại: `Status = Failed`, `SentAt = null`, `NextAttemptAt = null`, `FailureReason = "SMS gateway thất bại ({phoneNumber}): {errorMessage ?? "không rõ lý do"}"` (cắt còn 1000 ký tự) |
+>
+> ⚠️ **Publisher phải đặt `correlationId = NotificationId`** thì vòng phản hồi mới khép kín —
+> `SmsBusChannel` làm đúng như vậy. Service khác muốn có feedback tương tự phải tự viết consumer.
+>
+> `SmsDeliveryReportEvent` **vẫn chưa có consumer** ở NotificationService — record SMS gửi thành công
+> giữ nguyên `Sent`, không lên `Delivered` (khác kênh Push, nơi Expo receipt cho phép suy ra `Delivered`).
 
-> ⚠️ **Sẽ xóa sau 1-2 sprint.** AuthService đã migrate sang publish `SendSmsCommand` trực tiếp (Phase 9). Consumer `SendPhoneOtpConsumer` giữ lại tạm để hỗ trợ message tồn đọng trong queue cũ.
+### ~~`SendPhoneOtpEvent` (inbound — DEPRECATED, backward-compat)~~ — **ĐÃ XOÁ (Sprint 6.2 NOTI-15 · #686)**
 
-SmsService nhận event này (legacy contract) qua `SendPhoneOtpConsumer` → render template `"Ma OTP cua ban la {Otp}. Vui long khong chia se ma nay."` → forward sang `QueueSmsCommand` nội bộ với `SourceService="auth"`, `Category="otp"`.
+> 🚫 **Consumer `SendPhoneOtpConsumer` đã bị XOÁ khỏi SmsService ngày 30/07/2026.**
+>
+> Class này vốn là backward-compat cho AuthService cũ, ngay trong XML comment đã ghi rõ *"Sau khi
+> AuthService migrate sang `SendSmsCommand` (Phase 9) và verify 1-2 sprint không còn event này nữa,
+> XÓA class này"*. AuthService đã migrate xong từ lâu ⇒ Sprint 6.2 dọn nốt.
+>
+> Cùng đợt, stub `SendPhoneOtpConsumer` bên **EmailService** (đã đánh
+> `[ExcludeFromConfigureEndpoints]`, tức chưa từng bind endpoint) cũng bị xoá.
 
-| Field | Type | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `id` | `Guid` | Bắt buộc | Dùng làm `CorrelationId` của SMS |
-| `phoneNumber` | `string` | Bắt buộc | Số điện thoại đích |
-| `otp` | `string` | Bắt buộc | Mã OTP 6 chữ số — render vào template |
+**Hệ quả vận hành:** `SendPhoneOtpEvent` **không còn consumer nào**. Message loại này publish lên
+RabbitMQ sẽ bị **drop im lặng** (không có binding ⇒ không lỗi, không log). Nếu còn message tồn đọng
+trong queue cũ, **xử lý trước khi deploy** — sau khi deploy chúng biến mất không dấu vết.
 
-**Service mới KHÔNG được publish event này.** Dùng `SendSmsCommand` để control nội dung message + `category` + `targetDeviceCode`.
+**Service mới BẮT BUỘC dùng `SendSmsCommand`** — control được nội dung message, `category`,
+`targetDeviceCode`, và có `correlationId` để nhận `SmsDeliveryReportEvent`/`SmsFailedEvent` phản hồi.
+
+---
+
+### `ISmsProvider` — seam provider (Sprint 6.3 NOTI3-05 · #705)
+
+Trừu tượng hoá nhà cung cấp SMS. **Hành vi không đổi** — hiện thực duy nhất là `GatewaySmsProvider`
+(`ProviderName = "android-gateway"`), nó **xếp hàng** tin nhắn qua `QueueSmsCommand` rồi thiết bị
+gateway kéo về, chứ không gửi trực tiếp. Vì vậy `SendAsync` trả `true` chỉ nghĩa là **"đã nhận đơn"**,
+KHÔNG phải "đã gửi".
+
+```csharp
+Task<bool> SendAsync(
+    string phoneNumber, string message, string sourceService,
+    Guid? correlationId = null, CancellationToken ct = default);
+```
+
+`correlationId` null → truyền `Guid.Empty` xuống `QueueSmsCommand` (command dùng `Guid` non-nullable).
+Đăng ký DI: `services.AddScoped<ISmsProvider, GatewaySmsProvider>()`.
+
+> 📌 **Vì sao tách interface khi vẫn chỉ có một đường gửi?** Quyết định 30/07/2026 chốt **nhánh B**:
+> KHÔNG mua provider thứ hai (ngoài ngân sách đồ án). Hệ quả ghi nhận ở **R-44** — gateway là **một
+> chiếc điện thoại**: hết pin hoặc mất mạng là **cả tầng SMS chết**, và fallback push→SMS bên
+> NotificationService **không cứu được ca đó**. Cam kết kèm theo là tách sẵn ranh giới này để khi có
+> ngân sách thì cắm Twilio/Vonage chỉ là thêm một lớp `ISmsProvider` + đổi đăng ký DI.
+
+---
+
+### Retry & DLQ ở tầng bus (Sprint 6.3 NOTI3-08 · #708)
+
+Sửa ở `SharedInfrastructure/Bus/MassTransitExtensions.cs` ⇒ **áp cho cả 8 service**, gồm SmsService.
+
+Trước sprint này **không có** `UseMessageRetry` lẫn `UseDelayedRedelivery`: consumer ném exception
+**đúng 1 lần** là message rơi thẳng vào queue `_error` và **không ai theo dõi**. Một trục trặc thoáng
+qua (Redis chớp, DB timeout) cũng đủ mất message.
+
+| Tầng | Mặc định | Cấu hình |
+|---|---|---|
+| `UseMessageRetry` — retry **trong tiến trình** | ✅ BẬT: Exponential **3 lần**, 200ms → 5000ms | `MessageBus:Retry:Limit` / `:InitialIntervalMs` / `:MaxIntervalMs` |
+| `UseDelayedRedelivery` — trả về broker, giao lại sau nhiều phút | ❌ **TẮT** | `MessageBus:Redelivery:Enabled`, `:IntervalsMinutes` (mặc định `[5,15,60]`) |
+
+> ⚠️ **Redelivery tắt mặc định là có lý do:** trên RabbitMQ nó cần plugin cộng đồng
+> `rabbitmq_delayed_message_exchange`. Image đang dùng (`rabbitmq:3-management-alpine`) **KHÔNG có**
+> plugin này — bật lên mà thiếu plugin thì việc khai báo exchange **thất bại ngay lúc bus khởi động**
+> ⇒ **chết TẤT CẢ service dùng bus**, không riêng SmsService.
+
+**Ảnh hưởng tới `SendSmsCommandConsumer`:** consumer đã idempotent sẵn bằng Redis inbox
+(`ProcessOnceAsync`), nên message được giao lại sẽ bị nhận diện và bỏ qua — **không nhân đôi SMS**.
+Đây chính là lý do NOTI3-09 (dedup atomic) phải làm **trước** NOTI3-08 (rủi ro R-41).
+
+**Giám sát DLQ:** `NotificationDlqMonitorBackgroundService` (chạy trong NotificationService) hỏi
+RabbitMQ Management API `GET /api/queues` và đẩy gauge `notification_dlq_size{queue}` cho **mọi** queue
+có hậu tố `_error` — bao gồm cả queue của SmsService. Alert `NotificationDlqNotEmpty` bắn khi tổng > 0.
 
 ---
 
@@ -943,7 +1034,7 @@ Endpoint: `GET /metrics` (không cần auth). Ngoài metric default của `prome
 
 | Metric | Type | Labels | Mục đích |
 |---|---|---|---|
-| `inbox_messages_processed_total` | Counter | `consumer` (`SendSmsCommandConsumer` / `SendPhoneOtpConsumer`) | Đếm event được consume lần đầu (tạo SMS row) |
+| `inbox_messages_processed_total` | Counter | `consumer` — nay **chỉ còn** `SendSmsCommandConsumer` (`SendPhoneOtpConsumer` đã xoá ở Sprint 6.2 NOTI-15) | Đếm event được consume lần đầu (tạo SMS row) |
 | `inbox_messages_skipped_duplicate_total` | Counter | `consumer` | Đếm duplicate skip — MassTransit retry hoặc service publisher gửi cùng `MessageId` 2 lần |
 
 ### Suggest alert rules (PromQL)

@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -35,12 +36,12 @@ public class ChatReactionRemoveCommandHandler : IRequestHandler<ChatReactionRemo
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.UserId, request.ActorRoles))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
             return Fail(403, "Không có quyền truy cập ticket.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);

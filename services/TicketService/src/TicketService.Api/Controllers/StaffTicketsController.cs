@@ -48,6 +48,27 @@ public class StaffTicketsController : ControllerBase
     }
 
     /// <summary>
+    /// Snapshot KPI dashboard cho chính Staff đang đăng nhập (open/resolved, SLA risk near-breach ≤25%/breached/paused, count theo status, trend 7 ngày).
+    /// </summary>
+    /// <remarks>
+    /// Scope theo AssignedStaffId từ Token — thay cho việc FE tự đếm trên 1 trang list (cap 100).
+    /// Nhóm "đang theo dõi SLA" = status ∈ Assigned/InProgress/WaitingCustomer/WaitingParts/WaitingOnsiteSchedule/Escalated và có SLA timer.
+    /// Snapshot hiện tại — KHÔNG nhận from/to. FE nên cache ~1 phút (staleTime).
+    /// </remarks>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Trả thống kê thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpGet("dashboard/stats")]
+    [ProducesResponseType(typeof(CommonResponse<StaffTicketDashboardStatsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMyDashboardStats(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new MyTicketDashboardStatsAsStaffQuery(), ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Staff xác nhận bắt đầu xử lý ticket đã được assigned — chuyển Status từ Assigned → InProgress, set StartedAt; SLA timer chính thức bắt đầu đếm.
     /// </summary>
     /// <remarks>
@@ -70,7 +91,7 @@ public class StaffTicketsController : ControllerBase
         {
             TicketId = id,
             StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
+            StaffName = _currentUser.FullName!
         };
 
         var result = await _mediator.Send(command, ct);
@@ -95,7 +116,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -120,7 +141,7 @@ public class StaffTicketsController : ControllerBase
         {
             TicketId = id,
             StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
+            StaffName = _currentUser.FullName!
         };
 
         var result = await _mediator.Send(command, ct);
@@ -147,7 +168,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -172,7 +193,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

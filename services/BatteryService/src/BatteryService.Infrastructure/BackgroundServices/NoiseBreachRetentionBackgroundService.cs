@@ -54,8 +54,10 @@ public class NoiseBreachRetentionBackgroundService : BackgroundService
         var uow = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
         var cutoff = DateTime.UtcNow - RetentionDuration;
 
+        // Sprint Bonus NS-10 (#654, N2) — breach đã promote thành Alert giữ vĩnh viễn để audit
+        // (đúng doc-comment NoiseBreachEvent.PromotedToAlertId), chỉ purge breach chưa promote.
         var deleted = await uow.NoiseBreachEvents.GetAllAsync()
-            .Where(n => n.Time < cutoff)
+            .Where(n => n.Time < cutoff && n.PromotedToAlertId == null)
             .ExecuteDeleteAsync(cancellationToken);
 
         if (deleted > 0)

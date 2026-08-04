@@ -1,5 +1,7 @@
+using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TicketService.Application.Common.Behaviors;
 using TicketService.Application.Common.Models;
 using TicketService.Application.StateMachine;
 using TicketService.Application.StateMachine.Rules;
@@ -16,6 +18,7 @@ public static class ManageDependencyInjection
 
         // Register MediatR handlers
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ManageDependencyInjection).Assembly));
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ClosedTicketMutationBehavior<,>));
         services.AddScoped<ITicketStateMachine, TicketStateMachine>();
         services.AddScoped<ITransitionRuleProvider, TransitionRuleProvider>();
         return services;

@@ -24,9 +24,7 @@ public class CreateKbArticleCommandHandlerTests
             CurrentUserRole = "Staff",
             Category = TicketCategoryEnum.Charging,
             Title = "Charging Issue",
-            Symptoms = "Symptoms here",
-            DiagnosisSteps = "Steps here",
-            SolutionSteps = "Solution here",
+            Content = "Symptoms here. Steps here. Solution here.",
             Tags = new List<string> { "tag1" }
         };
 

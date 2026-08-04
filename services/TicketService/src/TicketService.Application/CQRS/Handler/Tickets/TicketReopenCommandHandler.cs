@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -17,20 +18,20 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketReopenCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -52,14 +53,19 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
         {
             ActorUserId = request.CustomerId,
             ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName ?? "Customer",
+            ActorDisplayName = request.CustomerName!,
             Payload = new Dictionary<string, object?> { { "ReopenReason", request.ReopenReason } }
         }, ct);
 
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Reopened, newValue: request.ReopenReason);
 
         // Outbox: Ticket Reopened
-        await _producer.PublishAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
+        await _outboxWriter.WriteAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
+
+        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts cho NotificationService (notify Manager + Staff).
+        await _outboxWriter.WriteAsync(new TicketReopenedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ReopenReason,
+            ticket.ReopenCount, DateTime.UtcNow), ct);
 
         // BR-07: Auto-escalate if ReopenCount >= 2
         if (ticket.ReopenCount >= 2)
@@ -84,7 +90,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
 
                 await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: reason.ToString(), reason: note);
 
-                await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
+                await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
             }
         }
 

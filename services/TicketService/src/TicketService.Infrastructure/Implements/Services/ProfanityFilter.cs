@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Services;
@@ -16,17 +14,25 @@ public class ProfanityFilter : IProfanityFilter
         _options = options.Value;
     }
 
+    private static readonly char[] TokenSeparators =
+        [' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')', '[', ']', '/'];
+
     public bool ContainsProfanity(string body, out IReadOnlyList<string> matchedWords)
     {
         var matches = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(body))
         {
+            var tokens = body.Split(TokenSeparators, StringSplitOptions.RemoveEmptyEntries);
+
             foreach (var words in _options.ProfanityWords.Values)
             {
                 foreach (var word in words)
                 {
-                    if (!string.IsNullOrWhiteSpace(word) && body.Contains(word, StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrWhiteSpace(word))
+                        continue;
+
+                    if (tokens.Any(t => t.Equals(word, StringComparison.OrdinalIgnoreCase)))
                         matches.Add(word);
                 }
             }

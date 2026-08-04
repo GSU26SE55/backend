@@ -34,10 +34,18 @@ public class KnowledgeBaseReferenceController : ControllerBase
     /// <param name="command">Thông tin gán (TicketId, KbArticleId, ReferenceType, Note).</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Gán thành công.</response>
+    /// <response code="400">Lỗi field (TicketId/KbArticleId/ReferenceType không hợp lệ) — chi tiết trong listErrors.</response>
+    /// <response code="403">Không có quyền (Staff không được phân công xử lý ticket này).</response>
     /// <response code="404">Không tìm thấy Ticket hoặc Bài viết.</response>
+    /// <response code="409">Xung đột trạng thái: ticket đã chờ phê duyệt/hoàn thành, không thể gán thêm.</response>
+    /// <response code="422">Vi phạm rule nghiệp vụ: bài viết nội bộ không thể gán loại 'Cung cấp cho khách hàng'.</response>
     [HttpPost]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> AddReference([FromBody] AddTicketKbReferenceCommand command, CancellationToken ct)
     {
         command.CurrentUserId = GetCurrentUserId();

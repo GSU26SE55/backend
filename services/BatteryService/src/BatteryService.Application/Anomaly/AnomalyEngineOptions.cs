@@ -27,4 +27,19 @@ public class AnomalyEngineOptions
     /// Sprint 7 B4 (§31.7) — chu kỳ recompute cascade risk (mặc định 5 phút).
     /// </summary>
     public int CascadeRiskIntervalSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — bật publish <c>BatteryAnomalyWarningDetectedEvent</c> cho alert
+    /// mức Warning/Info để NotificationService báo Customer (spec §3.4 T#11/T#12).
+    /// Event này KHÔNG sinh ticket (TicketService không consume) nên không lặp lại nỗi lo spam ticket.
+    /// Đặt false để quay lại hành vi cũ (chỉ ghi alert, không báo ai).
+    /// </summary>
+    public bool PublishWarningNotifications { get; set; } = true;
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — cửa sổ chống spam notify Warning/Info, tính theo
+    /// (BatteryAssetId × AnomalyType). Mặc định 60 phút: pin chớm vượt ngưỡng có thể nhấp nháy
+    /// liên tục nhiều tick, nhưng Customer chỉ cần biết 1 lần mỗi giờ.
+    /// </summary>
+    public int WarningNotifyDedupMinutes { get; set; } = 60;
 }

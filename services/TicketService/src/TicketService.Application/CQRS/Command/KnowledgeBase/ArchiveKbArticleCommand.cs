@@ -13,6 +13,8 @@ public class ArchiveKbArticleCommand : IRequest<CommonResponse<KbArticleActionDT
     /// </summary>
     [JsonIgnore]
     public Guid ArticleId { get; set; }
+    [JsonIgnore]
+    public string CurrentUserRole { get; set; } = string.Empty;
 
     public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {

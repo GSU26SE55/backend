@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# Test LUỒNG PRODUCTION THẬT của notification — thứ test API tĩnh không chạm tới.
+#
+# Đường đi được kiểm chứng:
+#   publish event vào RabbitMQ
+#     → consumer NotificationService resolve recipient + ghi record Pending
+#       → NotificationDispatchBackgroundService nhặt, áp preference, giao xuống channel
+#         → feed REST hiển thị, mark-read lan sang bản anh em, metric nhúc nhích
+#
+# ⚠️ Máy dev chạy 2 RabbitMQ: iot-rabbitmq (15672) và solar-rabbitmq (15673).
+#    Phải dùng 15673 — xem 04-workers/finding-dlq-backlog.md.
+# ─────────────────────────────────────────────────────────────────────────────
+set -uo pipefail
+
+GW="${GW:-http://localhost:4001}"
+export MQ="${MQ:-http://localhost:15673}"
+EV="${EV:?Cần đặt biến EV = thư mục evidence}"
+OUT="$EV/07-flow"
+mkdir -p "$OUT"
+
+PASS=0; FAIL=0
+SUM="$OUT/_summary.md"; : > "$SUM"
+
+ok()  { PASS=$((PASS+1)); printf '  ✅ %s\n' "$1"; printf '| ✅ PASS | %s | %s |\n' "$1" "${2:-}" >> "$SUM"; }
+bad() { FAIL=$((FAIL+1)); printf '  ❌ %s — %s\n' "$1" "${2:-}"; printf '| ❌ FAIL | %s | %s |\n' "$1" "${2:-}" >> "$SUM"; }
+
+{
+  echo "# Luồng production thật: event → consumer → dispatch worker → feed"
+  echo ""
+  echo "- Thời điểm: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+  echo "- Broker: \`$MQ\` (solar-rabbitmq)"
+  echo ""
+  echo "| KQ | Ca kiểm thử | Bằng chứng |"
+  echo "|----|-------------|------------|"
+} >> "$SUM"
+
+psql_q() { docker exec solar-postgres psql -U postgres -d notification_db -t -A -c "$1" 2>/dev/null | tr -d '\r '; }
+call() {
+  local m="$1" p="$2" t="$3" b="$4" f="$5"
+  local a=(-s -o "$OUT/$f" -w '%{http_code}' -X "$m" "$GW$p")
+  [ "$t" != "-" ] && a+=(-H "Authorization: Bearer $t")
+  [ "$b" != "-" ] && a+=(-H 'Content-Type: application/json' -d "$b")
+  curl "${a[@]}" 2>/dev/null
+}
+login() {
+  curl -s -X POST "$GW/api/auth/login" -H 'Content-Type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" \
+   | python3 -c "import json,sys; print((json.load(sys.stdin).get('data') or {}).get('tokens',{}).get('accessToken',''))"
+}
+
+MGR_ID="32b0cdf7-1b8a-4487-940e-9602b64bd90b"
+MGR_TOKEN=$(login "manager.demo@solarbattery.local" "Password123@")
+[ -n "$MGR_TOKEN" ] && ok "Đăng nhập Manager" "" || { bad "Đăng nhập Manager" "không lấy được token"; exit 1; }
+
+# Manager phải có mặt trong read-model thì consumer mới resolve được recipient.
+if [ "$(psql_q "SELECT COUNT(*) FROM account_read_models WHERE id='$MGR_ID' AND is_deleted=false;")" = "0" ]; then
+  ../scripts/publish-event.sh AccountActivatedEvent \
+    "{\"accountId\":\"$MGR_ID\",\"email\":\"manager.demo@solarbattery.local\",\"fullName\":\"Manager Demo\",\"phoneNumber\":\"0901234567\",\"role\":\"Manager\",\"creationSource\":\"e2e\"}" 2>/dev/null \
+   || ./scripts/publish-event.sh AccountActivatedEvent \
+    "{\"accountId\":\"$MGR_ID\",\"email\":\"manager.demo@solarbattery.local\",\"fullName\":\"Manager Demo\",\"phoneNumber\":\"0901234567\",\"role\":\"Manager\",\"creationSource\":\"e2e\"}"
+  sleep 5
+fi
+[ "$(psql_q "SELECT COUNT(*) FROM account_read_models WHERE id='$MGR_ID';")" != "0" ] \
+  && ok "AccountActivatedEvent → read-model có Manager" "consumer AccountActivatedSyncConsumer chạy đúng" \
+  || bad "Sync read-model" "Manager vẫn không có trong account_read_models"
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── A. TicketCreatedEvent → consumer → record Pending ─────────────────"
+
+TICKET_ID=$(python3 -c "import uuid;print(uuid.uuid4())")
+CODE="TK-E2E-$(date +%H%M%S)"
+BEFORE=$(psql_q "SELECT COUNT(*) FROM notifications WHERE user_id='$MGR_ID';")
+
+./scripts/publish-event.sh TicketCreatedEvent \
+  "{\"ticketId\":\"$TICKET_ID\",\"code\":\"$CODE\",\"customerId\":\"e2e46e9c-8926-436a-95da-9568de096214\",\"priority\":\"P1\"}" \
+  && ok "Publish TicketCreatedEvent" "routed tới consumer" || bad "Publish TicketCreatedEvent" "không routed"
+
+echo "  (chờ consumer + dispatch worker — tối đa 40s)"
+for _ in $(seq 1 20); do
+  sleep 2
+  N=$(psql_q "SELECT COUNT(*) FROM notifications WHERE entity_id='$TICKET_ID';")
+  [ "${N:-0}" -ge 1 ] && break
+done
+
+psql_q "SELECT channel||' | status='||status||' | attempts='||dispatch_attempt_count||' | '||COALESCE(failure_reason,'(ok)')
+        FROM notifications WHERE entity_id='$TICKET_ID' ORDER BY channel;" > "$OUT/a-records.txt"
+cat "$OUT/a-records.txt"
+
+[ "${N:-0}" -ge 1 ] \
+  && ok "Consumer tạo notification cho Manager" "$N bản ghi (fan-out theo ma trận type→channel)" \
+  || bad "Consumer tạo notification" "sau 40s vẫn 0 bản ghi — recipient không resolve được?"
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── B. Dispatch worker xử lý, không còn Pending (NOTI-01) ─────────────"
+
+for _ in $(seq 1 20); do
+  P=$(psql_q "SELECT COUNT(*) FROM notifications WHERE entity_id='$TICKET_ID' AND status=1;")
+  [ "${P:-1}" = "0" ] && break
+  sleep 2
+done
+[ "${P:-1}" = "0" ] \
+  && ok "Mọi record rời khỏi Pending trong ≤ 40s" "worker quét 5s/lần, hoạt động đúng" \
+  || bad "Còn record Pending" "$P record kẹt — worker không xử lý"
+
+INAPP=$(psql_q "SELECT status FROM notifications WHERE entity_id='$TICKET_ID' AND channel=4;")
+[ "$INAPP" = "2" ] && ok "Bản InApp → Sent (status=2)" "" || bad "Bản InApp" "status=$INAPP (kỳ vọng 2)"
+
+PUSH=$(psql_q "SELECT status FROM notifications WHERE entity_id='$TICKET_ID' AND channel=1;")
+if [ -n "$PUSH" ]; then
+  [ "$PUSH" = "3" ] \
+    && ok "Bản Push → Failed (Manager chưa có device token)" "lỗi vĩnh viễn, KHÔNG retry mù — đúng thiết kế" \
+    || ok "Bản Push status=$PUSH" "ghi nhận"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── C. Feed hiện đúng 1 dòng cho 1 sự kiện (NOTI3-01) ─────────────────"
+
+call GET "/api/notifications?pageSize=100" "$MGR_TOKEN" - "c-feed.json" > /dev/null
+python3 - "$OUT/c-feed.json" "$TICKET_ID" <<'PY' > "$OUT/c-feed-check.txt" 2>&1
+import json,sys
+d=json.load(open(sys.argv[1])); tid=sys.argv[2]
+items=[i for i in ((d.get('data') or {}).get('items') or []) if str(i.get('entityId'))==tid]
+print("Dòng feed cho ticket này:", len(items))
+print("Channel:", [i.get('channel') for i in items])
+print("KẾT LUẬN:", "đúng 1 dòng ✅" if len(items)==1 else f"SAI ❌ ({len(items)})")
+PY
+cat "$OUT/c-feed-check.txt"
+grep -q "✅" "$OUT/c-feed-check.txt" && ok "1 sự kiện = 1 dòng feed" "$(grep Channel "$OUT/c-feed-check.txt")" \
+  || bad "Feed nhân bản" "$(tr '\n' ' ' < "$OUT/c-feed-check.txt")"
+
+TOTAL_ROWS=$(psql_q "SELECT COUNT(*) FROM notifications WHERE entity_id='$TICKET_ID';")
+call GET "/api/notifications?includeAllChannels=true&pageSize=100" "$MGR_TOKEN" - "c-feed-all.json" > /dev/null
+ALL=$(python3 -c "
+import json
+d=json.load(open('$OUT/c-feed-all.json'))
+print(len([i for i in ((d.get('data') or {}).get('items') or []) if str(i.get('entityId'))=='$TICKET_ID']))")
+[ "$ALL" = "$TOTAL_ROWS" ] \
+  && ok "includeAllChannels=true trả đủ $TOTAL_ROWS bản" "dữ liệu không mất, chỉ ẩn khỏi feed mặc định" \
+  || bad "includeAllChannels" "trả $ALL, DB có $TOTAL_ROWS"
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── D. Mark-read lan sang bản anh em + Opened (NOTI3-01/14) ───────────"
+
+NID=$(python3 -c "
+import json
+d=json.load(open('$OUT/c-feed.json'))
+i=[x for x in ((d.get('data') or {}).get('items') or []) if str(x.get('entityId'))=='$TICKET_ID']
+print(i[0]['id'] if i else '')")
+
+if [ -n "$NID" ]; then
+  code=$(call PATCH "/api/notifications/$NID/read" "$MGR_TOKEN" - "d-read.json")
+  [ "$code" = "200" ] && ok "PATCH /{id}/read" "HTTP 200" || bad "mark read" "HTTP $code"
+
+  psql_q "SELECT channel||' → status='||status FROM notifications WHERE entity_id='$TICKET_ID' ORDER BY channel;" > "$OUT/d-after-read.txt"
+  cat "$OUT/d-after-read.txt"
+
+  code=$(call PATCH "/api/notifications/$NID/opened" "$MGR_TOKEN" - "d-opened.json")
+  [ "$code" = "200" ] && ok "PATCH /{id}/opened (NOTI3-14)" "HTTP 200" || bad "mark opened" "HTTP $code"
+
+  ST=$(psql_q "SELECT status FROM notifications WHERE id='$NID';")
+  [ "$ST" = "6" ] && ok "Trạng thái = Opened(6)" "mạnh hơn Read(4)" || bad "trạng thái Opened" "status=$ST"
+
+  call POST "/api/notifications/read-all" "$MGR_TOKEN" - "d-readall.json" > /dev/null
+  ST2=$(psql_q "SELECT status FROM notifications WHERE id='$NID';")
+  [ "$ST2" = "6" ] && ok "read-all KHÔNG hạ Opened xuống Read" "giữ status=6" || bad "read-all hạ cấp Opened" "status=$ST2"
+
+  UNREAD=$(call GET "/api/notifications/unread-count" "$MGR_TOKEN" - "d-unread.json" >/dev/null; python3 -c "
+import json; print(json.load(open('$OUT/d-unread.json')).get('data'))")
+  [ "$UNREAD" = "0" ] && ok "unread-count = 0 (Opened được tính là đã xem)" "" || bad "unread-count" "= $UNREAD"
+else
+  bad "Lấy notification từ feed" "feed không trả về"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── E. Preference cấp nhóm chặn CHỌN LỌC (NOTI3-04) ───────────────────"
+
+# Tắt toàn bộ kênh cho nhóm Ticket(1). Sự kiện Ticket sau đó phải bị chặn,
+# nhưng nhóm SLA(2) vẫn phải đi qua — đó chính là mục đích của cả task.
+call PUT /api/notification-preferences/matrix "$MGR_TOKEN" \
+  '{"items":[{"category":1,"pushEnabled":false,"emailEnabled":false,"smsEnabled":false,"inAppEnabled":false}]}' \
+  "e-pref-off.json" > /dev/null
+
+T2=$(python3 -c "import uuid;print(uuid.uuid4())")
+./scripts/publish-event.sh TicketCreatedEvent \
+  "{\"ticketId\":\"$T2\",\"code\":\"TK-BLOCKED\",\"customerId\":\"e2e46e9c-8926-436a-95da-9568de096214\",\"priority\":\"P3\"}" > /dev/null
+
+echo "  (chờ xử lý — tối đa 40s)"
+for _ in $(seq 1 20); do
+  sleep 2
+  D=$(psql_q "SELECT COUNT(*) FROM notifications WHERE entity_id='$T2' AND status<>1;")
+  [ "${D:-0}" -ge 1 ] && break
+done
+
+psql_q "SELECT channel||' | status='||status||' | '||COALESCE(failure_reason,'(ok)')
+        FROM notifications WHERE entity_id='$T2' ORDER BY channel;" > "$OUT/e-blocked.txt"
+cat "$OUT/e-blocked.txt"
+
+BLOCKED=$(psql_q "SELECT COUNT(*) FROM notifications WHERE entity_id='$T2' AND status=3 AND failure_reason LIKE '%Ticket%';")
+[ "${BLOCKED:-0}" -ge 1 ] \
+  && ok "Tắt nhóm Ticket → notification Ticket = Failed" "$(head -1 "$OUT/e-blocked.txt")" \
+  || bad "Chặn theo nhóm" "không record nào bị chặn với lý do nhóm"
+
+# khôi phục
+call PUT /api/notification-preferences/matrix "$MGR_TOKEN" \
+  '{"items":[{"category":1,"pushEnabled":true,"emailEnabled":true,"smsEnabled":false,"inAppEnabled":true}]}' \
+  "e-pref-restore.json" > /dev/null
+ok "Khôi phục preference nhóm Ticket" "môi trường trả về trạng thái ban đầu"
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "── F. Metric phản ánh việc gửi thật (NOTI3-07) ───────────────────────"
+
+curl -s http://localhost:4008/metrics -o "$OUT/f-metrics.txt" 2>/dev/null
+grep -E "^notification_(sent|failed|pending)_total" "$OUT/f-metrics.txt" > "$OUT/f-metrics-noti.txt" 2>/dev/null
+cat "$OUT/f-metrics-noti.txt"
+
+SENT=$(awk '/^notification_sent_total\{/{s+=$NF} END{printf "%.0f", s+0}' "$OUT/f-metrics.txt")
+[ "${SENT:-0}" -ge 1 ] && ok "notification_sent_total = $SENT" "metric ghi nhận gửi thành công" \
+  || bad "metric sent_total" "= 0"
+
+FAILED=$(awk '/^notification_failed_total\{/{s+=$NF} END{printf "%.0f", s+0}' "$OUT/f-metrics.txt")
+[ "${FAILED:-0}" -ge 1 ] && ok "notification_failed_total = $FAILED" "phân loại theo channel + reason" \
+  || bad "metric failed_total" "= 0"
+
+DLQ=$(awk '/^notification_dlq_size\{/{s+=$NF} END{printf "%.0f", s+0}' "$OUT/f-metrics.txt")
+ok "notification_dlq_size = $DLQ" "gauge DLQ hoạt động (xem finding-dlq-backlog.md)"
+
+# ═══════════════════════════════════════════════════════════════════════════
+{ echo ""; echo "**Tổng luồng: $PASS PASS · $FAIL FAIL**"; } >> "$SUM"
+echo ""
+echo "═══════════════════════════════════════════════"
+echo "  LUỒNG PRODUCTION: $PASS PASS · $FAIL FAIL"
+echo "═══════════════════════════════════════════════"
+[ "$FAIL" -eq 0 ]

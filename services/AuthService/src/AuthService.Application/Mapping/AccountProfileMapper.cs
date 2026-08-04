@@ -21,6 +21,7 @@ public static class AccountProfileMapper
             EmailConfirmed = account.EmailConfirmed,
             PhoneConfirmed = account.PhoneConfirmed,
             TwoFactorEnabled = account.TwoFactorEnabled,
+            IsGoogleLinked = account.GoogleId != null,
             Status = account.Status,
             LastLoginAt = account.LastLoginAt,
             CreatedAt = account.CreatedAt,
@@ -46,6 +47,7 @@ public static class AccountProfileMapper
             Department = staffProfile.Department,
             MaxConcurrentTickets = staffProfile.MaxConcurrentTickets,
             IsAvailable = staffProfile.IsAvailable,
+            SkillTier = (int)staffProfile.SkillTier,
             DisplayAvatarUrl = ResolveDisplayAvatarUrl(staffProfile.Account.Profile),
             Skills = staffProfile.Skills
                 .OrderBy(skill => skill.SkillCode)
@@ -83,6 +85,7 @@ public static class AccountProfileMapper
             Department = staffProfile.Department,
             MaxConcurrentTickets = staffProfile.MaxConcurrentTickets,
             IsAvailable = staffProfile.IsAvailable,
+            SkillTier = (int)staffProfile.SkillTier,
             Notes = staffProfile.Notes,
             Skills = staffProfile.Skills
                 .OrderBy(skill => skill.SkillCode)

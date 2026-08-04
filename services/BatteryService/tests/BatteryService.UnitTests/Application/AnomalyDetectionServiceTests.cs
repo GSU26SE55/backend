@@ -4,6 +4,7 @@ using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.UnitTests.Helpers;
 using Microsoft.Extensions.Options;
+using SharedContracts.Events;
 
 namespace BatteryService.UnitTests.Application;
 
@@ -15,6 +16,10 @@ public class AnomalyDetectionServiceTests
 
     private static IOptions<AnomalyEngineOptions> Opts() =>
         Options.Create(new AnomalyEngineOptions { DedupWindowMinutes = 30 });
+
+    /// <summary>Sprint 6.2 NOTI-08 (#679) — tắt publish notify Warning để giữ hành vi cũ trong test.</summary>
+    private static IOptions<AnomalyEngineOptions> OptsWithoutWarningNotify() =>
+        Options.Create(new AnomalyEngineOptions { DedupWindowMinutes = 30, PublishWarningNotifications = false });
 
     private static BatteryAsset MakeAsset() => new()
     {
@@ -55,6 +60,67 @@ public class AnomalyDetectionServiceTests
         SocPercent = soc,
         SohPercent = soh
     };
+
+    // Sprint Bonus NS-08 (#652, N4) — Detect chỉ chạy trên reading primary.
+    // INA226 real mode gửi SOC=0/temp=0 (không đo được) — nếu Detect ăn phải sẽ spam LowSoc Critical.
+    [Theory]
+    [InlineData("redundant")]
+    [InlineData("external-temp")]
+    public async Task Scan_NonPrimaryReadingSocZero_NoAlert(string sourceCode)
+    {
+        var reading = MakeReading(soc: 0m);
+        reading.Temperature = 0m;
+        reading.SourceType = SensorReadingSourceTypeEnum.IotGateway;
+        reading.SensorSourceCode = sourceCode;
+
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold())
+            .WithSensorReadings(reading);
+        var svc = new AnomalyDetectionService(b.Build(), Opts());
+
+        var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
+
+        result.AlertsCreated.Should().Be(0);
+        result.AlertsSuppressed.Should().Be(0);
+        b.Alerts.Verify(r => r.AddAsync(It.IsAny<Alert>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Scan_PrimaryReadingLowSoc_CreatesAlert()
+    {
+        var reading = MakeReading(soc: 5m);
+        reading.SourceType = SensorReadingSourceTypeEnum.Bms;
+        reading.SensorSourceCode = "primary";
+
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold())
+            .WithSensorReadings(reading);
+        var svc = new AnomalyDetectionService(b.Build(), Opts());
+
+        var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
+
+        result.AlertsCreated.Should().Be(1);
+        b.Alerts.Verify(r => r.AddAsync(It.Is<Alert>(a =>
+            a.AnomalyType == AnomalyTypeEnum.LowSoc
+            && a.Severity == AlertSeverityEnum.Critical)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Scan_NullSourceCode_TreatedAsPrimary_StillDetects()
+    {
+        // Thiết bị single-source không gắn tag → null coi như primary (cùng quy ước coalescer SSE).
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold())
+            .WithSensorReadings(MakeReading(soc: 5m)); // SensorSourceCode = null
+        var svc = new AnomalyDetectionService(b.Build(), Opts());
+
+        var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
+
+        result.AlertsCreated.Should().Be(1);
+    }
 
     [Fact]
     public async Task Scan_NoReadings_ReturnsEmptyResult()
@@ -107,8 +173,14 @@ public class AnomalyDetectionServiceTests
             && m.Payload.Contains("BAT-001"))), Times.Once);
     }
 
+    /// <summary>
+    /// Sprint 6.2 NOTI-08 (#679) — alert Warning nay publish <c>BatteryAnomalyWarningDetectedEvent</c>
+    /// (event RIÊNG, chỉ NotificationService consume nên KHÔNG đẻ ticket) để đạt spec §3.4 T#12.
+    /// Quan trọng: tuyệt đối không được publish <c>BatteryAnomalyDetectedEvent</c> ở mức Warning —
+    /// đó là event mà TicketService dùng để auto-tạo ticket.
+    /// </summary>
     [Fact]
-    public async Task Scan_WarningReading_CreatesAlert_NoOutbox()
+    public async Task Scan_WarningReading_CreatesAlert_AndPublishesWarningNotifyEventOnly()
     {
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
@@ -119,8 +191,31 @@ public class AnomalyDetectionServiceTests
         var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
 
         result.AlertsCreated.Should().Be(1);
-        result.OutboxEventsQueued.Should().Be(0);
+        result.OutboxEventsQueued.Should().Be(1);
         b.Alerts.Verify(r => r.AddAsync(It.Is<Alert>(a => a.Severity == AlertSeverityEnum.Warning)), Times.Once);
+
+        b.OutboxMessages.Verify(
+            r => r.AddAsync(It.Is<OutboxMessage>(m => m.Type == nameof(BatteryAnomalyWarningDetectedEvent))),
+            Times.Once);
+        b.OutboxMessages.Verify(
+            r => r.AddAsync(It.Is<OutboxMessage>(m => m.Type == nameof(BatteryAnomalyDetectedEvent))),
+            Times.Never, "mức Warning KHÔNG được đi vào event auto-tạo ticket");
+    }
+
+    /// <summary>Tắt cờ config → quay lại hành vi cũ: chỉ ghi alert, không publish gì.</summary>
+    [Fact]
+    public async Task Scan_WarningReading_WhenNotifyDisabled_CreatesAlert_NoOutbox()
+    {
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold())
+            .WithSensorReadings(MakeReading(temp: 53m));
+        var svc = new AnomalyDetectionService(b.Build(), OptsWithoutWarningNotify());
+
+        var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
+
+        result.AlertsCreated.Should().Be(1);
+        result.OutboxEventsQueued.Should().Be(0);
         b.OutboxMessages.Verify(r => r.AddAsync(It.IsAny<OutboxMessage>()), Times.Never);
     }
 
