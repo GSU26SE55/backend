@@ -28,6 +28,10 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<NotificationAuditOutbox> NotificationAuditOutboxes { get; set; } // Sprint audit #AUDIT-34
     public virtual DbSet<PushReceipt> PushReceipts { get; set; }                     // Sprint 6.3 NOTI3-02 (#702)
     public virtual DbSet<NotificationCategoryPreference> NotificationCategoryPreferences { get; set; } // Sprint 6.3 NOTI3-04 (#704)
+    public virtual DbSet<NotificationGroup> NotificationGroups { get; set; }             // Sprint 6.4 NOTI4-01
+    public virtual DbSet<NotificationGroupMember> NotificationGroupMembers { get; set; } // Sprint 6.4 NOTI4-01
+    public virtual DbSet<NotificationBatch> NotificationBatches { get; set; }             // Sprint 6.4 NOTI4-06
+    public virtual DbSet<NotificationBatchTarget> NotificationBatchTargets { get; set; }  // Sprint 6.4 NOTI4-06
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

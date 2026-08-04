@@ -72,11 +72,13 @@ public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
 
         var channels = ResolveChannels(tier);
 
+        var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
+
         var title = tier switch
         {
-            PriorityTier.P1 => "🔴 SLA P1 bị vi phạm — cần xử lý ngay",
-            PriorityTier.P2 => "🟠 SLA P2 bị vi phạm",
-            _ => "🟡 SLA P3 bị vi phạm",
+            PriorityTier.P1 => $"🔴 SLA P1 bị vi phạm{codeSuffix} — cần xử lý ngay",
+            PriorityTier.P2 => $"🟠 SLA P2 bị vi phạm{codeSuffix}",
+            _ => $"🟡 SLA P3 bị vi phạm{codeSuffix}",
         };
 
         var body = tier switch
@@ -95,6 +97,8 @@ public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
         var payload = JsonSerializer.Serialize(new
         {
             ticketId = evt.TicketId,
+            // 03/08/2026 — xem chú thích cùng chủ đề ở SlaWarningConsumer.
+            code = evt.Code,
             breachedAt = evt.BreachedAt,
             priority = evt.Priority,
             priorityTier = tier.ToString(),

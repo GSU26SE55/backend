@@ -27,5 +27,19 @@ public record BatteryAnomalyDetectedEvent(
     decimal? ThresholdValue,   // §1.3.5 — nullable cho incident-based alert
     decimal? ActualValue,      // §1.3.5 — nullable cho incident-based alert
     string? Unit,              // §1.3.5 — nullable cho incident-based alert
-    DateTime DetectedAt
+    DateTime DetectedAt,
+
+    // 03/08/2026 — thêm tên enum kèm theo số, đúng khuôn OldStatusName/NewStatusName của
+    // TicketStatusChangedEvent.
+    //
+    // Vì sao cần: hai enum trên thuộc BatteryService.Domain nên subscriber KHÔNG tham chiếu được,
+    // chỉ nhận con số trần. NotificationService vì thế gửi cho khách những câu như
+    // "Loại: 4 — Mức độ: 3". Tự dựng bảng tra số ở phía nhận thì mỗi lần BatteryService thêm loại
+    // bất thường mới, phía nhận lại âm thầm hiện ra số — đúng kiểu trôi lệch mà không ai hay.
+    // Bên sở hữu enum gửi kèm tên là chỗ duy nhất luôn đúng.
+    //
+    // Nullable + mặc định null: event cũ đã nằm trong Outbox/hàng đợi không có hai trường này,
+    // deserialize ra null và phía nhận tự lùi về số.
+    string? AnomalyTypeName = null,   // nameof(AnomalyTypeEnum.X)
+    string? SeverityName = null       // nameof(AlertSeverityEnum.X)
 ) : IntegrationEvent;

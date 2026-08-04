@@ -79,13 +79,15 @@ public class DispatchPendingTests
         DeviceToken[]? tokens = null,
         NotificationDispatchOptions? options = null,
         NotificationTemplate[]? templates = null,
-        ITemplateRenderer? renderer = null)
+        ITemplateRenderer? renderer = null,
+        NotificationBatch[]? batches = null)
     {
         var (uow, _, _) = MockNotificationUnitOfWork.Build(
             deviceTokenSeed: tokens ?? [],
             notificationSeed: [notification],
             accountSeed: account is null ? [] : [account],
-            templateSeed: templates ?? []);
+            templateSeed: templates ?? [],
+            batchSeed: batches ?? []);
 
         var prefRepo = new Mock<IGenericRepository<NotificationPreference>>();
         prefRepo.Setup(r => r.GetAllAsync())
@@ -449,7 +451,7 @@ public class DispatchPendingTests
             Id = Guid.NewGuid(),
             Type = NotificationTypeEnum.TicketCreated,
             Channel = NotificationChannelEnum.InApp,
-            Locale = "vi-VN",
+
             TitleTemplate = "TPL {{code}}",
             BodyTemplate = "BODY {{code}}",
             IsActive = true,
@@ -462,6 +464,179 @@ public class DispatchPendingTests
         var n = Pending(NotificationChannelEnum.InApp, payloadJson: """{"code":"TKT-9"}""");
         var channel = Channel(NotificationChannelEnum.InApp);
         var (sut, _, _) = Build(n, channel.Object, account: Account(), templates: [template], renderer: renderer.Object);
+
+        await sut.DispatchPendingAsync(n);
+
+        channel.Verify(c => c.SendAsync(
+            It.Is<SendRequest>(r => r.Title == "TPL TKT-9" && r.Body == "BODY TKT-9"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// 03/08/2026 — nội dung của lần gửi hàng loạt THỦ CÔNG không được đem template đè lên.
+    ///
+    /// <para>Màn hình gửi hàng loạt cho admin chọn <b>bất kỳ</b> loại thông báo nào (loại quyết định
+    /// nhóm tuỳ chọn nhận tin nên không ép về mỗi System được). Chọn "Ticket mới" rồi gõ tay tiêu đề
+    /// thì template (TicketCreated × kênh) khớp và render — nhưng payload của một lần gửi tay KHÔNG
+    /// có <c>code</c>, nên ra "Ticket mới " với chỗ trống và chữ admin vừa gõ biến mất sạch.</para>
+    ///
+    /// <para>Đã kiểm trên hệ thống thật: admin gõ "KTMPL Tiêu đề admin tự gõ", người nhận thấy
+    /// "Ticket mới ". Lỗi có từ khi có tính năng gửi hàng loạt, âm thầm áp cho Email/Push/SMS; riêng
+    /// InApp thì kết quả render vốn bị vứt đi nên không ai thấy, tới khi InApp ghi ngược nội dung
+    /// vào dòng notification thì nó lộ ngay trên feed.</para>
+    /// </summary>
+    [Fact]
+    public async Task DispatchPending_LanGuiThuCong_GiuNguyenChuAdminGo_KhongDungTemplate()
+    {
+        var template = new NotificationTemplate
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Channel = NotificationChannelEnum.InApp,
+            TitleTemplate = "Ticket mới {{code}}",
+            BodyTemplate = "Ticket {{code}} vừa được tạo.",
+            IsActive = true,
+        };
+
+        var batch = new NotificationBatch
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Source = NotificationBatchSourceEnum.Manual,
+            Title = "Tiêu đề admin tự gõ",
+            Body = "Nội dung admin tự gõ",
+        };
+
+        // Renderer thật sẽ trả về chuỗi có chỗ trống; ở đây dựng sẵn để nếu guard hỏng thì thấy rõ.
+        var renderer = new Mock<ITemplateRenderer>();
+        renderer.Setup(r => r.RenderInline(It.IsAny<string>(), It.IsAny<object>())).Returns("Ticket mới ");
+
+        var n = Pending(NotificationChannelEnum.InApp);
+        n.BatchId = batch.Id;
+        n.Title = "Tiêu đề admin tự gõ";
+        n.Body = "Nội dung admin tự gõ";
+
+        var channel = Channel(NotificationChannelEnum.InApp);
+        var (sut, _, _) = Build(n, channel.Object, account: Account(),
+            templates: [template], renderer: renderer.Object, batches: [batch]);
+
+        await sut.DispatchPendingAsync(n);
+
+        channel.Verify(c => c.SendAsync(
+            It.Is<SendRequest>(r => r.Title == "Tiêu đề admin tự gõ" && r.Body == "Nội dung admin tự gõ"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// 03/08/2026 — lần gửi THỦ CÔNG mà admin <b>bật "dùng mẫu"</b> thì phải render qua mẫu.
+    ///
+    /// <para>Đây là ranh giới tinh tế nhất của guard: cùng là <c>Source = Manual</c>, nhưng
+    /// <c>UseTemplate = true</c> nghĩa là admin cố ý chọn và đã điền biến. Chặn nhầm ở đây là tính
+    /// năng vừa làm thành vô dụng mà không có gì báo.</para>
+    /// </summary>
+    [Fact]
+    public async Task DispatchPending_LanGuiThuCong_BatDungMau_ThiVanRenderQuaMau()
+    {
+        var template = new NotificationTemplate
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Channel = NotificationChannelEnum.InApp,
+            TitleTemplate = "TPL {{code}}",
+            BodyTemplate = "BODY {{code}}",
+            IsActive = true,
+        };
+
+        var batch = new NotificationBatch
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Source = NotificationBatchSourceEnum.Manual,
+            UseTemplate = true,
+        };
+
+        var renderer = new Mock<ITemplateRenderer>();
+        renderer.Setup(r => r.RenderInline("TPL {{code}}", It.IsAny<object>())).Returns("TPL TKT-9");
+        renderer.Setup(r => r.RenderInline("BODY {{code}}", It.IsAny<object>())).Returns("BODY TKT-9");
+
+        var n = Pending(NotificationChannelEnum.InApp, payloadJson: """{"code":"TKT-9"}""");
+        n.BatchId = batch.Id;
+
+        var channel = Channel(NotificationChannelEnum.InApp);
+        var (sut, _, _) = Build(n, channel.Object, account: Account(),
+            templates: [template], renderer: renderer.Object, batches: [batch]);
+
+        await sut.DispatchPendingAsync(n);
+
+        channel.Verify(c => c.SendAsync(
+            It.Is<SendRequest>(r => r.Title == "TPL TKT-9" && r.Body == "BODY TKT-9"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// Bật "dùng mẫu" nhưng kênh đó KHÔNG có mẫu khớp ⇒ rơi về nội dung admin gõ, không chặn gửi.
+    /// </summary>
+    [Fact]
+    public async Task DispatchPending_BatDungMau_NhungKenhKhongCoMau_ThiRoiVeChuAdminGo()
+    {
+        var batch = new NotificationBatch
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Source = NotificationBatchSourceEnum.Manual,
+            UseTemplate = true,
+        };
+
+        var n = Pending(NotificationChannelEnum.InApp);
+        n.BatchId = batch.Id;
+        n.Title = "Chữ dự phòng";
+        n.Body = "Thân dự phòng";
+
+        var channel = Channel(NotificationChannelEnum.InApp);
+        // templates rỗng — không cặp nào khớp
+        var (sut, _, _) = Build(n, channel.Object, account: Account(), batches: [batch]);
+
+        await sut.DispatchPendingAsync(n);
+
+        channel.Verify(c => c.SendAsync(
+            It.Is<SendRequest>(r => r.Title == "Chữ dự phòng" && r.Body == "Thân dự phòng"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// Ngược lại: lần gửi sinh TỰ ĐỘNG từ sự kiện vẫn phải đi qua template như thường — guard trên
+    /// chỉ được chặn đúng nhánh thủ công, không được tắt template cho mọi thứ có batch.
+    /// </summary>
+    [Fact]
+    public async Task DispatchPending_LanGuiTuSuKien_VanDungTemplate()
+    {
+        var template = new NotificationTemplate
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Channel = NotificationChannelEnum.InApp,
+            TitleTemplate = "TPL {{code}}",
+            BodyTemplate = "BODY {{code}}",
+            IsActive = true,
+        };
+
+        var batch = new NotificationBatch
+        {
+            Id = Guid.NewGuid(),
+            Type = NotificationTypeEnum.TicketCreated,
+            Source = NotificationBatchSourceEnum.Event,
+        };
+
+        var renderer = new Mock<ITemplateRenderer>();
+        renderer.Setup(r => r.RenderInline("TPL {{code}}", It.IsAny<object>())).Returns("TPL TKT-9");
+        renderer.Setup(r => r.RenderInline("BODY {{code}}", It.IsAny<object>())).Returns("BODY TKT-9");
+
+        var n = Pending(NotificationChannelEnum.InApp, payloadJson: """{"code":"TKT-9"}""");
+        n.BatchId = batch.Id;
+
+        var channel = Channel(NotificationChannelEnum.InApp);
+        var (sut, _, _) = Build(n, channel.Object, account: Account(),
+            templates: [template], renderer: renderer.Object, batches: [batch]);
 
         await sut.DispatchPendingAsync(n);
 
@@ -492,7 +667,7 @@ public class DispatchPendingTests
             Id = Guid.NewGuid(),
             Type = NotificationTypeEnum.TicketCreated,
             Channel = NotificationChannelEnum.InApp,
-            Locale = "vi-VN",
+
             TitleTemplate = "{{#bad}}",
             BodyTemplate = "{{#bad}}",
             IsActive = true,
@@ -521,7 +696,7 @@ public class DispatchPendingTests
             Id = Guid.NewGuid(),
             Type = NotificationTypeEnum.TicketCreated,
             Channel = NotificationChannelEnum.InApp,
-            Locale = "vi-VN",
+
             TitleTemplate = "TPL",
             BodyTemplate = "BODY",
             IsActive = true,

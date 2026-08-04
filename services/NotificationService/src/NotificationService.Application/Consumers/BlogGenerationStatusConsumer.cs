@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -50,7 +51,7 @@ public class BlogGenerationStatusConsumer : IConsumer<BlogGenerationStatusChange
                 Channel = NotificationChannelEnum.InApp,
                 Title = title,
                 Body = body,
-                PayloadJson = $"{{\"blogPostId\":\"{evt.BlogPostId}\"}}",
+                PayloadJson = JsonSerializer.Serialize(new { blogPostId = evt.BlogPostId }),
                 EntityType = "BlogPost",
                 EntityId = evt.BlogPostId,
             };

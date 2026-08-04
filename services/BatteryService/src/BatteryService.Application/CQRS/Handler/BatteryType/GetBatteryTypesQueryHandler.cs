@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.BatteryType;
 
@@ -33,8 +34,6 @@ public class GetBatteryTypesQueryHandler : IRequestHandler<GetBatteryTypesQuery,
                 (type.Manufacturer != null && type.Manufacturer.ToLower().Contains(keyword)));
         }
 
-        var total = await query.CountAsync(cancellationToken);
-
         var descending = SortHelper.IsDescending(request.SortDir);
         // Whitelist: name | manufacturer | chemistry | nominalCapacityAh | nominalVoltage | maxCycleCount | createdAt (default).
         var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
@@ -48,24 +47,17 @@ public class GetBatteryTypesQueryHandler : IRequestHandler<GetBatteryTypesQuery,
             _ => descending ? query.OrderByDescending(type => type.CreatedAt) : query.OrderBy(type => type.CreatedAt),
         };
 
-        var items = await ordered
+        // Phân trang trên entity rồi mới map: BatteryMapper.ToDto là method call, EF không dịch được
+        // sang SQL — chiếu trước khi cắt trang sẽ làm Skip/Take mất khả năng dịch.
+        var page = await ordered
             .ThenBy(type => type.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(type => BatteryMapper.ToDto(type))
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<BatteryTypeDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<BatteryTypeDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.Map(BatteryMapper.ToDto)
         };
     }
 }

@@ -53,6 +53,11 @@ internal static class PermissionSeed
         new(PermissionCodes.NotificationView, "Notification", "Xem thông báo"),
         new(PermissionCodes.NotificationSend, "Notification", "Gửi thông báo vận hành"),
         new(PermissionCodes.NotificationManageTemplate, "Notification", "Quản lý template thông báo"),
+        // Sprint 6.4 NOTI4-10
+        new(PermissionCodes.NotificationGroupView, "Notification", "Xem nhóm người nhận thông báo"),
+        new(PermissionCodes.NotificationGroupManage, "Notification", "Tạo/sửa/xoá nhóm và thành viên"),
+        new(PermissionCodes.NotificationBroadcast, "Notification", "Gửi thông báo hàng loạt cho nhóm"),
+        new(PermissionCodes.NotificationBatchView, "Notification", "Xem lịch sử các lần gửi hàng loạt"),
 
         // KnowledgeBase
         new(PermissionCodes.KnowledgeBaseView, "KnowledgeBase", "Xem bài viết knowledge base"),
@@ -99,6 +104,9 @@ internal static class PermissionSeed
                 PermissionCodes.TicketViewAll, PermissionCodes.TicketAssign,
                 PermissionCodes.TicketClose, PermissionCodes.TicketEscalate,
                 PermissionCodes.NotificationView, PermissionCodes.NotificationSend,
+                // Sprint 6.4 NOTI4-10 — Manager chỉ ĐỌC: xem được nhóm và lịch sử gửi để đối chiếu,
+                // nhưng không tạo nhóm và không gửi hàng loạt (§17.6.4.6 câu hỏi 2 — mặc định chỉ Admin).
+                PermissionCodes.NotificationGroupView, PermissionCodes.NotificationBatchView,
                 PermissionCodes.KnowledgeBaseView, PermissionCodes.KnowledgeBaseCreate,
                 PermissionCodes.KnowledgeBaseUpdate, PermissionCodes.KnowledgeBasePublish,
                 PermissionCodes.ReportsView, PermissionCodes.ReportsExport,

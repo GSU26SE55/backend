@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Services;
 
 namespace BatteryService.Application.CQRS.Handler.Site;
@@ -44,11 +45,9 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
             .Select(account => account.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(site => site.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(site => site.Id) // tie-breaker cố định — pagination ổn định
             .Select(site => new SiteDto
             {
                 Id = site.Id.ToString(),
@@ -66,19 +65,13 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
                 ActiveBatteryAssetCount = site.BatteryAssets.Count(asset => !asset.IsDeleted && asset.Status == Domain.Enums.BatteryStatusEnum.Active),
                 CreatedAt = site.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<SiteDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<SiteDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

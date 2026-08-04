@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -36,13 +37,13 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
             query = query.Where(t => t.Category == request.Category.Value);
 
         // P1 first, then P2, P3; within same priority older tickets first
-        query = query.OrderBy(t => t.Priority).ThenBy(t => t.CreatedAt);
+        query = query.OrderBy(t => t.Priority).ThenBy(t => t.CreatedAt)
+            .ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
-        var total = await query.CountAsync(cancellationToken);
-        var rawItems = await query
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
+        // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,
+        // nên không chiếu sang DTO trong SQL được.
+        var page = await query.ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
+        var rawItems = page.Items;
 
         var ticketIds = rawItems.Select(t => t.Id).ToList();
         HashSet<Guid> unreadTicketIds;
@@ -71,13 +72,7 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketDTO>
-            {
-                Items = rawItems.Select(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id))).ToList(),
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id)))
         };
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Api.Controllers;
 
@@ -133,8 +134,6 @@ public class AdminAuditLogsController : ControllerBase
         if (to.HasValue)
             q = q.Where(x => x.OccurredAt <= to.Value);
 
-        var total = await q.CountAsync(ct);
-
         var descending = SortHelper.IsDescending(sortDir);
         // Whitelist: occurredAt (default) | actionCode | severity | targetDisplay | actorAccountId | isSuccess.
         var ordered = (sortBy?.Trim().ToLowerInvariant()) switch
@@ -146,9 +145,8 @@ public class AdminAuditLogsController : ControllerBase
             "issuccess" => descending ? q.OrderByDescending(x => x.IsSuccess) : q.OrderBy(x => x.IsSuccess),
             _ => descending ? q.OrderByDescending(x => x.OccurredAt) : q.OrderBy(x => x.OccurredAt),
         };
-        var items = await ordered
+        var page = await ordered
             .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
-            .Skip((pageNumber - 1) * pageSize).Take(pageSize)
             .Select(x => new BatteryAuditLogDto
             {
                 Id = x.Id.ToString(),
@@ -162,17 +160,12 @@ public class AdminAuditLogsController : ControllerBase
                 IsSuccess = x.IsSuccess,
                 Reason = x.Reason,
                 OccurredAt = x.OccurredAt,
-            }).ToListAsync(ct);
+            })
+            .ToPagedEntityListAsync(pageNumber, pageSize, ct);
 
         return Ok(new CommonResponse<PaginationResponse<BatteryAuditLogDto>>
         {
-            Data = new PaginationResponse<BatteryAuditLogDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            },
+            Data = page,
         });
     }
 }

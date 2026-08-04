@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -45,7 +46,12 @@ public class ChatReactionConsumer : IConsumer<ChatReactedEvent>
                     Channel = channel,
                     Title = "Chat của bạn có reaction mới",
                     Body = "Một chat của bạn vừa nhận được reaction.",
-                    PayloadJson = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\",\"reactionType\":{evt.ReactionType}}}",
+                    PayloadJson = JsonSerializer.Serialize(new
+                    {
+                        chatId = evt.ChatId,
+                        ticketId = evt.TicketId,
+                        reactionType = evt.ReactionType,
+                    }),
                     EntityType = "Chat",
                     EntityId = evt.ChatId
                 };

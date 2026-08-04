@@ -92,7 +92,10 @@ public class NotificationCategoryMapTests
     [InlineData(NotificationTypeEnum.BatteryAnomalyWarning, NotificationCategoryEnum.Battery)]
     [InlineData(NotificationTypeEnum.EnvironmentalIncidentDetected, NotificationCategoryEnum.Environmental)]
     [InlineData(NotificationTypeEnum.ChatMentioned, NotificationCategoryEnum.Chat)]
-    [InlineData(NotificationTypeEnum.AdminInvite, NotificationCategoryEnum.Account)]
+    // 03/08/2026 — thay AdminInvite bằng AccountActivated: AdminInvite đã bị gỡ khỏi
+    // NotificationTypeEnum vì thư mời đi thẳng AuthService → EmailService, không consumer nào ở
+    // đây ghi nó. Vẫn cần một đại diện nhóm Account nên dùng loại có producer thật.
+    [InlineData(NotificationTypeEnum.AccountActivated, NotificationCategoryEnum.Account)]
     public void Resolve_ReturnsExpectedCategory(NotificationTypeEnum type, NotificationCategoryEnum expected)
     {
         NotificationCategoryMap.Resolve(type).Should().Be(expected);

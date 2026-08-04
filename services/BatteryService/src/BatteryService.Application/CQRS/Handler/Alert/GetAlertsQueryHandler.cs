@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.Alert;
 
@@ -47,11 +48,9 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             query = query.Where(alert => alert.DetectedAt <= to);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(alert => alert.DetectedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(alert => alert.Id) // tie-breaker cố định — pagination ổn định
             .Select(alert => new AlertDto
             {
                 Id = alert.Id.ToString(),
@@ -74,19 +73,13 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
                 DedupWindowEndUtc = alert.DedupWindowEndUtc,
                 CreatedAt = alert.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<AlertDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AlertDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 

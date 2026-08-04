@@ -21,7 +21,6 @@ public class NotificationTemplateCatalogTests
     public void EveryTypeChannelPair_HasVietnameseTemplate()
     {
         var covered = Catalog
-            .Where(e => e.Locale == NotificationTemplateCatalog.DefaultLocale)
             .Select(e => (e.Type, e.Channel))
             .ToHashSet();
 
@@ -50,41 +49,51 @@ public class NotificationTemplateCatalogTests
             .Should().BeEmpty();
     }
 
+    /// <summary>
+    /// 02/08/2026 — hệ thống tiếng Việt only: mỗi ô ma trận đúng MỘT dòng, không còn bản dịch nào.
+    /// Trước đây các type hướng Customer sinh thêm bản <c>en-US</c>, làm mỗi ô có 2 dòng.
+    /// </summary>
     [Fact]
-    public void CustomerFacingTypes_HaveEnglishTemplates()
+    public void Catalog_HasExactlyOneEntryPerMatrixCell()
     {
-        var english = Catalog
-            .Where(e => e.Locale == NotificationTemplateCatalog.EnglishLocale)
-            .Select(e => e.Type)
-            .ToHashSet();
+        var matrixCells = NotificationDispatchOptions.DefaultTypeChannelMatrix
+            .Sum(kv => kv.Value.Length);
 
-        foreach (var type in NotificationTemplateCatalog.CustomerFacingTypes)
-        {
-            // Chỉ đòi bản en-US cho type thực sự có trong ma trận.
-            if (NotificationDispatchOptions.DefaultTypeChannelMatrix.ContainsKey(type))
-                english.Should().Contain(type, $"{type} hướng Customer nên cần bản tiếng Anh");
-        }
+        Catalog.Should().HaveCount(matrixCells,
+            "mỗi ô type × kênh đúng một template tiếng Việt — không còn bản dịch");
     }
 
-    /// <summary>Không dịch thứ không ai đọc — type nội bộ chỉ cần tiếng Việt.</summary>
+    /// <summary>Không còn template tiếng Anh nào lọt lại trong danh mục.</summary>
     [Fact]
-    public void InternalOnlyTypes_HaveNoEnglishTemplate()
+    public void Catalog_HasNoEnglishLeftovers()
     {
-        var english = Catalog
-            .Where(e => e.Locale == NotificationTemplateCatalog.EnglishLocale)
-            .Select(e => e.Type)
-            .ToHashSet();
+        // Câu tiếng Việt của dự án luôn có ít nhất một ký tự có dấu; bản tiếng Anh cũ thì không.
+        const string vietnameseChars =
+            "ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ";
 
-        english.Should().NotContain(NotificationTypeEnum.SlaBreached);
-        english.Should().NotContain(NotificationTypeEnum.AlertTicketSagaFailed);
-        english.Should().NotContain(NotificationTypeEnum.IotDeviceWentOffline);
+        // Template chuyển tiếp nguyên văn (chỉ gồm placeholder, không có chữ nào của mình) đương
+        // nhiên không có dấu — đó không phải sót tiếng Anh. Hiện chỉ `System` thuộc dạng này: nội
+        // dung của nó CHÍNH LÀ thông điệp admin gõ, không có gì để khuôn mẫu hoá.
+        static bool ChiGomPlaceholder(string text) =>
+            System.Text.RegularExpressions.Regex
+                .Replace(text, @"\{\{\{?[^}]*\}?\}\}", string.Empty)
+                .Trim()
+                .Length == 0;
+
+        var suspects = Catalog
+            .Where(e => !ChiGomPlaceholder(e.Title + " " + e.Body))
+            .Where(e => !(e.Title + e.Body).ToLowerInvariant().Any(vietnameseChars.Contains))
+            .Select(e => $"{e.Type}/{e.Channel}")
+            .ToList();
+
+        suspects.Should().BeEmpty("mọi template phải là tiếng Việt");
     }
 
-    /// <summary>Bộ (Type, Channel, Locale) là khoá unique trong DB — trùng là seeder sẽ nổ.</summary>
+    /// <summary>Cặp (Type, Channel) là khoá unique trong DB — trùng là seeder sẽ nổ.</summary>
     [Fact]
     public void Catalog_HasNoDuplicateKeys()
     {
-        Catalog.GroupBy(e => (e.Type, e.Channel, e.Locale))
+        Catalog.GroupBy(e => (e.Type, e.Channel))
             .Where(g => g.Count() > 1)
             .Select(g => g.Key.ToString())
             .Should().BeEmpty();
@@ -131,7 +140,7 @@ public class NotificationTemplateCatalogTests
                 renderer.RenderInline(entry.Body, new { });
             };
 
-            act.Should().NotThrow($"{entry.Type}/{entry.Channel}/{entry.Locale} phải compile được");
+            act.Should().NotThrow($"{entry.Type}/{entry.Channel} phải compile được");
         }
     }
 
@@ -148,22 +157,9 @@ public class NotificationTemplateCatalogTests
                 var close = System.Text.RegularExpressions.Regex.Matches(text, @"\}\}").Count;
 
                 open.Should().Be(close,
-                    $"{entry.Type}/{entry.Channel}/{entry.Locale}: số ngoặc {{{{ và }}}} không khớp");
+                    $"{entry.Type}/{entry.Channel}: số ngoặc {{{{ và }}}} không khớp");
             }
         }
     }
 
-    /// <summary>Bản tiếng Anh không được sót câu tiếng Việt — dấu hiệu copy nhầm.</summary>
-    [Fact]
-    public void EnglishTemplates_ContainNoVietnameseDiacritics()
-    {
-        var vietnameseChars = "ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ";
-
-        foreach (var entry in Catalog.Where(e => e.Locale == NotificationTemplateCatalog.EnglishLocale))
-        {
-            var text = (entry.Title + entry.Body).ToLowerInvariant();
-
-            text.Should().NotContainAny(vietnameseChars.Select(c => c.ToString()).ToArray());
-        }
-    }
 }

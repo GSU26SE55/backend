@@ -64,6 +64,10 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<DateTime?>("LastSnapshotAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_snapshot_at_utc");
+
                     b.Property<DateTime>("LastSyncedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_synced_at_utc");
@@ -72,11 +76,6 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("phone_number");
-
-                    b.Property<string>("PreferredLocale")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("preferred_locale");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -168,6 +167,10 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
                     b.Property<string>("Body")
                         .IsRequired()
                         .HasMaxLength(2000)
@@ -258,11 +261,20 @@ namespace NotificationService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("ix_notifications_batch")
+                        .HasFilter("batch_id IS NOT NULL");
+
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("EntityType", "EntityId");
 
                     b.HasIndex("UserId", "Status");
+
+                    b.HasIndex("BatchId", "UserId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notifications_batch_user_channel")
+                        .HasFilter("batch_id IS NOT NULL");
 
                     b.HasIndex("Status", "NextAttemptAt", "CreatedAt")
                         .HasDatabaseName("ix_notifications_dispatch_queue");
@@ -484,6 +496,169 @@ namespace NotificationService.Infrastructure.Migrations
                     b.ToTable("notification_audit_outbox", (string)null);
                 });
 
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<int[]>("ChannelValues")
+                        .IsRequired()
+                        .HasColumnType("integer[]")
+                        .HasColumnName("channels");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("NotificationCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("notification_count");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<int>("RecipientCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("recipient_count");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer")
+                        .HasColumnName("source");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<bool>("UseTemplate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("use_template");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_notification_batches_created_at");
+
+                    b.HasIndex("EntityType", "EntityId")
+                        .HasDatabaseName("ix_notification_batches_entity");
+
+                    b.ToTable("notification_batches", (string)null);
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationBatchTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("TargetKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_kind");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("ix_notification_batch_targets_batch");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_notification_batch_targets_group")
+                        .HasFilter("group_id IS NOT NULL");
+
+                    b.ToTable("notification_batch_targets", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_batch_targets_shape", "(target_kind = 1 AND group_id IS NOT NULL AND user_id IS NULL) OR (target_kind = 2 AND user_id IS NOT NULL AND group_id IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("NotificationService.Domain.Entities.NotificationCategoryPreference", b =>
                 {
                     b.Property<Guid>("Id")
@@ -551,6 +726,138 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasDatabaseName("ux_notification_category_preferences_user_category");
 
                     b.ToTable("notification_category_preferences", (string)null);
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<string>("RoleFilter")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("role_filter");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_groups_normalized_name")
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex("RoleFilter")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_groups_role_filter")
+                        .HasFilter("kind = 2 AND is_deleted = false");
+
+                    b.ToTable("notification_groups", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_groups_role_filter", "(kind = 2 AND role_filter IS NOT NULL) OR (kind = 1 AND role_filter IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationGroupMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AddedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_notification_group_members_user")
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex("GroupId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_group_members_pair")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("notification_group_members", (string)null);
                 });
 
             modelBuilder.Entity("NotificationService.Domain.Entities.NotificationPreference", b =>
@@ -701,12 +1008,6 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<string>("Locale")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("locale");
-
                     b.Property<string>("TitleTemplate")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -729,14 +1030,14 @@ namespace NotificationService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Type", "Channel", "Locale")
+                    b.HasIndex("Type", "Channel")
                         .IsUnique()
                         .HasDatabaseName("ux_notification_templates_active_per_key")
                         .HasFilter("is_active = true AND is_deleted = false");
 
-                    b.HasIndex("Type", "Channel", "Locale", "Version")
+                    b.HasIndex("Type", "Channel", "Version")
                         .IsUnique()
-                        .HasDatabaseName("ux_notification_templates_type_channel_locale_version");
+                        .HasDatabaseName("ux_notification_templates_type_channel_version");
 
                     b.ToTable("notification_templates", (string)null);
                 });
@@ -826,6 +1127,53 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasDatabaseName("ix_push_receipts_status_created");
 
                     b.ToTable("push_receipts", (string)null);
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("NotificationService.Domain.Entities.NotificationBatch", null)
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationBatchTarget", b =>
+                {
+                    b.HasOne("NotificationService.Domain.Entities.NotificationBatch", "Batch")
+                        .WithMany("Targets")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NotificationService.Domain.Entities.NotificationGroup", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationGroupMember", b =>
+                {
+                    b.HasOne("NotificationService.Domain.Entities.NotificationGroup", "Group")
+                        .WithMany("Members")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationBatch", b =>
+                {
+                    b.Navigation("Targets");
+                });
+
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationGroup", b =>
+                {
+                    b.Navigation("Members");
                 });
 #pragma warning restore 612, 618
         }

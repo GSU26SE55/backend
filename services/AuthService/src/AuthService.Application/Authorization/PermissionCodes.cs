@@ -49,6 +49,13 @@ public static class PermissionCodes
     public const string NotificationSend = "notification.send";
     public const string NotificationManageTemplate = "notification.manage_template";
 
+    // Sprint 6.4 NOTI4-10 — nhóm người nhận và gửi hàng loạt. Dấu chấm ngăn module, gạch dưới ngăn
+    // các từ trong tên hành động — bám đúng notification.manage_template ở trên.
+    public const string NotificationGroupView = "notification.group_view";
+    public const string NotificationGroupManage = "notification.group_manage";
+    public const string NotificationBroadcast = "notification.broadcast";
+    public const string NotificationBatchView = "notification.batch_view";
+
     // Knowledge base (knowledge_base.*)
     public const string KnowledgeBaseView = "knowledge_base.view";
     public const string KnowledgeBaseCreate = "knowledge_base.create";

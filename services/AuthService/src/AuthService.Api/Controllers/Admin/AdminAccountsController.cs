@@ -455,6 +455,47 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
+    /// Đối soát read-model tài khoản của các service khác: phát lại <c>AccountSyncSnapshotEvent</c>
+    /// cho toàn bộ account (hoặc một account chỉ định).
+    /// </summary>
+    /// <remarks>
+    /// Read-model account ở các service khác (rõ nhất là NotificationService — nơi quyết định
+    /// "gửi thông báo cho nhóm Manager/Admin" gồm những ai) chỉ được nuôi bằng integration event.
+    /// Có ba đường làm nó lệch mà bản thân service kia không tự phát hiện được:
+    ///
+    /// - Account tạo bằng <c>AuthDataSeeder</c> ghi thẳng DbContext, không đi qua handler nào nên
+    ///   không phát event ⇒ không bao giờ có mặt trong read-model.
+    /// - Event bị mất/hỏng trong lúc service tiêu thụ đang chết.
+    /// - Read-model bị xoá/dựng lại khi reset môi trường.
+    ///
+    /// Mỗi service một database nên không thể tự đối soát từ phía bên kia — bắt buộc AuthService
+    /// phải phát lại. Endpoint này an toàn khi gọi lại nhiều lần: snapshot là upsert thuần ở phía
+    /// consumer, KHÔNG kèm tác dụng phụ nghiệp vụ (không gửi welcome, không sinh notification).
+    ///
+    /// Event đi qua Outbox nên vẫn tới nơi kể cả khi RabbitMQ hoặc service tiêu thụ đang tạm chết.
+    ///
+    /// Quyền truy cập: chỉ role <c>Admin</c>.
+    /// </remarks>
+    /// <param name="accountId">Bỏ trống = đối soát toàn bộ. Có giá trị = chỉ phát lại cho account đó.</param>
+    /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
+    /// <returns>Số snapshot đã phát, kèm phân rã theo trạng thái để đối chiếu với read-model.</returns>
+    /// <response code="200">Đã phát snapshot.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="404">Có truyền accountId nhưng không tìm thấy account.</response>
+    [HttpPost("resync")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(AccountResyncResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(AccountResyncResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Resync([FromQuery] Guid? accountId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AccountResyncCommand { AccountId = accountId }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Unlock 1 tài khoản đang bị khóa (reset FailedLoginAttempts, LockoutEndAt; chuyển Status sang Active nếu đang Locked).
     /// </summary>
     /// <remarks>

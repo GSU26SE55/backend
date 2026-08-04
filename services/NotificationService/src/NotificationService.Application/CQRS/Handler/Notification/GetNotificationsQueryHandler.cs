@@ -4,7 +4,7 @@ using NotificationService.Application.CQRS.Query.Notification;
 using NotificationService.Application.DTOs.Response.Notification;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Enums;
-using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace NotificationService.Application.CQRS.Handler.Notification;
 
@@ -44,12 +44,9 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
                                      && n.Status != NotificationStatusEnum.Opened);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-
-        var items = await query
+        var page = await query
             .OrderByDescending(n => n.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(n => n.Id) // tie-breaker cố định — pagination ổn định
             .Select(n => new NotificationDto
             {
                 Id = n.Id,
@@ -66,19 +63,13 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
                 ReadAt = n.ReadAt,
                 CreatedAt = n.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new NotificationListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<NotificationDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

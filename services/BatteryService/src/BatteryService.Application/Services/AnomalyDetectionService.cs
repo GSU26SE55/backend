@@ -149,7 +149,11 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                         ThresholdValue: alert.ThresholdValue,
                         ActualValue: alert.ActualValue,
                         Unit: alert.Unit,
-                        DetectedAt: alert.DetectedAt);
+                        DetectedAt: alert.DetectedAt,
+                        // Gửi kèm TÊN enum: subscriber không tham chiếu được hai enum này của
+                        // BatteryService nên chỉ có số thì không dựng nổi câu chữ cho người đọc.
+                        AnomalyTypeName: alert.AnomalyType.ToString(),
+                        SeverityName: alert.Severity.ToString());
                     await _unitOfWork.OutboxMessages.AddAsync(new OutboxEntity
                     {
                         Id = Guid.NewGuid(),
@@ -203,7 +207,9 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                             ThresholdValue: alert.ThresholdValue,
                             ActualValue: alert.ActualValue,
                             Unit: alert.Unit,
-                            DetectedAt: alert.DetectedAt);
+                            DetectedAt: alert.DetectedAt,
+                            AnomalyTypeName: alert.AnomalyType.ToString(),
+                            SeverityName: alert.Severity.ToString());
 
                         await _unitOfWork.OutboxMessages.AddAsync(new OutboxEntity
                         {

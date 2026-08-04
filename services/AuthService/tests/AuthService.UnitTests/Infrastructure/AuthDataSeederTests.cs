@@ -6,6 +6,7 @@ using AuthService.Infrastructure.Persistence.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 
@@ -49,8 +50,12 @@ public class AuthDataSeederTests : IDisposable
 
     public void Dispose() => _ctx.Dispose();
 
+    // 02/08/2026 — seeder nay phát AccountSyncSnapshotEvent cho account nó vừa tạo, để
+    // read-model account bên NotificationService không bỏ sót tài khoản seed.
+    private readonly Mock<IMessageProducerService> _producer = new();
+
     private AuthDataSeeder NewSeeder() =>
-        new(_ctx, _config, _hasher.Object, NullLogger<AuthDataSeeder>.Instance);
+        new(_ctx, _config, _hasher.Object, _producer.Object, NullLogger<AuthDataSeeder>.Instance);
 
     [Fact]
     public async Task SeedAsync_FreshDb_Creates4Roles_AndAdminAccountWithAdminRole()

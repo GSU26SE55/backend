@@ -27,6 +27,10 @@ public class RecipientResolverTests
     {
         var repo = new Mock<IGenericRepository<AccountReadModel>>();
         repo.Setup(r => r.GetAllAsync()).Returns(seed.AsQueryable().BuildMock());
+        // Sprint 6.4 — resolver chuyển sang overload no-tracking cho truy vấn chỉ-đọc (#AUTH-35).
+        // Thiếu stub này thì Moq trả IQueryable rỗng không async được, và lỗi hiện ra dưới dạng
+        // "doesn't implement IAsyncEnumerable" chứ không phải sai kết quả — rất mất thời gian truy.
+        repo.Setup(r => r.GetAllAsync(It.IsAny<bool>())).Returns(seed.AsQueryable().BuildMock());
 
         var uow = new Mock<INotificationUnitOfWork>();
         uow.SetupGet(u => u.Accounts).Returns(repo.Object);

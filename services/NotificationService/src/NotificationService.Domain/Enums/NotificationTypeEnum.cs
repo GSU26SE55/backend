@@ -18,7 +18,16 @@ public enum NotificationTypeEnum
     EnvironmentalIncidentDetected = 10,
     EnvironmentalIncidentResolved = 11,
     AccountActivated = 12,
-    AdminInvite = 13,
+    // 13 = AdminInvite — ĐÃ GỠ 03/08/2026, cố ý để trống số này.
+    //
+    // Thư mời quản trị đi thẳng AuthService → EmailService (`SendAdminInviteEvent` →
+    // `SendAdminInviteConsumer`), KHÔNG qua NotificationService. Ở đây nó là enum KHÔNG CÓ
+    // PRODUCER: không consumer nào ghi, không dòng notifications nào mang type 13, nhưng vẫn
+    // chiếm một ô trong ma trận kênh và một template trong DB — người vận hành sửa template đó
+    // mãi mà chẳng đổi được gì.
+    //
+    // Đây đúng thứ mà ghi chú NOTI-04 phía dưới đã chốt tránh, chỉ là lúc đó bỏ sót chính dòng
+    // này. Không dùng lại số 13 cho loại khác: dữ liệu cũ có thể còn tham chiếu.
     IncidentDeclared = 14,
 
     /// <summary>
@@ -100,7 +109,8 @@ public enum NotificationTypeEnum
     /// <see cref="ChatEscalatedToAdmin"/>; hai tên trùng giá trị là hợp lệ với compiler nhưng khiến
     /// <c>NotificationCategoryMap</c> (dictionary khoá theo giá trị enum) **không thể** chứa
     /// <c>TicketMerged</c> như một khoá riêng → nó bị xếp nhầm nhóm <c>Sla</c> và biến mất khỏi
-    /// <c>GET /api/notification-preferences/categories</c>.
+    /// <c>GET /api/notification-preferences/categories</c>. Trùng số cũng khiến hai loại tranh
+    /// cùng khoá template <c>(type, channel)</c>. Mobile đã chốt 34 và không dùng lại 27.
     /// An toàn: bảng <c>notifications</c> không có record nào <c>type = 27</c> khi đổi.
     /// </summary>
     TicketMerged = 34,

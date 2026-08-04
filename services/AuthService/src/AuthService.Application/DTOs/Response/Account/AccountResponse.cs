@@ -10,6 +10,8 @@ public class AccountStatsResponse : CommonResponse<AccountStatsDto> { }
 
 public class AccountActionResponse : CommonResponse<Guid> { }
 
+public class AccountResyncResponse : CommonResponse<AccountResyncDto> { }
+
 public class StaffAssignmentProfileResponse : CommonResponse<StaffAssignmentProfileDto> { }
 
 public class StaffAssignmentProfileListResponse : CommonResponse<List<StaffAssignmentProfileDto>> { }

@@ -53,6 +53,57 @@ Ví dụ: `GET /api/admin/accounts?PageNumber=1&PageSize=10&SortBy=fullName&Sort
 | `Suspended` | 4 | Đình chỉ do vi phạm policy (admin set/clear) |
 | `Banned` | 5 | Cấm vĩnh viễn, không reactivate được |
 
+### `POST /api/admin/accounts/resync` *(02/08/2026)*
+
+Phát lại `AccountSyncSnapshotEvent` cho tài khoản, để các service khác dựng lại read-model account
+của mình. **Chỉ role `Admin`.**
+
+| Query param | Kiểu | Bắt buộc | Ý nghĩa |
+|---|---|---|---|
+| `accountId` | uuid | Không | Bỏ trống = đối soát **toàn bộ**. Có giá trị = chỉ phát lại cho account đó |
+
+**Response:** `CommonResponse<AccountResyncDto>`
+
+```jsonc
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã phát 10 snapshot đồng bộ tài khoản.",
+  "data": {
+    "totalAccounts": 10,    // đã quét và phát (gồm cả account đã xoá mềm)
+    "activeAccounts": 7,    // ⇐ số dòng is_active = true mà read-model PHẢI có sau khi đồng bộ xong
+    "inactiveAccounts": 3,  // chưa xác thực / đình chỉ / cấm
+    "deletedAccounts": 0    // đã xoá mềm — read-model sẽ đánh dấu xoá theo
+  }
+}
+```
+
+**Khi nào dùng.** Read-model account ở các service khác — rõ nhất là NotificationService, nơi quyết
+định "gửi thông báo cho nhóm Manager/Admin" gồm những ai — chỉ được nuôi bằng integration event. Ba
+đường làm nó lệch mà bản thân service kia không tự phát hiện được:
+
+- Account tạo bằng `AuthDataSeeder` ghi thẳng DbContext, không đi qua handler nên không phát event.
+- Event mất/hỏng trong lúc service tiêu thụ đang chết.
+- Read-model bị xoá/dựng lại khi reset môi trường.
+
+Mỗi service một database nên không thể đối soát từ phía bên kia — bắt buộc AuthService phát lại.
+
+**An toàn khi gọi lại nhiều lần:** snapshot là upsert thuần ở phía consumer, **không** kèm tác dụng
+phụ nghiệp vụ (không gửi welcome, không sinh notification). Event đi qua Outbox nên vẫn tới nơi kể
+cả khi RabbitMQ hoặc service tiêu thụ đang tạm chết.
+
+**Kiểm chứng sau khi gọi:**
+
+```bash
+docker exec solar-postgres psql -U postgres -d notification_db -c \
+  "SELECT role, count(*) FILTER (WHERE is_active) FROM account_read_models
+   WHERE NOT is_deleted GROUP BY role;"
+```
+
+> `AccountSyncSnapshotEvent` được phát tự động ở 5 chỗ: đổi role · đổi trạng thái · người dùng tự vô
+> hiệu hoá · khôi phục tài khoản · seeder tạo account mới. Endpoint này chỉ dành cho việc **đối
+> soát** khi nghi ngờ đã lệch.
+
 ### `GET /api/accounts/me/login-history`
 
 | `SortBy` | Sort theo | Kiểu | Nullable |

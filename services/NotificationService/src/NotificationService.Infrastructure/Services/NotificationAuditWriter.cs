@@ -158,6 +158,39 @@ public class NotificationAuditWriter : INotificationAuditWriter
             // là hành động cần nổi lên trong bộ lọc audit, không nên lẫn vào nhiễu Info.
             NotificationAuditActionEnum.TemplateTestSent =>
                 (ActionCodes.Notification.TemplateTestSent, AuditCategories.Communication, Severities.Warning),
+
+            // 02/08/2026 — sửa/xoá/quay lui template đổi câu chữ gửi cho hàng trăm khách ⇒ Warning.
+            // Riêng TemplateCreated là Info: tạo mới cho một cặp chưa có template thì trước đó nó
+            // đang rơi về chuỗi hardcode trong consumer, có template là tốt lên chứ không rủi ro.
+            NotificationAuditActionEnum.TemplateCreated =>
+                (ActionCodes.Notification.TemplateCreated, AuditCategories.Communication, Severities.Info),
+            NotificationAuditActionEnum.TemplateRevised =>
+                (ActionCodes.Notification.TemplateRevised, AuditCategories.Communication, Severities.Warning),
+            NotificationAuditActionEnum.TemplateActivated =>
+                (ActionCodes.Notification.TemplateActivated, AuditCategories.Communication, Severities.Warning),
+            NotificationAuditActionEnum.TemplateDeleted =>
+                (ActionCodes.Notification.TemplateDeleted, AuditCategories.Communication, Severities.Warning),
+
+            // Sprint 6.4 — nhóm quyết định AI nhận được thông báo nội bộ, nên mọi thay đổi thành
+            // phần nhóm đều là Warning: thêm nhầm một người vào nhóm "Quản lý" là rò rỉ thông tin.
+            // Riêng GroupCreated là Info — nhóm vừa tạo còn rỗng, chưa chạm tới ai.
+            NotificationAuditActionEnum.GroupCreated =>
+                (ActionCodes.Notification.GroupCreated, AuditCategories.Communication, Severities.Info),
+            NotificationAuditActionEnum.GroupUpdated =>
+                (ActionCodes.Notification.GroupUpdated, AuditCategories.Communication, Severities.Info),
+            NotificationAuditActionEnum.GroupDeleted =>
+                (ActionCodes.Notification.GroupDeleted, AuditCategories.Communication, Severities.Warning),
+            NotificationAuditActionEnum.GroupMembersAdded =>
+                (ActionCodes.Notification.GroupMembersAdded, AuditCategories.Communication, Severities.Warning),
+            NotificationAuditActionEnum.GroupMemberRemoved =>
+                (ActionCodes.Notification.GroupMemberRemoved, AuditCategories.Communication, Severities.Warning),
+
+            // Một lệnh gửi hàng loạt có thể chạm tới toàn bộ người dùng hệ thống. Chỉ có 4 mức
+            // severity (Info/Warning/Critical/Security) — không có "Error"; lượt gửi hỏng dùng
+            // Critical vì nó nghĩa là một thông báo đáng lẽ tới tay nhiều người đã không tới.
+            NotificationAuditActionEnum.BroadcastSent =>
+                (ActionCodes.Notification.BroadcastSent, AuditCategories.Communication, isSuccess ? Severities.Warning : Severities.Critical),
+
             _ => (action.ToString(), AuditCategories.Communication, Severities.Info),
         };
 

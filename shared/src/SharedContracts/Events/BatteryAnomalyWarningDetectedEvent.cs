@@ -25,5 +25,11 @@ public record BatteryAnomalyWarningDetectedEvent(
     decimal? ThresholdValue,
     decimal? ActualValue,
     string? Unit,
-    DateTime DetectedAt
+    DateTime DetectedAt,
+
+    // 03/08/2026 — xem chú thích cùng chủ đề ở BatteryAnomalyDetectedEvent: subscriber không tham
+    // chiếu được hai enum của BatteryService nên chỉ nhận số trần, kéo theo thông báo gửi khách
+    // ghi "Loại: 4 — Mức độ: 3". Bên sở hữu enum gửi kèm tên là chỗ duy nhất luôn đúng.
+    string? AnomalyTypeName = null,   // nameof(AnomalyTypeEnum.X)
+    string? SeverityName = null       // nameof(AlertSeverityEnum.X)
 ) : IntegrationEvent;

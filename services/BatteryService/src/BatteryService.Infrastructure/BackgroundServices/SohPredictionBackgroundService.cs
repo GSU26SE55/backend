@@ -413,7 +413,13 @@ public class SohPredictionBackgroundService : BackgroundService
             // code/severity/message). Fallback "%" sẽ gửi đơn vị SOH xuống ticket nhiệt → rỗng.
             // Alert SohDegradation luôn set Unit="%" nên nhánh này không đụng tới nó.
             Unit: alert.Unit ?? string.Empty,
-            DetectedAt: alert.DetectedAt);
+            DetectedAt: alert.DetectedAt,
+            // Giữ 2 trường tên enum của PR #1022 (subscriber không tham chiếu được enum của
+            // BatteryService nên cần tên kèm số). GH-805 — lấy theo type THẬT của alert thay vì
+            // hằng SohDegradation: job này giờ sinh cả Overheat/Undervoltage/Undertemp, hardcode
+            // sẽ báo khách "Loại: SohDegradation" cho một sự cố nhiệt.
+            AnomalyTypeName: alert.AnomalyType.ToString(),
+            SeverityName: alert.Severity.ToString());
         await uow.OutboxMessages.AddAsync(new OutboxEntity
         {
             Id = Guid.NewGuid(),

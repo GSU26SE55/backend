@@ -167,9 +167,11 @@ public class NotificationDigestBackgroundService : BackgroundService
                 Type = NotificationTypeEnum.System,
                 Channel = group.Key.Channel,
                 Status = NotificationStatusEnum.Pending,
-                Title = items.Count == 1
-                    ? items[0].Title
-                    : $"Bạn có {items.Count} thông báo mới",
+                // Tiêu đề của mục con có thể dài đúng bằng trần 200 của cột, chép nguyên vào đây thì
+                // vẫn vừa — nhưng cắt cho chắc, vì cột đích cũng chỉ 200.
+                Title = Truncate(
+                    items.Count == 1 ? items[0].Title : $"Bạn có {items.Count} thông báo mới",
+                    TitleMaxLength),
                 Body = BuildBody(items),
                 PayloadJson = JsonSerializer.Serialize(new
                 {
@@ -206,20 +208,57 @@ public class NotificationDigestBackgroundService : BackgroundService
         return created;
     }
 
+    /// <summary>Khớp <c>NotificationConfiguration</c>: cột <c>title</c> 200, <c>body</c> 2000.</summary>
+    private const int TitleMaxLength = 200;
+    private const int BodyMaxLength = 2000;
+
+    /// <summary>
+    /// Gom nội dung các mục con thành thân bản tin tổng hợp.
+    ///
+    /// <para><b>Phải cắt.</b> Mỗi mục con có thân tối đa 2000 ký tự, mà <c>MaxItemsInBody</c> mặc
+    /// định gom nhiều mục — chỉ cần hai mục dài là vượt luôn giới hạn 2000 của chính cột
+    /// <c>body</c>, Postgres ném lỗi và cả vòng gom digest hỏng. Chưa nổ vì hệ thống chưa sinh bản
+    /// tin gom nào, nhưng đó là bẫy chờ sẵn chứ không phải chuyện không xảy ra.</para>
+    ///
+    /// <para>Cắt ở ranh giới dòng chứ không cắt giữa câu: thà hiện ít mục mà đọc trọn còn hơn một
+    /// mục cụt ngang. Phần bị bỏ luôn được nói ra bằng dòng "… và N thông báo khác" — người đọc
+    /// biết còn thiếu để mở danh sách đầy đủ.</para>
+    /// </summary>
     private string BuildBody(IReadOnlyList<Notification> items)
     {
         if (items.Count == 1)
-            return items[0].Body;
+            return Truncate(items[0].Body, BodyMaxLength);
 
-        var sb = new StringBuilder();
         var shown = Math.Min(items.Count, Math.Max(1, _options.MaxItemsInBody));
 
+        // Dựng dần và dừng ngay khi dòng kế tiếp sẽ làm vượt ngưỡng — cộng chỗ cho dòng kết.
+        var sb = new StringBuilder();
+        var used = 0;
+
         for (var i = 0; i < shown; i++)
-            sb.AppendLine($"• {items[i].Title}: {items[i].Body}");
+        {
+            var line = $"• {items[i].Title}: {items[i].Body}";
+            var remaining = items.Count - i;
+            var footer = $"… và {remaining} thông báo khác.";
+
+            // Còn đủ chỗ cho dòng này VÀ cho dòng kết (nếu sau đó phải cắt) thì mới thêm.
+            if (used + line.Length + 1 + footer.Length > BodyMaxLength)
+            {
+                sb.Append(footer);
+                return sb.ToString().TrimEnd();
+            }
+
+            sb.AppendLine(line);
+            used = sb.Length;
+        }
 
         if (items.Count > shown)
-            sb.AppendLine($"… và {items.Count - shown} thông báo khác.");
+            sb.Append($"… và {items.Count - shown} thông báo khác.");
 
-        return sb.ToString().TrimEnd();
+        // Chốt chặn cuối: dù mọi tính toán trên có sai thì cột vẫn không bao giờ bị tràn.
+        return Truncate(sb.ToString().TrimEnd(), BodyMaxLength);
     }
+
+    private static string Truncate(string value, int maxLength) =>
+        string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
 }

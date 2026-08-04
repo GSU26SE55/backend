@@ -424,4 +424,69 @@ public class NotificationWorkerTests
         await using var db = NewDb(nameof(BuildDigests_NoDueRecords_ReturnsZero));
         (await DigestSut(db).BuildDigestsAsync(CancellationToken.None)).Should().Be(0);
     }
+
+    /// <summary>
+    /// 03/08/2026 — bản tin gom KHÔNG được vượt giới hạn cột.
+    ///
+    /// <para>Cột <c>body</c> chỉ chứa 2000 ký tự, mà mỗi mục con cũng được phép dài tới 2000. Chỉ
+    /// cần hai mục dài là bản gom vượt trần, Postgres ném lỗi và hỏng cả vòng gom. Trước thay đổi
+    /// này <c>BuildBody</c> nối thẳng không cắt gì — chưa nổ chỉ vì hệ thống chưa sinh bản tin gom
+    /// nào, tức là bẫy chờ sẵn chứ không phải chuyện không xảy ra.</para>
+    /// </summary>
+    [Fact]
+    public async Task BuildDigests_MucConRatDai_ThanVanNamTrongGioiHanCot()
+    {
+        await using var db = NewDb(nameof(BuildDigests_MucConRatDai_ThanVanNamTrongGioiHanCot));
+        var userId = Guid.NewGuid();
+        db.NotificationPreferences.Add(new NotificationPreference
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DigestWindowMinutes = 15
+        });
+
+        var due = DateTime.UtcNow.AddMinutes(-1);
+        for (var i = 0; i < 5; i++)
+        {
+            var n = Pending(userId, NotificationChannelEnum.Email, nextAttemptAt: due);
+            n.Title = new string('T', 200);    // đúng trần cột title
+            n.Body = new string('B', 2000);    // đúng trần cột body
+            db.Notifications.Add(n);
+        }
+        await db.SaveChangesAsync();
+
+        await DigestSut(db, new NotificationDigestOptions { MaxItemsInBody = 5 })
+            .BuildDigestsAsync(CancellationToken.None);
+
+        var aggregate = await db.Notifications.SingleAsync(n => n.EntityType == NotificationDigest.EntityType);
+
+        aggregate.Body.Length.Should().BeLessThanOrEqualTo(2000, "vượt là Postgres ném lỗi");
+        aggregate.Title.Length.Should().BeLessThanOrEqualTo(200);
+        aggregate.Body.Should().Contain("thông báo khác",
+            "phần bị lược phải được nói ra, không im lặng nuốt mất");
+    }
+
+    /// <summary>Một mục con duy nhất mà dài quá trần cũng phải bị cắt.</summary>
+    [Fact]
+    public async Task BuildDigests_MotMucDuyNhatQuaDai_VanBiCat()
+    {
+        await using var db = NewDb(nameof(BuildDigests_MotMucDuyNhatQuaDai_VanBiCat));
+        var userId = Guid.NewGuid();
+        db.NotificationPreferences.Add(new NotificationPreference
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DigestWindowMinutes = 15
+        });
+
+        var only = Pending(userId, NotificationChannelEnum.Email, nextAttemptAt: DateTime.UtcNow.AddMinutes(-1));
+        only.Body = new string('B', 2000);
+        db.Notifications.Add(only);
+        await db.SaveChangesAsync();
+
+        await DigestSut(db).BuildDigestsAsync(CancellationToken.None);
+
+        var aggregate = await db.Notifications.SingleAsync(n => n.EntityType == NotificationDigest.EntityType);
+        aggregate.Body.Length.Should().BeLessThanOrEqualTo(2000);
+    }
 }
