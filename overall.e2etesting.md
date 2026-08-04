@@ -1,9 +1,9 @@
 # Báo cáo kiểm thử E2E toàn hệ thống — Solar Battery Maintenance
 
-**Thời điểm kiểm thử:** 2026-08-01–2026-08-02 (Asia/Ho_Chi_Minh)  
-**Backend branch/commit:** `dev` / `1050d20`  
-**Repo issue:** `GSU26SE55/backend`  
-**Milestone:** [E2E](https://github.com/GSU26SE55/backend/milestone/20)  
+**Thời điểm kiểm thử:** 2026-08-01–2026-08-02 (Asia/Ho_Chi_Minh)
+**Backend branch/commit:** `dev` / `1050d20`
+**Repo issue:** `GSU26SE55/backend`
+**Milestone:** [E2E](https://github.com/GSU26SE55/backend/milestone/20)
 **Kết quả cuối sau vòng kiểm thử thứ 27:** 276 defect unique đã được xác nhận và tạo issue trong các dải [#722](https://github.com/GSU26SE55/backend/issues/722)–[#865](https://github.com/GSU26SE55/backend/issues/865), [#867](https://github.com/GSU26SE55/backend/issues/867)–[#893](https://github.com/GSU26SE55/backend/issues/893), [#895](https://github.com/GSU26SE55/backend/issues/895), [#897](https://github.com/GSU26SE55/backend/issues/897)–[#952](https://github.com/GSU26SE55/backend/issues/952), [#954](https://github.com/GSU26SE55/backend/issues/954), [#956](https://github.com/GSU26SE55/backend/issues/956)–[#997](https://github.com/GSU26SE55/backend/issues/997) và [#999](https://github.com/GSU26SE55/backend/issues/999)–[#1003](https://github.com/GSU26SE55/backend/issues/1003). #866 là issue feature ngoài audit; #894/#896/#953 không tồn tại; #955 là pull request, không phải defect; #998 là duplicate của #809, đã đóng `not_planned` và gỡ milestone nên không được tính. Vòng 27 là vòng full-audit tạo **0 issue mới**, đáp ứng tiêu chí hội tụ quan sát được trong phạm vi và giới hạn §6.
 
 ## 1. Kết luận điều hành
