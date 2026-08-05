@@ -16,12 +16,13 @@
 
 1. [Kiến trúc pipeline](#kiến-trúc-pipeline) — luồng từ event → record → giao nhận
 2. [Cấu trúc Response chung](#cấu-trúc-response-chung)
-3. [Enums](#enums) — 8 enum + bảng ánh xạ type → nhóm
+3. [Enums](#enums) — 9 enum + bảng ánh xạ type → nhóm
 3b. [Routing qua ApiGateway](#routing-qua-apigateway) — 5 route mới
 4. [Endpoints — Notifications](#endpoints--notifications) (`/api/notifications`)
 5. [Endpoints — Device Tokens](#endpoints--device-tokens) (`/api/device-tokens`)
 6. [Endpoints — Notification Preferences](#endpoints--notification-preferences) (`/api/notification-preferences`)
 7. [Endpoints — Admin Notification Templates](#endpoints--admin-notification-templates) (`/api/admin/notification-templates`)
+7b. [Endpoints — Admin Notification Settings](#endpoints--admin-notification-settings) (`/api/admin/notification-settings`)
 8. [Endpoints — Unsubscribe một chạm](#endpoints--unsubscribe-một-chạm) (`/api/notification-unsubscribe`)
 9. [Realtime — SignalR Hub `/hubs/notifications`](#realtime--signalr-hub-hubsnotifications)
 10. [Tầng dispatch — thứ tự cổng chặn](#tầng-dispatch--thứ-tự-cổng-chặn)
@@ -56,14 +57,23 @@
                     │  → rate limit → quiet hours → địa chỉ nhận    │
                     └───┬─────────┬─────────┬──────────┬───────────┘
                         │         │         │          │
-                     InApp     Expo Push  Email      SMS
-                   (SignalR)   (batch)   (bus →     (bus →
-                                          EmailSvc)  SmsSvc)
-                        │         │
-                        │         └─► push_receipts → ExpoReceiptReconcile
-                        │                              → Delivered / token chết
+                     InApp      Push      Email      SMS
+                   (SignalR)  (Composite) (bus →     (bus →
+                        │          │       EmailSvc)  SmsSvc)
+                        │          │
+                        │          ├─► SignalRPushChannel ─► NotificationHub
+                        │          │      (không cần device token, không có Delivered)
+                        │          │
+                        │          └─► ExpoPushChannel ─► Expo Push API
+                        │                 └─► push_receipts → ExpoReceiptReconcile
+                        │                                      → Delivered / token chết
                         └─► NotificationHub → client cập nhật feed + badge ngay
 ```
+
+> **ADR-0019 — kênh Push có HAI đường vận chuyển.** `CompositePushChannel` là kênh Push duy nhất
+> dispatcher nhìn thấy; nó rẽ sang SignalR, Expo hoặc cả hai theo cấu hình `push.transport` đổi được
+> lúc chạy qua `PUT /api/admin/notification-settings/push-transport`. Chi tiết:
+> [Endpoints — Admin Notification Settings](#endpoints--admin-notification-settings).
 
 **Ba điều quan trọng phải nắm trước khi đọc phần endpoint:**
 
@@ -74,8 +84,14 @@
 2. **Consumer chỉ ghi "ý định gửi"**, không quyết định có gửi hay không. Việc tôn trọng tuỳ chọn
    người dùng, quiet hours, hạn mức, digest đều nằm ở `NotificationDispatcher` — nên một consumer
    ghi đủ 4 kênh không có nghĩa người dùng sẽ nhận đủ 4 kênh.
-3. **`Status = Sent` KHÔNG có nghĩa "đã tới thiết bị"** với kênh Push — nó chỉ nghĩa là Expo đã nhận
-   request. Bằng chứng giao hàng thật là `Delivered` (Sprint 6.3 NOTI3-02/NOTI3-14).
+3. **`Status = Sent` KHÔNG có nghĩa "đã tới thiết bị"** với kênh Push — nó chỉ nghĩa là đã bàn giao
+   cho đường vận chuyển. Bằng chứng giao hàng thật là `Delivered` (Sprint 6.3 NOTI3-02/NOTI3-14).
+   **Chỉ đường Expo mới sinh ra được `Delivered`** (nhờ đối soát biên nhận). Chạy thuần
+   `push.transport = SignalR` thì `Sent` là trạng thái cuối cùng, và vì không có dữ liệu biên nhận
+   nên chuỗi bù SMS cho push critical (NOTI3-05) cũng tự nghỉ. Xem ADR-0019.
+4. **Chat bỏ qua quiet hours, digest và hạn mức** (ADR-0019). `ChatCreated` và `ChatMentioned` là
+   hội thoại giữa người thật — hoãn tới sáng hôm sau thì buổi tối nhắn tin không ai nhận được gì.
+   Muốn tắt hẳn thông báo chat thì tắt kênh Push hoặc tắt nhóm "Trao đổi" trong tuỳ chọn.
 
 ---
 
@@ -265,16 +281,17 @@ Trạng thái lifecycle của **một record giao nhận**. Sprint 6.3 NOTI3-14 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
 | `Pending` | 1 | Đã tạo bản ghi, chưa giao xuống channel. Worker sẽ pick lên. **Không bao giờ bị retention dọn** |
-| `Sent` | 2 | Đã **bàn giao cho channel** (Expo/Mailjet/SMS gateway). ⚠️ CHƯA chắc thiết bị nhận được |
+| `Sent` | 2 | Đã **bàn giao cho channel** (hub SignalR / Expo / Mailjet / SMS gateway). ⚠️ CHƯA chắc thiết bị nhận được |
 | `Failed` | 3 | Thất bại vĩnh viễn — hết `MaxAttempts` hoặc lỗi không thể phục hồi (`FailureReason` ghi lý do) |
 | `Read` | 4 | User đã mark read trên feed in-app |
-| `Delivered` | 5 | **Sprint 6.3** — provider **xác nhận** đã đẩy tới thiết bị. Với push: Expo receipt trả `status:"ok"`. Đây mới là bằng chứng giao hàng thật |
+| `Delivered` | 5 | **Sprint 6.3** — provider **xác nhận** đã đẩy tới thiết bị. Với push: Expo receipt trả `status:"ok"`. Đây mới là bằng chứng giao hàng thật. ⚠️ **ADR-0019: chỉ đạt được khi `push.transport` là `Expo` hoặc `Both`** — chạy thuần `SignalR` thì `Sent` là trạng thái cuối của kênh Push |
 | `Opened` | 6 | **Sprint 6.3** — user đã **mở** notification (bấm push / deep link). Mạnh hơn `Read` (Read có thể chỉ do lướt feed) |
 
 **Chuyển trạng thái hợp lệ:**
 
 ```
-Pending ──dispatch ok──► Sent ──receipt ok──► Delivered ──user bấm──► Opened
+Pending ──dispatch ok──► Sent ──receipt Expo ok──► Delivered ──user bấm──► Opened
+                         │        (chỉ khi transport = Expo | Both)
    │                       │                      │
    │                       └──user mark read──────┴──────────────────► Read
    │
@@ -295,10 +312,40 @@ Pending ──dispatch ok──► Sent ──receipt ok──► Delivered ─�
 
 | Giá trị | Int | Ý nghĩa | Vai trò trong feed |
 |---|---|---|---|
-| `Push` | 1 | Push qua Expo (batch tối đa 100 message/request, trần payload 4096 byte) | Bản ghi giao nhận — **không** hiện trong feed |
+| `Push` | 1 | Push — đi qua **hub SignalR và/hoặc Expo** tuỳ `push.transport` (ADR-0019) | Bản ghi giao nhận — **không** hiện trong feed |
 | `Email` | 2 | Email — publish `SendNotificationEmailEvent` → EmailService gửi qua Mailjet | Bản ghi giao nhận |
 | `Sms` | 3 | SMS — publish `SendSmsCommand` → SmsService → gateway Android | Bản ghi giao nhận |
 | `InApp` | 4 | Mục hiển thị trong app | ✅ **Đây là feed**. `GET /api/notifications` mặc định chỉ trả kênh này |
+
+---
+
+### `PushTransportEnum` *(MỚI — ADR-0019)*
+
+Đường vận chuyển của kênh `Push`. Đây là **cấu hình cấp hệ thống** (một giá trị cho cả service), đổi
+được lúc chạy qua [`PUT /api/admin/notification-settings/push-transport`](#put-apiadminnotification-settingspush-transport).
+
+Phân biệt rõ với `NotificationPreference.PushEnabled` — cái đó là tuỳ chọn của **từng người dùng**:
+người dùng tắt kênh Push thì không nhận push bằng đường nào cả; đổi transport ở đây chỉ đổi *cách*
+gói tin đi.
+
+| Giá trị | Int | Đường đi | Cần device token | Sinh được `Delivered` | Khi nào chọn |
+|---|---|---|---|---|---|
+| `SignalR` | 1 | Hub `/hubs/notifications` của chính hệ thống. Máy nhận dựng thông báo hệ điều hành tại chỗ từ sự kiện `NotificationReceived` | **Không** | **Không** — SignalR không có cơ chế biên nhận | Không có / không muốn phụ thuộc khoá EAS-FCM; ưu tiên độ trễ thấp; người dùng chủ yếu dùng web |
+| `Expo` | 2 | Expo Push API (`https://exp.host/--/api/v2/push/send`), batch tối đa 100 message/request, trần payload 4096 byte | **Có** — không có token là **thất bại** | **Có** — nhờ đối soát biên nhận `push_receipts` | Cần push tới máy đã **đóng app**, và cần bằng chứng giao hàng thật |
+| `Both` | 3 | Gửi **cả hai** đường cho cùng một thông báo | Không bắt buộc | Có, nếu đường Expo đi được | Muốn cả hai ưu điểm: máy đang mở app nhận tức thì qua SignalR, máy đã tắt app vẫn nhận qua Expo |
+
+**Quy ước kết quả ở chế độ `Both`:** coi là **thành công khi ÍT NHẤT MỘT đường thành công**. Người
+dùng không có device token nào (chỉ dùng web) thì đó là chuyện bình thường, không phải lỗi — vẫn
+`Sent` nhờ SignalR. Chỉ khi **mọi** đường được chọn đều hỏng mới ghi `Failed`, và `failureReason`
+gộp lý do của từng đường, ví dụ:
+
+```
+SignalR: hub down; Expo: DeviceNotRegistered
+```
+
+**Giá trị mặc định khi bảng `notification_settings` còn trống:** `SignalR`
+(đổi được bằng `NOTIFICATION_PUSH_DEFAULT_TRANSPORT`). Sau khi Admin bấm một lần thì database là
+nguồn sự thật vĩnh viễn — restart service **không** ghi đè lựa chọn đó.
 
 ---
 
@@ -415,6 +462,8 @@ Sprint 6.3 thêm **5 route mới** vào `services/ApiGateway/src/ApiGateway/apps
 | `notification-unsubscribe-route` | `/api/notification-unsubscribe` | Huỷ đăng ký một chạm (**public** — Gmail/Yahoo gọi từ ngoài) |
 | `admin-notification-templates-route` | `/api/admin/notification-templates/{**catch-all}` | `preview` / `test-send` / `activate` |
 | `admin-notification-templates-root-route` | `/api/admin/notification-templates` | Danh sách template |
+| `admin-notification-settings-route` | `/api/admin/notification-settings/{**catch-all}` | **ADR-0019** — `push-transport` (đọc/đổi đường vận chuyển push) |
+| `admin-notification-settings-root-route` | `/api/admin/notification-settings` | (dự phòng cho endpoint gốc) |
 
 > Route `/api/notifications`, `/api/device-tokens`, `/api/notification-preferences` đã có từ trước
 > (catch-all) nên **không cần thêm** cho 5 endpoint mới thuộc các nhóm đó.
@@ -848,6 +897,11 @@ Base route: `/api/device-tokens`
 Quản lý push token thiết bị (Expo) cho Mobile/Web. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn
 lấy từ JWT claim, user chỉ thao tác trên token của chính mình (không nhận `userId` từ body).
 
+> **ADR-0019 — token này chỉ có tác dụng khi `push.transport` là `Expo` hoặc `Both`.** Chạy thuần
+> `SignalR` thì đường push không đọc device token, nhưng client **vẫn nên đăng ký như thường**: đổi
+> transport là việc của Admin và có thể xảy ra bất cứ lúc nào; máy nào chưa có token đăng ký thì
+> ngay sau khi đổi sẽ không nhận được push nền cho tới lần đăng ký kế tiếp.
+
 > **Sprint 6.3 — token nay có thể bị hệ thống TỰ TẮT.** `ExpoReceiptReconcileBackgroundService` đặt
 > `IsActive = false` khi Expo trả `DeviceNotRegistered` (user gỡ app / đổi máy). `ExpoPushChannel`
 > cũng tắt token ngay khi ticket gửi trả lỗi này. FE nên **đăng ký lại token sau mỗi lần đăng nhập**
@@ -871,9 +925,27 @@ Mỗi message có dạng:
 
 | Field | Giá trị | Ghi chú |
 |---|---|---|
-| `priority` | `"high"` nếu notification **critical**, ngược lại `"normal"` | Critical = type thuộc `CriticalTypes` **hoặc** payload có `bypassQuietHours: true` |
-| `channelId` | `"alerts-critical"` (critical) / `"alerts-default"` | ⚠️ **Android app PHẢI tạo sẵn 2 notification channel đúng 2 id này** (`expo-notifications` `setNotificationChannelAsync`). Channel chưa tồn tại → Android dùng channel mặc định, mất hẳn ưu tiên/âm báo đã thiết kế |
-| `data` | `payloadJson` đã deserialize | Payload không parse được → gửi **không kèm `data`** (log Warning), push vẫn đi |
+| `priority` | `"high"` nếu notification **critical**, ngược lại `"normal"` | Critical = type thuộc `CriticalTypes` **hoặc** payload có `bypassQuietHours: true`. ⚠️ Chat **không** phải critical dù được miễn quiet hours |
+| `channelId` | `"alerts-critical"` · `"chat-messages"` · `"alerts-default"` | ⚠️ **Android app PHẢI tạo sẵn cả 3 notification channel đúng 3 id này** (`expo-notifications` `setNotificationChannelAsync`). Channel chưa tồn tại → Android dùng channel mặc định, mất hẳn ưu tiên/âm báo đã thiết kế |
+| `data` | `payloadJson` đã deserialize **+ 5 khoá cố định** (bảng dưới) | Payload không parse được → vẫn gửi kèm 5 khoá cố định (log Warning), push vẫn đi |
+
+**Cách chọn `channelId`** (`ExpoPushChannel.ResolveChannelId`) — xét theo thứ tự:
+
+| Điều kiện | `channelId` |
+|---|---|
+| `isCritical == true` | `"alerts-critical"` |
+| Type ∈ `{ChatCreated, ChatMentioned, ChatReacted}` | `"chat-messages"` *(MỚI)* |
+| Còn lại | `"alerts-default"` |
+
+**5 khoá luôn có trong `data`** — client dựa vào đây để deep link và báo "đã mở":
+
+| Khoá | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `notificationId` | `Guid` | Không | Id của **record Push**. Client gọi `PATCH /api/notifications/{id}/opened` bằng giá trị này. Payload nghiệp vụ **không được ghi đè** khoá này |
+| `entityType` | `string?` | **Có** | `"Ticket"` / `"Chat"` / … — dựng deep link |
+| `entityId` | `Guid?` | **Có** | Id entity liên quan |
+| `createdAt` | `DateTime` | Không | UTC — client dùng để sắp xếp và khử trùng |
+| `notificationType` | `int` | Không | `NotificationTypeEnum` dạng **số** |
 
 **Giới hạn kích thước (Sprint 6.3 NOTI3-02):** message bị ép vừa **4096 byte** *trước* khi gửi.
 Thứ tự hy sinh: **bỏ `data` trước** (client vẫn mở được app, chỉ mất deep link), rồi mới **cắt `body`**
@@ -885,6 +957,13 @@ người dùng không nhận được gì mà hệ thống vẫn tưởng đã g
 HTTP call (Expo cho tối đa **100 message/request**; nhiều hơn thì chia lô). Trước đó mỗi token là 1
 HTTP call — user có 3 thiết bị = 3 request cho cùng một notification.
 **Chỉ cần ≥ 1 thiết bị nhận được** thì notification tính là đã bàn giao (`Sent`).
+
+> **ADR-0019 — mục này CHỈ áp dụng khi `push.transport` là `Expo` hoặc `Both`.**
+> Chạy thuần `SignalR` thì không có HTTP call nào tới Expo, không có `push_receipts`, và trần 4096
+> byte cũng không áp dụng (SignalR không có giới hạn đó).
+>
+> Token bị Expo trả `DeviceNotRegistered` vẫn **tự động bị tắt** (`is_active = false`) như trước —
+> đã kiểm chứng E2E qua đường `CompositePushChannel`.
 
 ---
 
@@ -1925,6 +2004,161 @@ Bản đã đúng trạng thái mong muốn thì bỏ qua (không ghi thừa).
 
 ---
 
+## Endpoints — Admin Notification Settings
+
+Base route: `/api/admin/notification-settings` · **`[Authorize(Roles = "Admin")]`** *(MỚI — ADR-0019)*
+
+Cấu hình cấp **hệ thống**, đổi được lúc chạy. Khác hẳn `/api/notification-preferences` là tuỳ chọn
+của từng người dùng: người dùng tắt kênh Push thì không nhận push bằng đường nào cả, còn đổi
+transport ở đây chỉ đổi *cách* gói tin đi.
+
+> Dùng `[Authorize(Roles = "Admin")]` chứ **không** dùng policy `AdminOnly` — policy đó có trong cấu
+> hình nhưng không service nào đăng ký, gắn vào sẽ chặn cả Admin thật.
+
+### `GET /api/admin/notification-settings/push-transport`
+
+Đọc đường vận chuyển đang áp dụng, **kèm toàn bộ lựa chọn hợp lệ** để màn hình Admin dựng ô chọn mà
+không phải hard-code danh sách — thêm transport mới ở backend là giao diện tự có thêm lựa chọn.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": {
+    "transport": 1,
+    "transportName": "SignalR",
+    "options": [
+      {
+        "value": 1,
+        "name": "SignalR",
+        "description": "Chỉ đẩy qua hub SignalR của hệ thống. Không cần khoá EAS/FCM và không cần device token; …",
+        "requiresDeviceToken": false
+      },
+      {
+        "value": 2,
+        "name": "Expo",
+        "description": "Chỉ đẩy qua Expo Push API. Cần device token còn hoạt động; đổi lại có đối soát biên nhận …",
+        "requiresDeviceToken": true
+      },
+      {
+        "value": 3,
+        "name": "Both",
+        "description": "Đẩy cả hai đường cho cùng một thông báo, thành công khi ít nhất một đường thành công. …",
+        "requiresDeviceToken": false
+      }
+    ]
+  }
+}
+```
+
+**Response `data` — `PushTransportDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `transport` | `int` | Không | Giá trị `PushTransportEnum` đang áp dụng: `1` SignalR · `2` Expo · `3` Both |
+| `transportName` | `string` | Không | Tên hằng số tương ứng (`"SignalR"` / `"Expo"` / `"Both"`) — tiện hiển thị, không phải parse từ số |
+| `options` | `PushTransportOptionDto[]` | Không | **Luôn đủ 3 phần tử**, theo đúng thứ tự khai báo enum. Không bao giờ rỗng |
+
+**`PushTransportOptionDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `value` | `int` | Không | Giá trị để gửi lên ở `PUT` |
+| `name` | `string` | Không | Tên hằng số |
+| `description` | `string` | Không | Mô tả tiếng Việt, dựng sẵn để hiện thẳng lên giao diện |
+| `requiresDeviceToken` | `bool` | Không | `true` ⇒ chọn đường này mà người nhận chưa đăng ký device token thì push **thất bại**. Giao diện nên cảnh báo trước khi lưu |
+
+> `data` **không bao giờ `null`** ở mã 200: bảng cấu hình trống thì service trả về giá trị mặc định
+> (`SignalR`) chứ không trả rỗng. `message` là chuỗi rỗng `""` khi đọc thành công.
+
+| Mã | Khi nào | `data` |
+|----|---------|--------|
+| 200 | Luôn luôn, kể cả khi chưa ai cấu hình | Có |
+| 401 | Chưa đăng nhập / token hết hạn | — |
+| 403 | Đã đăng nhập nhưng **không phải Admin** (Manager/Staff/Customer đều 403) | — |
+
+---
+
+### `PUT /api/admin/notification-settings/push-transport`
+
+Đổi đường vận chuyển push cho **toàn hệ thống**.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `transport` | `int` | **Có** | Phải là `1`, `2` hoặc `3`. Thiếu trường ⇒ nhận giá trị `0` ⇒ **400** |
+
+```json
+{ "transport": 3 }
+```
+
+**Response 200** — giống hệt cấu trúc của `GET` (cùng `PushTransportDto`), `data` phản ánh giá trị
+**mới**:
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã đổi đường vận chuyển push từ SignalR sang Both.",
+  "data": {
+    "transport": 3,
+    "transportName": "Both",
+    "options": [ /* … 3 phần tử như GET … */ ]
+  },
+  "listErrors": null
+}
+```
+
+Gửi lại đúng giá trị đang dùng → vẫn **200**, nhưng **không ghi database** và `message` đổi thành:
+
+```json
+{ "isSuccess": true, "statusCode": 200, "message": "Đường vận chuyển push đang là Both — không có gì thay đổi." }
+```
+
+**Response 400** — validate ở pipeline, trả `listErrors` theo chuẩn chung:
+
+```json
+{
+  "isSuccess": false,
+  "statusCode": 400,
+  "message": "Dữ liệu đầu vào không hợp lệ.",
+  "data": null,
+  "listErrors": [
+    { "field": "Transport", "detail": "Transport không hợp lệ. Chỉ nhận 1 (SignalR), 2 (Expo) hoặc 3 (Both)." }
+  ]
+}
+```
+
+| Mã | Khi nào |
+|----|---------|
+| 200 | Đổi thành công, **hoặc** giá trị mới trùng giá trị cũ (khi đó không ghi lại, không xoá cache) |
+| 400 | `transport` không thuộc `{1,2,3}` — gồm cả `0` (thiếu trường trong body), `99`, số âm |
+| 401 | Chưa đăng nhập / token hết hạn |
+| 403 | Không phải Admin |
+
+**Có hiệu lực khi nào**
+
+| Nơi | Độ trễ |
+|---|---|
+| Tiến trình xử lý chính request này | **Ngay lập tức** (cache bị xoá ngay sau khi ghi DB) |
+| Worker nền, các bản sao khác | Chậm nhất `Notification:Push:CacheSeconds` giây (mặc định **30**) |
+| Hai worker phụ thuộc Expo (đối soát biên nhận, bù SMS) | Tự bật/tắt ở vòng lặp kế tiếp — **không cần khởi động lại service** |
+
+**Ba điều dễ hiểu nhầm**
+
+1. **Database thắng biến môi trường.** Sau lần `PUT` đầu tiên, `Notification__Push__DefaultTransport`
+   vô hiệu vĩnh viễn — kể cả khi restart service với giá trị ngược lại. Cố ý: deploy lại không được
+   ghi đè lựa chọn của người vận hành. Muốn quay về "chưa cấu hình" thì xoá dòng `push.transport`
+   trong bảng `notification_settings`.
+2. **Không ảnh hưởng tuỳ chọn của người dùng.** Người dùng tắt kênh Push (hoặc tắt nhóm "Trao đổi")
+   thì không nhận push bằng **bất kỳ** đường nào — endpoint này không ghi đè được điều đó.
+3. **Chọn `Both` ⇒ một dòng notification, hai lần gửi.** Máy vừa mở app vừa nhận push nền có thể
+   thấy hai lần — client phải khử trùng: `data.notificationId` của Expo **bằng** `id` của sự kiện
+   `NotificationReceived`.
+
+---
+
 ## Endpoints — Unsubscribe một chạm
 
 Base route: `/api/notification-unsubscribe` · **`[AllowAnonymous]`** *(MỚI — Sprint 6.3 NOTI3-15 / #715)*
@@ -2060,23 +2294,85 @@ nơi độ trễ vài chục giây là có ý nghĩa.
 
 | Event | Payload | Khi nào |
 |---|---|---|
-| `NotificationCreated` | object (bảng dưới) | `InAppChannel` giao xong một record InApp — tức là **sau khi đã lưu DB**, để client không bao giờ thấy thông báo mà REST chưa trả về |
+| `NotificationCreated` | object | `InAppChannel` giao xong một record **InApp** — tức là **sau khi đã lưu DB**, để client không bao giờ thấy thông báo mà REST chưa trả về. Dùng để **dựng feed + badge**. |
 | `UnreadCountChanged` | `int` | Ngay sau `NotificationCreated`, mang số chưa đọc mới (đếm theo đúng công thức badge: `InApp && Status ∉ {Read, Opened}`) |
+| `NotificationReceived` *(MỚI — ADR-0019)* | object | `SignalRPushChannel` giao xong một record **Push**. Dùng để **dựng thông báo hệ điều hành / bong bóng chat tại máy**, KHÔNG phải để thêm vào feed. |
 
-**Payload `NotificationCreated`** — ⚠️ enum trả dạng **chuỗi** (khác REST DTO trả số):
+### ⚠️ Hai điểm client BẮT BUỘC xử lý
+
+**1. Enum trả về dạng SỐ, không phải chuỗi.**
+Hub **cố ý không** đăng ký `JsonStringEnumConverter`, để payload realtime khớp đúng với số mà REST API
+trả về — client chỉ cần một bộ ánh xạ enum duy nhất cho cả hai đường. Trước ADR-0019 hub trả chuỗi
+(`"SlaBreached"`); nay trả số (`19`). **Client cũ so sánh bằng chuỗi sẽ im lặng không khớp nhánh nào.**
+
+**2. Một thông báo sinh ra HAI sự kiện, phải khử trùng.**
+Một sự kiện nghiệp vụ tạo hai record (`InApp` + `Push`), nên client nhận cả `NotificationCreated`
+lẫn `NotificationReceived`. Chúng có **`id` khác nhau** (hai record khác nhau trong DB) nhưng
+**`entityType` + `entityId` giống nhau**. Hiện cả hai lên màn hình mà không khử trùng thì người dùng
+thấy hai lần.
+
+Cách phân vai đúng:
+
+| Sự kiện | Client làm gì | Client KHÔNG làm gì |
+|---|---|---|
+| `NotificationCreated` | Thêm vào danh sách thông báo trong app, cập nhật badge | Không dựng thông báo hệ điều hành |
+| `NotificationReceived` | Dựng thông báo hệ điều hành / bong bóng chat | Không thêm vào feed (record Push không nằm trong `GET /api/notifications`) |
+
+> Chế độ `push.transport = Both` còn gửi thêm **một bản qua Expo** cho cùng thông báo đó. Khi app
+> đang mở, máy có thể vừa nhận `NotificationReceived` vừa nhận push nền của Expo — khử trùng theo
+> `data.notificationId` của Expo so với `id` của `NotificationReceived` (hai giá trị này **bằng nhau**,
+> cùng là id của record Push).
+
+### Payload `NotificationCreated`
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `id` | `Guid` | Không | ID notification |
-| `type` | `string` | Không | Tên `NotificationTypeEnum` (vd `"SlaBreached"`) |
-| `channel` | `string` | Không | Luôn `"InApp"` |
-| `status` | `string` | Không | Luôn `"Sent"` tại thời điểm đẩy |
-| `title` | `string` | Không | Tiêu đề |
-| `body` | `string` | Không | Nội dung |
-| `payloadJson` | `string?` | **Có** | Chuỗi JSON metadata |
-| `entityType` | `string?` | **Có** | `"Ticket"` / `"Battery"` / … |
-| `entityId` | `Guid?` | **Có** | ID entity liên quan |
+| `id` | `Guid` | Không | ID của **record InApp** |
+| `type` | `int` | Không | `NotificationTypeEnum` — **số** (vd `19` = `ChatCreated`) |
+| `channel` | `int` | Không | `NotificationChannelEnum` — luôn `4` (`InApp`) |
+| `status` | `int` | Không | `NotificationStatusEnum` — luôn `2` (`Sent`) tại thời điểm đẩy |
+| `title` | `string` | Không | Tiêu đề đã render |
+| `body` | `string` | Không | Nội dung đã render |
+| `payloadJson` | `string?` | **Có** | Chuỗi JSON metadata nghiệp vụ (`chatId`, `ticketId`, …). `null` khi consumer không kèm |
+| `entityType` | `string?` | **Có** | `"Ticket"` / `"Chat"` / `"Battery"` / … |
+| `entityId` | `Guid?` | **Có** | ID entity liên quan — dùng cho deep link |
 | `createdAt` | `DateTime` | Không | UTC |
+
+### Payload `NotificationReceived` *(MỚI — ADR-0019)*
+
+Giống hệt `NotificationCreated`, **thêm `isCritical`** và khác ở hai field:
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | ID của **record Push** — khác `id` của `NotificationCreated` cùng sự kiện |
+| `type` | `int` | Không | `NotificationTypeEnum` — số |
+| `channel` | `int` | Không | Luôn `1` (`Push`) |
+| `status` | `int` | Không | Luôn `2` (`Sent`) |
+| `title` | `string` | Không | Tiêu đề đã render |
+| `body` | `string` | Không | Nội dung đã render |
+| `payloadJson` | `string?` | **Có** | Như trên |
+| `entityType` | `string?` | **Có** | Như trên |
+| `entityId` | `Guid?` | **Có** | Như trên |
+| `createdAt` | `DateTime` | Không | UTC |
+| **`isCritical`** | `bool` | Không | `true` ⇒ thuộc `CriticalTypes` hoặc payload có cờ `bypassQuietHours`. Client nên dựng thông báo ở mức ưu tiên cao (Android: channel `alerts-critical`, bỏ qua chế độ im lặng nếu OS cho phép) |
+
+**Ví dụ `NotificationReceived` thật** (bắt được bằng client SignalR trong lần kiểm thử E2E):
+
+```json
+{
+  "id": "1ece1d62-2298-4a2f-9f31-0d7c3a5b1e40",
+  "type": 19,
+  "channel": 1,
+  "status": 2,
+  "title": "Tin nhắn mới trên ticket",
+  "body": "Demo Customer: xin chào, pin của tôi có vấn đề",
+  "payloadJson": "{\"chatId\":\"80821822-...\",\"ticketId\":\"7edccf64-...\",\"senderName\":\"Demo Customer\",\"isInternal\":false}",
+  "entityType": "Chat",
+  "entityId": "80821822-d53c-485a-a86a-6e52a1b9a639",
+  "createdAt": "2026-08-05T09:36:58.4271Z",
+  "isCritical": false
+}
+```
 
 **Snippet FE:**
 
@@ -2088,8 +2384,20 @@ const conn = new signalR.HubConnectionBuilder()
   .withAutomaticReconnect()
   .build();
 
+// Feed trong app + badge
 conn.on("NotificationCreated", (n) => prependToFeed(n));
 conn.on("UnreadCountChanged", (count) => setBadge(count));
+
+// Thông báo hệ điều hành / bong bóng chat — KHÔNG thêm vào feed
+conn.on("NotificationReceived", (n) => {
+  if (shownEntities.has(`${n.entityType}:${n.entityId}`)) return;  // khử trùng với Expo
+  showOsNotification({
+    title: n.title,
+    body: n.body,
+    priority: n.isCritical ? "high" : "default",
+    deepLink: buildDeepLink(n.entityType, n.entityId),
+  });
+});
 
 await conn.start();   // không cần gọi thêm method nào — server tự ghép nhóm
 ```
@@ -2097,6 +2405,17 @@ await conn.start();   // không cần gọi thêm method nào — server tự gh
 > **Polling REST vẫn giữ nguyên làm đường dự phòng.** Realtime là lớp tăng tốc, không phải nguồn dữ
 > liệu duy nhất — WebSocket rớt thì client vẫn phải lấy được đủ thông báo bằng
 > `GET /api/notifications`. Notifier **nuốt mọi lỗi**: mất realtime không được làm hỏng bản ghi thật.
+>
+> ⚠️ Nhưng lưu ý: record **Push không nằm trong** `GET /api/notifications` (endpoint đó mặc định lọc
+> `Channel = InApp`). Nghĩa là `NotificationReceived` **không có đường dự phòng REST** — mất kết nối
+> lúc nào thì mất thông báo hệ điều hành lúc đó. Muốn chắc chắn tới máy kể cả khi app đóng thì bật
+> `push.transport = Both` để có thêm đường Expo.
+
+### Backplane Redis khi chạy nhiều bản sao
+
+Hub tự bật backplane Redis khi `ConnectionStrings:Redis` có giá trị (prefix kênh: `Notification`).
+Không có Redis thì vẫn chạy bình thường với **một** bản sao — nhưng chạy nhiều bản sao mà thiếu
+backplane thì người dùng nối vào bản sao A sẽ không nhận được sự kiện do bản sao B phát.
 
 ---
 
@@ -2111,13 +2430,50 @@ await conn.start();   // không cần gọi thêm method nào — server tự gh
 | 0 | Không có channel handler cho `Channel` | → `Failed` | `no_channel_handler` |
 | 0 | `UserId == Guid.Empty` | → `Failed` | `empty_user_id` |
 | 1 | **Preference kênh toàn cục** + **preference nhóm × kênh** (và logic) | → `Failed` (không bao giờ gửi được, dừng luôn để tránh retry vô hạn) | `channel_disabled` |
-| 2 | **Digest** — không-critical, kênh Email/Push, user có `digestWindowMinutes > 0` hoặc `Frequency = Daily`, và record **không phải** bản digest | → **Deferred**: `NextAttemptAt = now + window`, KHÔNG tăng attempt | `digest` |
-| 2b | **Hạn mức người dùng** — không-critical, kênh ≠ InApp, record không phải digest | → **Deferred** `now + DeferMinutes` (mặc định 60') để gom vào digest. **Không vứt bỏ** — vứt là mất dữ liệu nghiệp vụ | `rate_limited` (+ label `per_hour` / `per_type`) |
-| 3 | **Quiet hours** — không-critical, kênh ≠ InApp | → **Deferred** tới khi hết quiet hours (+1 phút đệm) | `quiet_hours` |
+| 2 | **Digest** — không-critical, **không phải hội thoại**, kênh Email/Push, user có `digestWindowMinutes > 0` hoặc `Frequency = Daily`, và record **không phải** bản digest | → **Deferred**: `NextAttemptAt = now + window`, KHÔNG tăng attempt | `digest` |
+| 2b | **Hạn mức người dùng** — không-critical, **không phải hội thoại**, kênh ≠ InApp, record không phải digest | → **Deferred** `now + DeferMinutes` (mặc định 60') để gom vào digest. **Không vứt bỏ** — vứt là mất dữ liệu nghiệp vụ | `rate_limited` (+ label `per_hour` / `per_type`) |
+| 3 | **Quiet hours** — không-critical, **không phải hội thoại**, kênh ≠ InApp | → **Deferred** tới khi hết quiet hours (+1 phút đệm) | `quiet_hours` |
 | 4 | **Địa chỉ nhận** — Email cần `account_read_models.email`, SMS cần `phoneNumber` | → `Failed` | `no_email` / `no_phone` |
-| 4b | **Device token** — kênh Push cần ≥ 1 token `IsActive` | → `Failed` | `no_device_token` |
 | 5 | **Render nội dung** — ưu tiên DB template `(Type × Channel)` active, `OrderByDescending(Version)`; không có → dùng Title/Body inline. **Template hỏng KHÔNG chặn gửi** | (không chặn) | — |
 | 6 | **`channel.SendAsync`** | Lỗi → tăng `DispatchAttemptCount`, đặt `NextAttemptAt` theo backoff, vẫn `Pending`. Chạm `MaxAttempts` → `Failed` | `max_attempts_exceeded` |
+
+> ### ⚠️ Cổng "Device token" đã BỎ khỏi dispatcher (ADR-0019)
+>
+> Trước đây có cổng `4b`: kênh Push cần ≥ 1 device token `IsActive`, thiếu là `Failed` với lý do
+> `no_device_token`. Nay dispatcher **không còn biết** tới device token — việc đó chuyển vào
+> `CompositePushChannel`, vì chỉ đường Expo mới cần token.
+>
+> Hệ quả theo từng transport:
+>
+> | `push.transport` | Người nhận không có device token |
+> |---|---|
+> | `SignalR` | Không liên quan — vẫn gửi bình thường |
+> | `Expo` | Thất bại ở bước `SendAsync` (cổng 6), `failureReason` = `"Expo: Người nhận chưa đăng ký device token nào đang hoạt động."`, có **retry theo backoff** rồi mới `Failed` |
+> | `Both` | **Thành công** nhờ SignalR — thiếu token không còn là lỗi |
+
+### Ngoại lệ hội thoại — `ChatCreated` và `ChatMentioned` *(ADR-0019)*
+
+Hai loại này **bỏ qua cả ba cơ chế làm chậm** ở cổng 2, 2b và 3 (digest, hạn mức, quiet hours).
+
+**Vì sao:** từ khi kênh Push thành đường realtime của chat, hoãn một tin nhắn tới sáng hôm sau nghĩa
+là buổi tối nhắn tin không ai nhận được gì; người đặt `Frequency = Daily` thì mỗi ngày mới nhận chat
+một lần. Ba cơ chế đó sinh ra để chặn **thông báo hệ thống** làm phiền, không phải để chặn người
+thật đang nói chuyện với nhau.
+
+**Vẫn KHÔNG phải `critical`.** Đây là hai khái niệm tách biệt:
+
+| | Hội thoại (`ChatCreated`, `ChatMentioned`) | Critical (`SlaBreached`, `IncidentDeclared`, …) |
+|---|---|---|
+| Bỏ qua quiet hours | ✅ | ✅ |
+| Bỏ qua digest | ✅ | ✅ |
+| Bỏ qua hạn mức | ✅ | ✅ |
+| `isCritical` trong payload realtime | `false` | `true` |
+| Độ ưu tiên gói push Expo | `normal`, channel `chat-messages` | `high`, channel `alerts-critical` |
+| Được bù SMS khi push không tới | ❌ | ✅ |
+
+**Cách tắt thông báo chat** (quiet hours không còn tác dụng với chúng):
+- Tắt kênh Push trong `PUT /api/notification-preferences`, **hoặc**
+- Tắt nhóm `Chat` trong `PUT /api/notification-preferences/matrix` — cách này giữ nguyên các nhóm khác.
 
 **Kết quả (`DispatchOutcome`):**
 
@@ -2185,8 +2541,8 @@ ngày 30/07/2026 (đo thật lúc rảnh: 329 MiB = 86% của 384m, chỉ còn ~
 | `NotificationDispatchBackgroundService` | **6.2 NOTI-01** | `PollIntervalSeconds` (5s) | ✅ | `Notification:Dispatch:Enabled=false` |
 | `NotificationDigestBackgroundService` | **6.2 NOTI-12** | `PollIntervalMinutes` (5') | ✅ | `Notification:Digest:Enabled=false` |
 | `NotificationDlqMonitorBackgroundService` | **6.3 NOTI3-08** | `IntervalSeconds` (60s, sàn 10s) | ❌ (chỉ đọc) | `MessageBus:DlqMonitor:Enabled=false` |
-| `ExpoReceiptReconcileBackgroundService` | **6.3 NOTI3-02** | `PollIntervalSeconds` (300s, sàn 10s) | ❌ | `Notification:ExpoReceipt:Enabled=false` |
-| `NotificationFallbackBackgroundService` | **6.3 NOTI3-05** | `PollIntervalSeconds` (120s) | ✅ | `Notification:Fallback:Enabled=false` |
+| `ExpoReceiptReconcileBackgroundService` | **6.3 NOTI3-02** | `PollIntervalSeconds` (300s, sàn 10s) | ❌ | `Notification:ExpoReceipt:Enabled=false` **hoặc** `push.transport = SignalR` |
+| `NotificationFallbackBackgroundService` | **6.3 NOTI3-05** | `PollIntervalSeconds` (120s) | ✅ | `Notification:Fallback:Enabled=false` **hoặc** `push.transport = SignalR` |
 | `NotificationRetentionBackgroundService` | **6.3 NOTI3-11** | tick 15', chạy 1 lần/ngày lúc `RunAtUtcHour` | ✅ | `Notification:Retention:Enabled=false` |
 
 **Leader-election** dùng Redis key riêng cho từng worker (`notification_dispatch_leader`,
@@ -2196,6 +2552,24 @@ lease TTL 30s–10'. **Redis lỗi thì xử lý khác nhau theo worker:**
   lần vẫn hơn là không đến).
 - Retention: **bỏ qua lượt dọn** (ở đây "làm trùng" nghĩa là hai instance cùng xoá — thà hoãn tới đêm
   sau còn hơn dọn nhầm khi không chắc).
+
+### Hai worker phụ thuộc Expo tự bật/tắt theo transport *(ADR-0019)*
+
+`ExpoReceiptReconcile` và `NotificationFallback` đọc dữ liệu biên nhận của Expo, nên chỉ có nghĩa khi
+`push.transport` là `Expo` hoặc `Both`. Cả hai **hỏi lại transport ở MỖI vòng lặp** (không chốt một
+lần lúc khởi động), nên đổi cấu hình trên màn hình Admin là chúng tự sống lại hoặc tự nghỉ —
+**không cần khởi động lại service**.
+
+Chúng chọn hướng an toàn **ngược nhau** khi không đọc được cấu hình, và đây không phải lỗi sao chép:
+
+| Worker | Đọc cấu hình lỗi thì | Vì sao |
+|---|---|---|
+| `ExpoReceiptReconcile` | **vẫn chạy** | Quét thừa một vòng là vô hại — không có biên nhận nào để xử lý. Bỏ sót thì mất dữ liệu giao hàng thật |
+| `NotificationFallback` | **nghỉ** | Chạy thừa **bắn SMS thật** cho người dùng thật. Bỏ lỡ một vòng thì vòng sau vẫn bắt được, vì điều kiện lọc dựa trên mốc thời gian chứ không dựa trên lần quét |
+
+> Chạy thuần `SignalR` ⇒ không có biên nhận ⇒ **`Delivered` không bao giờ đạt tới**, và chuỗi bù SMS
+> cho push critical (NOTI3-05) cũng không có dữ liệu để làm việc. Đây là cái giá đã biết của việc bỏ
+> phụ thuộc EAS/FCM — đừng báo cáo "push critical luôn có đường bù" khi hệ thống đang chạy `SignalR`.
 
 ---
 
@@ -2496,6 +2870,28 @@ Nguồn: `env.prod.example`, `deploy/helm/solar-battery/values.yaml`,
 }
 ```
 
+### `Notification:Push` — đường vận chuyển push *(MỚI — ADR-0019)*
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `DefaultTransport` | `PushTransportEnum` | `SignalR` | Nhận **tên** (`SignalR`/`Expo`/`Both`, không phân biệt hoa-thường) hoặc **số** (`1`/`2`/`3`). ⚠️ **Chỉ được đọc khi bảng `notification_settings` còn trống** — sau lần Admin bấm đầu tiên thì database thắng vĩnh viễn, kể cả khi restart với giá trị ngược lại |
+| `CacheSeconds` | `int` | `30` | Thời gian nhớ transport trong cache (sàn 1s). Quyết định bao lâu thì lựa chọn của Admin lan tới worker nền và các bản sao khác. Bản thân request đổi luôn xoá cache ngay nên không phải chờ |
+
+```jsonc
+"Notification": {
+  "Push": {
+    "DefaultTransport": "SignalR",   // SignalR | Expo | Both
+    "CacheSeconds": 30
+  }
+}
+```
+
+> **Bẫy khi đặt bằng biến môi trường.** Trong docker-compose, `environment:` **đè** `env_file:`.
+> Cả `docker-compose.yml` lẫn `docker-compose.prod.yml` đều khai khoá này trong `environment:` dưới
+> dạng `${NOTIFICATION_PUSH_DEFAULT_TRANSPORT:-SignalR}`, nên phải dùng **tên viết hoa** ở `.env` /
+> `/opt/solar/.env.prod`. Đặt `Notification__Push__DefaultTransport` vào `.env.Docker` sẽ **bị bỏ qua
+> im lặng** — không lỗi, không log.
+
 ### `Notification:Digest` (6.2 NOTI-12)
 
 | Khoá | Kiểu | Mặc định | Ý nghĩa |
@@ -2569,7 +2965,8 @@ Nguồn: `env.prod.example`, `deploy/helm/solar-battery/values.yaml`,
 
 ## Database schema
 
-DB: `notification_db`. **4 migration mới** ở Sprint 6.2/6.3.
+DB: `notification_db`. **4 migration** ở Sprint 6.2/6.3, **+2 migration** ở ADR-0019
+(`RepairLegacyNotificationRetryColumns`, `AddNotificationSettings`).
 
 ### `notifications` — cột thêm (migration `20260729161154_AddNotificationDispatchRetryColumns`)
 
@@ -2585,6 +2982,44 @@ DB: `notification_db`. **4 migration mới** ở Sprint 6.2/6.3.
 hình dạng câu truy vấn của dispatch worker.
 
 **Không expose qua API:** cả 2 cột + `failure_reason` chỉ dùng nội bộ.
+
+> **Migration vá kèm theo — `20260805083909_RepairLegacyNotificationRetryColumns`.**
+> Một nhánh phát triển cũ từng đặt tên cột là `attempt_count` trước khi chốt `dispatch_attempt_count`.
+> Database nào đã chạy nhánh đó sẽ thừa cột cũ và thừa index `IX_notifications_status_next_attempt_at`.
+> Migration vá gộp dữ liệu retry về cột đúng (`GREATEST`, không đặt ngược về 0) rồi dọn phần thừa.
+>
+> Toàn bộ `Up()` có điều kiện tồn tại nên trên database khoẻ mạnh là **no-op**. `Down()` cố ý để
+> trống — đây là migration dọn dẹp, rollback nó nghĩa là dựng lại một cột rác.
+>
+> Không sửa thẳng `20260729161154` vì migration đó **đã merge và đã chạy** trên các database hiện có
+> ⇒ tên nó nằm trong `__EFMigrationsHistory` ⇒ sửa nội dung không bao giờ chạy lại.
+
+---
+
+### `notification_settings` — bảng MỚI *(ADR-0019, migration `20260805085310_AddNotificationSettings`)*
+
+Cấu hình cấp hệ thống sửa được lúc chạy, dạng khoá–giá trị. Hiện có **đúng một khoá**:
+`push.transport`.
+
+| Cột | Kiểu | Null | Default | Ý nghĩa |
+|---|---|---|---|---|
+| `id` | `uuid` | Không | — | PK |
+| `key` | `varchar(100)` | Không | — | Khoá cấu hình, dạng chấm phân cấp. Hiện dùng: `push.transport` |
+| `value` | `varchar(500)` | Không | — | Giá trị dạng chuỗi. Với `push.transport`: `"SignalR"` / `"Expo"` / `"Both"`. Đọc được cả dạng số (`"3"`) để dữ liệu nhập tay vẫn hiểu |
+| `description` | `varchar(500)` | **Có** | `null` | Mô tả cho người vận hành đọc |
+| `created_at` / `created_by` / `updated_at` / `is_deleted` / `deleted_at` | — | — | — | Cột chuẩn của `AuditableEntity` |
+
+**Index:** `IX_notification_settings_key` — UNIQUE **có lọc** `WHERE is_deleted = false`.
+Lọc theo `is_deleted` vì bảng dùng xoá mềm: tính cả dòng đã xoá thì một lần xoá mềm sẽ khoá vĩnh viễn
+khoá đó, không bao giờ tạo lại được.
+
+**Vì sao khoá–giá trị chứ không mỗi cấu hình một cột:** loại cấu hình này rất ít và không có quan hệ
+với nhau; mỗi lần thêm một công tắc mà phải sinh một migration là chi phí không đáng.
+
+**Giá trị đọc thế nào:** cache Redis `notif:setting:push_transport` (TTL `Notification:Push:CacheSeconds`,
+mặc định 30s) → không có thì đọc DB → không có dòng nào thì rơi về `Notification:Push:DefaultTransport`.
+Mọi lỗi khi **đọc** đều rơi về mặc định thay vì ném, vì hàm này nằm trên đường đi của từng lần gửi
+thông báo. Lỗi khi **ghi** thì ném bình thường — người vận hành cần biết là chưa đổi được.
 
 ---
 
@@ -2755,6 +3190,28 @@ mới về sau vẫn đẻ row thừa. Nhánh B (~4 ngày) **hoãn sang sprint s
 type nào chỉ ghi `Push` sẽ **biến mất hoàn toàn** khỏi feed sau khi bật lọc. Có test chặn
 (`EveryConsumerWritesInAppTests`) bao mọi `NotificationTypeEnum` hướng user.
 
+### 2b. Đường `SignalR` không có bằng chứng giao hàng *(ADR-0019)*
+
+`Clients.Group(...).SendAsync(...)` trả về **không** đồng nghĩa máy nhận được: SignalR không có cơ
+chế biên nhận. Hệ quả khi chạy `push.transport = SignalR`:
+
+- `Delivered` **không bao giờ đạt tới** — `Sent` là trạng thái cuối của kênh Push.
+- Chuỗi bù SMS cho push critical (NOTI3-05) không có dữ liệu để làm việc và **tự nghỉ**.
+- Record Push **không nằm trong** `GET /api/notifications` (endpoint lọc `Channel = InApp`), nên sự
+  kiện `NotificationReceived` **không có đường dự phòng REST**: WebSocket rớt lúc nào thì mất thông
+  báo hệ điều hành lúc đó.
+
+**Cách bù:** bật `push.transport = Both` — máy đang tắt app vẫn nhận qua Expo, và có lại `Delivered`
+lẫn chuỗi bù SMS. Đổi lại phải có khoá EAS/FCM và device token còn hạn.
+
+### 2c. Chế độ `Both` gửi hai lần cho một dòng notification *(ADR-0019)*
+
+Một record Push nhưng **hai lần gửi** (SignalR + Expo). Máy vừa mở app vừa nhận push nền sẽ thấy
+thông báo hai lần nếu client không khử trùng. Server **không** khử hộ được: nó không biết máy nào
+đang mở app.
+
+Khoá khử trùng: `data.notificationId` của gói Expo **bằng** `id` của sự kiện `NotificationReceived`.
+
 ### 3. Một provider mỗi kênh (R-44)
 
 Mailjet · Expo · gateway SMS Android tự dựng — **đều là single point of failure**, chấp nhận có chủ
@@ -2781,6 +3238,49 @@ vẫn phải qua SQL hoặc seeder.
 ---
 
 ## Changelog
+
+### 2026-08-05 — ADR-0019: hai đường vận chuyển push, Admin chọn lúc chạy
+
+**Vấn đề gốc:** kênh Push chỉ có một đường — Expo Push API — nên phụ thuộc khoá EAS/FCM và device
+token; người dùng web không có token thì không nhận được gì. Khi module Chat lấy kênh Push làm đường
+realtime, một vòng gọi HTTP ra ngoài cộng đối soát biên nhận là quá chậm để nhắn tin. Một nhánh trước
+đó đã gỡ hẳn Expo, nhưng kéo theo mất `Delivered` và mất chuỗi bù SMS cho cảnh báo P1 mà không nói ra.
+
+**Endpoint mới (2):**
+- `GET /api/admin/notification-settings/push-transport` — đọc transport hiện tại **kèm cả 3 lựa chọn
+  hợp lệ** để giao diện không phải hard-code danh sách.
+- `PUT /api/admin/notification-settings/push-transport` — đổi transport. Chỉ `Admin`.
+
+**Enum mới:** [`PushTransportEnum`](#pushtransportenum-mới--adr-0019) — `SignalR` 1 · `Expo` 2 · `Both` 3.
+
+**Sự kiện SignalR mới:** `NotificationReceived` — dùng để dựng thông báo hệ điều hành, tách vai với
+`NotificationCreated` (feed + badge).
+
+**⚠️ Hai thay đổi phá vỡ tương thích của client realtime:**
+
+| | Trước | Sau |
+|---|---|---|
+| Enum trong payload hub | **chuỗi** (`"SlaBreached"`, `"InApp"`) | **số** (`19`, `4`) — khớp với REST API |
+| Số sự kiện cho một thông báo | 1 (`NotificationCreated`) | 2 (`NotificationCreated` + `NotificationReceived`), client phải khử trùng |
+
+**Thay đổi hành vi:**
+- `ChatCreated` / `ChatMentioned` **bỏ qua quiet hours, digest và hạn mức**. Muốn tắt thông báo chat
+  thì tắt kênh Push hoặc tắt nhóm `Chat` trong tuỳ chọn.
+- Bỏ cổng `no_device_token` khỏi dispatcher — chuyển vào `CompositePushChannel`, vì chỉ Expo mới cần.
+- `Delivered` chỉ đạt được khi transport là `Expo`/`Both`.
+- `ExpoReceiptReconcile` và `NotificationFallback` **tự bật/tắt theo transport**, hỏi lại mỗi vòng lặp.
+
+**Bảng mới:** `notification_settings` (khoá–giá trị, unique index có lọc `is_deleted = false`).
+
+**Migration:** `20260805083909_RepairLegacyNotificationRetryColumns` (vá database lệch cột
+`attempt_count`, idempotent) · `20260805085310_AddNotificationSettings`.
+
+**Cấu hình mới:** `Notification:Push:DefaultTransport`, `Notification:Push:CacheSeconds` — **không
+bắt buộc**, và chỉ có tác dụng khi bảng cấu hình còn trống.
+
+Chi tiết quyết định và các đánh đổi: [ADR-0019](adr/0019-push-transport-signalr-expo.md).
+
+---
 
 ### 2026-08-03 — Sprint 6.4: Nhóm người nhận & gửi hàng loạt (`#1006..#1020`, 15 task)
 

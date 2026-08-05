@@ -45,6 +45,35 @@ Hệ quả:
 
 Thay đổi participant dùng event riêng, do `ParticipantChangeConsumer` xử lý.
 
+### `ChatCreatedEvent.RecipientUserIds` — ai được báo
+
+Trường `RecipientUserIds` (optional, thêm 05/08/2026) mang **sẵn danh sách người cần nhận thông
+báo**, đã loại tác giả và đã lọc theo `IsInternal`.
+
+**Vì sao publisher tính chứ không phải consumer:** NotificationService không có bảng
+`ticket_assignments` lẫn `ticket_participants` nên không thể tự suy ra. Trước khi có trường này,
+consumer đoán ra **đúng một** người (`isStaffAuthor ? CustomerId : AssignedStaffId`) và **bỏ qua
+hoàn toàn** chat nội bộ — supporter, participant và Admin/Manager từng trả lời không bao giờ biết
+có tin nhắn mới.
+
+**Luật lọc** nằm ở `ChatRecipientResolver` (TicketService) và **không được định nghĩa lại ở nơi
+khác**: nó gọi thẳng `TicketQueryHelper.CanViewInternalChats(roles, participantCanViewInternal)` —
+đúng hàm mà mọi query đọc chat, hub realtime và `ChatAuthorizationService` đang dùng. Danh sách
+"được báo" vì thế trùng khít danh sách "đọc được".
+
+- **Chat công khai:** chủ ticket + primary handler + supporter + participant còn hoạt động + mọi
+  người từng nhắn trên ticket. `PreviousPrimaryHandler` **không** tính — đã bàn giao thì thôi.
+- **Ghi chú nội bộ:** cùng bộ ứng viên đó nhưng chỉ giữ ai đọc được nội bộ — Admin/Manager/Staff
+  theo vai trò, cộng participant bất kỳ (kể cả Customer) đã được cấp cờ `CanViewInternal` (#522).
+
+> `null`/rỗng chỉ xảy ra với message publish từ bản cũ còn tồn trong queue. Consumer khi đó quay về
+> suy luận từ `CustomerId`/`AssignedStaffId` như trước.
+>
+> ⚠️ Nội dung tin nhắn đi **nguyên văn** vào `Title`/`Body` của thông báo đẩy (template `ChatCreated`
+> là `{{Title}}`/`{{Body}}`), nên nó hiện trên màn hình khoá. Danh sách người nhận vì vậy là ranh
+> giới bảo mật thật sự, không chỉ là chuyện tiện dụng — mọi thay đổi ở `ChatRecipientResolver` phải
+> kèm test cho nhánh `isInternal`.
+
 > ⚠️ Bản cũ liệt kê `ChatEditedEvent` / `ChatDeletedEvent` như integration event — **không tồn tại**.
 > Sửa/xoá chat chỉ phát **SignalR** (`ChatEdited`, `ChatDeleted`) tới client, không lên message bus.
 
