@@ -1,6 +1,7 @@
 using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Query.Dashboard;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -15,12 +16,16 @@ public class GetBatteryDashboardStatsQueryHandler
 {
     private readonly IBatteryUnitOfWork _uow;
     private readonly AnomalyEngineOptions _options;
+    private readonly IBatteryCurrentUserService _currentUser;
 
     public GetBatteryDashboardStatsQueryHandler(
-        IBatteryUnitOfWork uow, IOptions<AnomalyEngineOptions> options)
+        IBatteryUnitOfWork uow,
+        IOptions<AnomalyEngineOptions> options,
+        IBatteryCurrentUserService currentUser)
     {
         _uow = uow;
         _options = options.Value;
+        _currentUser = currentUser;
     }
 
     public async Task<CommonResponse<BatteryDashboardStatsDto>> Handle(
@@ -29,6 +34,48 @@ public class GetBatteryDashboardStatsQueryHandler
         var now = DateTime.UtcNow;
         var offlineCutoff = now - TimeSpan.FromMinutes(_options.OfflineThresholdMinutes);
         var siteId = request.SiteId;
+
+        // ===== GH-774: phân quyền =====
+        //
+        // Controller chỉ có `[Authorize]`, trong khi chính tài liệu của endpoint ghi "trả tổng hợp
+        // toàn bộ system (yêu cầu role Admin/Manager)". Đo được lúc chạy thật: cả Manager, Staff và
+        // Customer đều nhận 200 với totalAssets=10 — tức toàn bộ số liệu đội tàu, cảnh báo và phân
+        // phối SOH của mọi khách hàng bị lộ cho bất kỳ ai đăng nhập.
+        //
+        // Đặt ở handler chứ không phải controller: đây là giới hạn theo DỮ LIỆU, phải nằm cùng chỗ
+        // truy dữ liệu — thêm attribute ở controller sẽ không chặn được ca truyền siteId của người
+        // khác. Chính sách lấy nguyên từ BatteryTenantScopeHelper (spec §34.10.6) để không trôi
+        // khỏi đường SSE.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUser.UserId, _currentUser.Roles);
+
+        if (!siteId.HasValue)
+        {
+            // Tổng hợp TOÀN HỆ THỐNG: chỉ Admin/Manager. Staff tuy được xem mọi asset (§34.10.6)
+            // nhưng con số gộp toàn đội tàu là thông tin điều hành, không phải thứ cần để xử lý
+            // ticket — và tài liệu của endpoint đã nói vậy từ đầu.
+            if (!_currentUser.Roles.Any(r =>
+                    r.Equals("Admin", StringComparison.OrdinalIgnoreCase)
+                    || r.Equals("Manager", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new CommonResponse<BatteryDashboardStatsDto>
+                {
+                    IsSuccess = false,
+                    StatusCode = 403,
+                    Message = "Chỉ Admin/Manager được xem thống kê toàn hệ thống. Truyền siteId để xem theo site."
+                };
+            }
+        }
+        else if (!await BatteryTenantAccessGuard.CanAccessSiteAsync(_uow, siteId.Value, scope, ct))
+        {
+            // Site của người khác: trả 404 chứ không 403 — 403 xác nhận site đó có thật, biến
+            // endpoint thành công cụ dò xem khách hàng nào đang tồn tại. Khớp quy ước GH-722.
+            return new CommonResponse<BatteryDashboardStatsDto>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy site."
+            };
+        }
 
         // ===== Asset queries =====
         var assetsQuery = _uow.BatteryAssets.GetAllAsync().Where(a => !a.IsDeleted);

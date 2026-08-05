@@ -17,10 +17,35 @@ public sealed class FileInternalGrpcService : FileInternal.FileInternalBase
         (_uow, _storage) = (uow, storage);
     }
 
-    public override async Task DownloadForTranscription(DownloadForTranscriptionRequest request,
+    public override Task DownloadForTranscription(DownloadForTranscriptionRequest request,
+        IServerStreamWriter<DownloadFileReply> responseStream, ServerCallContext context)
+        => StreamFileAsync(request.FileId, responseStream, context);
+
+    /// <summary>
+    /// GH-790 — kênh tải file nội bộ dùng chung giữa các service.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>VirusScanWorker</c> của TicketService trước đây gọi thẳng
+    /// <c>GET /api/files/{id}/download</c> — endpoint có <c>[Authorize]</c> — mà không gắn token nào.
+    /// Kết quả luôn là 401; worker ghi <c>VirusScanStatus=Failed</c>, và vì nó chỉ quét bản ghi
+    /// <c>Pending</c> nên bản ghi đó không bao giờ được thử lại: đính kèm kẹt vĩnh viễn ở 202
+    /// "đang quét, thử lại sau".
+    /// </para>
+    /// <para>
+    /// Kênh gRPC nội bộ chạy trên cổng riêng, không đi qua tầng JWT dành cho người dùng cuối, và đã
+    /// được dùng sẵn cho voice transcription — nên đây là đường service-to-service ĐÃ CÓ, không phải
+    /// cơ chế mới bịa ra cho riêng virus scan.
+    /// </para>
+    /// </remarks>
+    public override Task DownloadFile(DownloadFileRequest request,
+        IServerStreamWriter<DownloadFileReply> responseStream, ServerCallContext context)
+        => StreamFileAsync(request.FileId, responseStream, context);
+
+    private async Task StreamFileAsync(string rawFileId,
         IServerStreamWriter<DownloadFileReply> responseStream, ServerCallContext context)
     {
-        if (!Guid.TryParse(request.FileId, out var fileId))
+        if (!Guid.TryParse(rawFileId, out var fileId))
             throw new RpcException(new Status(StatusCode.NotFound, "File not found."));
 
         var file = await _uow.UploadedFiles.GetAllAsync().AsNoTracking()
@@ -28,7 +53,7 @@ public sealed class FileInternalGrpcService : FileInternal.FileInternalBase
         if (file is null || file.Status == FileStatusEnum.Deleted)
             throw new RpcException(new Status(StatusCode.NotFound, "File not found."));
         if (file.Status is FileStatusEnum.Quarantined or FileStatusEnum.Processing)
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, "File is not available for transcription."));
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "File is not available for download."));
 
         var download = await _storage.DownloadAsync(file.ObjectKey, context.CancellationToken);
         await using var stream = download.Stream;

@@ -63,7 +63,11 @@ public class IotDeviceDetailDto : IotDeviceDto
 
 public class IotDeviceCreatedDto : IotDeviceDto
 {
-    /// <summary>Plaintext API key. Trả 1 lần duy nhất khi create/rotate.</summary>
+    /// <summary>
+    /// Plaintext API key trả về ngay khi create/rotate.
+    /// GH-724 — KHÔNG phải "chỉ 1 lần": key vẫn đọc lại được qua
+    /// <c>GET /api/admin/iot-devices/{id}</c> (<see cref="IotDeviceDetailDto.ApiKey"/>).
+    /// </summary>
     public string RawApiKey { get; set; } = string.Empty;
 
     /// <summary>
@@ -84,6 +88,22 @@ public class IotDeviceCreatedDto : IotDeviceDto
 
     /// <summary>MQTT broker port (1883 plain / 8883 TLS).</summary>
     public int? MqttBrokerPort { get; set; }
+
+    /// <summary>
+    /// GH-784 — broker có yêu cầu TLS không. Thiếu trường này thiết bị phải đoán từ số cổng.
+    /// </summary>
+    public bool? MqttUseTls { get; set; }
+
+    /// <summary>
+    /// GH-784 — tiền tố topic thiết bị PHẢI dùng, đã chuẩn hoá chữ thường.
+    /// </summary>
+    /// <remarks>
+    /// ACL dùng <c>solar/%u/...</c> với <c>%u</c> = username (chữ thường), nên publish lên
+    /// <c>solar/{DeviceCode}</c> nguyên bản chữ hoa sẽ bị broker từ chối dù credential đúng.
+    /// So khớp topic MQTT phân biệt hoa/thường và không tắt được — nên phía cấp credential nói
+    /// thẳng tiền tố dùng được, thay vì để mỗi bên tự suy rồi lệch nhau.
+    /// </remarks>
+    public string? MqttTopicPrefix { get; set; }
 }
 
 public class IotFirmwareReleaseDto

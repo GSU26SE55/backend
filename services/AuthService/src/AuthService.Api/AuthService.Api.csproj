@@ -10,11 +10,19 @@
 
     <ItemGroup>
         <PackageReference Include="DotNetEnv" Version="3.2.0" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="9.0.0" />
+        <!--
+          GH-730/731/732 (quét audit) — ĐÃ GỠ Microsoft.VisualStudio.Web.CodeGeneration.Design 9.0.0.
+          Lý do: (1) không có dòng code nào dùng — nó chỉ là công cụ scaffolding CLI;
+                 (2) nó kéo Microsoft.Build 17.10.4 dính advisory High vào runtime deps;
+                 (3) là package 9.x nên âm thầm nâng cả stack Microsoft.Extensions của riêng
+                     project này lên 9.0.0, lệch với phần còn lại của solution (8.0.x) — đúng
+                     kiểu lệch phiên bản gây lỗi runtime rất khó truy.
+          Cần scaffold lại thì cài global tool: dotnet tool install -g dotnet-aspnet-codegenerator
+        -->
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
 
         <PackageReference Include="Grpc.AspNetCore" Version="2.60.0" />

@@ -3,6 +3,8 @@ using FileStorageService.Application.Authorization;
 using FileStorageService.Domain.Entities;
 using FileStorageService.Domain.Enums;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using SharedKernels.Security;
 
 namespace FileStorageService.UnitTests.Application;
 
@@ -11,7 +13,10 @@ public class FileAuthorizationServiceTests
     private static readonly Guid CurrentUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid OtherUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private static FileAuthorizationService BuildService(string role, Guid? userId = null)
+    /// <summary>Khoá ký grant dùng trong test (GH-723).</summary>
+    private const string TestSecretKey = "test-secret-key-for-file-access-grant-0123456789";
+
+    private static FileAuthorizationService BuildService(string role, Guid? userId = null, string? grant = null)
     {
         var claims = new List<Claim>
         {
@@ -22,10 +27,20 @@ public class FileAuthorizationServiceTests
         var principal = new ClaimsPrincipal(identity);
 
         var httpContext = new DefaultHttpContext { User = principal };
+        if (grant is not null)
+        {
+            httpContext.Request.QueryString =
+                new QueryString($"?{FileAccessGrant.QueryParameterName}={Uri.EscapeDataString(grant)}");
+        }
+
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.Setup(x => x.HttpContext).Returns(httpContext);
 
-        return new FileAuthorizationService(accessor.Object);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["JwtSettings:SecretKey"] = TestSecretKey })
+            .Build();
+
+        return new FileAuthorizationService(accessor.Object, configuration);
     }
 
     private static UploadedFile BuildFile(FilePurposeEnum purpose, Guid createdBy)
@@ -108,13 +123,83 @@ public class FileAuthorizationServiceTests
     [Theory]
     [InlineData(FilePurposeEnum.TicketAttachment)]
     [InlineData(FilePurposeEnum.MaintenancePhoto)]
-    public void CanRead_Customer_OtherUserFile_TicketRelatedPurpose_ReturnsTrue(FilePurposeEnum purpose)
+    public void CanRead_Customer_OtherUserFile_TicketRelatedPurpose_ReturnsFalse(FilePurposeEnum purpose)
     {
+        // GH-723 — test này TRƯỚC ĐÂY khẳng định `ReturnsTrue` với ghi chú "đọc được bởi mọi
+        // user đã đăng nhập". Đó chính là lỗ hổng: biết fileId là tải được file của ticket
+        // người khác. Issue #723 đổi spec thành "403 trừ uploader, ticket participant,
+        // assigned staff hoặc Manager/Admin", nên kỳ vọng bị đảo lại có chủ đích.
+        // Customer là participant hợp lệ thì đi qua grant — xem các test grant bên dưới.
         var service = BuildService("Customer");
         var file = BuildFile(purpose, createdBy: OtherUserId);
 
-        // TicketAttachment/MaintenancePhoto đọc được bởi mọi user đã đăng nhập (không giới hạn owner).
-        service.CanRead(file).Should().BeTrue();
+        service.CanRead(file).Should().BeFalse();
+    }
+
+    // ── GH-723: grant do TicketService cấp ──
+
+    [Fact]
+    public void CanRead_Customer_OtherUserTicketAttachment_WithValidGrant_ReturnsTrue()
+    {
+        var file = BuildFile(FilePurposeEnum.TicketAttachment, createdBy: OtherUserId);
+        var grant = FileAccessGrant.Issue(
+            TestSecretKey, file.Id, CurrentUserId, DateTimeOffset.UtcNow.AddMinutes(5));
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanRead_Customer_GrantIssuedForAnotherUser_ReturnsFalse()
+    {
+        var file = BuildFile(FilePurposeEnum.TicketAttachment, createdBy: OtherUserId);
+        // Grant cấp cho người khác — chuyển tay không được dùng lại.
+        var grant = FileAccessGrant.Issue(
+            TestSecretKey, file.Id, OtherUserId, DateTimeOffset.UtcNow.AddMinutes(5));
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanRead_Customer_GrantIssuedForAnotherFile_ReturnsFalse()
+    {
+        var file = BuildFile(FilePurposeEnum.TicketAttachment, createdBy: OtherUserId);
+        var grant = FileAccessGrant.Issue(
+            TestSecretKey, Guid.NewGuid(), CurrentUserId, DateTimeOffset.UtcNow.AddMinutes(5));
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanRead_Customer_ExpiredGrant_ReturnsFalse()
+    {
+        var file = BuildFile(FilePurposeEnum.TicketAttachment, createdBy: OtherUserId);
+        var grant = FileAccessGrant.Issue(
+            TestSecretKey, file.Id, CurrentUserId, DateTimeOffset.UtcNow.AddSeconds(-1));
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("rác")]
+    [InlineData("9999999999.chữ-ký-bịa")]
+    public void CanRead_Customer_TamperedGrant_ReturnsFalse(string grant)
+    {
+        var file = BuildFile(FilePurposeEnum.TicketAttachment, createdBy: OtherUserId);
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanRead_Customer_MaintenancePhoto_GrantDoesNotApply_ReturnsFalse()
+    {
+        // Maintenance log là tài liệu nội bộ (controller chỉ mở cho Staff/Manager/Admin)
+        // ⇒ grant KHÔNG mở đường cho Customer.
+        var file = BuildFile(FilePurposeEnum.MaintenancePhoto, createdBy: OtherUserId);
+        var grant = FileAccessGrant.Issue(
+            TestSecretKey, file.Id, CurrentUserId, DateTimeOffset.UtcNow.AddMinutes(5));
+
+        BuildService("Customer", grant: grant).CanRead(file).Should().BeFalse();
     }
 
     [Theory]

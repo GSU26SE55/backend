@@ -25,6 +25,19 @@ public class SendRequest
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public string? PayloadJson { get; set; }
+
+    /// <summary>
+    /// 03/08/2026 — cặp (loại thực thể, id) mà thông báo này trỏ tới, chép thẳng từ bản ghi
+    /// notification.
+    ///
+    /// <para><b>Vì sao cần đưa xuống tận kênh gửi:</b> push chỉ mang <c>notificationId</c> cộng các
+    /// khoá payload, nên client phải <i>đoán</i> mở màn nào — mà đoán theo khoá payload thì lệch
+    /// ngay với danh sách trong ứng dụng (vốn dùng <c>entityType</c>). Cùng một thông báo, bấm ở
+    /// feed ra một màn, bấm ở push ra màn khác. Gửi kèm cặp này để hai đường dùng chung một nguồn.</para>
+    /// </summary>
+    public string? EntityType { get; set; }
+
+    public Guid? EntityId { get; set; }
     public bool IsCritical { get; set; }
 
     /// <summary>

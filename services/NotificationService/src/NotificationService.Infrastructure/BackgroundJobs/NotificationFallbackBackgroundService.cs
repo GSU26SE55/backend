@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,6 +10,7 @@ using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
 using SharedInfrastructure.Metrics;
+using SharedInfrastructure.Leasing;
 
 namespace NotificationService.Infrastructure.BackgroundJobs;
 
@@ -39,7 +39,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IDistributedCache _cache;
+    private readonly IDistributedLease _lease;
     private readonly NotificationFallbackOptions _options;
     private readonly NotificationDispatchOptions _dispatchOptions;
     private readonly ExpoReceiptOptions _receiptOptions;
@@ -47,7 +47,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
     public NotificationFallbackBackgroundService(
         IServiceScopeFactory scopeFactory,
-        IDistributedCache cache,
+        IDistributedLease lease,
         IOptions<NotificationFallbackOptions> options,
         IOptions<NotificationDispatchOptions> dispatchOptions,
         ILogger<NotificationFallbackBackgroundService> logger,
@@ -55,7 +55,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
         IOptions<ExpoReceiptOptions>? receiptOptions = null)
     {
         _scopeFactory = scopeFactory;
-        _cache = cache;
+        _lease = lease;
         _options = options.Value;
         _dispatchOptions = dispatchOptions.Value;
         _receiptOptions = receiptOptions?.Value ?? new ExpoReceiptOptions();
@@ -129,23 +129,24 @@ public class NotificationFallbackBackgroundService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// GH-793 — giành quyền bằng MỘT lệnh nguyên tử có token chủ sở hữu.
+    /// </summary>
+    /// <remarks>
+    /// Khuôn cũ <c>GET</c> rồi <c>SET</c> để lọt hai replica cùng đọc thấy khoá trống trong cùng một
+    /// khoảnh khắc, và cả hai đều tự coi là chủ. <see cref="IDistributedLease"/> gộp kiểm-và-ghi vào
+    /// một lệnh Redis nên khe hở đó biến mất.
+    /// </remarks>
     private async Task<bool> IsLeaderAsync(CancellationToken ct)
     {
         try
         {
-            var current = await _cache.GetStringAsync(LeaderKey, ct);
-            if (current is null || current == _instanceId)
-            {
-                await _cache.SetStringAsync(LeaderKey, _instanceId,
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = LeaseTtl }, ct);
-                return true;
-            }
-            return false;
+            return await _lease.TryAcquireAsync(LeaderKey, _instanceId, LeaseTtl, ct);
         }
         catch (Exception ex)
         {
-            // Redis lỗi ⇒ vẫn chạy. Cảnh báo critical đến hai lần vẫn hơn là không đến.
-            _logger.LogWarning(ex, "NotificationFallback: leader-election lỗi — vẫn xử lý.");
+            // Redis sự cố → vẫn chạy: không ai làm gì cả là hỏng nặng hơn làm trùng.
+            _logger.LogWarning(ex, "Lease lỗi — chạy tiếp lượt này.");
             return true;
         }
     }

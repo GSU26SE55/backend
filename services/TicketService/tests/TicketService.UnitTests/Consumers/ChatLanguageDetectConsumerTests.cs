@@ -27,7 +27,7 @@ public class ChatLanguageDetectConsumerTests
     }
 
     private ChatLanguageDetectConsumer CreateConsumer()
-        => new(_langDetector.Object, _uow.Object, _inbox.Object, _redis.Object,
+        => new(_langDetector.Object, _uow.Object, _inbox.Object,
             NullLogger<ChatLanguageDetectConsumer>.Instance);
 
     private static ConsumeContext<ChatCreatedEvent> BuildContext(Guid chatId, string body, Guid? messageId = null)
@@ -63,8 +63,8 @@ public class ChatLanguageDetectConsumerTests
     [Fact]
     public async Task Consume_DuplicateMessage_Skips()
     {
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         await CreateConsumer().Consume(BuildContext(Guid.NewGuid(), "Hello world test message"));
 
@@ -78,8 +78,8 @@ public class ChatLanguageDetectConsumerTests
     [Fact]
     public async Task Consume_LinguaReturnsUnd_SkipsDbQuery()
     {
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("und");
 
         await CreateConsumer().Consume(BuildContext(Guid.NewGuid(), "hi"));
@@ -90,8 +90,8 @@ public class ChatLanguageDetectConsumerTests
     [Fact]
     public async Task Consume_ChatNotFound_SkipsUpdate_NoException()
     {
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
         SetupChats(); // empty
 
@@ -106,8 +106,8 @@ public class ChatLanguageDetectConsumerTests
         var chatId = Guid.NewGuid();
         var chat = BuildChat(chatId, originalLanguage: "en");
 
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
         SetupChats(chat);
 
@@ -126,8 +126,8 @@ public class ChatLanguageDetectConsumerTests
         var chatId = Guid.NewGuid();
         var chat = BuildChat(chatId);
 
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
         var repo = SetupChats(chat);
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
@@ -146,8 +146,8 @@ public class ChatLanguageDetectConsumerTests
         var chatId = Guid.NewGuid();
         var chat = BuildChat(chatId);
 
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("vi");
         var repo = SetupChats(chat);
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
@@ -165,45 +165,53 @@ public class ChatLanguageDetectConsumerTests
     #region Error recovery
 
     [Fact]
-    public async Task Consume_CommitThrows_DeletesInboxKey_Rethrows()
+    public async Task Consume_CommitThrows_ReleasesInboxClaim_Rethrows()
     {
+        // GH-764 — trước đây consumer tự xoá khoá Redis với định dạng khoá viết cứng ngay trong
+        // nhánh catch. Nay việc nhả chỗ giữ do ProcessOnceAsync lo, nên phép khẳng định chuyển
+        // sang chính hành vi đó. Điều cần bảo đảm không đổi: sau khi side effect lỗi, lần gửi lại
+        // PHẢI chạy thật chứ không bị coi là trùng.
         var messageId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
         var chat = BuildChat(chatId);
-        var expectedKey = $"inbox:{nameof(ChatLanguageDetectConsumer)}:{messageId:N}";
 
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
         SetupChats(chat);
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         _uow.Setup(u => u.CommitTransactionAsync()).ThrowsAsync(new Exception("DB unavailable"));
         _uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
-        _redisDb.Setup(d => d.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-            .ReturnsAsync(true);
 
         var act = async () => await CreateConsumer().Consume(BuildContext(chatId, "Hello world test", messageId));
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB unavailable");
 
         _uow.Verify(u => u.RollbackTransactionAsync(), Times.Once);
-        _redisDb.Verify(d => d.KeyDeleteAsync(expectedKey, It.IsAny<CommandFlags>()), Times.Once);
+        _inbox.Verify(i => i.ReleaseAsync(
+            It.IsAny<Guid>(), nameof(ChatLanguageDetectConsumer), "gh764-test-token", It.IsAny<CancellationToken>()),
+            Times.Once);
+        // Và tuyệt đối KHÔNG được chốt "đã xong" cho một lượt xử lý đã hỏng.
+        _inbox.Verify(i => i.CompleteAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task Consume_CommitThrows_RedisDeleteFails_StillRethrowsOriginalException()
+    public async Task Consume_CommitThrows_ReleaseFails_StillRethrowsOriginalException()
     {
         var chatId = Guid.NewGuid();
         var chat = BuildChat(chatId);
 
-        _inbox.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         _langDetector.Setup(d => d.Detect(It.IsAny<string>())).Returns("en");
         SetupChats(chat);
         _uow.Setup(u => u.BeginTransactionAsync()).Returns(Task.CompletedTask);
         _uow.Setup(u => u.CommitTransactionAsync()).ThrowsAsync(new Exception("DB unavailable"));
         _uow.Setup(u => u.RollbackTransactionAsync()).Returns(Task.CompletedTask);
-        _redisDb.Setup(d => d.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+        _inbox.Setup(i => i.ReleaseAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new RedisException("Redis down"));
 
         var act = async () => await CreateConsumer().Consume(BuildContext(chatId, "Hello world test", Guid.NewGuid()));

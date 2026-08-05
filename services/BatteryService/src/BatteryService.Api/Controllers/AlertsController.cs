@@ -191,4 +191,37 @@ public class AlertsController : ControllerBase
         var result = await _mediator.Send(new ResolveAlertCommand { Id = id }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
+
+    /// <summary>
+    /// GH-778 — kỹ thuật viên phản hồi về prescription AI đã đưa cho alert này
+    /// (<c>accepted</c> / <c>edited</c> / <c>rejected</c>).
+    /// </summary>
+    /// <remarks>
+    /// Prescription được chấp nhận sẽ thành ví dụ few-shot cho các ca tương tự sau. Trước GH-778
+    /// <c>prescription_id</c> bị bỏ ngay lúc map response nên vòng học không bao giờ khép lại.
+    /// <para>
+    /// Mã trả về: <b>409</b> alert có thật nhưng chưa có prescription để phản hồi ·
+    /// <b>410</b> AI không còn giữ id đó (thử lại vô ích) · <b>503</b> AI không kết nối được (thử lại sau).
+    /// Ba ca này cố ý tách nhau để client biết khi nào NÊN retry.
+    /// </para>
+    /// Customer chỉ phản hồi được alert của mình; alert của khách khác trả 404 (không phải 403 —
+    /// 403 sẽ xác nhận alert đó có thật).
+    /// </remarks>
+    [HttpPost("{id:guid}/prescription-feedback")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status410Gone)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> SubmitPrescriptionFeedback(
+        Guid id,
+        [FromBody] SubmitPrescriptionFeedbackCommand command,
+        CancellationToken cancellationToken)
+    {
+        command.AlertId = id;
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
 }

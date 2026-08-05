@@ -44,6 +44,8 @@ public class ExpoPushChannel : INotificationChannel
     /// (<c>chatId</c>, <c>ticketId</c>, …) nên không bao giờ có sẵn id này.
     /// </summary>
     private const string NotificationIdKey = "notificationId";
+    private const string EntityTypeKey = "entityType";
+    private const string EntityIdKey = "entityId";
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly INotificationUnitOfWork _unitOfWork;
@@ -178,6 +180,11 @@ public class ExpoPushChannel : INotificationChannel
     {
         var data = new Dictionary<string, object?> { [NotificationIdKey] = request.NotificationId };
 
+        // Gán cặp định tuyến NGAY, trước mọi nhánh thoát sớm. Đặt nó ở cuối hàm là bỏ sót trường
+        // hợp PayloadJson rỗng — mà đó lại là trường hợp thường gặp, và chính là lúc client cần
+        // entityType nhất vì không còn khoá payload nào để đoán.
+        ApplyRoutingKeys(data, request);
+
         if (string.IsNullOrWhiteSpace(request.PayloadJson))
             return data;
 
@@ -204,7 +211,24 @@ public class ExpoPushChannel : INotificationChannel
                 request.NotificationId);
         }
 
+        // Gọi LẠI sau vòng lặp payload: consumer có thể đã ghi một khoá trùng tên vào payload, và
+        // cặp định tuyến phải lấy từ bản ghi notification chứ không phải từ chữ consumer tự viết.
+        ApplyRoutingKeys(data, request);
+
         return data;
+    }
+
+    /// <summary>
+    /// Ghi cặp <c>entityType</c>/<c>entityId</c> — thứ client dùng để chọn màn hình khi người dùng
+    /// bấm vào push. Lấy từ bản ghi notification nên luôn khớp với danh sách trong ứng dụng.
+    /// </summary>
+    private static void ApplyRoutingKeys(Dictionary<string, object?> data, SendRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.EntityType))
+            data[EntityTypeKey] = request.EntityType;
+
+        if (request.EntityId is not null)
+            data[EntityIdKey] = request.EntityId;
     }
 
     /// <summary>

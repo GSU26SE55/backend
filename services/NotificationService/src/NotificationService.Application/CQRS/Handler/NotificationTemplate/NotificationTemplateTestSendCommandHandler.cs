@@ -10,6 +10,7 @@ using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedContracts.Events.Root;
 
 namespace NotificationService.Application.CQRS.Handler.NotificationTemplate;
 
@@ -141,18 +142,13 @@ public class NotificationTemplateTestSendCommandHandler
 
         var notificationId = Guid.NewGuid();
 
-        await _publishEndpoint.Publish(
-            new SendNotificationEmailEvent(
-                NotificationId: notificationId,
-                ToEmail: recipient,
-                Subject: $"[GỬI THỬ] {subject}",
-                Body: body,
-                SourceService: "notification-template-test",
-                // Email gửi thử KHÔNG có link hủy: nó không phải thư gửi hàng loạt, và link hủy trong
-                // bản thử sẽ tắt nhầm thông báo thật của chính admin.
-                UnsubscribeUrl: null),
-            cancellationToken);
-
+        // GH-795 — GHI AUDIT VÀ COMMIT TRƯỚC, publish sau.
+        //
+        // Thứ tự cũ là publish rồi mới ghi audit + SaveChanges. Nếu lần ghi DB hỏng sau khi broker
+        // đã nhận event, admin thấy HTTP 500 nhưng email VẪN được gửi, và không có bản ghi kiểm toán
+        // nào để đối chiếu. Admin bấm lại vì tưởng chưa gửi ⇒ thư thứ hai.
+        //
+        // Đảo lại thì hỏng DB nghĩa là chưa có tác động ra ngoài nào cả, và bấm lại là hành vi đúng.
         await _auditWriter.WriteAsync(
             NotificationAuditActionEnum.TemplateTestSent,
             notificationId,
@@ -170,6 +166,52 @@ public class NotificationTemplateTestSendCommandHandler
             ct: cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _publishEndpoint.Publish(
+                new SendNotificationEmailEvent(
+                    NotificationId: notificationId,
+                    ToEmail: recipient,
+                    Subject: $"[GỬI THỬ] {subject}",
+                    Body: body,
+                    SourceService: "notification-template-test",
+                    // Email gửi thử KHÔNG có link hủy: nó không phải thư gửi hàng loạt, và link hủy
+                    // trong bản thử sẽ tắt nhầm thông báo thật của chính admin.
+                    UnsubscribeUrl: null)
+                {
+                    // GH-792 — ID suy từ notificationId để EmailService nhận ra bản trùng nếu event
+                    // này được phát lại (MassTransit retry, hoặc relay chạy lại).
+                    Id = DeterministicEventId.From(notificationId, "email"),
+                },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Chiều ngược lại của việc commit trước: broker hỏng thì audit đã ghi "đã gửi thử" mà
+            // thư chưa đi. Ghi thêm một bản ghi thất bại để dấu vết kiểm toán nói đúng sự thật, thay
+            // vì để lại một dòng "thành công" không có thư nào tương ứng.
+            _logger.LogError(ex, "Test-send template {TemplateId}: publish thất bại sau khi đã ghi audit.",
+                template.Id);
+
+            await _auditWriter.WriteAsync(
+                NotificationAuditActionEnum.TemplateTestSent,
+                notificationId,
+                request.ActorUserId,
+                isSuccess: false,
+                reason: $"Publish thất bại: {ex.Message}",
+                metadata: new Dictionary<string, object?> { ["templateId"] = template.Id },
+                ct: cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return new NotificationTemplateTestSendResponse
+            {
+                IsSuccess = false,
+                StatusCode = 502,
+                Message = "Không gửi được thư thử: hệ thống hàng đợi không nhận được yêu cầu.",
+            };
+        }
 
         _logger.LogInformation(
             "Test-send template {TemplateId} tới {Email} (nguồn {Source}, admin {AdminId}, lượt {Used}/{Limit}).",

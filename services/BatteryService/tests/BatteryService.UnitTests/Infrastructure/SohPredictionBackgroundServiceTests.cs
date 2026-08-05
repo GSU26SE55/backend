@@ -171,6 +171,341 @@ public class SohPredictionBackgroundServiceTests
         harness.Outbox.Count(m => m.Type == nameof(BatteryAnomalyDetectedV2Event)).Should().Be(1);
     }
 
+    // ── GH-762 ───────────────────────────────────────────────────────────────────
+    // Job gom đúng MinReadings mẫu gần nhất rồi gửi thẳng. AI duyệt TỪNG dòng và ném lỗi ở dòng
+    // lệch dải ĐẦU TIÊN ⇒ một số đo bất khả thi làm hỏng cả cửa sổ, job nhận null rồi `continue`,
+    // pin đó không có prediction nào cho tới khi số đo ấy tự rơi khỏi cửa sổ.
+    // Bằng chứng runtime: BAT-2026-001 (LiFePO4 12 V) có một mẫu 52.40 V ⇒ 13.10 V/cell.
+
+    [Fact]
+    public async Task Tick_SingleOutlierInWindow_StillPredicts_UsingOlderCleanReading()
+    {
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        // 30 mẫu sạch + 1 mẫu 52.4 V là MỚI NHẤT — trường hợp xấu nhất, vì cửa sổ luôn gồm mẫu
+        // mới nhất nên chắc chắn dính.
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize + 1,
+                (i, r) => { if (i == AiOptions.WindowSize) r.Voltage = 52.4m; }));
+
+        await harness.RunTickAsync();
+
+        // Trước bản sửa: AI bị gọi với cả mẫu 52.4 V và từ chối ⇒ 0 prediction.
+        harness.Predictions.Should().HaveCount(1);
+        harness.LastReadingsSentToAi.Should().NotBeNull();
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        harness.LastReadingsSentToAi!.Should().NotContain(row => row[0] > 50);
+    }
+
+    [Fact]
+    public async Task Tick_OutlierRemoved_TimeColumnStillStartsAtZero()
+    {
+        // Cột `time` là GIÂY TƯƠNG ĐỐI so với mẫu đầu cửa sổ. Nếu lọc SAU khi dựng dòng thì gốc
+        // thời gian rơi vào một mẫu đã bị loại, cột `time` không còn bắt đầu từ 0, và phân phối
+        // đầu vào model lệch đi mà không có gì báo.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize + 1,
+                (i, r) => { if (i == 0) r.Voltage = 52.4m; }));   // mẫu CŨ NHẤT hỏng ⇒ bị loại
+
+        await harness.RunTickAsync();
+
+        harness.LastReadingsSentToAi.Should().NotBeNull();
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        harness.LastReadingsSentToAi![0][3].Should().Be(0.0);
+        harness.LastReadingsSentToAi![1][3].Should().Be(13.0);
+        harness.LastReadingsSentToAi![2][3].Should().Be(26.0);
+    }
+
+    [Fact]
+    public async Task Tick_PredictionWindowTimestamps_MatchTheReadingsActuallySent()
+    {
+        // Cửa sổ ghi vào SohPrediction phải là các mẫu THỰC SỰ gửi đi, không phải toàn dải đã
+        // quét — nếu không, biểu đồ dashboard hiển thị một khoảng rộng hơn sự thật.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize + 1,
+                (i, r) => { if (i == 0) r.Voltage = 52.4m; }));
+
+        await harness.RunTickAsync();
+
+        var prediction = harness.Predictions.Should().ContainSingle().Subject;
+        prediction.InputWindowStartUtc.Should().Be(t0.AddSeconds(13));   // KHÔNG phải t0
+        prediction.InputWindowEndUtc.Should().Be(t0.AddSeconds(13 * AiOptions.WindowSize));
+    }
+
+    [Fact]
+    public async Task Tick_TooManyOutliers_SkipsAssetWithoutCallingAi()
+    {
+        // Không đủ mẫu sạch thì bỏ qua lượt — nhưng phải bỏ qua TRƯỚC khi gọi AI, chứ không phải
+        // gọi rồi để AI từ chối (tốn một vòng mạng cho một payload chắc chắn hỏng).
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        // 31 mẫu nhưng 2 mẫu hỏng ⇒ chỉ còn 29 sạch, thiếu 1 so với cửa sổ bắt buộc.
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize + 1,
+                (i, r) => { if (i is 5 or 9) r.Voltage = 52.4m; }));
+
+        await harness.RunTickAsync();
+
+        harness.Predictions.Should().BeEmpty();
+        harness.Prediction.Verify(
+            c => c.PredictAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
+                It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Tick_CleanWindow_BehavesExactlyAsBefore()
+    {
+        // Chống hồi quy: dữ liệu sạch phải đi đúng đường cũ — bản sửa không được đổi gì ở đây.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(assetId, Window(assetId, t0, AiOptions.WindowSize));
+
+        await harness.RunTickAsync();
+
+        harness.Predictions.Should().HaveCount(1);
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        harness.LastReadingsSentToAi![0][3].Should().Be(0.0);
+    }
+
+    // ── GH-777 ───────────────────────────────────────────────────────────────────────────────
+    // Worker đọc SensorReading có sẵn CycleCount và SocPercent nhưng chỉ gửi 4 cột legacy
+    // [V, I, T, time]. AI vì thế phải thay cycle bằng 0 và tự ước lượng SOC từ chính cửa sổ 30 mẫu
+    // — ước lượng cục bộ, kém hẳn số đo thật lấy từ toàn bộ lịch sử sạc/xả. Đo được cùng seed cùng
+    // model: 4 cột ra SOH 67.33, 6 cột (cycle=150, SOC=20) ra 40.46 — lệch 26.87 điểm.
+
+    [Fact]
+    public async Task Tick_AllReadingsHaveCycleCount_SendsSixColumns()
+    {
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize, (i, r) =>
+            {
+                r.CycleCount = 150 + i;
+                r.SocPercent = 20m + i;
+            }));
+
+        await harness.RunTickAsync();
+
+        var rows = harness.LastReadingsSentToAi!;
+        rows.Should().HaveCount(AiOptions.WindowSize);
+        rows.Should().OnlyContain(r => r.Length == 6);
+        // Thứ tự cột theo hợp đồng AI: [voltage, current, temperature, time, cycle_count, soc_percent].
+        // Đảo hai cột cuối là gửi SOC vào chỗ cycle mà không có gì đỏ — model chỉ ra số sai.
+        rows[0][4].Should().Be(150);
+        rows[0][5].Should().Be(20);
+        rows[^1][4].Should().Be(150 + AiOptions.WindowSize - 1);
+        rows[^1][5].Should().Be(20 + AiOptions.WindowSize - 1);
+    }
+
+    [Fact]
+    public async Task Tick_AnyReadingMissingCycleCount_FallsBackToFourColumns()
+    {
+        // Hợp đồng AI đòi cycle/soc "tất cả hoặc không". Gửi cửa sổ nửa nọ nửa kia sẽ bị từ chối
+        // NGUYÊN KHỐI — đúng cái vòng câm lặng mà GH-762 vừa gỡ. CycleCount là nullable và thực tế
+        // có mẫu thiếu, nên nhánh 4 cột là đường chạy thật chứ không phải "phòng hờ".
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize, (i, r) =>
+            {
+                r.CycleCount = i == 7 ? null : 150 + i;   // đúng MỘT mẫu thiếu cycle
+                r.SocPercent = 50m;
+            }));
+
+        await harness.RunTickAsync();
+
+        harness.LastReadingsSentToAi.Should().NotBeNull();
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        harness.LastReadingsSentToAi!.Should().OnlyContain(r => r.Length == 4);
+    }
+
+    [Fact]
+    public async Task Tick_SixColumnWindow_StillStartsTimeAtZero()
+    {
+        // Chống hồi quy GH-762: thêm cột không được làm xê dịch gốc thời gian.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize, (i, r) =>
+            {
+                r.CycleCount = 10;
+                r.SocPercent = 50m;
+            }));
+
+        await harness.RunTickAsync();
+
+        harness.LastReadingsSentToAi![0][3].Should().Be(0.0);
+        harness.LastReadingsSentToAi![1][3].Should().Be(13.0);
+        harness.LastReadingsSentToAi![2][3].Should().Be(26.0);
+    }
+
+    [Fact]
+    public async Task Tick_ReadingWithImpossibleSoc_IsQuarantined_NotSentToAi()
+    {
+        // Giao điểm GH-777 × GH-762: cửa sổ 6 cột có thêm soc_percent, và AI KIỂM cột đó. Không lọc
+        // ở phía mình thì một SOC bất khả thi lại làm AI từ chối nguyên cửa sổ — đúng lỗi vừa gỡ.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadings(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize + 1, (i, r) =>
+            {
+                r.CycleCount = 10;
+                r.SocPercent = i == AiOptions.WindowSize ? 250m : 50m;   // SOC 250% — bất khả thi
+            }));
+
+        await harness.RunTickAsync();
+
+        harness.Predictions.Should().HaveCount(1);
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        harness.LastReadingsSentToAi!.Should().NotContain(r => r.Length >= 6 && r[5] > 100);
+    }
+
+    [Fact]
+    public async Task Tick_CriticalAlert_StoresPrescriptionIdOnTheAlert()
+    {
+        // GH-778 — không lưu id thì nó chết ngay sau khi dựng xong đoạn text nhét vào ticket, và
+        // vòng học của AI không bao giờ khép lại. Test này đi qua ĐÚNG đường client → alert, nên
+        // nó đỏ nếu ai đó bỏ lại việc map `prescription_id`.
+        var harness = Harness.ForFailedPrediction(Guid.NewGuid());
+        harness.Prescription
+            .Setup(c => c.PrescribeAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
+                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiPrescriptionResult(
+                Prescription: "Kiểm tra cell 3",
+                ActionSteps: new[] { "Đo điện áp từng cell" },
+                PpeRequired: new[] { "Găng cách điện" },
+                SopReferences: Array.Empty<string>(),
+                SafetyWarnings: Array.Empty<string>(),
+                HumanVerificationRequired: false,
+                Enriched: true,
+                LlmProvider: "deepseek",
+                PrescriptionId: "presc-abc-123"));
+
+        await harness.RunTickAsync();
+
+        harness.Alerts.Should().ContainSingle()
+            .Which.AiPrescriptionId.Should().Be("presc-abc-123");
+    }
+
+    [Fact]
+    public async Task Tick_WhenAiReturnsNoPrescriptionId_AlertKeepsItNull()
+    {
+        // enrich=false hoặc AI không trả id ⇒ không có gì để học. Bịa ra một id giả sẽ khiến
+        // endpoint phản hồi gọi AI với id không tồn tại rồi nhận 410 mãi.
+        var harness = Harness.ForFailedPrediction(Guid.NewGuid());
+
+        await harness.RunTickAsync();
+
+        harness.Alerts.Should().ContainSingle().Which.AiPrescriptionId.Should().BeNull();
+    }
+
+    private static SensorReading FullReading(Guid assetId, DateTime time, int? cycle, decimal soc) => new()
+    {
+        Time = time,
+        BatteryAssetId = assetId,
+        Voltage = 12.4m,
+        Current = -1.2m,
+        Temperature = 31.0m,
+        SocPercent = soc,
+        CycleCount = cycle,
+        SourceType = SensorReadingSourceTypeEnum.Bms,
+    };
+
+    // ── GH-780 ───────────────────────────────────────────────────────────────────────────────
+    // `Ai:MinReadings` đóng hai vai xung khắc: vừa là ngưỡng "đủ lịch sử", vừa là số dòng payload.
+    // AI từ chối mọi payload khác 30 dòng, nên đặt 29 hay 31 là qua ngưỡng rồi gửi sai hình dạng ⇒
+    // prediction DỪNG HẲN mà nhìn cấu hình không thấy gì sai.
+
+    [Theory]
+    [InlineData(30)]
+    [InlineData(31)]
+    [InlineData(45)]
+    public async Task Tick_WhateverMinReadingsIs_PayloadIsAlwaysExactlyWindowSize(int minReadings)
+    {
+        // Có dư mẫu tới đâu thì payload vẫn phải đúng 30 dòng — số dòng thuộc về trọng số model,
+        // không phải tham số vận hành.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-30);
+        var harness = Harness.ForReadings(
+            assetId, Window(assetId, t0, minReadings + 10), minReadings: minReadings);
+
+        await harness.RunTickAsync();
+
+        harness.LastReadingsSentToAi.Should().NotBeNull();
+        harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
+        // Và phải là 30 mẫu MỚI NHẤT, không phải 30 mẫu đầu tiên.
+        harness.Predictions.Should().ContainSingle()
+            .Which.InputWindowEndUtc.Should().Be(t0.AddSeconds(13 * (minReadings + 10 - 1)));
+    }
+
+    [Fact]
+    public async Task Tick_FewerReadingsThanWindowSize_SkipsWithoutCallingAi()
+    {
+        // 29 mẫu: dù ngưỡng có đặt thấp tới đâu cũng KHÔNG dựng nổi payload 30 dòng. Gọi AI ở đây
+        // là tốn một vòng mạng cho một payload chắc chắn bị từ chối.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-30);
+        var harness = Harness.ForReadings(
+            assetId, Window(assetId, t0, AiOptions.WindowSize - 1), minReadings: AiOptions.WindowSize);
+
+        await harness.RunTickAsync();
+
+        harness.Predictions.Should().BeEmpty();
+        harness.Prediction.Verify(
+            c => c.PredictAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
+                It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// GH-780 — <paramref name="count"/> reading hợp lệ, cách nhau 13 giây, MỚI NHẤT ở cuối.
+    /// <paramref name="mutate"/> sửa mẫu theo chỉ số để dựng đúng ca cần thử.
+    /// </summary>
+    /// <remarks>
+    /// Mọi test tầng job phải chạy ở quy mô ≥ 30: AI từ chối payload khác 30 dòng, nên một test
+    /// dùng 3-4 mẫu là đang kiểm một cấu hình không bao giờ tồn tại ở production.
+    /// </remarks>
+    private static SensorReading[] Window(
+        Guid assetId, DateTime t0, int count, Action<int, SensorReading>? mutate = null)
+    {
+        var list = new SensorReading[count];
+        for (var i = 0; i < count; i++)
+        {
+            var r = OutlierAwareReading(assetId, t0.AddSeconds(13 * i), 12.4m);
+            mutate?.Invoke(i, r);
+            list[i] = r;
+        }
+        return list;
+    }
+
+    private static SensorReading OutlierAwareReading(Guid assetId, DateTime time, decimal voltage) => new()
+    {
+        Time = time,
+        BatteryAssetId = assetId,
+        Voltage = voltage,
+        Current = -1.2m,
+        Temperature = 31.0m,
+        SocPercent = 40m,
+        SourceType = SensorReadingSourceTypeEnum.Bms,
+    };
+
     private static Alert ExpiredOpenSohAlert(Guid assetId) => new()
     {
         Id = Guid.NewGuid(),
@@ -193,13 +528,33 @@ public class SohPredictionBackgroundServiceTests
 
         private SohPredictionBackgroundService _sut = null!;
 
-        public MockUnitOfWorkBuilder Uow { get; private init; } = null!;
-        public Mock<IAiPrescriptionClient> Prescription { get; private init; } = null!;
+        public MockUnitOfWorkBuilder Uow { get; private set; } = null!;
+        public Mock<IAiPrescriptionClient> Prescription { get; private set; } = null!;
+        public Mock<IAiPredictionClient> Prediction { get; private set; } = null!;
+
+        /// <summary>GH-762 — payload THỰC SỰ gửi cho AI ở lần gọi gần nhất (null nếu chưa gọi).</summary>
+        public IReadOnlyList<double[]>? LastReadingsSentToAi { get; private set; }
 
         public List<Alert> Alerts => Uow.Alerts.Object.GetAllAsync().ToList();
         public List<OutboxMessage> Outbox => Uow.OutboxMessages.Object.GetAllAsync().ToList();
+        public List<SohPrediction> Predictions => Uow.SohPredictions.Object.GetAllAsync().ToList();
 
         public static Harness ForFailedPrediction(Guid assetId, params Alert[] existingAlerts)
+            => Build(assetId, readings: null, existingAlerts);
+
+        /// <summary>
+        /// GH-762 — dựng tick với bộ reading tự chỉ định, để kiểm hành vi khi có số đo ngoài dải.
+        /// </summary>
+        public static Harness ForReadings(Guid assetId, params SensorReading[] readings)
+            => Build(assetId, readings, Array.Empty<Alert>());
+
+        /// <summary>GH-780 — bản cho phép đổi ngưỡng, để thử 30/31/45 mà payload vẫn phải đúng 30.</summary>
+        public static Harness ForReadings(Guid assetId, SensorReading[] readings, int minReadings)
+            => Build(assetId, readings, Array.Empty<Alert>(), minReadings);
+
+        private static Harness Build(
+            Guid assetId, SensorReading[]? readings, Alert[] existingAlerts,
+            int minReadings = AiOptions.WindowSize)
         {
             var t0 = DateTime.UtcNow.AddMinutes(-5);
             var asset = new BatteryAsset
@@ -219,18 +574,31 @@ public class SohPredictionBackgroundServiceTests
 
             var uow = new MockUnitOfWorkBuilder()
                 .WithBatteryAssets(asset)
-                .WithSensorReadings(
-                    AssetReading(assetId, t0),
-                    AssetReading(assetId, t0.AddSeconds(13)),
-                    AssetReading(assetId, t0.AddSeconds(26)))
+                .WithSensorReadings(readings ??
+                Enumerable.Range(0, AiOptions.WindowSize)
+                    .Select(i => AssetReading(assetId, t0.AddSeconds(13 * i)))
+                    .ToArray())
                 .WithAlerts(existingAlerts);
+
+            var harness = new Harness();
 
             var prediction = new Mock<IAiPredictionClient>();
             prediction
                 .Setup(c => c.PredictAsync(
                     It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
                     It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FailedPrediction());
+                .ReturnsAsync((string _, IReadOnlyList<double[]> rows, AiPackConfig? pack, CancellationToken _) =>
+                {
+                    harness.LastReadingsSentToAi = rows;
+                    // GH-762 — mock phải TỪ CHỐI giống AI thật, nếu không thì khẳng định "vẫn có
+                    // prediction" là vô nghĩa: mock trả kết quả bất kể payload nên test sẽ xanh
+                    // ngay cả khi outlier vẫn lọt vào. Dải per-cell [2.0, 4.5] lấy từ
+                    // ai-module/src/core/config.py; cố ý viết thẳng số ở đây thay vì gọi
+                    // AiReadingWindowFilter, kẻo test chỉ so bộ lọc với chính nó.
+                    var nSeries = pack?.NSeries ?? 1;
+                    var rejects = rows.Any(r => r[0] / nSeries is < 2.0 or > 4.5);
+                    return rejects ? null : FailedPrediction();
+                });
 
             var prescription = new Mock<IAiPrescriptionClient>();
             prescription
@@ -250,9 +618,13 @@ public class SohPredictionBackgroundServiceTests
             var scopeFactory = new Mock<IServiceScopeFactory>();
             scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
 
-            var harness = new Harness { Uow = uow, Prescription = prescription };
+            harness.Uow = uow;
+            harness.Prescription = prescription;
+            harness.Prediction = prediction;
             harness._sut = Make(
-                new AiOptions { Enabled = true, MinReadings = 3, PrescriptionEnabled = true },
+                // GH-780 — MinReadings = 3 là cấu hình BẤT KHẢ THI: AI từ chối mọi payload khác 30 dòng.
+                // Harness cũ xanh trong khi mã hoá đúng thiết lập mà issue nói là hỏng.
+                new AiOptions { Enabled = true, MinReadings = minReadings, MaxScanReadings = minReadings * 2, PrescriptionEnabled = true },
                 scopeFactory.Object);
             return harness;
         }

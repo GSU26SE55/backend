@@ -13,6 +13,7 @@ using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.Leasing;
 
 namespace NotificationService.Infrastructure.DependencyInjection;
 
@@ -26,21 +27,30 @@ public static class ManageDependencyInjection
 
         // MassTransit consumers — Sprint IoT-1 (#249) đăng ký consumer assembly để consume
         // IotDeviceWentOfflineEvent (và sẵn sàng cho các consumer Sprint 6 khác trong cùng assembly).
-        services.AddMessageBus(configuration, typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly);
+        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+        services.AddMessageBus(
+            configuration,
+            typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly,
+            typeof(ManageDependencyInjection).Assembly);
 
         services.AddScoped<NotificationDataSeeder>();
         services.AddScoped<NotificationGroupSeeder>();   // Sprint 6.4 NOTI4-04
         services.AddNotificationChannels();
         services.AddInboxIdempotency(configuration);
+        // GH-793 — quyền chạy độc quyền nguyên tử cho các job nền (thay khuôn GET-rồi-SET cũ).
+        services.AddDistributedLease(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
         services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>(); // GH-672 NOTI-01
 
         // Sprint 6.2 NOTI-01 (#672) — worker giao record Pending xuống channel (Push/Email/SMS/InApp).
         // Không có nó thì dispatcher vẫn là dead code và notification chỉ nằm trong DB.
+        // GH-793 — dòng AddHostedService thứ hai đã bỏ: nó trùng với đăng ký phía trên.
+        // (Vô hại vì AddHostedService dùng TryAddEnumerable nên khử trùng, nhưng đọc vào thì tưởng
+        // hai worker cùng chạy trong một tiến trình — hiểu nhầm rất tốn thời gian khi đi tìm nguyên
+        // nhân gửi trùng.)
         services.Configure<NotificationDispatchOptions>(
             configuration.GetSection(NotificationDispatchOptions.SectionName));
-        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>();
 
         // Sprint 6.2 NOTI-12 (#683) — gom digest cho user bật Frequency=Daily / DigestWindowMinutes.
         services.Configure<NotificationDigestOptions>(

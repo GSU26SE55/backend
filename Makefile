@@ -104,10 +104,10 @@ test-perf: ## Chạy riêng test Category=Performance (YÊU CẦU máy rảnh �
 
 BASE_REF ?= origin/dev
 
-ci: ci-preflight ci-format ci-build ci-test ci-rules ci-trivy ## Full local CI (preflight → format → build → unit test → rules → trivy)
+ci: ci-preflight ci-format ci-build ci-test ci-rules ci-audit ci-trivy ## Full local CI (preflight → format → build → unit test → rules → nuget audit → trivy)
 	@printf '\n\033[1;32m========== CI PASS ==========\033[0m\n'
 
-ci-fast: ci-preflight ci-build ci-test ci-rules ## CI nhanh (bỏ format + trivy) — cho vòng lặp dev
+ci-fast: ci-preflight ci-build ci-test ci-rules ## CI nhanh (bỏ format + audit + trivy) — cho vòng lặp dev
 	@printf '\n\033[1;32m========== CI-FAST PASS ==========\033[0m\n'
 
 ci-full: ci ci-integration ## CI + integration tests (cần Docker)
@@ -141,8 +141,12 @@ ci-rules: ## [stage 5] Project rule checks (await void / AuditableEntity / audit
 	@printf '\n\033[1;34m[5/6] Project rule checks (BASE_REF=$(BASE_REF))\033[0m\n'
 	@BASE_REF=$(BASE_REF) ./ci/scripts/rule-checks.sh
 
-ci-trivy: ## [stage 6] Trivy fs scan (CRITICAL, ignore-unfixed) — SKIP_TRIVY=1 để bỏ qua
-	@printf '\n\033[1;34m[6/6] Security scan (trivy)\033[0m\n'
+ci-audit: ## [stage 6] NuGet audit — chặn dependency dính lỗ hổng High/Critical (GH-730/731/732)
+	@printf '\n\033[1;34m[6/7] NuGet vulnerability audit\033[0m\n'
+	@./ci/scripts/nuget-audit.sh
+
+ci-trivy: ## [stage 7] Trivy fs scan (CRITICAL, ignore-unfixed) — SKIP_TRIVY=1 để bỏ qua
+	@printf '\n\033[1;34m[7/7] Security scan (trivy)\033[0m\n'
 	@./ci/scripts/trivy-scan.sh
 
 ci-integration: ## [stage 7] Integration tests (cần Docker daemon)

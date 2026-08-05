@@ -2,6 +2,7 @@ using BatteryService.Application.CQRS.Handler.SensorReading;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
+using BatteryService.UnitTests.Helpers;
 using FluentAssertions;
 
 namespace BatteryService.UnitTests.Application;
@@ -24,7 +25,7 @@ public class GetSensorReadingHourlyAggregateQueryHandlerTests
         reader.Setup(r => r.ReadHourlyAsync(assetId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
-        var handler = new GetSensorReadingHourlyAggregateQueryHandler(reader.Object);
+        var handler = new GetSensorReadingHourlyAggregateQueryHandler(reader.Object, new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin());
         var res = await handler.Handle(new GetSensorReadingHourlyAggregateQuery { BatteryAssetId = assetId }, CancellationToken.None);
 
         res.IsSuccess.Should().BeTrue();
@@ -64,7 +65,7 @@ public class GetSensorReadingHourlyAggregateQueryHandlerTests
         var reader = new Mock<ISensorReadingAggregateViewReader>();
         reader.Setup(r => r.ReadHourlyAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<SensorReadingAggregateDto>());
-        var handler = new GetSensorReadingHourlyAggregateQueryHandler(reader.Object);
+        var handler = new GetSensorReadingHourlyAggregateQueryHandler(reader.Object, new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin());
 
         var res = await handler.Handle(new GetSensorReadingHourlyAggregateQuery { BatteryAssetId = Guid.NewGuid() }, CancellationToken.None);
 

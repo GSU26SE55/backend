@@ -20,7 +20,7 @@
         <PackageReference Include="MediatR" Version="12.2.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.3" />
         <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
         <PackageReference Include="StackExchange.Redis" Version="2.9.17" />
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.2" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
@@ -30,11 +30,29 @@
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
         <!-- Sprint 7 #114 — Reports XLSX export. -->
         <PackageReference Include="ClosedXML" Version="0.102.2" />
-        <!-- Sprint 7 #116 — OpenTelemetry tracing → Tempo (OTLP). -->
-        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
-        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.9.0" />
+        <!--
+          GH-731 — ClosedXML 0.102.2 kéo System.IO.Packaging 6.0.0, dính 2 advisory High
+          (GHSA-f32c-w444-8ppv, GHSA-qj66-m88j-hmgj). Bản vá của nhánh 6 là 6.0.1; ở đây ghim
+          thẳng 8.0.1 cho khớp runtime net8.0.
+
+          Vì sao ghim trực tiếp thay vì nâng ClosedXML: 0.102 → 0.105 kéo theo
+          DocumentFormat.OpenXml 2.16 → 3.x (major) — rủi ro vỡ API xuất Excel mà KHÔNG thêm
+          lợi ích bảo mật nào, vì lỗ hổng nằm ở System.IO.Packaging chứ không ở ClosedXML.
+          NuGet luôn lấy version cao nhất nên reference trực tiếp này thắng transitive 6.0.0.
+
+          ĐỪNG XOÁ dòng này khi chưa nâng ClosedXML — xoá là advisory quay lại ngay.
+        -->
+        <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
+        <!-- Sprint 7 #116 — OpenTelemetry tracing → Tempo (OTLP).
+             GH-732 — 1.9.0 dính GHSA-4625-4j76-fww9 + GHSA-g94r-2vxg-569j (Moderate).
+             Bản vá là 1.15.3, nhưng Instrumentation.AspNetCore/Http KHÔNG có 1.15.3
+             (chỉ 1.15.2 rồi nhảy 1.16.0) ⇒ chọn 1.16.0 là bản thấp nhất mà CẢ BỐN package
+             cùng có và đều ≥ 1.15.3. Giữ 4 package cùng version — lệch nhau là nguồn lỗi
+             runtime khó truy của OTel. -->
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
     </ItemGroup>
 
     <ItemGroup>

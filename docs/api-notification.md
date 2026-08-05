@@ -200,6 +200,20 @@ viễn khi retention dọn) hay không.
 > trong `NotificationCategoryMap` — runtime vẫn fallback về `Account`, nhưng chúng không xuất hiện
 > trong `GET /categories`. Nay cả hai đã được khai báo tường minh.
 >
+> **03/08/2026 — push mang thêm `entityType`/`entityId`.**
+>
+> `data` của Expo push nay gồm: `notificationId` + **`entityType`/`entityId`** + mọi khoá trong
+> `payload_json`. Hai khoá mới lấy thẳng từ bản ghi notification và **không cho payload ghi đè** —
+> giống cách bảo vệ `notificationId`.
+>
+> **Vì sao thêm:** trước đó client phải *đoán* mở màn nào từ khoá payload. Mobile đoán bằng
+> `ticketId`, nên thông báo về **pin** — 1.228/1.285 dòng, tức **95,6%** — bấm vào không đi đâu cả;
+> trong khi danh sách trong ứng dụng lại dùng `entityType`. Cùng một thông báo mà hai đường mở ra
+> hai màn khác nhau. Có cặp này thì cả hai dùng chung một phép suy luận.
+>
+> Client cũ bỏ qua khoá lạ nên không vỡ; client mới không thấy hai khoá này (push gửi trước khi
+> deploy) thì tự lùi về `ticketId` như cũ.
+>
 > **2026-08-03 — ba thay đổi hợp đồng event để template dựng được câu tử tế.**
 >
 > | Event | Thêm | Vì sao |

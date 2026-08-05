@@ -1,3 +1,4 @@
+using AuthService.Application.Common.Options;
 using AuthService.Application.Authorization;
 using AuthService.Application.Configuration;
 using AuthService.Application.Interfaces.Helpers;
@@ -28,7 +29,12 @@ public static class ManageDependencyInjection
         services.AddSharedInfrastructure(configuration, "AuthService.Application", "Auth Service API");
 
         // #AUTH-15: register Application-layer consumers (PermissionsChangedConsumer).
-        services.AddMessageBus(configuration, typeof(AuthService.Application.Authorization.PermissionResolver).Assembly);
+        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+        // Thiếu dòng này thì yêu cầu replay bay qua service mà không ai xử lý, và job treo mãi.
+        services.AddMessageBus(
+            configuration,
+            typeof(AuthService.Application.Authorization.PermissionResolver).Assembly,
+            typeof(ManageDependencyInjection).Assembly);
 
         // Outbox Pattern: override IMessageProducerService bằng OutboxMessagePublisher.
         // Handler publish event → INSERT vào DbContext.OutboxMessages, atomic với business data.
@@ -55,6 +61,10 @@ public static class ManageDependencyInjection
 
         // #AUTH-12: device binding cho refresh token (IP/UA cross-check).
         services.Configure<AuthSecurityOptions>(configuration.GetSection(AuthSecurityOptions.SectionName));
+
+        // GH-776 — khoá truy cập cho endpoint OAuth introspection. Bỏ trống ⇒ endpoint từ chối tất
+        // cả (fail closed) — xem IntrospectionOptions.
+        services.Configure<IntrospectionOptions>(configuration.GetSection(IntrospectionOptions.SectionName));
 
         // #AUTH-32 + #AUTH-66: JwtSettings options với ValidateDataAnnotations + ValidateOnStart.
         // Deploy thiếu SecretKey/Issuer/Audience → fail fast lúc Build() thay vì runtime crash.
@@ -103,6 +113,8 @@ public static class ManageDependencyInjection
     private static void AddScopedInterface(this IServiceCollection service, IConfiguration configuration)
     {
         service.AddScoped<IAuthUnitOfWork, UnitOfWork>();
+        // GH-794 — giành quyền publish từng dòng outbox, chặn hai replica cùng gửi một message.
+        service.AddScoped<IOutboxClaimService, Implements.Services.OutboxClaimService>();
         service.AddScoped<IJwtHelper, JwtHelper>();
         // #AUTH-21: configure timeout 10s cho HttpClient. Retry sẽ thực hiện trong helper bằng
         // try/catch + delay (tránh thêm Polly dependency cho chỉ 1 endpoint).

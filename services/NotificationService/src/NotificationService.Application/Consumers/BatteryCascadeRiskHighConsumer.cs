@@ -40,36 +40,35 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
 
     public async Task Consume(ConsumeContext<BatteryCascadeRiskHighEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "CascadeRiskHigh", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate CascadeRiskHigh message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No Manager/Admin recipient resolved for CascadeRiskHigh asset={AssetId} — skip.", evt.BatteryAssetId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for CascadeRiskHigh asset={AssetId} — skip.", evt.BatteryAssetId);
-            return;
-        }
+            var title = "🔴 Nguy cơ lan truyền (cascade risk) cao";
+            var body = $"Pin {evt.AssetSerialNumber} có cascade risk {evt.CascadeRiskScore:P0} (≥ 70%). "
+                     + "Cần điều Staff kiểm tra/cô lập ngay để tránh lan sang pin lân cận.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                batteryAssetId = evt.BatteryAssetId,
+                siteId = evt.SiteId,
+                cascadeRiskScore = evt.CascadeRiskScore,
+                relatedTicketId = evt.RelatedTicketId,
+                screen = "BatteryDetail"
+            });
 
-        var title = "🔴 Nguy cơ lan truyền (cascade risk) cao";
-        var body = $"Pin {evt.AssetSerialNumber} có cascade risk {evt.CascadeRiskScore:P0} (≥ 70%). "
-                 + "Cần điều Staff kiểm tra/cô lập ngay để tránh lan sang pin lân cận.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            batteryAssetId = evt.BatteryAssetId,
-            siteId = evt.SiteId,
-            cascadeRiskScore = evt.CascadeRiskScore,
-            relatedTicketId = evt.RelatedTicketId,
-            screen = "BatteryDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.CascadeRiskHigh, NotificationWriter.InAppPushEmail,
+                title, body, payload, "BatteryAsset", evt.BatteryAssetId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.CascadeRiskHigh, NotificationWriter.InAppPushEmail,
-            title, body, payload, "BatteryAsset", evt.BatteryAssetId, context.CancellationToken);
     }
 }

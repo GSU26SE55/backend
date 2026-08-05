@@ -13,11 +13,16 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIotApiKeyService _apiKeyService;
+    private readonly IMqttBrokerEndpointProvider _brokerEndpoint;
 
-    public CreateIotDeviceCommandHandler(IBatteryUnitOfWork unitOfWork, IIotApiKeyService apiKeyService)
+    public CreateIotDeviceCommandHandler(
+        IBatteryUnitOfWork unitOfWork,
+        IIotApiKeyService apiKeyService,
+        IMqttBrokerEndpointProvider brokerEndpoint)
     {
         _unitOfWork = unitOfWork;
         _apiKeyService = apiKeyService;
+        _brokerEndpoint = brokerEndpoint;
     }
 
     public async Task<CommonResponse<IotDeviceCreatedDto>> Handle(CreateIotDeviceCommand request, CancellationToken cancellationToken)
@@ -65,6 +70,15 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
         var dto = IotDeviceMapper.ToCreatedDto(entity, key.RawKey, site.Name);
         dto.MqttUsername = mqttCred.Username;
         dto.MqttPassword = mqttCred.RawPassword;
+
+        // GH-784 — trước đây MqttBrokerHost/Port có trên DTO nhưng KHÔNG nơi nào gán ⇒ luôn null:
+        // thiết bị nhận username/password mà không biết nối đi đâu. Kèm luôn tiền tố topic đã
+        // chuẩn hoá chữ thường, vì ACL dùng %u (= username chữ thường) còn deviceCode có thể hoa.
+        var broker = _brokerEndpoint.Resolve(entity.DeviceCode);
+        dto.MqttBrokerHost = broker.Host;
+        dto.MqttBrokerPort = broker.Port;
+        dto.MqttUseTls = broker.Host is null ? null : broker.UseTls;
+        dto.MqttTopicPrefix = broker.TopicPrefix;
         return new CommonResponse<IotDeviceCreatedDto>
         {
             IsSuccess = true,

@@ -63,8 +63,21 @@ public class StaleSmsReaperAndRedactorTests : IAsyncLifetime
         return provider;
     }
 
+    /// <summary>
+    /// Chạy job nền tới khi <paramref name="until"/> thành đúng, hoặc <b>ném lỗi</b> khi hết giờ.
+    /// </summary>
+    /// <remarks>
+    /// Bản trước hết giờ thì lặng lẽ <c>return</c>, để các khẳng định phía sau tự đỏ. Hậu quả là một
+    /// lần hết giờ (job bị bỏ đói luồng khi chạy cả bộ) hiện ra dưới dạng "Expected Pending but found
+    /// Sending" — trông y hệt lỗi nghiệp vụ, và người đọc sẽ đi tìm bug trong reaper thay vì nhận ra
+    /// nó chưa từng chạy. Ném lỗi ở đây để hai nguyên nhân KHÔNG còn cùng một triệu chứng.
+    /// <para>
+    /// Hạn 60s thay vì 20s: đây là chờ theo điều kiện, đạt sớm thì thoát sớm nên không tốn thêm giây
+    /// nào lúc bình thường; nới ra chỉ để chịu được lúc cả bộ tích hợp chạy song song nhiều container.
+    /// </para>
+    /// </remarks>
     private static async Task RunUntilAsync(Microsoft.Extensions.Hosting.BackgroundService svc,
-        Func<Task<bool>> until, int timeoutSeconds = 20)
+        Func<Task<bool>> until, int timeoutSeconds = 60)
     {
         await svc.StartAsync(CancellationToken.None);
         try
@@ -76,6 +89,10 @@ public class StaleSmsReaperAndRedactorTests : IAsyncLifetime
                     return;
                 await Task.Delay(150);
             }
+
+            throw new TimeoutException(
+                $"Job nền không đạt điều kiện trong {timeoutSeconds}s — job chưa chạy hoặc đứng, "
+                + "KHÔNG phải kết quả nghiệp vụ sai.");
         }
         finally
         {

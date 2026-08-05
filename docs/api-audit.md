@@ -10,7 +10,7 @@
 
 `AuditAggregatorService` là **read-store hợp nhất (materialized view)** gom audit event của TOÀN hệ thống (Auth/Battery/Ticket/File/Notification/Sms…) về 1 nơi (`audit_aggregate`), phục vụ **điều tra forensic, truy vết bảo mật, compliance, GDPR**. Service consume `AuditCreatedEventV1` từ RabbitMQ và expose REST API tra cứu chỉ cho **Admin**.
 
-> **KHÔNG phải nguồn chân lý** — bản gốc nằm ở bảng append-only `{service}_audit_logs` của từng service; read-store có thể replay lại.
+> **KHÔNG phải nguồn chân lý** — bản gốc nằm ở bảng append-only của từng service; read-store replay lại được từ `{service}_audit_outbox` (xem `POST /api/admin/audit/replay`).
 
 ---
 
@@ -403,7 +403,24 @@ String PascalCase thì quá khứ (vd `LoginSucceeded`, `BatteryUpdated`, `State
 
 **Request body:** Không có.
 
-**Response thành công `202 Accepted`:** `CommonResponse<object>` — `data = null`, `message` xác nhận đã nhận yêu cầu (re-ingestion chạy nền, ghi meta-audit `AuditReplayed`).
+**Response thành công `202 Accepted`:** `CommonResponse<object>` — `data` chứa `jobId`, `service`, `from`, `to`, `expectedResponders`, `status`.
+`202` chỉ được trả **sau khi job đã ghi vào DB**; nếu ghi hỏng sẽ trả lỗi chứ không trả 202.
+
+**Response `400`:** tham số sai — `service` không thuộc 6 service có audit, `from > to`, hoặc `from` ở tương lai. Khi đó **không** tạo job.
+
+### `GET /api/admin/audit/replay/{jobId}`
+
+**Mục đích:** xem tiến độ job replay.
+
+| Trường | Ý nghĩa |
+|---|---|
+| `status` | `Requested` / `InProgress` / `Completed` / `CompletedWithErrors` |
+| `respondedServices` / `pendingServices` | Đã / chưa phản hồi — dùng khi job treo |
+| `republishedCount` | Tổng bản ghi audit đã phát lại |
+| `truncated` | `true` ⇒ **dữ liệu chưa đầy đủ** (chạm trần 50.000/lần hoặc payload hỏng) |
+| `error` | Lỗi gộp từ các service báo thất bại |
+
+**`404`** nếu không có job.
 
 > **Phạm vi capstone:** endpoint ghi nhận yêu cầu; re-publish per-service hoàn thiện khi onboard từng service.
 

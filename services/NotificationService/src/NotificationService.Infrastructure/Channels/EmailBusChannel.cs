@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
 
 namespace NotificationService.Infrastructure.Channels;
 
@@ -51,7 +52,14 @@ public class EmailBusChannel : INotificationChannel
                     Body: request.Body,
                     SourceService: "notification",
                     UnsubscribeUrl: BuildUnsubscribeUrl(request)
-                ),
+                )
+                {
+                    // GH-792 — ID sinh theo NotificationId, KHÔNG ngẫu nhiên. EmailService chống
+                    // trùng bằng ProcessOnceAsync khoá theo Id này; ID ngẫu nhiên nghĩa là lần gửi
+                    // lại (sau khi tiến trình chết giữa "đã publish" và "đã ghi Sent") trông như
+                    // một việc mới và người dùng nhận email lần thứ hai.
+                    Id = DeterministicEventId.From(request.NotificationId, "email"),
+                },
                 ct);
 
             return new ChannelResult(true);

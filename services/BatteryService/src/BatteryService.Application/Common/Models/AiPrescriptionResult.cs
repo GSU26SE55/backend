@@ -24,7 +24,8 @@ public class AiPrescriptionResult
         IReadOnlyList<string> SafetyWarnings,
         bool HumanVerificationRequired,
         bool Enriched,
-        string LlmProvider)
+        string LlmProvider,
+        string? PrescriptionId = null)
     {
         this.Prescription = Prescription;
         this.ActionSteps = ActionSteps;
@@ -34,6 +35,7 @@ public class AiPrescriptionResult
         this.HumanVerificationRequired = HumanVerificationRequired;
         this.Enriched = Enriched;
         this.LlmProvider = LlmProvider;
+        this.PrescriptionId = PrescriptionId;
     }
 
     public string Prescription { get; }
@@ -44,4 +46,20 @@ public class AiPrescriptionResult
     public bool HumanVerificationRequired { get; }
     public bool Enriched { get; }
     public string LlmProvider { get; }
+
+    /// <summary>
+    /// GH-778 — định danh do AI cấp cho prescription này, dùng để gửi phản hồi
+    /// (accepted/edited/rejected) về <c>POST /prescribe/feedback</c>.
+    /// </summary>
+    /// <remarks>
+    /// Proto có sẵn <c>prescription_id = 23</c> và AI có sẵn endpoint nhận phản hồi, nhưng cả hai
+    /// client Battery đều BỎ trường này khi map ⇒ ID mất vĩnh viễn ngay tại ranh giới bridge. Hậu
+    /// quả: kỹ thuật viên đọc được prescription nhưng không có cách nào nói lại nó đúng hay sai,
+    /// nên vòng học của AI không bao giờ khép lại.
+    /// <para>
+    /// Null khi AI không trả (vd <c>enrich=false</c> — prescription theo luật, không qua LLM, nên
+    /// không có gì để học).
+    /// </para>
+    /// </remarks>
+    public string? PrescriptionId { get; }
 }

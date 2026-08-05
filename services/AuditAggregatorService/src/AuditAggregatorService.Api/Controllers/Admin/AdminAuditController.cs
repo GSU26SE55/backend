@@ -342,7 +342,7 @@ public class AdminAuditController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Công cụ vận hành (admin tool) để khôi phục read-store: vì <c>audit_aggregate</c> chỉ là bản sao (materialized view),
-    /// dữ liệu gốc vẫn nằm ở bảng append-only <c>{service}_audit_logs</c> của từng service nên có thể re-publish lại.
+    /// dữ liệu gốc vẫn nằm ở bảng <c>{service}_audit_outbox</c> của từng service (payload chính là <c>AuditCreatedEventV1</c>) nên có thể re-publish lại.
     ///
     /// Quyền truy cập:
     /// - Chỉ role <c>Admin</c>. Thiếu token → 401; sai role → 403.
@@ -352,8 +352,11 @@ public class AdminAuditController : ControllerBase
     /// - <c>from</c> / <c>to</c>: giới hạn khoảng thời gian replay (UTC).
     ///
     /// Cách hoạt động:
-    /// - <b>Bất đồng bộ:</b> nhận yêu cầu → trả ngay <b>202 Accepted</b>, việc re-ingestion chạy nền (ghi meta-audit <c>AuditReplayed</c>).
-    /// - Phạm vi capstone: endpoint ghi nhận yêu cầu; phần re-publish per-service hoàn thiện khi onboard từng service (Phase 3-5).
+    /// - <b>Bất đồng bộ:</b> validate → <b>lưu job bền vững</b> → publish <c>AuditReplayRequestedEvent</c> → trả <b>202</b> kèm <c>jobId</c>.
+    /// - Mỗi service nguồn đọc bảng <c>*_audit_outbox</c> của mình rồi phát lại <c>AuditCreatedEventV1</c> giữ nguyên <c>EventId</c>;
+    ///   consumer của aggregator idempotent theo <c>EventId</c> (#AUDIT-15) nên chạy lại nhiều lần không sinh bản ghi trùng.
+    /// - Theo dõi tiến độ: <c>GET /api/admin/audit/replay/{jobId}</c>.
+    /// - Input sai (service lạ, from &gt; to, from ở tương lai) → <b>400</b>, KHÔNG tạo job.
     ///
     /// Use case:
     /// - Read-store bị hỏng/xoá nhầm → dựng lại từ source.
@@ -362,16 +365,46 @@ public class AdminAuditController : ControllerBase
     /// <param name="command">Phạm vi replay: <c>service</c> (null = tất cả), <c>from</c>, <c>to</c> (UTC, optional).</param>
     /// <param name="ct">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Xác nhận đã nhận yêu cầu replay.</returns>
-    /// <response code="202">Đã nhận yêu cầu replay — xử lý bất đồng bộ (re-ingestion chạy nền).</response>
+    /// <response code="202">Đã tạo job replay — trả kèm <c>jobId</c> để theo dõi tiến độ.</response>
+    /// <response code="400">Tham số không hợp lệ (service lạ, from &gt; to, from ở tương lai).</response>
     /// <response code="401">Chưa đăng nhập / token không hợp lệ / hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     [HttpPost("replay")]
     [ProducesResponseType(typeof(CommonResponse<object>), 202)]
+    [ProducesResponseType(typeof(CommonResponse<object>), 400)]
     [ProducesResponseType(typeof(CommonResponse<object>), 401)]
     [ProducesResponseType(typeof(CommonResponse<object>), 403)]
     public async Task<IActionResult> Replay([FromQuery] AuditReplayCommand command, CancellationToken ct)
     {
         var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// GH-728 — xem tiến độ một job replay.
+    /// </summary>
+    /// <remarks>
+    /// Trả trạng thái (<c>Requested</c> / <c>InProgress</c> / <c>Completed</c> /
+    /// <c>CompletedWithErrors</c>), số service đã phản hồi, tổng bản ghi đã phát lại, và
+    /// <b>danh sách service còn đang chờ</b> — thứ cần nhất khi job không kết thúc.
+    ///
+    /// Lưu ý <c>truncated = true</c>: có service chạm trần an toàn hoặc gặp payload hỏng ⇒
+    /// dữ liệu CHƯA đầy đủ dù trạng thái đã là kết thúc.
+    /// </remarks>
+    /// <param name="jobId">Id job lấy từ response 202 của <c>POST /replay</c>.</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Trả tiến độ job.</response>
+    /// <response code="401">Chưa đăng nhập / token không hợp lệ / hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="404">Không tìm thấy job.</response>
+    [HttpGet("replay/{jobId:guid}")]
+    [ProducesResponseType(typeof(CommonResponse<AuditReplayJobDto>), 200)]
+    [ProducesResponseType(typeof(CommonResponse<object>), 401)]
+    [ProducesResponseType(typeof(CommonResponse<object>), 403)]
+    [ProducesResponseType(typeof(CommonResponse<object>), 404)]
+    public async Task<IActionResult> GetReplayJob(Guid jobId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new AuditReplayJobGetByIdQuery { JobId = jobId }, ct);
         return StatusCode(result.StatusCode, result);
     }
 

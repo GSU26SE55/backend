@@ -64,6 +64,7 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
             return Fail(401, "OTP không chính xác.");
 
         // Restore: clear soft-delete + reset auth state.
+        var oldStatus = account.Status;   // GH-766 — bắt trước khi ghi đè.
         account.IsDeleted = false;
         account.DeletedAt = null;
         account.Status = AccountStatusEnum.Active;
@@ -91,6 +92,15 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
             IsDeleted: false,
             SnapshotAtUtc: DateTime.UtcNow,
             Reason: "Reactivated"), cancellationToken);
+
+        // GH-766 — Battery/Ticket đồng bộ trạng thái account qua event này; trước đây không nơi nào
+        // publish nó nên hai read-model kia vẫn thấy account Active sau khi bị khoá/vô hiệu hoá.
+        await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+            account.Id,
+            account.Email,
+            (int)oldStatus,
+            (int)AccountStatusEnum.Active,
+            "Reactivated"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

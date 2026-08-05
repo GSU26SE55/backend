@@ -16,4 +16,22 @@ public class MqttOptions
     public string Password { get; set; } = string.Empty;
     public string ClientId { get; set; } = "battery-service-bridge";
     public int ReconnectIntervalSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// GH-784 — đường dẫn file <c>passwd</c> của Mosquitto mà service ghi credential thiết bị vào.
+    /// </summary>
+    /// <remarks>
+    /// Bỏ trống ⇒ KHÔNG đồng bộ (no-op, có log). Cố ý không mặc định một đường dẫn nào: đoán sai
+    /// chỗ ghi thì hoặc là ghi vào hư không, hoặc là đè lên file của người khác.
+    /// </remarks>
+    public string? PasswordFilePath { get; set; }
+
+    /// <summary>
+    /// GH-784 — chu kỳ rà soát lại credential thiết bị (giây).
+    /// </summary>
+    /// <remarks>
+    /// Mỗi lần GHI file kéo theo một lần broker nạp lại, nên vòng quét chỉ ghi khi nội dung THỰC SỰ
+    /// đổi. 60 giây đủ nhanh cho việc cấp/thu hồi thiết bị mà không quấy broker.
+    /// </remarks>
+    public int CredentialSyncIntervalSeconds { get; set; } = 60;
 }

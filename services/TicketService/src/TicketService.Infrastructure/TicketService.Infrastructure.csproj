@@ -11,17 +11,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
     <PackageReference Include="Markdig" Version="0.37.0" />
-    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.2" />
+    <PackageReference Include="HtmlSanitizer" Version="9.1.982" />
+    <!-- 8.0.2 kéo MessagePack 2.5.108 dính GHSA-4qm4-8hg2-g2xm (Moderate) +
+         GHSA-hv8m-jj95-wg3x (High). 8.0.29 kéo MessagePack 2.5.302 ≥ 2.5.301 (vá cả hai).
+         Cùng nhánh 8.0.x nên không có breaking change. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.29" />
     <PackageReference Include="SearchPioneer.Lingua" Version="1.0.5" />
-    <PackageReference Include="FFMpegCore" Version="5.1.0" />
+    <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <!-- BE-AI — gRPC client tới AI module (VerifyTicket). Contract: Protos/ai_service.proto
          (copy từ repo ai-module — mọi thay đổi contract phải qua ai-module trước). -->
     <PackageReference Include="Grpc.Net.ClientFactory" Version="2.63.0" />

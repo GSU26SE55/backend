@@ -132,7 +132,7 @@ public class SiteFullHandlerTests
     [Fact]
     public async Task GetById_NotFound_Returns404()
     {
-        var r = await new GetSiteByIdQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetSiteByIdQuery { Id = Guid.NewGuid() }, default);
+        var r = await new GetSiteByIdQueryHandler(new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteByIdQuery { Id = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -141,7 +141,7 @@ public class SiteFullHandlerTests
     {
         var s = MakeSite();
         var b = new MockUnitOfWorkBuilder().WithSites(s);
-        var r = await new GetSiteByIdQueryHandler(b.Build()).Handle(new GetSiteByIdQuery { Id = s.Id }, default);
+        var r = await new GetSiteByIdQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteByIdQuery { Id = s.Id }, default);
         r.IsSuccess.Should().BeTrue();
         r.Data!.Name.Should().Be("S1");
     }
@@ -195,7 +195,7 @@ public class SiteFullHandlerTests
     [Fact]
     public async Task GetSiteAssets_SiteMissing_Returns404()
     {
-        var r = await new GetSiteAssetsQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetSiteAssetsQuery { SiteId = Guid.NewGuid() }, default);
+        var r = await new GetSiteAssetsQueryHandler(new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteAssetsQuery { SiteId = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -206,14 +206,14 @@ public class SiteFullHandlerTests
         var t = new BatteryType { Id = Guid.NewGuid(), Name = "T", NominalCapacityAh = 1, NominalVoltage = 1, CreatedAt = DateTime.UtcNow };
         var asset = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "S", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Active, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryAssets(asset);
-        var r = await new GetSiteAssetsQueryHandler(b.Build()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, Status = BatteryStatusEnum.Active }, default);
+        var r = await new GetSiteAssetsQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteAssetsQuery { SiteId = s.Id, Status = BatteryStatusEnum.Active }, default);
         r.Data!.TotalItems.Should().Be(1);
     }
 
     [Fact]
     public async Task Dashboard_SiteMissing_Returns404()
     {
-        var r = await new GetSiteDashboardQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetSiteDashboardQuery { Id = Guid.NewGuid() }, default);
+        var r = await new GetSiteDashboardQueryHandler(new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteDashboardQuery { Id = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -222,7 +222,7 @@ public class SiteFullHandlerTests
     {
         var s = MakeSite();
         var b = new MockUnitOfWorkBuilder().WithSites(s);
-        var r = await new GetSiteDashboardQueryHandler(b.Build()).Handle(new GetSiteDashboardQuery { Id = s.Id }, default);
+        var r = await new GetSiteDashboardQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteDashboardQuery { Id = s.Id }, default);
         r.Data!.HealthScore.Should().Be(100);
         r.Data.TotalAssets.Should().Be(0);
     }
@@ -236,7 +236,7 @@ public class SiteFullHandlerTests
         var asset2 = new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "A2", BatteryTypeId = t.Id, BatteryType = t, CustomerId = Cust, SiteId = s.Id, InstallDate = DateTime.UtcNow, Status = BatteryStatusEnum.Inactive, CreatedAt = DateTime.UtcNow };
         var alert = new Alert { Id = Guid.NewGuid(), BatteryAssetId = asset1.Id, Status = AlertStatusEnum.Open, AnomalyType = AnomalyTypeEnum.Overheat, Severity = AlertSeverityEnum.Critical, Unit = "C", DetectedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithSites(s).WithBatteryAssets(asset1, asset2).WithAlerts(alert);
-        var r = await new GetSiteDashboardQueryHandler(b.Build()).Handle(new GetSiteDashboardQuery { Id = s.Id }, default);
+        var r = await new GetSiteDashboardQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSiteDashboardQuery { Id = s.Id }, default);
         r.Data!.TotalAssets.Should().Be(2);
         r.Data.ActiveAssets.Should().Be(1);
         r.Data.AssetsWithActiveAlerts.Should().Be(1);

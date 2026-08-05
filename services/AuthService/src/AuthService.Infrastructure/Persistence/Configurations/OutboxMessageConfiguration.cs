@@ -58,8 +58,22 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
         builder.Property(o => o.DeletedAt)
             .HasColumnName("deleted_at");
 
+        // GH-794 — quyền giữ dòng (lease) để hai replica không cùng publish một message.
+        builder.Property(o => o.LeaseOwner)
+            .HasColumnName("lease_owner")
+            .HasMaxLength(128);
+
+        builder.Property(o => o.LeaseUntilUtc)
+            .HasColumnName("lease_until_utc");
+
         builder.HasIndex(o => new { o.ProcessedAt, o.OccurredAt })
             .HasDatabaseName("ix_outbox_messages_processed_at_occurred_at");
+
+        // Chỉ mục cho đúng câu truy vấn "dòng nào nhận được": chưa xử lý VÀ chưa ai giữ (hoặc quyền
+        // đã hết hạn). Lọc theo processed_at IS NULL để chỉ mục chỉ chứa phần việc còn tồn.
+        builder.HasIndex(o => new { o.ProcessedAt, o.LeaseUntilUtc, o.OccurredAt })
+            .HasDatabaseName("idx_outbox_claimable")
+            .HasFilter("processed_at IS NULL");
 
         builder.Ignore(o => o.DomainEvents);
     }

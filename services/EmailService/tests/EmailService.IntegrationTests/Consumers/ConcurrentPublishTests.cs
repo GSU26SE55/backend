@@ -40,9 +40,19 @@ public class ConcurrentPublishTests : IAsyncLifetime
         // Publish song song qua Task.WhenAll.
         await Task.WhenAll(events.Select(e => _harness.Bus.Publish(e)));
 
-        // Đợi từng OTP unique → consumer đã chạy hết.
+        // Đợi từng OTP unique → consumer đã chạy hết phần dựng nội dung.
         foreach (var e in events)
             await _factory.WaitForRenderCallAsync(e.Otp, timeoutMs: 10000);
+
+        // GH-801 — PHẢI đợi thêm chính lời gọi Mailjet trước khi đếm.
+        //
+        // Render xảy ra TRƯỚC bước gửi HTTP. Đợi render xong rồi đếm ngay nghĩa là đếm vào lúc một
+        // vài lời gọi vẫn đang bay — bản ghi CI cho thấy đúng 1 trong 20 lời gọi bị đếm 0.
+        // Đó là lỗi của khung test, không phải sản phẩm mất email; và mỗi lần đỏ giả như vậy làm mờ
+        // đi những hồi quy thật.
+        // Test mixed phía dưới vốn đã chờ đúng cách — ở đây chỉ là chép lại cùng khuôn.
+        foreach (var e in events)
+            await _factory.WaitForMailjetCallAsync(e.ToEmail, timeoutMs: 10000);
 
         // Mỗi email tương ứng đúng 1 mailjet call (không miss, không duplicate).
         foreach (var e in events)

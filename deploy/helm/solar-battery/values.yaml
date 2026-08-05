@@ -251,7 +251,9 @@ rabbitmq:
 minio:
   enabled: true
   image: minio/minio:latest
-  rootUser: minioadmin
+  # GH-788 — root user/password đều lấy từ Secret `solar-secrets`
+  # (ObjectStorage__AccessKey / ObjectStorage__SecretKey). values.yaml nằm trong Git nên không
+  # chứa credential; khoá `rootUser` cũ đã bỏ để không ai vô tình đặt lại giá trị mặc định.
   bucketName: solar-battery-files
   storage: 10Gi
   resources:
@@ -264,7 +266,12 @@ minio:
       requests: { cpu: 20m, memory: 64Mi }
       limits:   { cpu: 100m, memory: 128Mi }
   ingress:
-    enabled: false   # bật trong values-staging.yaml — expose files.{domain} + minio.{domain}
+    enabled: false   # bật trong values-staging.yaml — expose files.{domain} (S3 API) cho client
+  # GH-788 — console quản trị TÁCH khỏi cờ trên và mặc định tắt ở MỌI môi trường.
+  # Console đăng nhập bằng chính root credential ⇒ mở ra Internet là mở toàn quyền mọi bucket.
+  # Cần vào console: `kubectl port-forward svc/minio 9001:9001`.
+  consoleIngress:
+    enabled: false
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)

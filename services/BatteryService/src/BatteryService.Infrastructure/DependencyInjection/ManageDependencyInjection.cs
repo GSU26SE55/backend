@@ -79,6 +79,15 @@ public static class ManageDependencyInjection
 
         // Sprint IoT-1 (#253) — MQTT bridge (P3, optional).
         services.Configure<BatteryService.Infrastructure.Mqtt.MqttOptions>(configuration.GetSection(BatteryService.Infrastructure.Mqtt.MqttOptions.SectionName));
+
+        // GH-784 — cấp điểm kết nối broker cho luồng tạo/xoay khoá thiết bị. Trước đây DTO có sẵn
+        // MqttBrokerHost/Port nhưng không nơi nào gán ⇒ luôn null.
+        services.AddScoped<Application.Interfaces.IMqttBrokerEndpointProvider,
+            BatteryService.Infrastructure.Mqtt.MqttBrokerEndpointProvider>();
+
+        // GH-784 — đưa thông tin đăng nhập thiết bị xuống file passwd của broker. Không có nó thì
+        // API cấp credential xong nhưng Mosquitto không hề biết, và thiết bị nhận "not authorised".
+        services.AddHostedService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>();
         services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>();
         services.AddSingleton<BatteryService.Application.Services.IMqttBridgePublisher>(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
         services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
@@ -109,7 +118,20 @@ public static class ManageDependencyInjection
         services.AddHostedService<WeatherSyncBackgroundService>();
 
         // BE-AI — AI bridge (gRPC primary → HTTP fallback) + SohPredictionBackgroundService.
-        services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
+        // GH-780 — chặn cấu hình bất khả thi NGAY LÚC KHỞI ĐỘNG. Trước đây `Ai:MinReadings` đóng
+        // cả hai vai (ngưỡng lịch sử + số dòng payload), nên đặt 29 hay 31 là service vẫn lên bình
+        // thường rồi mọi prediction bị AI từ chối im lặng. Sai cấu hình thì phải gãy ở chỗ dễ thấy
+        // nhất — lúc bật service — chứ không phải hiện ra dưới dạng "AI không chạy nữa".
+        services.AddOptions<AiOptions>()
+            .Bind(configuration.GetSection(AiOptions.SectionName))
+            .Validate(o => o.MinReadings >= AiOptions.WindowSize,
+                $"Ai:MinReadings phải ≥ {AiOptions.WindowSize} — AI từ chối mọi payload khác "
+                + $"{AiOptions.WindowSize} dòng, nên đòi ít mẫu hơn thì đến lúc gửi vẫn không dựng nổi payload.")
+            .Validate(o => o.MaxScanReadings >= o.MinReadings,
+                "Ai:MaxScanReadings phải ≥ Ai:MinReadings — quét về ít hơn ngưỡng thì không bao giờ đủ mẫu.")
+            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes phải lớn hơn 0.")
+            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds phải lớn hơn 0.")
+            .ValidateOnStart();
         var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
 
         // gRPC channel (primary) — 1 AiServiceClient dùng chung cho Predict + Prescribe wrapper.
@@ -141,6 +163,12 @@ public static class ManageDependencyInjection
         // Composite fallback clients — cái được inject vào job.
         services.AddScoped<IAiPredictionClient, Implements.Ai.FallbackAiPredictionClient>();
         services.AddScoped<IAiPrescriptionClient, Implements.Ai.FallbackAiPrescriptionClient>();
+
+        // GH-778 — đường phản hồi prescription CHỈ có ở HTTP: ai_service.proto không khai RPC nào
+        // cho feedback. Trỏ thẳng vào bản HTTP thay vì bọc qua fallback, để không tạo ảo giác rằng
+        // gRPC cũng gửi được.
+        services.AddScoped<IAiPrescriptionFeedbackClient>(sp =>
+            sp.GetRequiredService<Implements.Ai.AiPrescriptionHttpClient>());
         services.AddHostedService<SohPredictionBackgroundService>();
 
         // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.
@@ -155,6 +183,10 @@ public static class ManageDependencyInjection
         // Sprint Bonus NS-06 (#650) — đọc continuous aggregate 1h (scoped, dùng ApplicationDbContext).
         services.AddScoped<ISensorReadingAggregateViewReader, BatteryService.Infrastructure.Realtime.SensorReadingAggregateViewReader>();
         services.AddScoped<IBatteryRealtimeAuthorizationService, BatteryService.Infrastructure.Implements.Services.BatteryRealtimeAuthorizationService>();
+
+        // GH-722 — role của caller cho tầng REST, phục vụ giới hạn dữ liệu theo tenant.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IBatteryCurrentUserService, BatteryService.Infrastructure.Implements.Services.BatteryCurrentUserService>();
 
         return services;
     }

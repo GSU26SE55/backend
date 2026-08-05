@@ -51,6 +51,7 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
             };
         }
 
+        var oldStatus = account.Status;   // GH-766 — bắt trước khi ghi đè, để event nói đúng chuyển đổi.
         account.Status = AccountStatusEnum.Inactive;
         _unitOfWork.Accounts.UpdateAsync(account);
 
@@ -82,6 +83,15 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
             IsDeleted: false,
             SnapshotAtUtc: DateTime.UtcNow,
             Reason: "StatusChanged"), cancellationToken);
+
+        // GH-766 — Battery/Ticket đồng bộ trạng thái account qua event này; trước đây không nơi nào
+        // publish nó nên hai read-model kia vẫn thấy account Active sau khi bị khoá/vô hiệu hoá.
+        await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+            account.Id,
+            account.Email,
+            (int)oldStatus,
+            (int)AccountStatusEnum.Inactive,
+            "Self deactivated"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

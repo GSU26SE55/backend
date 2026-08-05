@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Query.BatteryAsset;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -11,18 +12,40 @@ namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
 public class GetBatteryAssetRealtimeQueryHandler : IRequestHandler<GetBatteryAssetRealtimeQuery, CommonResponse<BatteryAssetRealtimeDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetBatteryAssetRealtimeQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetBatteryAssetRealtimeQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<BatteryAssetRealtimeDto>> Handle(GetBatteryAssetRealtimeQuery request, CancellationToken cancellationToken)
     {
-        var asset = await _unitOfWork.BatteryAssets
+        // GH-722 — Customer chỉ được xem snapshot asset của chính mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<BatteryAssetRealtimeDto>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Không xác định được người dùng hiện tại."
+            };
+        }
+
+        var assetQuery = _unitOfWork.BatteryAssets
             .GetAllAsync()
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == request.Id && !item.IsDeleted, cancellationToken);
+            .Where(item => item.Id == request.Id && !item.IsDeleted);
+
+        // 404 thay vì 403: không tiết lộ rằng asset của tenant khác có tồn tại.
+        if (scope.IsCustomerScoped)
+        {
+            assetQuery = assetQuery.Where(item => item.CustomerId == scope.CustomerId);
+        }
+
+        var asset = await assetQuery.FirstOrDefaultAsync(cancellationToken);
 
         if (asset is null)
         {

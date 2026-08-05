@@ -6485,7 +6485,7 @@ nhiều người (nhiều nhóm)** và **1 người (1 nhóm) → nhiều thông
 
 **Owner:** Thắng (`@Alexdev257`) — đã gán toàn bộ 15 issue.
 **Trạng thái (03/08/2026): ✅ 15/15 task DONE.** Backend + Frontend đã implement và kiểm chứng đầu-cuối trên docker; 527 unit test NotificationService (20 test mới), 2.782 test toàn hệ thống; FE sạch cả 4 cổng (`tsc -b` · `eslint --max-warnings=0` · `npm run build` · `prettier --check`). Evidence: `notification-test-evidence/20260803-notification-groups/`.
-**Issue numbers:** ✅ **đã tạo 03/08/2026** — GitHub `#1006..#1020` (milestone `Sprint 6.4`, assign `@Alexdev257`, cột Plan). Bản đồ NOTI4-01→#1006 … NOTI4-15→#1020 (liệt kê tại §17.6.4.2).
+**Issue numbers:** ✅ **đã tạo 03/08/2026** — GitHub `#1006..#1020` (milestone `Sprint 6.4`, assign `@Alexdev257`). **Cập nhật 03/08/2026:** cả 15 issue đã chuyển `status: init` → `status: reviewing` = cột **In Review** sau khi implement xong. Bản đồ NOTI4-01→#1006 … NOTI4-15→#1020 (liệt kê tại §17.6.4.2).
 **Quy mô:** **15 task** (`#NOTI4-01..15`) · **~13.5 dev-day** · **THÊM 12 · SỬA 3**.
 
 **Phụ thuộc:**
@@ -6730,7 +6730,9 @@ Phase A và Phase B **độc lập triển khai được** — có thể ship A 
 
 ### Sprint 6.5 (Notification template — cho template thật sự có tác dụng, khảo sát + thi công 2026-08-03)
 
-**Trạng thái: ✅ ĐÃ IMPLEMENT XONG 03/08/2026.** 560/560 unit test xanh.
+**Trạng thái: ✅ ĐÃ IMPLEMENT XONG 03/08/2026.** 580/580 unit test NotificationService xanh (+455 BatteryService, +941 TicketService).
+
+**Owner:** Thắng (`@Alexdev257`). **Issue numbers:** ✅ **đã tạo 03/08/2026** — GitHub `#1023..#1044` (22 issue, milestone `Sprint 6.5`, label `status: reviewing` = cột **In Review**). Bản đồ NOTI5-01→#1023 … NOTI5-22→#1044. Phân bố: 19 `role: BE` + 3 `role: FE`; 4 issue `priority: P1` (NOTI5-04 template sai biến hàng loạt · NOTI5-13 hiện số thay chữ · NOTI5-18 StaffId luôn null · NOTI5-19 broadcast bị template đè). **Phụ thuộc:** Sprint 6.4 (batch + broadcast) đã xong; NOTI5-13/14 chạm SharedContracts + BatteryService + TicketService.
 
 #### 17.6.5.0. Câu hỏi mở đầu và điều thực sự tìm thấy
 
@@ -6946,6 +6948,56 @@ Nay mỗi nhóm có nút mở/đóng danh sách người, mặc định đóng.
 | Nói thẳng phần chênh lệch | *"3 người đang ngừng hoạt động sẽ không nhận thông báo — đó là lý do con số bên cạnh tên nhóm (2) nhỏ hơn số dòng ở đây."* |
 
 File: `GroupMemberPeek.tsx` (mới) + sửa ô chọn nhóm trong `BroadcastNotificationForm.tsx`.
+
+#### 17.6.5.8ter. Rà soát mobile sau Sprint 6.2→6.5 (03/08/2026)
+
+Đối chiếu toàn bộ `mobile/src` với hợp đồng backend hiện tại. **Phần lớn đã đúng** — không phải sửa:
+
+| Hạng mục | Kết quả |
+|---|---|
+| 4 enum (Type/Channel/Status/Category) | Khớp **tuyệt đối**, kể cả `System = 99` |
+| `ICON_MAP` của NotificationCard | **34/34** type, không thiếu, không trỏ type đã gỡ |
+| DTO thông báo | Khớp **1:1**, 12 trường |
+| DTO tuỳ chọn nhận tin | Khớp **1:1**, 11 trường |
+| Endpoint | Đủ 5 notification + 3 preference; `MARK_OPENED`, ma trận nhóm, `unread-count` đều **có gọi thật** |
+| Vị từ "chưa đọc" | `!= Read && != Opened` — khớp **đúng** truy vấn đếm của backend |
+| Trùng lặp feed | Không — backend mặc định chỉ trả kênh `InApp`, mobile không truyền `IncludeAllChannels` |
+| Đăng ký/huỷ push token | Nối đủ ở login thường, login 2FA, và logout |
+
+**Hai lỗ hổng thật, đều về điều hướng:**
+
+**(1) Danh sách thông báo chỉ mở được `entityType === 'Ticket'`.** Đo trên DB:
+
+| entityType | Số dòng | Trước |
+|---|---|---|
+| **Battery** | **1.228** | ❌ bấm không đi đâu |
+| Ticket | 43 | ✅ |
+| IotDevice / EnvironmentalIncident / Alert / Account | 8 / 1 / 1 / 1 | ❌ |
+
+Tức **1.228/1.285 = 95,6%** không bấm được — mà đó đúng là nhóm gửi cho Customer, người dùng chính
+của app. Màn hình `batteries/[id]`, `alerts/[id]`, `incidents/[id]` **đã có sẵn từ lâu**, chỉ chưa ai
+nối. Thêm `notificationHref` phân giải theo `entityType`, nối 5 loại có màn hình thật và id khớp;
+loại chưa có màn hình vẫn trả `null` (bấm để đánh dấu đã đọc, không điều hướng) — nối tới màn không
+tồn tại thì bấm vào là văng lỗi, tệ hơn không nối.
+
+**(2) `PushResponseHandler` ghi CỨNG nhóm route `(customer)`.** Một dòng chứa hai lỗi:
+`router.push('/(customer)/tickets/...')` — Staff bấm push bị quăng vào nhóm route của Customer, và
+chỉ đọc `ticketId` nên push về pin cũng không đi đâu. Nay lấy vai trò từ phiên đăng nhập và dùng
+chung `pushHref`.
+
+**Kéo theo một thay đổi backend:** push chỉ mang `notificationId` + khoá payload, **không có**
+`entityType`, nên client buộc phải *đoán*. Đoán theo khoá payload thì lệch ngay với danh sách trong
+app (vốn dùng `entityType`) — cùng một thông báo, bấm ở feed ra một màn, bấm ở push ra màn khác.
+`SendRequest` + `NotificationDispatcher` + `ExpoPushChannel` nay gửi kèm cặp định tuyến, không cho
+payload ghi đè.
+
+> **Lỗi tôi tự tạo rồi tự bắt được:** bản đầu đặt phần gán cặp định tuyến ở *cuối* `BuildData`, sau
+> nhánh `return` sớm khi `PayloadJson` rỗng — tức bỏ sót đúng trường hợp cần nó nhất (không còn khoá
+> payload nào để đoán). Test mới viết cho tính năng này đỏ ngay và chỉ thẳng vào đó.
+
+**Kiểm chứng:** mobile `tsc --noEmit` **0 lỗi** và `expo lint` sạch (phải `npm install` trước — repo
+chưa từng cài `node_modules`, nên các phiên trước không type-check được mobile). Backend **590/590**
+test xanh, thêm 2 test cho cặp định tuyến.
 
 #### 17.6.5.9. Còn treo
 

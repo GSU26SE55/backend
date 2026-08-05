@@ -250,7 +250,7 @@ public class IotResponseContractTests
                ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault
            });
         var apiKeyService = new IotApiKeyService(uow.Build());
-        var handler = new CreateIotDeviceCommandHandler(uow.Build(), apiKeyService);
+        var handler = new CreateIotDeviceCommandHandler(uow.Build(), apiKeyService, TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new CreateIotDeviceCommand
         {

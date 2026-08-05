@@ -40,58 +40,57 @@ public class BatteryAnomalyWarningConsumer : IConsumer<BatteryAnomalyWarningDete
 
     public async Task Consume(ConsumeContext<BatteryAnomalyWarningDetectedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "BatteryAnomalyWarning", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate BatteryAnomalyWarning message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            if (evt.CustomerId == Guid.Empty)
+            {
+                _logger.LogWarning("BatteryAnomalyWarning alert={AlertId}: thiếu CustomerId — skip.", evt.AlertId);
+                return;
+            }
 
-        if (evt.CustomerId == Guid.Empty)
-        {
-            _logger.LogWarning("BatteryAnomalyWarning alert={AlertId}: thiếu CustomerId — skip.", evt.AlertId);
-            return;
-        }
+            var isInfo = evt.Severity == SeverityInfo;
+            var serial = string.IsNullOrWhiteSpace(evt.AssetSerialNumber) ? "(không rõ serial)" : evt.AssetSerialNumber;
 
-        var isInfo = evt.Severity == SeverityInfo;
-        var serial = string.IsNullOrWhiteSpace(evt.AssetSerialNumber) ? "(không rõ serial)" : evt.AssetSerialNumber;
+            // T#11 Info → chỉ InApp; T#12 Warning → InApp + Push.
+            var type = isInfo ? NotificationTypeEnum.BatteryAnomalyInfo : NotificationTypeEnum.BatteryAnomalyWarning;
+            var channels = isInfo ? NotificationWriter.InAppOnly : NotificationWriter.InAppPush;
 
-        // T#11 Info → chỉ InApp; T#12 Warning → InApp + Push.
-        var type = isInfo ? NotificationTypeEnum.BatteryAnomalyInfo : NotificationTypeEnum.BatteryAnomalyWarning;
-        var channels = isInfo ? NotificationWriter.InAppOnly : NotificationWriter.InAppPush;
+            var title = isInfo
+                ? $"Ghi nhận thông số pin {serial}"
+                : $"⚠️ Cảnh báo pin {serial}";
+            // 03/08/2026 — xem chú thích cùng chủ đề ở BatteryAnomalyDetectedConsumer.
+            var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
+            var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
 
-        var title = isInfo
-            ? $"Ghi nhận thông số pin {serial}"
-            : $"⚠️ Cảnh báo pin {serial}";
-        // 03/08/2026 — xem chú thích cùng chủ đề ở BatteryAnomalyDetectedConsumer.
-        var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
-        var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
+            var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {serial} " +
+                       $"lúc {evt.DetectedAt:dd/MM HH:mm}" +
+                       (evt.ActualValue.HasValue ? $" (giá trị {evt.ActualValue} {evt.Unit})." : ".");
 
-        var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {serial} " +
-                   $"lúc {evt.DetectedAt:dd/MM HH:mm}" +
-                   (evt.ActualValue.HasValue ? $" (giá trị {evt.ActualValue} {evt.Unit})." : ".");
+            var payload = JsonSerializer.Serialize(new
+            {
+                alertId = evt.AlertId,
+                batteryAssetId = evt.BatteryAssetId,
+                customerId = evt.CustomerId,
+                assetSerialNumber = evt.AssetSerialNumber,
+                anomalyType = evt.AnomalyType,
+                severity = evt.Severity,
+                anomalyTypeName = anomalyLabel,
+                severityName = severityLabel,
+                thresholdValue = evt.ThresholdValue,
+                actualValue = evt.ActualValue,
+                unit = evt.Unit,
+                detectedAt = evt.DetectedAt,
+                screen = "BatteryDetail"
+            });
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            alertId = evt.AlertId,
-            batteryAssetId = evt.BatteryAssetId,
-            customerId = evt.CustomerId,
-            assetSerialNumber = evt.AssetSerialNumber,
-            anomalyType = evt.AnomalyType,
-            severity = evt.Severity,
-            anomalyTypeName = anomalyLabel,
-            severityName = severityLabel,
-            thresholdValue = evt.ThresholdValue,
-            actualValue = evt.ActualValue,
-            unit = evt.Unit,
-            detectedAt = evt.DetectedAt,
-            screen = "BatteryDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [evt.CustomerId], type, channels,
+                title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.CustomerId], type, channels,
-            title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
     }
 }

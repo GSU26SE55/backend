@@ -20,6 +20,8 @@ public class UnitOfWork : IAuditAggregatorUnitOfWork
 
     public IGenericRepository<AuditAggregate> AuditAggregates => new GenericRepository<AuditAggregate>(_context);
 
+    public IGenericRepository<AuditReplayJob> AuditReplayJobs => new GenericRepository<AuditReplayJob>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

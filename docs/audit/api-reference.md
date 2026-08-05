@@ -14,7 +14,8 @@ Auth: tất cả **`[Authorize(Roles = "Admin")]`** (SecurityOfficer gộp Admin
 | GET | `/api/admin/audit/stats` | `from, to, groupBy=service\|action\|severity` | `CommonResponse<List<AuditStatsItemDto>>` |
 | GET | `/api/admin/audit/export` | `format=csv\|json` + search filters | Streaming download (no-OOM, IAsyncEnumerable) |
 | POST | `/api/admin/audit/redact` | `accountId` | `CommonResponse<object>` — GDPR redact PII (#AUDIT-42), KHÔNG xóa row |
-| POST | `/api/admin/audit/replay` | `service, from, to` | `202 Accepted` — re-ingestion từ source-of-truth |
+| POST | `/api/admin/audit/replay` | `service, from, to` | `202 Accepted` + `jobId` — tạo job replay; `400` nếu tham số sai |
+| GET | `/api/admin/audit/replay/{jobId}` | — | Tiến độ job: trạng thái, số service đã/chưa phản hồi, tổng bản ghi phát lại, cờ `truncated` |
 
 ### Health (k8s — #AUDIT-18)
 `GET /live` · `GET /ready` · `GET /health`

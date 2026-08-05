@@ -167,7 +167,7 @@ docker exec solar-postgres psql -U postgres -d notification_db -c \
 | `TwoFactorDisable` | `me/2fa/disable` | 3 / 5 phút | userId, fallback IP |
 | `BackupCodeRegenerate` | `me/2fa/backup-codes/regenerate` | 3 / **giờ** | userId, fallback IP |
 
-**Endpoints KHÔNG có middleware rate limit** (chỉ dựa vào lockout / business rule ở handler): `verify-otp`, `verify-reset-otp`, `reset-password`, `refresh-token`, `logout`, `revoke`, `introspect`, `accept-invite`, `google/login`, `google/callback`, và toàn bộ endpoint authenticated khác (sessions, accounts profile, admin/*).
+**Endpoints KHÔNG có middleware rate limit** (chỉ dựa vào lockout / business rule ở handler): `verify-otp`, `verify-reset-otp`, `reset-password`, `refresh-token`, `logout`, `revoke`, `accept-invite`, `google/login`, `google/callback`, và toàn bộ endpoint authenticated khác (sessions, accounts profile, admin/*).
 
 ---
 
@@ -1450,7 +1450,19 @@ Server check `data.AccountId == request.AccountId` (`JWT.AccountId` của Device
 
 **Mục đích:** **OAuth 2.0 Token Introspection theo RFC 7662** — Resource server / API gateway / downstream service gọi để verify access token + check revocation trước khi cho qua. Trả `{active: true/false}` + metadata cơ bản. Dùng cho **service-to-service**, không phải user-facing.
 
-**Auth:** Không yêu cầu auth header (RFC 7662 cho phép unauthenticated introspection trong scope nội bộ — production có thể wrap thêm `[Authorize(Roles="Service")]` hoặc mTLS).
+**Auth (GH-776):** Bắt buộc header `X-Introspection-Key` khớp cấu hình `Introspection:ApiKey`
+(tối thiểu 32 ký tự). Sai hoặc thiếu → **401**. Chưa cấu hình khoá → **từ chối tất cả** (fail closed).
+
+> Câu cũ ở đây ghi "RFC 7662 cho phép unauthenticated introspection trong scope nội bộ" — **sai**.
+> RFC 7662 §2.1 nói ngược lại: *"the endpoint MUST require some form of authorization"*. Vì tin vào
+> câu đó nên endpoint đứng mở trên Internet: đo được 12 request liên tiếp không kèm gì đều trả 200
+> `active=true`, tức bất kỳ ai cũng tra được một token còn sống hay đã thu hồi.
+
+**Rate limit:** 60 req/phút theo IP (policy `Introspect`) — lớp thứ hai cho ca khoá bị lộ, và chặn
+việc dò khoá bằng vét cạn.
+
+**So sánh khoá theo thời gian cố định** — so bằng `==` sẽ dừng ở ký tự lệch đầu tiên, biến độ trễ
+phản hồi thành kênh dò từng ký tự.
 
 **Request body:**
 

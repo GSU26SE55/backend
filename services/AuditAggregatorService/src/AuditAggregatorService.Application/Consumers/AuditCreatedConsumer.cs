@@ -63,11 +63,23 @@ public class AuditCreatedConsumer : IConsumer<AuditCreatedEventV1>
         {
             await _unitOfWork.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DuplicateAuditDetection.IsDuplicateEventInsert(ex))
         {
             // Race: consumer khác đã insert cùng event_id (composite unique). Idempotent → coi như đã có, không tính metric.
             _logger.LogDebug("Audit event {EventId} bị insert đồng thời — bỏ qua (idempotent race).", evt.EventId);
             return;
+        }
+        catch (DbUpdateException ex)
+        {
+            // GH-775 — MỌI lỗi DB khác phải nổi lên. Bản cũ bắt trọn DbUpdateException nên chuỗi
+            // quá dài (22001), jsonb không hợp lệ (22P02) hay lỗi kết nối cũng bị ghi log là
+            // "trùng lặp" rồi ACK: bản ghi kiểm toán mất hẳn, không retry, không DLQ. Với hệ thống
+            // kiểm toán thì đó là kiểu mất mát tệ nhất — mất trong im lặng và tự nhận là bình thường.
+            _logger.LogError(ex,
+                "Audit event {EventId} ({Service}/{Action}) lưu thất bại — KHÔNG phải trùng lặp. "
+                + "Ném lại để MassTransit thử lại / đưa vào error queue.",
+                evt.EventId, evt.ServiceName, evt.ActionCode);
+            throw;
         }
 
         // #AUDIT-44 — metric: counter events_total + histogram consumer_lag (now - occurred_at).

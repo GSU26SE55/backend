@@ -65,6 +65,15 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
             .HasConversion<int>()
             .HasDefaultValue(VirusScanStatusEnum.Pending);
 
+        // GH-790 — theo đúng quy ước snake_case của bảng này. Không khai tên cột thì EF sinh
+        // "VirusScanAttempts" viết hoa, lệch hẳn với mọi cột còn lại.
+        builder.Property(e => e.VirusScanAttempts)
+            .HasColumnName("virus_scan_attempts")
+            .HasDefaultValue(0);
+
+        builder.Property(e => e.VirusScanLastAttemptAt)
+            .HasColumnName("virus_scan_last_attempt_at");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 

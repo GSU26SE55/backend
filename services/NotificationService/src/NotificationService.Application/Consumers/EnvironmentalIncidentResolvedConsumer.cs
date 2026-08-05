@@ -35,46 +35,45 @@ public class EnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalInci
 
     public async Task Consume(ConsumeContext<EnvironmentalIncidentResolvedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "EnvironmentalIncidentResolved", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate EnvironmentalIncidentResolved message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
-
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentResolved incident={IncidentId} — skip.", evt.IncidentId);
-            return;
-        }
-
-        var label = evt.WasFalseAlarm ? "false-alarm" : "resolved";
-        var title = $"[ENV] Đã {label} — site {evt.SiteId}";
-        var body = $"Sự cố môi trường (IncidentId {evt.IncidentId}) đã được đánh dấu {label} lúc {evt.ResolvedAt:O}. " +
-                   $"{evt.ResolutionNote ?? string.Empty}";
-
-        foreach (var userId in recipientIds)
-        {
-            var cmd = new CreateNotificationCommand
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+            if (recipientIds.Count == 0)
             {
-                UserId = userId,
-                Type = NotificationTypeEnum.EnvironmentalIncidentResolved,
-                Channel = NotificationChannelEnum.InApp,
-                Title = title,
-                Body = body,
-                EntityType = "EnvironmentalIncident",
-                EntityId = evt.IncidentId
-            };
-            var result = await _mediator.Send(cmd, context.CancellationToken);
-            if (!result.IsSuccess)
-            {
-                _logger.LogWarning(
-                    "Failed to create EnvironmentalIncident resolved notification incident={IncidentId}: {Message}",
-                    evt.IncidentId, result.Message);
+                _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentResolved incident={IncidentId} — skip.", evt.IncidentId);
+                return;
             }
-        }
+
+            var label = evt.WasFalseAlarm ? "false-alarm" : "resolved";
+            var title = $"[ENV] Đã {label} — site {evt.SiteId}";
+            var body = $"Sự cố môi trường (IncidentId {evt.IncidentId}) đã được đánh dấu {label} lúc {evt.ResolvedAt:O}. " +
+                       $"{evt.ResolutionNote ?? string.Empty}";
+
+            foreach (var userId in recipientIds)
+            {
+                var cmd = new CreateNotificationCommand
+                {
+                    UserId = userId,
+                    Type = NotificationTypeEnum.EnvironmentalIncidentResolved,
+                    Channel = NotificationChannelEnum.InApp,
+                    Title = title,
+                    Body = body,
+                    EntityType = "EnvironmentalIncident",
+                    EntityId = evt.IncidentId
+                };
+                var result = await _mediator.Send(cmd, context.CancellationToken);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        "Failed to create EnvironmentalIncident resolved notification incident={IncidentId}: {Message}",
+                        evt.IncidentId, result.Message);
+                }
+            }
+        });
     }
 }

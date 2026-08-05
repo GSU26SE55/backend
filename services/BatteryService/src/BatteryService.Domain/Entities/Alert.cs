@@ -51,6 +51,17 @@ public class Alert : AuditableEntity
 
     public DateTime DedupWindowEndUtc { get; set; }
 
+    /// <summary>
+    /// GH-778 — id prescription do AI cấp cho alert này, dùng để gửi phản hồi của kỹ thuật viên
+    /// (accepted/edited/rejected) về AI. Null khi chưa prescribe hoặc AI không trả id.
+    /// </summary>
+    /// <remarks>
+    /// Không lưu ở đây thì id chết ngay sau khi dựng xong đoạn text nhét vào ticket, và vòng học
+    /// của AI không bao giờ khép lại — kỹ thuật viên đọc được lời khuyên nhưng không nói lại được
+    /// nó đúng hay sai.
+    /// </remarks>
+    public string? AiPrescriptionId { get; set; }
+
     public BatteryAsset? BatteryAsset { get; set; }
 
     public Site? Site { get; set; }

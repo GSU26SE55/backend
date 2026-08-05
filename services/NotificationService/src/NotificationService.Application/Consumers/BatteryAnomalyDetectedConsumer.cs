@@ -41,44 +41,43 @@ public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEv
 
     public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "BatteryAnomalyDetected", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate BatteryAnomalyDetected message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = new[] { evt.CustomerId };
 
-        var recipientIds = new[] { evt.CustomerId };
+            // 03/08/2026 — chữ đọc được thay cho số trần. Trước đó thân tin nhắn ghi "mức 3" và template
+            // ghi "Loại: 4" vì hai enum này thuộc BatteryService.Domain, phía đây không tham chiếu được.
+            var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
+            var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
 
-        // 03/08/2026 — chữ đọc được thay cho số trần. Trước đó thân tin nhắn ghi "mức 3" và template
-        // ghi "Loại: 4" vì hai enum này thuộc BatteryService.Domain, phía đây không tham chiếu được.
-        var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
-        var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
+            var title = $"⚠️ Bất thường pin {evt.AssetSerialNumber}";
+            var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                alertId = evt.AlertId,
+                batteryAssetId = evt.BatteryAssetId,
+                customerId = evt.CustomerId,
+                assetSerialNumber = evt.AssetSerialNumber,
+                anomalyType = evt.AnomalyType,
+                severity = evt.Severity,
+                // Giữ CẢ số lẫn chữ: số cho phía client lọc/so sánh, chữ cho template dựng câu.
+                anomalyTypeName = anomalyLabel,
+                severityName = severityLabel,
+                thresholdValue = evt.ThresholdValue,
+                actualValue = evt.ActualValue,
+                unit = evt.Unit,
+                detectedAt = evt.DetectedAt,
+                screen = "BatteryDetail"
+            });
 
-        var title = $"⚠️ Bất thường pin {evt.AssetSerialNumber}";
-        var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            alertId = evt.AlertId,
-            batteryAssetId = evt.BatteryAssetId,
-            customerId = evt.CustomerId,
-            assetSerialNumber = evt.AssetSerialNumber,
-            anomalyType = evt.AnomalyType,
-            severity = evt.Severity,
-            // Giữ CẢ số lẫn chữ: số cho phía client lọc/so sánh, chữ cho template dựng câu.
-            anomalyTypeName = anomalyLabel,
-            severityName = severityLabel,
-            thresholdValue = evt.ThresholdValue,
-            actualValue = evt.ActualValue,
-            unit = evt.Unit,
-            detectedAt = evt.DetectedAt,
-            screen = "BatteryDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.AllChannels,
+                title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.BatteryAnomalyDetected, NotificationWriter.AllChannels,
-            title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
     }
 }

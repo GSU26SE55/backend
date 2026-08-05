@@ -101,8 +101,9 @@ kubectl create secret generic solar-secrets \
   --from-literal=JwtSettings__Audience='https://api.staging.your-domain.com' \
   --from-literal=MailJet__ApiKey='xxx' \
   --from-literal=MailJet__ApiSecret='xxx' \
-  --from-literal=ObjectStorage__AccessKey='minioadmin' \
-  --from-literal=ObjectStorage__SecretKey='minio-strong-password' \
+  `# GH-788 — AccessKey giờ là root user của MinIO: sinh ngẫu nhiên, đừng để 'minioadmin'` \
+  --from-literal=ObjectStorage__AccessKey="$(openssl rand -hex 16)" \
+  --from-literal=ObjectStorage__SecretKey="$(openssl rand -base64 32)" \
   --from-literal=GoogleOAuth__ClientId='xxx.apps.googleusercontent.com' \
   --from-literal=GoogleOAuth__ClientSecret='GOCSPX-xxx' \
   --from-literal=ADMIN_PASSWORD='Admin123@strong' \

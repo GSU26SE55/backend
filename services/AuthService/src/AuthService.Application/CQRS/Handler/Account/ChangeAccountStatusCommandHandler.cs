@@ -126,6 +126,17 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
             SnapshotAtUtc: DateTime.UtcNow,
             Reason: "StatusChanged"), cancellationToken);
 
+        // GH-766 — BatteryService và TicketService đồng bộ trạng thái account qua
+        // AccountStatusChangedEvent, nhưng KHÔNG NƠI NÀO trong AuthService từng publish nó. Hậu quả:
+        // khoá/đình chỉ/cấm xong, hai read-model kia vẫn thấy account Active.
+        // AccountSyncSnapshotEvent ở trên không thay thế được — chỉ NotificationService consume nó.
+        await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+            account.Id,
+            account.Email,
+            (int)oldStatus,
+            (int)request.Status,
+            request.Reason), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse

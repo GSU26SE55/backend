@@ -67,7 +67,36 @@ public class ChatOptions
         public int IntervalSeconds { get; set; } = 30;
 
         /// <summary>Base URL của FileStorageService để download file trước khi scan.</summary>
+        /// <remarks>
+        /// GH-790 — KHÔNG còn dùng để tải file. Endpoint REST đó có <c>[Authorize]</c> nên gọi không
+        /// token luôn nhận 401; việc tải đã chuyển sang kênh gRPC nội bộ
+        /// (<c>Chat:Voice:FileStorageGrpcAddress</c> / <c>FILE_STORAGE_GRPC_CLIENT_ADDRESS</c>).
+        /// Giữ khoá cấu hình để bản triển khai cũ không vỡ khi đọc file settings.
+        /// </remarks>
         public string FileStorageBaseUrl { get; set; } = "http://filestorageservice:8080";
+
+        /// <summary>
+        /// GH-790 — số lần thử tối đa trước khi coi là hỏng hẳn (<c>Failed</c>).
+        /// </summary>
+        /// <remarks>
+        /// Trước đây một lần hỏng là <c>Failed</c> ngay và không bao giờ được thử lại. Ba lần đủ để
+        /// vượt qua sự cố thoáng qua (service khởi động lại, ClamAV nghẽn) mà không quét lại vô hạn
+        /// một file thật sự có vấn đề.
+        /// </remarks>
+        public int MaxAttempts { get; set; } = 3;
+
+        /// <summary>Giãn cách trước lần thử lại đầu tiên (giây); các lần sau nhân đôi.</summary>
+        public int RetryBackoffSeconds { get; set; } = 60;
+
+        /// <summary>
+        /// GH-790 — bản ghi ở <c>Scanning</c> quá bao lâu thì coi là lượt quét bị bỏ dở và thu hồi
+        /// về <c>Pending</c> (giây).
+        /// </summary>
+        /// <remarks>
+        /// Phải LỚN hơn hẳn một lượt quét chậm nhất (tải file + ClamAV). Đặt ngắn quá là thu hồi một
+        /// lượt vẫn đang chạy, và lúc đó hai worker cùng quét một đính kèm.
+        /// </remarks>
+        public int ScanTimeoutSeconds { get; set; } = 600;
     }
 
     public class AiSection

@@ -64,6 +64,10 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
+        # GH-790 — cổng gRPC nội bộ (voice transcription + quét virus đính kèm). Khai biến địa chỉ
+        # trong configmap mà không mở cổng ở đây thì `http://filestorageservice:8081` không định
+        # tuyến tới đâu cả, và lỗi sẽ hiện ra dưới dạng "không quét được file" chứ không phải lỗi cấu hình.
+        - { name: grpc, containerPort: 8081 }
         env:
         - name: POSTGRES_PASSWORD
           valueFrom:
@@ -96,4 +100,6 @@ spec:
     app.kubernetes.io/component: filestorageservice
   ports:
   - { name: http, port: 80, targetPort: http }
+  # GH-790 — cổng gRPC nội bộ; giữ đúng số 8081 để khớp FILE_STORAGE_GRPC_CLIENT_ADDRESS.
+  - { name: grpc, port: 8081, targetPort: grpc }
 {{- end }}

@@ -49,87 +49,86 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
 
     public async Task Consume(ConsumeContext<EnvironmentalIncidentDetectedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "EnvironmentalIncidentDetected", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate EnvironmentalIncidentDetected message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
-
-        // GH-604: recipient resolve qua read-model (broadcast Manager + Admin).
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentDetected incident={IncidentId} — skip.", evt.IncidentId);
-            return;
-        }
-
-        // Push title/body — §15.2 EnvironmentalIncidentCritical format
-        var title = $"🚨 Sự cố môi trường: {evt.IncidentType} tại {evt.SiteName}";
-        var plainBody = $"Severity {evt.Severity} — {evt.Description ?? string.Empty}. " +
-                        $"Phát hiện lúc {evt.DetectedAt:HH:mm}. Xử lý ngay!";
-
-        var htmlBody = _templateRenderer.Render("environmental-incident-detected", new
-        {
-            SiteName = evt.SiteName,
-            IncidentType = evt.IncidentType.ToString(),
-            Severity = evt.Severity.ToString(),
-            Description = evt.Description,
-            DetectedAt = evt.DetectedAt.ToString("dd/MM/yyyy HH:mm:ss"),
-            IncidentId = evt.IncidentId.ToString()
-        });
-
-        var payload = JsonSerializer.Serialize(new
-        {
-            incidentId = evt.IncidentId,
-            siteId = evt.SiteId,
-            siteName = evt.SiteName,
-            incidentType = evt.IncidentType,
-            severity = evt.Severity,
-            alertId = evt.AlertId,
-            customerId = evt.CustomerId,
-            detectedAt = evt.DetectedAt,
-            description = evt.Description,
-            screen = "IncidentDetail"
-        });
-
-        // Push + Email + SMS, BypassQuietHours = true (Critical bypass).
-        var channels = new[]
-        {
-            // Sprint 6.3 NOTI3-01 (#701) — InApp bắt buộc: feed lọc theo Channel=InApp,
-            // thiếu row này thì sự cố môi trường không hiện trong app (R-40).
-            NotificationChannelEnum.InApp,
-            NotificationChannelEnum.Push,
-            NotificationChannelEnum.Email,
-            NotificationChannelEnum.Sms
-        };
-
-        foreach (var userId in recipientIds)
-        {
-            foreach (var channel in channels)
+            // GH-604: recipient resolve qua read-model (broadcast Manager + Admin).
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+            if (recipientIds.Count == 0)
             {
-                var cmd = new CreateNotificationCommand
+                _logger.LogWarning("No Manager/Admin recipient resolved for EnvironmentalIncidentDetected incident={IncidentId} — skip.", evt.IncidentId);
+                return;
+            }
+
+            // Push title/body — §15.2 EnvironmentalIncidentCritical format
+            var title = $"🚨 Sự cố môi trường: {evt.IncidentType} tại {evt.SiteName}";
+            var plainBody = $"Severity {evt.Severity} — {evt.Description ?? string.Empty}. " +
+                            $"Phát hiện lúc {evt.DetectedAt:HH:mm}. Xử lý ngay!";
+
+            var htmlBody = _templateRenderer.Render("environmental-incident-detected", new
+            {
+                SiteName = evt.SiteName,
+                IncidentType = evt.IncidentType.ToString(),
+                Severity = evt.Severity.ToString(),
+                Description = evt.Description,
+                DetectedAt = evt.DetectedAt.ToString("dd/MM/yyyy HH:mm:ss"),
+                IncidentId = evt.IncidentId.ToString()
+            });
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                incidentId = evt.IncidentId,
+                siteId = evt.SiteId,
+                siteName = evt.SiteName,
+                incidentType = evt.IncidentType,
+                severity = evt.Severity,
+                alertId = evt.AlertId,
+                customerId = evt.CustomerId,
+                detectedAt = evt.DetectedAt,
+                description = evt.Description,
+                screen = "IncidentDetail"
+            });
+
+            // Push + Email + SMS, BypassQuietHours = true (Critical bypass).
+            var channels = new[]
+            {
+                // Sprint 6.3 NOTI3-01 (#701) — InApp bắt buộc: feed lọc theo Channel=InApp,
+                // thiếu row này thì sự cố môi trường không hiện trong app (R-40).
+                NotificationChannelEnum.InApp,
+                NotificationChannelEnum.Push,
+                NotificationChannelEnum.Email,
+                NotificationChannelEnum.Sms
+            };
+
+            foreach (var userId in recipientIds)
+            {
+                foreach (var channel in channels)
                 {
-                    UserId = userId,
-                    Type = NotificationTypeEnum.EnvironmentalIncidentDetected,
-                    Channel = channel,
-                    Title = title,
-                    Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
-                    PayloadJson = payload,
-                    EntityType = "EnvironmentalIncident",
-                    EntityId = evt.IncidentId,
-                    BypassQuietHours = true
-                };
-                var result = await _mediator.Send(cmd, context.CancellationToken);
-                if (!result.IsSuccess)
-                {
-                    _logger.LogWarning(
-                        "Failed to create EnvironmentalIncident notification incident={IncidentId} channel={Channel}: {Message}",
-                        evt.IncidentId, channel, result.Message);
+                    var cmd = new CreateNotificationCommand
+                    {
+                        UserId = userId,
+                        Type = NotificationTypeEnum.EnvironmentalIncidentDetected,
+                        Channel = channel,
+                        Title = title,
+                        Body = channel == NotificationChannelEnum.Email ? htmlBody : plainBody,
+                        PayloadJson = payload,
+                        EntityType = "EnvironmentalIncident",
+                        EntityId = evt.IncidentId,
+                        BypassQuietHours = true
+                    };
+                    var result = await _mediator.Send(cmd, context.CancellationToken);
+                    if (!result.IsSuccess)
+                    {
+                        _logger.LogWarning(
+                            "Failed to create EnvironmentalIncident notification incident={IncidentId} channel={Channel}: {Message}",
+                            evt.IncidentId, channel, result.Message);
+                    }
                 }
             }
-        }
+        });
     }
 }

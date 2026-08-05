@@ -97,6 +97,14 @@ public static class MockNotificationUnitOfWork
         var batchTargets = BuildRepo(batchTargetSeed);
 
         var uow = new Mock<INotificationUnitOfWork>();
+
+        // GH-793 — mặc định "chiếm được". Không khai thì Moq trả false và mọi test dispatch sẽ nghĩ
+        // rằng instance khác đã giành mất bản ghi, rồi thoát sớm mà không gửi gì — đỏ hàng loạt vì
+        // một lý do chẳng liên quan đến điều đang kiểm. Test nào muốn thử nhánh thua thì tự khai đè.
+        uow.Setup(u => u.TryClaimForDispatchAsync(
+               It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+           .ReturnsAsync(true);
+
         uow.SetupGet(u => u.NotificationGroups).Returns(groups.Object);
         uow.SetupGet(u => u.NotificationGroupMembers).Returns(groupMembers.Object);
         uow.SetupGet(u => u.NotificationBatches).Returns(batches.Object);

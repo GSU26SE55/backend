@@ -75,7 +75,12 @@ public class NotificationBatchGetByIdQueryHandler
                 SentCount = g.Count(n => n.Status == NotificationStatusEnum.Sent),
                 ReadCount = g.Count(n => n.ReadAt != null),
                 FailedCount = g.Count(n => n.Status == NotificationStatusEnum.Failed),
-                PendingCount = g.Count(n => n.Status == NotificationStatusEnum.Pending),
+                // GH-792 — Processing đếm CHUNG với Pending. Trạng thái đó nghĩa là "đã chiếm để
+                // gửi, chưa biết kết quả", tức vẫn thuộc phần chưa xong. Bỏ sót nó thì
+                // Pending + Sent + Failed < Total và màn hình chi tiết batch của Admin hiện ra
+                // cảnh các bản ghi biến mất khỏi mọi ô đếm giữa chừng rồi lại xuất hiện.
+                PendingCount = g.Count(n => n.Status == NotificationStatusEnum.Pending
+                                            || n.Status == NotificationStatusEnum.Processing),
             })
             .FirstOrDefaultAsync(cancellationToken);
 

@@ -10,6 +10,8 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
@@ -25,6 +27,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     private readonly IAuthTokenIssuer _tokenIssuer;
     private readonly ITwoFactorChallengeStore _challengeStore;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public LoginCommandHandler(
@@ -33,6 +36,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         IAuthTokenIssuer tokenIssuer,
         ITwoFactorChallengeStore challengeStore,
         IPublisher publisher,
+        IMessageProducerService messageProducer,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
@@ -40,6 +44,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         _tokenIssuer = tokenIssuer;
         _challengeStore = challengeStore;
         _publisher = publisher;
+        _messageProducer = messageProducer;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -142,6 +147,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         {
             account.FailedLoginAttempts += 1;
             var wasJustLocked = false;
+            var previousStatus = account.Status;   // GH-766 — bắt trước khi có thể bị ghi đè thành Locked.
 
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
             {
@@ -173,6 +179,16 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                         ["lockoutEndAt"] = account.LockoutEndAt
                     },
                     cancellationToken: cancellationToken);
+
+                // GH-766 — tự khoá cũng là một chuyển đổi trạng thái, và là đường DỄ XẢY RA NHẤT
+                // (không cần admin thao tác). Không phát event ở đây thì Battery/Ticket vẫn coi
+                // tài khoản đang bị brute-force là bình thường. Outbox ⇒ nguyên tử với SaveChanges.
+                await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+                    account.Id,
+                    account.Email,
+                    (int)previousStatus,
+                    (int)AccountStatusEnum.Locked,
+                    $"Auto-lock sau {MaxFailedAttempts} lần sai mật khẩu."), cancellationToken);
             }
 
             await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,

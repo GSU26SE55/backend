@@ -16,13 +16,30 @@ namespace BatteryService.UnitTests.Application;
 /// </summary>
 public class AmbientHandlersTests
 {
+    /// <summary>
+    /// GH-806 — <paramref name="siteIds"/> là các site CÓ THẬT trong DB giả lập.
+    /// Handler ingest giờ kiểm site tồn tại trước khi ghi (site lạ ⇒ 404 thay vì lỗi khoá ngoại 500),
+    /// nên test nào có ingest đều phải khai site của mình. Đây là yêu cầu mới đúng đắn, không phải
+    /// nới lỏng phép kiểm.
+    /// </summary>
     private static Mock<IBatteryUnitOfWork> BuildUow(
         List<AmbientReading>? readings = null,
-        List<AmbientThresholdConfig>? thresholds = null)
+        List<AmbientThresholdConfig>? thresholds = null,
+        params Guid[] siteIds)
     {
         readings ??= new List<AmbientReading>();
         thresholds ??= new List<AmbientThresholdConfig>();
         var uow = new Mock<IBatteryUnitOfWork>();
+
+        var sites = siteIds
+            .Concat(thresholds.Select(t => t.SiteId))
+            .Distinct()
+            .Select(id => new Site { Id = id, Name = "Site", Status = SiteStatusEnum.Active })
+            .ToList();
+        var sitesRepo = new Mock<IGenericRepository<Site>>();
+        sitesRepo.Setup(r => r.GetAllAsync()).Returns(() => sites.AsQueryable().BuildMock());
+        sitesRepo.Setup(r => r.GetAllAsync(It.IsAny<bool>())).Returns(() => sites.AsQueryable().BuildMock());
+        uow.SetupGet(u => u.Sites).Returns(sitesRepo.Object);
         var readingsRepo = new Mock<IGenericRepository<AmbientReading>>();
         var thresholdsRepo = new Mock<IGenericRepository<AmbientThresholdConfig>>();
         readingsRepo.Setup(r => r.GetAllAsync()).Returns(readings.AsQueryable().BuildMock());
@@ -35,9 +52,10 @@ public class AmbientHandlersTests
 
     // Sprint Bonus NS-21 (#661, E1) — uow có Alerts để test detect-at-ingest.
     private static (Mock<IBatteryUnitOfWork> uow, List<Alert> alertsAdded) BuildUowWithAlerts(
-        List<AmbientThresholdConfig> thresholds, List<Alert>? existingAlerts = null)
+        List<AmbientThresholdConfig> thresholds, List<Alert>? existingAlerts = null,
+        params Guid[] siteIds)
     {
-        var uow = BuildUow(thresholds: thresholds);
+        var uow = BuildUow(thresholds: thresholds, siteIds: siteIds);
         var alertsAdded = new List<Alert>();
         var alertsRepo = new Mock<IGenericRepository<Alert>>();
         alertsRepo.Setup(r => r.GetAllAsync()).Returns((existingAlerts ?? new List<Alert>()).AsQueryable().BuildMock());
@@ -119,12 +137,13 @@ public class AmbientHandlersTests
     [Fact]
     public async Task BatchIngest_NoConfigForSite_SavesReadingsNoAlert()
     {
-        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig>()); // không có config
+        var otherSite = Guid.NewGuid();
+        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig>(), siteIds: otherSite); // không có config
         var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
 
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
-            Items = new List<AmbientReadingItem> { new() { SiteId = Guid.NewGuid(), Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 95m } }
+            Items = new List<AmbientReadingItem> { new() { SiteId = otherSite, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 95m } }
         }, default);
 
         result.IsSuccess.Should().BeTrue();
@@ -183,10 +202,10 @@ public class AmbientHandlersTests
     [Fact]
     public async Task BatchIngest_ValidItems_ShouldSave()
     {
-        var uow = BuildUow();
+        var siteId = Guid.NewGuid();
+        var uow = BuildUow(siteIds: siteId);
         var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
 
-        var siteId = Guid.NewGuid();
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
             Items = new List<AmbientReadingItem>

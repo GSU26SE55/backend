@@ -50,14 +50,24 @@ public static class ConsumerTestHarness
 
     public static async Task<(ITestHarness harness, List<Notification> written, Mock<INotificationUnitOfWork> uow)> StartAsync<TConsumer>(
         IReadOnlyList<Guid>? recipients = null,
-        ICacheService? cache = null)
+        ICacheService? cache = null,
+        Func<int, bool>? failWriteOnAttempt = null)
         where TConsumer : class, IConsumer
     {
         var written = new List<Notification>();
 
+        // GH-765 — cho phép test bắt lần ghi ĐẦU hỏng rồi lần sau thành công. Không có seam này
+        // thì không thể kiểm được điều issue nói: lỗi lần đầu có làm mất hẳn notification không.
+        var writeAttempts = 0;
         var repo = new Mock<IGenericRepository<Notification>>();
         repo.Setup(r => r.AddAsync(It.IsAny<Notification>()))
-            .Callback<Notification>(written.Add)
+            .Callback<Notification>(n =>
+            {
+                writeAttempts++;
+                if (failWriteOnAttempt is not null && failWriteOnAttempt(writeAttempts))
+                    throw new InvalidOperationException("DB tạm thời lỗi");
+                written.Add(n);
+            })
             .Returns(Task.CompletedTask);
 
         var uow = new Mock<INotificationUnitOfWork>();

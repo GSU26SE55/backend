@@ -1,0 +1,50 @@
+{
+  "_doc": [
+    "Ví dụ .claude/settings.json — biến loop-engine thành lớp cưỡng chế xác định cho Claude Code.",
+    "Chép các mục dưới vào settings.json của dự án (hoặc .claude/settings.local.json).",
+    "",
+    "Vì sao dùng hook thay vì viết luật trong CLAUDE.md: hook do harness chạy, không do model",
+    "quyết định tuân thủ. Exit 2 ở PreToolUse CHẶN tool call; exit 2 ở Stop BUỘC agent làm tiếp.",
+    "Đó là khác biệt giữa 'chính sách' và 'sự thật'.",
+    "",
+    "Lưu ý hiệu năng: Stop hook chạy sau MỖI lần agent định kết thúc. Chỉ gác tầng rẻ",
+    "(--max-level 1). Gác e2e ở đây sẽ khiến phiên làm việc không dùng được."
+  ],
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "loopctl guard --check --quiet >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "loopctl verify --max-level 0 --quiet || true"
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "loopctl gate --max-level 1 --quiet"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -142,6 +142,49 @@ public class NotificationBatchQueryTests
         (d.SentCount + d.FailedCount + d.PendingCount).Should().Be(d.TotalRows);
     }
 
+    /// <summary>
+    /// GH-792 — dòng đang được gửi (<c>Processing</c>) phải nằm trong ô "đang chờ".
+    /// </summary>
+    /// <remarks>
+    /// Bất biến <c>Sent + Failed + Pending == TotalRows</c> đã được khẳng định từ trước, nhưng
+    /// không dữ liệu test nào có dòng <c>Processing</c> nên nó vẫn xanh sau khi trạng thái này
+    /// ra đời. Người dùng nhìn thấy hậu quả ở màn hình chi tiết batch của Admin: giữa chừng một
+    /// lần gửi lớn, tổng ba ô đếm nhỏ hơn tổng số dòng — trông như bản ghi bốc hơi.
+    /// </remarks>
+    [Fact]
+    public async Task ChiTiet_DongDangGui_VanNamTrongODangCho()
+    {
+        var batch = Batch();
+        var user = Guid.NewGuid();
+
+        NotificationEntity Row(NotificationChannelEnum ch, NotificationStatusEnum st)
+            => new()
+            {
+                Id = Guid.NewGuid(), UserId = user, BatchId = batch.Id,
+                Type = batch.Type, Channel = ch, Status = st,
+                Title = batch.Title, Body = batch.Body,
+            };
+
+        var rows = new[]
+        {
+            Row(NotificationChannelEnum.InApp, NotificationStatusEnum.Sent),
+            Row(NotificationChannelEnum.Email, NotificationStatusEnum.Pending),
+            Row(NotificationChannelEnum.Push, NotificationStatusEnum.Processing),
+        };
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build(
+            notificationSeed: rows, batchSeed: new[] { batch });
+
+        var resp = await new NotificationBatchGetByIdQueryHandler(uow.Object)
+            .Handle(new NotificationBatchGetByIdQuery { Id = batch.Id }, CancellationToken.None);
+
+        var d = resp.Data!;
+        d.TotalRows.Should().Be(3);
+        d.PendingCount.Should().Be(2, "Pending và Processing đều là phần chưa xong");
+        (d.SentCount + d.FailedCount + d.PendingCount).Should().Be(d.TotalRows,
+            "không dòng nào được rơi ra ngoài cả ba ô đếm");
+    }
+
     [Fact]
     public async Task ChiTiet_LanGuiChuaSinhDongNao_TraVeSoKhongChuKhongVoi()
     {

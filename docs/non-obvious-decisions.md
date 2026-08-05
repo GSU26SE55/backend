@@ -128,3 +128,30 @@ Các giá trị dưới đây đọc từ code/cấu hình thật (`.env.Docker`
 - **`SkipNegotiation = true` ⇒ `HubConnection.ConnectionId` phía client là `null`.** Dùng nó làm khoá dictionary sẽ ném trong callback, và lại bị SignalR nuốt — cũng ra đúng triệu chứng "tin không tới".
 - **Cú pháp chỗ-trống của mẫu câu trả lời trùng cú pháp biến Postman.** `TemplateRendererService` khớp `{{tên}}` bằng regex `\{\{(\w+)\}\}` — hệt Postman. Bộ sưu tập `docs/chat/chat-hub.postman.json` **cố ý không khai** biến `customerName`/`ticketCode` để hai chỗ-trống được gửi nguyên văn; ai thêm biến trùng tên vào environment là Postman nuốt mất chỗ-trống, mẫu tạo ra thành văn bản chết.
 - **`ConnectionStrings__Redis` trong `.env` ở gốc repo trỏ tới Upstash trên cloud**, và `EnvFileLoader` nạp nó cho **cả test**. Test nào chạm SignalR/Redis phải tự ghi đè sang container cục bộ, nếu không sẽ bắn tải vào Redis dùng chung. Ghi đè phải bằng **biến môi trường**, không phải `ConfigureAppConfiguration` — `Program.cs` đọc chuỗi kết nối TRƯỚC `builder.Build()`, mà delegate của `WebApplicationFactory` chỉ được áp lúc `Build()`.
+
+---
+
+## API key thiết bị IoT lưu plaintext — CÓ CHỦ Ý (GH-724, chốt 2026-08-04)
+
+`iot_devices` giữ **cả hai**: `ApiKeyHash` (verify constant-time) **và** `ApiKeyPlaintext`
+(để Admin đọc lại trên `GET /api/admin/iot-devices/{id}`). Bắt đầu từ commit `82b56569`
+(2026-07-16, *"display iotkey"*).
+
+**Vì sao:** ESP32 nằm ngoài hiện trường; khi phải flash lại firmware, Admin cần đọc lại
+đúng key đang dùng. Nếu chỉ giữ hash thì mọi lần flash lại đều buộc rotate key → phải chạm
+tay vào thiết bị hai lần.
+
+**Rủi ro đã chấp nhận:** ai đọc được DB, hoặc gọi được endpoint admin GetById, thì lấy được
+credential thiết bị và giả mạo được telemetry.
+
+**Issue #724 báo đúng sự kiện** (doc lúc đó ghi "DB chỉ giữ hash" trong khi thực tế không
+phải), nhưng kết luận "phải bỏ plaintext" thì trái quyết định sản phẩm. Chốt: **giữ hành vi,
+sửa tài liệu cho khớp**. Đã sửa 4 chỗ: `IIotApiKeyService.GenerateKey`,
+`IotDeviceCreatedDto.RawApiKey`, và 3 dòng doc trong `AdminIotDevicesController`
+(create + rotate).
+
+**Đừng nhầm với MQTT password:** cái đó **chỉ có `MqttPasswordHash`**, KHÔNG lưu plaintext,
+nên "chỉ trả 1 lần" với MQTT là đúng. Hai cơ chế khác nhau trong cùng một entity.
+
+**Đừng nhầm với SmsService gateway device** (`docs/api-sms.md`): đó là hệ khác, API key ở đó
+vẫn là chỉ-hiện-1-lần.

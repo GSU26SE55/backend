@@ -15,7 +15,7 @@ public class CreateIotDeviceHandlerTests
     {
         var uow = new MockUnitOfWorkBuilder();
         var key = new IotApiKeyService(uow.Build());
-        var handler = new CreateIotDeviceCommandHandler(uow.Build(), key);
+        var handler = new CreateIotDeviceCommandHandler(uow.Build(), key, TestMqttBrokerEndpointProvider.Enabled());
         return (handler, uow, key);
     }
 

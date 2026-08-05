@@ -33,29 +33,31 @@ public class TicketStatusChangedConsumer : IConsumer<TicketStatusChangedEvent>
 
     public async Task Consume(ConsumeContext<TicketStatusChangedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketStatusChangedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-        if (evt.CustomerId == Guid.Empty)
-            return;
-
-        var title = $"Ticket {evt.Code} chuyển trạng thái";
-        var body = $"Ticket {evt.Code}: {evt.OldStatusName} → {evt.NewStatusName}.";
-        var payload = JsonSerializer.Serialize(new
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketStatusChangedEvent), _logger, async () =>
         {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            oldStatus = evt.OldStatus,
-            newStatus = evt.NewStatus,
-            oldStatusName = evt.OldStatusName,
-            newStatusName = evt.NewStatusName,
-            screen = "TicketDetail"
-        });
+            var evt = context.Message;
+            if (evt.CustomerId == Guid.Empty)
+                return;
 
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketStatusChanged, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+            var title = $"Ticket {evt.Code} chuyển trạng thái";
+            var body = $"Ticket {evt.Code}: {evt.OldStatusName} → {evt.NewStatusName}.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                oldStatus = evt.OldStatus,
+                newStatus = evt.NewStatus,
+                oldStatusName = evt.OldStatusName,
+                newStatusName = evt.NewStatusName,
+                screen = "TicketDetail"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketStatusChanged, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+        });
     }
 }
 
@@ -76,28 +78,30 @@ public class TicketApprovedConsumer : IConsumer<TicketApprovedEvent>
 
     public async Task Consume(ConsumeContext<TicketApprovedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketApprovedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-        if (evt.CustomerId == Guid.Empty)
-            return;
-
-        var title = $"Ticket {evt.Code} đã được duyệt hoàn tất";
-        var body = string.IsNullOrWhiteSpace(evt.ManagerComment)
-            ? $"Ticket {evt.Code} đã được duyệt. Mời bạn đánh giá chất lượng xử lý."
-            : $"Ticket {evt.Code} đã được duyệt: {evt.ManagerComment}. Mời bạn đánh giá chất lượng xử lý.";
-        var payload = JsonSerializer.Serialize(new
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketApprovedEvent), _logger, async () =>
         {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            approvedAt = evt.ApprovedAt,
-            screen = "TicketRate"
-        });
+            var evt = context.Message;
+            if (evt.CustomerId == Guid.Empty)
+                return;
 
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketApproved, NotificationWriter.InAppPushEmail,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+            var title = $"Ticket {evt.Code} đã được duyệt hoàn tất";
+            var body = string.IsNullOrWhiteSpace(evt.ManagerComment)
+                ? $"Ticket {evt.Code} đã được duyệt. Mời bạn đánh giá chất lượng xử lý."
+                : $"Ticket {evt.Code} đã được duyệt: {evt.ManagerComment}. Mời bạn đánh giá chất lượng xử lý.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                approvedAt = evt.ApprovedAt,
+                screen = "TicketRate"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketApproved, NotificationWriter.InAppPushEmail,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+        });
     }
 }
 
@@ -121,49 +125,51 @@ public class TicketRejectedConsumer : IConsumer<TicketRejectedEvent>
 
     public async Task Consume(ConsumeContext<TicketRejectedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketRejectedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-
-        Guid recipient;
-        string title;
-        string body;
-
-        if (evt.IsClosedRejected)
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketRejectedEvent), _logger, async () =>
         {
-            recipient = evt.CustomerId;
-            title = $"Ticket {evt.Code} bị từ chối";
-            body = $"Yêu cầu {evt.Code} nằm ngoài phạm vi dịch vụ nên đã được đóng. Lý do: {evt.Reason}";
-        }
-        else
-        {
-            recipient = evt.StaffId ?? Guid.Empty;
-            title = $"Kết quả xử lý ticket {evt.Code} bị trả lại";
-            body = $"Manager yêu cầu xử lý lại ticket {evt.Code}. Lý do: {evt.Reason}";
-        }
+            var evt = context.Message;
 
-        if (recipient == Guid.Empty)
-        {
-            _logger.LogWarning(
-                "TicketRejected ticket={TicketId}: không xác định được người nhận (isClosedRejected={Flag}) — skip.",
-                evt.TicketId, evt.IsClosedRejected);
-            return;
-        }
+            Guid recipient;
+            string title;
+            string body;
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            reason = evt.Reason,
-            isClosedRejected = evt.IsClosedRejected,
-            rejectedAt = evt.RejectedAt,
-            screen = "TicketDetail"
+            if (evt.IsClosedRejected)
+            {
+                recipient = evt.CustomerId;
+                title = $"Ticket {evt.Code} bị từ chối";
+                body = $"Yêu cầu {evt.Code} nằm ngoài phạm vi dịch vụ nên đã được đóng. Lý do: {evt.Reason}";
+            }
+            else
+            {
+                recipient = evt.StaffId ?? Guid.Empty;
+                title = $"Kết quả xử lý ticket {evt.Code} bị trả lại";
+                body = $"Manager yêu cầu xử lý lại ticket {evt.Code}. Lý do: {evt.Reason}";
+            }
+
+            if (recipient == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "TicketRejected ticket={TicketId}: không xác định được người nhận (isClosedRejected={Flag}) — skip.",
+                    evt.TicketId, evt.IsClosedRejected);
+                return;
+            }
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                reason = evt.Reason,
+                isClosedRejected = evt.IsClosedRejected,
+                rejectedAt = evt.RejectedAt,
+                screen = "TicketDetail"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [recipient], NotificationTypeEnum.TicketRejected, NotificationWriter.InAppPushEmail,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [recipient], NotificationTypeEnum.TicketRejected, NotificationWriter.InAppPushEmail,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }
 
@@ -189,43 +195,45 @@ public class TicketClosedConsumer : IConsumer<TicketClosedEvent>
 
     public async Task Consume(ConsumeContext<TicketClosedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketClosedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-
-        var title = $"Ticket {evt.Code} đã đóng";
-        var body = evt.IsAutoClosed
-            ? $"Ticket {evt.Code} tự động đóng do quá hạn đánh giá."
-            : evt.Rating.HasValue
-                ? $"Cảm ơn bạn đã đánh giá {evt.Rating} sao. Ticket {evt.Code} đã đóng."
-                : $"Ticket {evt.Code} đã đóng.";
-        var payload = JsonSerializer.Serialize(new
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketClosedEvent), _logger, async () =>
         {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            closedAt = evt.ClosedAt,
-            isAutoClosed = evt.IsAutoClosed,
-            rating = evt.Rating,
-            screen = "TicketDetail"
+            var evt = context.Message;
+
+            var title = $"Ticket {evt.Code} đã đóng";
+            var body = evt.IsAutoClosed
+                ? $"Ticket {evt.Code} tự động đóng do quá hạn đánh giá."
+                : evt.Rating.HasValue
+                    ? $"Cảm ơn bạn đã đánh giá {evt.Rating} sao. Ticket {evt.Code} đã đóng."
+                    : $"Ticket {evt.Code} đã đóng.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                closedAt = evt.ClosedAt,
+                isAutoClosed = evt.IsAutoClosed,
+                rating = evt.Rating,
+                screen = "TicketDetail"
+            });
+
+            var recipients = new List<Guid>();
+            if (evt.CustomerId != Guid.Empty)
+                recipients.Add(evt.CustomerId);
+
+            var managers = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+            recipients.AddRange(managers.Where(m => m != evt.CustomerId));
+
+            if (recipients.Count == 0)
+            {
+                _logger.LogWarning("TicketClosed ticket={TicketId}: không có người nhận — skip.", evt.TicketId);
+                return;
+            }
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipients.Distinct().ToList(), NotificationTypeEnum.TicketClosed, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        var recipients = new List<Guid>();
-        if (evt.CustomerId != Guid.Empty)
-            recipients.Add(evt.CustomerId);
-
-        var managers = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
-        recipients.AddRange(managers.Where(m => m != evt.CustomerId));
-
-        if (recipients.Count == 0)
-        {
-            _logger.LogWarning("TicketClosed ticket={TicketId}: không có người nhận — skip.", evt.TicketId);
-            return;
-        }
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipients.Distinct().ToList(), NotificationTypeEnum.TicketClosed, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }
 
@@ -251,36 +259,38 @@ public class TicketReopenedConsumer : IConsumer<TicketReopenedEvent>
 
     public async Task Consume(ConsumeContext<TicketReopenedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketReopenedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-
-        var title = $"Ticket {evt.Code} được mở lại";
-        var body = $"Khách hàng mở lại ticket {evt.Code} (lần {evt.ReopenCount}). Lý do: {evt.ReopenReason}";
-        var payload = JsonSerializer.Serialize(new
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketReopenedEvent), _logger, async () =>
         {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            reopenReason = evt.ReopenReason,
-            reopenCount = evt.ReopenCount,
-            reopenedAt = evt.ReopenedAt,
-            screen = "TicketDetail"
+            var evt = context.Message;
+
+            var title = $"Ticket {evt.Code} được mở lại";
+            var body = $"Khách hàng mở lại ticket {evt.Code} (lần {evt.ReopenCount}). Lý do: {evt.ReopenReason}";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                reopenReason = evt.ReopenReason,
+                reopenCount = evt.ReopenCount,
+                reopenedAt = evt.ReopenedAt,
+                screen = "TicketDetail"
+            });
+
+            var recipients = (await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager")).ToList();
+            if (evt.StaffId is { } staffId && staffId != Guid.Empty)
+                recipients.Add(staffId);
+
+            if (recipients.Count == 0)
+            {
+                _logger.LogWarning("TicketReopened ticket={TicketId}: không có người nhận — skip.", evt.TicketId);
+                return;
+            }
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipients.Distinct().ToList(), NotificationTypeEnum.TicketReopened, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        var recipients = (await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager")).ToList();
-        if (evt.StaffId is { } staffId && staffId != Guid.Empty)
-            recipients.Add(staffId);
-
-        if (recipients.Count == 0)
-        {
-            _logger.LogWarning("TicketReopened ticket={TicketId}: không có người nhận — skip.", evt.TicketId);
-            return;
-        }
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipients.Distinct().ToList(), NotificationTypeEnum.TicketReopened, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }
 
@@ -301,49 +311,32 @@ public class TicketRatingRequestedConsumer : IConsumer<TicketRatingRequestedEven
 
     public async Task Consume(ConsumeContext<TicketRatingRequestedEvent> context)
     {
-        if (!await TicketNotificationHelper.TryBeginAsync(_cache, context, nameof(TicketRatingRequestedEvent), _logger))
-            return;
-
-        var evt = context.Message;
-        if (evt.CustomerId == Guid.Empty)
-            return;
-
-        var title = $"Mời đánh giá ticket {evt.Code}";
-        var body = evt.DaysUntilAutoClose > 0
-            ? $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá trong " +
-              $"{evt.DaysUntilAutoClose} ngày tới, sau đó ticket sẽ tự đóng."
-            : $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá để hoàn tất.";
-        var payload = JsonSerializer.Serialize(new
+        // GH-765 — xem NotificationDebounce.ProcessOnceAsync: chỗ giữ ngắn, chỉ nâng lên cửa sổ
+        // 30 phút sau khi ghi xong, và nhả ngay khi lỗi để lần gửi lại chạy thật.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, nameof(TicketRatingRequestedEvent), _logger, async () =>
         {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            approvedAt = evt.ApprovedAt,
-            daysPending = evt.DaysPending,
-            daysUntilAutoClose = evt.DaysUntilAutoClose,
-            screen = "TicketRate"
+            var evt = context.Message;
+            if (evt.CustomerId == Guid.Empty)
+                return;
+
+            var title = $"Mời đánh giá ticket {evt.Code}";
+            var body = evt.DaysUntilAutoClose > 0
+                ? $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá trong " +
+                  $"{evt.DaysUntilAutoClose} ngày tới, sau đó ticket sẽ tự đóng."
+                : $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá để hoàn tất.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                approvedAt = evt.ApprovedAt,
+                daysPending = evt.DaysPending,
+                daysUntilAutoClose = evt.DaysUntilAutoClose,
+                screen = "TicketRate"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketRatingRequested, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketRatingRequested, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
-    }
-}
-
-/// <summary>Dedup theo messageId dùng chung cho nhóm consumer vòng đời ticket (30 phút).</summary>
-internal static class TicketNotificationHelper
-{
-    public static async Task<bool> TryBeginAsync<T>(
-        ICacheService cache, ConsumeContext<T> context, string eventName, ILogger logger)
-        where T : class
-    {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId == Guid.Empty)
-            return true;
-
-        if (await NotificationDebounce.TryBeginByMessageAsync(cache, messageId, context.CancellationToken))
-            return true;
-
-        logger.LogInformation("Debounce: skip duplicate {Event} message={MessageId}", eventName, messageId);
-        return false;
     }
 }

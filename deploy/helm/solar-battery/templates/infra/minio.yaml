@@ -25,13 +25,17 @@ spec:
         - { name: s3,      containerPort: 9000 }
         - { name: console, containerPort: 9001 }
         env:
+        # GH-788 — root user lấy từ Secret như root password, không hardcode trong values.yaml.
+        # values.yaml nằm trong Git; để "minioadmin" ở đó nghĩa là một nửa credential quản trị đã
+        # công khai, và nửa còn lại là thứ duy nhất chặn giữa Internet và toàn bộ bucket.
         - name: MINIO_ROOT_USER
-          value: {{ .Values.minio.rootUser | quote }}
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: ObjectStorage__AccessKey }
         - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
-        - name: MINIO_PROMETHEUS_AUTH_TYPE
-          value: public
+        # GH-788 — bỏ MINIO_PROMETHEUS_AUTH_TYPE=public: không có scrape job nào dùng tới, mà
+        # /minio/v2/metrics/cluster để mở sẽ phát tên bucket, số object và dung lượng cho bất kỳ ai.
         - name: MINIO_SERVER_URL
           value: "https://files.{{ .Values.global.domain }}"
         readinessProbe:
@@ -93,8 +97,14 @@ spec:
           service:
             name: minio
             port: { name: s3 }
+{{- end }}
+{{- if .Values.minio.consoleIngress.enabled }}
 ---
-# MinIO Console — minio.* dùng để quản lý bucket qua UI
+# MinIO Console — minio.* dùng để quản lý bucket qua UI.
+# GH-788 — cờ RIÊNG, mặc định tắt. Trước đây console dùng chung `minio.ingress.enabled` với S3 API,
+# nên bật đường tải file cho client là đồng thời mở luôn giao diện quản trị ra Internet — mà đăng
+# nhập giao diện đó bằng chính root credential, tức toàn quyền trên mọi bucket.
+# Cần vào console thì `kubectl port-forward svc/minio 9001:9001`.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -175,15 +185,22 @@ spec:
             mc mb -p "local/${MINIO_BUCKET_NAME}"
           fi
 
-          echo "MinIO init: setting anonymous download policy"
-          mc anonymous set download "local/${MINIO_BUCKET_NAME}"
+          # GH-788 — bucket PRIVATE. `anonymous set download` cho phép bất kỳ ai biết object key là
+          # tải được file mà không cần token: đính kèm ticket, ảnh bảo trì, tài liệu bảo hành đều
+          # nằm chung bucket này. `set none` là idempotent nên chạy lại trên cụm cũ sẽ THU HỒI
+          # chính sách public đã lỡ đặt trước đó — đó là lý do đặt lệnh này thay vì chỉ xoá đi.
+          echo "MinIO init: enforcing private bucket policy"
+          mc anonymous set none "local/${MINIO_BUCKET_NAME}"
 
           echo "MinIO init: verifying bucket ${MINIO_BUCKET_NAME}"
           mc ls "local/${MINIO_BUCKET_NAME}" >/dev/null
           echo "MinIO init: bucket ${MINIO_BUCKET_NAME} ready"
         env:
+        # GH-788 — cùng nguồn Secret với StatefulSet; job init phải đăng nhập bằng đúng credential
+        # thật, không phải giá trị mặc định nằm trong values.yaml.
         - name: MINIO_ROOT_USER
-          value: {{ .Values.minio.rootUser | quote }}
+          valueFrom:
+            secretKeyRef: { name: solar-secrets, key: ObjectStorage__AccessKey }
         - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
