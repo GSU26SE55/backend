@@ -547,6 +547,10 @@ services:
       TicketAi__BatteryGrpcAddress: ${TICKET_AI_BATTERY_GRPC_ADDRESS:-http://batteryservice:8081}
       TicketAi__TimeoutSeconds: ${TICKET_AI_TIMEOUT_SECONDS:-5}
       TicketAi__MaxDuplicateCandidates: ${TICKET_AI_MAX_DUPLICATE_CANDIDATES:-10}
+      # Chặng 1/2 của độ trễ notification: chat ghi outbox → relay poll → RabbitMQ.
+      # Mỗi giây poll ở đây cộng thẳng vào thời gian tin nhắn hiện trên máy người nhận.
+      Outbox__IntervalSeconds: ${TICKET_OUTBOX_INTERVAL_SECONDS:-1}
+      Outbox__BatchSize: ${TICKET_OUTBOX_BATCH_SIZE:-100}
     ports:
       - "4007:8080"
     depends_on:
@@ -581,6 +585,11 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      # Chặng 2/2 của độ trễ notification: consumer ghi row Pending → dispatch poll → SignalR.
+      # Cùng với Outbox__IntervalSeconds bên TicketService, hai vòng poll này là toàn bộ độ trễ
+      # cảm nhận được; bản thân SignalR đẩy tới máy tức thì.
+      Notification__Dispatch__PollIntervalSeconds: ${NOTIFICATION_DISPATCH_POLL_INTERVAL_SECONDS:-1}
+      Notification__Dispatch__BatchSize: ${NOTIFICATION_DISPATCH_BATCH_SIZE:-100}
     ports:
       - "4008:8080"
     depends_on:
@@ -775,7 +784,8 @@ services:
       - /var/lib/docker:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "8081:8080"
+      # 8081 is Expo Metro's default port; keep cAdvisor available without blocking mobile dev.
+      - "8082:8080"
     networks: [solar-net]
     restart: unless-stopped
 
