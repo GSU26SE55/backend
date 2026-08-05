@@ -196,6 +196,31 @@ public class ExpoPushChannelTests
         deviceTokenRepo.Verify(r => r.UpdateAsync(deviceToken), Times.Once);
     }
 
+    [Fact]
+    public async Task SendAsync_ChatNotification_UsesConversationChannel()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), request =>
+        {
+            captured = request.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+        var request = MakeRequest();
+        request.Type = NotificationTypeEnum.ChatCreated;
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        doc.RootElement[0].GetProperty("channelId").GetString().Should().Be("chat-messages");
+        doc.RootElement[0].GetProperty("data").GetProperty("notificationType").GetInt32()
+            .Should().Be((int)NotificationTypeEnum.ChatCreated);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

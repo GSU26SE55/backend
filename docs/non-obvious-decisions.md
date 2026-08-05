@@ -155,3 +155,95 @@ nên "chỉ trả 1 lần" với MQTT là đúng. Hai cơ chế khác nhau trong
 
 **Đừng nhầm với SmsService gateway device** (`docs/api-sms.md`): đó là hệ khác, API key ở đó
 vẫn là chỉ-hiện-1-lần.
+
+---
+
+## Thông báo đẩy — hai đường vận chuyển và ba miễn trừ cho chat (2026-08-05)
+
+Quyết định kiến trúc đầy đủ: **[ADR-0019](adr/0019-push-transport-signalr-expo.md)**. Phần dưới chỉ
+ghi những thứ đọc code sẽ không tự suy ra được.
+
+### Vì sao có `CompositePushChannel` thay vì đăng ký thẳng hai kênh
+
+`NotificationDispatcher` chọn kênh bằng `_channels.FirstOrDefault(c => c.ChannelType == …)`. Cả
+`SignalRPushChannel` lẫn `ExpoPushChannel` đều khai `ChannelType = Push`, nên **đăng ký cả hai dưới
+`INotificationChannel` thì cái thứ hai chết im lặng** — không lỗi, không log, chỉ là không bao giờ
+được gọi, và thứ tự đăng ký trong `ManageDependencyInjection` âm thầm trở thành cấu hình. Vì vậy
+mỗi đường có interface riêng (`ISignalRPushChannel`, `IExpoPushChannel`) và chỉ bản gộp mới đăng ký
+dưới interface chung.
+
+### `Delivered` chỉ tồn tại khi bật Expo
+
+`NotificationStatusEnum.Delivered` **chỉ** do `ExpoReceiptReconcileBackgroundService` đặt. Chạy
+thuần `push.transport = SignalR` thì `Sent` là trạng thái cuối cùng — SignalR không có cơ chế biên
+nhận nào. Kéo theo: `NotificationFallbackBackgroundService` (bù SMS cho push critical) không có dữ
+liệu để làm việc và cũng tự nghỉ. Đây là cái giá đã biết của việc bỏ phụ thuộc EAS/FCM, không phải
+lỗi — nhưng đừng báo cáo "push critical luôn có đường bù" khi hệ thống đang chạy thuần SignalR.
+
+### Hai worker Expo chọn hướng an toàn NGƯỢC NHAU khi không đọc được cấu hình
+
+| Worker | Đọc lỗi thì | Vì sao |
+|--------|-------------|--------|
+| `ExpoReceiptReconcileBackgroundService` | **vẫn chạy** | Chạy thừa vô hại (không có biên nhận nào để xử lý); bỏ sót thì mất dữ liệu giao hàng thật |
+| `NotificationFallbackBackgroundService` | **nghỉ** | Chạy thừa **bắn SMS thật** cho người dùng thật; bỏ lỡ một vòng thì vòng sau vẫn bắt được vì lọc theo mốc thời gian |
+
+Ai thấy hai nhánh `catch` trả về hai giá trị ngược nhau mà tưởng là lỗi sao chép thì đọc lại bảng này.
+
+### Chat bỏ qua CẢ BA cơ chế làm chậm
+
+`ChatCreated` và `ChatMentioned` bỏ qua **quiet hours**, **digest** và **hạn mức người dùng**
+(`NotificationDispatcher.RealtimeConversationTypes`). Ba cơ chế đó sinh ra để chặn thông báo hệ
+thống làm phiền; áp lên hội thoại giữa người thật thì buổi tối nhắn tin không ai nhận được gì, và
+người đặt `Frequency = Daily` thì mỗi ngày mới nhận chat một lần.
+
+Hệ quả phải biết: sau thay đổi này, **cách duy nhất để tắt thông báo chat** là tắt kênh Push hoặc
+tắt nhóm "Trao đổi" trong tuỳ chọn — quiet hours không còn tác dụng với chat.
+
+### Nội dung chat đi nguyên văn ra màn hình khoá
+
+Template `ChatCreated` là `{{Title}}`/`{{Body}}`, mà consumer dựng sẵn `"{tên người gửi}: {nội dung}"`.
+Nghĩa là **nội dung tin nhắn, kể cả ghi chú nội bộ, hiện nguyên văn trên banner thông báo**. Vì thế
+`ChatRecipientResolver` là ranh giới bảo mật thật sự chứ không chỉ là chuyện tiện dụng:
+
+- Nó **không được tự chế luật riêng** — phải gọi `TicketQueryHelper.CanViewInternalChats(roles,
+  participantCanViewInternal)`, đúng hàm mà tầng đọc dùng, để "được báo" trùng khít "đọc được".
+- Luật đó cho phép **Customer đọc nội bộ nếu được cấp cờ `CanViewInternal`** (#522). Câu "Customer
+  KHÔNG bao giờ thấy ghi chú nội bộ" trong `CLAUDE.md` đúng với **mặc định** (`TicketCreateCommandHandler`
+  đặt `CanViewInternal = false`), không đúng khi có cấp quyền tường minh.
+- Mọi thay đổi ở resolver phải kèm test nhánh `isInternal` — xem `ChatRecipientResolverTests`.
+
+### Client nhận HAI sự kiện SignalR cho cùng một thông báo
+
+`NotificationCreated` (từ `InAppChannel`, dòng `Channel = InApp`) dùng để cập nhật feed + badge;
+`NotificationReceived` (từ `SignalRPushChannel`, dòng `Channel = Push`) dùng để dựng thông báo hệ
+điều hành. Cùng `entityId`. Có chủ ý — nhưng client hiện cả hai mà không khử trùng thì người dùng
+thấy hai lần. Chế độ `Both` còn cộng thêm một bản qua Expo nữa.
+
+### Migration đã merge thì KHÔNG sửa tại chỗ
+
+`20260729161154_AddNotificationDispatchRetryColumns` đã có trên `dev` và đã chạy trên các database
+hiện có ⇒ tên nó nằm trong `__EFMigrationsHistory` ⇒ **sửa nội dung nó không bao giờ chạy lại**, chỉ
+database dựng mới mới thấy bản sửa. Bản vá đúng quy trình là một migration MỚI
+(`20260805083909_RepairLegacyNotificationRetryColumns`), viết idempotent để trên database khoẻ mạnh
+toàn bộ `Up()` là no-op.
+
+### Tên class consumer chính là tên queue RabbitMQ — trùng tên là mất message
+
+MassTransit `ConfigureEndpoints` sinh tên queue từ **tên class** (bỏ hậu tố `Consumer`), **không**
+tính namespace hay tên service. Hai service khai `class AccountActivatedConsumer` ⇒ cùng nghe queue
+`AccountActivated` ⇒ RabbitMQ chia round-robin ⇒ **mỗi service chỉ nhận ~50%**, service kia im lặng
+mất phần còn lại. Không có log lỗi, không có message vào DLQ — nhìn y hệt "event không được publish".
+
+Đã dính 6 nhóm; nặng nhất là `AuditReplayRequestedConsumer` trùng ở **6** service trong khi thiết kế
+của nó là fanout ("mọi service đều nhận") ⇒ ~83% lệnh replay bị nuốt.
+
+Quy ước bắt buộc: **prefix tên service vào mọi class consumer** — `NotificationAccountActivatedConsumer`,
+`BatteryAccountActivatedConsumer`, `TicketAccountActivatedConsumer`. `ci/scripts/rule-checks.sh`
+RULE 9 quét toàn repo và fail CI nếu có tên trùng.
+
+Hai thứ đi kèm khi đổi tên, quên là hỏng âm thầm:
+- `ProcessOnceAsync(_inbox, nameof(XxxConsumer), …)` — khoá idempotency đổi theo, nên consumer sẽ
+  xử lý LẠI các message cũ. Chỉ an toàn khi handler là upsert; nếu handler tạo bản ghi mới thì phải
+  giữ nguyên chuỗi khoá cũ thay vì dùng `nameof`.
+- Queue mang tên cũ vẫn tồn tại trên broker sau khi deploy. Phải xoá tay
+  (`rabbitmqctl delete_queue`, `rabbitmqadmin delete exchange`), nếu không message cũ nằm lại mãi.

@@ -54,6 +54,11 @@ public class InAppChannelRealtimeTests
             return Task.CompletedTask;
         }
 
+        public Task NotifyPushAsync(
+            NotificationEntity notification,
+            bool isCritical,
+            CancellationToken ct = default) => Task.CompletedTask;
+
         public Task NotifyUnreadCountAsync(Guid userId, int unreadCount, CancellationToken ct = default)
         {
             UnreadCounts.Add((userId, unreadCount));

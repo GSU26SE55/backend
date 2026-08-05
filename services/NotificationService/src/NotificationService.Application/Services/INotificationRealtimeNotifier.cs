@@ -22,6 +22,9 @@ public interface INotificationRealtimeNotifier
     /// <summary>Đẩy một notification mới tới đúng người nhận (mọi thiết bị đang kết nối).</summary>
     Task NotifyCreatedAsync(Notification notification, CancellationToken ct = default);
 
+    /// <summary>Deliver a Push record through the self-hosted realtime connection.</summary>
+    Task NotifyPushAsync(Notification notification, bool isCritical, CancellationToken ct = default);
+
     /// <summary>Đẩy số chưa đọc mới để client cập nhật badge mà không phải gọi lại API.</summary>
     Task NotifyUnreadCountAsync(Guid userId, int unreadCount, CancellationToken ct = default);
 }
@@ -30,6 +33,8 @@ public interface INotificationRealtimeNotifier
 public sealed class NullNotificationRealtimeNotifier : INotificationRealtimeNotifier
 {
     public Task NotifyCreatedAsync(Notification notification, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task NotifyPushAsync(Notification notification, bool isCritical, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task NotifyUnreadCountAsync(Guid userId, int unreadCount, CancellationToken ct = default) => Task.CompletedTask;
 }

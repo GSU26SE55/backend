@@ -462,6 +462,17 @@ services:
       # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
       AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
       AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
+      # Chặng 1/2 của độ trễ thông báo chat: chat ghi outbox → relay poll → RabbitMQ.
+      #
+      # Mặc định trong code là 5s; cộng với 5s ở chặng 2 bên NotificationService thì một tin nhắn
+      # mất tới ~10 giây mới hiện thông báo trên máy người nhận — trong khi dev đã chỉnh xuống 1+1.
+      # Từ khi kênh Push thành đường realtime của chat (ADR-0019), chênh lệch đó làm chính tính năng
+      # này vô dụng ở production. Đặt bằng dev để hai môi trường hành xử giống nhau.
+      #
+      # Máy chủ yếu thì nâng lên bằng NOTIFICATION/TICKET_* trong /opt/solar/.env.prod — mỗi vòng
+      # poll chỉ là một truy vấn có index kèm LIMIT, nhưng vẫn là truy vấn.
+      Outbox__IntervalSeconds: ${TICKET_OUTBOX_INTERVAL_SECONDS:-1}
+      Outbox__BatchSize: ${TICKET_OUTBOX_BATCH_SIZE:-100}
       # AI features — config loaded directly from .env.prod via env_file (no substitution needed)
     ports:
       - "4007:8080"
@@ -512,6 +523,19 @@ services:
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__NotificationDb: "Host=postgres;Port=5432;Database=${NOTIFICATION_DB_NAME:-notification_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
+      # Chặng 2/2 của độ trễ thông báo chat: consumer ghi dòng Pending → dispatch poll → SignalR.
+      # Xem ghi chú ở khối Outbox__ của ticketservice bên trên; hai vòng poll này cộng lại là toàn bộ
+      # độ trễ cảm nhận được, bản thân SignalR đẩy tới máy tức thì.
+      Notification__Dispatch__PollIntervalSeconds: ${NOTIFICATION_DISPATCH_POLL_INTERVAL_SECONDS:-1}
+      Notification__Dispatch__BatchSize: ${NOTIFICATION_DISPATCH_BATCH_SIZE:-100}
+      # ADR-0019 — đường vận chuyển push (SignalR | Expo | Both).
+      #
+      # CHỈ đọc khi bảng notification_settings CÒN TRỐNG, tức lần đầu dựng một môi trường mới.
+      # Sau khi Admin gọi PUT /api/admin/notification-settings/push-transport một lần thì database
+      # là nguồn sự thật và dòng này vô hiệu — cố ý, để mỗi lần deploy lại không ghi đè lựa chọn của
+      # người vận hành.
+      Notification__Push__DefaultTransport: ${NOTIFICATION_PUSH_DEFAULT_TRANSPORT:-SignalR}
+      Notification__Push__CacheSeconds: ${NOTIFICATION_PUSH_CACHE_SECONDS:-30}
     ports:
       - "4008:8080"
     depends_on:

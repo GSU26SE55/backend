@@ -58,6 +58,12 @@ public class DebounceRetryTests
         public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
             => Task.FromResult(default(T));
 
+        // Bộ đếm của IncrementAsync lưu dạng chuỗi thuần, khác với giá trị ghi qua SetAsync<T>.
+        public Task<long?> GetCounterAsync(string key, CancellationToken cancellationToken = default)
+            => Task.FromResult(_entries.TryGetValue(key, out var v) && long.TryParse(v, out var n)
+                ? (long?)n
+                : null);
+
         public Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 

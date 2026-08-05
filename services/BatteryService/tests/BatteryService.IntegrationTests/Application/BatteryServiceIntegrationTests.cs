@@ -27,7 +27,7 @@ public class BatteryServiceIntegrationTests
         await using var dbContext = CreateDbContext();
         var unitOfWork = new UnitOfWork(dbContext);
         var inboxStore = new InMemoryInboxStore();
-        var consumer = new AccountActivatedConsumer(unitOfWork, inboxStore);
+        var consumer = new BatteryAccountActivatedConsumer(unitOfWork, inboxStore);
         var customerId = Guid.NewGuid();
         var evt = new AccountActivatedEvent(
             customerId,
@@ -264,7 +264,7 @@ public class BatteryServiceIntegrationTests
     public async Task AccountActivatedConsumer_NonCustomerRole_Skipped()
     {
         await using var dbContext = CreateDbContext();
-        var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
+        var consumer = new BatteryAccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
         var evt = new AccountActivatedEvent(Guid.NewGuid(), "x@x", "n", null, "Admin", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);
@@ -282,7 +282,7 @@ public class BatteryServiceIntegrationTests
         dbContext.CustomerAccounts.Add(CreateCustomer(customerId, isActive: false));
         await dbContext.SaveChangesAsync();
 
-        var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
+        var consumer = new BatteryAccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
         var evt = new AccountActivatedEvent(customerId, "NEW@X.COM", " Name ", " 0901 ", "Customer", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);

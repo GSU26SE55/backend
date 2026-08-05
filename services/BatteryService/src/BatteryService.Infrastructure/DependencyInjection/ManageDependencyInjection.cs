@@ -28,7 +28,7 @@ public static class ManageDependencyInjection
         services.AddScoped<BatteryDataSeeder>();
         services.AddScoped<EnvironmentDataSeeder>();
         services.AddSharedInfrastructure(configuration, "BatteryService.Application", "Battery Service API");
-        services.AddMessageBus(configuration, typeof(AccountActivatedConsumer).Assembly);
+        services.AddMessageBus(configuration, typeof(BatteryAccountActivatedConsumer).Assembly);
         services.AddInboxIdempotency(configuration);
 
         // Anomaly engine config (Sprint 3) — service/AnomalyRules dùng options này

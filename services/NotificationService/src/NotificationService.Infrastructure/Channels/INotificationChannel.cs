@@ -9,6 +9,22 @@ public interface INotificationChannel
 }
 
 /// <summary>
+/// ADR-0019 — đường push qua hub SignalR tự vận hành.
+///
+/// <para>Hai đường push cần interface riêng vì cả hai đều có <c>ChannelType = Push</c>: đăng ký
+/// chúng dưới <see cref="INotificationChannel"/> thì dispatcher chỉ thấy cái đầu tiên và cái còn
+/// lại chết im lặng. Chỉ <c>CompositePushChannel</c> mới đăng ký dưới interface chung.</para>
+/// </summary>
+public interface ISignalRPushChannel : INotificationChannel
+{
+}
+
+/// <summary>ADR-0019 — đường push qua Expo Push API. Xem ghi chú ở <see cref="ISignalRPushChannel"/>.</summary>
+public interface IExpoPushChannel : INotificationChannel
+{
+}
+
+/// <summary>
 /// Dữ liệu đủ để gửi qua bất kỳ channel nào.
 /// Dispatcher populate các field channel-specific trước khi gọi SendAsync.
 /// </summary>
@@ -39,6 +55,12 @@ public class SendRequest
 
     public Guid? EntityId { get; set; }
     public bool IsCritical { get; set; }
+
+    /// <summary>
+    /// ADR-0019 — thời điểm tạo bản ghi gốc (UTC). Client dùng để sắp xếp và khử trùng giữa hai
+    /// đường push: cùng một thông báo có thể tới qua SignalR và qua Expo ở chế độ <c>Both</c>.
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>
     /// Expo push token đơn — giữ cho caller cũ. Khi <see cref="ExpoTokens"/> có giá trị thì

@@ -111,7 +111,7 @@ public static class NotificationTemplateVariables
                  "lastSeenAt", "offlineDurationSeconds", "affectedBatteryCount"],
 
             // ── Trao đổi (chat) ───────────────────────────────────────────────────────────────
-            [NotificationTypeEnum.ChatCreated] = ["chatId", "ticketId"],
+            [NotificationTypeEnum.ChatCreated] = ["chatId", "ticketId", "senderName", "isInternal"],
             [NotificationTypeEnum.ChatMentioned] = ["chatId", "ticketId", "isGroupMention"],
             [NotificationTypeEnum.ChatReacted] = ["chatId", "ticketId", "reactionType"],
             [NotificationTypeEnum.ChatEscalatedToAdmin] =

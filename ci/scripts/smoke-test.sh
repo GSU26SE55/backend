@@ -38,11 +38,17 @@ IOT_ROUTES=(
 # `/api/notification-preferences` từng bị loại khỏi danh sách vì controller chưa tồn tại.
 # Sprint 6.3 NOTI3-10 đã tạo PreferencesController (kèm ma trận theo nhóm), đo thực tế qua
 # gateway trả 401 → đưa vào danh sách.
+#
+# `/api/admin/notification-settings/push-transport` (ADR-0019) — công tắc chọn đường vận chuyển
+# push (SignalR / Expo / Both). Đáng canh vì nó là route admin MỚI: quên thêm vào cấu hình YARP
+# của gateway thì màn hình cấu hình trả 404, mà 404 ở đây rất dễ bị đọc nhầm thành "tính năng
+# chưa làm" thay vì "định tuyến sai" — đúng kiểu hỏng im lặng mà smoke test sinh ra để bắt.
 NOTIFICATION_ROUTES=(
   "/api/notifications"
   "/api/notification-preferences"
   "/api/notification-preferences/matrix"
   "/api/admin/notification-templates"
+  "/api/admin/notification-settings/push-transport"
 )
 
 # Endpoint CÔNG KHAI (không [Authorize]) — không bao giờ trả 401, nên cần ngưỡng riêng.

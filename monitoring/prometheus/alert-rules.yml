@@ -568,6 +568,28 @@ groups:
   # Sprint 6.2 bật tầng gửi (Push/Email/SMS) nhưng trước đó không có metric nào
   # ⇒ hỏng mà không ai biết. Nhóm alert dưới đây là điều kiện tối thiểu để
   # "vận hành được" chứ không chỉ "chạy được".
+  #
+  # ⚠️ ADR-0019 — ĐỌC TRƯỚC KHI DIỄN GIẢI SỐ LIỆU KÊNH PUSH.
+  # Kênh Push có HAI đường vận chuyển, chọn lúc chạy qua
+  # PUT /api/admin/notification-settings/push-transport (giá trị nằm ở bảng
+  # notification_settings, khoá `push.transport`):
+  #
+  #   SignalR — hub tự vận hành. KHÔNG gọi Expo, KHÔNG sinh push_receipts.
+  #   Expo    — Expo Push API, có đối soát biên nhận.
+  #   Both    — cả hai; tính là gửi thành công khi ÍT NHẤT MỘT đường thành công.
+  #
+  # Hệ quả khi đang chạy `SignalR`:
+  #   • expo_push_receipt_total / expo_push_token_deactivated_total /
+  #     notification_fallback_total đều ĐỨNG YÊN Ở 0 — đây là ĐÚNG, không phải
+  #     Expo hỏng. Đừng điều tra "vì sao không có receipt".
+  #   • Trạng thái Delivered không bao giờ đạt tới ⇒ không có alert nào dựa trên
+  #     Delivered, và cũng KHÔNG ĐƯỢC thêm alert kiểu vậy nếu chưa chốt transport.
+  #   • Chuỗi bù push→SMS (NOTI3-05) tự nghỉ vì không có dữ liệu biên nhận.
+  #
+  # Muốn biết transport đang là gì: gọi
+  # GET /api/admin/notification-settings/push-transport (Admin), hoặc
+  # SELECT value FROM notification_settings WHERE key='push.transport';
+  # Chưa có dòng nào ⇒ đang dùng mặc định Notification__Push__DefaultTransport.
   # ══════════════════════════════════════════════════════════════════════
   - name: notification-delivery
     interval: 30s
@@ -632,6 +654,9 @@ groups:
           description: "Kiểm tra NotificationDispatchBackgroundService còn sống không, Redis leader key notification_dispatch_leader có bị instance chết giữ không, và cờ Notification:Dispatch:Enabled."
 
       # 5. Token Expo chết hàng loạt — thường do sai credential hoặc cấu hình project.
+      #    ⚠️ Alert này CHỈ có ý nghĩa khi push.transport là Expo hoặc Both.
+      #    Chạy thuần SignalR thì không có lệnh gọi Expo nào ⇒ metric luôn 0 ⇒
+      #    alert im lặng. Im lặng ở đây KHÔNG chứng minh push đang khoẻ.
       - alert: ExpoTokenDeactivationSpike
         expr: sum(rate(expo_push_token_deactivated_total[1h])) * 3600 > 50
         for: 10m

@@ -108,10 +108,10 @@ public static class NotificationTemplateCatalog
             [NotificationTypeEnum.EnvironmentalIncidentResolved] =
                 ("Sự cố môi trường đã được xử lý", "Sự cố môi trường tại site của bạn đã kết thúc."),
 
-            // Nhóm chat: payload chỉ có id, KHÔNG có tên người gửi hay trích đoạn nội dung. Viết
-            // câu không cần hai thứ đó thay vì để chỗ trống.
+            // ChatCreated là luồng realtime: consumer đã dựng preview "sender: body" trong
+            // Title/Body builtin. Giữ nguyên hai field này để banner/bubble hiện đúng tin thật.
             [NotificationTypeEnum.ChatCreated] =
-                ("Trao đổi mới trên ticket", "Có trao đổi mới. Mở ticket để xem nội dung."),
+                ("{{Title}}", "{{Body}}"),
             [NotificationTypeEnum.ChatMentioned] =
                 ("Bạn được nhắc tới trong một trao đổi", "Mở ticket để xem nội dung nhắc tới bạn."),
             [NotificationTypeEnum.ChatReacted] =

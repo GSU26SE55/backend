@@ -23,6 +23,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly IChatRecipientResolver _recipientResolver;
     private readonly ILogger<ChatReplyCommandHandler> _logger;
 
     public ChatReplyCommandHandler(
@@ -30,12 +31,14 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
+        IChatRecipientResolver recipientResolver,
         ILogger<ChatReplyCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -101,6 +104,9 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
                 request.IsInternal ? "[Nội bộ]" : "[Công khai]",
                 $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
+            var recipientIds = await _recipientResolver.ResolveAsync(
+                ticket.Id, ticket.CustomerId, reply.AuthorUserId, reply.IsInternal, transactionCt);
+
             await _outboxWriter.WriteAsync(new ChatCreatedEvent(
                 reply.Id,
                 reply.TicketId,
@@ -111,7 +117,8 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
                 reply.IsInternal,
                 reply.AttachmentFileIds,
                 ticket.CustomerId,
-                ticket.PrimaryHandlerStaffId), transactionCt);
+                ticket.PrimaryHandlerStaffId,
+                recipientIds), transactionCt);
         }, ct);
 
         try

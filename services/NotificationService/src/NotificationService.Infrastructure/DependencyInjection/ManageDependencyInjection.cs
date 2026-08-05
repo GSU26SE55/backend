@@ -27,7 +27,7 @@ public static class ManageDependencyInjection
 
         // MassTransit consumers — Sprint IoT-1 (#249) đăng ký consumer assembly để consume
         // IotDeviceWentOfflineEvent (và sẵn sàng cho các consumer Sprint 6 khác trong cùng assembly).
-        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+        // GH-728 — thêm assembly Infrastructure để MassTransit thấy NotificationAuditReplayRequestedConsumer.
         services.AddMessageBus(
             configuration,
             typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly,
@@ -35,22 +35,31 @@ public static class ManageDependencyInjection
 
         services.AddScoped<NotificationDataSeeder>();
         services.AddScoped<NotificationGroupSeeder>();   // Sprint 6.4 NOTI4-04
+
+        // ADR-0019 — mặc định cho lần chạy đầu khi bảng notification_settings còn trống.
+        // Sau khi Admin đổi transport qua REST thì DB là nguồn sự thật, phần này hết ảnh hưởng.
+        services.Configure<NotificationPushOptions>(
+            configuration.GetSection(NotificationPushOptions.SectionName));
+
         services.AddNotificationChannels();
         services.AddInboxIdempotency(configuration);
         // GH-793 — quyền chạy độc quyền nguyên tử cho các job nền (thay khuôn GET-rồi-SET cũ).
         services.AddDistributedLease(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
-        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>(); // GH-672 NOTI-01
 
         // Sprint 6.2 NOTI-01 (#672) — worker giao record Pending xuống channel (Push/Email/SMS/InApp).
-        // Không có nó thì dispatcher vẫn là dead code và notification chỉ nằm trong DB.
-        // GH-793 — dòng AddHostedService thứ hai đã bỏ: nó trùng với đăng ký phía trên.
-        // (Vô hại vì AddHostedService dùng TryAddEnumerable nên khử trùng, nhưng đọc vào thì tưởng
-        // hai worker cùng chạy trong một tiến trình — hiểu nhầm rất tốn thời gian khi đi tìm nguyên
-        // nhân gửi trùng.)
+        // Không có nó thì dispatcher là dead code và notification chỉ nằm trong DB ở trạng thái
+        // Pending mãi mãi: consumer vẫn ghi đủ dòng, API vẫn 200, nhưng KHÔNG AI nhận được gì.
+        //
+        // ⚠️ Trước đây file này có HAI dòng AddHostedService cho cùng worker (một ở trên, một ở
+        // dưới khối Configure). GH-793 bỏ dòng dưới, nhánh push transport bỏ dòng trên — mỗi bên
+        // sửa một nửa, và khi gộp lại thì git bỏ CẢ HAI mà không báo xung đột. Bắt được nhờ E2E:
+        // notification sinh ra đúng người nhận nhưng đứng im ở Pending, dispatch_attempt_count = 0.
+        // Giữ đúng MỘT dòng ở đây; đừng thêm dòng thứ hai ở chỗ khác nữa.
         services.Configure<NotificationDispatchOptions>(
             configuration.GetSection(NotificationDispatchOptions.SectionName));
+        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>();
 
         // Sprint 6.2 NOTI-12 (#683) — gom digest cho user bật Frequency=Daily / DigestWindowMinutes.
         services.Configure<NotificationDigestOptions>(
@@ -64,6 +73,7 @@ public static class ManageDependencyInjection
 
         // Sprint 6.3 NOTI3-02 (#702) — đối soát biên nhận Expo.
         // Ticket "ok" chỉ chứng minh Expo NHẬN request; giao hàng thật phải hỏi /push/getReceipts.
+        // ADR-0019: worker tự bỏ qua từng vòng khi transport hiện tại không dùng Expo.
         services.Configure<ExpoReceiptOptions>(
             configuration.GetSection(ExpoReceiptOptions.SectionName));
         services.AddHostedService<BackgroundJobs.ExpoReceiptReconcileBackgroundService>();
@@ -118,19 +128,29 @@ public static class ManageDependencyInjection
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.AddScoped<IRecipientResolver, RecipientResolver>();
         services.AddScoped<INotificationAuditWriter, NotificationAuditWriter>(); // Sprint 6.2 NOTI-13 (#684)
+        services.AddScoped<IPushTransportSettingService, PushTransportSettingService>(); // ADR-0019
         services.AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>();
         services.AddHttpContextAccessor();
     }
 
     private static void AddNotificationChannels(this IServiceCollection services)
     {
-        // Named HttpClient "expo" với Polly retry 3 lần exponential backoff
+        // Named HttpClient "expo" với Polly retry 3 lần exponential backoff.
         services.AddHttpClient("expo", c => { c.Timeout = TimeSpan.FromSeconds(30); })
                 .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
                     3,
                     attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))));
 
-        services.AddScoped<INotificationChannel, ExpoPushChannel>();
+        // ADR-0019 — hai đường vận chuyển push đăng ký dưới KIỂU CỤ THỂ, không dưới
+        // INotificationChannel. Dispatcher chọn kênh theo ChannelType và chỉ lấy cái đầu tiên khớp,
+        // nên đăng ký cả hai dưới cùng interface sẽ làm một cái chết im lặng.
+        services.AddScoped<ISignalRPushChannel, SignalRPushChannel>();
+        services.AddScoped<IExpoPushChannel, ExpoPushChannel>();
+
+        // Kênh Push mà dispatcher thấy là bản gộp: nó tự rẽ sang SignalR / Expo / cả hai theo
+        // cấu hình đổi được lúc chạy.
+        services.AddScoped<INotificationChannel, CompositePushChannel>();
+
         services.AddScoped<INotificationChannel, EmailBusChannel>();
         services.AddScoped<INotificationChannel, SmsBusChannel>();
         services.AddScoped<INotificationChannel, InAppChannel>();

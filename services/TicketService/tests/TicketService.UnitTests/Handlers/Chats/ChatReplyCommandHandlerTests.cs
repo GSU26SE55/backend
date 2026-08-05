@@ -21,6 +21,7 @@ public class ChatReplyCommandHandlerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
     private readonly Mock<ILogger<ChatReplyCommandHandler>> _logger = new();
+    private readonly Mock<IChatRecipientResolver> _recipientResolver = new();
 
     private ChatReplyCommandHandler CreateHandler()
     {
@@ -33,7 +34,11 @@ public class ChatReplyCommandHandlerTests
                 It.IsAny<Func<CancellationToken, Task>>(), It.IsAny<CancellationToken>()))
             .Returns((Func<CancellationToken, Task> operation, CancellationToken cancellationToken) =>
                 operation(cancellationToken));
-        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);
+        _recipientResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid>());
+        return new ChatReplyCommandHandler(_uow.Object, _activityLogger.Object, _outboxWriter.Object,
+            _realtimeNotifier.Object, _recipientResolver.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id) => new()

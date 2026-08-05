@@ -9,7 +9,7 @@ namespace NotificationService.Application.Consumers;
 /// <summary>
 /// GH-604 — Sync read-model account khi account active (upsert). Sync MỌI role
 /// (khác BatteryService chỉ lọc Customer) vì NotificationService cần broadcast Manager/Admin.
-/// Tách khỏi <see cref="AccountActivatedConsumer"/> (welcome notification) để 1 việc/1 consumer.
+/// Tách khỏi <see cref="NotificationAccountActivatedConsumer"/> (welcome notification) để 1 việc/1 consumer.
 /// Lỗi DB → throw → MassTransit auto-retry. Upsert tự idempotent nên không cần InboxStore.
 /// </summary>
 public class AccountActivatedSyncConsumer : IConsumer<AccountActivatedEvent>

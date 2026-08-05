@@ -89,7 +89,7 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.TicketEscalated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaWarning] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaBreached] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-            // Sms bổ sung 03/08/2026: BatteryAnomalyDetectedConsumer gửi bằng
+            // Sms bổ sung 03/08/2026: NotificationBatteryAnomalyDetectedConsumer gửi bằng
             // NotificationWriter.AllChannels (có Sms) nên thực tế đã sinh 98 dòng SMS, trong khi ma
             // trận này lại thiếu Sms — mà seeder template dựng theo ma trận. Hệ quả: SMS gửi đi
             // không có template nào khớp, âm thầm rơi về nội dung hardcode. Khai đúng để hai đường

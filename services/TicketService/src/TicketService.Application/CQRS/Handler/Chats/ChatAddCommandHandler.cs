@@ -36,6 +36,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.create/mention
     private readonly IChatCacheService _chatCache;
     private readonly ISlaService _slaService;
+    private readonly IChatRecipientResolver _recipientResolver;
 
 
     public ChatAddCommandHandler(
@@ -53,6 +54,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
         ISlaService slaService,
+        IChatRecipientResolver recipientResolver,
         IPublisher publisher)
     {
         _publisher = publisher;
@@ -70,6 +72,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
         _slaService = slaService;
+        _recipientResolver = recipientResolver;
     }
 
     public async Task<TicketActionResponse> Handle(ChatAddCommand request, CancellationToken cancellationToken)
@@ -78,6 +81,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         if (ticket == null)
             return Fail(404, "Không tìm thấy Ticket.");
 
+        // Ticket.PrimaryHandlerStaffId là [NotMapped] — nguồn sự thật nằm ở ticket_assignments.
+        // Không có dòng PrimaryHandler thì đây là null, và ChatCreatedEvent.AssignedStaffId cũng null;
+        // người nhận thông báo lấy từ IChatRecipientResolver chứ không dựa vào trường này.
         ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
             .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
             .Select(a => (Guid?)a.StaffId)
@@ -297,6 +303,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                     ActivityActionEnum.ChatFlagged, null, null, string.Join(" | ", warnings));
             }
 
+            var recipientIds = await _recipientResolver.ResolveAsync(
+                ticket.Id, ticket.CustomerId, chat.AuthorUserId, chat.IsInternal, cancellationToken);
+
             await _outboxWriter.WriteAsync(new ChatCreatedEvent(
                 chat.Id,
                 chat.TicketId,
@@ -307,7 +316,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 chat.IsInternal,
                 chat.AttachmentFileIds,
                 ticket.CustomerId,
-                ticket.PrimaryHandlerStaffId), cancellationToken);
+                ticket.PrimaryHandlerStaffId,
+                recipientIds), cancellationToken);
 
             if (request.RequestCustomerInfo &&
                 request.UserRole is ActorRoleEnum.Staff or ActorRoleEnum.Manager or ActorRoleEnum.Admin)

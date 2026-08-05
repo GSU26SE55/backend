@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using SharedInfrastructure.Caching;
+using StackExchange.Redis;
 
 namespace SharedInfrastructure.UnitTests.Caching;
 
@@ -102,6 +103,45 @@ public class RedisCacheServiceTests
         await Sut().RemoveAsync("k");
 
         _cache.Verify();
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_PlainString_ReturnsCounter()
+    {
+        _cache.Setup(c => c.GetAsync("counter", It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Encoding.UTF8.GetBytes("42"));
+
+        var result = await Sut().GetCounterAsync("counter");
+
+        result.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_WithRedis_ReadsRawStringInsteadOfDistributedCache()
+    {
+        var database = new Mock<IDatabase>();
+        database.Setup(d => d.StringGetAsync((RedisKey)"counter", CommandFlags.None))
+                .ReturnsAsync((RedisValue)"84");
+        var redis = new Mock<IConnectionMultiplexer>();
+        redis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
+             .Returns(database.Object);
+        var sut = new RedisCacheService(_cache.Object, redis.Object);
+
+        var result = await sut.GetCounterAsync("counter");
+
+        result.Should().Be(84);
+        _cache.Verify(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_MissingOrInvalidValue_ReturnsNull()
+    {
+        _cache.SetupSequence(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync((byte[]?)null)
+              .ReturnsAsync(Encoding.UTF8.GetBytes("not-a-number"));
+
+        (await Sut().GetCounterAsync("missing")).Should().BeNull();
+        (await Sut().GetCounterAsync("invalid")).Should().BeNull();
     }
 
     // ════════ Sprint 6.3 NOTI3-09 (#709) — TrySetIfNotExistsAsync ════════

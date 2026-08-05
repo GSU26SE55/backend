@@ -971,6 +971,60 @@ namespace NotificationService.Infrastructure.Migrations
                     b.ToTable("notification_preferences", (string)null);
                 });
 
+            modelBuilder.Entity("NotificationService.Domain.Entities.NotificationSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("notification_settings", (string)null);
+                });
+
             modelBuilder.Entity("NotificationService.Domain.Entities.NotificationTemplate", b =>
                 {
                     b.Property<Guid>("Id")

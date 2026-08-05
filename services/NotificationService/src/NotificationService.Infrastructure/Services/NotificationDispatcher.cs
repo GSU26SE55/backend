@@ -16,6 +16,36 @@ namespace NotificationService.Infrastructure.Services;
 
 public class NotificationDispatcher : INotificationDispatcher
 {
+    /// <summary>
+    /// Sự kiện hội thoại phải tới ngay, không được xếp hàng chờ.
+    ///
+    /// <para>Hai cơ chế làm chậm bị bỏ qua cho nhóm này:</para>
+    /// <list type="bullet">
+    ///   <item><description><b>Hạn mức người dùng</b> — một đợt cảnh báo dồn dập không được đẩy tin
+    ///   nhắn thật sang digest hàng giờ sau.</description></item>
+    ///   <item><description><b>Quiet hours</b> — từ khi kênh Push trở thành đường realtime chính của
+    ///   chat (ADR-0019), hoãn tới hết giờ yên lặng nghĩa là buổi tối nhắn tin không ai nhận được
+    ///   gì. Quiet hours sinh ra để chặn thông báo hệ thống làm phiền, không phải để chặn người
+    ///   thật đang nói chuyện với nhau.</description></item>
+    /// </list>
+    ///
+    /// <para>Người dùng vẫn tắt được hoàn toàn bằng tuỳ chọn kênh hoặc tuỳ chọn nhóm "Trao đổi" —
+    /// đó mới là công tắc dành cho ý muốn "đừng làm phiền tôi vì chat".</para>
+    /// </summary>
+    private static readonly IReadOnlySet<NotificationTypeEnum> RealtimeConversationTypes =
+        new HashSet<NotificationTypeEnum>
+        {
+            NotificationTypeEnum.ChatCreated,
+            NotificationTypeEnum.ChatMentioned
+        };
+
+    /// <summary>
+    /// Loại này có được bỏ qua các cơ chế làm chậm (hạn mức, quiet hours) hay không.
+    /// Gom một chỗ để hai đường gửi (fan-out và worker) không bao giờ lệch luật nhau.
+    /// </summary>
+    private static bool IsRealtimeConversation(NotificationTypeEnum type) =>
+        RealtimeConversationTypes.Contains(type);
+
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
     private readonly IEnumerable<INotificationChannel> _channels;
@@ -70,12 +100,16 @@ public class NotificationDispatcher : INotificationDispatcher
 
         bool isCritical = request.BypassQuietHours || _criticalTypes.Contains(request.Type);
 
+        // Chat xuyên qua quiet hours nhưng KHÔNG vì thế mà thành "critical": critical còn kéo theo
+        // bỏ qua hạn mức ở mọi kênh và đổi độ ưu tiên của gói push. Tách hai khái niệm ra.
+        bool bypassQuietHours = isCritical || IsRealtimeConversation(request.Type);
+
         foreach (var recipient in request.Recipients)
         {
             var pref = await LoadPreferenceAsync(recipient.UserId, ct);
-            bool isQuiet = !isCritical && IsQuietHours(pref);
+            bool isQuiet = !bypassQuietHours && IsQuietHours(pref);
 
-            // Push: 1 record per device token
+            // Push: one policy/delivery record per recipient. SignalR needs no device token.
             if (targetChannels.Contains(NotificationChannelEnum.Push))
                 await DispatchPushAsync(request, recipient, pref, isQuiet, ct);
 
@@ -124,22 +158,12 @@ public class NotificationDispatcher : INotificationDispatcher
         if (pushChannel is null)
             return;
 
-        var tokens = await _unitOfWork.DeviceTokens.GetAllAsync()
-            .Where(dt => dt.UserId == recipient.UserId && !dt.IsDeleted && dt.IsActive)
-            .ToListAsync(ct);
-
-        if (tokens.Count == 0)
-        {
-            _logger.LogDebug("Dispatcher: no device tokens for user {UserId}, skipping Push", recipient.UserId);
-            return;
-        }
-
         bool isCritical = _criticalTypes.Contains(request.Type) || request.BypassQuietHours;
 
         // NOTI-16 (#687) — 1 record + 1 lần gọi Expo cho TẤT CẢ token của user (batch),
         // thay vì 1 record + 1 HTTP call cho mỗi token.
         await SendSingleAsync(request, recipient, NotificationChannelEnum.Push, pushChannel,
-            isCritical, expoTokens: tokens.Select(t => t.Token).ToList(), ct: ct);
+            isCritical, ct: ct);
     }
 
     private async Task SendSingleAsync(
@@ -148,7 +172,6 @@ public class NotificationDispatcher : INotificationDispatcher
         NotificationChannelEnum channelType,
         INotificationChannel channel,
         bool isCritical,
-        IReadOnlyList<string>? expoTokens = null,
         CancellationToken ct = default)
     {
         var notification = new Notification
@@ -177,8 +200,9 @@ public class NotificationDispatcher : INotificationDispatcher
             Body = request.Body,
             PayloadJson = request.PayloadJson,
             IsCritical = isCritical,
-            ExpoToken = expoTokens is { Count: > 0 } ? expoTokens[0] : null,
-            ExpoTokens = expoTokens,
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
+            CreatedAt = notification.CreatedAt,
             Email = recipient.Email,
             PhoneNumber = recipient.PhoneNumber,
         };
@@ -225,7 +249,12 @@ public class NotificationDispatcher : INotificationDispatcher
         // 2) Digest (NOTI-12) — gom notification không-critical của user bật digest,
         //    NotificationDigestBackgroundService sẽ gộp và gửi 1 lần.
         //    Bản digest tổng hợp thì KHÔNG gom tiếp (nếu không sẽ tự hoãn chính nó mãi mãi).
+        //    ADR-0019: chat cũng được miễn gom digest, cùng lý do với quiet hours ở bước 3. Người
+        //    dùng đặt Frequency=Daily mà tin nhắn cũng bị gom thì mỗi ngày mới nhận chat một lần —
+        //    digest sinh ra để gộp thông báo hệ thống, không phải để gộp người đang nói chuyện.
+        //    Muốn tắt hẳn thông báo chat thì tắt kênh Push hoặc tắt nhóm "Trao đổi" trong tuỳ chọn.
         if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
             && notification.EntityType != NotificationDigest.EntityType
             && IsDigestChannel(notification.Channel)
             && TryGetDigestWindow(pref, out var window))
@@ -239,7 +268,8 @@ public class NotificationDispatcher : INotificationDispatcher
         if (!isCritical
             && _rateLimiter is not null
             && notification.Channel != NotificationChannelEnum.InApp
-            && notification.EntityType != NotificationDigest.EntityType)
+            && notification.EntityType != NotificationDigest.EntityType
+            && !IsRealtimeConversation(notification.Type))
         {
             var decision = await _rateLimiter.TryConsumeAsync(notification.UserId, notification.Type, ct);
 
@@ -255,7 +285,12 @@ public class NotificationDispatcher : INotificationDispatcher
         }
 
         // 3) Quiet hours — InApp vẫn ghi được (im lặng), các kênh chủ động thì hoãn tới hết giờ yên.
-        if (!isCritical && notification.Channel != NotificationChannelEnum.InApp && IsQuietHours(pref))
+        //    ADR-0019: chat được miễn. Push nay là đường realtime chính của hội thoại, hoãn nó tới
+        //    sáng hôm sau tức là buổi tối nhắn tin không ai nhận được gì.
+        if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
+            && notification.Channel != NotificationChannelEnum.InApp
+            && IsQuietHours(pref))
             return await DeferAsync(notification, ResolveQuietHoursEndUtc(pref),
                 "Đang trong quiet hours — hoãn tới khi hết.", ct, "quiet_hours");
 
@@ -267,18 +302,6 @@ public class NotificationDispatcher : INotificationDispatcher
 
         if (notification.Channel == NotificationChannelEnum.Sms && string.IsNullOrWhiteSpace(account?.PhoneNumber))
             return await MarkFailedAsync(notification, "Người nhận không có số điện thoại trong read-model.", ct, "no_phone");
-
-        List<string>? tokens = null;
-        if (notification.Channel == NotificationChannelEnum.Push)
-        {
-            tokens = await _unitOfWork.DeviceTokens.GetAllAsync()
-                .Where(dt => dt.UserId == notification.UserId && !dt.IsDeleted && dt.IsActive)
-                .Select(dt => dt.Token)
-                .ToListAsync(ct);
-
-            if (tokens.Count == 0)
-                return await MarkFailedAsync(notification, "Người nhận chưa đăng ký device token nào đang hoạt động.", ct, "no_device_token");
-        }
 
         var (title, body) = await RenderContentAsync(notification, ct);
 
@@ -294,8 +317,7 @@ public class NotificationDispatcher : INotificationDispatcher
             EntityType = notification.EntityType,
             EntityId = notification.EntityId,
             IsCritical = isCritical,
-            ExpoToken = tokens is { Count: > 0 } ? tokens[0] : null,
-            ExpoTokens = tokens,
+            CreatedAt = notification.CreatedAt,
             Email = account?.Email,
             PhoneNumber = account?.PhoneNumber,
         };
