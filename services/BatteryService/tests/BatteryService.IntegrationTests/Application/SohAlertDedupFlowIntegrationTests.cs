@@ -170,7 +170,16 @@ public class SohAlertDedupFlowIntegrationTests
 
         return new SohPredictionBackgroundService(
             scopeFactory.Object,
-            Options.Create(new AiOptions { Enabled = true, MinReadings = 3, PrescriptionEnabled = true }),
+            // GH-780 — MinReadings = 3 là cấu hình BẤT KHẢ THI: AI từ chối mọi payload khác
+            // AiOptions.WindowSize dòng, nên bộ test cũ đang kiểm một thiết lập không tồn tại được
+            // ở production.
+            Options.Create(new AiOptions
+            {
+                Enabled = true,
+                MinReadings = AiOptions.WindowSize,
+                MaxScanReadings = AiOptions.WindowSize * 2,
+                PrescriptionEnabled = true,
+            }),
             NullLogger<SohPredictionBackgroundService>.Instance);
     }
 
@@ -206,7 +215,7 @@ public class SohAlertDedupFlowIntegrationTests
         });
 
         var t0 = DateTime.UtcNow.AddMinutes(-5);
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < AiOptions.WindowSize; i++)
         {
             db.SensorReadings.Add(new SensorReading
             {

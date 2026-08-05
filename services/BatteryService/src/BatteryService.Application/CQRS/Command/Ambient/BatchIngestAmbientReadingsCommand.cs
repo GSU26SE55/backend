@@ -15,6 +15,17 @@ public class BatchIngestAmbientReadingsCommand : IRequest<CommonResponse<int>>, 
     /// <summary>Danh sách items.</summary>
     public List<AmbientReadingItem> Items { get; set; } = new();
 
+    /// <summary>
+    /// GH-806 — site của thiết bị đã xác thực, lấy từ claim <c>iot:site_id</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>[JsonIgnore][BindNever]</c>: client KHÔNG được đặt trường này qua body. Thiếu hai attribute
+    /// đó thì thiết bị chỉ cần tự khai site của mình là đi vòng qua toàn bộ hàng rào.
+    /// </remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
+    [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+    public Guid? AuthenticatedDeviceSiteId { get; set; }
+
     public Task<CommonResponse<int>> ValidateAsync()
     {
         var response = new CommonResponse<int>();

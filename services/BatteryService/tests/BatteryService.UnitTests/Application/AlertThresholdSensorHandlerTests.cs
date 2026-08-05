@@ -52,8 +52,8 @@ public class AlertThresholdSensorHandlerTests
     public async Task Ack_NotFound_404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var c = new Mock<ICurrentUserService>();
-        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c.Object).Handle(new AcknowledgeAlertCommand { Id = Guid.NewGuid() }, default);
+        var c = TestBatteryCurrentUserService.Admin();
+        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c).Handle(new AcknowledgeAlertCommand { Id = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -62,8 +62,8 @@ public class AlertThresholdSensorHandlerTests
     {
         var a = MakeAlert(AlertStatusEnum.Resolved);
         var b = new MockUnitOfWorkBuilder().WithAlerts(a);
-        var c = new Mock<ICurrentUserService>();
-        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c.Object).Handle(new AcknowledgeAlertCommand { Id = a.Id }, default);
+        var c = TestBatteryCurrentUserService.Admin();
+        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c).Handle(new AcknowledgeAlertCommand { Id = a.Id }, default);
         r.StatusCode.Should().Be(409);
     }
 
@@ -73,9 +73,10 @@ public class AlertThresholdSensorHandlerTests
         var a = MakeAlert();
         var b = new MockUnitOfWorkBuilder().WithAlerts(a);
         var uid = Guid.NewGuid();
-        var c = new Mock<ICurrentUserService>();
-        c.SetupGet(x => x.UserId).Returns(uid.ToString());
-        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c.Object).Handle(new AcknowledgeAlertCommand { Id = a.Id }, default);
+        // Admin ⇒ phạm vi không giới hạn, giữ nguyên ý nghĩa test; UserId vẫn là uid để
+        // assertion AcknowledgedByUserId bên dưới không đổi.
+        var c = new TestBatteryCurrentUserService(uid.ToString(), "Admin");
+        var r = await new AcknowledgeAlertCommandHandler(b.Build(), c).Handle(new AcknowledgeAlertCommand { Id = a.Id }, default);
         r.IsSuccess.Should().BeTrue();
         a.Status.Should().Be(AlertStatusEnum.Acknowledged);
         a.AcknowledgedByUserId.Should().Be(uid);
@@ -110,7 +111,7 @@ public class AlertThresholdSensorHandlerTests
     [Fact]
     public async Task GetAlertById_NotFound_404()
     {
-        var r = await new GetAlertByIdQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetAlertByIdQuery { Id = Guid.NewGuid() }, default);
+        var r = await new GetAlertByIdQueryHandler(new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetAlertByIdQuery { Id = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -119,7 +120,7 @@ public class AlertThresholdSensorHandlerTests
     {
         var a = MakeAlert();
         var b = new MockUnitOfWorkBuilder().WithAlerts(a);
-        var r = await new GetAlertByIdQueryHandler(b.Build()).Handle(new GetAlertByIdQuery { Id = a.Id }, default);
+        var r = await new GetAlertByIdQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetAlertByIdQuery { Id = a.Id }, default);
         r.IsSuccess.Should().BeTrue();
     }
 
@@ -128,7 +129,7 @@ public class AlertThresholdSensorHandlerTests
     {
         var a = MakeAlert();
         var b = new MockUnitOfWorkBuilder().WithAlerts(a);
-        var r = await new GetAlertsQueryHandler(b.Build()).Handle(new GetAlertsQuery
+        var r = await new GetAlertsQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetAlertsQuery
         {
             BatteryAssetId = AssetId,
             Severity = AlertSeverityEnum.Warning,
@@ -255,7 +256,7 @@ public class AlertThresholdSensorHandlerTests
     [Fact]
     public async Task GetLatest_NotFound_404()
     {
-        var r = await new GetLatestSensorReadingQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetLatestSensorReadingQuery { BatteryAssetId = Guid.NewGuid() }, default);
+        var r = await new GetLatestSensorReadingQueryHandler(new MockUnitOfWorkBuilder().Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetLatestSensorReadingQuery { BatteryAssetId = Guid.NewGuid() }, default);
         r.StatusCode.Should().Be(404);
     }
 
@@ -266,7 +267,7 @@ public class AlertThresholdSensorHandlerTests
         var older = new SensorReading { BatteryAssetId = assetId, Time = DateTime.UtcNow.AddHours(-1), Voltage = 10, Current = 0, Temperature = 25, SocPercent = 50 };
         var newer = new SensorReading { BatteryAssetId = assetId, Time = DateTime.UtcNow, Voltage = 12, Current = 0, Temperature = 26, SocPercent = 60 };
         var b = new MockUnitOfWorkBuilder().WithSensorReadings(older, newer);
-        var r = await new GetLatestSensorReadingQueryHandler(b.Build()).Handle(new GetLatestSensorReadingQuery { BatteryAssetId = assetId }, default);
+        var r = await new GetLatestSensorReadingQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetLatestSensorReadingQuery { BatteryAssetId = assetId }, default);
         r.IsSuccess.Should().BeTrue();
         r.Data!.Voltage.Should().Be(12);
     }
@@ -279,7 +280,7 @@ public class AlertThresholdSensorHandlerTests
         var inRange = new SensorReading { BatteryAssetId = assetId, Time = now.AddHours(-1), Voltage = 12, Current = 0, Temperature = 25, SocPercent = 50 };
         var outOfRange = new SensorReading { BatteryAssetId = assetId, Time = now.AddDays(-5), Voltage = 11, Current = 0, Temperature = 24, SocPercent = 40 };
         var b = new MockUnitOfWorkBuilder().WithSensorReadings(inRange, outOfRange);
-        var r = await new GetSensorReadingHistoryQueryHandler(b.Build()).Handle(new GetSensorReadingHistoryQuery
+        var r = await new GetSensorReadingHistoryQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSensorReadingHistoryQuery
         {
             BatteryAssetId = assetId,
             From = now.AddDays(-2),
@@ -300,7 +301,7 @@ public class AlertThresholdSensorHandlerTests
         var oldest = new SensorReading { BatteryAssetId = assetId, Time = now.AddMinutes(-2), Voltage = 11, Current = 0, Temperature = 25, SocPercent = 50 };
         var b = new MockUnitOfWorkBuilder().WithSensorReadings(newest, middle, oldest);
 
-        var firstPage = await new GetSensorReadingHistoryQueryHandler(b.Build()).Handle(new GetSensorReadingHistoryQuery
+        var firstPage = await new GetSensorReadingHistoryQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSensorReadingHistoryQuery
         {
             BatteryAssetId = assetId,
             Limit = 1
@@ -311,7 +312,7 @@ public class AlertThresholdSensorHandlerTests
         firstPage.Data.HasMore.Should().BeTrue();
         firstPage.Data.NextCursor.Should().Be(newest.Time);
 
-        var secondPage = await new GetSensorReadingHistoryQueryHandler(b.Build()).Handle(new GetSensorReadingHistoryQuery
+        var secondPage = await new GetSensorReadingHistoryQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetSensorReadingHistoryQuery
         {
             BatteryAssetId = assetId,
             Limit = 1,

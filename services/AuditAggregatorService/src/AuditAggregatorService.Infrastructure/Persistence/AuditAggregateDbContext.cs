@@ -13,6 +13,9 @@ public class AuditAggregateDbContext : DbContext
 
     public DbSet<AuditAggregate> AuditAggregates => Set<AuditAggregate>();
 
+    /// <summary>GH-728 — job replay bền vững (bảng thường, không partition).</summary>
+    public DbSet<AuditReplayJob> AuditReplayJobs => Set<AuditReplayJob>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

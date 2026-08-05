@@ -17,9 +17,15 @@ public class ObjectStorageOptions
 
     public string BucketName { get; set; } = "solar-battery-files";
 
-    public string AccessKey { get; set; } = "minioadmin";
+    /// <summary>
+    /// GH-788 — KHÔNG có giá trị mặc định. Trước đây mặc định là <c>minioadmin</c>, nên một triển
+    /// khai quên cấu hình vẫn chạy được bằng credential ai cũng đoán ra, mà không lỗi cũng không
+    /// cảnh báo. Thiếu giá trị thì <see cref="ObjectStorageCredentialGuard"/> chặn ngay lúc khởi động.
+    /// </summary>
+    public string AccessKey { get; set; } = string.Empty;
 
-    public string SecretKey { get; set; } = "minioadmin";
+    /// <inheritdoc cref="AccessKey"/>
+    public string SecretKey { get; set; } = string.Empty;
 
     public string Region { get; set; } = "auto";
 

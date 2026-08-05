@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Events;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
+using AuthService.Application.Interfaces.Services;
 
 namespace AuthService.UnitTests.Infrastructure.Outbox;
 
@@ -38,6 +39,10 @@ public class OutboxRelayBackgroundServiceTests
         services.AddSingleton(db);
         services.AddSingleton<ApplicationDbContext>(db);
         services.AddSingleton(publishMock.Object);
+        // GH-794 — relay giành quyền từng dòng trước khi publish. Bản production dùng
+        // ExecuteUpdateAsync (provider InMemory không hỗ trợ), nên ở đây dùng bản giữ nguyên ngữ
+        // nghĩa; tính nguyên tử thật được chứng minh trên Postgres ở AuthService.IntegrationTests.
+        services.AddSingleton<IOutboxClaimService>(_ => new InMemoryOutboxClaimService(db));
         var sp = services.BuildServiceProvider();
 
         return (db, sp, publishMock);

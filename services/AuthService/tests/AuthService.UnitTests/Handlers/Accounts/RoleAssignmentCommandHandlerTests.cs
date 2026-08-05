@@ -148,7 +148,8 @@ public class UnlockAccountCommandHandlerTests
             LockoutEndAt = DateTime.UtcNow.AddMinutes(10)
         };
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
-        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object);
+        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object,
+            new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UnlockAccountCommand { Id = account.Id }, CancellationToken.None);
 
@@ -163,7 +164,8 @@ public class UnlockAccountCommandHandlerTests
     {
         var (uow, accounts, _, _) = MockUnitOfWork.Build();
         accounts.Setup(r => r.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((global::AuthService.Domain.Entities.Account?)null);
-        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object);
+        var handler = new UnlockAccountCommandHandler(uow.Object, MockPublisher.NoOp().Object,
+            new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object);
 
         var resp = await handler.Handle(new UnlockAccountCommand { Id = Guid.NewGuid() }, CancellationToken.None);
 

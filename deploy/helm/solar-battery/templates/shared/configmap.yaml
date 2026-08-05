@@ -26,7 +26,19 @@ data:
 
   # Object Storage URLs build từ domain
   ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"
-  ObjectStorage__PublicBaseUrl: "https://files.{{ .Values.global.domain }}/{{ .Values.minio.bucketName }}"
+  # GH-788 — bucket là private nên KHÔNG phát URL public nữa: URL đó chỉ trả 403, mà FE lại tưởng
+  # dùng được. Rỗng ⇒ API trả publicUrl=null ⇒ client buộc đi đường presigned URL (có hạn) hoặc
+  # endpoint download của FileStorageService (kiểm quyền). Giống hệt dev, vốn đã chạy như vậy.
+  ObjectStorage__PublicBaseUrl: ""
+
+  # GH-790 — kênh gRPC nội bộ FileStorage ↔ TicketService.
+  # BẮT BUỘC: thiếu là FileStorageService KHÔNG khởi động được (Program.cs ném
+  # InvalidOperationException "FILE_STORAGE_SERVICE_GRPC_SERVER_PORT (or Grpc:Port) must be
+  # configured."). Chart trước đây chưa bao giờ khai hai biến này, nên cả voice transcription lẫn
+  # quét virus đính kèm đều không có đường chạy trên k8s.
+  # Cổng phải KHÁC 8080 (cổng HTTP) — Program.cs cũng chặn trường hợp trùng.
+  FILE_STORAGE_SERVICE_GRPC_SERVER_PORT: "8081"
+  FILE_STORAGE_GRPC_CLIENT_ADDRESS: "http://filestorageservice:8081"
 
   # Google OAuth callback — build theo domain
   GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/auth-service/api/auth/google/callback"

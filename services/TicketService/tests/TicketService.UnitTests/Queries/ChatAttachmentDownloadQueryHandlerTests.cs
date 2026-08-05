@@ -1,11 +1,14 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using SharedKernels.Interfaces;
+using SharedKernels.Security;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using SharedContracts.Common.Responses;
 
 namespace TicketService.UnitTests.Queries;
 
@@ -21,12 +24,18 @@ public class ChatAttachmentDownloadQueryHandlerTests
         _uow.Setup(u => u.TicketAttachments).Returns(_attachmentsRepo.Object);
     }
 
+    /// <summary>GH-723 — khoá ký grant; phải trùng khoá mà FileStorageService dùng để xác minh.</summary>
+    private const string TestSecretKey = "test-secret-key-for-file-access-grant-0123456789";
+
     private ChatAttachmentDownloadQueryHandler CreateHandler(bool enableVirusScan = true) =>
         new(_uow.Object, Options.Create(new ChatOptions
         {
             Features = new ChatOptions.FeaturesSection { EnableVirusScan = enableVirusScan },
             VirusScan = new ChatOptions.VirusScanSection { FileStorageBaseUrl = "http://files" }
-        }));
+        }),
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["JwtSettings:SecretKey"] = TestSecretKey })
+            .Build());
 
     private static Ticket MakeTicket(Guid id, Guid customerId, Guid? PrimaryHandlerStaffId = null) => new()
     {
@@ -266,17 +275,22 @@ public class ChatAttachmentDownloadQueryHandlerTests
         result.Data.Should().StartWith("http://files");
     }
 
-    [Theory]
-    [InlineData(VirusScanStatusEnum.Pending)]
-    [InlineData(VirusScanStatusEnum.Failed)]
-    public async Task Handle_PendingOrFailed_Returns202(VirusScanStatusEnum status)
+    /// <summary>
+    /// GH-723 — hai nửa phải khớp nhau: grant mà TicketService gắn vào URL phải được
+    /// <c>FileAccessGrant.Validate</c> (thứ FileStorageService gọi) chấp nhận, đúng cặp
+    /// (fileId, người gọi). Không có test này thì hai service có thể xanh riêng lẻ mà
+    /// ghép vào vẫn 403.
+    /// </summary>
+    [Fact]
+    public async Task Handle_CleanFile_UrlCarriesGrantAcceptedByFileStorage()
     {
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
         var actorId = Guid.NewGuid();
+        var attachment = MakeAttachment(attachmentId, ticketId, chatId, VirusScanStatusEnum.Clean);
         SetupTickets(MakeTicket(ticketId, actorId));
-        SetupAttachments(MakeAttachment(attachmentId, ticketId, chatId, status));
+        SetupAttachments(attachment);
 
         var result = await CreateHandler().Handle(new ChatAttachmentDownloadQuery
         {
@@ -287,8 +301,69 @@ public class ChatAttachmentDownloadQueryHandlerTests
             ActorRoles = ["Customer"]
         }, CancellationToken.None);
 
+        var query = new Uri(result.Data!).Query.TrimStart('?');
+        var grant = Uri.UnescapeDataString(
+            query.Split('&').Single(p => p.StartsWith($"{FileAccessGrant.QueryParameterName}=", StringComparison.Ordinal))
+                 [(FileAccessGrant.QueryParameterName.Length + 1)..]);
+
+        FileAccessGrant.Validate(TestSecretKey, grant, attachment.FileId, actorId, DateTimeOffset.UtcNow)
+            .Should().BeTrue("grant phải hợp lệ đúng cặp (fileId, người gọi)");
+
+        // Và KHÔNG hợp lệ cho người khác / file khác.
+        FileAccessGrant.Validate(TestSecretKey, grant, attachment.FileId, Guid.NewGuid(), DateTimeOffset.UtcNow)
+            .Should().BeFalse();
+        FileAccessGrant.Validate(TestSecretKey, grant, Guid.NewGuid(), actorId, DateTimeOffset.UtcNow)
+            .Should().BeFalse();
+    }
+
+    /// <summary>
+    /// GH-790 — chỉ những trạng thái CHƯA có kết luận mới là 202 "thử lại sau".
+    /// </summary>
+    [Theory]
+    [InlineData(VirusScanStatusEnum.Pending)]
+    [InlineData(VirusScanStatusEnum.Scanning)]
+    public async Task Handle_ScanNotFinished_Returns202(VirusScanStatusEnum status)
+    {
+        var result = await DownloadWithScanStatusAsync(status);
+
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(202);
+    }
+
+    /// <summary>
+    /// GH-790 — <c>Failed</c> KHÔNG còn bị gộp vào 202.
+    /// </summary>
+    /// <remarks>
+    /// Trước đây mọi trạng thái ngoài Clean/Infected đều trả 202 "đang quét, thử lại sau". Với một
+    /// lượt quét đã hỏng hẳn thì đó là lời nói dối: client hỏi lại mãi mãi và không bao giờ nhận
+    /// được file — đúng triệu chứng mà issue mô tả. 503 nói đúng chuyện đã xảy ra.
+    /// </remarks>
+    [Fact]
+    public async Task Handle_ScanFailed_Returns503_NotAMisleading202()
+    {
+        var result = await DownloadWithScanStatusAsync(VirusScanStatusEnum.Failed);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(503);
+    }
+
+    private async Task<CommonResponse<string>> DownloadWithScanStatusAsync(VirusScanStatusEnum status)
+    {
+        var ticketId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        SetupTickets(MakeTicket(ticketId, actorId));
+        SetupAttachments(MakeAttachment(attachmentId, ticketId, chatId, status));
+
+        return await CreateHandler().Handle(new ChatAttachmentDownloadQuery
+        {
+            TicketId = ticketId,
+            ChatId = chatId,
+            AttachmentId = attachmentId,
+            ActorUserId = actorId,
+            ActorRoles = ["Customer"]
+        }, CancellationToken.None);
     }
 
     #endregion

@@ -9,6 +9,8 @@ using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.BackgroundJobs;
 using NotificationService.Infrastructure.Persistence;
 
+using NotificationService.UnitTests.Helpers;
+
 namespace NotificationService.UnitTests.BackgroundJobs;
 
 /// <summary>
@@ -29,20 +31,6 @@ public class NotificationWorkerTests
     }
 
     /// <summary>Cache phân tán giả — luôn cho instance hiện tại làm leader.</summary>
-    private sealed class NoLeaderCache : IDistributedCache
-    {
-        private readonly Dictionary<string, byte[]> _store = new();
-
-        public byte[]? Get(string key) => _store.TryGetValue(key, out var v) ? v : null;
-        public Task<byte[]?> GetAsync(string key, CancellationToken token = default) => Task.FromResult(Get(key));
-        public void Refresh(string key) { }
-        public Task RefreshAsync(string key, CancellationToken token = default) => Task.CompletedTask;
-        public void Remove(string key) => _store.Remove(key);
-        public Task RemoveAsync(string key, CancellationToken token = default) { Remove(key); return Task.CompletedTask; }
-        public void Set(string key, byte[] value, DistributedCacheEntryOptions options) => _store[key] = value;
-        public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default)
-        { Set(key, value, options); return Task.CompletedTask; }
-    }
 
     private sealed class StubDispatcher : INotificationDispatcher
     {
@@ -110,7 +98,7 @@ public class NotificationWorkerTests
 
         var dispatcher = new StubDispatcher();
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -132,7 +120,7 @@ public class NotificationWorkerTests
 
         var dispatcher = new StubDispatcher();
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -150,7 +138,7 @@ public class NotificationWorkerTests
 
         var dispatcher = new StubDispatcher();
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions { MaxAttempts = 5 }),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -172,7 +160,7 @@ public class NotificationWorkerTests
         await db.SaveChangesAsync();
 
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, new StubDispatcher()), new NoLeaderCache(),
+            ScopeFactory(db, new StubDispatcher()), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -193,7 +181,7 @@ public class NotificationWorkerTests
 
         var dispatcher = new StubDispatcher();
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions { BatchSize = 1 }),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -217,7 +205,7 @@ public class NotificationWorkerTests
             n.Id == bad.Id ? throw new InvalidOperationException("boom") : DispatchOutcome.Sent);
 
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -244,7 +232,7 @@ public class NotificationWorkerTests
             : DispatchOutcome.Failed);
 
         var sut = new NotificationDispatchBackgroundService(
-            ScopeFactory(db, dispatcher), new NoLeaderCache(),
+            ScopeFactory(db, dispatcher), new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
 
@@ -258,7 +246,7 @@ public class NotificationWorkerTests
     // ── NOTI-12: digest worker ───────────────────────────────────────────────
 
     private static NotificationDigestBackgroundService DigestSut(ApplicationDbContext db, NotificationDigestOptions? opts = null) =>
-        new(ScopeFactory(db, new StubDispatcher()), new NoLeaderCache(),
+        new(ScopeFactory(db, new StubDispatcher()), new InMemoryLease(),
             Options.Create(opts ?? new NotificationDigestOptions()),
             NullLogger<NotificationDigestBackgroundService>.Instance);
 

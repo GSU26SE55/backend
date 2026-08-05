@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -30,6 +31,26 @@ public class ReportEnvironmentalIncidentCommandHandler
 
     public async Task<EnvironmentalIncidentResponse> Handle(ReportEnvironmentalIncidentCommand request, CancellationToken cancellationToken)
     {
+        // GH-806 — thiết bị chỉ được tạo sự cố cho ĐÚNG site của nó, và site phải có thật.
+        // Trước đây SiteId lấy thẳng từ body: thiết bị bị chiếm quyền tạo được sự cố giả (cháy,
+        // khói, ngập) cho khách hàng khác.
+        var existingSites = await _uow.Sites.GetAllAsync()
+            .Where(site => !site.IsDeleted && site.Id == request.SiteId)
+            .Select(site => site.Id)
+            .ToListAsync(cancellationToken);
+
+        var access = IotSiteAccessGuard.Check(
+            request.AuthenticatedDeviceSiteId, [request.SiteId], existingSites);
+        if (!access.Allowed)
+        {
+            return new EnvironmentalIncidentResponse
+            {
+                IsSuccess = false,
+                StatusCode = access.StatusCode,
+                Message = access.Message
+            };
+        }
+
         // Dedup — không tạo nếu đã có Open/Acknowledged cùng (site, incidentType).
         var existing = await _uow.EnvironmentalIncidents.GetAllAsync()
             .Where(i => !i.IsDeleted

@@ -41,8 +41,8 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
 
         _inbox = new Mock<IInboxStore>();
         // Default: lần đầu xử lý → true
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(true);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -107,15 +107,15 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
     public async Task Consume_DuplicateMessage_InboxBlocks_NoEmailSent()
     {
         // F003: nếu Inbox báo "đã processed" → consumer skip, không gọi Mailjet
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(false);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(InboxClaim.Completed);
 
         var evt = new SendOtpRegisterEvent("user@example.com", "123456");
         await _harness.Bus.Publish(evt);
 
         // Inbox PHẢI được hỏi (consumer đã chạy)
         await ConsumerTestWaiter.UntilAsync(
-            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+            () => _inbox.Verify(s => s.TryBeginAsync(
                 It.IsAny<Guid>(),
                 nameof(SendOtpRegisterConsumer),
                 It.IsAny<CancellationToken>()), Times.AtLeastOnce),
@@ -131,9 +131,14 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
     [Fact]
     public async Task Consume_SameMessageId_5Times_OnlyFirstSendsEmail()
     {
-        var sequence = new Queue<bool>(new[] { true, false, false, false, false });
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(() => sequence.Count > 0 ? sequence.Dequeue() : false);
+        // Lần đầu giành được chỗ; bốn lần sau message đã xử lý XONG nên bỏ qua.
+        var sequence = new Queue<InboxClaim>(new[]
+        {
+            new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"),
+            InboxClaim.Completed, InboxClaim.Completed, InboxClaim.Completed, InboxClaim.Completed,
+        });
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(() => sequence.Count > 0 ? sequence.Dequeue() : InboxClaim.Completed);
 
         var evt = new SendOtpRegisterEvent("user@example.com", "999999");
 
@@ -149,7 +154,7 @@ public class SendOtpRegisterConsumerTests : IAsyncLifetime
             await Task.Delay(100);
         }
 
-        _inbox.Verify(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()),
+        _inbox.Verify(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendOtpRegisterConsumer), It.IsAny<CancellationToken>()),
             Times.AtLeast(5));
 
         // Mailjet chỉ gọi 1 lần (4 lần sau bị Inbox skip)

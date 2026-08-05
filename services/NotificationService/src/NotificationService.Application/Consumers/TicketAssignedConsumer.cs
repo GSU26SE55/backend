@@ -34,45 +34,44 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
 
     public async Task Consume(ConsumeContext<TicketAssignedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "TicketAssigned", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate TicketAssigned message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                staffId = evt.PrimaryHandlerStaffId,
+                customerId = evt.CustomerId,
+                priority = evt.Priority,
+                screen = "TicketDetail"
+            });
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            staffId = evt.PrimaryHandlerStaffId,
-            customerId = evt.CustomerId,
-            priority = evt.Priority,
-            screen = "TicketDetail"
-        });
-
-        // Staff được phân công.
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, [evt.PrimaryHandlerStaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-            $"Bạn được phân công ticket {evt.Code}",
-            $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.",
-            payload, "Ticket", evt.TicketId, context.CancellationToken);
-
-        // Sprint 6.2 NOTI-05 (#676) — Customer sở hữu ticket.
-        if (evt.CustomerId != Guid.Empty && evt.CustomerId != evt.PrimaryHandlerStaffId)
-        {
+            // Staff được phân công.
             await NotificationWriter.WriteAsync(
-                _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-                $"Ticket {evt.Code} đã có nhân viên xử lý",
-                $"Yêu cầu {evt.Code} của bạn đã được phân công cho nhân viên kỹ thuật (ưu tiên {evt.Priority}).",
+                _unitOfWork, [evt.PrimaryHandlerStaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
+                $"Bạn được phân công ticket {evt.Code}",
+                $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.",
                 payload, "Ticket", evt.TicketId, context.CancellationToken);
-        }
-        else if (evt.CustomerId == Guid.Empty)
-        {
-            _logger.LogWarning(
-                "TicketAssigned ticket={TicketId}: CustomerId rỗng — bỏ qua notification cho Customer.", evt.TicketId);
-        }
+
+            // Sprint 6.2 NOTI-05 (#676) — Customer sở hữu ticket.
+            if (evt.CustomerId != Guid.Empty && evt.CustomerId != evt.PrimaryHandlerStaffId)
+            {
+                await NotificationWriter.WriteAsync(
+                    _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
+                    $"Ticket {evt.Code} đã có nhân viên xử lý",
+                    $"Yêu cầu {evt.Code} của bạn đã được phân công cho nhân viên kỹ thuật (ưu tiên {evt.Priority}).",
+                    payload, "Ticket", evt.TicketId, context.CancellationToken);
+            }
+            else if (evt.CustomerId == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "TicketAssigned ticket={TicketId}: CustomerId rỗng — bỏ qua notification cho Customer.", evt.TicketId);
+            }
+        });
     }
 }

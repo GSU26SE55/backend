@@ -11,6 +11,8 @@ using NotificationService.Infrastructure.BackgroundJobs;
 using NotificationService.Infrastructure.Persistence;
 using NotificationEntity = NotificationService.Domain.Entities.Notification;
 
+using NotificationService.UnitTests.Helpers;
+
 namespace NotificationService.UnitTests.BackgroundJobs;
 
 /// <summary>
@@ -46,7 +48,7 @@ public class NotificationFallbackTests : IDisposable
 
     private NotificationFallbackBackgroundService Sut(NotificationFallbackOptions? options = null) =>
         new(_provider.GetRequiredService<IServiceScopeFactory>(),
-            new NoopCache(),
+            new InMemoryLease(),
             Options.Create(options ?? new NotificationFallbackOptions { PushReceiptTimeoutMinutes = 10 }),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationFallbackBackgroundService>.Instance);
@@ -240,16 +242,4 @@ public class NotificationFallbackTests : IDisposable
     }
 
     /// <summary>Cache no-op — test không dựng Redis, leader election phải tự xoay xở được.</summary>
-    private sealed class NoopCache : IDistributedCache
-    {
-        public byte[]? Get(string key) => null;
-        public Task<byte[]?> GetAsync(string key, CancellationToken token = default) => Task.FromResult<byte[]?>(null);
-        public void Refresh(string key) { }
-        public Task RefreshAsync(string key, CancellationToken token = default) => Task.CompletedTask;
-        public void Remove(string key) { }
-        public Task RemoveAsync(string key, CancellationToken token = default) => Task.CompletedTask;
-        public void Set(string key, byte[] value, DistributedCacheEntryOptions options) { }
-        public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default)
-            => Task.CompletedTask;
-    }
 }

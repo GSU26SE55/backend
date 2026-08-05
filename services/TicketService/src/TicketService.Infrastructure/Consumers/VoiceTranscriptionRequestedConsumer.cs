@@ -35,61 +35,64 @@ public sealed class VoiceTranscriptionRequestedConsumer : IConsumer<VoiceTranscr
 
     public async Task Consume(ConsumeContext<VoiceTranscriptionRequestedEvent> context)
     {
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(VoiceTranscriptionRequestedConsumer), context.CancellationToken))
-            return;
-
-        var message = context.Message;
-        var claimed = await _uow.TicketChats.GetAllAsync()
-            .Where(x => x.Id == message.ChatId && !x.IsDeleted && x.VoiceTranscriptionStatus == VoiceTranscriptionStatusEnum.Pending)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.VoiceTranscriptionStatus, VoiceTranscriptionStatusEnum.Processing)
-                .SetProperty(x => x.TranscriptionStartedAt, DateTime.UtcNow), context.CancellationToken);
-        if (claimed != 1)
-            return;
-
-        var chat = await _uow.TicketChats.GetAllAsync().FirstAsync(x => x.Id == message.ChatId, context.CancellationToken);
-        try
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(VoiceTranscriptionRequestedConsumer), async () =>
         {
-            using var call = _files.DownloadForTranscription(
-                new DownloadForTranscriptionRequest { FileId = message.FileId.ToString() },
-                deadline: DateTime.UtcNow.AddSeconds(45),
-                cancellationToken: context.CancellationToken);
-            await using var audio = new MemoryStream();
-            var contentType = "application/octet-stream";
-            long expectedSize = 0;
-            while (await call.ResponseStream.MoveNext(context.CancellationToken))
+            var message = context.Message;
+            var claimed = await _uow.TicketChats.GetAllAsync()
+                .Where(x => x.Id == message.ChatId && !x.IsDeleted && x.VoiceTranscriptionStatus == VoiceTranscriptionStatusEnum.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.VoiceTranscriptionStatus, VoiceTranscriptionStatusEnum.Processing)
+                    .SetProperty(x => x.TranscriptionStartedAt, DateTime.UtcNow), context.CancellationToken);
+            if (claimed != 1)
+                return;
+
+            var chat = await _uow.TicketChats.GetAllAsync().FirstAsync(x => x.Id == message.ChatId, context.CancellationToken);
+            try
             {
-                var chunk = call.ResponseStream.Current;
-                if (!string.IsNullOrEmpty(chunk.ContentType))
-                    contentType = chunk.ContentType;
-                if (chunk.TotalSize > 0)
-                    expectedSize = chunk.TotalSize;
-                if (audio.Length + chunk.Chunk.Length > ChatVoiceTranscribeCommand.MaxAudioFileSizeDefault)
-                    throw new RpcException(new Status(StatusCode.ResourceExhausted, "Audio exceeds 20 MB."));
-                chunk.Chunk.WriteTo(audio);
+                using var call = _files.DownloadForTranscription(
+                    new DownloadForTranscriptionRequest { FileId = message.FileId.ToString() },
+                    deadline: DateTime.UtcNow.AddSeconds(45),
+                    cancellationToken: context.CancellationToken);
+                await using var audio = new MemoryStream();
+                var contentType = "application/octet-stream";
+                long expectedSize = 0;
+                while (await call.ResponseStream.MoveNext(context.CancellationToken))
+                {
+                    var chunk = call.ResponseStream.Current;
+                    if (!string.IsNullOrEmpty(chunk.ContentType))
+                        contentType = chunk.ContentType;
+                    if (chunk.TotalSize > 0)
+                        expectedSize = chunk.TotalSize;
+                    if (audio.Length + chunk.Chunk.Length > ChatVoiceTranscribeCommand.MaxAudioFileSizeDefault)
+                        throw new RpcException(new Status(StatusCode.ResourceExhausted, "Audio exceeds 20 MB."));
+                    chunk.Chunk.WriteTo(audio);
+                }
+
+                if (audio.Length == 0 || (expectedSize > 0 && audio.Length != expectedSize))
+                    throw new InvalidOperationException("Downloaded audio is incomplete.");
+                audio.Position = 0;
+                var transcript = await _voice.TranscribeAsync(audio, contentType, context.CancellationToken);
+                if (string.IsNullOrWhiteSpace(transcript))
+                    throw new InvalidOperationException("Gemini returned an empty transcript.");
+
+                chat.Body = transcript.Trim();
+                chat.VoiceTranscriptionStatus = VoiceTranscriptionStatusEnum.Completed;
+                chat.VoiceTranscriptionError = null;
+                chat.TranscribedAt = DateTime.UtcNow;
+                await PersistAndNotifyAsync(chat, context.CancellationToken);
             }
-
-            if (audio.Length == 0 || (expectedSize > 0 && audio.Length != expectedSize))
-                throw new InvalidOperationException("Downloaded audio is incomplete.");
-            audio.Position = 0;
-            var transcript = await _voice.TranscribeAsync(audio, contentType, context.CancellationToken);
-            if (string.IsNullOrWhiteSpace(transcript))
-                throw new InvalidOperationException("Gemini returned an empty transcript.");
-
-            chat.Body = transcript.Trim();
-            chat.VoiceTranscriptionStatus = VoiceTranscriptionStatusEnum.Completed;
-            chat.VoiceTranscriptionError = null;
-            chat.TranscribedAt = DateTime.UtcNow;
-            await PersistAndNotifyAsync(chat, context.CancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Voice transcription failed for chat {ChatId}", chat.Id);
-            chat.Body = PendingBody;
-            chat.VoiceTranscriptionStatus = VoiceTranscriptionStatusEnum.Failed;
-            chat.VoiceTranscriptionError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-            await PersistAndNotifyAsync(chat, context.CancellationToken);
-        }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Voice transcription failed for chat {ChatId}", chat.Id);
+                chat.Body = PendingBody;
+                chat.VoiceTranscriptionStatus = VoiceTranscriptionStatusEnum.Failed;
+                chat.VoiceTranscriptionError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                await PersistAndNotifyAsync(chat, context.CancellationToken);
+            }
+        });
     }
 
     private async Task PersistAndNotifyAsync(TicketChat chat, CancellationToken ct)

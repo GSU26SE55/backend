@@ -65,6 +65,10 @@ public class AmbientReadingsController : ControllerBase
     [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.EnvironmentalIngest)]
     public async Task<IActionResult> BatchIngest([FromBody] BatchIngestAmbientReadingsCommand cmd, CancellationToken ct)
     {
+        // GH-806 — site LẤY TỪ CLAIM của thiết bị đã xác thực, không tin SiteId trong body.
+        // Trước đây thiết bị thuộc Site A gửi được dữ liệu cho Site B và vẫn nhận 201.
+        cmd.AuthenticatedDeviceSiteId = ReadDeviceSiteIdClaim();
+
         var result = await _mediator.Send(cmd, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -199,5 +203,15 @@ public class AmbientReadingsController : ControllerBase
     {
         var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// GH-806 — đọc claim <c>iot:site_id</c> do <c>ApiKeyAuthenticationHandler</c> phát ra.
+    /// Trả <c>null</c> khi người gọi không phải thiết bị (JWT) — lúc đó chỉ còn kiểm tồn tại site.
+    /// </summary>
+    private Guid? ReadDeviceSiteIdClaim()
+    {
+        var raw = User.FindFirst(ApiKeyAuthenticationHandler.ClaimDeviceSiteId)?.Value;
+        return Guid.TryParse(raw, out var siteId) ? siteId : null;
     }
 }

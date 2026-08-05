@@ -30,29 +30,28 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 
     public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "AccountActivated", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate AccountActivated message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = new[] { evt.AccountId };
 
-        var recipientIds = new[] { evt.AccountId };
+            var title = "Chào mừng bạn đến với hệ thống";
+            var body = $"Tài khoản của {evt.FullName} đã được kích hoạt thành công.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                accountId = evt.AccountId,
+                role = evt.Role,
+                creationSource = evt.CreationSource,
+                screen = "Home"
+            });
 
-        var title = "Chào mừng bạn đến với hệ thống";
-        var body = $"Tài khoản của {evt.FullName} đã được kích hoạt thành công.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            accountId = evt.AccountId,
-            role = evt.Role,
-            creationSource = evt.CreationSource,
-            screen = "Home"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.AccountActivated, NotificationWriter.InAppOnly,
+                title, body, payload, "Account", evt.AccountId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.AccountActivated, NotificationWriter.InAppOnly,
-            title, body, payload, "Account", evt.AccountId, context.CancellationToken);
     }
 }

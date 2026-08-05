@@ -99,7 +99,10 @@ public class S3CompatibleFileStorageService : IObjectStorageService
             BucketName = _options.BucketName,
             Key = safeObjectKey,
             Verb = HttpVerb.GET,
-            Expires = DateTime.UtcNow.Add(expiresIn)
+            Expires = DateTime.UtcNow.Add(expiresIn),
+            // GH-788 — mặc định của SDK là HTTPS bất kể ServiceURL, nên endpoint HTTP (VPS, dev) nhận
+            // được link https:// và chết ở bắt tay TLS. Xem ObjectStorageClientFactory.ResolveProtocol.
+            Protocol = ObjectStorageClientFactory.ResolveProtocol(_options)
         };
 
         // Dùng public S3 client → URL signed với hostname mà browser resolve được (vd localhost:9090).

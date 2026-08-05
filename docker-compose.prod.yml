@@ -134,14 +134,22 @@ services:
     mem_limit: 512m
     cpus: "0.50"
     command: server /data --console-address ":9001"
+    # GH-788 — KHÔNG đặt giá trị mặc định cho credential ở production.
+    # Cú pháp ${VAR:?...} làm `docker compose up` DỪNG NGAY khi biến trống/không có, thay vì âm thầm
+    # dựng MinIO với minioadmin/minioadmin. Đây là khác biệt sống còn: bản cũ triển khai "thành công"
+    # với credential ai cũng đoán được, và không có gì trong log nói rằng đã rơi về mặc định.
     environment:
-      MINIO_ROOT_USER: ${ObjectStorage__AccessKey:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${ObjectStorage__SecretKey:-minioadmin}
+      MINIO_ROOT_USER: ${ObjectStorage__AccessKey:?ObjectStorage__AccessKey là bắt buộc ở production — không có mặc định}
+      MINIO_ROOT_PASSWORD: ${ObjectStorage__SecretKey:?ObjectStorage__SecretKey là bắt buộc ở production — không có mặc định}
       MINIO_SERVER_URL: http://${VPS_IP:-152.42.167.222}:9090
-      MINIO_PROMETHEUS_AUTH_TYPE: public
     ports:
+      # Cổng S3 API PHẢI ra ngoài: presigned URL được ký cho chính host:port này, browser tải file
+      # qua đó. Truy cập vẫn cần chữ ký còn hạn — mở cổng không có nghĩa là mở dữ liệu.
       - "9090:9000"
-      - "9091:9001"
+      # Console quản trị chỉ nghe trên loopback của VPS: vào bằng SSH tunnel
+      # (ssh -L 9091:127.0.0.1:9091 user@vps). Trước đây console mở ra Internet, mà đăng nhập console
+      # bằng chính root credential — tức là toàn quyền trên mọi bucket.
+      - "127.0.0.1:9091:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -160,11 +168,16 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    # GH-788 — bucket PRIVATE. `anonymous set download` trước đây cho phép bất kỳ ai biết object key
+    # là tải được file mà không cần token: đính kèm ticket, ảnh bảo trì, tài liệu bảo hành đều nằm
+    # chung một bucket đó. Object key là GUID nên "khó đoán", nhưng key rò ra qua log, qua lịch sử
+    # trình duyệt, qua Referer — và lúc đó không còn tầng nào chặn nữa.
+    # Tải file đi qua FileStorageService (kiểm quyền) hoặc presigned URL có hạn.
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 ${ObjectStorage__AccessKey:-minioadmin} ${ObjectStorage__SecretKey:-minioadmin} &&
+      mc alias set local http://minio:9000 ${ObjectStorage__AccessKey:?ObjectStorage__AccessKey là bắt buộc ở production} ${ObjectStorage__SecretKey:?ObjectStorage__SecretKey là bắt buộc ở production} &&
       mc mb -p local/${ObjectStorage__BucketName:-solar-battery-files} 2>/dev/null || true &&
-      mc anonymous set download local/${ObjectStorage__BucketName:-solar-battery-files} &&
+      mc anonymous set none local/${ObjectStorage__BucketName:-solar-battery-files} &&
       exit 0
       "
     networks: [solar-net]
@@ -293,8 +306,23 @@ services:
       Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      # GH-790 — cổng kênh gRPC nội bộ (voice transcription + quét virus đính kèm).
+      # `${VAR:?}` để `docker compose up` DỪNG NGAY khi thiếu, thay vì để container lên rồi chết với
+      # InvalidOperationException khó lần. Dev compose đã fail-fast như vậy; prod thì trước đây phó
+      # mặc cho env_file — thiếu là service crash-loop mà không ai biết vì sao.
+      Grpc__Port: ${FILE_STORAGE_SERVICE_GRPC_SERVER_PORT:?FILE_STORAGE_SERVICE_GRPC_SERVER_PORT is required}
+
       # Override để dùng internal minio hostname (container-to-container)
       ObjectStorage__ServiceUrl: http://minio:9000
+      # GH-788 — Host mà BROWSER dùng khi tải presigned URL. Chữ ký S3 phủ cả Host, nên nếu ký bằng
+      # `minio:9000` (tên nội bộ) thì link trả ra không ai ngoài mạng container mở được. Thiếu biến
+      # này chính là lý do production phải mở bucket anonymous để file tải được — vá bucket mà không
+      # vá chỗ này thì chỉ đổi lỗi rò dữ liệu thành lỗi không tải được file.
+      # dev đặt trong docker-compose.yml, k8s đặt trong configmap; chỉ compose prod bỏ sót.
+      ObjectStorage__PublicServiceUrl: "${ObjectStorage__PublicServiceUrl:-http://${VPS_IP:-152.42.167.222}:9090}"
+      # Bucket private ⇒ không phát URL public nữa (xem minio-init). Ghi rõ rỗng để giá trị cũ trong
+      # /opt/solar/.env.prod không âm thầm sống lại.
+      ObjectStorage__PublicBaseUrl: ""
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"
       ConnectionStrings__FileStorageDb: "Host=postgres;Port=5432;Database=${FILE_STORAGE_DB_NAME:-file_storage_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Maximum Pool Size=10;Minimum Pool Size=0"
@@ -421,6 +449,9 @@ services:
       Cors__AllowedOrigins__1: "${Cors__AllowedOrigins__1:-}"
       Cors__AllowedOrigins__2: "${Cors__AllowedOrigins__2:-}"
       ASPNETCORE_ENVIRONMENT: Production
+      # GH-790 — địa chỉ kênh gRPC nội bộ của FileStorageService. Thiếu là VirusScanWorker và voice
+      # transcription không biết gọi đi đâu; `:?` để lỗi hiện ra lúc deploy, không phải lúc chạy.
+      Chat__Voice__FileStorageGrpcAddress: ${FILE_STORAGE_GRPC_CLIENT_ADDRESS:?FILE_STORAGE_GRPC_CLIENT_ADDRESS is required}
       ASPNETCORE_URLS: http://+:8080
       DOTNET_gcServer: "0"
       DisableHttpsRedirection: "true"

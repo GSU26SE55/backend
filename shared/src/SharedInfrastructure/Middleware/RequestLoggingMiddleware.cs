@@ -52,15 +52,30 @@ public class RequestLoggingMiddleware
         {
             sw.Stop();
 
-            var status = context.Response.StatusCode;
+            // GH-800 — client tự đóng kết nối không phải lỗi máy chủ.
+            //
+            // Luồng SSE sống lâu; client đóng lại là chuyện bình thường, nhưng YARP đánh trạng thái
+            // downstream thành 502 và dòng log này ghi ra một lỗi 5xx dù dữ liệu đã truyền xong.
+            // Tỉ lệ lỗi giả làm SLO sai và che mất những cú 502 THẬT.
+            //
+            // Ở đây nhận diện theo RequestAborted chứ không sửa Response.StatusCode: khi phản hồi đã
+            // bắt đầu (đúng trường hợp SSE) thì trạng thái không sửa được nữa —
+            // ClientDisconnectStatusMiddleware lo phần sửa được, còn phần này lo phần còn lại.
+            var clientAborted = context.RequestAborted.IsCancellationRequested;
+            var status = clientAborted && context.Response.StatusCode >= 500
+                ? ClientDisconnectStatusMiddleware.ClientClosedRequest
+                : context.Response.StatusCode;
+
             var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var correlationId = context.GetCorrelationId();
 
-            var level = status >= 500 || exception != null
-                ? LogLevel.Error
-                : status >= 400
-                    ? LogLevel.Warning
-                    : LogLevel.Information;
+            var level = clientAborted
+                ? LogLevel.Information
+                : status >= 500 || exception != null
+                    ? LogLevel.Error
+                    : status >= 400
+                        ? LogLevel.Warning
+                        : LogLevel.Information;
 
             _logger.Log(level, exception,
                 "HTTP {Method} {Path}{Query} → {StatusCode} in {Elapsed}ms (user={UserId}, corrId={CorrelationId})",

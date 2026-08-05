@@ -137,9 +137,51 @@ services:
       - ./infra/mqtt/mosquitto/certs:/mosquitto/certs:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
+    # GH-784 — broker TỰ nạp lại khi file passwd đổi.
+    #
+    # Mosquitto 2.0 chỉ đọc lại `password_file` khi nhận SIGHUP. Cách khác là để BatteryService gọi
+    # Docker API mà bắn tín hiệu sang đây — nhưng như vậy phải cấp Docker socket cho một container
+    # ứng dụng, tức trao quyền điều khiển toàn máy chủ chỉ để bảo broker đọc lại một file.
+    # Ở đây broker tự theo dõi file của chính nó: không container nào cần thêm đặc quyền.
+    #
+    # Dùng vòng lặp so mốc sửa đổi thay vì inotify vì image mosquitto:2.0 không có inotify-tools;
+    # 5 giây là đủ nhanh cho việc cấp/thu hồi thiết bị.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        (
+          last=""
+          while :; do
+            cur=$$(stat -c %Y /mosquitto/config/passwd 2>/dev/null || echo none)
+            if [ -n "$$last" ] && [ "$$cur" != "$$last" ]; then
+              echo "[passwd-watch] file doi -> SIGHUP mosquitto"
+              kill -HUP 1 2>/dev/null || true
+            fi
+            last="$$cur"
+            sleep 5
+          done
+        ) &
+        exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+    environment:
+      # GH-786 — credential cho healthcheck. Dùng lại tài khoản bridge: ACL đã cho nó
+      # `readwrite solar/#`, nên không phải sinh thêm user chỉ để thăm dò.
+      MQTT_HEALTH_USER: ${Mqtt__Username:-backend-bridge}
+      MQTT_HEALTH_PASS: ${Mqtt__Password:-}
     healthcheck:
-      # `nc` không có trong image mosquitto:2.0 → dùng /dev/tcp của sh.
-      test: ["CMD-SHELL", "timeout 2 sh -c '</dev/tcp/127.0.0.1/1883' || exit 1"]
+      # GH-786 — thăm dò bằng PUBLISH CÓ XÁC THỰC, không phải mở socket.
+      #
+      # Bản cũ dùng `sh -c '</dev/tcp/127.0.0.1/1883'` kèm chú thích "nc không có trong image".
+      # Nhưng `/dev/tcp` là tính năng của BASH, còn image mosquitto:2.0 dùng BusyBox ash — kiểm
+      # chứng trực tiếp: `sh: can't open /dev/tcp/127.0.0.1/1883: no such file`. Nên healthcheck
+      # LUÔN thất bại và container vĩnh viễn `unhealthy`, kể cả khi broker đang phục vụ bình thường.
+      #
+      # `mosquitto_pub` CÓ trong image (/usr/bin/mosquitto_pub). Publish QoS 1 buộc broker phải ACK,
+      # nên phép thử này phủ cả listener LẪN đường xác thực — mở được socket mà auth hỏng thì vẫn
+      # phải báo unhealthy, đó mới là "thật sự dùng được".
+      #
+      # Không đặt cờ timeout của mosquitto_pub: nó không có `-W`; `timeout:` của Docker lo việc đó.
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -u \"$$MQTT_HEALTH_USER\" -P \"$$MQTT_HEALTH_PASS\" -t solar/healthcheck -m ok -q 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -414,6 +456,10 @@ services:
       Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # GH-784 — nơi ghi thông tin đăng nhập thiết bị để broker biết chúng tồn tại. Bỏ trống ⇒
+      # KHÔNG đồng bộ, và thiết bị vừa cấp sẽ nhận "not authorised" dù API trả 201.
+      Mqtt__PasswordFilePath: ${Mqtt__PasswordFilePath:-/mosquitto-config/passwd}
+      Mqtt__CredentialSyncIntervalSeconds: ${Mqtt__CredentialSyncIntervalSeconds:-60}
       # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage (multipart upload).
       Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
       Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
@@ -435,6 +481,10 @@ services:
       - "8081"
     volumes:
       - firmware-storage:/data/firmware-storage
+      # GH-784 — mount READ-WRITE đúng MỘT thư mục chứa file passwd, không phải cả infra/mqtt.
+      # Mosquitto vẫn mount file đó read-only ở phía nó: chỉ một bên được ghi, và bên ghi là bên
+      # sở hữu dữ liệu (DB thiết bị).
+      - ./infra/mqtt/mosquitto:/mosquitto-config:rw
     depends_on:
       postgres:
         condition: service_healthy

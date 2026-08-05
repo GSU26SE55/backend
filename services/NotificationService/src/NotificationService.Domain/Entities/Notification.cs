@@ -74,4 +74,15 @@ public class Notification : AuditableEntity
     /// </list>
     /// </summary>
     public DateTime? NextAttemptAt { get; set; }
+
+    /// <summary>
+    /// GH-792 — UTC, thời điểm bản ghi được CHIẾM để gửi
+    /// (<see cref="NotificationStatusEnum.Processing"/>).
+    /// </summary>
+    /// <remarks>
+    /// Dùng để thu hồi việc bị bỏ dở: tiến trình chết giữa chừng thì bản ghi nằm mãi ở
+    /// <c>Processing</c> và không ai gửi nữa. Có mốc này mới phân biệt được "đang gửi" với "đã chết
+    /// lúc đang gửi" — không có nó thì hoặc là kẹt vĩnh viễn, hoặc phải thu hồi mù và gửi trùng.
+    /// </remarks>
+    public DateTime? ProcessingStartedAt { get; set; }
 }

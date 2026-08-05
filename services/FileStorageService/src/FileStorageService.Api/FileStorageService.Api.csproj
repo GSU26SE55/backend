@@ -14,7 +14,7 @@
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
         <PackageReference Include="Grpc.AspNetCore" Version="2.63.0" />
         <!-- Sprint audit #AUDIT-29 — EF tools cho migration audit. -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>

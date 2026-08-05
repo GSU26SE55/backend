@@ -1,10 +1,11 @@
 using SharedKernels.Domain;
+using SharedKernels.Interfaces;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Domain.Entities;
 
 /// <summary>Outbox riêng cho audit pipeline TicketService (Sprint audit #AUDIT-25). Pattern giống AuthService #AUDIT-07.</summary>
-public class TicketAuditOutbox : AuditableEntity
+public class TicketAuditOutbox : AuditableEntity, IAuditOutboxMessage
 {
     public Guid EventId { get; set; }
     public string EventType { get; set; } = "AuditCreatedEventV1";

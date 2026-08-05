@@ -350,16 +350,44 @@ public class BatteryServiceIntegrationTests
         };
     }
 
+    /// <summary>
+    /// GH-764 — bám đúng vòng đời ba bước: giữ chỗ → chốt khi xong → nhả khi lỗi.
+    /// Bản giả mà chốt ngay từ lúc xin chỗ sẽ che mất chính lỗi mà issue nói tới.
+    /// </summary>
     private sealed class InMemoryInboxStore : IInboxStore
     {
-        private readonly ConcurrentDictionary<string, byte> _processedMessages = new();
+        private readonly ConcurrentDictionary<string, (bool Completed, string Token)> _entries = new();
 
-        public Task<bool> TryMarkProcessedAsync(
+        private static string Key(Guid messageId, string consumerName) => $"{consumerName}:{messageId}";
+
+        public Task<InboxClaim> TryBeginAsync(
             Guid messageId,
             string consumerName,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(_processedMessages.TryAdd($"{consumerName}:{messageId}", 0));
+            var token = Guid.NewGuid().ToString("N");
+            if (_entries.TryAdd(Key(messageId, consumerName), (false, token)))
+                return Task.FromResult(new InboxClaim(InboxClaimStatus.Claimed, token));
+
+            return Task.FromResult(_entries[Key(messageId, consumerName)].Completed
+                ? InboxClaim.Completed
+                : InboxClaim.Busy);
+        }
+
+        public Task CompleteAsync(Guid messageId, string consumerName, string token, CancellationToken cancellationToken = default)
+        {
+            var key = Key(messageId, consumerName);
+            if (_entries.TryGetValue(key, out var e) && e.Token == token)
+                _entries[key] = (true, token);
+            return Task.CompletedTask;
+        }
+
+        public Task ReleaseAsync(Guid messageId, string consumerName, string token, CancellationToken cancellationToken = default)
+        {
+            var key = Key(messageId, consumerName);
+            if (_entries.TryGetValue(key, out var e) && e.Token == token && !e.Completed)
+                _entries.TryRemove(key, out _);
+            return Task.CompletedTask;
         }
     }
 }

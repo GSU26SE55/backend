@@ -35,34 +35,33 @@ public class IncidentDeclaredConsumer : IConsumer<IncidentDeclaredEvent>
 
     public async Task Consume(ConsumeContext<IncidentDeclaredEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "IncidentDeclared", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate IncidentDeclared message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No Manager/Admin recipient resolved for IncidentDeclared ticket={TicketId} — skip.", evt.TicketId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for IncidentDeclared ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
+            var title = $"🚨 Critical Incident: {evt.Code}";
+            var body = $"Ticket {evt.Code} đã được declare thành Critical Incident. Cần xử lý khẩn.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                declaredByUserId = evt.DeclaredByUserId,
+                screen = "TicketDetail"
+            });
 
-        var title = $"🚨 Critical Incident: {evt.Code}";
-        var body = $"Ticket {evt.Code} đã được declare thành Critical Incident. Cần xử lý khẩn.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            declaredByUserId = evt.DeclaredByUserId,
-            screen = "TicketDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.IncidentDeclared, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.IncidentDeclared, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

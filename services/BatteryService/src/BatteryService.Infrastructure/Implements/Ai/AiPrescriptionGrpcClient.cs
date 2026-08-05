@@ -49,6 +49,9 @@ public class AiPrescriptionGrpcClient
             SafetyWarnings: resp.SafetyWarnings.ToList(),
             HumanVerificationRequired: resp.HumanVerificationRequired,
             Enriched: resp.Enriched,
-            LlmProvider: resp.LlmProvider);
+            LlmProvider: resp.LlmProvider,
+            // GH-778 — giữ lại ID để còn gửi phản hồi được. Bỏ ở đây là cắt đứt vòng học của AI
+            // ngay tại ranh giới bridge.
+            PrescriptionId: string.IsNullOrWhiteSpace(resp.PrescriptionId) ? null : resp.PrescriptionId);
     }
 }

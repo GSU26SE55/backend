@@ -43,8 +43,11 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
 
     public async Task<AccountActionResponse> Handle(ChangeAccountRoleCommand request, CancellationToken cancellationToken)
     {
+        // GH-769 — Include(Role) để biết TÊN role cũ. Consumer bên Battery/Ticket cần cả vế cũ
+        // lẫn vế mới: chỉ có role mới thì không suy ra được bản sao NÀO phải dọn.
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (account == null)
@@ -72,6 +75,9 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
         }
 
         var previousRoleId = account.RoleId;
+        // Chụp TÊN role cũ ngay đây — sau khi gán RoleId mới thì navigation Role có thể đã đổi.
+        // Role rỗng là hợp lệ: account Google OAuth chưa onboard chưa có role nào.
+        var previousRoleName = account.Role?.Name ?? string.Empty;
 
         if (previousRoleId == request.RoleId)
         {
@@ -145,6 +151,20 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
                         IsDeleted: false,
                         SnapshotAtUtc: snapshotAtUtc,
                         Reason: "RoleChanged"), ct);
+
+                    // GH-769 — Battery và Ticket KHÔNG nghe AccountSyncSnapshotEvent (chỉ
+                    // NotificationService nghe), nên trước đây đổi role xong bản sao ở hai service
+                    // đó giữ nguyên role cũ: thiếu StaffAccount thì không giao ticket được, thừa
+                    // CustomerAccount thì vẫn giữ quyền nghiệp vụ cũ.
+                    await _messageProducer.PublishAsync(new AccountRoleChangedEvent(
+                        account.Id,
+                        account.Email,
+                        account.FullName,
+                        account.PhoneNumber,
+                        OldRole: previousRoleName,
+                        NewRole: role.Name,
+                        ChangedAtUtc: snapshotAtUtc), ct);
+
                     snapshotPublished = true;
                 }
 

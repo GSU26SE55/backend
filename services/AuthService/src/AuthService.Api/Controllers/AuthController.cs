@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using AuthService.Api.Extensions;
+using AuthService.Application.Common.Options;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
@@ -471,9 +472,15 @@ public class AuthController : ControllerBase
     /// access token + check revocation. Trả {active: true/false} + metadata cơ bản.
     /// </summary>
     [HttpPost("introspect")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyIntrospect)]
     [ProducesResponseType(typeof(CommonResponse<AuthService.Application.CQRS.Command.Auth.TokenIntrospectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Introspect([FromBody] IntrospectTokenCommand command, CancellationToken cancellationToken)
     {
+        // GH-776 — khoá resource server lấy từ HEADER, không phải body: field trên command có
+        // [JsonIgnore]+[BindNever] nên client không tự đặt được. Cùng khuôn với CallerAccountId ở trên.
+        command.PresentedApiKey = Request.Headers[IntrospectionOptions.HeaderName].ToString();
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }

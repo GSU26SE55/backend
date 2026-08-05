@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Query.Alert;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,19 +12,41 @@ namespace BatteryService.Application.CQRS.Handler.Alert;
 public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonResponse<PaginationResponse<AlertDto>>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetAlertsQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetAlertsQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<PaginationResponse<AlertDto>>> Handle(GetAlertsQuery request, CancellationToken cancellationToken)
     {
+        // GH-722 — Customer chỉ thấy alert của asset/site thuộc mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<PaginationResponse<AlertDto>>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Không xác định được người dùng hiện tại."
+            };
+        }
+
         var query = _unitOfWork.Alerts
             .GetAllAsync()
             .AsNoTracking()
             .Include(alert => alert.BatteryAsset)
             .Where(alert => !alert.IsDeleted);
+
+        // Alert có thể gắn asset HOẶC site (cả hai đều nullable) — phải phủ cả hai đường.
+        if (scope.IsCustomerScoped)
+        {
+            query = query.Where(alert =>
+                (alert.BatteryAsset != null && alert.BatteryAsset.CustomerId == scope.CustomerId)
+                || (alert.Site != null && alert.Site.CustomerId == scope.CustomerId));
+        }
 
         if (request.BatteryAssetId.HasValue)
             query = query.Where(alert => alert.BatteryAssetId == request.BatteryAssetId.Value);

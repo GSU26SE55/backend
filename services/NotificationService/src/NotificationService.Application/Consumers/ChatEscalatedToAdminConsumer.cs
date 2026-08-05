@@ -40,37 +40,36 @@ public class ChatEscalatedToAdminConsumer : IConsumer<ChatEscalatedToAdminEvent>
 
     public async Task Consume(ConsumeContext<ChatEscalatedToAdminEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "ChatEscalatedToAdmin", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate ChatEscalatedToAdmin message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Admin");
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning(
+                    "No Admin recipient resolved for ChatEscalatedToAdmin ticket={TicketId} — skip.", evt.TicketId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning(
-                "No Admin recipient resolved for ChatEscalatedToAdmin ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
+            var title = $"🚨 Escalation chat lên Admin — ticket {evt.TicketCode}";
+            var body = $"Manager không phản hồi yêu cầu review chat trên ticket {evt.TicketCode} trong 30 phút. " +
+                       "Cần Admin vào xử lý.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                chatId = evt.ChatId,
+                ticketId = evt.TicketId,
+                ticketCode = evt.TicketCode,
+                managerUserId = evt.ManagerUserId,
+                screen = "TicketDetail"
+            });
 
-        var title = $"🚨 Escalation chat lên Admin — ticket {evt.TicketCode}";
-        var body = $"Manager không phản hồi yêu cầu review chat trên ticket {evt.TicketCode} trong 30 phút. " +
-                   "Cần Admin vào xử lý.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            chatId = evt.ChatId,
-            ticketId = evt.TicketId,
-            ticketCode = evt.TicketCode,
-            managerUserId = evt.ManagerUserId,
-            screen = "TicketDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.ChatEscalatedToAdmin, NotificationWriter.InAppPushEmail,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.ChatEscalatedToAdmin, NotificationWriter.InAppPushEmail,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

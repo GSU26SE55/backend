@@ -134,7 +134,9 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo IoT device mới + sinh API key per-device + MQTT credential — response trả raw key + raw MQTT password ĐÚNG 1 LẦN, sau đó chỉ giữ hash trong DB.
+    /// Tạo IoT device mới + sinh API key per-device + MQTT credential. Response trả raw API key
+    /// và raw MQTT password. <b>MQTT password chỉ trả 1 lần</b> (DB chỉ giữ hash);
+    /// <b>API key thì đọc lại được</b> qua <c>GET /{id}</c> (GH-724 — có chủ ý).
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -158,7 +160,7 @@ public class AdminIotDevicesController : ControllerBase
     ///
     /// Lưu ý:
     /// <list type="bullet">
-    ///   <item><description><b>RawApiKey chỉ trả về 1 lần</b>. Sau khi response trả về, hệ thống chỉ giữ hash. Mất key → rotate (không phải reset).</description></item>
+    ///   <item><description>GH-724 — <b>RawApiKey KHÔNG phải "chỉ 1 lần"</b>: hệ thống giữ cả hash lẫn plaintext, Admin đọc lại được qua <c>GET /{id}</c>. Mất key vẫn có thể rotate. Ngược lại, <b>raw MQTT password đúng là chỉ 1 lần</b> — DB chỉ giữ <c>MqttPasswordHash</c>.</description></item>
     ///   <item><description>Endpoint không gửi <c>RawApiKey</c> qua log/audit/event — chỉ trong response body. Đảm bảo client không log nó.</description></item>
     ///   <item><description>Sau khi tạo, gắn calibration profile (<c>iot_device_calibrations</c>) cho từng channel nếu BMS có offset/scale riêng — endpoint riêng (Sprint IoT-2).</description></item>
     /// </list>
@@ -285,9 +287,9 @@ public class AdminIotDevicesController : ControllerBase
     /// Endpoint dành riêng cho rotate vì là hành động nghiệp vụ đặc biệt:
     /// <list type="bullet">
     ///   <item><description>Sinh raw key 256-bit mới (prefix <c>iotk_</c>).</description></item>
-    ///   <item><description>Replace <c>ApiKeyHash</c> + <c>ApiKeyLastFour</c> trong DB.</description></item>
+    ///   <item><description>Replace <c>ApiKeyHash</c> + <c>ApiKeyLastFour</c> + <c>ApiKeyPlaintext</c> trong DB (GH-724 — plaintext được lưu lại có chủ ý).</description></item>
     ///   <item><description>Reset <c>ApiKeyIssuedAt = UtcNow</c>, set <c>ApiKeyRevokedAt = null</c> (cho phép device dùng lại sau khi từng revoke).</description></item>
-    ///   <item><description>Trả <see cref="IotDeviceCreatedDto"/> với <c>RawApiKey</c> mới — chỉ 1 lần.</description></item>
+    ///   <item><description>Trả <see cref="IotDeviceCreatedDto"/> với <c>RawApiKey</c> mới (đọc lại được sau đó qua <c>GET /{id}</c> — GH-724).</description></item>
     /// </list>
     ///
     /// Use case:

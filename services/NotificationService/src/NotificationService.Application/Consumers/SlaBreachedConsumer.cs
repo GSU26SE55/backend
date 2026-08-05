@@ -48,66 +48,65 @@ public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
 
     public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "SlaBreached", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate SlaBreached message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
+            var tier = ResolvePriorityTier(evt.Priority);
 
-        var evt = context.Message;
-        var tier = ResolvePriorityTier(evt.Priority);
+            var roles = tier == PriorityTier.P1
+                ? new[] { "Manager", "Admin" }
+                : new[] { "Manager" };
 
-        var roles = tier == PriorityTier.P1
-            ? new[] { "Manager", "Admin" }
-            : new[] { "Manager" };
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, roles);
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No {Roles} recipient resolved for SlaBreached ticket={TicketId} — skip.",
+                    string.Join("/", roles), evt.TicketId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, roles);
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No {Roles} recipient resolved for SlaBreached ticket={TicketId} — skip.",
-                string.Join("/", roles), evt.TicketId);
-            return;
-        }
+            var channels = ResolveChannels(tier);
 
-        var channels = ResolveChannels(tier);
+            var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
 
-        var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
+            var title = tier switch
+            {
+                PriorityTier.P1 => $"🔴 SLA P1 bị vi phạm{codeSuffix} — cần xử lý ngay",
+                PriorityTier.P2 => $"🟠 SLA P2 bị vi phạm{codeSuffix}",
+                _ => $"🟡 SLA P3 bị vi phạm{codeSuffix}",
+            };
 
-        var title = tier switch
-        {
-            PriorityTier.P1 => $"🔴 SLA P1 bị vi phạm{codeSuffix} — cần xử lý ngay",
-            PriorityTier.P2 => $"🟠 SLA P2 bị vi phạm{codeSuffix}",
-            _ => $"🟡 SLA P3 bị vi phạm{codeSuffix}",
-        };
+            var body = tier switch
+            {
+                PriorityTier.P1 =>
+                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Cần reassign Senior (Tier 3) và báo Admin ngay.",
+                PriorityTier.P2 =>
+                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Manager cân nhắc reassign Tier 2/3.",
+                _ =>
+                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Cần Manager review khi có thể.",
+            };
 
-        var body = tier switch
-        {
-            PriorityTier.P1 =>
-                $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                "Cần reassign Senior (Tier 3) và báo Admin ngay.",
-            PriorityTier.P2 =>
-                $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                "Manager cân nhắc reassign Tier 2/3.",
-            _ =>
-                $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                "Cần Manager review khi có thể.",
-        };
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                // 03/08/2026 — xem chú thích cùng chủ đề ở SlaWarningConsumer.
+                code = evt.Code,
+                breachedAt = evt.BreachedAt,
+                priority = evt.Priority,
+                priorityTier = tier.ToString(),
+                screen = "TicketDetail"
+            });
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            // 03/08/2026 — xem chú thích cùng chủ đề ở SlaWarningConsumer.
-            code = evt.Code,
-            breachedAt = evt.BreachedAt,
-            priority = evt.Priority,
-            priorityTier = tier.ToString(),
-            screen = "TicketDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.SlaBreached, channels,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.SlaBreached, channels,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 
     private static NotificationChannelEnum[] ResolveChannels(PriorityTier tier) => tier switch

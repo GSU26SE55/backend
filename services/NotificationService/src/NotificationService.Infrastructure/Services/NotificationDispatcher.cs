@@ -290,12 +290,43 @@ public class NotificationDispatcher : INotificationDispatcher
             Title = title,
             Body = body,
             PayloadJson = notification.PayloadJson,
+            // Để kênh push gửi kèm, giúp client mở đúng màn hình mà danh sách trong app cũng mở.
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
             IsCritical = isCritical,
             ExpoToken = tokens is { Count: > 0 } ? tokens[0] : null,
             ExpoTokens = tokens,
             Email = account?.Email,
             PhoneNumber = account?.PhoneNumber,
         };
+
+        // GH-792 — CHIẾM bản ghi và ghi xuống DB TRƯỚC khi gọi provider.
+        //
+        // Trước đây bản ghi ở nguyên Pending trong suốt lúc gọi provider; tiến trình chết sau khi
+        // provider đã nhận nhưng trước khi kịp ghi Sent là vòng quét sau gửi lại — người dùng nhận
+        // email/SMS/push lần thứ hai. Ghi Processing trước thu hẹp cửa sổ đó xuống còn "chết trước
+        // khi kịp gửi", trường hợp mà gửi lại là ĐÚNG.
+        //
+        // DispatchAttemptCount tăng ngay tại đây, không đợi kết quả: một lần chiếm việc rồi chết
+        // vẫn là một lần thử. Đếm theo kết quả thì sự cố lặp lại sẽ quay vòng mãi mà số đếm không
+        // nhích, và MaxAttempts không bao giờ chạm tới.
+        // GH-793 — chiếm bằng MỘT câu UPDATE có điều kiện, không phải "đọc rồi ghi": hai replica
+        // cùng thấy Pending thì cơ sở dữ liệu chọn đúng một bên. Không dựa vào leader lease, vì
+        // lease hết hạn giữa chừng hay Redis sự cố là lại có hai chủ.
+        var claimedAt = DateTime.UtcNow;
+        if (!await _unitOfWork.TryClaimForDispatchAsync(notification.Id, claimedAt, ct))
+        {
+            _logger.LogDebug(
+                "Dispatch: notification {Id} đã được instance khác chiếm — bỏ qua.", notification.Id);
+            return DispatchOutcome.Deferred;
+        }
+
+        // Đồng bộ bản trong bộ nhớ với những gì câu UPDATE vừa ghi: ExecuteUpdate không đi qua bộ
+        // theo dõi thay đổi của EF, nên nếu bỏ bước này thì mọi đoạn phía sau (và bản ghi audit)
+        // vẫn nhìn thấy trạng thái cũ.
+        notification.Status = NotificationStatusEnum.Processing;
+        notification.ProcessingStartedAt = claimedAt;
+        notification.DispatchAttemptCount += 1;
 
         ChannelResult result;
         try
@@ -315,7 +346,8 @@ public class NotificationDispatcher : INotificationDispatcher
             notification.SentAt = DateTime.UtcNow;
             notification.FailureReason = null;
             notification.NextAttemptAt = null;
-            notification.DispatchAttemptCount += 1;
+            // GH-792 — số lần thử đã tăng lúc chiếm việc; tăng lại ở đây là đếm đôi.
+            notification.ProcessingStartedAt = null;
             _unitOfWork.Notifications.UpdateAsync(notification);
 
             // NOTI3-07 (#707) — delivery-rate tách theo channel là metric cơ bản nhất.
@@ -331,7 +363,8 @@ public class NotificationDispatcher : INotificationDispatcher
         }
 
         // Lỗi → retry có backoff cho tới MaxAttempts.
-        notification.DispatchAttemptCount += 1;
+        // GH-792 — số lần thử đã tăng lúc chiếm việc.
+        notification.ProcessingStartedAt = null;
         notification.FailureReason = Truncate(result.ErrorMessage, 1000);
 
         if (notification.DispatchAttemptCount >= _options.MaxAttempts)
@@ -352,6 +385,9 @@ public class NotificationDispatcher : INotificationDispatcher
             return DispatchOutcome.Failed;
         }
 
+        // GH-792 — trả về hàng đợi tường minh: bản ghi đang ở Processing (đã chiếm), không tự quay
+        // lại Pending được. Quên dòng này là nó kẹt ở Processing tới khi bộ thu hồi nhặt lên.
+        notification.Status = NotificationStatusEnum.Pending;
         notification.NextAttemptAt = DateTime.UtcNow.Add(BackoffFor(notification.DispatchAttemptCount));
         _unitOfWork.Notifications.UpdateAsync(notification);
         await _unitOfWork.SaveChangesAsync(ct);

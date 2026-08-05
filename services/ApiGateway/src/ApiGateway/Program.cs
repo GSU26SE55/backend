@@ -82,6 +82,12 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 // Prometheus HTTP metrics — track latency, status code, route distribution at gateway layer.
 app.UseHttpMetrics();
 
+// GH-800 — PHẢI đứng ngay SAU UseHttpMetrics, tức nằm BÊN TRONG nó.
+// `http_requests_received_total` đọc Response.StatusCode sau khi phần còn lại của pipeline chạy
+// xong; đặt ở đây thì trạng thái đã được chuẩn hoá trước lúc bộ đếm nhìn vào. Đặt trước
+// UseHttpMetrics là bộ đếm vẫn ghi 502 và dashboard vẫn báo 5xx giả mỗi lần client đóng luồng SSE.
+app.UseMiddleware<ClientDisconnectStatusMiddleware>();
+
 // Bật Swagger UI cho mọi non-Production environment (Development, Docker, Staging...).
 // Production thực sự nên tắt để giảm attack surface.
 if (!app.Environment.IsProduction())

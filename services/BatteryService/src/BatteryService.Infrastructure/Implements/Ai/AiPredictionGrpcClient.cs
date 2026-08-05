@@ -30,7 +30,10 @@ public class AiPredictionGrpcClient
         foreach (var row in readings)
         {
             var reading = new Reading();
-            reading.Values.AddRange(row);   // [voltage, current, temperature, time]
+            // GH-777 — chuyển tiếp NGUYÊN số cột của hàng: 4 cột
+            // [voltage, current, temperature, time] hoặc 6 cột khi có thêm
+            // [cycle_count, soc_percent]. Proto khai `repeated double` nên không cần sửa gì.
+            reading.Values.AddRange(row);
             request.Readings.Add(reading);
         }
         if (packConfig is not null)

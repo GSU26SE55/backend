@@ -32,8 +32,8 @@ public class Sprint62EmailConsumerTests : IAsyncLifetime
                  .ReturnsAsync("<html>RENDERED</html>");
 
         _inbox = new Mock<IInboxStore>();
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(true);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -138,9 +138,9 @@ public class Sprint62EmailConsumerTests : IAsyncLifetime
     [Fact]
     public async Task NotificationEmail_DuplicateMessage_InboxBlocks_NoEmailSent()
     {
-        _inbox.Setup(s => s.TryMarkProcessedAsync(
+        _inbox.Setup(s => s.TryBeginAsync(
                 It.IsAny<Guid>(), nameof(SendNotificationEmailConsumer), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(false);
+              .ReturnsAsync(InboxClaim.Completed);
 
         await _harness.Bus.Publish(new SendNotificationEmailEvent(
             Guid.NewGuid(), "dup@example.com", "S", "B"));

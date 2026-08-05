@@ -37,6 +37,9 @@ var connectionString = builder.Configuration.GetConnectionString("SmsDb")
 builder.Services.AddDbContext<SmsDbContext>(opt => opt.UseNpgsql(connectionString));
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<SmsDbContext>());
 builder.Services.AddScoped<ISmsUnitOfWork, SmsUnitOfWork>();
+// GH-794 — giành quyền publish từng dòng outbox, chặn hai replica cùng gửi một tin nhắn.
+builder.Services.AddScoped<SmsService.Application.Interfaces.Services.IOutboxClaimService,
+    SmsService.Infrastructure.Implements.Services.OutboxClaimService>();
 
 // Sprint 6.3 NOTI3-05 (#705) — seam để sau này cắm provider SMS thứ hai (Twilio/Vonage) mà không
 // phải sửa business logic. Hiện tại chỉ có gateway Android — giới hạn đã ghi nhận ở R-44.
@@ -62,10 +65,12 @@ builder.Services.AddInboxIdempotency(builder.Configuration);
 // ── 5. MassTransit consumers ──────────────────────────────────────────────
 // Consumer assembly: SmsService.Application chứa SendSmsCommandConsumer + SendPhoneOtpConsumer (Phase 5).
 // AddMessageBus đăng ký IMessageProducerService = MassTransitProducer — step 6 OVERRIDE bằng OutboxMessagePublisher.
+// GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
 builder.Services.AddMessageBus(
     builder.Configuration,
     configure: null,
-    AppDI.ApplicationAssembly);
+    AppDI.ApplicationAssembly,
+    typeof(SmsService.Infrastructure.Consumers.AuditReplayRequestedConsumer).Assembly);
 
 // ── 6. Outbox publisher (PHẢI đăng ký SAU AddMessageBus để override) ──────
 // Last-registration-wins: handler resolve IMessageProducerService → OutboxMessagePublisher.

@@ -22,71 +22,74 @@ public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
     public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountActivatedConsumer), context.CancellationToken))
-            return;
-
-        var isStaff = @event.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase) ||
-                      @event.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
-                      @event.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase);
-
-        if (isStaff)
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(TicketAccountActivatedConsumer), async () =>
         {
-            var staff = await _uow.StaffAccounts.GetAllAsync()
-                .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+            var isStaff = @event.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase) ||
+                          @event.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
+                          @event.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase);
 
-            if (staff == null)
+            if (isStaff)
             {
-                staff = new StaffAccount
+                var staff = await _uow.StaffAccounts.GetAllAsync()
+                    .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+
+                if (staff == null)
                 {
-                    Id = Guid.NewGuid(),
-                    AccountId = @event.AccountId,
-                    Email = @event.Email,
-                    FullName = @event.FullName,
-                    Status = AccountStatusEnum.Active,
-                    LastSyncedAt = DateTime.UtcNow
-                };
-                await _uow.StaffAccounts.AddAsync(staff);
-            }
-            else
-            {
-                staff.Email = @event.Email;
-                staff.FullName = @event.FullName;
-                staff.Status = AccountStatusEnum.Active;
-                staff.LastSyncedAt = DateTime.UtcNow;
-                _uow.StaffAccounts.UpdateAsync(staff);
-            }
-        }
-        else // Customer
-        {
-            var customer = await _uow.CustomerAccounts.GetAllAsync()
-                .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
-
-            if (customer == null)
-            {
-                customer = new CustomerAccount
+                    staff = new StaffAccount
+                    {
+                        Id = Guid.NewGuid(),
+                        AccountId = @event.AccountId,
+                        Email = @event.Email,
+                        FullName = @event.FullName,
+                        Status = AccountStatusEnum.Active,
+                        LastSyncedAt = DateTime.UtcNow
+                    };
+                    await _uow.StaffAccounts.AddAsync(staff);
+                }
+                else
                 {
-                    Id = Guid.NewGuid(),
-                    AccountId = @event.AccountId,
-                    Email = @event.Email,
-                    FullName = @event.FullName,
-                    PhoneNumber = @event.PhoneNumber,
-                    Status = AccountStatusEnum.Active,
-                    LastSyncedAt = DateTime.UtcNow
-                };
-                await _uow.CustomerAccounts.AddAsync(customer);
+                    staff.Email = @event.Email;
+                    staff.FullName = @event.FullName;
+                    staff.Status = AccountStatusEnum.Active;
+                    staff.LastSyncedAt = DateTime.UtcNow;
+                    _uow.StaffAccounts.UpdateAsync(staff);
+                }
             }
-            else
+            else // Customer
             {
-                customer.Email = @event.Email;
-                customer.FullName = @event.FullName;
-                customer.PhoneNumber = @event.PhoneNumber;
-                customer.Status = AccountStatusEnum.Active;
-                customer.LastSyncedAt = DateTime.UtcNow;
-                _uow.CustomerAccounts.UpdateAsync(customer);
-            }
-        }
+                var customer = await _uow.CustomerAccounts.GetAllAsync()
+                    .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
 
-        await _uow.SaveChangesAsync(context.CancellationToken);
+                if (customer == null)
+                {
+                    customer = new CustomerAccount
+                    {
+                        Id = Guid.NewGuid(),
+                        AccountId = @event.AccountId,
+                        Email = @event.Email,
+                        FullName = @event.FullName,
+                        PhoneNumber = @event.PhoneNumber,
+                        Status = AccountStatusEnum.Active,
+                        LastSyncedAt = DateTime.UtcNow
+                    };
+                    await _uow.CustomerAccounts.AddAsync(customer);
+                }
+                else
+                {
+                    customer.Email = @event.Email;
+                    customer.FullName = @event.FullName;
+                    customer.PhoneNumber = @event.PhoneNumber;
+                    customer.Status = AccountStatusEnum.Active;
+                    customer.LastSyncedAt = DateTime.UtcNow;
+                    _uow.CustomerAccounts.UpdateAsync(customer);
+                }
+            }
+
+            await _uow.SaveChangesAsync(context.CancellationToken);
+        });
     }
 }
 
@@ -104,28 +107,31 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
     public async Task Consume(ConsumeContext<AccountStatusChangedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountStatusChangedConsumer), context.CancellationToken))
-            return;
-
-        var staff = await _uow.StaffAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
-        if (staff != null)
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(TicketAccountStatusChangedConsumer), async () =>
         {
-            staff.Status = (AccountStatusEnum)@event.NewStatus;
-            staff.LastSyncedAt = DateTime.UtcNow;
-            _uow.StaffAccounts.UpdateAsync(staff);
-        }
+            var staff = await _uow.StaffAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+            if (staff != null)
+            {
+                staff.Status = (AccountStatusEnum)@event.NewStatus;
+                staff.LastSyncedAt = DateTime.UtcNow;
+                _uow.StaffAccounts.UpdateAsync(staff);
+            }
 
-        var customer = await _uow.CustomerAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
-        if (customer != null)
-        {
-            customer.Status = (AccountStatusEnum)@event.NewStatus;
-            customer.LastSyncedAt = DateTime.UtcNow;
-            _uow.CustomerAccounts.UpdateAsync(customer);
-        }
+            var customer = await _uow.CustomerAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
+            if (customer != null)
+            {
+                customer.Status = (AccountStatusEnum)@event.NewStatus;
+                customer.LastSyncedAt = DateTime.UtcNow;
+                _uow.CustomerAccounts.UpdateAsync(customer);
+            }
 
-        await _uow.SaveChangesAsync(context.CancellationToken);
+            await _uow.SaveChangesAsync(context.CancellationToken);
+        });
     }
 }
 
@@ -143,29 +149,32 @@ public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdat
     public async Task Consume(ConsumeContext<AccountProfileUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketAccountProfileUpdatedConsumer), context.CancellationToken))
-            return;
-
-        var staff = await _uow.StaffAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
-        if (staff != null)
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(TicketAccountProfileUpdatedConsumer), async () =>
         {
-            staff.FullName = @event.FullName;
-            staff.LastSyncedAt = DateTime.UtcNow;
-            _uow.StaffAccounts.UpdateAsync(staff);
-        }
+            var staff = await _uow.StaffAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+            if (staff != null)
+            {
+                staff.FullName = @event.FullName;
+                staff.LastSyncedAt = DateTime.UtcNow;
+                _uow.StaffAccounts.UpdateAsync(staff);
+            }
 
-        var customer = await _uow.CustomerAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
-        if (customer != null)
-        {
-            customer.FullName = @event.FullName;
-            customer.PhoneNumber = @event.PhoneNumber;
-            customer.LastSyncedAt = DateTime.UtcNow;
-            _uow.CustomerAccounts.UpdateAsync(customer);
-        }
+            var customer = await _uow.CustomerAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
+            if (customer != null)
+            {
+                customer.FullName = @event.FullName;
+                customer.PhoneNumber = @event.PhoneNumber;
+                customer.LastSyncedAt = DateTime.UtcNow;
+                _uow.CustomerAccounts.UpdateAsync(customer);
+            }
 
-        await _uow.SaveChangesAsync(context.CancellationToken);
+            await _uow.SaveChangesAsync(context.CancellationToken);
+        });
     }
 }
 
@@ -183,21 +192,24 @@ public class TicketStaffProfileUpdatedConsumer : IConsumer<StaffProfileUpdatedEv
     public async Task Consume(ConsumeContext<StaffProfileUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketStaffProfileUpdatedConsumer), context.CancellationToken))
-            return;
-
-        var staff = await _uow.StaffAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
-        if (staff != null)
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(TicketStaffProfileUpdatedConsumer), async () =>
         {
-            staff.EmployeeCode = @event.EmployeeCode;
-            staff.MaxConcurrentTickets = @event.MaxConcurrentTickets;
-            staff.IsAvailable = @event.IsAvailable;
-            staff.SkillTier = (StaffSkillTierEnum)@event.SkillTier;
-            staff.LastSyncedAt = DateTime.UtcNow;
-            _uow.StaffAccounts.UpdateAsync(staff);
-            await _uow.SaveChangesAsync(context.CancellationToken);
-        }
+            var staff = await _uow.StaffAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+            if (staff != null)
+            {
+                staff.EmployeeCode = @event.EmployeeCode;
+                staff.MaxConcurrentTickets = @event.MaxConcurrentTickets;
+                staff.IsAvailable = @event.IsAvailable;
+                staff.SkillTier = (StaffSkillTierEnum)@event.SkillTier;
+                staff.LastSyncedAt = DateTime.UtcNow;
+                _uow.StaffAccounts.UpdateAsync(staff);
+                await _uow.SaveChangesAsync(context.CancellationToken);
+            }
+        });
     }
 }
 
@@ -215,17 +227,20 @@ public class TicketStaffSkillsUpdatedConsumer : IConsumer<StaffSkillsUpdatedEven
     public async Task Consume(ConsumeContext<StaffSkillsUpdatedEvent> context)
     {
         var @event = context.Message;
-        if (!await _inbox.TryMarkProcessedAsync(context.MessageId.GetValueOrDefault(), nameof(TicketStaffSkillsUpdatedConsumer), context.CancellationToken))
-            return;
-
-        var staff = await _uow.StaffAccounts.GetAllAsync()
-            .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
-        if (staff != null)
+        // GH-764 — qua ProcessOnceAsync: giữ chỗ có hạn → chạy → chốt khi xong / nhả khi lỗi.
+        // Bản cũ đánh dấu đã-xử-lý TRƯỚC side effect và không bao giờ gỡ, nên một lỗi tạm thời
+        // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
+        await context.ProcessOnceAsync(_inbox, nameof(TicketStaffSkillsUpdatedConsumer), async () =>
         {
-            staff.SkillCodes = @event.SkillCodes;
-            staff.LastSyncedAt = DateTime.UtcNow;
-            _uow.StaffAccounts.UpdateAsync(staff);
-            await _uow.SaveChangesAsync(context.CancellationToken);
-        }
+            var staff = await _uow.StaffAccounts.GetAllAsync()
+                .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
+            if (staff != null)
+            {
+                staff.SkillCodes = @event.SkillCodes;
+                staff.LastSyncedAt = DateTime.UtcNow;
+                _uow.StaffAccounts.UpdateAsync(staff);
+                await _uow.SaveChangesAsync(context.CancellationToken);
+            }
+        });
     }
 }

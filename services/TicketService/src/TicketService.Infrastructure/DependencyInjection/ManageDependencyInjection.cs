@@ -190,13 +190,11 @@ public static class ManageDependencyInjection
             http.Timeout = TimeSpan.FromSeconds(Math.Max(10, opts.VirusScan.TimeoutSeconds));
         });
 
-        // #514 — Named HttpClient cho VirusScanWorker download file từ FileStorageService
-        services.AddHttpClient("FileDownload", (sp, http) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.BaseAddress = new Uri(opts.VirusScan.FileStorageBaseUrl);
-            http.Timeout = TimeSpan.FromSeconds(30);
-        });
+        // GH-790 — đã BỎ named HttpClient "FileDownload".
+        // Nó gọi GET /api/files/{id}/download mà không gắn token, trong khi endpoint đó có
+        // [Authorize] ⇒ mọi lần tải đều 401. Việc tải file để quét virus đã chuyển sang kênh gRPC
+        // nội bộ FileInternal (đăng ký ngay bên dưới, dùng chung với voice transcription).
+        // Giữ lại registration này chỉ tạo ra một đường chết mà người sau tưởng là đang dùng.
 
         // #567 — Gemini voice transcription client (multimodal, timeout từ Chat:Voice:TranscribeTimeoutSeconds)
         services.AddHttpClient<IVoiceTranscriptionService, GeminiVoiceTranscriptionService>((sp, http) =>

@@ -25,8 +25,8 @@ public class SendSmsCommandConsumerTests : IAsyncLifetime
             .ReturnsAsync(new CommonResponse<Guid> { IsSuccess = true, Data = Guid.NewGuid() });
 
         _inbox = new Mock<IInboxStore>();
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(true);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
 
         var services = new ServiceCollection();
         services.AddSingleton(_mediator.Object);
@@ -76,8 +76,8 @@ public class SendSmsCommandConsumerTests : IAsyncLifetime
     [Fact]
     public async Task Consume_Duplicate_InboxBlocks_NoForward()
     {
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendSmsCommandConsumer), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(false);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendSmsCommandConsumer), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(InboxClaim.Completed);
 
         await _harness.Bus.Publish(new SendSmsCommand(
             "0901234567", "Hi", "auth", Guid.NewGuid()));
