@@ -100,7 +100,7 @@ public class NotificationRateLimiter : INotificationRateLimiter
         string currentKey, string previousKey, double elapsedFraction, CancellationToken ct)
     {
         var current = await _cache.IncrementAsync(currentKey, KeyTtl, ct);
-        var previous = await _cache.GetAsync<long?>(previousKey, ct) ?? 0;
+        var previous = await _cache.GetCounterAsync(previousKey, ct) ?? 0;
 
         return previous * (1 - elapsedFraction) + current;
     }

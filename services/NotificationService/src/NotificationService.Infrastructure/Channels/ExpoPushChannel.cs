@@ -93,7 +93,7 @@ public class ExpoPushChannel : INotificationChannel
                 data = dataToSend,
                 sound = "default",
                 priority = request.IsCritical ? "high" : "normal",
-                channelId = request.IsCritical ? "alerts-critical" : "alerts-default"
+                channelId = ResolveChannelId(request)
             }).ToArray();
 
             try
@@ -178,7 +178,14 @@ public class ExpoPushChannel : INotificationChannel
     /// </summary>
     private Dictionary<string, object?> BuildData(SendRequest request)
     {
-        var data = new Dictionary<string, object?> { [NotificationIdKey] = request.NotificationId };
+        var data = new Dictionary<string, object?>
+        {
+            [NotificationIdKey] = request.NotificationId,
+            ["entityType"] = request.EntityType,
+            ["entityId"] = request.EntityId,
+            ["createdAt"] = request.CreatedAt,
+            ["notificationType"] = (int)request.Type,
+        };
 
         // Gán cặp định tuyến NGAY, trước mọi nhánh thoát sớm. Đặt nó ở cuối hàm là bỏ sót trường
         // hợp PayloadJson rỗng — mà đó lại là trường hợp thường gặp, và chính là lúc client cần
@@ -216,6 +223,18 @@ public class ExpoPushChannel : INotificationChannel
         ApplyRoutingKeys(data, request);
 
         return data;
+    }
+
+    private static string ResolveChannelId(SendRequest request)
+    {
+        if (request.IsCritical)
+            return "alerts-critical";
+
+        return request.Type is NotificationTypeEnum.ChatCreated
+            or NotificationTypeEnum.ChatMentioned
+            or NotificationTypeEnum.ChatReacted
+            ? "chat-messages"
+            : "alerts-default";
     }
 
     /// <summary>

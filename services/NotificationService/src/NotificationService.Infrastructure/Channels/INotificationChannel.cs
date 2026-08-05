@@ -40,6 +40,14 @@ public class SendRequest
     public Guid? EntityId { get; set; }
     public bool IsCritical { get; set; }
 
+    /// <summary>Entity linked to the notification; used by clients for deep links.</summary>
+    public string? EntityType { get; set; }
+
+    public Guid? EntityId { get; set; }
+
+    /// <summary>Original creation time, used by clients for ordering and deduplication.</summary>
+    public DateTime CreatedAt { get; set; }
+
     /// <summary>
     /// Expo push token đơn — giữ cho caller cũ. Khi <see cref="ExpoTokens"/> có giá trị thì
     /// <c>ExpoPushChannel</c> ưu tiên dùng danh sách đó.

@@ -9,7 +9,6 @@ using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
 using NotificationService.Infrastructure.Persistence.Seeders;
 using NotificationService.Infrastructure.Services;
-using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
@@ -41,7 +40,6 @@ public static class ManageDependencyInjection
         services.AddDistributedLease(configuration);
 
         services.AddHostedService<BackgroundJobs.NotificationAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-34
-        services.AddHostedService<BackgroundJobs.NotificationDispatchBackgroundService>(); // GH-672 NOTI-01
 
         // Sprint 6.2 NOTI-01 (#672) — worker giao record Pending xuống channel (Push/Email/SMS/InApp).
         // Không có nó thì dispatcher vẫn là dead code và notification chỉ nằm trong DB.
@@ -61,18 +59,6 @@ public static class ManageDependencyInjection
         // MassTransit không expose API đọc queue depth nên phải hỏi trực tiếp broker.
         services.AddHttpClient("rabbitmq-management", c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHostedService<BackgroundJobs.NotificationDlqMonitorBackgroundService>();
-
-        // Sprint 6.3 NOTI3-02 (#702) — đối soát biên nhận Expo.
-        // Ticket "ok" chỉ chứng minh Expo NHẬN request; giao hàng thật phải hỏi /push/getReceipts.
-        services.Configure<ExpoReceiptOptions>(
-            configuration.GetSection(ExpoReceiptOptions.SectionName));
-        services.AddHostedService<BackgroundJobs.ExpoReceiptReconcileBackgroundService>();
-
-        // Sprint 6.3 NOTI3-05 (#705) — bù SMS khi push critical không có receipt.
-        // Phụ thuộc dữ liệu receipt của NOTI3-02: tắt đối soát thì fallback cũng vô nghĩa.
-        services.Configure<NotificationFallbackOptions>(
-            configuration.GetSection(NotificationFallbackOptions.SectionName));
-        services.AddHostedService<BackgroundJobs.NotificationFallbackBackgroundService>();
 
         // Sprint 6.3 NOTI3-06 (#706) — hạn mức per-user. Vượt trần thì hoãn vào digest, không vứt.
         services.Configure<NotificationRateLimitOptions>(
@@ -124,13 +110,9 @@ public static class ManageDependencyInjection
 
     private static void AddNotificationChannels(this IServiceCollection services)
     {
-        // Named HttpClient "expo" với Polly retry 3 lần exponential backoff
-        services.AddHttpClient("expo", c => { c.Timeout = TimeSpan.FromSeconds(30); })
-                .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
-                    3,
-                    attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))));
-
-        services.AddScoped<INotificationChannel, ExpoPushChannel>();
+        // No EAS/FCM dependency: Push policy is delivered over the self-hosted SignalR hub.
+        // Mobile turns NotificationReceived into an OS notification or Android chat bubble.
+        services.AddScoped<INotificationChannel, SignalRPushChannel>();
         services.AddScoped<INotificationChannel, EmailBusChannel>();
         services.AddScoped<INotificationChannel, SmsBusChannel>();
         services.AddScoped<INotificationChannel, InAppChannel>();

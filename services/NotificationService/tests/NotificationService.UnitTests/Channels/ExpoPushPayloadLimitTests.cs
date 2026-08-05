@@ -129,6 +129,30 @@ public class ExpoPushPayloadLimitTests
         data.GetProperty("chatId").GetString().Should().Be("c-1");
     }
 
+    [Fact]
+    public async Task Data_CarriesDeepLinkAndConversationMetadata()
+    {
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var (channel, handler) = Build(uow, Ok("t1"));
+        var entityId = Guid.NewGuid();
+        var createdAt = new DateTime(2026, 8, 4, 12, 30, 0, DateTimeKind.Utc);
+        var request = Request("Tin nhắn mới", "Nội dung");
+        request.Type = NotificationService.Domain.Enums.NotificationTypeEnum.ChatCreated;
+        request.EntityType = "Chat";
+        request.EntityId = entityId;
+        request.CreatedAt = createdAt;
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(handler.Body!);
+        var data = doc.RootElement[0].GetProperty("data");
+        data.GetProperty("entityType").GetString().Should().Be("Chat");
+        data.GetProperty("entityId").GetGuid().Should().Be(entityId);
+        data.GetProperty("createdAt").GetDateTime().Should().Be(createdAt);
+        data.GetProperty("notificationType").GetInt32()
+            .Should().Be((int)NotificationService.Domain.Enums.NotificationTypeEnum.ChatCreated);
+    }
+
     /// <summary>
     /// Payload do consumer tự viết KHÔNG được ghi đè <c>notificationId</c> — nếu đè được thì client
     /// sẽ đánh dấu "đã mở" nhầm sang record khác. Payload hỏng cũng vẫn phải gửi kèm id.

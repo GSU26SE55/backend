@@ -295,7 +295,7 @@ public class NotificationDispatcherTests
     // ── no device token → push skipped ───────────────────────────────────────
 
     [Fact]
-    public async Task DispatchAsync_NoPushToken_PushSkipped()
+    public async Task DispatchAsync_NoPushToken_SignalRPushStillSent()
     {
         var userId = Guid.NewGuid();
         // No device token in seed
@@ -312,7 +312,7 @@ public class NotificationDispatcherTests
             Body = "B",
         });
 
-        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── midnight-wrapping quiet hours ────────────────────────────────────────

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
 using Moq;
 using SharedContracts.Events;
+using SharedContracts.Events.Chats;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
@@ -96,6 +97,31 @@ public class OutboxRelayServiceTests
         result.Published.Should().Be(1);
         msg.ProcessedAtUtc.Should().NotBeNull();
         _transport.Verify(x => x.PublishAsync(It.IsAny<TicketEscalatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RelayBatchAsync_ChatCreatedEvent_PublishesThroughTransportAndMarksProcessed()
+    {
+        var evt = new ChatCreatedEvent(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, "Nhân viên", "Nội dung thật",
+            false, [], Guid.NewGuid(), Guid.NewGuid());
+        var msg = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = nameof(ChatCreatedEvent),
+            Payload = JsonSerializer.Serialize(evt),
+            OccurredAtUtc = DateTime.UtcNow
+        };
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: new[] { msg });
+        var sut = CreateSut(uow, msg);
+
+        var result = await sut.RelayBatchAsync(10, CancellationToken.None);
+
+        result.Published.Should().Be(1);
+        msg.ProcessedAtUtc.Should().NotBeNull();
+        _transport.Verify(
+            x => x.PublishAsync(It.IsAny<ChatCreatedEvent>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

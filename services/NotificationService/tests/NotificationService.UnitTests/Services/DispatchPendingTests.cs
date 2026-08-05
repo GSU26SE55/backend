@@ -130,21 +130,29 @@ public class DispatchPendingTests
     }
 
     [Fact]
-    public async Task DispatchPending_Push_WithActiveToken_MarksSent_AndAuditsPushSent()
+    public async Task DispatchPending_Push_MarksSent_AndAuditsPushSent_WithoutExternalToken()
     {
         var n = Pending(NotificationChannelEnum.Push);
+        n.EntityId = Guid.NewGuid();
+        n.CreatedAt = new DateTime(2026, 8, 4, 10, 0, 0, DateTimeKind.Utc);
         var token = new DeviceToken { Id = Guid.NewGuid(), UserId = UserId, Token = "ExponentPushToken[x]", IsActive = true };
         var channel = Channel(NotificationChannelEnum.Push);
         var (sut, _, audit) = Build(n, channel.Object, account: Account(), tokens: [token]);
 
         var outcome = await sut.DispatchPendingAsync(n);
 
+        channel.Verify(c => c.SendAsync(
+            It.Is<SendRequest>(request => request.EntityType == n.EntityType
+                                          && request.EntityId == n.EntityId
+                                          && request.CreatedAt == n.CreatedAt),
+            It.IsAny<CancellationToken>()), Times.Once);
+
         outcome.Should().Be(DispatchOutcome.Sent);
         audit.Written[0].Action.Should().Be(NotificationAuditActionEnum.PushSent);
 
         // NOTI-16 — toàn bộ token của user được đưa vào 1 lần gửi.
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.ExpoTokens != null && r.ExpoTokens.Count == 1),
+            It.Is<SendRequest>(r => r.ExpoToken == null && r.ExpoTokens == null),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -178,15 +186,15 @@ public class DispatchPendingTests
     }
 
     [Fact]
-    public async Task DispatchPending_PushWithoutDeviceToken_Fails()
+    public async Task DispatchPending_PushWithoutDeviceToken_UsesSelfHostedChannel()
     {
         var n = Pending(NotificationChannelEnum.Push);
         var (sut, _, _) = Build(n, Channel(NotificationChannelEnum.Push).Object, account: Account(), tokens: []);
 
         var outcome = await sut.DispatchPendingAsync(n);
 
-        outcome.Should().Be(DispatchOutcome.Failed);
-        n.FailureReason.Should().Contain("device token");
+        outcome.Should().Be(DispatchOutcome.Sent);
+        n.FailureReason.Should().BeNull();
     }
 
     [Fact]

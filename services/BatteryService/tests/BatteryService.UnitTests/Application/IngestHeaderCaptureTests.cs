@@ -175,6 +175,39 @@ public class IngestHeaderCaptureTests
     }
 
     [Fact]
+    public async Task BatchIngest_DefaultsMissingSensorSourceCode_ToPrimary()
+    {
+        var assetId = Guid.NewGuid();
+        var asset = new BatteryAsset { Id = assetId, SerialNumber = "BAT-LEGACY" };
+        var uow = new MockUnitOfWorkBuilder().WithBatteryAssets(asset);
+        var captured = new List<SensorReading>();
+        uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))
+           .Callback<SensorReading>(captured.Add)
+           .Returns(Task.CompletedTask);
+
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+
+        await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            Items = new()
+            {
+                new()
+                {
+                    BatteryAssetId = assetId,
+                    Time = DateTime.UtcNow,
+                    Voltage = 3.7m,
+                    Current = 1m,
+                    Temperature = 25m,
+                    SocPercent = 50m
+                }
+            }
+        }, default);
+
+        captured.Should().ContainSingle();
+        captured[0].SensorSourceCode.Should().Be("primary");
+    }
+
+    [Fact]
     public async Task BatchIngest_IdempotencyRecord_HasGeneratedId()
     {
         // Regression (fix): `SensorIngestIdempotencyRecord.id` cấu hình ValueGeneratedNever()
