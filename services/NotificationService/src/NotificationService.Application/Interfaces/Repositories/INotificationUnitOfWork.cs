@@ -53,4 +53,7 @@ public interface INotificationUnitOfWork : IUnitOfWork
     /// </remarks>
     /// <returns><c>true</c> nếu lời gọi này giành được bản ghi.</returns>
     Task<bool> TryClaimForDispatchAsync(Guid notificationId, DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>ADR-0019 — cấu hình cấp hệ thống sửa được lúc chạy (đường vận chuyển push).</summary>
+    IGenericRepository<NotificationSetting> NotificationSettings { get; }
 }

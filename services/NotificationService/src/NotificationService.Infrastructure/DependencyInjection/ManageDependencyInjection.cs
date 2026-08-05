@@ -9,6 +9,7 @@ using NotificationService.Infrastructure.Implements.Repositories;
 using NotificationService.Infrastructure.Persistence;
 using NotificationService.Infrastructure.Persistence.Seeders;
 using NotificationService.Infrastructure.Services;
+using Polly;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
@@ -34,6 +35,12 @@ public static class ManageDependencyInjection
 
         services.AddScoped<NotificationDataSeeder>();
         services.AddScoped<NotificationGroupSeeder>();   // Sprint 6.4 NOTI4-04
+
+        // ADR-0019 — mặc định cho lần chạy đầu khi bảng notification_settings còn trống.
+        // Sau khi Admin đổi transport qua REST thì DB là nguồn sự thật, phần này hết ảnh hưởng.
+        services.Configure<NotificationPushOptions>(
+            configuration.GetSection(NotificationPushOptions.SectionName));
+
         services.AddNotificationChannels();
         services.AddInboxIdempotency(configuration);
         // GH-793 — quyền chạy độc quyền nguyên tử cho các job nền (thay khuôn GET-rồi-SET cũ).
@@ -59,6 +66,19 @@ public static class ManageDependencyInjection
         // MassTransit không expose API đọc queue depth nên phải hỏi trực tiếp broker.
         services.AddHttpClient("rabbitmq-management", c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHostedService<BackgroundJobs.NotificationDlqMonitorBackgroundService>();
+
+        // Sprint 6.3 NOTI3-02 (#702) — đối soát biên nhận Expo.
+        // Ticket "ok" chỉ chứng minh Expo NHẬN request; giao hàng thật phải hỏi /push/getReceipts.
+        // ADR-0019: worker tự bỏ qua từng vòng khi transport hiện tại không dùng Expo.
+        services.Configure<ExpoReceiptOptions>(
+            configuration.GetSection(ExpoReceiptOptions.SectionName));
+        services.AddHostedService<BackgroundJobs.ExpoReceiptReconcileBackgroundService>();
+
+        // Sprint 6.3 NOTI3-05 (#705) — bù SMS khi push critical không có receipt.
+        // Phụ thuộc dữ liệu receipt của NOTI3-02: tắt đối soát thì fallback cũng vô nghĩa.
+        services.Configure<NotificationFallbackOptions>(
+            configuration.GetSection(NotificationFallbackOptions.SectionName));
+        services.AddHostedService<BackgroundJobs.NotificationFallbackBackgroundService>();
 
         // Sprint 6.3 NOTI3-06 (#706) — hạn mức per-user. Vượt trần thì hoãn vào digest, không vứt.
         services.Configure<NotificationRateLimitOptions>(
@@ -104,15 +124,29 @@ public static class ManageDependencyInjection
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.AddScoped<IRecipientResolver, RecipientResolver>();
         services.AddScoped<INotificationAuditWriter, NotificationAuditWriter>(); // Sprint 6.2 NOTI-13 (#684)
+        services.AddScoped<IPushTransportSettingService, PushTransportSettingService>(); // ADR-0019
         services.AddSingleton<ITemplateRenderer, HandlebarsTemplateRenderer>();
         services.AddHttpContextAccessor();
     }
 
     private static void AddNotificationChannels(this IServiceCollection services)
     {
-        // No EAS/FCM dependency: Push policy is delivered over the self-hosted SignalR hub.
-        // Mobile turns NotificationReceived into an OS notification or Android chat bubble.
-        services.AddScoped<INotificationChannel, SignalRPushChannel>();
+        // Named HttpClient "expo" với Polly retry 3 lần exponential backoff.
+        services.AddHttpClient("expo", c => { c.Timeout = TimeSpan.FromSeconds(30); })
+                .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
+                    3,
+                    attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))));
+
+        // ADR-0019 — hai đường vận chuyển push đăng ký dưới KIỂU CỤ THỂ, không dưới
+        // INotificationChannel. Dispatcher chọn kênh theo ChannelType và chỉ lấy cái đầu tiên khớp,
+        // nên đăng ký cả hai dưới cùng interface sẽ làm một cái chết im lặng.
+        services.AddScoped<ISignalRPushChannel, SignalRPushChannel>();
+        services.AddScoped<IExpoPushChannel, ExpoPushChannel>();
+
+        // Kênh Push mà dispatcher thấy là bản gộp: nó tự rẽ sang SignalR / Expo / cả hai theo
+        // cấu hình đổi được lúc chạy.
+        services.AddScoped<INotificationChannel, CompositePushChannel>();
+
         services.AddScoped<INotificationChannel, EmailBusChannel>();
         services.AddScoped<INotificationChannel, SmsBusChannel>();
         services.AddScoped<INotificationChannel, InAppChannel>();

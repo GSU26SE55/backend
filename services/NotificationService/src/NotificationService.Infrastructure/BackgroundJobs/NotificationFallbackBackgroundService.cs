@@ -121,11 +121,39 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
             try
             {
-                if (await IsLeaderAsync(stoppingToken))
+                // ADR-0019 — chuỗi bù này đọc dữ liệu receipt của Expo, nên chỉ có nghĩa khi đường
+                // vận chuyển hiện tại còn dùng Expo. Chạy thuần SignalR mà vẫn quét thì mọi push
+                // critical đều "không có receipt Ok" và sẽ lãnh thêm một SMS thừa.
+                // Hỏi lại mỗi vòng vì transport đổi được lúc chạy.
+                if (await IsExpoActiveAsync(stoppingToken) && await IsLeaderAsync(stoppingToken))
                     await ProcessOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { _logger.LogError(ex, "NotificationFallback: vòng quét lỗi."); }
+        }
+    }
+
+    /// <summary>
+    /// ADR-0019 — chuỗi bù chỉ chạy khi đường vận chuyển hiện tại có dùng Expo.
+    ///
+    /// <para>Đọc lỗi thì trả <c>false</c> (NGƯỢC với worker đối soát biên nhận): ở đây "chạy thừa"
+    /// không vô hại — nó bắn SMS thật cho người dùng thật. Bỏ lỡ một vòng bù thì vòng sau vẫn bắt
+    /// được vì điều kiện lọc dựa trên mốc thời gian, không phải trên lần quét.</para>
+    /// </summary>
+    private async Task<bool> IsExpoActiveAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var setting = scope.ServiceProvider.GetRequiredService<IPushTransportSettingService>();
+            var transport = await setting.GetAsync(ct);
+            return transport is PushTransportEnum.Expo or PushTransportEnum.Both;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "NotificationFallback: không đọc được đường vận chuyển push — bỏ qua vòng này để không bắn SMS thừa.");
+            return false;
         }
     }
 

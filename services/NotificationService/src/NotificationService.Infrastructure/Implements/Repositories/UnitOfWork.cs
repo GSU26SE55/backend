@@ -32,6 +32,7 @@ public class UnitOfWork : INotificationUnitOfWork
     public IGenericRepository<NotificationGroupMember> NotificationGroupMembers => new GenericRepository<NotificationGroupMember>(_context); // Sprint 6.4 NOTI4-01
     public IGenericRepository<NotificationBatch> NotificationBatches => new GenericRepository<NotificationBatch>(_context);                  // Sprint 6.4 NOTI4-06
     public IGenericRepository<NotificationBatchTarget> NotificationBatchTargets => new GenericRepository<NotificationBatchTarget>(_context); // Sprint 6.4 NOTI4-06
+    public IGenericRepository<NotificationSetting> NotificationSettings => new GenericRepository<NotificationSetting>(_context);             // ADR-0019 — push transport đổi lúc chạy
 
     public async Task BeginTransactionAsync()
     {

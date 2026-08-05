@@ -20,7 +20,7 @@ namespace NotificationService.Infrastructure.Channels;
 /// Sprint 6.3 NOTI3-02 (#702) — lưu ticket id vào <c>push_receipts</c> để
 /// <c>ExpoReceiptReconcileBackgroundService</c> đối soát sau, và chặn payload vượt trần 4KB của Expo.
 /// </summary>
-public class ExpoPushChannel : INotificationChannel
+public class ExpoPushChannel : IExpoPushChannel
 {
     private const string ExpoUrl = "https://exp.host/--/api/v2/push/send";
 

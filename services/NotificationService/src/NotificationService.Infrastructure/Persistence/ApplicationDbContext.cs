@@ -32,6 +32,7 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<NotificationGroupMember> NotificationGroupMembers { get; set; } // Sprint 6.4 NOTI4-01
     public virtual DbSet<NotificationBatch> NotificationBatches { get; set; }             // Sprint 6.4 NOTI4-06
     public virtual DbSet<NotificationBatchTarget> NotificationBatchTargets { get; set; }  // Sprint 6.4 NOTI4-06
+    public virtual DbSet<NotificationSetting> NotificationSettings { get; set; }          // ADR-0019 — push transport
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
