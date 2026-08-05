@@ -34,6 +34,12 @@ public interface ICacheService
     Task<long> IncrementAsync(string key, TimeSpan expiration, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads a counter written by <see cref="IncrementAsync"/>. Redis counters are stored as
+    /// plain string values, unlike values written through <see cref="SetAsync{T}"/>.
+    /// </summary>
+    Task<long?> GetCounterAsync(string key, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gia hạn một distributed lease chỉ khi giá trị hiện tại vẫn khớp owner token.
     /// </summary>
     Task<bool> TryRefreshLeaseAsync(

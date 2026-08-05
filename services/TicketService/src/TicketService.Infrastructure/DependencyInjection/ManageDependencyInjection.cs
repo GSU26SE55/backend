@@ -134,6 +134,7 @@ public static class ManageDependencyInjection
 
         // Realtime Chat Services
         services.AddScoped<IChatAuthorizationService, ChatAuthorizationService>();
+        services.AddScoped<IChatRecipientResolver, ChatRecipientResolver>();
         services.AddScoped<ITicketChatRealtimeNotifier, SignalRTicketChatNotifier>();
         services.AddScoped<IMarkdownRenderer, MarkdigMarkdownRenderer>();
 

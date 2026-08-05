@@ -47,6 +47,20 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketMergedEvent), typeof(TicketMergedEvent) },
         { nameof(BlogGenerationRequestedEvent), typeof(BlogGenerationRequestedEvent) },
         { nameof(BlogGenerationStatusChangedEvent), typeof(BlogGenerationStatusChangedEvent) },
+        // Chat events are written by the TicketService chat handlers. Keep every
+        // event here; otherwise the relay exhausts its retries with "Unknown event
+        // type" and real chat notifications never reach NotificationService.
+        { nameof(ChatCreatedEvent), typeof(ChatCreatedEvent) },
+        { nameof(ChatMentionedEvent), typeof(ChatMentionedEvent) },
+        { nameof(ChatReactedEvent), typeof(ChatReactedEvent) },
+        { nameof(ChatEditedEvent), typeof(ChatEditedEvent) },
+        { nameof(ChatDeletedEvent), typeof(ChatDeletedEvent) },
+        { nameof(ChatEscalatedToAdminEvent), typeof(ChatEscalatedToAdminEvent) },
+        { nameof(ChatEscalationReviewRequestedEvent), typeof(ChatEscalationReviewRequestedEvent) },
+        { nameof(ChatEscalationReviewAckedEvent), typeof(ChatEscalationReviewAckedEvent) },
+        { nameof(ParticipantAddedEvent), typeof(ParticipantAddedEvent) },
+        { nameof(ParticipantRemovedEvent), typeof(ParticipantRemovedEvent) },
+        { nameof(ParticipantRoleChangedEvent), typeof(ParticipantRoleChangedEvent) },
         { nameof(VoiceTranscriptionRequestedEvent), typeof(VoiceTranscriptionRequestedEvent) },
     };
 

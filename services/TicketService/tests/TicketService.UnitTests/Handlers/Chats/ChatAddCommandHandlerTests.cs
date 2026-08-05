@@ -39,6 +39,7 @@ public class ChatAddCommandHandlerTests
 
     private readonly Mock<IChatCacheService> _chatCache = new();
     private readonly Mock<ISlaService> _slaService = new();
+    private readonly Mock<IChatRecipientResolver> _recipientResolver = new();
 
     public ChatAddCommandHandlerTests()
     {
@@ -57,13 +58,16 @@ public class ChatAddCommandHandlerTests
         _groupMentionResolver
             .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
+        _recipientResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid>());
     }
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object, _publisher.Object);
+            _slaService.Object, _recipientResolver.Object, _publisher.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()

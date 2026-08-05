@@ -45,6 +45,11 @@ internal sealed class StubCacheService : ICacheService
         return Task.FromResult(next);
     }
 
+    public Task<long?> GetCounterAsync(string key, CancellationToken cancellationToken = default)
+        => Task.FromResult(_store.TryGetValue(key, out var value) && value is long count
+            ? (long?)count
+            : null);
+
     public Task<bool> TryRefreshLeaseAsync(
         string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
     {

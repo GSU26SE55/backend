@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using NotificationService.Infrastructure.DependencyInjection;
 using NotificationService.Infrastructure.Persistence;
@@ -28,8 +29,52 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddNotificationServiceInfrastructure(builder.Configuration);
 builder.Services.AddIdempotencyKey(builder.Configuration);
 
-// Sprint 6.3 NOTI3-13 (#713) — realtime feed in-app. Polling REST vẫn giữ nguyên làm đường dự phòng.
-builder.Services.AddSignalR();
+// Self-hosted transport: both the live feed and push-policy payloads travel through this hub.
+// Android turns push-policy payloads into native notifications and bubbles locally.
+var signalRBuilder = builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+})
+.AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    // Do not add JsonStringEnumConverter here. NotificationReceived must match the numeric
+    // enums returned by the notification REST API and consumed by the mobile application.
+});
+
+// Share SignalR groups across replicas when Redis is configured. A single instance still
+// works without a backplane in local development.
+var signalRRedisConnection = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(signalRRedisConnection))
+{
+    signalRBuilder.AddStackExchangeRedis(signalRRedisConnection, options =>
+    {
+        options.Configuration.ChannelPrefix = new StackExchange.Redis.RedisChannel(
+            "Notification",
+            StackExchange.Redis.RedisChannel.PatternMode.Literal);
+    });
+}
+
+// The SignalR JavaScript client sends the bearer token in the access_token query parameter
+// during WebSocket negotiation. Restrict query-token handling to this hub only.
+builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+{
+    var existingOnMessageReceived = options.Events.OnMessageReceived;
+    options.Events.OnMessageReceived = async context =>
+    {
+        if (existingOnMessageReceived is not null)
+            await existingOnMessageReceived(context);
+
+        var accessToken = context.Request.Query["access_token"];
+        if (!string.IsNullOrEmpty(accessToken)
+            && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+        {
+            context.Token = accessToken;
+        }
+    };
+});
 
 var app = builder.Build();
 

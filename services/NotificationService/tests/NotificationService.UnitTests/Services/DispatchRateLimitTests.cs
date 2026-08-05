@@ -150,6 +150,22 @@ public class DispatchRateLimitTests
             Times.Never, "critical thì không cần hỏi hạn mức");
     }
 
+    [Fact]
+    public async Task RealtimeChat_BypassesRateLimit()
+    {
+        var n = Pending(NotificationChannelEnum.Push, NotificationTypeEnum.ChatCreated, entityType: "Chat");
+        var limiter = new Mock<INotificationRateLimiter>();
+        limiter.Setup(l => l.TryConsumeAsync(It.IsAny<Guid>(), It.IsAny<NotificationTypeEnum>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new RateLimitDecision(false, "per_hour"));
+
+        var (sut, channel) = Build(n, limiter.Object);
+
+        (await sut.DispatchPendingAsync(n)).Should().Be(DispatchOutcome.Sent);
+        channel.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        limiter.Verify(l => l.TryConsumeAsync(It.IsAny<Guid>(), It.IsAny<NotificationTypeEnum>(), It.IsAny<CancellationToken>()),
+            Times.Never, "chat realtime không được chậm vì hạn mức notification chung");
+    }
+
     /// <summary>Feed in-app không làm phiền ai — giới hạn nó chỉ khiến user mất dữ liệu trên màn hình.</summary>
     [Fact]
     public async Task InAppChannel_IsNeverRateLimited()

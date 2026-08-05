@@ -34,9 +34,9 @@ public class SignalRNotificationNotifier : INotificationRealtimeNotifier
                 .SendAsync("NotificationCreated", new
                 {
                     id = notification.Id,
-                    type = notification.Type.ToString(),
-                    channel = notification.Channel.ToString(),
-                    status = notification.Status.ToString(),
+                    type = notification.Type,
+                    channel = notification.Channel,
+                    status = notification.Status,
                     title = notification.Title,
                     body = notification.Body,
                     payloadJson = notification.PayloadJson,
@@ -49,6 +49,38 @@ public class SignalRNotificationNotifier : INotificationRealtimeNotifier
         {
             _logger.LogWarning(ex,
                 "[NotificationHub] Không đẩy được notification {NotificationId} — client sẽ nhận qua polling.",
+                notification.Id);
+        }
+    }
+
+    public async Task NotifyPushAsync(
+        Notification notification,
+        bool isCritical,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await _hub.Clients
+                .Group(NotificationHub.UserGroup(notification.UserId))
+                .SendAsync("NotificationReceived", new
+                {
+                    id = notification.Id,
+                    type = notification.Type,
+                    channel = notification.Channel,
+                    status = notification.Status,
+                    title = notification.Title,
+                    body = notification.Body,
+                    payloadJson = notification.PayloadJson,
+                    entityType = notification.EntityType,
+                    entityId = notification.EntityId,
+                    createdAt = notification.CreatedAt,
+                    isCritical,
+                }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[NotificationHub] Could not deliver local push {NotificationId}; client will catch up through REST.",
                 notification.Id);
         }
     }

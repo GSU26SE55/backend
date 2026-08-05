@@ -1,4 +1,5 @@
 using BatteryService.Application.CQRS.Command.SensorReading;
+using BatteryService.Application.Common;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Interfaces;
@@ -259,6 +260,12 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             var readingTime = item.Time.Kind == DateTimeKind.Unspecified
                 ? DateTime.SpecifyKind(item.Time, DateTimeKind.Utc)
                 : item.Time.ToUniversalTime();
+            // Legacy/current clients do not send SensorSourceCode. Some deployed
+            // Timescale schemas include this column in the composite primary key,
+            // so persist the canonical primary-source tag instead of null.
+            var sensorSourceCode = string.IsNullOrWhiteSpace(item.SensorSourceCode)
+                ? SensorSource.Primary
+                : item.SensorSourceCode.Trim();
 
             await _unitOfWork.SensorReadings.AddAsync(new SensorReadingEntity
             {
@@ -276,7 +283,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 CellVoltageDeltaMv = item.CellVoltageDeltaMv,
                 SourceType = item.SourceType,
                 BmsErrorCode = item.BmsErrorCode?.Trim(),
-                SensorSourceCode = item.SensorSourceCode?.Trim()
+                SensorSourceCode = sensorSourceCode
             });
 
             if (!asset.LastSensorReadingAt.HasValue || asset.LastSensorReadingAt.Value < readingTime)
@@ -305,7 +312,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 BmsErrorCode = item.BmsErrorCode?.Trim(),
                 SourceDeviceId = item.SourceDeviceId?.Trim(),
                 SourceType = (int)item.SourceType,
-                SensorSourceCode = item.SensorSourceCode?.Trim()
+                SensorSourceCode = sensorSourceCode
             });
         }
 

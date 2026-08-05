@@ -111,6 +111,25 @@ public class RedisCacheService : ICacheService
         return next;
     }
 
+    /// <inheritdoc />
+    public async Task<long?> GetCounterAsync(
+        string key, CancellationToken cancellationToken = default)
+    {
+        string? value;
+
+        if (_redis is not null)
+        {
+            var redisValue = await _redis.GetDatabase().StringGetAsync(key);
+            value = redisValue.HasValue ? redisValue.ToString() : null;
+        }
+        else
+        {
+            value = await _cache.GetStringAsync(key, cancellationToken);
+        }
+
+        return long.TryParse(value, out var counter) ? counter : null;
+    }
+
     public async Task<bool> TryRefreshLeaseAsync(
         string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
     {

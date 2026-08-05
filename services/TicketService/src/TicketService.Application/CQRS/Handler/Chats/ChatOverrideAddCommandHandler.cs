@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
@@ -28,6 +30,8 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IMarkdownRenderer _markdownRenderer;
     private readonly ILogger<ChatOverrideAddCommandHandler> _logger;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IChatRecipientResolver _recipientResolver;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public ChatOverrideAddCommandHandler(
@@ -36,6 +40,8 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
         ITicketChatRealtimeNotifier realtimeNotifier,
         IMarkdownRenderer markdownRenderer,
         ILogger<ChatOverrideAddCommandHandler> logger,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IChatRecipientResolver recipientResolver,
         IPublisher publisher)
     {
         _uow = uow;
@@ -43,6 +49,8 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
         _realtimeNotifier = realtimeNotifier;
         _markdownRenderer = markdownRenderer;
         _logger = logger;
+        _outboxWriter = outboxWriter;
+        _recipientResolver = recipientResolver;
         _publisher = publisher;
     }
 
@@ -108,6 +116,24 @@ public class ChatOverrideAddCommandHandler : IRequestHandler<ChatOverrideAddComm
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
             TicketService.Domain.Enums.TicketAuditActionEnum.CommentAdded, ticket.Id, targetDisplay: ticket.Code), ct);
+
+        // Đường override trước đây chỉ bắn SignalR nên ai không mở sẵn ticket thì không hề biết.
+        // Ghi ChatCreatedEvent như ChatAdd để notification đi đủ mọi người liên quan.
+        var recipientIds = await _recipientResolver.ResolveAsync(
+            ticket.Id, ticket.CustomerId, chat.AuthorUserId, chat.IsInternal, ct);
+
+        await _outboxWriter.WriteAsync(new ChatCreatedEvent(
+            chat.Id,
+            chat.TicketId,
+            chat.AuthorUserId,
+            (int)chat.AuthorRole,
+            chat.AuthorDisplayName,
+            chat.Body,
+            chat.IsInternal,
+            chat.AttachmentFileIds,
+            ticket.CustomerId,
+            ticket.PrimaryHandlerStaffId,
+            recipientIds), ct);
 
         await _uow.SaveChangesAsync(ct);
 

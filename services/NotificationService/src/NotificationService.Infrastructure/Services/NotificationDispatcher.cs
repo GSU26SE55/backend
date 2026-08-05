@@ -16,6 +16,15 @@ namespace NotificationService.Infrastructure.Services;
 
 public class NotificationDispatcher : INotificationDispatcher
 {
+    // Conversation events must stay realtime. A burst of admin/alert notifications must not
+    // postpone an actual chat message for an hour, otherwise Android bubbles cannot behave as chat.
+    private static readonly IReadOnlySet<NotificationTypeEnum> RealtimeConversationTypes =
+        new HashSet<NotificationTypeEnum>
+        {
+            NotificationTypeEnum.ChatCreated,
+            NotificationTypeEnum.ChatMentioned
+        };
+
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
     private readonly IEnumerable<INotificationChannel> _channels;
@@ -75,7 +84,7 @@ public class NotificationDispatcher : INotificationDispatcher
             var pref = await LoadPreferenceAsync(recipient.UserId, ct);
             bool isQuiet = !isCritical && IsQuietHours(pref);
 
-            // Push: 1 record per device token
+            // Push: one policy/delivery record per recipient. SignalR needs no device token.
             if (targetChannels.Contains(NotificationChannelEnum.Push))
                 await DispatchPushAsync(request, recipient, pref, isQuiet, ct);
 
@@ -124,22 +133,12 @@ public class NotificationDispatcher : INotificationDispatcher
         if (pushChannel is null)
             return;
 
-        var tokens = await _unitOfWork.DeviceTokens.GetAllAsync()
-            .Where(dt => dt.UserId == recipient.UserId && !dt.IsDeleted && dt.IsActive)
-            .ToListAsync(ct);
-
-        if (tokens.Count == 0)
-        {
-            _logger.LogDebug("Dispatcher: no device tokens for user {UserId}, skipping Push", recipient.UserId);
-            return;
-        }
-
         bool isCritical = _criticalTypes.Contains(request.Type) || request.BypassQuietHours;
 
         // NOTI-16 (#687) — 1 record + 1 lần gọi Expo cho TẤT CẢ token của user (batch),
         // thay vì 1 record + 1 HTTP call cho mỗi token.
         await SendSingleAsync(request, recipient, NotificationChannelEnum.Push, pushChannel,
-            isCritical, expoTokens: tokens.Select(t => t.Token).ToList(), ct: ct);
+            isCritical, ct: ct);
     }
 
     private async Task SendSingleAsync(
@@ -148,7 +147,6 @@ public class NotificationDispatcher : INotificationDispatcher
         NotificationChannelEnum channelType,
         INotificationChannel channel,
         bool isCritical,
-        IReadOnlyList<string>? expoTokens = null,
         CancellationToken ct = default)
     {
         var notification = new Notification
@@ -177,8 +175,9 @@ public class NotificationDispatcher : INotificationDispatcher
             Body = request.Body,
             PayloadJson = request.PayloadJson,
             IsCritical = isCritical,
-            ExpoToken = expoTokens is { Count: > 0 } ? expoTokens[0] : null,
-            ExpoTokens = expoTokens,
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
+            CreatedAt = notification.CreatedAt,
             Email = recipient.Email,
             PhoneNumber = recipient.PhoneNumber,
         };
@@ -239,7 +238,8 @@ public class NotificationDispatcher : INotificationDispatcher
         if (!isCritical
             && _rateLimiter is not null
             && notification.Channel != NotificationChannelEnum.InApp
-            && notification.EntityType != NotificationDigest.EntityType)
+            && notification.EntityType != NotificationDigest.EntityType
+            && !RealtimeConversationTypes.Contains(notification.Type))
         {
             var decision = await _rateLimiter.TryConsumeAsync(notification.UserId, notification.Type, ct);
 
@@ -268,18 +268,6 @@ public class NotificationDispatcher : INotificationDispatcher
         if (notification.Channel == NotificationChannelEnum.Sms && string.IsNullOrWhiteSpace(account?.PhoneNumber))
             return await MarkFailedAsync(notification, "Người nhận không có số điện thoại trong read-model.", ct, "no_phone");
 
-        List<string>? tokens = null;
-        if (notification.Channel == NotificationChannelEnum.Push)
-        {
-            tokens = await _unitOfWork.DeviceTokens.GetAllAsync()
-                .Where(dt => dt.UserId == notification.UserId && !dt.IsDeleted && dt.IsActive)
-                .Select(dt => dt.Token)
-                .ToListAsync(ct);
-
-            if (tokens.Count == 0)
-                return await MarkFailedAsync(notification, "Người nhận chưa đăng ký device token nào đang hoạt động.", ct, "no_device_token");
-        }
-
         var (title, body) = await RenderContentAsync(notification, ct);
 
         var sendRequest = new SendRequest
@@ -291,8 +279,9 @@ public class NotificationDispatcher : INotificationDispatcher
             Body = body,
             PayloadJson = notification.PayloadJson,
             IsCritical = isCritical,
-            ExpoToken = tokens is { Count: > 0 } ? tokens[0] : null,
-            ExpoTokens = tokens,
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
+            CreatedAt = notification.CreatedAt,
             Email = account?.Email,
             PhoneNumber = account?.PhoneNumber,
         };

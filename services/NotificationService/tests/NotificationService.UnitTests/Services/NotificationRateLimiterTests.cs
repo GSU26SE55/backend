@@ -49,6 +49,9 @@ public class NotificationRateLimiterTests
             return Task.FromResult(_counters.AddOrUpdate(key, 1, (_, v) => v + 1));
         }
 
+        public Task<long?> GetCounterAsync(string key, CancellationToken cancellationToken = default)
+            => Task.FromResult(_counters.TryGetValue(key, out var value) ? (long?)value : null);
+
         public Task<bool> TryRefreshLeaseAsync(string key, string ownerToken, TimeSpan expiration, CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
