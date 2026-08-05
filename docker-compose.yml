@@ -590,6 +590,13 @@ services:
       # cảm nhận được; bản thân SignalR đẩy tới máy tức thì.
       Notification__Dispatch__PollIntervalSeconds: ${NOTIFICATION_DISPATCH_POLL_INTERVAL_SECONDS:-1}
       Notification__Dispatch__BatchSize: ${NOTIFICATION_DISPATCH_BATCH_SIZE:-100}
+      # ADR-0019 — đường vận chuyển push. Hai giá trị dưới chỉ là MẶC ĐỊNH cho lần chạy đầu khi
+      # bảng notification_settings còn trống; sau khi Admin đổi qua
+      # PUT /api/admin/notification-settings/push-transport thì database là nguồn sự thật và biến
+      # môi trường này không còn ảnh hưởng (nếu không, mỗi lần restart sẽ ghi đè lựa chọn đó).
+      # SignalR | Expo | Both
+      Notification__Push__DefaultTransport: ${NOTIFICATION_PUSH_DEFAULT_TRANSPORT:-SignalR}
+      Notification__Push__CacheSeconds: ${NOTIFICATION_PUSH_CACHE_SECONDS:-30}
     ports:
       - "4008:8080"
     depends_on:

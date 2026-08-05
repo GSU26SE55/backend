@@ -304,6 +304,35 @@ config:
   Realtime__ReplayMaxEvents: "200"
   Realtime__ReplayTtlMinutes: "5"
 
+  # ---------- ADR-0019 — đường vận chuyển push (SignalR ∥ Expo) ----------
+  # Kênh Push có hai đường: hub SignalR tự vận hành và Expo Push API.
+  #
+  # ⚠️ Giá trị dưới CHỈ được đọc khi bảng `notification_settings` còn TRỐNG, tức lần đầu dựng một
+  # môi trường mới. Sau khi Admin gọi PUT /api/admin/notification-settings/push-transport một lần
+  # thì database là nguồn sự thật vĩnh viễn — `helm upgrade` KHÔNG ghi đè lựa chọn đó (cố ý).
+  # Muốn ép lại thì xoá dòng `push.transport` trong bảng, hoặc gọi lại endpoint.
+  #
+  # SignalR — không cần khoá EAS/FCM, không cần device token, nhưng KHÔNG có bằng chứng giao hàng
+  #           ⇒ trạng thái Delivered không bao giờ đạt tới và chuỗi bù SMS cho push critical tự nghỉ.
+  # Expo    — cần device token còn hạn; có đối soát biên nhận nên mới có Delivered.
+  # Both    — gửi cả hai, thành công khi ít nhất một đường thành công.
+  Notification__Push__DefaultTransport: "SignalR"
+  # Bao lâu thì lựa chọn của Admin lan tới worker nền và các pod khác (giây).
+  Notification__Push__CacheSeconds: "30"
+
+  # Hai worker phụ thuộc Expo (ExpoReceiptReconcile, NotificationFallback) tự bật/tắt theo
+  # `push.transport` ở MỖI vòng lặp, nên đổi transport không cần restart pod. Công tắc cứng của
+  # chúng — `Notification__ExpoReceipt__*` và `Notification__Fallback__*` — khai ở khối Sprint 6.3
+  # phía dưới trong file này; đặt `Enabled: false` thì tắt hẳn kể cả khi transport có Expo.
+
+  # ---------- Độ trễ thông báo chat: hai vòng poll nối tiếp ----------
+  # chat → outbox (TicketService) --Outbox__IntervalSeconds--> RabbitMQ
+  #      → dòng Pending (NotificationService) --Dispatch__PollIntervalSeconds--> SignalR
+  # Mặc định trong code của cả hai là 5s ⇒ tổng ~10 giây, đủ để người dùng cho là hỏng.
+  # Từ khi kênh Push thành đường realtime của chat (ADR-0019), phải ghim xuống 1s như compose.
+  Outbox__IntervalSeconds: "1"
+  Notification__Dispatch__PollIntervalSeconds: "1"
+
   MailJet__FromEmail: thangbpse180445@fpt.edu.vn
   MailJet__DisplayName: Solar Panel Battery Maintainance
   MailJet__SendEndpoint: https://api.mailjet.com/v3.1/send

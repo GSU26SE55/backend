@@ -334,7 +334,7 @@
         },
         "overrides": []
       },
-      "description": "Tăng đột biến nghĩa là push đang không tới được thiết bị (NOTI3-05)."
+      "description": "⚠️ ADR-0019 — chuỗi bù push→SMS đọc dữ liệu biên nhận của Expo, nên chỉ chạy khi push.transport là Expo hoặc Both. Chạy thuần SignalR thì worker tự nghỉ và panel trống: push critical KHÔNG có đường bù SMS ở chế độ đó."
     },
     {
       "type": "timeseries",
@@ -372,7 +372,7 @@
         },
         "overrides": []
       },
-      "description": "Ticket 'ok' của Expo KHÔNG có nghĩa đã giao — đây mới là kết quả thật (NOTI3-02)."
+      "description": "⚠️ ADR-0019 — chỉ có dữ liệu khi push.transport là Expo hoặc Both. Chạy thuần SignalR thì panel này TRỐNG LÀ ĐÚNG (không gọi Expo ⇒ không sinh push_receipts), không phải Expo hỏng. Kiểm tra transport: GET /api/admin/notification-settings/push-transport."
     },
     {
       "type": "timeseries",
@@ -399,7 +399,7 @@
         "defaults": {},
         "overrides": []
       },
-      "description": "Rải rác là bình thường (user gỡ app). Tăng vọt thường do sai EAS projectId hoặc credential FCM/APNs hết hạn."
+      "description": "⚠️ ADR-0019 — chỉ có dữ liệu khi push.transport là Expo hoặc Both. Chạy thuần SignalR thì không có lệnh gọi Expo nào nên không token nào bị vô hiệu hoá; panel trống KHÔNG chứng minh push đang khoẻ."
     }
   ]
 }
