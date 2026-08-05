@@ -141,6 +141,8 @@
 | **Sprint 6.2** (Notification pipeline completion — review 2026-07-14) | 🔴 P1 | §17 Sprint 6.2 + `reviewnotification.md` | 17 task `#NOTI-01..17` = GitHub `#672..#688` (milestone Sprint 6.2), ~14 dev-day. ✅ **17/17 DONE 2026-07-31**, merged `dev` qua PR `#718`; toàn bộ đã ở **cột In Review**. Vấn đề gốc: `NotificationDispatcher` dead code (0 caller) → Push/Email/SMS không bao giờ gửi; + orphan events (publish nhưng 0 consumer) + gap routing matrix §3.4. **THÊM 6 · SỬA 8 · XOÁ 1 · 2 fork THÊM/XOÁ; 5 điểm cần chốt.** Nguồn: `reviewnotification.md` §7. |
 | **Sprint 6.3** (Notification production-hardening — benchmark 2026-07-30) | 🔴 P1 | §17 Sprint 6.3 (§17.6.3.1–17.6.3.5) | **16/17 task** `#NOTI3-01..17` = GitHub `#701..#717` (milestone `Sprint 6.3`, assign `@Alexdev257`), **~17 dev-day** — ✅ **16/16 active DONE 2026-07-31**, merged `dev` qua PR `#718`; 16 issue đã ở **cột In Review**, riêng `#703` (huỷ) giữ cột Plan — 🚫 **NOTI3-03 (#703) đã HUỶ 30/07** sau khi implement xong (xem §17.6.3.5 mục 5). Đứng trên Sprint 6.2 (phải merge trước). Vấn đề gốc: pipeline đã "gửi được" nhưng chưa "vận hành được" — feed in-app nhân bản 2–4 lần (`GetNotificationsQuery` không lọc channel), không đối soát Expo receipt, 1 metric duy nhất toàn service, không rate-limit, không retry/DLQ ở tầng bus. **THÊM 10 · SỬA 6.** ✅ 4 fork **đã chốt 30/07** (01→A · 05→B · 10→B · 12→A) — decision log + đánh đổi chấp nhận: §17.6.3.5; sinh thêm R-45/R-46. Thi công bắt đầu từ NOTI3-07. Benchmark: Knock · Courier · Novu. |
 | **Sprint 6.4** (Notification audience — nhóm người nhận & quan hệ DB cho gửi hàng loạt, khảo sát 2026-08-02) | 🔴 P1 | §17 Sprint 6.4 (§17.6.4.0–17.6.4.6) + [`notigroup.md`](notigroup.md) | **15 task** `#NOTI4-01..15` = GitHub `#1006..#1020` (milestone `Sprint 6.4`, assign `@Alexdev257`, tạo 03/08/2026, cột Plan). **~13.5 dev-day** · **THÊM 12 · SỬA 3** · **KHÔNG cross-service** (trừ seed permission ở AuthService). Vấn đề gốc: hệ thống chỉ gửi được cho **đúng 1 người mỗi lệnh** — không bảng nhóm nào, **0 foreign key / 0 navigation property** trong toàn NotificationService, `notifications` chép lại `title`/`body` từng dòng, không có `batch_id` nên không truy vết được lần gửi (đo được: 1.282 dòng / 9 người / 242 lần gửi gom mò). ✅ **Điều kiện cần `NOTI4-00` ĐÃ XONG 02/08/2026** — read-model tài khoản từ 2/10 dòng lên đủ 10, 4 nguyên nhân độc lập đã sửa; không có nó thì nhóm rỗng và sprint này vô nghĩa. ✅ **15/15 task DONE 03/08/2026** — BE + FE đã implement, kiểm chứng đầu-cuối trên docker (gom trùng: 2 nhóm giao nhau → mỗi người đúng 1 dòng/kênh; 2 bất biến DB = 0). 1 điểm đi chệch kế hoạch có chủ đích ở NOTI4-05 — xem §17.6.4.2. 5 fork đã chốt khi khảo sát — §17.6.4.5; sinh R-47..R-52. 5 câu hỏi cần Leader chốt trước khi code — §17.6.4.6. Phase A và B **độc lập ship được**. |
+| **Sprint 6.5** (Notification template — cho template thật sự có tác dụng, khảo sát + thi công 2026-08-03) | 🔴 P1 | §17 Sprint 6.5 (§17.6.5.0–17.6.5.9) | **22 task** `#NOTI5-01..22` = GitHub `#1023..#1044` (milestone `Sprint 6.5`, assign `@Alexdev257`), ✅ **ĐÃ IMPLEMENT XONG 03/08/2026** — 580/580 unit test NotificationService xanh. Vấn đề gốc: template có bảng, có API, có seeder nhưng **sáu lỗi im lặng** làm nó gần như vô tác dụng — sai tên biến hàng loạt (Handlebars render rỗng chứ không ném), kênh InApp render xong rồi vứt đi (43% số dòng), enum trùng giá trị `TicketMerged = ChatEscalatedToAdmin = 27`, thiếu ánh xạ nhóm, template lệch 2 bậc do enum đánh số lại, ma trận kênh lệch consumer. Quan hệ nhân quả: lỗi #3 che #4, lỗi #2 che #1 ⇒ **thứ tự thi công là bắt buộc**. |
+| **Sprint 6.6** (Notification push transport — hai đường SignalR ∥ Expo, Admin chọn lúc chạy; thi công 2026-08-05) | 🔴 P1 | §17 Sprint 6.6 (§17.6.6.0–17.6.6.5) | **26 task** `#NOTI6-01..26` = GitHub `#1047..#1072` (milestone `Sprint 6.6`; `NOTI6-01..14` assign `@CodeForFee`, `NOTI6-15..26` assign `@Alexdev257`), ✅ **ĐÃ IMPLEMENT XONG 05/08/2026** — L0 build 0 error · L1 **3.540** unit · L2 **676** integration · L3 e2e-smoke **14/14** · E2E sâu **15/15** trên stack Docker thật. Hai bài toán chồng nhau: (1) thông báo chat gửi **sai người** — consumer đoán ra đúng MỘT người nhận và bỏ qua hoàn toàn ghi chú nội bộ; (2) kênh Push **phụ thuộc Expo** nên cần khoá EAS/FCM + device token, người dùng web không nhận được gì. Kèm **ba lỗi im lặng**: `EventTypeMap` thiếu 11 chat event ⇒ thông báo chat CHƯA TỪNG rời TicketService · worker dispatch đăng ký hai lần · rate limiter đọc bộ đếm sai kiểu. ⚠️ **PHÁ VỠ TƯƠNG THÍCH**: enum trong payload hub đổi chuỗi→số, thêm sự kiện `NotificationReceived` — FE/Mobile bắt buộc sửa (R-59). Sinh R-57..R-61. |
 | AI Module integration (FastAPI + Polly + fallback) | 🟠 P1 | §30 | Sprint 3-4 (đã start) |
 | Distributed tracing (OpenTelemetry → Tempo/Jaeger) | 🟡 P2 | §8.4 | 0.5 sprint |
 | Gateway JWT validate + claim forwarding | 🟠 P1 | §10 | 0.5 sprint |
@@ -5000,7 +5002,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3 + Sprint 6.4
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3 + Sprint 6.4 + Sprint 6.5 + Sprint 6.6
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -7005,6 +7007,225 @@ Không còn mục nào của Sprint 6.5. Một điểm **ngoài phạm vi** ghi 
 
 - `AccountStatusChangedEvent` vẫn **không ai publish** (ghi nhận từ Sprint 6.4) ⇒ consumer tương ứng
   ở TicketService + BatteryService là code chết.
+
+---
+### Sprint 6.6 (Notification push transport — hai đường SignalR ∥ Expo, Admin chọn lúc chạy; thi công 2026-08-05)
+
+**Trạng thái: ✅ ĐÃ IMPLEMENT XONG 05/08/2026.** L0 build 0 error · L1 **3.540** unit test · L2 **676** integration test · L3 e2e-smoke **14/14** · E2E sâu **15/15** — tất cả xanh trên stack Docker thật.
+
+**Owner:** Hoà (`@CodeForFee`) phần A+B · Thắng (`@Alexdev257`) phần C+D+E.
+**Issue numbers:** ✅ **đã tạo 05/08/2026** — GitHub `#1047..#1072` (26 issue, milestone `Sprint 6.6`, label `status: reviewing` = cột **In Review**). Bản đồ NOTI6-01→#1047 … NOTI6-26→#1072. Phân bố assignee: `#1047..#1060` (NOTI6-01..14) → `@CodeForFee` · `#1061..#1072` (NOTI6-15..26) → `@Alexdev257`. Nhãn: 26 `role: BE` · 14 `priority: P1` · 9 `P2` · 3 `P3` · type: 9 feat / 12 fix / 2 refactor / 2 chore / 1 docs.
+**Phụ thuộc:** Sprint 6.5 (template) đã xong. Chạm `SharedContracts` + `SharedInfrastructure` + TicketService + BatteryService + ApiGateway.
+**Nhánh:** `push-noti-test`, đã rebase lên `origin/dev` (`cea550eb`).
+
+#### 17.6.6.0. Vấn đề gốc — hai bài toán chồng lên nhau
+
+**Bài toán 1 — thông báo chat gửi sai người.** `ChatCreatedConsumer` đoán ra **đúng một** người nhận
+(`isStaffAuthor ? CustomerId : AssignedStaffId`) và **bỏ qua hoàn toàn** ghi chú nội bộ. Supporter,
+participant, và Admin/Manager từng trả lời không bao giờ biết có tin nhắn mới. Nguyên nhân sâu hơn:
+NotificationService **không có** bảng `ticket_assignments` lẫn `ticket_participants` nên không thể tự
+suy ra danh sách người nhận — phải để TicketService tính sẵn.
+
+**Bài toán 2 — kênh Push phụ thuộc Expo.** Cần khoá EAS/FCM và device token còn hạn; người dùng web
+không có token thì không nhận được gì. Khi module Chat lấy kênh Push làm đường realtime, một vòng gọi
+HTTP ra ngoài cộng đối soát biên nhận là quá chậm để nhắn tin.
+
+Ngoài ra khảo sát tìm thấy **ba lỗi im lặng độc lập**, không log, không metric, không test nào bắt:
+
+| # | Lỗi | Đo được | Vì sao im lặng |
+|---|---|---|---|
+| 1 | **`OutboxRelayService.EventTypeMap` thiếu 11 chat event** | Mọi `ChatCreatedEvent` ghi vào outbox đều `MarkFailed("Unknown event type")` sau khi retry hết lượt ⇒ **thông báo chat CHƯA TỪNG tới NotificationService** | Relay chỉ ghi `RetryCount`, không có alert nào theo dõi bảng outbox |
+| 2 | **`NotificationDispatchBackgroundService` đăng ký HAI lần** | Hai instance worker cùng chạy trên một tiến trình, cùng tranh bảng `notifications` | `AddHostedService` không báo lỗi khi trùng; leader-election che phần lớn hệ quả |
+| 3 | **Rate limiter đọc bộ đếm sai kiểu** | `IncrementAsync` ghi chuỗi thuần, `GetAsync<long?>` lại giải mã JSON ⇒ cửa sổ trước **luôn = 0** ⇒ hạn mức trượt tính sai | Trả về `null` rồi `?? 0` nên không ném, chỉ âm thầm nới hạn mức |
+
+> **Quan hệ nhân quả cần nhớ:** lỗi #1 **che** toàn bộ bài toán 1 — sửa người nhận mà không sửa
+> `EventTypeMap` thì vẫn không ai nhận được gì, và ngược lại. Thứ tự A→B là bắt buộc.
+
+#### 17.6.6.1. Tasks (nhãn hành động THÊM / SỬA)
+
+**Phase A — Chat notification tới đúng người (`@CodeForFee`, commit `03d9e2be`):**
+
+- [x] **NOTI6-01** (#1047) [THÊM] `IChatRecipientResolver` + `ChatRecipientResolver` (TicketService) — gom
+  người nhận từ ba nguồn: `ticket_assignments` (PrimaryHandler + Supporter, **bỏ**
+  PreviousPrimaryHandler), `ticket_participants` còn hoạt động, và **mọi người đã từng nhắn trên
+  ticket**. Nguồn thứ ba tồn tại vì Admin/Manager nhảy vào trả lời một lần **không** được thêm vào
+  assignment lẫn participant. Loại tác giả, loại `Guid.Empty`, distinct. ~1d
+- [x] **NOTI6-02** (#1048) [SỬA] `ChatCreatedEvent` thêm `RecipientUserIds` (optional, cuối positional
+  record ⇒ tương thích ngược với message cũ còn tồn trong queue). Ba handler ghi outbox
+  (`ChatAdd` · `ChatReply` · `ChatOverrideAdd`) gọi resolver rồi gắn danh sách vào event. ~0.5d
+- [x] **NOTI6-03** (#1049) [SỬA] `ChatOverrideAddCommandHandler` **ghi outbox** — đường override trước đây
+  chỉ bắn SignalR nên ai không mở sẵn ticket thì không hề biết có tin nhắn. ~0.5d
+- [x] **NOTI6-04** (#1050) [SỬA] `ChatCreatedConsumer` — bỏ nhánh `if (evt.IsInternal) return;`, loop qua
+  **toàn bộ** `RecipientUserIds` × 2 kênh (InApp + Push). Tiêu đề đổi theo `IsInternal`
+  ("Ghi chú nội bộ mới trên ticket" / "Tin nhắn mới trên ticket"), payload thêm `senderName` +
+  `isInternal`. Có nhánh fallback cho message publish từ bản cũ. ~0.5d
+- [x] **NOTI6-05** (#1051) [SỬA] `OutboxRelayService.EventTypeMap` **+11 chat event** (`ChatCreated`,
+  `ChatMentioned`, `ChatReacted`, `ChatEdited`, `ChatDeleted`, `ChatEscalatedToAdmin`,
+  `ChatEscalationReviewRequested`, `ChatEscalationReviewAcked`, `ParticipantAdded`,
+  `ParticipantRemoved`, `ParticipantRoleChanged`). **Đây là lỗi #1 ở §17.6.6.0** — thiếu là relay
+  báo "Unknown event type" và thông báo chat không bao giờ rời TicketService. ~0.5d
+- [x] **NOTI6-06** (#1052) [SỬA] `ICacheService.GetCounterAsync` + hiện thực ở `RedisCacheService` (đọc raw
+  string qua `StringGetAsync`, không giải mã JSON). `NotificationRateLimiter` đổi sang dùng nó —
+  **lỗi #3 ở §17.6.6.0**. Cập nhật 3 stub `ICacheService` trong test. ~0.5d
+- [x] **NOTI6-07** (#1053) [SỬA] Template `ChatCreated` đổi từ câu cố định sang `{{Title}}`/`{{Body}}` để
+  banner hiện đúng nội dung tin thật; `NotificationTemplateVariables` khai thêm `senderName`,
+  `isInternal`. ~0.25d
+
+**Phase B — Kênh Push đi qua hub SignalR (`@CodeForFee`, commit `03d9e2be` + `640e4f9f`):**
+
+- [x] **NOTI6-08** (#1054) [THÊM] `SignalRPushChannel` — đẩy record `Channel = Push` qua sự kiện
+  **`NotificationReceived`** trên hub, kèm `entityType` · `entityId` · `createdAt` · `isCritical`.
+  Máy nhận dựng thông báo hệ điều hành / bong bóng chat tại chỗ, **không cần device token**. ~1d
+- [x] **NOTI6-09** (#1055) [SỬA] Cấu hình hub trong `Program.cs`: `KeepAliveInterval` 15s ·
+  `ClientTimeoutInterval` 60s · JSON protocol camelCase · **backplane Redis** khi có
+  `ConnectionStrings:Redis` (prefix kênh `Notification`) · nhận bearer qua query `access_token`
+  **chỉ cho path `/hubs/notifications`**. ~0.5d
+- [x] **NOTI6-10** (#1056) [SỬA] ⚠️ **PHÁ VỠ TƯƠNG THÍCH** — enum trong payload hub đổi từ **chuỗi** sang
+  **số** (`type`, `channel`, `status`), để khớp đúng số mà REST API trả về; client chỉ cần một bộ
+  ánh xạ enum cho cả hai đường. Hub **cố ý không** đăng ký `JsonStringEnumConverter`. Client cũ so
+  sánh bằng chuỗi sẽ im lặng không khớp nhánh nào. ~0.25d
+- [x] **NOTI6-11** (#1057) [SỬA] `NotificationDispatcher` bỏ phụ thuộc device token ở kênh Push (gỡ cổng
+  `no_device_token`) và cho `ChatCreated`/`ChatMentioned` **bỏ qua hạn mức người dùng** — một đợt
+  cảnh báo dồn dập không được đẩy tin nhắn thật sang digest hàng giờ sau. ~0.5d
+- [x] **NOTI6-12** (#1058) [SỬA] `ExpoPushChannel` — `data` gửi kèm thêm `entityType` · `entityId` ·
+  `createdAt` · `notificationType` (tổng 5 khoá cố định); `channelId` thêm nhánh **`chat-messages`**
+  cho `ChatCreated`/`ChatMentioned`/`ChatReacted`. ⚠️ Android app phải tạo sẵn **cả 3** notification
+  channel. ~0.5d
+- [x] **NOTI6-13** (#1059) [SỬA] `BatchIngestSensorReadingsCommandHandler` (BatteryService) —
+  `SensorSourceCode` rỗng ghi mặc định `SensorSource.Primary` thay vì `null`, vì một số schema
+  Timescale đã triển khai đưa cột này vào khoá chính tổ hợp. ~0.25d
+- [x] **NOTI6-14** (#1060) [SỬA] `docker-compose.yml` — ghim `Outbox__IntervalSeconds` và
+  `Notification__Dispatch__PollIntervalSeconds` xuống **1s** (hai vòng poll này là toàn bộ độ trễ
+  cảm nhận được); đổi cổng cAdvisor 8081→8082 (né Expo Metro); thêm `.gitattributes` giữ LF cho
+  `*.sh` (script bind-mount vào container Alpine). ~0.25d
+
+**Phase C — Hai đường song song, Admin chọn lúc chạy (`@Alexdev257`, commit `5b67af99`):**
+
+- [x] **NOTI6-15** (#1061) [THÊM] `PushTransportEnum` (`SignalR = 1` · `Expo = 2` · `Both = 3`) + entity
+  `NotificationSetting` (khoá–giá trị) + migration `AddNotificationSettings`. Unique index **có lọc**
+  `WHERE is_deleted = false` — bảng dùng xoá mềm, tính cả dòng đã xoá thì một lần xoá mềm khoá vĩnh
+  viễn khoá đó. ~0.5d
+- [x] **NOTI6-16** (#1062) [THÊM] `IPushTransportSettingService` + `PushTransportSettingService` — đọc/ghi
+  transport, cache 30s, **xoá cache ngay khi ghi**. Mọi lỗi khi ĐỌC rơi về mặc định thay vì ném (hàm
+  nằm trên đường đi của từng lần gửi); lỗi khi GHI thì ném bình thường. ~0.5d
+- [x] **NOTI6-17** (#1063) [THÊM] `CompositePushChannel` — kênh Push duy nhất dispatcher nhìn thấy, tự rẽ
+  nhánh và **tự nạp device token** khi cần Expo. Tách `ISignalRPushChannel` / `IExpoPushChannel`:
+  dispatcher chọn kênh bằng `FirstOrDefault(c => c.ChannelType == …)` nên đăng ký cả hai dưới
+  `INotificationChannel` thì cái thứ hai **chết im lặng**. Quy ước: thành công khi ÍT NHẤT MỘT đường
+  thành công; thiếu token ở `Both` **không phải lỗi**. ~1d
+- [x] **NOTI6-18** (#1064) [SỬA] Khôi phục `ExpoPushChannel` + HttpClient `expo` (Polly retry 3 lần) + hai
+  worker Sprint 6.3 (`ExpoReceiptReconcile` NOTI3-02 · `NotificationFallback` NOTI3-05) đã bị gỡ
+  khỏi DI. Thêm **cổng chặn hỏi lại transport MỖI vòng lặp** nên tự bật/tắt không cần restart. Hai
+  worker chọn hướng an toàn **ngược nhau** khi đọc lỗi: đối soát biên nhận *vẫn chạy* (thừa thì vô
+  hại), bù SMS *nghỉ* (thừa thì bắn SMS thật). ~1d
+- [x] **NOTI6-19** (#1065) [THÊM] API `GET|PUT /api/admin/notification-settings/push-transport`
+  (`[Authorize(Roles = "Admin")]`) + 2 route ApiGateway. `GET` trả kèm **cả 3 lựa chọn hợp lệ** để
+  giao diện không hard-code danh sách. Sau lần `PUT` đầu tiên, **database là nguồn sự thật vĩnh
+  viễn** — restart service không ghi đè lựa chọn của người vận hành. ~1d
+
+**Phase D — Sửa các điểm lệch chuẩn (`@Alexdev257`, commit `5b67af99` + `e85f8e39`):**
+
+- [x] **NOTI6-20** (#1066) [SỬA] `ChatRecipientResolver` gọi thẳng
+  `TicketQueryHelper.CanViewInternalChats(roles, participantCanViewInternal)` thay vì tự chế luật
+  riêng. Luật cũ vừa **bỏ sót** Staff participant có `CanViewInternal = false` (đọc được mà không
+  được báo), vừa **không xét** Customer được cấp quyền theo #522. Danh sách "được báo" nay trùng khít
+  danh sách "đọc được". ⚠️ Nội dung chat đi **nguyên văn** vào tiêu đề/nội dung thông báo đẩy nên
+  hiện trên màn hình khoá — đây là ranh giới bảo mật, không chỉ là chuyện tiện dụng. **+14 test.** ~1d
+- [x] **NOTI6-21** (#1067) [SỬA] `ChatCreated`/`ChatMentioned` bỏ qua **quiet hours** và **digest** (đã bỏ
+  qua hạn mức ở NOTI6-11). Kênh Push nay là đường realtime của hội thoại; hoãn tới sáng hôm sau
+  nghĩa là buổi tối nhắn tin không ai nhận được gì, và người đặt `Frequency = Daily` thì mỗi ngày
+  mới nhận chat một lần. Vẫn **KHÔNG** phải `critical` — hai khái niệm tách biệt. **+9 test.** ~0.5d
+- [x] **NOTI6-22** (#1068) [SỬA] Migration: hoàn nguyên `20260729161154_AddNotificationDispatchRetryColumns`
+  về đúng bản đã merge (**sửa migration đã chạy thì không bao giờ chạy lại** — tên nó đã nằm trong
+  `__EFMigrationsHistory`), bù bằng `20260805083909_RepairLegacyNotificationRetryColumns` viết
+  idempotent: no-op trên database khoẻ mạnh, gộp `attempt_count` cũ bằng `GREATEST` để không đặt
+  ngược số lần thử về 0. Đã test rollback 2 vòng trên Postgres thật. ~0.5d
+- [x] **NOTI6-23** (#1069) [SỬA] 🔴 **P1** — đăng ký lại `NotificationDispatchBackgroundService` bị mất khi
+  rebase. Hai nhánh cùng dọn một dòng `AddHostedService` bị lặp (GH-793 bỏ dòng dưới, nhánh này bỏ
+  dòng trên); git gộp lại thành bỏ **CẢ HAI** và **không báo xung đột**. Hệ quả: consumer vẫn ghi đủ
+  dòng đúng người nhận, REST vẫn 200, build + 3.532 unit + 676 integration + e2e-smoke đều xanh —
+  nhưng **không ai nhận được thông báo**. Thêm `HostedServiceRegistrationTests` khoá 7 worker bắt
+  buộc, mỗi cái đúng một lần. ~0.5d
+
+**Phase E — Vận hành, giám sát, tài liệu (`@Alexdev257`, commit `83b41e7a` + `e92b80a9`):**
+
+- [x] **NOTI6-24** (#1070) [SỬA] 🔴 Độ trễ thông báo ở production chậm **gấp 5 lần** dev:
+  `docker-compose.prod.yml` và Helm `values.yaml` đều **không khai** `Outbox__IntervalSeconds` lẫn
+  `Notification__Dispatch__PollIntervalSeconds` ⇒ rơi về mặc định 5s + 5s = **~10 giây**, trong khi
+  dev đã chỉnh 1+1. Ghim cả hai nơi xuống 1s, vẫn nâng lại được qua `.env.prod`. Kèm
+  `Notification__Push__*` cho cả compose lẫn Helm. ~0.5d
+- [x] **NOTI6-25** (#1071) [SỬA] `ci/scripts/smoke-test.sh` canh route admin mới — quên map ở YARP thì màn
+  hình cấu hình trả 404, rất dễ đọc nhầm thành "chưa làm tính năng". Monitoring: alert-rules +
+  dashboard (**cả 2 bản**, `monitoring/` và `deploy/helm/`, phải sửa đồng thời) ghi rõ 3 metric Expo
+  đứng yên ở 0 khi chạy `SignalR` là **ĐÚNG**, không phải Expo hỏng; và im lặng của
+  `ExpoTokenDeactivationSpike` **không** chứng minh push đang khoẻ. ~0.5d
+- [x] **NOTI6-26** (#1072) [THÊM] `docs/adr/0019-push-transport-signalr-expo.md` + cập nhật 4 tài liệu:
+  `api-notification.md` (PushTransportEnum · endpoint admin đầy đủ nullable/mã lỗi · bảng
+  `notification_settings` · **sửa mục Realtime đang sai**: enum đã đổi sang số và thêm sự kiện
+  `NotificationReceived` · gỡ cổng `no_device_token` khỏi bảng tầng dispatch) ·
+  `chat/api-reference.md` (luật ai được báo khi có chat mới) · `chat/rabbitmq-topology.md`
+  (`RecipientUserIds`) · `non-obvious-decisions.md` (7 bẫy đã trả giá). ~1d
+
+#### 17.6.6.2. Acceptance
+
+- [x] `make ci-build` — 0 error
+- [x] L1 unit **3.540** test / 9 suite — 0 đỏ (trong đó **+71 test mới** của sprint này)
+- [x] L2 integration **676** test / 8 suite — 0 đỏ
+- [x] L3 `tools/e2e-smoke.sh` — **14/14**
+- [x] E2E sâu **15/15** trên stack Docker thật, kiểm chứng bằng truy vấn DB chứ không tin log:
+  - Chat công khai → đúng 4 người nhận, tác giả bị loại, 8 record (mỗi người InApp + Push), tất cả `Sent`
+  - Ghi chú nội bộ → **Customer = 0**; Staff participant có cờ `false` **vẫn nhận** (ca luật cũ bỏ sót)
+  - Customer được cấp `CanViewInternal` → **có nhận** (đúng #522)
+  - `transport = Expo` không token → Push thất bại đúng lý do, InApp không ảnh hưởng
+  - `transport = Both` không token → Push **thành công** nhờ SignalR
+  - Quiet hours 24h → chat `Sent`, thông báo hệ thống bị hoãn
+  - Digest hằng ngày → chat `Sent`, thông báo hệ thống bị gom
+  - SignalR → đủ 3 sự kiện (`NotificationCreated` · `UnreadCountChanged` · `NotificationReceived`), enum **dạng số**
+- [x] API push-transport **15/15** — 401/403/400/200, ghi DB, idempotent khi PUT trùng giá trị
+- [x] Migration apply sạch trên DB trắng · rollback 2 vòng · vá được database lệch cột `attempt_count`
+  (`dispatch_attempt_count` = 3, không đặt ngược về 0)
+- [x] `helm lint` pass · `helm template` render đúng 9 khoá cấu hình liên quan
+- [x] Quét toàn repo tìm dòng bị nuốt khi rebase: **398 file, 0 dòng mất** (bộ dò đã được kiểm chứng
+  ngược — chạy với commit trước khi sửa thì nó phát hiện đúng dòng `AddHostedService` bị mất)
+
+#### 17.6.6.3. Rủi ro
+
+| Mã | Rủi ro | Mức | Giảm thiểu |
+|---|---|---|---|
+| R-57 | Đường `SignalR` **không có bằng chứng giao hàng** ⇒ `Delivered` không bao giờ đạt tới, chuỗi bù SMS cho push critical tự nghỉ | 🔴 Cao | Bật `transport = Both` khi cần bằng chứng giao hàng. Đã ghi rõ ở ADR-0019, `api-notification.md` §Giới hạn 2b, và comment trong alert-rules |
+| R-58 | Chế độ `Both` gửi **hai lần** cho một record ⇒ người dùng thấy thông báo hai lần | 🟡 TB | Client khử trùng: `data.notificationId` của Expo **bằng** `id` của `NotificationReceived`. Đã ghi trong `api-notification.md` §Realtime |
+| R-59 | Enum trong payload hub đổi chuỗi→số ⇒ **client cũ hỏng im lặng** | 🔴 Cao | Đã ghi ở Changelog `api-notification.md` mục "phá vỡ tương thích". **FE/Mobile bắt buộc sửa trước khi merge lên staging** |
+| R-60 | Record `Push` **không nằm trong** `GET /api/notifications` ⇒ `NotificationReceived` không có đường dự phòng REST; mất WebSocket lúc nào thì mất thông báo lúc đó | 🟡 TB | Bật `Both` để có thêm đường Expo; hoặc chấp nhận vì feed InApp vẫn đủ |
+| R-61 | Cùng một dòng bị hai nhánh sửa/xoá khác nhau ⇒ git gộp im lặng, mất code mà không báo xung đột (đã xảy ra thật ở NOTI6-23) | 🔴 Cao | `HostedServiceRegistrationTests` khoá danh sách worker; quy trình: sau mỗi rebase lớn phải chạy đủ L0→L3 **và** E2E thật, không dừng ở "test xanh" |
+
+#### 17.6.6.4. Decision log (chốt 05/08/2026)
+
+| # | Ngã ba | Chọn | Vì sao |
+|---|---|---|---|
+| 1 | Bỏ hẳn Expo / giữ song song / giữ nhưng đánh dấu `[Obsolete]` | **Giữ song song, chọn được từ giao diện Admin** | Bỏ hẳn thì mất `Delivered` và mất chuỗi bù SMS cho cảnh báo P1 — hai tính năng Sprint 6.3 đã merge. Chủ dự án chốt: phải cấu hình được từ frontend |
+| 2 | Chat có bỏ qua quiet hours không | **Có** | Kênh Push nay là đường realtime của hội thoại. Muốn tắt thì tắt kênh Push hoặc tắt nhóm `Chat` — quiet hours không còn tác dụng với chat |
+| 3 | Chat có bỏ qua **digest** không (ngoài câu hỏi ban đầu) | **Có** | Cùng loại cơ chế làm chậm. Để lại thì người đặt `Frequency = Daily` mỗi ngày mới nhận chat một lần. Đã báo lại cho chủ dự án như một mở rộng có chủ ý |
+| 4 | `device_tokens` gỡ hay giữ | **Giữ và làm cho có tác dụng thật** | Transport `Expo`/`Both` vẫn cần token. Gỡ endpoint sẽ phá mobile đang gọi |
+| 5 | Sửa thẳng migration đã merge / bù migration mới | **Bù migration mới** | Migration đã chạy thì tên nó nằm trong `__EFMigrationsHistory` ⇒ sửa nội dung **không bao giờ chạy lại**, chỉ database dựng mới mới thấy bản sửa |
+| 6 | Đặt `Notification__Push__*` vào `.env.Docker` | **Không** — đặt tên VIẾT HOA ở `.env` | Trong docker-compose, `environment:` **đè** `env_file:`. Đã kiểm chứng bằng thí nghiệm riêng; đặt sai chỗ là bị bỏ qua **im lặng** |
+| 7 | Thêm `Notification__Push__*` vào `docker-compose.prod.yml` | **Có**, theo đúng khuôn `${VAR:-default}` mà prod đã dùng cho `MessageBus__*` và `AlertTicketSaga__*` | Nhất quán với lệ sẵn có; và quan trọng hơn là để ghim luôn hai tham số độ trễ vốn đang bỏ trống |
+
+#### 17.6.6.5. Còn treo
+
+- **FE/Mobile phải sửa theo hợp đồng realtime mới** (R-59): enum dạng số + khử trùng
+  `NotificationCreated` với `NotificationReceived` theo `entityType`+`entityId`; Android tạo thêm
+  notification channel `chat-messages`.
+- **Chuỗi bù SMS chưa được chứng minh chạy.** Cổng chặn transport đã verify cả hai chiều (bật `Expo`
+  → key leader được set; bật `SignalR` → không set suốt 150s), nhưng khi cho qua thì
+  `ProcessOnceAsync` không tạo bản SMS nào dù truy vấn SQL cùng điều kiện cho ra 1 ứng viên hợp lệ.
+  Đây là logic Sprint 6.3 **không sửa dòng nào** trong sprint này. Nghi ngờ: EF không dịch được
+  `criticalTypes.Contains(n.Type)` trên thuộc tính enum có value-converter. **Cần điều tra riêng.**
+- **`Outbox__BatchSize = 50` trong Helm ConfigMap** đang âm thầm đè mặc định 100 của TicketService —
+  ba service dùng chung tiền tố `Outbox__` nhưng lớp options khác nhau (`AuthService`/`SmsService`
+  có `PollIntervalSeconds`/`MaxRetries`; `TicketService` có `IntervalSeconds`/`MaxRetryCount`).
+  Cố ý hay tác dụng phụ — cần chủ dự án xác nhận.
+- **`plan.md` viết hồi tố** (`logs/GH-TBD-push-transport/plan.md`) và **chưa commit** vì `logs/` đang
+  bị `.gitignore` chặn. Người ship cần `git add -f` sau khi có số issue thật.
 
 ---
 
