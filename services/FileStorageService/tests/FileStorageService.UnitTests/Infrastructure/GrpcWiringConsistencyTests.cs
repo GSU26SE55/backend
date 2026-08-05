@@ -48,18 +48,45 @@ public class GrpcWiringConsistencyTests
         return File.ReadAllText(path);
     }
 
-    /// <summary>Mọi nguồn cấu hình khai kênh gRPC — thêm môi trường mới thì thêm một dòng ở đây.</summary>
+    /// <summary>Đọc file nếu có, trả <c>null</c> nếu không — dùng cho file cục bộ theo từng máy.</summary>
+    private static string? TryRead(params string[] segments)
+    {
+        var path = Path.Combine(new[] { RepoRoot }.Concat(segments).ToArray());
+        return File.Exists(path) ? File.ReadAllText(path) : null;
+    }
+
+    /// <summary>
+    /// Nguồn cấu hình <b>có trong Git</b> — bắt buộc phải tồn tại và phải khớp nhau.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Chỉ liệt kê file được Git theo dõi. <c>.env</c> và <c>.env.Docker</c> KHÔNG nằm ở đây dù
+    /// chúng cũng khai hai biến này: cả hai bị <c>.gitignore</c> và do từng người tự tạo, nên
+    /// máy vừa clone hoặc runner CI không hề có chúng.
+    /// </para>
+    /// <para>
+    /// Bản đầu tiên của phép kiểm này gộp chung cả năm nguồn. Đo được: đổi tên <c>.env</c> đi rồi
+    /// chạy lại thì <b>4 test đỏ</b> với thông báo "thiếu file cấu hình …/.env" — tức bộ test chỉ
+    /// xanh nhờ file riêng của máy tôi, và sẽ đỏ ở mọi nơi khác. Xem
+    /// <see cref="LocalEnvFiles_WhenPresent_AgreeWithTheTrackedOnes"/> cho phần kiểm file cục bộ.
+    /// </para>
+    /// </remarks>
     public static TheoryData<string, string[]> WiringSources()
     {
         var data = new TheoryData<string, string[]>();
-        data.Add("dev (.env)", [".env"]);
-        data.Add("dev docker (.env.Docker)", [".env.Docker"]);
         data.Add("dev template (.env.Docker.example)", [".env.Docker.example"]);
         data.Add("production (env.prod.example)", ["env.prod.example"]);
         data.Add("k8s (helm configmap)",
             ["deploy", "helm", "solar-battery", "templates", "shared", "configmap.yaml"]);
         return data;
     }
+
+    /// <summary>File cấu hình CỤC BỘ — có thì kiểm, không có thì thôi.</summary>
+    private static readonly (string Label, string[] Path)[] LocalWiringSources =
+    [
+        ("dev (.env)", [".env"]),
+        ("dev docker (.env.Docker)", [".env.Docker"]),
+    ];
 
     /// <summary>Lấy giá trị của một khoá, chấp nhận cả dạng <c>KEY=value</c> lẫn <c>KEY: "value"</c>.</summary>
     private static string? ValueOf(string content, string key)
@@ -132,6 +159,39 @@ public class GrpcWiringConsistencyTests
             .ToList();
 
         ports.Should().ContainSingle("mọi môi trường nên dùng chung một cổng gRPC");
+    }
+
+    /// <summary>
+    /// File cục bộ (<c>.env</c>, <c>.env.Docker</c>) nếu CÓ thì phải khớp các nguồn trong Git.
+    /// </summary>
+    /// <remarks>
+    /// Chúng bị <c>.gitignore</c> nên máy vừa clone và runner CI không có — vì vậy chỉ kiểm khi
+    /// tồn tại. Vẫn đáng kiểm: đây chính là file mà người phát triển chạy hằng ngày, lệch cổng ở
+    /// đây thì "máy tôi chạy được" mà không ai giải thích nổi tại sao.
+    /// </remarks>
+    [Fact]
+    public void LocalEnvFiles_WhenPresent_AgreeWithTheTrackedOnes()
+    {
+        var expectedPort = ValueOf(Read(".env.Docker.example"), ServerPortKey);
+        expectedPort.Should().NotBeNull("bản mẫu trong Git phải khai cổng gRPC");
+
+        foreach (var (label, path) in LocalWiringSources)
+        {
+            var content = TryRead(path);
+            if (content is null) continue;   // máy này không có file đó — không phải lỗi
+
+            var port = ValueOf(content, ServerPortKey);
+            var address = ValueOf(content, ClientAddressKey);
+
+            port.Should().NotBeNull($"{label}: có file thì phải khai {ServerPortKey}");
+            address.Should().NotBeNull($"{label}: có file thì phải khai {ClientAddressKey}");
+            port.Should().Be(expectedPort, $"{label}: phải dùng chung cổng với bản mẫu trong Git");
+
+            Uri.TryCreate(address, UriKind.Absolute, out var uri).Should().BeTrue(
+                $"{label}: TicketService yêu cầu URI tuyệt đối");
+            uri!.Port.Should().Be(int.Parse(port!), $"{label}: client phải trỏ đúng cổng máy chủ nghe");
+            uri.Host.Should().Be(ServiceHost, $"{label}: phải gọi theo tên service trong mạng nội bộ");
+        }
     }
 
     [Fact]

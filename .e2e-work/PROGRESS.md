@@ -2257,3 +2257,69 @@ sau cần làm lại bước này, hoặc cập nhật IP trong `.env` cho khớ
 đầu-cuối Docker/Production) và 1 cho `PendingCount` gộp `Processing`.
 
 **Chưa commit gì** — theo đúng yêu cầu.
+
+---
+
+## Hai lỗi phát hiện sau cùng (2026-08-05, sau khi nhánh rebase lên dev)
+
+### LỖI DO TÔI — test nối dây gRPC phụ thuộc file KHÔNG có trong Git
+
+`GrpcWiringConsistencyTests` đọc năm nguồn, trong đó `.env` và `.env.Docker` **bị `.gitignore`**
+và do từng người tự tạo. Máy vừa clone hoặc runner CI không hề có chúng.
+
+**Đo được:** đổi tên `.env` đi rồi chạy lại ⇒ **4 test đỏ**, thông báo
+`Expected File.Exists(path) to be true because thiếu file cấu hình …/.env`.
+Nghĩa là bộ test chỉ xanh nhờ file riêng của máy tôi — đúng loại "xanh giả" mà chính bộ test này
+sinh ra để chống.
+
+**Sửa:** tách hai nhóm.
+- `WiringSources()` giữ đúng ba nguồn **được Git theo dõi** (`.env.Docker.example`,
+  `env.prod.example`, helm configmap) — bắt buộc tồn tại và phải khớp nhau.
+- `LocalEnvFiles_WhenPresent_AgreeWithTheTrackedOnes` kiểm `.env` / `.env.Docker` **chỉ khi có**,
+  đối chiếu cổng và địa chỉ với bản mẫu trong Git. Vẫn đáng kiểm: đây là file người ta chạy hằng
+  ngày, lệch cổng ở đây sinh ra đúng cảnh "máy tôi chạy được" mà không ai giải thích nổi.
+
+**Chứng minh hai chiều:**
+
+| Tình huống | Kết quả |
+|---|---|
+| Ẩn cả `.env` lẫn `.env.Docker` (giả lập máy vừa clone / CI) | **16/16 xanh** (trước: 4 đỏ) |
+| Để file nhưng đổi cổng `.env.Docker` thành 9999 | **đỏ đúng chỗ**: `Expected port to be "8081" … but "9999" differs` |
+
+Toàn bộ `FileStorageService.UnitTests`: 107/107 xanh.
+
+**Trả lời câu hỏi "có thêm gì trong `.env` / `.env.Docker` không":** không. Hai biến gRPC đã có sẵn
+trong cả hai file từ trước (`.env` giữ nguyên mtime 2026-08-01). Compose chỉ bắt buộc đúng hai biến
+đó và cả hai đều có. `.env.local` bên mobile là file tạm lúc kiểm emulator, đã xoá.
+
+### KHÔNG PHẢI LỖI CỦA TÔI — test KB đỏ do commit kéo về từ `dev`
+
+Thang chạy lần 2 đỏ 1 test: `KbWorkflowHandlersTests.Handle_UpdateCommand_Success_CreatesPendingVersionAndUpdatesArticle`
+— *"Expected article.ReviewRequired to be true, but found False"*.
+
+Reflog giải thích: lúc `08-05 13:49` nhánh được `pull origin dev --rebase`, kéo về commit
+`0e68b2a6` (Shu1237, 2026-08-03) *"feat: direct KB update for owner and manager without
+re-approval"*. Commit đó đổi luật — **chủ bài viết và Manager/Admin sửa thẳng**, không qua duyệt —
+và có cập nhật `KbApiTests.cs` để nói rõ điều đó (`UpdateKbArticle_ByCreator_AppliesContentDirectly`
+khẳng định `ReviewRequired.Should().BeFalse()`), nhưng **bỏ sót** test đơn vị này.
+
+Test đó lấy chính `creatorId` làm người sửa rồi vẫn kỳ vọng nhánh chờ duyệt. Vì handler nay cho chủ
+bài viết đi `HandleDirectUpdate`, nó không bao giờ đúng nữa.
+
+**Sửa:** đổi người sửa thành một Staff **khác** (`editorId`). Chọn cách này vì tên test và cả khối
+`Verify` phiên bản 2.1/`Pending` phía dưới đều mô tả nhánh CHỜ DUYỆT — nhánh đó vẫn tồn tại, chỉ áp
+cho người ngoài. Kèm theo, `PendingReviewBy` phải là người vừa sửa chứ không phải người tạo.
+Quét cả file: chỉ đúng một test dính lỗi này. `KbWorkflowHandlersTests`: 18/18 xanh.
+
+### Thang sau cùng
+
+```
+✓ L0 build        exit 0
+✓ L1 unit         3461/3461 pass
+✓ L2 integration  676/676 pass
+✓ L3 e2e-smoke    exit 0
+✓ XANH — 4 verifier, 3m39s
+```
+
+Số test đơn vị 3466 → 3461 là do gộp nguồn: bỏ 2 nguồn khỏi 3 `[Theory]` (−6) và thêm 1 `[Fact]`
+mới (+1). Integration 675 → 676 (+1 test nối dây cục bộ).

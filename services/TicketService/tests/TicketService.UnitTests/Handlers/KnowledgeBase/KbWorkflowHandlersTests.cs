@@ -503,6 +503,7 @@ public class KbWorkflowHandlersTests
         // Arrange
         var articleId = Guid.NewGuid();
         var creatorId = Guid.NewGuid();
+        var editorId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
             Id = articleId,
@@ -521,7 +522,15 @@ public class KbWorkflowHandlersTests
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
-            CurrentUserId = creatorId,
+            // Người sửa là Staff KHÁC, không phải người tạo bài.
+            //
+            // Từ commit 0e68b2a6 ("direct KB update for owner and manager without re-approval"),
+            // chủ bài viết và Manager/Admin sửa thẳng qua `HandleDirectUpdate` — nhánh đó đặt
+            // `ReviewRequired = false` và sinh bản ghi phiên bản *.0 đã duyệt. Test này mô tả
+            // nhánh CHỜ DUYỆT (đúng như tên nó và như khối Verify phiên bản 2.1 phía dưới), nên
+            // người sửa phải là người ngoài. Trước đây nó truyền chính `creatorId` — commit trên
+            // cập nhật KbApiTests nhưng bỏ sót test này, và nó đỏ ngay khi nhánh rebase lên dev.
+            CurrentUserId = editorId,
             CurrentUserRole = "Staff",
             Title = "Updated Title",
             Content = "Updated Symptoms. Updated Steps. Updated Solution.",
@@ -536,7 +545,8 @@ public class KbWorkflowHandlersTests
         result.StatusCode.Should().Be(200);
         article.ReviewRequired.Should().BeTrue();
         article.Status.Should().Be(KbArticleStatusEnum.PendingReview);
-        article.PendingReviewBy.Should().Be(creatorId);
+        // Người chờ duyệt là người VỪA SỬA, không phải người tạo bài.
+        article.PendingReviewBy.Should().Be(editorId);
 
         kbArticles.Verify(x => x.UpdateAsync(article), Times.Once);
         kbVersions.Verify(x => x.AddAsync(It.Is<KbArticleVersion>(v =>
