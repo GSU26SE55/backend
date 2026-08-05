@@ -7,14 +7,14 @@ using SharedInfrastructure.Idempotency;
 
 namespace BatteryService.Infrastructure.Consumers;
 
-public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
+public class BatteryAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 {
     private const string CustomerRole = "Customer";
 
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IInboxStore _inboxStore;
 
-    public AccountActivatedConsumer(IBatteryUnitOfWork unitOfWork, IInboxStore inboxStore)
+    public BatteryAccountActivatedConsumer(IBatteryUnitOfWork unitOfWork, IInboxStore inboxStore)
     {
         _unitOfWork = unitOfWork;
         _inboxStore = inboxStore;
@@ -22,7 +22,7 @@ public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 
     public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
     {
-        await context.ProcessOnceAsync(_inboxStore, nameof(AccountActivatedConsumer), async () =>
+        await context.ProcessOnceAsync(_inboxStore, nameof(BatteryAccountActivatedConsumer), async () =>
         {
             var evt = context.Message;
 

@@ -63,7 +63,7 @@ public class BatteryAnomalyWarningConsumer : IConsumer<BatteryAnomalyWarningDete
             var title = isInfo
                 ? $"Ghi nhận thông số pin {serial}"
                 : $"⚠️ Cảnh báo pin {serial}";
-            // 03/08/2026 — xem chú thích cùng chủ đề ở BatteryAnomalyDetectedConsumer.
+            // 03/08/2026 — xem chú thích cùng chủ đề ở NotificationBatteryAnomalyDetectedConsumer.
             var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
             var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
 

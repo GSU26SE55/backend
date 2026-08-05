@@ -13,13 +13,13 @@ namespace BatteryService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<BatteryAuditOutbox>
+public class BatteryAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<BatteryAuditOutbox>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public BatteryAuditReplayRequestedConsumer(
         IBatteryUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<BatteryAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

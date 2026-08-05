@@ -13,13 +13,13 @@ namespace SmsService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<SmsAuditOutbox>
+public class SmsAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<SmsAuditOutbox>
 {
     private readonly ISmsUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public SmsAuditReplayRequestedConsumer(
         ISmsUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<SmsAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

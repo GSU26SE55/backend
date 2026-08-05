@@ -65,10 +65,10 @@ public class BatteryAnomalyDetectedConsumerTests
         contextMock.SetupGet(c => c.Message).Returns(message);
         contextMock.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
-        var consumer = new BatteryAnomalyDetectedConsumer(
+        var consumer = new TicketBatteryAnomalyDetectedConsumer(
             _mediatorMock.Object,
             _uowMock.Object,
-            NullLogger<BatteryAnomalyDetectedConsumer>.Instance
+            NullLogger<TicketBatteryAnomalyDetectedConsumer>.Instance
         );
 
         // Act
@@ -105,10 +105,10 @@ public class BatteryAnomalyDetectedConsumerTests
         contextMock.SetupGet(c => c.Message).Returns(message);
         contextMock.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
-        var consumer = new BatteryAnomalyDetectedConsumer(
+        var consumer = new TicketBatteryAnomalyDetectedConsumer(
             _mediatorMock.Object,
             _uowMock.Object,
-            NullLogger<BatteryAnomalyDetectedConsumer>.Instance
+            NullLogger<TicketBatteryAnomalyDetectedConsumer>.Instance
         );
 
         // Act

@@ -17,16 +17,16 @@ namespace TicketService.Infrastructure.Consumers;
 /// Xem overall.md §53.7 (Saga participants + cutover), §40.6 (newcomer onboarding).
 /// </summary>
 [Obsolete("Replaced by AlertTicketSagaStateMachine + CreateTicketFromAlertConsumer (#238). Do not register when AlertTicketSagaEnabled=true.")]
-public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
+public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
 {
     private readonly IMediator _mediator;
     private readonly ITicketUnitOfWork _uow;
-    private readonly ILogger<BatteryAnomalyDetectedConsumer> _logger;
+    private readonly ILogger<TicketBatteryAnomalyDetectedConsumer> _logger;
 
-    public BatteryAnomalyDetectedConsumer(
+    public TicketBatteryAnomalyDetectedConsumer(
         IMediator mediator,
         ITicketUnitOfWork uow,
-        ILogger<BatteryAnomalyDetectedConsumer> logger)
+        ILogger<TicketBatteryAnomalyDetectedConsumer> logger)
     {
         _mediator = mediator;
         _uow = uow;

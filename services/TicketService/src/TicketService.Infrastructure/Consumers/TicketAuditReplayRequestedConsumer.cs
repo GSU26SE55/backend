@@ -13,13 +13,13 @@ namespace TicketService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<TicketAuditOutbox>
+public class TicketAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<TicketAuditOutbox>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public TicketAuditReplayRequestedConsumer(
         ITicketUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<TicketAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

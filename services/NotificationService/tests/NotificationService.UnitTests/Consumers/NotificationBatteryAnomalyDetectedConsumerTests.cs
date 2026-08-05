@@ -11,7 +11,7 @@ public class BatteryAnomalyDetectedConsumerTests
     [Fact]
     public async Task BatteryAnomaly_Critical_Writes_To_CustomerId_AllFourChannels()
     {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<BatteryAnomalyDetectedConsumer>();
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<NotificationBatteryAnomalyDetectedConsumer>();
         var customerId = Guid.NewGuid();
         var evt = new BatteryAnomalyDetectedEvent(
             AlertId: Guid.NewGuid(),

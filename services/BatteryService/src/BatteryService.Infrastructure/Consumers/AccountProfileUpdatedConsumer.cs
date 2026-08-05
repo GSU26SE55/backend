@@ -39,7 +39,7 @@ public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEven
         {
             var evt = context.Message;
 
-            // Bản sao dùng chính AccountId làm khoá chính (xem AccountActivatedConsumer).
+            // Bản sao dùng chính AccountId làm khoá chính (xem BatteryAccountActivatedConsumer).
             var account = await _unitOfWork.CustomerAccounts
                 .GetAllAsync()
                 .FirstOrDefaultAsync(item => item.Id == evt.AccountId, context.CancellationToken);

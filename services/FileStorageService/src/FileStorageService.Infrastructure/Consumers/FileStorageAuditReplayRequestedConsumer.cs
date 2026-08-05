@@ -13,13 +13,13 @@ namespace FileStorageService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<FileAuditOutbox>
+public class FileStorageAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<FileAuditOutbox>
 {
     private readonly IFileStorageUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public FileStorageAuditReplayRequestedConsumer(
         IFileStorageUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<FileStorageAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

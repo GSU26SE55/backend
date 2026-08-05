@@ -45,14 +45,14 @@ public static class ManageDependencyInjection
         services.AddAlertTicketSaga(configuration);
 
         // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
-        // FIX duplicate-ticket — khi Saga bật, consumer cũ BatteryAnomalyDetectedConsumer
+        // FIX duplicate-ticket — khi Saga bật, consumer cũ TicketBatteryAnomalyDetectedConsumer
         // ([Obsolete] #238) PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
         // (gây trùng mã ticket → 23505 duplicate key IX_tickets_code).
         var sagaEnabled = configuration.GetValue(
             $"{AlertTicketSagaOptions.SectionName}:{nameof(AlertTicketSagaOptions.AlertTicketSagaEnabled)}",
             true);
         var excludedConsumers = sagaEnabled
-            ? new[] { typeof(Consumers.BatteryAnomalyDetectedConsumer) }
+            ? new[] { typeof(Consumers.TicketBatteryAnomalyDetectedConsumer) }
             : Array.Empty<Type>();
 
         services.AddMessageBus(

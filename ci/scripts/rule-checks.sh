@@ -280,4 +280,50 @@ else
   echo "PASS: không có template Helm bị bỏ qua vì đặt tên '_*'"
 fi
 
+# ---------------------------------------------------------------------------
+# RULE 9 — Tên class consumer PHẢI duy nhất trên toàn repo (GH-1073)
+#
+# MassTransit đặt tên queue từ TÊN CLASS consumer (bỏ hậu tố "Consumer"), KHÔNG kèm
+# namespace, vì repo không cấu hình EndpointNameFormatter riêng. Hai service đặt trùng
+# tên class ⇒ CHUNG một queue trong RabbitMQ ⇒ mô hình competing-consumer: mỗi message
+# chỉ tới ĐÚNG MỘT service, luân phiên.
+#
+# Đây là lỗi mất dữ liệu và HOÀN TOÀN IM LẶNG — không exception, không log, không test
+# nào bắt. Repo đã dính 6 nhóm cùng lúc (đo trên RabbitMQ đang chạy ngày 05/08/2026):
+#   · AuditReplayRequestedConsumer   ← 6 service, mà thiết kế là fanout "mọi service đều
+#     nhận rồi tự lọc ServiceName" ⇒ ~83% lệnh replay rơi vào service sai và bị bỏ qua
+#   · AccountActivatedConsumer       ← BatteryService + NotificationService
+#   · BatteryAnomalyDetectedConsumer · BatteryCascadeRiskHighConsumer
+#   · EnvironmentalIncidentDetectedConsumer · EnvironmentalIncidentResolvedConsumer
+#
+# Lệ đặt tên của repo (đã có sẵn từ trước, chỉ là bị bỏ sót):
+#   · TicketService  → tiền tố service:  TicketAccountActivatedConsumer
+#   · Khi cùng service có 2 consumer cho 1 event → hậu tố mô tả việc:
+#     AccountActivatedSyncConsumer (sync read-model) vs AccountActivatedWelcomeConsumer
+#
+# Quét TOÀN BỘ repo chứ không chỉ diff: một class đổi tên ở service A có thể đụng class
+# đã tồn tại từ lâu ở service B mà diff không hề chạm tới.
+# ---------------------------------------------------------------------------
+DUP_CONSUMERS="$(
+  grep -rhoE 'class[[:space:]]+[A-Za-z0-9_]+[[:space:]]*:[[:space:]]*(I?Consumer<|[A-Za-z0-9_]*ConsumerBase<)' \
+       --include='*.cs' services/ 2>/dev/null \
+    | sed -E 's/^class[[:space:]]+([A-Za-z0-9_]+).*/\1/' \
+    | grep -vE 'ConsumerBase$' \
+    | sort | uniq -d
+)"
+
+if [ -n "$DUP_CONSUMERS" ]; then
+  echo "FAIL: tên class consumer bị TRÙNG giữa các service ⇒ chung queue RabbitMQ, mất message:"
+  for c in $DUP_CONSUMERS; do
+    echo "  $c"
+    grep -rl "class[[:space:]]\+$c[[:space:]]*:" --include='*.cs' services/ 2>/dev/null | sed 's/^/      /'
+  done
+  echo "Fix: đổi tên MỘT bên theo lệ sẵn có — tiền tố service (TicketXxxConsumer) hoặc"
+  echo "     hậu tố mô tả việc (XxxSyncConsumer / XxxWelcomeConsumer)."
+  echo "Lưu ý: đổi tên class = đổi tên queue. Queue cũ còn lại trên broker phải dọn tay khi deploy."
+  FAILED=1
+else
+  echo "PASS: không có tên class consumer trùng giữa các service"
+fi
+
 exit "$FAILED"

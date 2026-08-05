@@ -11,7 +11,7 @@ public class AccountActivatedConsumerTests
     [Fact]
     public async Task AccountActivated_Writes_InApp_To_AccountId()
     {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<AccountActivatedConsumer>();
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<NotificationAccountActivatedConsumer>();
         var accountId = Guid.NewGuid();
         var evt = new AccountActivatedEvent(
             AccountId: accountId,

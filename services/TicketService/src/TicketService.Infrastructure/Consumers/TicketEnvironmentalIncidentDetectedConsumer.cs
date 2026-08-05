@@ -23,7 +23,7 @@ namespace TicketService.Application.Consumers;
 /// SlaTimer chạy ngay (NS-12 dependency). Ticket site-level không gắn pin cụ thể →
 /// <c>BatteryAssetId = Guid.Empty</c>.</para>
 /// </summary>
-public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalIncidentDetectedEvent>
+public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalIncidentDetectedEvent>
 {
     // AlertSeverityEnum (BatteryService): Info=1 · Warning=2 · Critical=3.
     private const int SeverityCritical = 3;
@@ -34,15 +34,15 @@ public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalInci
     private readonly ISlaCalculator _slaCalculator;
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
-    private readonly ILogger<EnvironmentalIncidentDetectedConsumer> _logger;
+    private readonly ILogger<TicketEnvironmentalIncidentDetectedConsumer> _logger;
 
-    public EnvironmentalIncidentDetectedConsumer(
+    public TicketEnvironmentalIncidentDetectedConsumer(
         ITicketUnitOfWork uow,
         ITicketCodeGenerator codeGenerator,
         ISlaCalculator slaCalculator,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        ILogger<EnvironmentalIncidentDetectedConsumer> logger)
+        ILogger<TicketEnvironmentalIncidentDetectedConsumer> logger)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;

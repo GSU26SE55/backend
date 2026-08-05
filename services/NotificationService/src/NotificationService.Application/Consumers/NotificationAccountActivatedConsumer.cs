@@ -12,16 +12,16 @@ namespace NotificationService.Application.Consumers;
 /// GH-107 — Account được kích hoạt → welcome notification cho chính account đó (AccountId là recipient).
 /// Channel InApp (email welcome do EmailService lo riêng).
 /// </summary>
-public class AccountActivatedConsumer : IConsumer<AccountActivatedEvent>
+public class NotificationAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
-    private readonly ILogger<AccountActivatedConsumer> _logger;
+    private readonly ILogger<NotificationAccountActivatedConsumer> _logger;
 
-    public AccountActivatedConsumer(
+    public NotificationAccountActivatedConsumer(
         INotificationUnitOfWork unitOfWork,
         ICacheService cache,
-        ILogger<AccountActivatedConsumer> logger)
+        ILogger<NotificationAccountActivatedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;

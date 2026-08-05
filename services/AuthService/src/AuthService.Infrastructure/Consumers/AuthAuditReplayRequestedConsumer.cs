@@ -13,13 +13,13 @@ namespace AuthService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<AuditOutbox>
+public class AuthAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<AuditOutbox>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public AuthAuditReplayRequestedConsumer(
         IAuthUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<AuthAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

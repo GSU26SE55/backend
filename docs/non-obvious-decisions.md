@@ -226,3 +226,24 @@ hiện có ⇒ tên nó nằm trong `__EFMigrationsHistory` ⇒ **sửa nội du
 database dựng mới mới thấy bản sửa. Bản vá đúng quy trình là một migration MỚI
 (`20260805083909_RepairLegacyNotificationRetryColumns`), viết idempotent để trên database khoẻ mạnh
 toàn bộ `Up()` là no-op.
+
+### Tên class consumer chính là tên queue RabbitMQ — trùng tên là mất message
+
+MassTransit `ConfigureEndpoints` sinh tên queue từ **tên class** (bỏ hậu tố `Consumer`), **không**
+tính namespace hay tên service. Hai service khai `class AccountActivatedConsumer` ⇒ cùng nghe queue
+`AccountActivated` ⇒ RabbitMQ chia round-robin ⇒ **mỗi service chỉ nhận ~50%**, service kia im lặng
+mất phần còn lại. Không có log lỗi, không có message vào DLQ — nhìn y hệt "event không được publish".
+
+Đã dính 6 nhóm; nặng nhất là `AuditReplayRequestedConsumer` trùng ở **6** service trong khi thiết kế
+của nó là fanout ("mọi service đều nhận") ⇒ ~83% lệnh replay bị nuốt.
+
+Quy ước bắt buộc: **prefix tên service vào mọi class consumer** — `NotificationAccountActivatedConsumer`,
+`BatteryAccountActivatedConsumer`, `TicketAccountActivatedConsumer`. `ci/scripts/rule-checks.sh`
+RULE 9 quét toàn repo và fail CI nếu có tên trùng.
+
+Hai thứ đi kèm khi đổi tên, quên là hỏng âm thầm:
+- `ProcessOnceAsync(_inbox, nameof(XxxConsumer), …)` — khoá idempotency đổi theo, nên consumer sẽ
+  xử lý LẠI các message cũ. Chỉ an toàn khi handler là upsert; nếu handler tạo bản ghi mới thì phải
+  giữ nguyên chuỗi khoá cũ thay vì dùng `nameof`.
+- Queue mang tên cũ vẫn tồn tại trên broker sau khi deploy. Phải xoá tay
+  (`rabbitmqctl delete_queue`, `rabbitmqadmin delete exchange`), nếu không message cũ nằm lại mãi.

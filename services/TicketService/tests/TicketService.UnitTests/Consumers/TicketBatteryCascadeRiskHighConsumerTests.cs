@@ -15,7 +15,7 @@ using TicketService.Domain.Enums;
 namespace TicketService.UnitTests.Consumers;
 
 /// <summary>
-/// Sprint 7 B4 (§31.7) — BatteryCascadeRiskHighConsumer: auto-upgrade Priority P1 + audit.
+/// Sprint 7 B4 (§31.7) — TicketBatteryCascadeRiskHighConsumer: auto-upgrade Priority P1 + audit.
 /// </summary>
 public class BatteryCascadeRiskHighConsumerTests
 {
@@ -37,9 +37,9 @@ public class BatteryCascadeRiskHighConsumerTests
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
     }
 
-    private BatteryCascadeRiskHighConsumer Build() =>
+    private TicketBatteryCascadeRiskHighConsumer Build() =>
         new(_uow.Object, _activityLogger.Object, _slaCalculator, _codeGenerator.Object, _outboxWriter.Object,
-            NullLogger<BatteryCascadeRiskHighConsumer>.Instance);
+            NullLogger<TicketBatteryCascadeRiskHighConsumer>.Instance);
 
     private static ConsumeContext<BatteryCascadeRiskHighEvent> Ctx(BatteryCascadeRiskHighEvent evt)
     {

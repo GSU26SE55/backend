@@ -2706,14 +2706,14 @@ Management API không sẵn sàng **không** làm chết service, chỉ mất kh
 | `SlaWarningConsumer` | `SlaWarningEvent` | Manager **+ Staff phụ trách** | InApp + Push |
 | `SlaBreachedConsumer` | `SlaBreachedEvent` | theo priority (bảng trên) | theo priority |
 | `IncidentDeclaredConsumer` | `IncidentDeclaredEvent` | Manager/Admin | InApp + Push |
-| `BatteryAnomalyDetectedConsumer` | `BatteryAnomalyDetectedEvent` | Customer sở hữu pin | **đủ 4 kênh** (trước 6.2 chỉ InApp+Push) |
+| `NotificationBatteryAnomalyDetectedConsumer` | `BatteryAnomalyDetectedEvent` | Customer sở hữu pin | **đủ 4 kênh** (trước 6.2 chỉ InApp+Push) |
 | 🆕 `BatteryAnomalyWarningConsumer` | `BatteryAnomalyWarningDetectedEvent` | Customer sở hữu pin | Warning → InApp+Push · Info → **chỉ InApp** |
 | `BatteryAlertEscalationRequestedConsumer` | `BatteryAlertEscalationRequestedEvent` | Manager/Admin | InApp + Push + **Email** (bản Email dùng HTML đã render sẵn từ template) |
-| `BatteryCascadeRiskHighConsumer` | `BatteryCascadeRiskHighEvent` | Manager/Admin | InApp + Push + Email |
+| `NotificationBatteryCascadeRiskHighConsumer` | `BatteryCascadeRiskHighEvent` | Manager/Admin | InApp + Push + Email |
 | `AlertTicketSagaFailedConsumer` | `AlertTicketSagaFailedEvent` | Admin | InApp + Push + **Email** (bản Email dùng HTML đã render sẵn) |
 | `IotDeviceWentOfflineConsumer` | `IotDeviceWentOfflineEvent` | Manager/Admin | InApp + Push |
-| `EnvironmentalIncidentDetectedConsumer` | `EnvironmentalIncidentDetectedEvent` | theo site | InApp + Push + Email + SMS, `BypassQuietHours = true` |
-| `EnvironmentalIncidentResolvedConsumer` | `EnvironmentalIncidentResolvedEvent` | theo site | chỉ InApp (clear banner) |
+| `NotificationEnvironmentalIncidentDetectedConsumer` | `EnvironmentalIncidentDetectedEvent` | theo site | InApp + Push + Email + SMS, `BypassQuietHours = true` |
+| `NotificationEnvironmentalIncidentResolvedConsumer` | `EnvironmentalIncidentResolvedEvent` | theo site | chỉ InApp (clear banner) |
 | `ChatCreatedConsumer` | `ChatCreatedEvent` | Customer ↔ Staff | **InApp + Push** (Sprint 6.2 NOTI-10 thêm InApp) |
 | `ChatMentionConsumer` | `ChatMentionedEvent` | người được mention | InApp + Push + Email |
 | `ChatReactionConsumer` | `ChatReactedEvent` | tác giả chat | InApp + Push |
@@ -2726,7 +2726,7 @@ Management API không sẵn sàng **không** làm chết service, chỉ mất kh
 | 🆕 `TicketReopenedConsumer` | `TicketReopenedEvent` | Manager + Staff đang assign | InApp + Push |
 | 🆕 `TicketRatingRequestedConsumer` | `TicketRatingRequestedEvent` | Customer | InApp + Push |
 | 🆕 `SmsFailedConsumer` | `SmsFailedEvent` | *(không tạo noti)* | cập nhật record SMS → `Failed` |
-| `AccountActivatedConsumer` | `AccountActivatedEvent` | user mới | **chỉ InApp** (email chào mừng đi đường AuthService → EmailService riêng) |
+| `NotificationAccountActivatedConsumer` | `AccountActivatedEvent` | user mới | **chỉ InApp** (email chào mừng đi đường AuthService → EmailService riêng) |
 | `AccountActivatedSyncConsumer` | `AccountActivatedEvent` | *(read-model)* | ghi `account_read_models` |
 | `AccountProfileUpdatedSyncConsumer` | `AccountProfileUpdatedEvent` | *(read-model)* | cập nhật read-model |
 | `AccountDeletedSyncConsumer` | `AccountDeletedEvent` | *(read-model)* | xoá read-model |
@@ -3421,7 +3421,7 @@ user chỉ thấy khi tự poll REST. Cộng nhiều **orphan event** (publish n
   `CustomerId` + `Priority`; `SlaWarningEvent` thêm `StaffId` (NOTI-05) ⇒ **Customer và Staff nay
   được notify** (trước bị bỏ với comment "deferred").
 - `SlaBreachedConsumer` phân nhánh P1/P2/P3 (NOTI-06).
-- `BatteryAnomalyDetectedConsumer` mở đủ 4 kênh (NOTI-08).
+- `NotificationBatteryAnomalyDetectedConsumer` mở đủ 4 kênh (NOTI-08).
 - `ChatCreatedConsumer` ghi thêm row `InApp` song song `Push` (NOTI-10).
 - `TypeChannelMatrix` + `CriticalTypes` đưa ra config, bổ sung **14 type còn thiếu**; chốt 1 pattern
   template: **DB thắng, inline là fallback** (NOTI-14).

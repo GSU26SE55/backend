@@ -29,7 +29,7 @@ public static class ManageDependencyInjection
         services.AddSharedInfrastructure(configuration, "AuthService.Application", "Auth Service API");
 
         // #AUTH-15: register Application-layer consumers (PermissionsChangedConsumer).
-        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuthAuditReplayRequestedConsumer.
         // Thiếu dòng này thì yêu cầu replay bay qua service mà không ai xử lý, và job treo mãi.
         services.AddMessageBus(
             configuration,

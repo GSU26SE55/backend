@@ -50,12 +50,12 @@ public class EnvironmentalIncidentConsumersTests
         SiteName: "Kho A", IncidentType: 1, Severity: severity,
         DetectedAt: DateTime.UtcNow, AlertId: Guid.NewGuid(), Description: "Khói");
 
-    private EnvironmentalIncidentDetectedConsumer BuildDetected() =>
+    private TicketEnvironmentalIncidentDetectedConsumer BuildDetected() =>
         new(_uow.Object, _codeGenerator.Object, _slaCalculator, _activityLogger.Object, _outboxWriter.Object,
-            NullLogger<EnvironmentalIncidentDetectedConsumer>.Instance);
+            NullLogger<TicketEnvironmentalIncidentDetectedConsumer>.Instance);
 
-    private EnvironmentalIncidentResolvedConsumer BuildResolved() =>
-        new(_uow.Object, _activityLogger.Object, NullLogger<EnvironmentalIncidentResolvedConsumer>.Instance);
+    private TicketEnvironmentalIncidentResolvedConsumer BuildResolved() =>
+        new(_uow.Object, _activityLogger.Object, NullLogger<TicketEnvironmentalIncidentResolvedConsumer>.Instance);
 
     // ── Detected ──
 

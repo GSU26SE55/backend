@@ -27,7 +27,7 @@ public static class ManageDependencyInjection
 
         // MassTransit consumers — Sprint IoT-1 (#249) đăng ký consumer assembly để consume
         // IotDeviceWentOfflineEvent (và sẵn sàng cho các consumer Sprint 6 khác trong cùng assembly).
-        // GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+        // GH-728 — thêm assembly Infrastructure để MassTransit thấy NotificationAuditReplayRequestedConsumer.
         services.AddMessageBus(
             configuration,
             typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly,

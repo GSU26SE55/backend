@@ -23,16 +23,16 @@ namespace NotificationService.Application.Consumers;
 ///
 /// Mức Warning/Info đi qua <see cref="BatteryAnomalyWarningConsumer"/> (event riêng, không đẻ ticket).
 /// </summary>
-public class BatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
+public class NotificationBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
-    private readonly ILogger<BatteryAnomalyDetectedConsumer> _logger;
+    private readonly ILogger<NotificationBatteryAnomalyDetectedConsumer> _logger;
 
-    public BatteryAnomalyDetectedConsumer(
+    public NotificationBatteryAnomalyDetectedConsumer(
         INotificationUnitOfWork unitOfWork,
         ICacheService cache,
-        ILogger<BatteryAnomalyDetectedConsumer> logger)
+        ILogger<NotificationBatteryAnomalyDetectedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;

@@ -13,7 +13,7 @@ namespace TicketService.Application.Consumers;
 /// nếu <c>WasFalseAlarm</c> → auto-close ticket gắn incident đó (đóng vòng). Sự cố được resolve
 /// bình thường (không false alarm) để Staff đóng theo quy trình chuẩn — không đụng ở đây.
 /// </summary>
-public class EnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalIncidentResolvedEvent>
+public class TicketEnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalIncidentResolvedEvent>
 {
     private static readonly TicketStatusEnum[] ClosableStatuses =
     {
@@ -29,12 +29,12 @@ public class EnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalInci
 
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
-    private readonly ILogger<EnvironmentalIncidentResolvedConsumer> _logger;
+    private readonly ILogger<TicketEnvironmentalIncidentResolvedConsumer> _logger;
 
-    public EnvironmentalIncidentResolvedConsumer(
+    public TicketEnvironmentalIncidentResolvedConsumer(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
-        ILogger<EnvironmentalIncidentResolvedConsumer> logger)
+        ILogger<TicketEnvironmentalIncidentResolvedConsumer> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;

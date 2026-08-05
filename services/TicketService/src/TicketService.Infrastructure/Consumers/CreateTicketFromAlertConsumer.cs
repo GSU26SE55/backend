@@ -17,7 +17,7 @@ namespace TicketService.Infrastructure.Consumers;
 /// thì reuse (response IsReused=true). Nếu OriginAlertId đã có Ticket (redelivery)
 /// thì cũng reuse.
 ///
-/// Sprint 5B #238 — thay direct <c>BatteryAnomalyDetectedConsumer</c> (xem overall.md §53.7).
+/// Sprint 5B #238 — thay direct <c>TicketBatteryAnomalyDetectedConsumer</c> (xem overall.md §53.7).
 /// </summary>
 public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertCommand>
 {

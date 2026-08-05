@@ -19,18 +19,18 @@ namespace NotificationService.Application.Consumers;
 /// Recipient resolve theo role (broadcast Manager + Admin) như <c>SlaBreachedConsumer</c>; site-scoping
 /// theo Manager của site để lại sau (resolver hiện chỉ theo role — issue #604).</para>
 /// </summary>
-public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEvent>
+public class NotificationBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly IRecipientResolver _recipientResolver;
     private readonly ICacheService _cache;
-    private readonly ILogger<BatteryCascadeRiskHighConsumer> _logger;
+    private readonly ILogger<NotificationBatteryCascadeRiskHighConsumer> _logger;
 
-    public BatteryCascadeRiskHighConsumer(
+    public NotificationBatteryCascadeRiskHighConsumer(
         INotificationUnitOfWork unitOfWork,
         IRecipientResolver recipientResolver,
         ICacheService cache,
-        ILogger<BatteryCascadeRiskHighConsumer> logger)
+        ILogger<NotificationBatteryCascadeRiskHighConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _recipientResolver = recipientResolver;

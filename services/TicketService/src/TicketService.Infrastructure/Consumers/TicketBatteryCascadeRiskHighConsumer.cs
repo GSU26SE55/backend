@@ -26,7 +26,7 @@ namespace TicketService.Application.Consumers;
 /// incident (không nâng nhầm ticket bảo trì định kỳ). Không có ticket active nào → auto-tạo ticket P1
 /// <c>Origin=System</c> + SlaTimer, để event High không rơi vào hư không.</para>
 /// </summary>
-public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEvent>
+public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEvent>
 {
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {
@@ -44,15 +44,15 @@ public class BatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRiskHighEv
     private readonly ISlaCalculator _slaCalculator;   // Sprint Bonus NS-12 (#656)
     private readonly ITicketCodeGenerator _codeGenerator;   // Sprint Bonus NS-13 (#657)
     private readonly IIntegrationEventOutboxWriter _outboxWriter;     // Sprint Bonus NS-13 (#657)
-    private readonly ILogger<BatteryCascadeRiskHighConsumer> _logger;
+    private readonly ILogger<TicketBatteryCascadeRiskHighConsumer> _logger;
 
-    public BatteryCascadeRiskHighConsumer(
+    public TicketBatteryCascadeRiskHighConsumer(
         ITicketUnitOfWork uow,
         IActivityLogger activityLogger,
         ISlaCalculator slaCalculator,
         ITicketCodeGenerator codeGenerator,
         IIntegrationEventOutboxWriter producer,
-        ILogger<BatteryCascadeRiskHighConsumer> logger)
+        ILogger<TicketBatteryCascadeRiskHighConsumer> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;

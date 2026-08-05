@@ -13,13 +13,13 @@ namespace NotificationService.Infrastructure.Consumers;
 /// <para>Toàn bộ logic nằm ở <see cref="AuditReplayRequestedConsumerBase{T}"/>; lớp này chỉ
 /// khai báo service nào và bảng nào.</para>
 /// </summary>
-public class AuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<NotificationAuditOutbox>
+public class NotificationAuditReplayRequestedConsumer : AuditReplayRequestedConsumerBase<NotificationAuditOutbox>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
 
-    public AuditReplayRequestedConsumer(
+    public NotificationAuditReplayRequestedConsumer(
         INotificationUnitOfWork unitOfWork,
-        ILogger<AuditReplayRequestedConsumer> logger)
+        ILogger<NotificationAuditReplayRequestedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         Logger = logger;

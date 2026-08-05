@@ -14,18 +14,18 @@ namespace NotificationService.Application.Consumers;
 /// GH-604: recipient resolve qua <see cref="IRecipientResolver"/> (broadcast Manager + Admin).
 /// Channel chỉ InApp (không spam Push/SMS lúc đã xử lý).
 /// </summary>
-public class EnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalIncidentResolvedEvent>
+public class NotificationEnvironmentalIncidentResolvedConsumer : IConsumer<EnvironmentalIncidentResolvedEvent>
 {
     private readonly IMediator _mediator;
     private readonly IRecipientResolver _recipientResolver;
     private readonly ICacheService _cache;
-    private readonly ILogger<EnvironmentalIncidentResolvedConsumer> _logger;
+    private readonly ILogger<NotificationEnvironmentalIncidentResolvedConsumer> _logger;
 
-    public EnvironmentalIncidentResolvedConsumer(
+    public NotificationEnvironmentalIncidentResolvedConsumer(
         IMediator mediator,
         IRecipientResolver recipientResolver,
         ICacheService cache,
-        ILogger<EnvironmentalIncidentResolvedConsumer> logger)
+        ILogger<NotificationEnvironmentalIncidentResolvedConsumer> logger)
     {
         _mediator = mediator;
         _recipientResolver = recipientResolver;

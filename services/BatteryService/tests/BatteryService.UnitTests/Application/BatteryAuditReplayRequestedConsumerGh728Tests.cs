@@ -70,8 +70,8 @@ public class AuditReplayRequestedConsumerGh728Tests
         return (ctx, published);
     }
 
-    private static AuditReplayRequestedConsumer Sut(MockUnitOfWorkBuilder b) =>
-        new(b.Build(), NullLogger<AuditReplayRequestedConsumer>.Instance);
+    private static BatteryAuditReplayRequestedConsumer Sut(MockUnitOfWorkBuilder b) =>
+        new(b.Build(), NullLogger<BatteryAuditReplayRequestedConsumer>.Instance);
 
     [Fact]
     public async Task Consume_RepublishesRowsAndReportsCompletion()

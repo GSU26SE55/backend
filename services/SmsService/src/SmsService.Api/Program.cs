@@ -65,12 +65,12 @@ builder.Services.AddInboxIdempotency(builder.Configuration);
 // ── 5. MassTransit consumers ──────────────────────────────────────────────
 // Consumer assembly: SmsService.Application chứa SendSmsCommandConsumer + SendPhoneOtpConsumer (Phase 5).
 // AddMessageBus đăng ký IMessageProducerService = MassTransitProducer — step 6 OVERRIDE bằng OutboxMessagePublisher.
-// GH-728 — thêm assembly Infrastructure để MassTransit thấy AuditReplayRequestedConsumer.
+// GH-728 — thêm assembly Infrastructure để MassTransit thấy SmsAuditReplayRequestedConsumer.
 builder.Services.AddMessageBus(
     builder.Configuration,
     configure: null,
     AppDI.ApplicationAssembly,
-    typeof(SmsService.Infrastructure.Consumers.AuditReplayRequestedConsumer).Assembly);
+    typeof(SmsService.Infrastructure.Consumers.SmsAuditReplayRequestedConsumer).Assembly);
 
 // ── 6. Outbox publisher (PHẢI đăng ký SAU AddMessageBus để override) ──────
 // Last-registration-wins: handler resolve IMessageProducerService → OutboxMessagePublisher.

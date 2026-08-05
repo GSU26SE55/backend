@@ -25,7 +25,7 @@ public class BatteryCascadeRiskHighConsumerTests
     [Fact]
     public async Task CascadeRiskHigh_Writes_InAppPushEmail_ToManagerAdmin()
     {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<BatteryCascadeRiskHighConsumer>();
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<NotificationBatteryCascadeRiskHighConsumer>();
         var evt = Event();
 
         await harness.Bus.Publish(evt);
@@ -52,7 +52,7 @@ public class BatteryCascadeRiskHighConsumerTests
     [Fact]
     public async Task CascadeRiskHigh_NoRecipient_WritesNothing()
     {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<BatteryCascadeRiskHighConsumer>(
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<NotificationBatteryCascadeRiskHighConsumer>(
             recipients: Array.Empty<Guid>());
 
         await harness.Bus.Publish(Event());
@@ -66,7 +66,7 @@ public class BatteryCascadeRiskHighConsumerTests
     [Fact]
     public async Task CascadeRiskHigh_DuplicateMessage_Debounced()
     {
-        var (harness, written, _) = await ConsumerTestHarness.StartAsync<BatteryCascadeRiskHighConsumer>(
+        var (harness, written, _) = await ConsumerTestHarness.StartAsync<NotificationBatteryCascadeRiskHighConsumer>(
             cache: ConsumerTestHarness.AlreadySeenCache());
 
         await harness.Bus.Publish(Event());

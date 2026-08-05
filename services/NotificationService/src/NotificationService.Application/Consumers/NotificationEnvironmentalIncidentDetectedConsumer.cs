@@ -25,20 +25,20 @@ namespace NotificationService.Application.Consumers;
 /// Title: 🚨 Sự cố môi trường: {IncidentType} tại {SiteName}
 /// Body:  Severity {Severity} — {Description}. Phát hiện lúc {DetectedAt:HH:mm}. Xử lý ngay!
 /// </summary>
-public class EnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalIncidentDetectedEvent>
+public class NotificationEnvironmentalIncidentDetectedConsumer : IConsumer<EnvironmentalIncidentDetectedEvent>
 {
     private readonly IMediator _mediator;
     private readonly ITemplateRenderer _templateRenderer;
     private readonly IRecipientResolver _recipientResolver;
     private readonly ICacheService _cache;
-    private readonly ILogger<EnvironmentalIncidentDetectedConsumer> _logger;
+    private readonly ILogger<NotificationEnvironmentalIncidentDetectedConsumer> _logger;
 
-    public EnvironmentalIncidentDetectedConsumer(
+    public NotificationEnvironmentalIncidentDetectedConsumer(
         IMediator mediator,
         ITemplateRenderer templateRenderer,
         IRecipientResolver recipientResolver,
         ICacheService cache,
-        ILogger<EnvironmentalIncidentDetectedConsumer> logger)
+        ILogger<NotificationEnvironmentalIncidentDetectedConsumer> logger)
     {
         _mediator = mediator;
         _templateRenderer = templateRenderer;

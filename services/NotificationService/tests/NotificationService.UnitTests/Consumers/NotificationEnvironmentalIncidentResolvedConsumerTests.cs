@@ -15,7 +15,7 @@ using SharedContracts.Interfaces;
 namespace NotificationService.UnitTests.Consumers;
 
 /// <summary>
-/// GH-604 — EnvironmentalIncidentResolvedConsumer: resolve Manager+Admin → InApp (clear banner).
+/// GH-604 — NotificationEnvironmentalIncidentResolvedConsumer: resolve Manager+Admin → InApp (clear banner).
 /// Recipient rỗng → skip.
 /// </summary>
 public class EnvironmentalIncidentResolvedConsumerTests
@@ -29,7 +29,7 @@ public class EnvironmentalIncidentResolvedConsumerTests
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>
             {
-                x.AddConsumer<EnvironmentalIncidentResolvedConsumer>();
+                x.AddConsumer<NotificationEnvironmentalIncidentResolvedConsumer>();
                 // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
                 // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
                 x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
@@ -37,7 +37,7 @@ public class EnvironmentalIncidentResolvedConsumerTests
             .AddSingleton(mediator)
             .AddSingleton(resolver.Object)
             .AddSingleton(cache ?? ConsumerTestHarness.ProceedCache())
-            .AddSingleton(NullLogger<EnvironmentalIncidentResolvedConsumer>.Instance)
+            .AddSingleton(NullLogger<NotificationEnvironmentalIncidentResolvedConsumer>.Instance)
             .BuildServiceProvider(true);
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
