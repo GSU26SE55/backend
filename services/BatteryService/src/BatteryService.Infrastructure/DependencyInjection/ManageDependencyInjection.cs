@@ -141,6 +141,7 @@ public static class ManageDependencyInjection
         });
         services.AddScoped<Implements.Ai.AiPredictionGrpcClient>();
         services.AddScoped<Implements.Ai.AiPrescriptionGrpcClient>();
+        services.AddScoped<Implements.Ai.AiHealthGrpcClient>();
 
         // HTTP clients (fallback) — Polly retry giống OpenMeteo. BaseUrl = FastAPI :8000.
         var aiRetry = HttpPolicyExtensions.HandleTransientHttpError()
@@ -159,16 +160,37 @@ public static class ManageDependencyInjection
                 http.Timeout = TimeSpan.FromSeconds(Math.Max(30, aiOptions.TimeoutSeconds));
             })
             .AddPolicyHandler(aiRetry);
+        services.AddHttpClient<Implements.Ai.AiHealthHttpClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(aiOptions.HttpBaseUrl);
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds));
+            })
+            .AddPolicyHandler(aiRetry);
 
         // Composite fallback clients — cái được inject vào job.
         services.AddScoped<IAiPredictionClient, Implements.Ai.FallbackAiPredictionClient>();
         services.AddScoped<IAiPrescriptionClient, Implements.Ai.FallbackAiPrescriptionClient>();
+        // Health: job đọc soc_mode + lfp_loaded từ đây thay vì hardcode theo chemistry.
+        services.AddScoped<IAiHealthClient, Implements.Ai.FallbackAiHealthClient>();
 
-        // GH-778 — đường phản hồi prescription CHỈ có ở HTTP: ai_service.proto không khai RPC nào
-        // cho feedback. Trỏ thẳng vào bản HTTP thay vì bọc qua fallback, để không tạo ảo giác rằng
-        // gRPC cũng gửi được.
-        services.AddScoped<IAiPrescriptionFeedbackClient>(sp =>
-            sp.GetRequiredService<Implements.Ai.AiPrescriptionHttpClient>());
+        // Phản hồi prescription: proto nay ĐÃ có rpc SubmitFeedback, nên đường này cũng theo
+        // khuôn gRPC primary → HTTP fallback như Predict/Prescribe. (Trước đây trỏ thẳng vào
+        // bản HTTP vì proto chưa có RPC tương ứng — ràng buộc đó không còn.)
+        services.AddScoped<Implements.Ai.AiPrescriptionFeedbackGrpcClient>();
+        services.AddScoped<IAiPrescriptionFeedbackClient, Implements.Ai.FallbackAiPrescriptionFeedbackClient>();
+
+        // F4 — phản hồi PHÂN LOẠI (khác phản hồi prescription ở trên: nhãn vs lời khuyên).
+        // Chỉ gRPC, không fallback: phản hồi đã lưu vào DB trước khi gọi nên mất một lần
+        // gửi chỉ làm chậm vòng học, không hỏng thao tác của người dùng.
+        services.AddScoped<IAiClassificationFeedbackClient, Implements.Ai.AiClassificationFeedbackGrpcClient>();
+
+        // C10 — dự đoán nhiều pin trong 1 kết nối (màn hình giám sát). Chỉ gRPC: REST không
+        // có endpoint streaming tương ứng, nên cũng không có gì để fallback sang.
+        services.AddScoped<IAiPredictionStreamClient, Implements.Ai.AiPredictionStreamGrpcClient>();
+
+        // GH-10 — SOH chuỗi dài. Chỉ gRPC: REST của AI có /predict/long nhưng đường này
+        // không nằm trên hot-path nên không cần fallback, thất bại thì báo 503.
+        services.AddScoped<IAiPredictionLongClient, Implements.Ai.AiPredictionLongGrpcClient>();
         services.AddHostedService<SohPredictionBackgroundService>();
 
         // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.

@@ -3,6 +3,7 @@ using System;
 using BatteryService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BatteryService.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260806055136_AddAiPredictionDetailColumns")]
+    partial class AddAiPredictionDetailColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1802,14 +1805,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ActionCode")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("action_code");
+                        .HasColumnType("text");
 
                     b.Property<string>("AiPriority")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasColumnName("ai_priority");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("BatteryAssetId")
                         .HasColumnType("uuid")
@@ -1829,22 +1828,17 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("created_by");
 
                     b.Property<int?>("CyclesToMaintenance")
-                        .HasColumnType("integer")
-                        .HasColumnName("cycles_to_maintenance");
+                        .HasColumnType("integer");
 
                     b.Property<decimal?>("DegradationRatePerCycle")
-                        .HasPrecision(8, 5)
-                        .HasColumnType("numeric(8,5)")
-                        .HasColumnName("degradation_rate_per_cycle");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("HealthStage")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("health_stage");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("InputWindowEndUtc")
                         .HasColumnType("timestamp with time zone")
@@ -1855,10 +1849,7 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("input_window_start_utc");
 
                     b.Property<bool>("IsBorderline")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_borderline");
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -1867,10 +1858,7 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("is_deleted");
 
                     b.Property<bool>("IsTemperatureOod")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_temperature_ood");
+                        .HasColumnType("boolean");
 
                     b.Property<int>("LatencyMs")
                         .HasColumnType("integer")
@@ -1896,28 +1884,19 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnName("raw_response");
 
                     b.Property<string>("RiskLevel")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("risk_level");
+                        .HasColumnType("text");
 
                     b.Property<int?>("RulCyclesEstimate")
-                        .HasColumnType("integer")
-                        .HasColumnName("rul_cycles_estimate");
+                        .HasColumnType("integer");
 
                     b.Property<decimal?>("SohStd")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("soh_std");
+                        .HasColumnType("numeric");
 
                     b.Property<string>("SohTrend")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("soh_trend");
+                        .HasColumnType("text");
 
                     b.Property<decimal?>("StageConfidence")
-                        .HasPrecision(4, 3)
-                        .HasColumnType("numeric(4,3)")
-                        .HasColumnName("stage_confidence");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

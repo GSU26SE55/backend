@@ -204,6 +204,26 @@ public class PrescriptionFeedbackTests
         result.ListErrors.Should().Contain(e => e.Field == nameof(command.Status));
     }
 
+    [Theory]
+    [InlineData("khong-hop-le", null)]
+    [InlineData("edited", null)]
+    public async Task ValidationFailure_SetsStatusCode400_NotZero(string status, List<string>? steps)
+    {
+        // Controller trả `StatusCode(result.StatusCode, result)`. StatusCode mặc định là 0, nên
+        // bỏ sót dòng gán này khiến Kestrel ghi ra "HTTP/1.1 0": client nhận BadStatusLine và
+        // gateway dịch thành 502 "Upstream không phản hồi hợp lệ" — gõ sai `status` trông y hệt
+        // lúc AI sập, và listErrors không bao giờ tới được người dùng.
+        var command = new SubmitPrescriptionFeedbackCommand
+        {
+            AlertId = Guid.NewGuid(), Status = status, EditedSteps = steps,
+        };
+
+        var result = await command.ValidateAsync();
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+    }
+
     [Fact]
     public async Task EditedWithoutSteps_IsRejectedByValidation()
     {

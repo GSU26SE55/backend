@@ -22,6 +22,21 @@ networks:
     driver: bridge
 
 volumes:
+  # F4 — phản hồi phân loại của Staff, dữ liệu để retrain model anomaly.
+  # BẮT BUỘC là volume, vì hai lý do độc lập:
+  #   1. gRPC và HTTP là HAI container riêng ⇒ mỗi cái ghi một file trong lớp ghi của
+  #      chính nó, thống kê precision/recall sẽ khác nhau tuỳ hỏi transport nào.
+  #   2. Không có volume thì `docker compose build` là xoá sạch dữ liệu retrain —
+  #      đúng thứ duy nhất mà F4 sinh ra để giữ lại.
+  ai-classification-feedback:
+  # Lịch sử prescription (ChromaDB) — giữ prescription_id và các ca đã được kỹ thuật viên
+  # chấp nhận (dùng làm few-shot cho ca tương tự sau).
+  # BẮT BUỘC dùng chung, cùng hai lý do như store phản hồi phân loại, nhưng hậu quả nặng hơn:
+  #   1. BE fallback gRPC→HTTP giữa lúc kê đơn và lúc gửi phản hồi là chuyện BÌNH THƯỜNG.
+  #      Store tách đôi ⇒ prescription kê ở container này, phản hồi hỏi container kia ⇒ 410,
+  #      phản hồi của kỹ thuật viên mất trắng mà UI vẫn báo thành công.
+  #   2. Nửa số ca "accepted" vô hình với nửa còn lại ⇒ few-shot học trên nửa dữ liệu.
+  ai-prescription-history:
   postgres-data:
   mosquitto-data:   # Sprint IoT-1 #253 — chỉ dùng khi bật profile `mqtt`
   mosquitto-log:
@@ -390,6 +405,11 @@ services:
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
     expose:
       - "50051"
+    volumes:
+      # Dùng CHUNG với ai-module-http: hai transport phải ghi vào một store, nếu không
+      # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-classification-feedback:/app/models/classification_feedback
+      - ai-prescription-history:/app/models/prescription_history
     networks: [solar-net]
     restart: unless-stopped
 
@@ -404,6 +424,20 @@ services:
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
     ports:
       - "4015:8000"   # expose HTTP fallback ra host cho debug/Swagger (:4015/docs)
+    volumes:
+      # Dùng CHUNG với ai-module-grpc: hai transport phải ghi vào một store, nếu không
+      # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-classification-feedback:/app/models/classification_feedback
+      - ai-prescription-history:/app/models/prescription_history
+    # Dùng python chứ KHÔNG phải curl: image base là python:3.11-slim, Dockerfile chỉ
+    # `pip install`, không hề `apt-get install curl` — healthcheck bằng curl sẽ luôn đỏ.
+    # start_period rộng vì lúc boot AI nạp torch + tối đa 8 bộ artifact.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     networks: [solar-net]
     restart: unless-stopped
 
@@ -496,8 +530,11 @@ services:
         condition: service_healthy
       ai-module-grpc:
         condition: service_started
+      # HTTP có healthcheck thật (gRPC thì không: image không có grpc_health_probe và AI
+      # không implement grpc.health.v1). Hai container dùng CHUNG image và cùng gọi
+      # load_models(), nên HTTP xanh là bằng chứng đủ tốt rằng artifact nạp được.
       ai-module-http:
-        condition: service_started
+        condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
 

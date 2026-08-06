@@ -7,6 +7,13 @@
 
 > **Đối chiếu code 2026-08-02:** toàn bộ route, 20 enum (`AnomalyTypeEnum` 16 giá trị, `BatteryChemistryEnum`, `IotApiKeyScopeEnum` bitflag, …) và DTO **khớp với codebase**. Bổ sung 2 endpoint AI trước đây thiếu: **`GET /api/v1/anomaly-classifications`** và **`GET /api/v1/soh-predictions`** (cả hai `Admin/Manager/Staff`, xem mục AI cuối tài liệu).
 
+> **Cập nhật 2026-08-06 — [Nhóm 14 (AI Module)](#nhóm-14--ai-module-dự-đoán-soh--phân-loại-bất-thường--kê-đơn--feedback) viết lại toàn bộ.** Mọi request/response/enum trong nhóm đó đã được **đối chiếu bằng request thật trên môi trường Docker đang chạy**, không suy từ code.
+> - `SohPredictionDto` **thêm 12 field** (`healthStage`, `stageConfidence`, `isBorderline`, `sohStd`, `rulCyclesEstimate`, `aiPriority`, `riskLevel`, `actionCode`, `sohTrend`, `degradationRatePerCycle`, `cyclesToMaintenance`, `isTemperatureOod`) — **10 field nullable**, bản ghi cũ đều `null`.
+> - **3 endpoint mới:** `GET /api/v1/soh-predictions/long` · `GET /api/v1/soh-predictions/batch` · `POST /api/alerts/{id}/ai-prescription`.
+> - **1 endpoint bổ sung tài liệu** (đã có code từ GH-778, trước nay thiếu doc): `POST /api/alerts/{id}/prescription-feedback`.
+> - `POST /api/v1/anomaly-classifications/{id}/feedback` **đổi hành vi**: nay gửi feedback ngược về AI sau khi lưu DB.
+> - ⚠️ `classification` serialize **KHÔNG đồng nhất**: số ở `AnomalyClassificationDto`, chuỗi ở `BatchPredictionItemDto`.
+
 ---
 
 ## Server-side Sort (`SortBy` + `SortDir`) — cập nhật đợt này
@@ -557,6 +564,21 @@ khi thêm event mới cho BatteryService.
 **Lỗi thường gặp:**
 - `404` — Alert không tìm thấy hoặc đã bị soft-delete
 - `409 isSuccess=false` — Alert đang ở trạng thái `Merged`; phải resolve alert gốc thay vì alert đã merge
+
+---
+
+### Hai endpoint AI trên alert — tài liệu ở Nhóm 14
+
+Cùng base route `/api/alerts/{id}` nhưng thuộc luồng AI, nên tài liệu đầy đủ (body, enum, nullable, mã lỗi)
+đặt chung ở [Nhóm 14](#nhóm-14--ai-module-dự-đoán-soh--phân-loại-bất-thường--kê-đơn--feedback):
+
+| Endpoint | Role | Tóm tắt |
+|---|---|---|
+| `POST /api/alerts/{id}/ai-prescription` | Admin/Manager/Staff | Kê lại đơn xử lý cho alert ở chế độ đầy đủ; gắn `aiPrescriptionId` mới lên alert |
+| `POST /api/alerts/{id}/prescription-feedback` | Admin/Manager/Staff/Customer | Phản hồi `accepted`/`edited`/`rejected` về đơn AI đã đưa ra |
+
+> Thứ tự bắt buộc: chưa có `aiPrescriptionId` trên alert thì `prescription-feedback` trả `409`. Gọi
+> `ai-prescription` trước để sinh id.
 
 ---
 
@@ -3310,10 +3332,32 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 ---
 
-## Nhóm 14 — AI Classification feedback (Sprint Bonus NS-26 · §30.3/§30.12)
+## Nhóm 14 — AI Module (dự đoán SOH · phân loại bất thường · kê đơn · feedback)
 
-> **Bối cảnh:** module AI (Isolation Forest + LSTM/CNN-LSTM) phân loại pin thành **Normal / Degrading / Failed** và dự đoán SOH%. Kết quả lưu ở **bảng riêng** `anomaly_classifications` / `soh_predictions` (KHÔNG nhét vào `Alerts`) để giữ bằng chứng model chạy thật (score/confidence/latency/modelVersion) + **feedback loop** cho retrain.
-> **Trạng thái:** NS-26 dựng sẵn **persistence (2 bảng)** + **endpoint feedback** dưới đây. **Luồng AI populate** 2 bảng (gọi HTTP `ai-module`) thuộc **Sprint AI** (`aibeiotrealtime.md`) — chưa chạy. Vì vậy hiện tại các bảng trống cho đến khi Sprint AI wire.
+> **Bối cảnh:** module AI (Mamba SOH predictor + Isolation Forest + lớp prescription RAG/LLM) chấm pin
+> theo cửa sổ 30 số đo, cho ra **SOH%**, **phân loại Normal/Degrading/Failed**, **mức rủi ro** và
+> **đơn xử lý**. Kết quả lưu ở **bảng riêng** `soh_predictions` / `anomaly_classifications` (KHÔNG nhét
+> vào `Alerts`) để giữ bằng chứng model chạy thật (score/confidence/latency/modelVersion) và làm
+> **feedback loop** cho retrain.
+>
+> **Trạng thái (đối chiếu code + dữ liệu thật 2026-08-06):** pipeline **đang chạy**.
+> `SohPredictionBackgroundService` gọi AI theo chu kỳ và ghi vào cả 2 bảng; tại thời điểm viết tài liệu
+> DB có **8 454** bản ghi `soh_predictions`. BE gọi AI qua **gRPC là chính, HTTP là dự phòng** — client
+> `Fallback*` tự chuyển đường khi gRPC lỗi, nên FE không thấy khác biệt.
+
+**Toàn bộ endpoint của nhóm:**
+
+| Endpoint | Method | Role | Mục đích |
+|---|---|---|---|
+| `/api/v1/soh-predictions` | GET | Admin/Manager/Staff | Lịch sử SOH đã dự đoán của 1 pin (chart) |
+| `/api/v1/soh-predictions/long` | GET | Admin/Manager/Staff | SOH từ chuỗi dài 31–4096 bước (phân tích lịch sử) |
+| `/api/v1/soh-predictions/batch` | GET | Admin/Manager/Staff | Chấm NHIỀU pin trong 1 kết nối stream (màn hình giám sát) |
+| `/api/v1/anomaly-classifications` | GET | Admin/Manager/Staff | Lịch sử phân loại bất thường của 1 pin |
+| `/api/v1/anomaly-classifications/{id}/feedback` | POST | Admin/Manager/Staff | Staff chấm đúng/sai kết quả AI → gửi ngược về AI |
+| `/api/alerts/{id}/ai-prescription` | POST | Admin/Manager/Staff | Kê lại đơn cho alert ở chế độ đầy đủ |
+| `/api/alerts/{id}/prescription-feedback` | POST | Admin/Manager/Staff/**Customer** | Phản hồi về đơn AI đã đưa ra |
+
+---
 
 ### Enum của nhóm này
 
@@ -3325,6 +3369,14 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `Degrading` | 2 | Pin đang xuống cấp — severity gợi ý Warning |
 | `Failed` | 3 | Pin hỏng/nguy cơ cao — severity gợi ý Critical |
 
+> ⚠️ **Cách serialize KHÔNG đồng nhất giữa 2 endpoint — đây là điểm dễ sai nhất của nhóm này:**
+> - `AnomalyClassificationDto.classification` → **số nguyên** (`3`), vì DTO khai kiểu enum C#.
+> - `BatchPredictionItemDto.classification` → **chuỗi** (`"Normal"`), vì handler batch gọi
+>   `.ToString()` trên giá trị AI trả về.
+>
+> FE dùng chung một hàm parse cho cả hai sẽ hỏng ở một trong hai chỗ. Đã kiểm chứng bằng response thật,
+> không phải suy từ code.
+
 #### `StaffFeedbackEnum` (đánh giá của Staff về classification)
 
 | Giá trị | Int | Ý nghĩa |
@@ -3333,31 +3385,67 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `FalsePositive` | 2 | AI báo bất thường nhưng thực tế **bình thường** (dương tính giả) |
 | `FalseNegative` | 3 | AI **bỏ sót** bất thường thật (âm tính giả) |
 
-### `GET /api/v1/anomaly-classifications`
+#### `healthStage` — tình trạng sức khỏe theo SOH (chuỗi, không phải enum C#)
 
-**Mục đích:** Lịch sử phân loại bất thường của **một pin** (do AI populate qua `SohPredictionBackgroundService`). Dùng cho FE hiển thị timeline phân loại + gắn nút feedback.
+Ngưỡng nằm ở `classify_health_stage()` phía AI (`src/models/anomaly_detector.py`); BE chỉ lưu lại chuỗi.
 
-**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được).
+| Giá trị | Điều kiện | Ý nghĩa |
+|---|---|---|
+| `"Healthy"` | SOH ≥ 90% | Pin tốt |
+| `"Degrading"` | 85% ≤ SOH < 90% | Bắt đầu xuống cấp, chưa cần hành động |
+| `"Maintenance Required"` | 80% ≤ SOH < 85% | Nên lên lịch bảo trì/thay thế |
+| `"End Of Life"` | SOH < 80% | Đạt ngưỡng EOL theo quy ước NASA 18650 |
 
-**Query params:**
+#### `riskLevel` + `aiPriority` + `actionCode` (chuỗi, do `compute_risk_profile()` sinh ra cùng lúc)
 
-| Param | Type | Bắt buộc | Mô tả |
+Ba field này **luôn nhất quán với nhau** — chúng được tính trong cùng một hàm, không phải 3 nguồn độc lập:
+
+| `riskLevel` | `aiPriority` | Điều kiện | `actionCode` tương ứng |
 |---|---|---|---|
-| `BatteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử phân loại |
-| `Classification` | `AnomalyClassificationEnum?` | ❌ | Lọc theo kết quả (`1` Normal / `2` Degrading / `3` Failed) |
-| `From` | `DateTime?` | ❌ | UTC — lọc `ClassifiedAt >= from` |
-| `To` | `DateTime?` | ❌ | UTC — lọc `ClassifiedAt <= to` |
-| `PageNumber` / `PageSize` | `int` | ❌ | Phân trang (kế thừa `PaginationRequest`) |
+| `"Critical"` | `"P1"` | `healthStage = "End Of Life"` **hoặc** có warning mức `critical` | `"REPLACE_IMMEDIATELY"` (khi EOL) |
+| `"High"` | `"P2"` | `healthStage = "Maintenance Required"` hoặc anomaly status = Anomaly | `"SCHEDULE_REPLACEMENT"` |
+| `"Medium"` | `"P3"` | `healthStage = "Degrading"`, hoặc có warning thường | `"SCHEDULE_MAINTENANCE"` |
+| `"Low"` | `"None"` | Không rơi vào các nhánh trên | `"MONITOR"` |
 
-**Response thành công `200`:** `CommonResponse<PaginationResponse<AnomalyClassificationDto>>` — shape item xem bảng **`AnomalyClassificationDto`** bên dưới.
+`actionCode` — 4 giá trị:
 
-**Lỗi thường gặp:** `401` chưa đăng nhập · `403` role không hợp lệ.
+| Giá trị | Ý nghĩa |
+|---|---|
+| `"REPLACE_IMMEDIATELY"` | Thay ngay |
+| `"SCHEDULE_REPLACEMENT"` | Lên lịch thay thế |
+| `"SCHEDULE_MAINTENANCE"` | Lên lịch bảo trì |
+| `"MONITOR"` | Chỉ theo dõi, chưa cần làm gì |
+
+> ⚠️ **`aiPriority` KHÔNG phải Priority của ticket.** Đây là tín hiệu *urgency* thuần kỹ thuật do AI
+> đưa ra. Priority thật của ticket do BE tính từ ma trận `ImpactScope × UrgencyLevel` khi Manager triage
+> (xem `.claude/rules/design.md`). Hiển thị `aiPriority` như Priority ticket là sai nghiệp vụ.
+
+#### `sohTrend` — xu hướng suy giảm (chuỗi)
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `"accelerating"` | Tốc độ suy giảm nửa sau cửa sổ > 1.2× nửa đầu — pin đang xấu đi nhanh dần |
+| `"stable"` | Tốc độ suy giảm không đổi đáng kể |
+| `"slowing"` | Tốc độ suy giảm nửa sau < 0.8× nửa đầu |
+
+> Với cửa sổ production 30 bước (ngắn hơn 1 chu kỳ NASA), AI **không** đủ tín hiệu liên-chu-kỳ để fit độ
+> dốc thật, nên trả thẳng `"stable"` + tốc độ suy giảm trung bình quần thể. Thấy `"stable"` ở đây nghĩa
+> là *"chưa đo được xu hướng"*, không phải *"đã xác nhận pin ổn định"*.
+
+#### `status` của prescription feedback (chuỗi — hợp đồng với AI)
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `"accepted"` | Kỹ thuật viên chấp nhận nguyên đơn AI → AI dùng làm ví dụ few-shot cho ca tương tự |
+| `"edited"` | Có sửa — **bắt buộc** kèm `editedSteps` |
+| `"rejected"` | Bác bỏ đơn |
 
 ---
 
 ### `GET /api/v1/soh-predictions`
 
-**Mục đích:** Lịch sử **SOH dự đoán** của một pin (AI populate qua `SohPredictionBackgroundService`) — FE dùng để vẽ chart SOH theo thời gian ở trang chi tiết pin.
+**Mục đích:** Lịch sử **SOH dự đoán** của một pin — FE dùng vẽ chart SOH theo thời gian ở trang chi tiết
+pin, kèm dải tin cậy, xu hướng và khuyến nghị hành động.
 
 **Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được).
 
@@ -3365,38 +3453,308 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 | Param | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `BatteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử dự đoán |
-| `From` | `DateTime?` | ❌ | UTC — lọc `PredictedAt >= from` |
-| `To` | `DateTime?` | ❌ | UTC — lọc `PredictedAt <= to` |
-| `PageNumber` / `PageSize` | `int` | ❌ | Phân trang |
+| `batteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử dự đoán |
+| `from` | `DateTime?` | ❌ | UTC — lọc `predictedAt >= from` |
+| `to` | `DateTime?` | ❌ | UTC — lọc `predictedAt <= to` |
+| `pageNumber` / `pageSize` | `int` | ❌ | Phân trang (kế thừa `PaginationRequest`) |
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<SohPredictionDto>>`
 
-**Chi tiết `SohPredictionDto`:**
+Response thật (đã chạy trên dữ liệu production, rút gọn còn 1 item):
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": "1a5ae545-64e5-445e-930a-35ceb2883fee",
+        "batteryAssetId": "8794a454-751a-4129-8cf9-d999ff359625",
+        "predictedSohPercent": 62.43,
+        "confidence": 0.618,
+        "modelVersion": "1.6",
+        "predictedAt": "2026-08-06T14:09:30.472388Z",
+        "latencyMs": 21,
+        "healthStage": "End Of Life",
+        "stageConfidence": 1.0,
+        "isBorderline": false,
+        "sohStd": 2.41,
+        "rulCyclesEstimate": 0,
+        "aiPriority": "P1",
+        "riskLevel": "Critical",
+        "actionCode": "REPLACE_IMMEDIATELY",
+        "sohTrend": "stable",
+        "degradationRatePerCycle": 0.15,
+        "cyclesToMaintenance": 0,
+        "isTemperatureOod": true
+      }
+    ],
+    "totalItems": 1037,
+    "pageNumber": 1,
+    "pageSize": 1,
+    "totalPages": 1037,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  },
+  "listErrors": null,
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": ""
+}
+```
+
+**Chi tiết `SohPredictionDto` — 19 field:**
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `id` | `string` (GUID) | Không | ID bản ghi dự đoán |
 | `batteryAssetId` | `string` (GUID) | Không | Pin được dự đoán |
-| `predictedSohPercent` | `decimal` | Không | SOH dự đoán (%) |
-| `confidence` | `decimal` | Không | Độ tự tin 0–1 |
-| `modelVersion` | `string` | Không | Phiên bản model (vd `"1.0"`) |
-| `predictedAt` | `DateTime` (UTC) | Không | Thời điểm dự đoán |
+| `predictedSohPercent` | `decimal` | Không | SOH dự đoán (%), `numeric(5,2)` |
+| `confidence` | `decimal` | Không | Độ tự tin 0–1, `numeric(4,3)` |
+| `modelVersion` | `string` | Không | Phiên bản model — thực tế hiện tại: `"1.6"` (bộ NASA) và `"2.0-lfp"` (bộ LFP). Model được chọn theo `chemistry` của pin |
+| `predictedAt` | `DateTime` (UTC) | Không | Thời điểm dự đoán — trục thời gian của chart |
 | `latencyMs` | `int` | Không | Độ trễ inference (ms) — monitor SLA < 100ms |
+| `healthStage` | `string?` | **Có** | `"Healthy"` / `"Degrading"` / `"Maintenance Required"` / `"End Of Life"` |
+| `stageConfidence` | `decimal?` | **Có** | Tỉ lệ mẫu MC Dropout rơi vào `healthStage`, 0–1, `numeric(4,3)` |
+| `isBorderline` | `bool` | Không (default `false`) | `true` khi `stageConfidence < 0.7` — kết luận sát ngưỡng |
+| `sohStd` | `decimal?` | **Có** | Độ lệch chuẩn MC Dropout theo điểm SOH — dùng vẽ error bar, `numeric(5,2)` |
+| `rulCyclesEstimate` | `int?` | **Có** | Số chu kỳ còn lại ước tính tới EOL (SOH 80%) |
+| `aiPriority` | `string?` | **Có** | `"P1"` / `"P2"` / `"P3"` / `"None"` — ⚠️ KHÔNG phải Priority ticket |
+| `riskLevel` | `string?` | **Có** | `"Critical"` / `"High"` / `"Medium"` / `"Low"` |
+| `actionCode` | `string?` | **Có** | `"REPLACE_IMMEDIATELY"` / `"SCHEDULE_REPLACEMENT"` / `"SCHEDULE_MAINTENANCE"` / `"MONITOR"` |
+| `sohTrend` | `string?` | **Có** | `"accelerating"` / `"stable"` / `"slowing"` |
+| `degradationRatePerCycle` | `decimal?` | **Có** | %SOH mất mỗi chu kỳ sạc–xả, `numeric(8,5)` |
+| `cyclesToMaintenance` | `int?` | **Có** | Số chu kỳ tới ngưỡng bảo trì 85%. `0` nghĩa là **đã ở/dưới ngưỡng**, không phải "không có dữ liệu" |
+| `isTemperatureOod` | `bool` | Không (default `false`) | `true` khi model đang **ngoại suy ngoài miền nhiệt độ đã train** |
+
+> ⚠️ **12 field từ `healthStage` trở xuống được thêm ngày 2026-08-06.** Bản ghi tạo TRƯỚC ngày đó có
+> toàn bộ 10 field nullable = `null`, và 2 field bool = `false`. Tại thời điểm viết tài liệu
+> **7 774 / 8 454 bản ghi** rơi vào diện này — tức **đa số**, không phải trường hợp hiếm.
+>
+> FE **phải** xử lý `null`: không được coi `healthStage == null` là pin khỏe, và không được coi
+> `isTemperatureOod == false` của bản ghi cũ là "đã kiểm tra và nhiệt độ bình thường". Muốn chỉ lấy bản
+> ghi đầy đủ thì lọc theo `predictedAt`.
+>
+> Đếm lại tỉ lệ hiện tại:
+> ```sql
+> SELECT count(*) FILTER (WHERE health_stage IS NULL) AS thieu_field,
+>        count(*)                                     AS tong
+> FROM soh_predictions;
+> ```
+
+> ⚠️ **`isTemperatureOod = true` KHÔNG phải dấu hiệu pin xấu.** Nó nói rằng *con số SOH kém tin cậy* vì
+> nhiệt độ đo nằm ngoài miền dữ liệu huấn luyện. UI phải phân biệt rõ hai chuyện này, nếu không người
+> dùng đọc một cảnh báo kỹ thuật thành một cảnh báo hỏng hóc.
 
 **Lỗi thường gặp:** `401` chưa đăng nhập · `403` role không hợp lệ.
 
-> ⚠️ Cả 2 bảng `anomaly_classifications` và `soh_predictions` được **AI populate** ở luồng Sprint AI. Nếu pipeline AI chưa chạy, endpoint vẫn trả `200` với `items: []` — không phải lỗi.
+---
+
+### `GET /api/v1/soh-predictions/long`
+
+**Mục đích:** Chấm SOH từ **chuỗi dài 31–4096 số đo** của một pin, dùng cho **phân tích lịch sử**.
+Khác hẳn `GET /api/v1/soh-predictions` về bản chất: đường này gọi **model LONG** (bộ trọng số riêng),
+**không có** MC Dropout (⇒ không `confidence`, không `healthStage`) và **không có** Isolation Forest
+(⇒ không anomaly, không `riskLevel`).
+
+> ⚠️ **KHÔNG dùng kết quả này để quyết định tạo ticket.** Phía AI cố ý bỏ anomaly vì Isolation Forest
+> được fit trên phân bố feature của cửa sổ 30 bước — chấm chuỗi 4096 bước bằng nó ra con số trông hợp lệ
+> mà vô nghĩa.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff`.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|---|
+| `batteryAssetId` | `Guid` | ✅ | — | Pin cần phân tích |
+| `limit` | `int` | ❌ | `512` | Số timestep lấy về. **Bị kẹp vào [31, 4096] ở handler**, không trả lỗi: gõ `5000` sẽ nhận `4096`, gõ `10` sẽ nhận `31` |
+
+**Response thành công `200`:** `CommonResponse<LongSohDto>`
+
+Response thật (cùng pin với ví dụ trên, `limit=300`):
+
+```json
+{
+  "data": {
+    "batteryAssetId": "8794a454-751a-4129-8cf9-d999ff359625",
+    "sohPercent": 32.25,
+    "seqLen": 300,
+    "device": "cpu",
+    "latencyMs": 36,
+    "modelVersion": "2.2"
+  },
+  "listErrors": null,
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": ""
+}
+```
+
+**Chi tiết `LongSohDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `batteryAssetId` | `string` (GUID) | Không | Pin được phân tích |
+| `sohPercent` | `decimal` | Không | SOH% từ model LONG |
+| `seqLen` | `int` | Không | Số timestep AI **thực sự** chấm — có thể nhỏ hơn `limit` nếu pin thiếu dữ liệu hoặc số đo bị loại vì ngoại lai |
+| `device` | `string` | Không | `"cpu"` hoặc `"cuda"` |
+| `latencyMs` | `int` | Không | Độ trễ inference (ms) |
+| `modelVersion` | `string` | Không | Phiên bản model LONG — **khác** `modelVersion` của SOH thường |
+
+> ⚠️ **Đừng vẽ chung một chart với SOH cửa sổ 30 mà không ghi rõ nguồn.** Hai đường dùng hai bộ trọng số
+> riêng: ví dụ thật ở trên cho cùng một pin ra **62.43%** (model `1.6`, cửa sổ 30) và **32.25%**
+> (model `2.2`, chuỗi 300). Chênh lệch này là bình thường, **không** phải pin vừa thay đổi.
+
+**Lỗi thường gặp** (đã kiểm chứng bằng request thật):
+
+| Mã | Khi nào | Body thật |
+|---|---|---|
+| `401` | Chưa đăng nhập | — |
+| `403` | Role không hợp lệ | — |
+| `404` | Pin không tồn tại hoặc đã soft-delete | `{"data":null,"listErrors":null,"isSuccess":false,"statusCode":404,"message":"Không tìm thấy pin."}` |
+| `409` | Pin chưa đủ 31 số đo | `{"...","statusCode":409,"message":"Pin cần ít nhất 31 số đo cho phân tích chuỗi dài, hiện có 0."}` |
+| `409` | Còn < 31 số đo sau khi loại ngoại lai | `message`: `"Chỉ còn N số đo hợp lệ sau khi loại ngoại lai."` |
+| `503` | AI không phản hồi (cả gRPC lẫn HTTP) | `message`: `"AI không phản hồi cho phân tích chuỗi dài."` |
+
+---
+
+### `GET /api/v1/soh-predictions/batch`
+
+**Mục đích:** Chấm **nhiều pin trong MỘT kết nối gRPC bidi stream** — dùng cho màn hình giám sát nhiều
+pin cùng lúc. N lần gọi đơn lẻ tốn N round-trip; stream chỉ tốn một.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff`.
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|---|
+| `limit` | `int` | ❌ | `10` | Số pin tối đa mỗi lượt. **Bị kẹp vào [1, 50] ở handler** |
+
+**Pin nào được chọn:** các `BatteryAsset` chưa xoá, `status = Active`, lấy `limit` cái đầu. Pin **chưa đủ
+30 số đo hợp lệ** bị **bỏ qua âm thầm** (không gửi đi, để khỏi làm đứt stream).
+
+**Response thành công `200`:** `CommonResponse<BatchPredictionDto>`
+
+Response thật (`limit=3`, chỉ 2 pin đủ dữ liệu):
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "batteryAssetId": "ab80f61e-1384-493a-98d5-fd9b445fa907",
+        "sohPercent": 98.1,
+        "classification": "Normal",
+        "healthStage": "Healthy",
+        "riskLevel": "Medium",
+        "actionCode": "SCHEDULE_MAINTENANCE",
+        "isBorderline": false,
+        "isTemperatureOod": false
+      },
+      {
+        "batteryAssetId": "125840ea-278b-49b5-8519-05a563865439",
+        "sohPercent": 96.81,
+        "classification": "Normal",
+        "healthStage": "Healthy",
+        "riskLevel": "Medium",
+        "actionCode": "SCHEDULE_MAINTENANCE",
+        "isBorderline": false,
+        "isTemperatureOod": false
+      }
+    ],
+    "requestedCount": 2,
+    "isComplete": true,
+    "abortReason": null
+  },
+  "listErrors": null,
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": ""
+}
+```
+
+**Chi tiết `BatchPredictionDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `items` | `BatchPredictionItemDto[]` | Không (có thể rỗng) | Kết quả, **đúng thứ tự đã gửi** |
+| `requestedCount` | `int` | Không | Số pin **đã gửi đi chấm** — có thể **nhỏ hơn `limit`** vì pin thiếu dữ liệu đã bị loại trước |
+| `isComplete` | `bool` | Không | `true` khi `abortReason == null` **và** `items.length == requestedCount` |
+| `abortReason` | `string?` | **Có** | Lý do stream đứt; `null` khi nhận đủ |
+
+**Chi tiết `BatchPredictionItemDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `batteryAssetId` | `string` (GUID) | Không | Pin tương ứng |
+| `sohPercent` | `decimal` | Không | SOH% dự đoán |
+| `classification` | `string` | Không | ⚠️ **Chuỗi** `"Normal"` / `"Degrading"` / `"Failed"` — KHÁC `AnomalyClassificationDto.classification` (số) |
+| `healthStage` | `string?` | **Có** | Như bảng `healthStage` ở trên |
+| `riskLevel` | `string?` | **Có** | `"Critical"` / `"High"` / `"Medium"` / `"Low"` |
+| `actionCode` | `string?` | **Có** | 4 giá trị action code |
+| `isBorderline` | `bool` | Không | Kết luận sát ngưỡng |
+| `isTemperatureOod` | `bool` | Không | Ngoại suy ngoài miền nhiệt độ |
+
+> 🔴 **PHẢI đọc `isComplete` trước khi hiển thị.** Bidi stream **không có lỗi theo từng message**: một pin
+> có cửa sổ sai sẽ làm đứt cả lượt, kéo theo mọi pin phía sau cũng không được chấm. Vì vậy **pin không có
+> trong `items` là pin CHƯA ĐƯỢC CHẤM**, không phải pin bình thường — hiển thị nó như "không có cảnh báo"
+> là nói sai sự thật với người vận hành.
+
+**Lỗi thường gặp:**
+
+| Mã | Khi nào | `message` |
+|---|---|---|
+| `401` / `403` | Chưa đăng nhập / sai role | — |
+| `409` | Không có pin `Active` nào | `"Không có pin Active nào để dự đoán."` |
+| `409` | Có pin nhưng không pin nào đủ số đo hợp lệ | `"Không pin nào đủ số đo hợp lệ để dự đoán hàng loạt."` |
+
+---
+
+### `GET /api/v1/anomaly-classifications`
+
+**Mục đích:** Lịch sử phân loại bất thường của **một pin** (do `SohPredictionBackgroundService` populate).
+Dùng cho FE hiển thị timeline phân loại + gắn nút feedback.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được).
+
+**Query params:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `batteryAssetId` | `Guid` | ✅ | Pin cần xem lịch sử phân loại |
+| `classification` | `AnomalyClassificationEnum?` | ❌ | Lọc theo kết quả (`1` Normal / `2` Degrading / `3` Failed) |
+| `from` | `DateTime?` | ❌ | UTC — lọc `classifiedAt >= from` |
+| `to` | `DateTime?` | ❌ | UTC — lọc `classifiedAt <= to` |
+| `pageNumber` / `pageSize` | `int` | ❌ | Phân trang (kế thừa `PaginationRequest`) |
+
+**Response thành công `200`:** `CommonResponse<PaginationResponse<AnomalyClassificationDto>>` — shape item
+xem bảng **`AnomalyClassificationDto`** bên dưới.
+
+**Lỗi thường gặp:** `401` chưa đăng nhập · `403` role không hợp lệ.
 
 ---
 
 ### `POST /api/v1/anomaly-classifications/{id}/feedback`
 
-**Mục đích:** Staff xác nhận classification của AI (sau khi xử lý/resolve ticket) là đúng hay sai — phục vụ đo precision/recall của model trên production + xuất dữ liệu retrain hàng tháng (§30.12). Là **feedback loop** của tầng AI.
+**Mục đích:** Staff xác nhận classification của AI (sau khi xử lý/resolve ticket) là đúng hay sai — phục
+vụ đo precision/recall của model trên production + xuất dữ liệu retrain hàng tháng (§30.12). Là
+**feedback loop** của tầng AI.
 
-**Cách dùng:** sau khi Staff resolve một ticket/alert có classification AI, UI hỏi "AI phân loại `Failed` có đúng không?" → gửi feedback về classification tương ứng.
+**Cách dùng:** sau khi Staff resolve một ticket/alert có classification AI, UI hỏi "AI phân loại `Failed`
+có đúng không?" → gửi feedback về classification tương ứng.
 
-**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được). `staffFeedbackByUserId` **luôn lấy từ token**, client không set được (chống mạo danh).
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` (Customer **không** được). `staffFeedbackByUserId`
+**luôn lấy từ token**, client không set được (chống mạo danh).
+
+> **Cập nhật 2026-08-06 — feedback giờ được gửi NGƯỢC về AI.** Trước đây endpoint chỉ ghi vào DB của BE;
+> AI không bao giờ biết mình phân loại sai. Nay handler gọi tiếp `SubmitClassificationFeedback` sang AI
+> để AI cộng dồn precision/recall vào store riêng (`classification_feedback.jsonl`, dùng chung volume
+> giữa 2 container AI).
+>
+> **Thứ tự là chủ ý: lưu DB TRƯỚC, gửi AI SAU.** Phản hồi của Staff phải được giữ lại kể cả khi AI đang
+> sập. Vì vậy **AI lỗi KHÔNG làm endpoint này trả lỗi** — vẫn `200`, chỉ là vòng học chậm lại. Không được
+> biến một thao tác đã thành công của người dùng thành lỗi.
 
 **Path param:**
 
@@ -3417,28 +3775,29 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 > Các field khác (`id` từ route, `staffFeedbackByUserId` từ token) **không** nhận qua body.
 
-**Response thành công `200`:** `CommonResponse<AnomalyClassificationDto>` — trả về classification sau khi cập nhật feedback.
+**Response thành công `200`:** `CommonResponse<AnomalyClassificationDto>` — trả về classification sau khi
+cập nhật feedback. Response thật:
 
 ```json
 {
+  "data": {
+    "id": "5c3e246c-8009-4a49-b485-85acc2fe9e3f",
+    "alertId": null,
+    "batteryAssetId": "8794a454-751a-4129-8cf9-d999ff359625",
+    "classification": 3,
+    "anomalyScore": 0.122300,
+    "confidence": 0.122,
+    "modelVersion": "1.6",
+    "classifiedAt": "2026-08-06T14:09:30.472388Z",
+    "latencyMs": 21,
+    "staffFeedback": 2,
+    "staffFeedbackByUserId": "62b55455-db76-46c3-a79b-1a58e6b1998e",
+    "staffFeedbackAt": "2026-08-06T14:12:43.2299509Z"
+  },
+  "listErrors": null,
   "isSuccess": true,
   "statusCode": 200,
-  "message": "Đã ghi nhận feedback.",
-  "data": {
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "alertId": "9b2e7c14-...",
-    "batteryAssetId": "c1d4a2b8-...",
-    "classification": 3,
-    "anomalyScore": -0.352100,
-    "confidence": 0.910,
-    "modelVersion": "1.0",
-    "classifiedAt": "2026-07-16T08:12:00Z",
-    "latencyMs": 42,
-    "staffFeedback": 2,
-    "staffFeedbackByUserId": "a77c...",
-    "staffFeedbackAt": "2026-07-16T09:30:00Z"
-  },
-  "listErrors": null
+  "message": "Đã ghi nhận feedback."
 }
 ```
 
@@ -3447,20 +3806,234 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
 | `id` | `string` (GUID) | Không | ID bản ghi classification |
-| `alertId` | `string?` (GUID) | **Null** nếu classify không gắn Alert cụ thể | Alert liên quan |
+| `alertId` | `string?` (GUID) | **Có** — `null` khi classify không gắn Alert cụ thể (đa số bản ghi từ job nền rơi vào diện này) | Alert liên quan |
 | `batteryAssetId` | `string` (GUID) | Không | Pin được phân loại |
-| `classification` | `AnomalyClassificationEnum` (int) | Không | Kết quả phân loại (1 Normal / 2 Degrading / 3 Failed) |
-| `anomalyScore` | `decimal` | Không | Điểm Isolation Forest (âm = bất thường hơn), precision (8,6) |
-| `confidence` | `decimal` | Không | Độ tự tin 0–1, precision (4,3) |
-| `modelVersion` | `string` | Không | Phiên bản model ("1.0"/"1.1") — khớp artifact versioning |
+| `classification` | `AnomalyClassificationEnum` (**int**) | Không | Kết quả phân loại (1 Normal / 2 Degrading / 3 Failed) |
+| `anomalyScore` | `decimal` | Không | Điểm Isolation Forest — **âm = bất thường hơn**; giá trị dương là bình thường, `numeric(8,6)` |
+| `confidence` | `decimal` | Không | Độ tự tin 0–1, `numeric(4,3)` |
+| `modelVersion` | `string` | Không | Phiên bản model — thực tế: `"1.6"` / `"2.0-lfp"` |
 | `classifiedAt` | `DateTime` (UTC) | Không | Thời điểm AI phân loại |
 | `latencyMs` | `int` | Không | Độ trễ inference (ms) — monitor SLA < 100ms |
-| `staffFeedback` | `StaffFeedbackEnum?` (int) | **Null** khi chưa có feedback | Đánh giá của Staff (1 Correct / 2 FalsePositive / 3 FalseNegative) |
-| `staffFeedbackByUserId` | `string?` (GUID) | **Null** khi chưa có feedback | User Staff đã đánh giá (từ token) |
-| `staffFeedbackAt` | `DateTime?` (UTC) | **Null** khi chưa có feedback | Thời điểm đánh giá |
+| `staffFeedback` | `StaffFeedbackEnum?` (int) | **Có** — `null` khi chưa có feedback | Đánh giá của Staff |
+| `staffFeedbackByUserId` | `string?` (GUID) | **Có** — `null` khi chưa có feedback | User Staff đã đánh giá (từ token) |
+| `staffFeedbackAt` | `DateTime?` (UTC) | **Có** — `null` khi chưa có feedback | Thời điểm đánh giá |
 
 **Lỗi thường gặp:**
 - `400` — `feedback` không thuộc `{1,2,3}` hoặc `id` rỗng → field-level (`listErrors: [{ field, detail }]`)
 - `401` — Chưa đăng nhập
 - `403` — Role không nằm trong Admin/Manager/Staff
 - `404` — Không tìm thấy classification → `message`, `listErrors: null`
+
+---
+
+### `POST /api/alerts/{id}/ai-prescription`
+
+**Mục đích:** Kỹ thuật viên **chủ động** hỏi AI: kê lại đơn xử lý cho alert này ở **chế độ đầy đủ**
+(RAG + LLM). Trả đơn về thẳng UI **và** gắn `prescriptionId` mới lên alert để vòng phản hồi dùng được.
+
+**Khác gì với prescription tự động gắn sẵn trên alert:** đường tự động chạy theo event, phải giữ ngân sách
+LLM cho **mọi** pin nên luôn `agentic=false`. Đây là thao tác thủ công cho **đúng một** pin, nên mới đáng
+bật chain agentic (2 lượt LLM).
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff`. **Không mở cho Customer** — đây là công cụ chẩn đoán
+của người vận hành.
+
+**Path param:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | ✅ | ID của alert cần kê đơn |
+
+**Query param:**
+
+| Param | Type | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|---|
+| `agentic` | `bool` | ❌ | `false` | `true` = bật chain agentic (2 lượt LLM, chậm hơn, chất lượng cao hơn) |
+
+**Request body:** Không có.
+
+**Response thành công `200`:** `CommonResponse<AiPrescriptionDto>`
+
+Response thật (alert của pin EOL, `agentic=false`):
+
+```json
+{
+  "data": {
+    "prescription": "Battery has reached end-of-life — immediate replacement required. Current SOH 60.9%, risk Critical, priority P1. Active warnings: BATTERY_EOL, TEMP_OOD.",
+    "actionSteps": [
+      "Isolate the battery from the system using the Lockout/Tagout procedure.",
+      "Measure open-circuit voltage and surface temperature before removal.",
+      "Replace with a unit of identical specification per the maintenance SOP §3.",
+      "Record final SOH, anomaly status, and replacement reason in the ticket."
+    ],
+    "ppeRequired": [
+      "Insulated gloves (>=500V)",
+      "Safety glasses (ANSI Z87.1)",
+      "Steel-toed footwear"
+    ],
+    "sopReferences": [
+      "battery_maintenance_sop §3 (Replacement Criteria)",
+      "electrical_safety_sop (LOTO + isolation)"
+    ],
+    "safetyWarnings": [
+      "Mandatory PPE missing from generated output — enforced per PPE matrix: Steel-toed footwear"
+    ],
+    "escalationConditions": [
+      "Immediate replacement required — notify manager within 1 hour.",
+      "Immediate replacement required — notify manager within 1 hour"
+    ],
+    "humanVerificationRequired": true,
+    "enriched": false,
+    "llmProvider": "none",
+    "blocked": false,
+    "cached": false,
+    "prescriptionId": "424d0473-e501-4a35-8a66-d7f2740f8bcf"
+  },
+  "listErrors": null,
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": ""
+}
+```
+
+**Chi tiết `AiPrescriptionDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `prescription` | `string` | Không (có thể **rỗng** `""`) | Mô tả tổng. Rỗng khi AI chạy đường rule-based mà không có nội dung mô tả |
+| `actionSteps` | `string[]` | Không (có thể rỗng) | Các bước cụ thể — **đã qua safety gate** (LOTO/thermal được chèn thêm nếu cần) |
+| `ppeRequired` | `string[]` | Không (có thể rỗng) | PPE bắt buộc |
+| `sopReferences` | `string[]` | Không (có thể rỗng) | Tham chiếu SOP |
+| `safetyWarnings` | `string[]` | Không (có thể rỗng) | Cảnh báo an toàn |
+| `escalationConditions` | `string[]` | Không (có thể rỗng) | Điều kiện nên escalate — **tham khảo**, hệ thống KHÔNG tự escalate theo field này. ⚠️ **AI có thể trả phần tử trùng lặp** (xem ví dụ trên: 2 dòng chỉ khác dấu chấm cuối) — FE nên dedupe trước khi hiển thị |
+| `humanVerificationRequired` | `bool` | Không | Luôn `true` với P1 và với mọi kết quả bị chặn |
+| `enriched` | `bool` | Không | `true` = LLM+RAG đã chạy; `false` = bản rule-based |
+| `llmProvider` | `string` | Không | `"deepseek"` / `"gemini"` / `"anthropic"` / `"none"` |
+| `blocked` | `bool` | Không | `true` khi output LLM **bị safety gate CHẶN** — nội dung trả về là bản rule-based thay thế, KHÔNG phải thứ LLM sinh ra |
+| `cached` | `bool` | Không | `true` khi AI trả từ cache idempotency (TTL 10 phút) thay vì chạy mới |
+| `prescriptionId` | `string?` (GUID) | **Có** | ID để gửi phản hồi về `POST /api/alerts/{id}/prescription-feedback`. `null` khi AI không cấp (history store lỗi) |
+
+> ⚠️ **`blocked = true` phải được nói rõ trên UI.** Người đọc đang xem bản rule-based, không phải khuyến
+> nghị của LLM. Hiển thị y như nhau là để người vận hành tin nhầm nguồn gốc của lời khuyên.
+
+> ⚠️ **`cached = true` không phải nút hỏng.** Bấm "gợi ý lại" hai lần liên tiếp với cùng dữ liệu sẽ ra
+> cùng kết quả — đó là đúng thiết kế (idempotency TTL 10 phút). UI nên phân biệt để người dùng không bấm mãi.
+
+> ℹ️ Ví dụ trên có `enriched: false` / `llmProvider: "none"` vì môi trường dev **chưa cấu hình API key
+> LLM**. Khi đã cấu hình, cùng request sẽ trả `enriched: true` và tên provider tương ứng. Cấu trúc field
+> không đổi.
+
+**Lỗi thường gặp:**
+
+| Mã | Khi nào | `message` |
+|---|---|---|
+| `401` / `403` | Chưa đăng nhập / role không hợp lệ (kể cả Customer) | — |
+| `404` | Không tìm thấy alert | `"Không tìm thấy alert."` |
+| `404` | Alert có nhưng pin của nó đã bị xoá | `"Không tìm thấy pin của alert này."` |
+| `409` | Alert ở **cấp site**, không gắn pin nào | `"Alert này ở cấp site, không gắn với pin nào nên không kê đơn được."` |
+| `409` | Pin chưa đủ 30 số đo | `"Pin chưa đủ 30 số đo để AI kê đơn."` |
+| `409` | Còn < 30 số đo sau khi loại ngoại lai | `"Không đủ số đo hợp lệ trong dải AI chấp nhận để kê đơn."` |
+| `409` | Cửa sổ thiếu `cycle_count` mà model của pin bắt buộc phải có | `"Cửa sổ thiếu cycle_count, mà model của pin này bắt buộc phải có."` |
+| `503` | AI không phản hồi (cả gRPC lẫn HTTP) | `"AI không phản hồi. Thử lại sau."` |
+
+---
+
+### `POST /api/alerts/{id}/prescription-feedback`
+
+**Mục đích:** Kỹ thuật viên phản hồi về **đơn mà AI đã đưa ra** cho một alert. Đơn được chấp nhận sẽ
+thành ví dụ few-shot cho các ca tương tự sau. Không có đường phản hồi thì AI lặp lại cùng một lời khuyên
+sai mãi mà không ai sửa được.
+
+**Điều kiện tiên quyết:** alert phải **đã có** `aiPrescriptionId` — tức là đã qua đường prescription tự
+động, hoặc vừa gọi `POST /api/alerts/{id}/ai-prescription`. Chưa có thì trả `409`.
+
+**Auth:** JWT — role `Admin` / `Manager` / `Staff` / **`Customer`**.
+
+> Customer **chỉ** phản hồi được alert của mình; alert của khách khác trả **`404`** (cố ý không phải
+> `403` — `403` sẽ xác nhận alert đó có thật).
+
+**Path param:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | ✅ | ID của alert mang prescription cần phản hồi |
+
+**Request body:**
+
+```json
+{
+  "status": "edited",
+  "editedSteps": ["Bước 1 đã sửa", "Bước 2 đã sửa"],
+  "note": "Bỏ bước đo nhiệt vì thiết bị đang bảo dưỡng"
+}
+```
+
+| Field | Type | Bắt buộc | Nullable | Validation | Mô tả |
+|---|---|---|---|---|---|
+| `status` | `string` | ✅ | Không | Chỉ nhận `"accepted"` / `"edited"` / `"rejected"` (đối chiếu **không phân biệt hoa thường**) | Kết luận của kỹ thuật viên |
+| `editedSteps` | `string[]?` | ❌ (✅ khi `status = "edited"`) | **Có** | Khi `status = "edited"` phải có ≥ 1 phần tử **không rỗng** | Các bước đã sửa |
+| `note` | `string?` | ❌ | **Có** | — | Ghi chú tự do |
+
+> `alertId` lấy từ route, **không** nhận qua body.
+> Phần tử rỗng/toàn khoảng trắng trong `editedSteps` bị **loại trước khi gửi sang AI** — gửi chuỗi trắng
+> là dạy AI một bước vô nghĩa.
+
+**Response thành công `200`:** `CommonResponse<string>` — `data` là **`prescriptionId`** đã được phản hồi.
+
+```json
+{
+  "data": "424d0473-e501-4a35-8a66-d7f2740f8bcf",
+  "listErrors": null,
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã ghi nhận phản hồi."
+}
+```
+
+**Lỗi thường gặp** (đã kiểm chứng bằng request thật):
+
+| Mã | Khi nào | Body |
+|---|---|---|
+| `400` | `status` rỗng hoặc không thuộc 3 giá trị | `listErrors: [{"field":"Status","detail":"Chỉ nhận: accepted, edited, rejected."}]` |
+| `400` | `status = "edited"` mà thiếu `editedSteps` | `listErrors: [{"field":"EditedSteps","detail":"Bắt buộc khi status = edited."}]` |
+| `401` | Chưa đăng nhập | — |
+| `404` | Không tìm thấy alert, **hoặc** Customer gọi alert không thuộc mình | `"Không tìm thấy alert."` |
+| `409` | Alert có thật nhưng **chưa có prescription** để phản hồi | `"Alert này chưa có prescription của AI để phản hồi."` |
+| `410` | AI **không còn giữ** `prescriptionId` đó (hết TTL) — **thử lại vô ích** | `"Prescription đã hết hạn ở phía AI — không ghi nhận được phản hồi nữa."` |
+| `503` | Không kết nối được AI — **nên thử lại sau** | `"Không kết nối được AI để ghi nhận phản hồi. Thử lại sau."` |
+
+> 🔴 **`409` / `410` / `503` cố ý tách nhau** để client biết khi nào NÊN retry: `409` cần gọi
+> `ai-prescription` trước; `410` retry vô ích; `503` retry được.
+
+> **Sửa lỗi 2026-08-06:** trước ngày này, mọi lỗi validate của endpoint đều trả **`502`**
+> (*"Upstream service không phản hồi hợp lệ"*) thay vì `400`. Nguyên nhân: `ValidateAsync()` không gán
+> `StatusCode`, để nguyên mặc định `0`, controller gọi `StatusCode(0, result)` khiến Kestrel ghi ra dòng
+> status `HTTP/1.1 0` — client nhận `BadStatusLine` và gateway dịch thành `502`. Hậu quả: người dùng gõ
+> sai `status` thấy y hệt lúc AI sập, còn `listErrors` thì không bao giờ tới nơi. Đã sửa (gán
+> `StatusCode = 400`, đúng quy ước của 26/28 command khác trong service).
+
+---
+
+## Phụ lục — Bẫy đã biết khi tích hợp AI
+
+Ba điểm dưới đây là **lỗi im lặng**: hệ thống không báo lỗi, chỉ trả số sai. Ghi lại để không ai phải
+tìm lại từ đầu.
+
+**1. `socMode` quyết định payload gửi sang AI — gửi sai KHÔNG bị từ chối.**
+Ý nghĩa của cột `soc_percent` phụ thuộc bộ artifact đang chấm: bộ NASA dùng `"window"` (SOC cục bộ trong
+cửa sổ), bộ LFP dùng `"cycle"` (SOC theo chu kỳ xả). BE đọc `socMode` **từ endpoint health của AI**, không
+suy từ `chemistry`. Gửi sai định nghĩa thì AI vẫn nhận, vẫn trả `200`, chỉ là SOH **lệch đi** — đo được
+tới ~60 điểm SOH trên cùng một bộ số đo. Khi `socMode` là `"window"` hoặc `"unknown"`, BE gửi **4 cột**;
+khi `"cycle"` mới gửi **6 cột** (kèm `cycle_count`, `soc_percent`).
+
+**2. Bộ lọc đọc `sensor_readings` phải giống nhau ở mọi đường.**
+Job nền, `ai-prescription`, `/long` và `/batch` đều lọc theo
+`sensorSourceCode IN (null, "", "primary")` — **không** hardcode `SourceType`. Dữ liệu production đến từ
+IoT gateway (`source_type = 2`), nên lọc theo `Bms` sẽ khiến mọi pin chạy gateway **không bao giờ** kê
+được đơn, dù job nền vẫn dự đoán cho chúng bình thường.
+
+**3. Deadline gRPC của Prescribe khác Predict.**
+`enrich = true` chạy RAG + LLM nên mất vài giây; dùng deadline 5s của Predict sẽ khiến **mọi** lượt
+prescribe `DeadlineExceeded` rồi mới fallback sang HTTP — tốn thêm 5 giây mỗi lần và log trông y hệt AI
+đang hỏng. Đường enriched dùng `max(30, TimeoutSeconds)`; đường rule-based giữ nguyên deadline ngắn để
+phát hiện AI treo thật sự.

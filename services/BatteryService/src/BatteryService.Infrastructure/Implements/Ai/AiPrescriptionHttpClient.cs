@@ -25,17 +25,38 @@ public class AiPrescriptionHttpClient : IAiPrescriptionFeedbackClient
         IReadOnlyList<double[]> readings,
         bool enrich,
         AiPackConfig? packConfig,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AiPrescriptionContext? context = null,
+        bool agentic = false)
     {
-        object payload = packConfig is null
-            ? new { battery_id = batteryId, readings, enrich }
-            : new
+        // Dựng payload bằng Dictionary thay vì anonymous type: số nhánh tổ hợp của
+        // (packConfig có/không) × (context có/không) tăng nhanh, mà mỗi nhánh lại phải lặp lại
+        // toàn bộ field — đúng chỗ dễ bỏ sót một field ở đúng một nhánh.
+        var payload = new Dictionary<string, object?>
+        {
+            ["battery_id"] = batteryId,
+            ["readings"] = readings,
+            ["enrich"] = enrich,
+            ["agentic"] = agentic,
+        };
+        if (packConfig is not null)
+        {
+            payload["pack_config"] = new
             {
-                battery_id = batteryId,
-                readings,
-                enrich,
-                pack_config = new { n_series = packConfig.NSeries, chemistry = packConfig.Chemistry, capacity_ah = packConfig.CapacityAh },
+                n_series = packConfig.NSeries,
+                chemistry = packConfig.Chemistry,
+                capacity_ah = packConfig.CapacityAh,
             };
+        }
+        if (context is not null)
+        {
+            if (context.AgeCycles is int age) payload["age_cycles"] = age;
+            if (!string.IsNullOrEmpty(context.LastMaintenanceDate))
+                payload["last_maintenance_date"] = context.LastMaintenanceDate;
+            // Thứ tự CŨ → MỚI — AI chỉ lấy 5 phần tử cuối.
+            if (context.TicketHistory.Count > 0)
+                payload["ticket_history"] = context.TicketHistory;
+        }
 
         using var response = await _http.PostAsJsonAsync("/prescribe/", payload, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -75,7 +96,10 @@ public class AiPrescriptionHttpClient : IAiPrescriptionFeedbackClient
             Enriched: Bool(root, "enriched"),
             LlmProvider: Str(root, "llm_provider"),
             // GH-778 — xem AiPrescriptionResult.PrescriptionId.
-            PrescriptionId: Str(root, "prescription_id") is { Length: > 0 } id ? id : null);
+            PrescriptionId: Str(root, "prescription_id") is { Length: > 0 } id ? id : null,
+            EscalationConditions: StrList(root, "escalation_conditions"),
+            Blocked: Bool(root, "blocked"),
+            Cached: Bool(root, "cached"));
     }
     /// <summary>
     /// GH-778 — gửi phản hồi kỹ thuật viên về AI. Chỉ có ở đường HTTP: <c>ai_service.proto</c>

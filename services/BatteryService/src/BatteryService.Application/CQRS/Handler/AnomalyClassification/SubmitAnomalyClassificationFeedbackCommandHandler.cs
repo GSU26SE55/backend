@@ -13,10 +13,14 @@ public class SubmitAnomalyClassificationFeedbackCommandHandler
     : IRequestHandler<SubmitAnomalyClassificationFeedbackCommand, CommonResponse<AnomalyClassificationDto>>
 {
     private readonly IBatteryUnitOfWork _uow;
+    private readonly IAiClassificationFeedbackClient _aiFeedback;
 
-    public SubmitAnomalyClassificationFeedbackCommandHandler(IBatteryUnitOfWork uow)
+    public SubmitAnomalyClassificationFeedbackCommandHandler(
+        IBatteryUnitOfWork uow,
+        IAiClassificationFeedbackClient aiFeedback)
     {
         _uow = uow;
+        _aiFeedback = aiFeedback;
     }
 
     public async Task<CommonResponse<AnomalyClassificationDto>> Handle(
@@ -33,6 +37,17 @@ public class SubmitAnomalyClassificationFeedbackCommandHandler
         entity.StaffFeedbackAt = DateTime.UtcNow;
         _uow.AnomalyClassifications.UpdateAsync(entity);
         await _uow.SaveChangesAsync(cancellationToken);
+
+        // F4 — gửi ngược về AI SAU khi đã lưu. Thứ tự này là chủ ý: phản hồi của Staff phải
+        // được giữ lại kể cả khi AI đang sập. Trả về false chỉ nghĩa là vòng học chậm lại,
+        // KHÔNG được biến thao tác đã thành công của người dùng thành lỗi.
+        await _aiFeedback.SubmitAsync(
+            entity.BatteryAssetId,
+            entity.Classification,
+            request.Feedback,
+            entity.ModelVersion,
+            entity.ClassifiedAt,
+            cancellationToken);
 
         return new CommonResponse<AnomalyClassificationDto>
         {

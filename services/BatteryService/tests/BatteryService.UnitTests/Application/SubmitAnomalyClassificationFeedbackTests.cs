@@ -1,9 +1,11 @@
 using BatteryService.Application.CQRS.Command.AnomalyClassification;
 using BatteryService.Application.CQRS.Handler.AnomalyClassification;
+using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.UnitTests.Helpers;
 using FluentAssertions;
+using Moq;
 
 namespace BatteryService.UnitTests.Application;
 
@@ -32,7 +34,7 @@ public class SubmitAnomalyClassificationFeedbackTests
         var staffId = Guid.NewGuid();
         var entity = MakeClassification(id);
         var b = new MockUnitOfWorkBuilder().WithAnomalyClassifications(entity);
-        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build());
+        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build(), AiFeedbackStub());
 
         var res = await handler.Handle(new SubmitAnomalyClassificationFeedbackCommand
         {
@@ -54,7 +56,7 @@ public class SubmitAnomalyClassificationFeedbackTests
     public async Task Feedback_NotFound_Returns404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build());
+        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build(), AiFeedbackStub());
 
         var res = await handler.Handle(new SubmitAnomalyClassificationFeedbackCommand
         {
@@ -83,6 +85,89 @@ public class SubmitAnomalyClassificationFeedbackTests
         res.IsSuccess.Should().BeFalse();
         res.StatusCode.Should().Be(400);
         res.ListErrors.Should().ContainSingle(e => e.Field == "Feedback" && !string.IsNullOrEmpty(e.Detail));
+    }
+
+    /// <summary>Client AI mặc định cho test: luôn "gửi được".</summary>
+    /// <remarks>
+    /// F4 — handler gọi AI SAU khi đã lưu và cố ý bỏ qua kết quả. Các test ở đây khẳng định
+    /// phần LƯU, nên stub chỉ cần không ném lỗi. Ca "AI sập" có test riêng bên dưới.
+    /// </remarks>
+    private static IAiClassificationFeedbackClient AiFeedbackStub(bool ok = true)
+    {
+        var m = new Mock<IAiClassificationFeedbackClient>();
+        m.Setup(c => c.SubmitAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<AnomalyClassificationEnum>(),
+                It.IsAny<StaffFeedbackEnum>(),
+                It.IsAny<string>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ok);
+        return m.Object;
+    }
+
+    [Fact]
+    public async Task Feedback_IsPersisted_EvenWhenAiThrows()
+    {
+        // AI sập KHÔNG được biến thao tác đã thành công của Staff thành lỗi: phản hồi đã nằm
+        // trong DB trước khi gọi AI, mất đường gửi chỉ làm chậm vòng học.
+        // Client THẬT nuốt lỗi và trả false — nếu ai đó bỏ try/catch trong client, test này đỏ.
+        var id = Guid.NewGuid();
+        var entity = MakeClassification(id);
+        var b = new MockUnitOfWorkBuilder().WithAnomalyClassifications(entity);
+
+        var down = new Mock<IAiClassificationFeedbackClient>();
+        down.Setup(c => c.SubmitAsync(
+                It.IsAny<Guid>(), It.IsAny<AnomalyClassificationEnum>(),
+                It.IsAny<StaffFeedbackEnum>(), It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build(), down.Object);
+
+        var res = await handler.Handle(new SubmitAnomalyClassificationFeedbackCommand
+        {
+            Id = id,
+            Feedback = StaffFeedbackEnum.Correct,
+            StaffFeedbackByUserId = Guid.NewGuid(),
+        }, CancellationToken.None);
+
+        res.IsSuccess.Should().BeTrue();
+        entity.StaffFeedback.Should().Be(StaffFeedbackEnum.Correct);
+    }
+
+    [Fact]
+    public async Task Feedback_IsForwardedToAi_WithTheLabelAiActuallyGave()
+    {
+        // Gửi nhầm "nhãn đúng" thay vì "nhãn AI đã đưa ra" sẽ làm hỏng dữ liệu retrain một
+        // cách âm thầm — file vẫn hợp lệ, chỉ là học sai.
+        var id = Guid.NewGuid();
+        var entity = MakeClassification(id);   // Classification = Failed
+        var b = new MockUnitOfWorkBuilder().WithAnomalyClassifications(entity);
+
+        var ai = new Mock<IAiClassificationFeedbackClient>();
+        ai.Setup(c => c.SubmitAsync(
+                It.IsAny<Guid>(), It.IsAny<AnomalyClassificationEnum>(),
+                It.IsAny<StaffFeedbackEnum>(), It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var handler = new SubmitAnomalyClassificationFeedbackCommandHandler(b.Build(), ai.Object);
+
+        await handler.Handle(new SubmitAnomalyClassificationFeedbackCommand
+        {
+            Id = id,
+            Feedback = StaffFeedbackEnum.FalsePositive,
+            StaffFeedbackByUserId = Guid.NewGuid(),
+        }, CancellationToken.None);
+
+        ai.Verify(c => c.SubmitAsync(
+            entity.BatteryAssetId,
+            AnomalyClassificationEnum.Failed,          // nhãn AI ĐÃ đưa ra
+            StaffFeedbackEnum.FalsePositive,           // đánh giá của Staff
+            entity.ModelVersion,
+            entity.ClassifiedAt,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
