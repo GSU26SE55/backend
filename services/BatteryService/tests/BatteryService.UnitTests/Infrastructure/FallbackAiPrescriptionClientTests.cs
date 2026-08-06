@@ -36,23 +36,58 @@ public class FallbackAiPrescriptionClientTests
     public async Task Prescribe_GrpcSucceeds_ReturnsGrpc()
     {
         var (sut, grpc, http) = Build();
-        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 5, It.IsAny<CancellationToken>()))
+        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 30, It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ReturnsAsync(Sample("deepseek"));
 
         var result = await sut.PrescribeAsync("B1", Window);
 
         result!.LlmProvider.Should().Be("deepseek");
         http.Verify(h => h.PrescribeAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-            It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Prescribe_Enriched_UsesWiderGrpcDeadline_NotThePredictTimeout()
+    {
+        // enrich=true chạy RAG + LLM nên mất vài giây. Bản HTTP đã được nới lên
+        // Math.Max(30, TimeoutSeconds) từ lâu, nhưng đường gRPC thì chưa — hậu quả ĐO ĐƯỢC:
+        // MỌI prescribe enrich=true đều DeadlineExceeded sau 5s rồi mới fallback sang HTTP.
+        // Tốn thêm 5 giây mỗi lần, và log trông y hệt như AI đang hỏng.
+        var (sut, grpc, _) = Build();
+        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 30,
+                It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
+            .ReturnsAsync(Sample("deepseek"));
+
+        await sut.PrescribeAsync("B1", Window, enrich: true);
+
+        // Deadline 5s (của Predict) KHÔNG được dùng cho đường enriched.
+        grpc.Verify(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 5,
+            It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Prescribe_RuleBased_KeepsTightDeadline()
+    {
+        // enrich=false chạy <100ms. Nới deadline ở đây chỉ làm chậm việc phát hiện AI treo,
+        // nên nhánh này phải giữ nguyên TimeoutSeconds gốc.
+        var (sut, grpc, _) = Build();
+        grpc.Setup(g => g.PrescribeAsync("B1", Window, false, It.IsAny<AiPackConfig?>(), 5,
+                It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
+            .ReturnsAsync(Sample("none"));
+
+        var result = await sut.PrescribeAsync("B1", Window, enrich: false);
+
+        result!.LlmProvider.Should().Be("none");
     }
 
     [Fact]
     public async Task Prescribe_GrpcUnavailable_FallsBackToHttp()
     {
         var (sut, grpc, http) = Build();
-        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 5, It.IsAny<CancellationToken>()))
+        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 30, It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ThrowsAsync(new RpcException(new Status(StatusCode.Unavailable, "down")));
-        http.Setup(h => h.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+        http.Setup(h => h.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ReturnsAsync(Sample("http-gemini"));
 
         var result = await sut.PrescribeAsync("B1", Window);
@@ -64,9 +99,9 @@ public class FallbackAiPrescriptionClientTests
     public async Task Prescribe_BothFail_ReturnsNull()
     {
         var (sut, grpc, http) = Build();
-        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 5, It.IsAny<CancellationToken>()))
+        grpc.Setup(g => g.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), 30, It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ThrowsAsync(new RpcException(new Status(StatusCode.Unavailable, "down")));
-        http.Setup(h => h.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+        http.Setup(h => h.PrescribeAsync("B1", Window, true, It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ThrowsAsync(new HttpRequestException("down"));
 
         var result = await sut.PrescribeAsync("B1", Window);

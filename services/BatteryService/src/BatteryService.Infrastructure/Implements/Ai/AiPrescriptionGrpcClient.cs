@@ -19,9 +19,26 @@ public class AiPrescriptionGrpcClient
         bool enrich,
         AiPackConfig? packConfig,
         int timeoutSeconds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AiPrescriptionContext? context = null,
+        bool agentic = false)
     {
-        var request = new PrescribeRequest { BatteryId = batteryId, Enrich = enrich };
+        var request = new PrescribeRequest
+        {
+            BatteryId = batteryId,
+            Enrich = enrich,
+            Agentic = agentic,
+        };
+        if (context is not null)
+        {
+            if (context.AgeCycles is int age)
+                request.AgeCycles = age;
+            if (!string.IsNullOrEmpty(context.LastMaintenanceDate))
+                request.LastMaintenanceDate = context.LastMaintenanceDate;
+            // Thứ tự CŨ → MỚI: AI chỉ lấy 5 phần tử CUỐI. Gửi ngược chiều là đưa cho LLM
+            // 5 sự kiện xa nhất thay vì gần nhất — sai mà không có lỗi nào báo.
+            request.TicketHistory.AddRange(context.TicketHistory);
+        }
         foreach (var row in readings)
         {
             var reading = new Reading();
@@ -52,6 +69,9 @@ public class AiPrescriptionGrpcClient
             LlmProvider: resp.LlmProvider,
             // GH-778 — giữ lại ID để còn gửi phản hồi được. Bỏ ở đây là cắt đứt vòng học của AI
             // ngay tại ranh giới bridge.
-            PrescriptionId: string.IsNullOrWhiteSpace(resp.PrescriptionId) ? null : resp.PrescriptionId);
+            PrescriptionId: string.IsNullOrWhiteSpace(resp.PrescriptionId) ? null : resp.PrescriptionId,
+            EscalationConditions: resp.EscalationConditions.ToList(),
+            Blocked: resp.Blocked,
+            Cached: resp.Cached);
     }
 }

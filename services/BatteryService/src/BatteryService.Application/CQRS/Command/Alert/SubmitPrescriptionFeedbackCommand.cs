@@ -59,7 +59,16 @@ public class SubmitPrescriptionFeedbackCommand : IRequest<CommonResponse<string>
             });
         }
 
-        if (response.ListErrors.Count > 0) response.IsSuccess = false;
+        if (response.ListErrors.Count > 0)
+        {
+            response.IsSuccess = false;
+            // PHẢI set StatusCode. Controller trả `StatusCode(result.StatusCode, result)`, mà
+            // CommonResponseBase.StatusCode mặc định 0 → Kestrel ghi ra dòng status "HTTP/1.1 0",
+            // client nhận BadStatusLine và gateway dịch thành 502 "Upstream không phản hồi hợp lệ".
+            // Người dùng gõ sai `status` sẽ thấy y hệt lúc AI sập, còn listErrors thì không bao giờ
+            // tới nơi. 26/28 command khác trong service này đều set 400 — đây là chỗ sót.
+            response.StatusCode = 400;
+        }
         return Task.FromResult(response);
     }
 }

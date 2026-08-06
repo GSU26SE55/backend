@@ -224,4 +224,33 @@ public class AlertsController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
+
+    /// <summary>Kỹ thuật viên chủ động hỏi AI: kê lại đơn cho alert này ở chế độ đầy đủ.</summary>
+    /// <remarks>
+    /// Khác prescription tự động gắn sẵn trên alert: đường tự động chạy trên event và phải giữ
+    /// ngân sách LLM cho MỌI pin nên luôn <c>agentic=false</c>. Đây là thao tác thủ công cho đúng
+    /// một pin, nên mới đáng bật chain agentic (2 lượt LLM).
+    /// <para>
+    /// <b>409</b> pin chưa đủ số đo hợp lệ (hoặc thiếu <c>cycle_count</c> mà model của pin bắt
+    /// buộc phải có) · <b>503</b> AI không phản hồi — thử lại sau.
+    /// </para>
+    /// Không mở cho Customer: đây là công cụ chẩn đoán của người vận hành.
+    /// </remarks>
+    [HttpPost("{id:guid}/ai-prescription")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(CommonResponse<AiPrescriptionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<AiPrescriptionDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<AiPrescriptionDto>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<AiPrescriptionDto>), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> RegenerateAiPrescription(
+        Guid id,
+        [FromQuery] bool agentic,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RegenerateAiPrescriptionCommand { AlertId = id, Agentic = agentic }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
 }

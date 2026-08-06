@@ -78,9 +78,13 @@ export default {
 
   // ───────────────────────────────────────────────────────────────────────
   // VERIFIERS — rẻ trước, đắt sau.
-  //   L0 build (~25s)  → L1 unit (~3ph)  → [cổng] L2 integration → L3 e2e
-  // L2/L3 gateOnly: chỉ chạy khi L0+L1 đã xanh — chúng trả lời "xong chưa",
+  //   L0 build (~25s) → L1 unit (~3ph) → [cổng] L2 integration → L3 e2e → L4 e2e-ai
+  // L2..L4 gateOnly: chỉ chạy khi L0+L1 đã xanh — chúng trả lời "xong chưa",
   // câu chỉ đáng hỏi khi loop sắp nói "rồi".
+  //
+  // L3 và L4 KHÔNG trùng nhau: L3 phủ gateway/auth/report/SLA/saga, L4 phủ
+  // tích hợp AI ↔ BE. Trước khi có L4, toàn bộ luồng AI nằm ngoài mọi tầng
+  // kiểm chứng dù nó là thứ sinh ra dự đoán, cảnh báo và ticket.
   // ───────────────────────────────────────────────────────────────────────
   verifiers: [
     {
@@ -124,6 +128,30 @@ export default {
       adapter: 'exitcode',
       timeout: 900000,
     },
+    {
+      // Tầng riêng cho tích hợp AI ↔ BE.
+      //
+      // VÌ SAO TÁCH KHỎI L3: e2e-smoke.sh không có một dòng nào về
+      // predict/prescribe/soh/anomaly — nó kiểm gateway/auth/report/SLA/saga.
+      // Trước khi có tầng này, "L3 xanh" hoàn toàn không nói gì về AI, mà toàn
+      // bộ luồng dự đoán/kê đơn/verify lại đi qua AI. Một lớp cả nghìn test vẫn
+      // để lọt lỗi chỉ lộ ra khi gọi API thật trên dữ liệu thật.
+      //
+      // Kiểm CẢ HAI CHIỀU: BE gọi sang AI (8 RPC) và dữ liệu AI hiện ra qua API
+      // của BE, kèm 2 round-trip thật (store AI tăng đúng số, prescriptionId AI
+      // vừa cấp dùng lại được).
+      //
+      // ⚠️ Script CÓ ghi DB: nó đưa 1 ticket ManualByCustomer về trạng thái
+      // Pending rồi gọi re-verify để mỗi lượt đều đi đúng đường thật thay vì rơi
+      // vào nhánh dự phòng. Re-verify ngay sau đó ghi verdict lại nên trạng thái
+      // cuối không đổi. Tắt bằng E2E_RESET_TICKET=0 nếu cần chạy chỉ-đọc.
+      id: 'e2e-ai',
+      level: 4,
+      gateOnly: true,
+      cmd: 'bash tools/e2e-ai-integration.sh',
+      adapter: 'exitcode',
+      timeout: 1800000,
+    },
   ],
 
   // ───────────────────────────────────────────────────────────────────────
@@ -142,6 +170,9 @@ export default {
   immutable: [
     'tools/loop/**',
     'tools/e2e-smoke.sh',
+    // Cùng lý do như e2e-smoke.sh: đây là THƯỚC ĐO của tầng L4. Sửa một dòng
+    // trong này là cổng AI mở toang mà nhìn báo cáo vẫn thấy xanh.
+    'tools/e2e-ai-integration.sh',
     'tools/e2e/**',
     'loop.config.mjs',
     'loop/context/**',

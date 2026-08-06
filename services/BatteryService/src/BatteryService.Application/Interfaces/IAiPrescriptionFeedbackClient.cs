@@ -18,11 +18,14 @@ public enum AiFeedbackOutcome
 /// </summary>
 /// <remarks>
 /// <para>
-/// Tách khỏi <see cref="IAiPrescriptionClient"/> vì đây là ràng buộc THẬT chứ không phải lựa chọn
-/// thẩm mỹ: <c>ai_service.proto</c> chỉ khai bốn RPC (Predict, Prescribe, Health, PredictStream) —
-/// KHÔNG có RPC nào cho feedback. Endpoint nhận phản hồi chỉ tồn tại ở REST
-/// (<c>POST /prescribe/feedback</c>). Nhét phương thức này vào interface chung sẽ buộc bản gRPC
-/// hiện thực một thứ nó không làm được, và bản "ném NotSupported" đó sớm muộn sẽ được ai đó gọi.
+/// Tách khỏi <see cref="IAiPrescriptionClient"/> vì nó có vòng đời riêng: phản hồi đến SAU khi
+/// kỹ thuật viên xử lý xong, không nằm trên đường dự đoán.
+/// </para>
+/// <para>
+/// ⚠️ Ghi chú cũ ở đây từng khẳng định "<c>ai_service.proto</c> chỉ khai bốn RPC, KHÔNG có RPC
+/// nào cho feedback, nên đây là ràng buộc THẬT". Điều đó KHÔNG CÒN ĐÚNG — proto nay đã có
+/// <c>rpc SubmitFeedback</c>. Bản hiện thực là <c>FallbackAiPrescriptionFeedbackClient</c>
+/// (gRPC primary → HTTP fallback), cùng khuôn với Predict/Prescribe.
 /// </para>
 /// <para>
 /// Vì sao vòng phản hồi đáng có: prescription được AI chấp nhận sẽ thành ví dụ few-shot cho các ca

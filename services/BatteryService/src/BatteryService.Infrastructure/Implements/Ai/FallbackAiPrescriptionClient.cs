@@ -34,12 +34,27 @@ public class FallbackAiPrescriptionClient : IAiPrescriptionClient
         IReadOnlyList<double[]> readings,
         bool enrich = true,
         AiPackConfig? packConfig = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AiPrescriptionContext? context = null,
+        bool agentic = false)
     {
         try
         {
+            // enrich=true chạy RAG + LLM nên mất vài giây — deadline 5s của Predict là quá ngắn.
+            // Bản HTTP đã nới lên Math.Max(30, TimeoutSeconds) từ lâu (xem ManageDependencyInjection)
+            // nhưng đường gRPC thì chưa, nên MỌI prescribe enrich=true đều DeadlineExceeded sau 5s
+            // rồi mới fallback sang HTTP: tốn thêm 5 giây mỗi lần, và log trông như AI đang hỏng
+            // trong khi nó chỉ đang làm việc bình thường.
+            //
+            // Giữ 5s cho enrich=false: đường rule-based chạy <100ms, deadline rộng ở đó chỉ làm
+            // chậm việc phát hiện AI thật sự treo.
+            var prescribeTimeout = enrich
+                ? Math.Max(30, _options.TimeoutSeconds)
+                : _options.TimeoutSeconds;
+
             return await _grpc.PrescribeAsync(
-                batteryId, readings, enrich, packConfig, _options.TimeoutSeconds, cancellationToken);
+                batteryId, readings, enrich, packConfig, prescribeTimeout, cancellationToken,
+                context, agentic);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.InvalidArgument)
         {
@@ -58,7 +73,8 @@ public class FallbackAiPrescriptionClient : IAiPrescriptionClient
 
         try
         {
-            return await _http.PrescribeAsync(batteryId, readings, enrich, packConfig, cancellationToken);
+            return await _http.PrescribeAsync(
+                batteryId, readings, enrich, packConfig, cancellationToken, context, agentic);
         }
         catch (Exception ex)
         {

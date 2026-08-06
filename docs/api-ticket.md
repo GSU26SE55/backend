@@ -2501,7 +2501,13 @@ Base path: `/api/admin/tickets`
 
 ### `POST /api/admin/tickets/{id}/re-verify`
 
-**Mục đích:** Kích hoạt AI kiểm tra lại tính hợp lệ của 1 ticket. **Chỉ áp dụng cho ticket tạo tay** đang ở `aiVerifyStatus ∈ {Skipped, Pending}`.
+**Mục đích:** Kích hoạt AI kiểm tra lại tính hợp lệ của 1 ticket — phát hiện ticket spam / trùng lặp.
+**Chỉ áp dụng cho ticket do Customer tự tạo** (`origin = ManualByCustomer` = `1`) đang ở
+`aiVerifyStatus ∈ {Pending, Skipped}`.
+
+**Cách chạy:** handler reset `aiVerifyStatus` về `Pending`, xoá kết quả cũ
+(`aiVerifyScore`, `aiVerifyReason`, `suspectedDuplicateOfTicketId`, `duplicateReason`), rồi gọi AI
+**đồng bộ ngay trong request** — không qua event, vì ticket đã tồn tại nên không có race.
 
 **Auth:** Bắt buộc — **chỉ role `Manager`**.
 
@@ -2509,9 +2515,25 @@ Base path: `/api/admin/tickets`
 
 **Request body:** Không có.
 
-**Response thành công `200`:** `TicketActionResponse` — sau đó đọc lại `aiVerifyStatus`/`aiVerifyScore`/`aiVerifyReason` trên ticket detail.
+**Response thành công `200`:** `TicketActionResponse` (`data`: `id`, `ticketId`, `code`, `status`),
+`message` = `"Đã kiểm tra lại bằng AI."` — sau đó đọc lại
+`aiVerifyStatus` / `aiVerifyScore` / `aiVerifyReason` trên ticket detail.
 
-**Lỗi thường gặp:** `401` · `403` (không phải Manager) · `404` (không tìm thấy ticket).
+**Lỗi thường gặp** (✅ = đã kiểm chứng bằng request thật trên môi trường Docker, 2026-08-06):
+
+| Mã | Khi nào | `message` | |
+|---|---|---|---|
+| `401` | Chưa đăng nhập | — | |
+| `403` | Không phải Manager | — | |
+| `404` | Không tìm thấy ticket hoặc đã soft-delete | `"Không tìm thấy ticket."` | |
+| `400` | `origin ≠ ManualByCustomer` — ticket auto từ alert / Staff tạo / hệ thống tạo | `"Chỉ ticket do khách hàng tạo mới có AI kiểm tra."` | ✅ |
+| `400` | `aiVerifyStatus` đã là `Legitimate` hoặc `Suspicious` | `"Ticket đã được AI đánh giá — không cần kiểm tra lại."` | ✅ |
+| `409` | Ticket đã đóng — chặn bởi `ClosedTicketMutationBehavior` **trước khi** vào handler | `"Ticket đã đóng nên không thể thay đổi."` | ✅ |
+
+> ⚠️ Hai nhánh `400` ở trên **không** được ghi trong tài liệu cũ. Client chỉ bắt `404` sẽ hiển thị sai
+> nguyên nhân cho Manager: nút "kiểm tra lại" trông như hỏng, trong khi thực ra ticket không đủ điều kiện.
+
+> ℹ️ Muốn biết ticket nào gọi được: `origin = 1` **và** `aiVerifyStatus ∈ {1, 4}` **và** ticket chưa đóng.
 
 ---
 

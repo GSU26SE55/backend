@@ -80,6 +80,23 @@ public class SohPredictionBackgroundService : BackgroundService
         var uow = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
         var aiClient = scope.ServiceProvider.GetRequiredService<IAiPredictionClient>();
         var prescriptionClient = scope.ServiceProvider.GetRequiredService<IAiPrescriptionClient>();
+        var healthClient = scope.ServiceProvider.GetRequiredService<IAiHealthClient>();
+
+        // Đọc soc_mode của TỪNG bộ artifact từ chính AI, thay vì suy ra từ chemistry.
+        // soc_mode là thuộc tính của BỘ TRỌNG SỐ: mỗi bộ được train với một định nghĩa
+        // soc_percent khác nhau, và gửi sai định nghĩa KHÔNG bị AI từ chối — nó chỉ dịch
+        // SOH đi. Suy từ chemistry sẽ hỏng lặng lẽ đúng vào ngày một bộ được retrain với
+        // định nghĩa kia. Gọi 1 lần mỗi lượt; client tự cache 5 phút.
+        var aiHealth = await healthClient.GetHealthAsync(ct);
+        if (aiHealth is not null && !aiHealth.LfpLoaded)
+        {
+            // Không chặn lượt chạy: pin NMC/NCA vẫn dự đoán bình thường. Nhưng phải nói ra,
+            // vì mọi pin LiFePO4 sẽ fail ở tầng inference chứ không phải ở đây.
+            _logger.LogWarning(
+                "AI chưa nạp bộ trọng số LFP (lfp_model_version={Version}) — mọi pin LiFePO4 "
+                + "sẽ bị AI từ chối ở tầng inference cho tới khi artifact có mặt.",
+                aiHealth.LfpModelVersion);
+        }
 
         var assets = await uow.BatteryAssets
             .GetAllAsync()
@@ -130,6 +147,7 @@ public class SohPredictionBackgroundService : BackgroundService
 
                 var scanned = recentDesc.OrderBy(r => r.Time).ToList(); // tăng dần theo Time
                 var packConfig = BuildPackConfig(asset.NominalVoltage, asset.NominalCapacityAh, asset.Chemistry);
+                var allowDerived = AllowDerivedColumns(aiHealth?.SocModeFor(packConfig.Chemistry), packConfig.Chemistry);
 
                 // Lọc theo ĐÚNG dải AI chấp nhận, rồi giữ MinReadings mẫu hợp lệ MỚI NHẤT.
                 //
@@ -141,7 +159,7 @@ public class SohPredictionBackgroundService : BackgroundService
                 // Cột `time` ở đây chỉ là chỗ giữ chỗ (0): giá trị thật tính sau khi chốt cửa sổ,
                 // và AI không kiểm dải cho `time`.
                 var checkRows = scanned
-                    .Select(r => r.CycleCount.HasValue
+                    .Select(r => allowDerived && r.CycleCount.HasValue
                         ? new[]
                         {
                             (double)r.Voltage, (double)r.Current, (double)r.Temperature,
@@ -187,8 +205,24 @@ public class SohPredictionBackgroundService : BackgroundService
                     .Select(i => scanned[i])
                     .ToList();
 
+                // Bộ artifact soc_mode="cycle" TỪ CHỐI THẲNG payload 4 cột — nó cần SOC thật
+                // của cả chu kỳ xả, thứ không thể ước lượng từ 30 mẫu. Thiếu cycle_count là
+                // cầm chắc bị từ chối, nên gọi đi chỉ tốn một lượt gRPC + một lượt HTTP
+                // fallback rồi vẫn về tay không. Dừng sớm và nói rõ nguyên nhân là dữ liệu
+                // cảm biến thiếu cột, chứ không phải "AI hỏng".
+                if (allowDerived && !window.All(r => r.CycleCount.HasValue))
+                {
+                    _logger.LogWarning(
+                        "Data quality: asset {AssetId} ({Serial}) thiếu cycle_count ở ít nhất 1 "
+                        + "trong {Window} mẫu, nhưng bộ artifact cho chemistry={Chemistry} đòi "
+                        + "payload 6 cột (soc_mode=cycle) — bỏ qua lượt này thay vì gọi AI để bị từ chối.",
+                        asset.Id, asset.SerialNumber, AiOptions.WindowSize, packConfig.Chemistry);
+                    degraded++;
+                    continue;
+                }
+
                 // Dựng dòng SAU khi chốt cửa sổ ⇒ cột `time` bắt đầu từ 0 đúng như hợp đồng.
-                var readings = BuildReadings(window);
+                var readings = BuildReadings(window, allowDerived);
 
                 var result = await aiClient.PredictAsync(asset.Id.ToString(), readings, packConfig, ct);
                 if (result is null)
@@ -209,7 +243,39 @@ public class SohPredictionBackgroundService : BackgroundService
                     InputWindowEndUtc = windowEnd,
                     PredictedAt = now,
                     LatencyMs = result.LatencyMs,
+                    // Nguyên văn response AI. Cột này có từ migration đầu tiên nhưng chưa
+                    // bao giờ được set, nên ~26 field AI trả về (health_stage,
+                    // stage_probabilities, is_borderline, soh_trend, soh_trajectory,
+                    // warnings, feature_summary, is_temperature_ood, …) bị mất ngay tại
+                    // ranh giới bridge và không cách nào lấy lại.
+                    RawResponse = result.RawResponse,
+                    // Rút ra cột riêng để dashboard/báo cáo không phải đào jsonb.
+                    // RulCyclesEstimate và AiPriority trước đây được PARSE ở cả hai client
+                    // rồi vứt ngay — không lưu, không lộ ra đâu cả.
+                    HealthStage = result.HealthStage,
+                    StageConfidence = result.StageConfidence,
+                    IsBorderline = result.IsBorderline,
+                    SohStd = result.SohStd,
+                    RulCyclesEstimate = result.RulCyclesEstimate,
+                    AiPriority = result.Priority,
+                    RiskLevel = result.RiskLevel,
+                    ActionCode = result.ActionCode,
+                    SohTrend = result.SohTrend,
+                    DegradationRatePerCycle = result.DegradationRatePerCycle,
+                    CyclesToMaintenance = result.CyclesToMaintenance,
+                    IsTemperatureOod = result.IsTemperatureOod,
                 });
+
+                if (result.IsTemperatureOod)
+                {
+                    // Model đang ngoại suy ngoài miền nhiệt đã train. Prediction vẫn trả về
+                    // và trông hoàn toàn bình thường — không nói ra thì không ai biết con số
+                    // này kém tin cậy vì lý do môi trường chứ không phải vì pin.
+                    _logger.LogWarning(
+                        "Asset {AssetId} ({Serial}): nhiệt độ cửa sổ ngoài miền huấn luyện — "
+                        + "SOH {Soh}% là kết quả NGOẠI SUY, độ tin cậy thấp hơn bình thường.",
+                        asset.Id, asset.SerialNumber, result.SohPercent);
+                }
 
                 // 2. Lưu AnomalyClassification (bằng chứng model chạy + feedback loop retrain).
                 await uow.AnomalyClassifications.AddAsync(new AnomalyClassification
@@ -243,8 +309,14 @@ public class SohPredictionBackgroundService : BackgroundService
                     {
                         if (!_options.PrescriptionEnabled)
                             return null;
+                        // Ngữ cảnh lịch sử — AI nhận ba field này từ lâu nhưng bridge chưa
+                        // bao giờ gửi, nên LLM luôn kê đơn cho một viên pin "không quá khứ".
+                        var prescribeContext = await BuildPrescriptionContextAsync(uow, asset.Id, window, token);
                         return await prescriptionClient.PrescribeAsync(
-                            asset.Id.ToString(), readings, enrich: true, packConfig, token);
+                            asset.Id.ToString(), readings, enrich: true, packConfig, token,
+                            // agentic=false: luồng auto-ticket không bật chain 2 lượt LLM.
+                            // Nó dành cho thao tác thủ công của kỹ thuật viên (xem C7).
+                            context: prescribeContext, agentic: false);
                     };
 
                     if (await RaiseSohAlertAsync(uow, asset.Id, asset.CustomerId, asset.SiteId,
@@ -302,12 +374,47 @@ public class SohPredictionBackgroundService : BackgroundService
     /// phải giữ, không phải để "phòng hờ".
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<double[]> BuildReadings(IReadOnlyList<SensorReading> window)
+    /// <summary>
+    /// Có được phép gửi 2 cột suy dẫn (<c>cycle_count</c>, <c>soc_percent</c>) hay không.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>soc_percent</c> mà BE có là SOC THẬT của pin — tính trên toàn bộ lịch sử sạc/xả,
+    /// tức "scope theo chu kỳ". Chỉ bộ artifact nào được train với <c>soc_mode="cycle"</c>
+    /// mới hiểu đúng con số đó. Bộ train với <c>soc_mode="window"</c> lại chờ SOC
+    /// window-local (~100% ở hàng ĐẦU của đúng 30 hàng này) — đưa SOC thật vào là ngoài
+    /// phân bố huấn luyện.
+    /// </para>
+    /// <para>
+    /// Và AI KHÔNG kiểm <c>soc_percent</c>: hợp đồng ghi rõ "used AS-IS, no validation —
+    /// a wrong soc_percent is a SILENT failure". Không có exception, không có cảnh báo,
+    /// chỉ có SOH lệch đi. Nên đây là chỗ phải quyết định đúng, không phải chỗ để đoán.
+    /// </para>
+    /// <para>
+    /// Khi <paramref name="socMode"/> là <c>null</c> (không gọi được Health) thì lùi về suy
+    /// luận theo chemistry: LFP giữ 6 cột (bộ đó train <c>soc_mode="cycle"</c> và TỪ CHỐI
+    /// thẳng payload 4 cột, nên hạ xuống 4 sẽ làm mọi pin LFP mất dự đoán), còn lại dùng
+    /// 4 cột — đường luôn an toàn vì AI tự tính SOC window-local đúng như lúc train.
+    /// </para>
+    /// </remarks>
+    private static bool AllowDerivedColumns(string? socMode, string? chemistry) => socMode switch
+    {
+        "cycle" => true,
+        // "window" và "unknown" đều KHÔNG được gửi SOC thật. "unknown" nghĩa là bộ artifact
+        // khai một giá trị build này không hiểu — đoán bừa ở đây là đúng kiểu lỗi im lặng.
+        "window" or "unknown" => false,
+        _ => string.Equals(chemistry, "LFP", StringComparison.OrdinalIgnoreCase),
+    };
+
+    private static IReadOnlyList<double[]> BuildReadings(
+        IReadOnlyList<SensorReading> window, bool allowDerived)
     {
         var t0 = window[0].Time;
 
         // SocPercent không nullable nên luôn có; chỉ CycleCount mới cần kiểm.
-        var includeDerived = window.All(r => r.CycleCount.HasValue);
+        // allowDerived là cổng thứ hai: đủ dữ liệu vẫn chưa đủ, bộ artifact phải hiểu
+        // đúng định nghĩa soc_percent thì mới được gửi (xem AllowDerivedColumns).
+        var includeDerived = allowDerived && window.All(r => r.CycleCount.HasValue);
 
         var rows = new List<double[]>(window.Count);
         foreach (var r in window)
@@ -355,6 +462,63 @@ public class SohPredictionBackgroundService : BackgroundService
         return new AiPackConfig(nSeries, aiChemistry, (double)nominalCapacityAh);
     }
 
+    /// <summary>
+    /// Dựng ngữ cảnh lịch sử pin cho <c>Prescribe(enrich=true)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nguồn dữ liệu là ALERT ĐÃ RESOLVE của chính BatteryService, không phải ticket của
+    /// TicketService: BatteryService không có client sang service đó, và thêm một phụ thuộc
+    /// cross-service chỉ để lấy văn bản mô tả là cái giá quá đắt. Alert đã resolve chính là
+    /// bản ghi "lần cuối có người đụng vào pin này" mà service này sở hữu.
+    /// </para>
+    /// <para>
+    /// Thứ tự trả về là CŨ → MỚI. Bắt buộc: AI chỉ lấy 5 phần tử CUỐI làm context, nên gửi
+    /// ngược chiều đồng nghĩa đưa cho LLM 5 sự kiện xa nhất thay vì gần nhất — sai lệch mà
+    /// không có lỗi nào báo ra.
+    /// </para>
+    /// <para>
+    /// Best-effort: lỗi truy vấn ở đây KHÔNG được làm hỏng prescription. Thiếu ngữ cảnh chỉ
+    /// làm lời khuyên kém sát, còn ném lỗi thì mất luôn cả prescription.
+    /// </para>
+    /// </remarks>
+    private async Task<AiPrescriptionContext> BuildPrescriptionContextAsync(
+        IBatteryUnitOfWork uow, Guid assetId, IReadOnlyList<SensorReading> window, CancellationToken ct)
+    {
+        try
+        {
+            // Tuổi pin = cycle_count của mẫu MỚI NHẤT trong cửa sổ (window tăng dần theo Time).
+            var ageCycles = window[^1].CycleCount;
+
+            var resolved = await uow.Alerts.GetAllAsync()
+                .AsNoTracking()
+                .Where(a => !a.IsDeleted && a.BatteryAssetId == assetId && a.ResolvedAt != null)
+                .OrderByDescending(a => a.ResolvedAt)
+                .Take(5)                       // AI chỉ dùng 5 phần tử cuối — lấy dư là phí
+                .Select(a => new { a.ResolvedAt, a.AnomalyType, a.Severity })
+                .ToListAsync(ct);
+
+            var history = resolved
+                .OrderBy(a => a.ResolvedAt)    // đảo lại thành CŨ → MỚI đúng hợp đồng AI
+                .Select(a =>
+                    $"{a.ResolvedAt!.Value:yyyy-MM-dd}: {a.AnomalyType} ({a.Severity}) — đã xử lý")
+                .ToList();
+
+            var lastMaintenance = resolved.Count > 0
+                ? resolved.Max(a => a.ResolvedAt)!.Value.ToString("yyyy-MM-dd")
+                : null;
+
+            return new AiPrescriptionContext(ageCycles, lastMaintenance, history);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Không dựng được ngữ cảnh lịch sử cho asset {AssetId} — prescribe không ngữ cảnh.",
+                assetId);
+            return AiPrescriptionContext.Empty;
+        }
+    }
+
     /// <summary>Ghép prescription text (mô tả + các bước + PPE) để đổ vào ticket Description.</summary>
     private static string? BuildPrescriptionText(AiPrescriptionResult? presc)
     {
@@ -365,6 +529,14 @@ public class SohPredictionBackgroundService : BackgroundService
             text += "\nSteps:\n" + string.Join("\n", presc.ActionSteps.Select(s => "- " + s));
         if (presc.PpeRequired.Count > 0)
             text += "\nPPE: " + string.Join(", ", presc.PpeRequired);
+        // AI trả sẵn điều kiện nên escalate; trước đây bridge bỏ luôn nên Staff không có
+        // mốc nào để biết khi nào phải nâng cấp xử lý.
+        if (presc.EscalationConditions.Count > 0)
+            text += "\nEscalate khi:\n" + string.Join("\n", presc.EscalationConditions.Select(s => "- " + s));
+        // Nội dung dưới đây KHÔNG do LLM sinh — nó đã bị safety gate chặn và thay bằng bản
+        // rule-based. Không nói ra thì người đọc tưởng đây là khuyến nghị đầy đủ của AI.
+        if (presc.Blocked)
+            text += "\n⚠ Nội dung LLM bị chặn bởi safety gate — đây là bản rule-based thay thế.";
         if (presc.HumanVerificationRequired)
             text += "\n⚠ Human verification required.";
         return text;

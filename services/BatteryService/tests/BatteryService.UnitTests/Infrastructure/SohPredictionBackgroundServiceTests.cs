@@ -78,7 +78,7 @@ public class SohPredictionBackgroundServiceTests
         harness.Prescription.Verify(
             c => c.PrescribeAsync(
                 It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()),
+                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()),
             Times.Never);
         harness.Uow.Alerts.Verify(r => r.AddAsync(It.IsAny<Alert>()), Times.Never);
     }
@@ -149,7 +149,7 @@ public class SohPredictionBackgroundServiceTests
         harness.Prescription.Verify(
             c => c.PrescribeAsync(
                 It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()),
+                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()),
             Times.Once);
         harness.Outbox.Count(m => m.Type == nameof(BatteryAnomalyDetectedEvent)).Should().Be(1);
         harness.Outbox.Count(m => m.Type == nameof(BatteryAnomalyDetectedV2Event)).Should().Be(1);
@@ -310,26 +310,54 @@ public class SohPredictionBackgroundServiceTests
     }
 
     [Fact]
-    public async Task Tick_AnyReadingMissingCycleCount_FallsBackToFourColumns()
+    public async Task Tick_MissingCycleCount_OnWindowModeArtifact_FallsBackToFourColumns()
     {
         // Hợp đồng AI đòi cycle/soc "tất cả hoặc không". Gửi cửa sổ nửa nọ nửa kia sẽ bị từ chối
         // NGUYÊN KHỐI — đúng cái vòng câm lặng mà GH-762 vừa gỡ. CycleCount là nullable và thực tế
         // có mẫu thiếu, nên nhánh 4 cột là đường chạy thật chứ không phải "phòng hờ".
+        //
+        // Với bộ soc_mode="window", 4 cột LUÔN hợp lệ: AI tự tính SOC window-local đúng như
+        // lúc train. Đây là nhánh giữ nguyên hành vi cũ.
         var assetId = Guid.NewGuid();
         var t0 = DateTime.UtcNow.AddMinutes(-10);
-        var harness = Harness.ForReadings(
+        var harness = Harness.ForReadingsWithHealth(
             assetId,
             Window(assetId, t0, AiOptions.WindowSize, (i, r) =>
             {
                 r.CycleCount = i == 7 ? null : 150 + i;   // đúng MỘT mẫu thiếu cycle
                 r.SocPercent = 50m;
-            }));
+            }),
+            Harness.DefaultHealth(lfpSocMode: "window"));
 
         await harness.RunTickAsync();
 
         harness.LastReadingsSentToAi.Should().NotBeNull();
         harness.LastReadingsSentToAi!.Should().HaveCount(AiOptions.WindowSize);
         harness.LastReadingsSentToAi!.Should().OnlyContain(r => r.Length == 4);
+    }
+
+    [Fact]
+    public async Task Tick_MissingCycleCount_OnCycleModeArtifact_SkipsWithoutCallingAi()
+    {
+        // Bộ soc_mode="cycle" TỪ CHỐI THẲNG payload 4 cột — quan sát được trong log thật:
+        //   "LFP artifacts were trained with soc_mode='cycle' ... but this payload has 4 columns"
+        // Nên hạ xuống 4 cột ở đây là cầm chắc bị từ chối, chỉ tốn một lượt gRPC cộng một lượt
+        // HTTP fallback rồi vẫn về tay không. Phải dừng TRƯỚC khi gọi.
+        var assetId = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var harness = Harness.ForReadingsWithHealth(
+            assetId,
+            Window(assetId, t0, AiOptions.WindowSize, (i, r) =>
+            {
+                r.CycleCount = i == 7 ? null : 150 + i;
+                r.SocPercent = 50m;
+            }),
+            Harness.DefaultHealth());   // lfpSocMode = "cycle"
+
+        await harness.RunTickAsync();
+
+        harness.LastReadingsSentToAi.Should().BeNull("không được gọi AI khi chắc chắn bị từ chối");
+        harness.Predictions.Should().BeEmpty();
     }
 
     [Fact]
@@ -385,7 +413,7 @@ public class SohPredictionBackgroundServiceTests
         harness.Prescription
             .Setup(c => c.PrescribeAsync(
                 It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ReturnsAsync(new AiPrescriptionResult(
                 Prescription: "Kiểm tra cell 3",
                 ActionSteps: new[] { "Đo điện áp từng cell" },
@@ -503,6 +531,11 @@ public class SohPredictionBackgroundServiceTests
         Current = -1.2m,
         Temperature = 31.0m,
         SocPercent = 40m,
+        // Như AssetReading: asset của harness là LiFePO4, mà bộ LFP (soc_mode="cycle") từ
+        // chối payload 4 cột. Cửa sổ LFP thiếu cycle_count không dự đoán được ngoài thực tế,
+        // nên để null ở đây là dựng một tình huống không tồn tại. Test nào cần thiếu
+        // cycle_count thì tự ghi đè qua tham số `mutate` của Window().
+        CycleCount = 150,
         SourceType = SensorReadingSourceTypeEnum.Bms,
     };
 
@@ -552,9 +585,18 @@ public class SohPredictionBackgroundServiceTests
         public static Harness ForReadings(Guid assetId, SensorReading[] readings, int minReadings)
             => Build(assetId, readings, Array.Empty<Alert>(), minReadings);
 
+        /// <summary>
+        /// Bản cho phép chỉ định soc_mode mà AI khai — thứ quyết định gửi 4 hay 6 cột.
+        /// Cần vì hai bộ artifact có hợp đồng KHÁC NHAU cho cùng một cửa sổ thiếu cycle_count.
+        /// </summary>
+        public static Harness ForReadingsWithHealth(
+            Guid assetId, SensorReading[] readings, AiHealthResult? health)
+            => Build(assetId, readings, Array.Empty<Alert>(), AiOptions.WindowSize, health);
+
         private static Harness Build(
             Guid assetId, SensorReading[]? readings, Alert[] existingAlerts,
-            int minReadings = AiOptions.WindowSize)
+            int minReadings = AiOptions.WindowSize,
+            AiHealthResult? health = null)
         {
             var t0 = DateTime.UtcNow.AddMinutes(-5);
             var asset = new BatteryAsset
@@ -604,13 +646,22 @@ public class SohPredictionBackgroundServiceTests
             prescription
                 .Setup(c => c.PrescribeAsync(
                     It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-                    It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
                 .ReturnsAsync((AiPrescriptionResult?)null);
+
+            // Health mock khớp production: bộ NASA/NMC train với soc_mode="window", bộ LFP
+            // với soc_mode="cycle". Asset trong harness là LiFePO4 ⇒ vẫn gửi 6 cột như
+            // trước, nên mọi khẳng định sẵn có về hình dạng payload không đổi nghĩa.
+            var healthClient = new Mock<IAiHealthClient>();
+            healthClient
+                .Setup(c => c.GetHealthAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(health ?? DefaultHealth());
 
             var provider = new Mock<IServiceProvider>();
             provider.Setup(p => p.GetService(typeof(IBatteryUnitOfWork))).Returns(uow.Build());
             provider.Setup(p => p.GetService(typeof(IAiPredictionClient))).Returns(prediction.Object);
             provider.Setup(p => p.GetService(typeof(IAiPrescriptionClient))).Returns(prescription.Object);
+            provider.Setup(p => p.GetService(typeof(IAiHealthClient))).Returns(healthClient.Object);
 
             var scope = new Mock<IServiceScope>();
             scope.SetupGet(s => s.ServiceProvider).Returns(provider.Object);
@@ -628,6 +679,25 @@ public class SohPredictionBackgroundServiceTests
                 scopeFactory.Object);
             return harness;
         }
+
+        /// <summary>
+        /// Health mặc định — phản ánh đúng bộ artifact đang chạy: NASA/NMC là
+        /// <c>soc_mode="window"</c>, LFP là <c>"cycle"</c>.
+        /// </summary>
+        public static AiHealthResult DefaultHealth(
+            string socMode = "window", string lfpSocMode = "cycle", bool lfpLoaded = true)
+            => new(
+                Status: "ok",
+                ModelVersion: "1.6",
+                ScalerLoaded: true,
+                MambaLoaded: true,
+                IsolationForestLoaded: true,
+                LfpLoaded: lfpLoaded,
+                LfpModelVersion: "2.0-lfp",
+                SocMode: socMode,
+                LfpSocMode: lfpSocMode,
+                LongLoaded: false,
+                LongModelVersion: "2.2");
 
         public Task RunTickAsync()
             => (Task)RunTick.Invoke(_sut, new object[] { CancellationToken.None })!;
@@ -647,6 +717,11 @@ public class SohPredictionBackgroundServiceTests
             Current = -1.2m,
             Temperature = 31.0m,
             SocPercent = 40m,
+            // Asset của harness là LiFePO4, mà bộ artifact LFP train với soc_mode="cycle" ⇒
+            // nó TỪ CHỐI THẲNG payload 4 cột. Một cửa sổ LFP thiếu cycle_count là cửa sổ
+            // KHÔNG dự đoán được trong thực tế, nên để null ở đây sẽ khiến mọi test dùng
+            // harness mặc định chạy trên một tình huống không tồn tại ngoài production.
+            CycleCount = 150,
             SourceType = SensorReadingSourceTypeEnum.Bms,
         };
 
@@ -673,10 +748,108 @@ public class SohPredictionBackgroundServiceTests
         SourceType = SensorReadingSourceTypeEnum.Bms,
     };
 
-    private static IReadOnlyList<double[]> InvokeBuildReadings(IReadOnlyList<SensorReading> window)
+    private static IReadOnlyList<double[]> InvokeBuildReadings(
+        IReadOnlyList<SensorReading> window, bool allowDerived = true)
     {
         var method = typeof(SohPredictionBackgroundService)
             .GetMethod("BuildReadings", BindingFlags.NonPublic | BindingFlags.Static)!;
-        return (IReadOnlyList<double[]>)method.Invoke(null, new object[] { window })!;
+        return (IReadOnlyList<double[]>)method.Invoke(null, new object[] { window, allowDerived })!;
+    }
+
+    // ── Ngữ cảnh lịch sử gửi kèm Prescribe ────────────────────────────────
+
+    [Fact]
+    public async Task Tick_Prescribe_SendsBatteryHistoryContext_AndNeverAgentic()
+    {
+        // AI nhận age_cycles/last_maintenance_date/ticket_history từ lâu nhưng bridge chưa
+        // bao giờ gửi ⇒ LLM luôn kê đơn cho một viên pin "không có quá khứ".
+        var assetId = Guid.NewGuid();
+        var harness = Harness.ForFailedPrediction(assetId);
+
+        await harness.RunTickAsync();
+
+        harness.Prescription.Verify(
+            c => c.PrescribeAsync(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<double[]>>(),
+                true,
+                It.IsAny<AiPackConfig?>(),
+                It.IsAny<CancellationToken>(),
+                // Phải có ngữ cảnh, và age_cycles phải lấy từ mẫu MỚI NHẤT của cửa sổ.
+                It.Is<AiPrescriptionContext?>(x => x != null && x.AgeCycles == 150),
+                // agentic PHẢI false ở luồng auto-ticket: nó tốn thêm một lượt LLM trong
+                // cùng ngân sách giờ, mà đường này chạy tự động cho mọi pin.
+                false),
+            Times.Once);
+    }
+
+    private static bool InvokeAllowDerivedColumns(string? socMode, string? chemistry)
+    {
+        var method = typeof(SohPredictionBackgroundService)
+            .GetMethod("AllowDerivedColumns", BindingFlags.NonPublic | BindingFlags.Static)!;
+        return (bool)method.Invoke(null, new object?[] { socMode, chemistry })!;
+    }
+
+    // ── soc_percent ↔ soc_mode ────────────────────────────────────────────
+    // AI dùng soc_percent AS-IS và KHÔNG kiểm: gửi sai định nghĩa không sinh lỗi nào,
+    // nó chỉ dịch SOH đi. Nên đây là hành vi phải được khoá bằng test, không phải
+    // thứ để suy luận lúc đọc code.
+
+    [Theory]
+    [InlineData("cycle", "LFP", true)]      // bộ LFP hiểu SOC thật của pin
+    [InlineData("cycle", "NMC", true)]      // theo bộ artifact, KHÔNG theo chemistry
+    [InlineData("window", "LFP", false)]    // bộ này chờ SOC window-local ⇒ đừng gửi SOC thật
+    [InlineData("window", "NMC", false)]
+    [InlineData("unknown", "LFP", false)]   // artifact khai giá trị lạ ⇒ không đoán
+    [InlineData("unknown", "NMC", false)]
+    public void AllowDerivedColumns_FollowsSocModeOfTheArtifactSet(
+        string socMode, string chemistry, bool expected)
+        => Assert.Equal(expected, InvokeAllowDerivedColumns(socMode, chemistry));
+
+    [Theory]
+    // Không gọi được Health ⇒ lùi về suy luận theo chemistry. LFP giữ 6 cột vì bộ đó
+    // TỪ CHỐI thẳng payload 4 cột — hạ xuống 4 sẽ làm mọi pin LFP mất dự đoán.
+    [InlineData("LFP", true)]
+    // Còn lại dùng 4 cột: luôn hợp lệ, AI tự tính SOC window-local đúng như lúc train.
+    [InlineData("NMC", false)]
+    [InlineData(null, false)]
+    public void AllowDerivedColumns_WhenHealthUnknown_FallsBackToChemistry(
+        string? chemistry, bool expected)
+        => Assert.Equal(expected, InvokeAllowDerivedColumns(null, chemistry));
+
+    [Fact]
+    public void BuildReadings_WhenDerivedNotAllowed_SendsFourColumns()
+    {
+        var t0 = DateTime.UtcNow;
+        var window = Enumerable.Range(0, AiOptions.WindowSize)
+            .Select(i =>
+            {
+                var r = MakeReading(t0.AddSeconds(10 * i), 3.3m, -1.5m, 25m);
+                r.CycleCount = 42;   // dữ liệu ĐỦ, nhưng bộ artifact không hiểu định nghĩa
+                return r;
+            })
+            .ToList();
+
+        var rows = InvokeBuildReadings(window, allowDerived: false);
+
+        Assert.All(rows, r => Assert.Equal(4, r.Length));
+    }
+
+    [Fact]
+    public void BuildReadings_WhenDerivedAllowed_SendsSixColumns()
+    {
+        var t0 = DateTime.UtcNow;
+        var window = Enumerable.Range(0, AiOptions.WindowSize)
+            .Select(i =>
+            {
+                var r = MakeReading(t0.AddSeconds(10 * i), 3.3m, -1.5m, 25m);
+                r.CycleCount = 42;
+                return r;
+            })
+            .ToList();
+
+        var rows = InvokeBuildReadings(window, allowDerived: true);
+
+        Assert.All(rows, r => Assert.Equal(6, r.Length));
     }
 }
