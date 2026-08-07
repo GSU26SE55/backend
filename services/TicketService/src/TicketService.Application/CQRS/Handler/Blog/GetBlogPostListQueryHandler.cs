@@ -27,6 +27,14 @@ public class GetBlogPostListQueryHandler : IRequestHandler<GetBlogPostListQuery,
         if (request.Origin.HasValue)
             query = query.Where(x => x.Origin == request.Origin.Value);
 
+        // Tìm theo tiêu đề / tóm tắt. ToLower() 2 vế để không phân biệt hoa thường
+        // trên Postgres (mặc định collation của Contains là case-sensitive).
+        if (!string.IsNullOrWhiteSpace(request.Q))
+        {
+            var q = request.Q.Trim().ToLower();
+            query = query.Where(x => x.Title.ToLower().Contains(q) || x.Summary.ToLower().Contains(q));
+        }
+
         // PaginationRequest đã clamp: PageNumber >= 1, PageSize trong [1, 100]
         var page = await query
             .OrderByDescending(x => x.CreatedAt)

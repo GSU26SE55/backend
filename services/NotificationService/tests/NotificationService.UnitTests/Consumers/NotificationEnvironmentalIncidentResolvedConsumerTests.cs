@@ -85,11 +85,16 @@ public class EnvironmentalIncidentResolvedConsumerTests
         var calls = new List<CreateNotificationCommand>();
         var harness = await StartHarness(CaptureMediator(calls).Object);
 
-        await harness.Bus.Publish(MakeEvent(falseAlarm: true));
+        var evt = MakeEvent(falseAlarm: true);
+        await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<EnvironmentalIncidentResolvedEvent>()).Should().BeTrue();
 
         calls.Should().ContainSingle();
-        calls[0].Title.Should().Contain("false-alarm");
+        // Tiêu đề nói bằng tiếng Việt cho người dùng, không dùng nhãn kỹ thuật "false-alarm".
+        calls[0].Title.Should().Contain("báo động nhầm");
+        // Guid không được lọt vào câu chữ hiển thị — định danh nằm ở payload.
+        calls[0].Title.Should().NotContain(evt.IncidentId.ToString());
+        calls[0].PayloadJson.Should().Contain(evt.IncidentId.ToString());
 
         await harness.Stop();
     }

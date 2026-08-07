@@ -72,6 +72,9 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             var cached = await _chatCache.GetPageAsync(request.TicketId, 1, request.PageSize, canViewInternalChats, cancellationToken);
             if (cached != null)
             {
+                // Cache dùng chung nên KHÔNG chứa IsRead — tính lại cho actor hiện tại.
+                await FillIsReadAsync(cached.Items, request.ActorUserId, cancellationToken);
+
                 return new CommonResponse<PaginationResponse<TicketChatDTO>>
                 {
                     IsSuccess = true,
@@ -187,11 +190,43 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         if (isDefaultQuery)
             await _chatCache.SetPageAsync(request.TicketId, 1, request.PageSize, canViewInternalChats, items, page.TotalItems, cancellationToken);
 
+        // IsRead điền SAU khi ghi cache: cache là shared giữa các user (key chỉ gồm
+        // ticket + page + canViewInternal), nhét read-state per-user vào đó sẽ khiến
+        // user sau đọc nhầm trạng thái của user trước.
+        await FillIsReadAsync(items, request.ActorUserId, cancellationToken);
+
         return new CommonResponse<PaginationResponse<TicketChatDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
             Data = page.WithItems(items)
         };
+    }
+
+    /// <summary>
+    /// Set <see cref="TicketChatDTO.IsRead"/> cho actor hiện tại. Tin của chính actor luôn
+    /// là "đã đọc" — BE không ghi read-receipt cho tác giả, thiếu bước này thì mọi tin mình
+    /// vừa gửi đều hiện dưới mốc "chưa đọc".
+    /// </summary>
+    private async Task FillIsReadAsync(
+        List<TicketChatDTO> items, Guid? actorUserId, CancellationToken ct)
+    {
+        if (items.Count == 0 || !actorUserId.HasValue)
+            return;
+
+        var chatIds = items
+            .Select(i => Guid.TryParse(i.Id, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToList();
+
+        var readIds = await ChatChildDataLoader.LoadReadChatIdsForUserAsync(
+            _unitOfWork, chatIds, actorUserId.Value, ct);
+
+        var actorId = actorUserId.Value.ToString();
+        foreach (var item in items)
+        {
+            item.IsRead = item.AuthorUserId == actorId
+                || (Guid.TryParse(item.Id, out var id) && readIds.Contains(id));
+        }
     }
 }
