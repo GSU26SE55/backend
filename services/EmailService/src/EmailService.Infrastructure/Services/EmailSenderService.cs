@@ -104,5 +104,78 @@ public class EmailSenderService : IEmailProvider
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException(
                 $"MailJet send failed: {(int)response.StatusCode} - {responseBody}");
+
+        // HTTP 200 KHÔNG có nghĩa là thư đã được nhận. Send API v3.1 xử lý từng message riêng và
+        // trả kết quả của từng cái trong body: "the response can contain both success and error
+        // notifications" (dev.mailjet.com/email/guides/send-api-v31). Địa chỉ sai, sender chưa
+        // xác thực, quota hết… đều rơi vào nhánh này.
+        //
+        // Trước đây chỉ xét mã HTTP nên mọi lỗi loại đó bị nuốt: log ghi "đã gửi", người dùng chờ
+        // mãi không thấy thư và không có gì để lần ra nguyên nhân.
+        EnsureAllMessagesAccepted(responseBody, to);
     }
+
+    /// <summary>
+    /// Soi từng phần tử trong <c>Messages</c> của response; chỉ cần một message không có
+    /// <c>Status = "success"</c> là ném lỗi kèm nguyên văn phần lỗi Mailjet trả về.
+    ///
+    /// Không parse được body (Mailjet đổi định dạng, trả HTML lỗi hạ tầng…) thì COI NHƯ ĐẠT: đã có
+    /// HTTP 2xx, chặn ở đây sẽ biến một thay đổi phía provider thành sự cố gửi thư hàng loạt.
+    /// Đánh đổi có chủ ý — ghi cảnh báo để còn lần ra, nhưng không chặn.
+    /// </summary>
+    private void EnsureAllMessagesAccepted(string responseBody, string to)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return;
+
+        List<string> failures;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("Messages", out var messages)
+                || messages.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            failures = [];
+
+            foreach (var message in messages.EnumerateArray())
+            {
+                var status = message.TryGetProperty("Status", out var s) ? s.GetString() : null;
+
+                // So sánh không phân biệt hoa thường: giá trị tài liệu hoá là "success", nhưng
+                // không đáng để một khác biệt hoa/thường làm chặn cả luồng gửi thư.
+                if (string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Chi tiết lỗi nằm ở mảng "Errors"; giữ nguyên văn để log còn dùng được khi
+                // đối chiếu với dashboard Mailjet.
+                var detail = message.TryGetProperty("Errors", out var errors)
+                    ? errors.GetRawText()
+                    : message.GetRawText();
+
+                failures.Add($"Status={status ?? "(thiếu)"} {detail}");
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger?.LogWarning(ex,
+                "Không đọc được response của Mailjet để kiểm tra trạng thái từng message (to={To}). " +
+                "Coi như đã gửi vì HTTP đã 2xx. Body: {Body}", to, Truncate(responseBody));
+            return;
+        }
+
+        if (failures.Count == 0)
+            return;
+
+        throw new HttpRequestException(
+            $"MailJet nhận request (HTTP 200) nhưng từ chối gửi tới {to}: {string.Join(" | ", failures)}");
+    }
+
+    private static string Truncate(string text, int max = 500)
+        => text.Length > max ? text[..max] + "…" : text;
 }

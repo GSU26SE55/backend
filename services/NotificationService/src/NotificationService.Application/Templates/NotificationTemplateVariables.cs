@@ -126,7 +126,10 @@ public static class NotificationTemplateVariables
 
             // ── Blog ──────────────────────────────────────────────────────────────────────────
             [NotificationTypeEnum.BlogGenerationCompleted] = ["blogPostId"],
-            [NotificationTypeEnum.BlogGenerationFailed] = ["blogPostId"],
+            // errorMessage = message kỹ thuật gốc từ AI/HttpClient. Body hiển thị đã được diễn
+            // giải thành câu người dùng hiểu, khoá này giữ lại để tra cứu (và cho template nào
+            // cần in chi tiết lỗi). Chỉ có ở nhánh thất bại.
+            [NotificationTypeEnum.BlogGenerationFailed] = ["blogPostId", "errorMessage"],
 
             // ── Hệ thống ──────────────────────────────────────────────────────────────────────
             // Sprint 6.4: admin gửi hàng loạt tự nhập payload, nên KHÔNG có khoá nào chắc chắn tồn
@@ -134,9 +137,15 @@ public static class NotificationTemplateVariables
             [NotificationTypeEnum.System] =
                 ["digest", "count", "from", "to", "notificationIds"],
 
-            // EnvironmentalIncidentResolved và AdminInvite cố ý vắng mặt: consumer không ghi
-            // payload nào (AdminInvite hiện chưa có consumer). Template của chúng chỉ được dùng
-            // biến Builtin.
+            // ── Môi trường ────────────────────────────────────────────────────────────────────
+            // Trước đây consumer không ghi payload nên type này cố ý vắng mặt. Nay câu hiển thị
+            // đã bỏ Guid/timestamp ISO ra khỏi Body, nên định danh chuyển xuống payload — phải
+            // khai ở đây thì người soạn template mới dùng được.
+            [NotificationTypeEnum.EnvironmentalIncidentResolved] =
+                ["incidentId", "siteId", "wasFalseAlarm", "resolvedAt"],
+
+            // AdminInvite cố ý vắng mặt: hiện chưa có consumer nào ghi payload. Template của nó
+            // chỉ được dùng biến Builtin.
         };
 
     /// <summary>

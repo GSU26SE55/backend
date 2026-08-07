@@ -17,3 +17,4 @@ public class ChatReactionActionResponse : CommonResponse<TicketChatReactionsAggr
 public class ChatMarkAsReadResponse : CommonResponse<int> { }
 public class ChatReadersResponse : CommonResponse<List<ChatReaderDTO>> { }
 public class TicketUnreadCountResponse : CommonResponse<int> { }
+public class UnreadCountByCustomerResponse : CommonResponse<List<UnreadCountByCustomerDTO>> { }

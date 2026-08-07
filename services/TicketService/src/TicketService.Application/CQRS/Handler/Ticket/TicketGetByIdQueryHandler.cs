@@ -50,6 +50,15 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             && activeParticipants.Any(p => p.UserId == request.ActorUserId.Value && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
+        // Tên staff phụ trách — lấy từ StaffAccount đã sync, để mọi role (kể cả
+        // Staff) hiển thị được tên mà không cần gọi /api/staff (Admin/Manager only).
+        var assignedStaffIds = ticket.Assignments.Select(a => a.StaffId).Distinct().ToList();
+        var staffNames = assignedStaffIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _unitOfWork.StaffAccounts.GetAllAsync().AsNoTracking()
+                .Where(s => assignedStaffIds.Contains(s.AccountId) && !s.IsDeleted)
+                .ToDictionaryAsync(s => s.AccountId, s => s.FullName, cancellationToken);
+
         var dto = new TicketDetailDTO
         {
             Id = ticket.Id.ToString(),
@@ -58,7 +67,12 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
             BatteryAssetId = ticket.BatteryAssetId == Guid.Empty ? string.Empty : ticket.BatteryAssetId.ToString(),
             CustomerId = ticket.CustomerId.ToString(),
-            Assignments = ticket.Assignments.Select(a => new TicketAssignmentDTO { StaffId = a.StaffId.ToString(), Role = a.Role }).ToList(),
+            Assignments = ticket.Assignments.Select(a => new TicketAssignmentDTO
+            {
+                StaffId = a.StaffId.ToString(),
+                Role = a.Role,
+                StaffName = staffNames.TryGetValue(a.StaffId, out var n) ? n : null,
+            }).ToList(),
             Title = ticket.Title,
             Description = ticket.Description,
             Category = ticket.Category,

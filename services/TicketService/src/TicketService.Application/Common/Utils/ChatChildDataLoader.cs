@@ -11,6 +11,36 @@ namespace TicketService.Application.Common.Utils;
 /// </summary>
 public static class ChatChildDataLoader
 {
+    /// <summary>
+    /// Tập chatId mà <paramref name="actorUserId"/> đã đọc (bảng TicketChatRead) — dùng
+    /// để set <c>TicketChatDTO.IsRead</c>, từ đó client vẽ mốc "Tin nhắn chưa đọc".
+    /// KHÔNG được nhét kết quả này vào cache trang chat: cache dùng chung giữa các user.
+    /// </summary>
+    public static async Task<HashSet<Guid>> LoadReadChatIdsForUserAsync(
+        ITicketUnitOfWork uow,
+        IReadOnlyCollection<Guid> chatIds,
+        Guid actorUserId,
+        CancellationToken ct)
+    {
+        if (chatIds.Count == 0)
+            return new();
+
+        // IsRead thuần hiển thị (vẽ mốc "chưa đọc"), KHÔNG phải authz. Repo chưa được cấu
+        // hình (một số unit test chỉ mock repo mà handler thực sự dùng) thì coi như chưa có
+        // read-receipt nào thay vì ném NullReference làm hỏng cả luồng đọc chat.
+        var source = uow.TicketChatReads?.GetAllAsync();
+        if (source is null)
+            return new();
+
+        var readIds = await source
+            .AsNoTracking()
+            .Where(r => chatIds.Contains(r.ChatId) && r.UserId == actorUserId && !r.IsDeleted)
+            .Select(r => r.ChatId)
+            .ToListAsync(ct);
+
+        return readIds.ToHashSet();
+    }
+
     public static async Task<Dictionary<Guid, List<TicketChatMentionDTO>>> LoadMentionsAsync(
         ITicketUnitOfWork uow, IReadOnlyCollection<Guid> chatIds, CancellationToken ct)
     {

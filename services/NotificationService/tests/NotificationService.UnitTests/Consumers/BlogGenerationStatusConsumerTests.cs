@@ -94,7 +94,13 @@ public class BlogGenerationStatusConsumerTests
         captured.Should().ContainSingle();
         captured[0].UserId.Should().Be(userId);
         captured[0].Type.Should().Be(NotificationTypeEnum.BlogGenerationFailed);
-        captured[0].Body.Should().Contain("thất bại");
+        captured[0].Body.Should().Contain("chưa tạo được");
+        // "DeepSeek timeout" là lỗi timeout → phải được diễn giải thành câu hướng dẫn,
+        // KHÔNG dán message kỹ thuật vào body cho người dùng đọc.
+        captured[0].Body.Should().Contain("thử tạo lại");
+        captured[0].Body.Should().NotContain("DeepSeek");
+        // Message gốc vẫn phải giữ được để tra cứu — nằm ở payload, không phải body.
+        captured[0].PayloadJson.Should().Contain("DeepSeek timeout");
 
         await harness.Stop();
     }

@@ -60,6 +60,13 @@ public class TicketChatDTO
     /// <summary>Bản dịch user hiện tại đã yêu cầu — null nếu chưa dịch.</summary>
     public ChatTranslateDTO? ActiveTranslation { get; set; }
 
+    /// <summary>
+    /// User hiện tại đã đọc tin này chưa (theo bảng TicketChatRead).
+    /// Tin do CHÍNH MÌNH gửi luôn là true — không ai phải "đọc" tin của chính mình.
+    /// Client dùng để vẽ mốc "Tin nhắn chưa đọc" và cuộn tới tin cũ nhất chưa đọc.
+    /// </summary>
+    public bool IsRead { get; set; }
+
     public bool IsDeleted { get; set; }
     public VoiceTranscriptionStatusEnum? VoiceTranscriptionStatus { get; set; }
     public string? VoiceTranscriptionError { get; set; }

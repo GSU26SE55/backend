@@ -134,11 +134,16 @@ public class AlertTicketSagaFailedConsumerTests
         await harness.Bus.Publish(MakeEvent(stage: "AlertLinkRequested"));
         (await harness.Consumed.Any<AlertTicketSagaFailedEvent>()).Should().BeTrue();
 
-        captured.Should().AllSatisfy(c =>
+        // Body của Push/InApp là câu cho người đọc nghiệp vụ: nêu hậu quả (cảnh báo chưa thành
+        // ticket) chứ KHÔNG chứa tên stage nội bộ hay reason kỹ thuật. Hai thứ đó vẫn còn
+        // nguyên trong PayloadJson (và trong template Email) để tra cứu.
+        captured.Where(c => c.Channel != NotificationChannelEnum.Email).Should().AllSatisfy(c =>
         {
-            c.Body.Should().Contain("AlertLinkRequested");
-            c.Body.Should().Contain("Asset not found");
+            c.Body.Should().Contain("không tự tạo được ticket");
+            c.Body.Should().NotContain("AlertLinkRequested");
+            c.Body.Should().NotContain("Asset not found");
         });
+        captured.Should().AllSatisfy(c => c.PayloadJson.Should().Contain("AlertLinkRequested"));
         await harness.Stop();
     }
 

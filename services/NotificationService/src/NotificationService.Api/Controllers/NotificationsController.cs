@@ -89,6 +89,52 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy chi tiết 1 notification của user hiện tại — phục vụ màn hình hộp thư.
+    /// </summary>
+    /// <remarks>
+    /// **Quyền:** chủ sở hữu notification.
+    ///
+    /// Danh sách chỉ trả theo trang; endpoint này để mở riêng một thông báo (deep link, F5 giữa
+    /// trang chi tiết, hoặc noti đã trôi khỏi trang đầu) mà không phải dò phân trang.
+    ///
+    /// Khác `GET /api/notifications`: **không** áp bộ lọc feed `Channel = InApp`. Khi client đã cầm
+    /// đúng id thì đó là yêu cầu xem một bản ghi cụ thể, kể cả record giao nhận (Push/Email/Sms).
+    ///
+    /// Chỉ đọc — KHÔNG tự đánh dấu đã đọc. Việc đó vẫn thuộc `PATCH {id}/read` và `PATCH {id}/opened`
+    /// để open-rate không bị thổi lên bởi mỗi lần tải trang.
+    ///
+    /// Notification của user khác → **404** (không leak existence).
+    /// </remarks>
+    /// <param name="id">Id notification (route).</param>
+    /// <param name="cancellationToken">Token hủy request.</param>
+    /// <response code="200">Trả chi tiết notification.</response>
+    /// <response code="400">Thiếu claim UserId trong token.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="404">Không tìm thấy notification của user hiện tại.</response>
+    /// <response code="500">Lỗi server không xử lý được (GlobalExceptionMiddleware).</response>
+    [HttpGet("{id:guid}")]
+    [Authorize]
+    [ProducesResponseType(typeof(NotificationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(NotificationResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(NotificationResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return BadRequest(new NotificationResponse
+            {
+                IsSuccess = false,
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Không xác định được user."
+            });
+
+        var result = await _mediator.Send(
+            new GetNotificationByIdQuery { Id = id, UserId = userId }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Tạo 1 notification thủ công (admin/test endpoint) — flow production chính dùng RabbitMQ consumer (BatteryAnomaly/EnvIncident/IotDeviceOffline events). Dùng cho backfill hoặc integration test.
     /// </summary>
     /// <remarks>

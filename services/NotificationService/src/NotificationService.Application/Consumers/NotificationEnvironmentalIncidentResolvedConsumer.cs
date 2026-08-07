@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -49,10 +50,32 @@ public class NotificationEnvironmentalIncidentResolvedConsumer : IConsumer<Envir
                 return;
             }
 
-            var label = evt.WasFalseAlarm ? "false-alarm" : "resolved";
-            var title = $"[ENV] Đã {label} — site {evt.SiteId}";
-            var body = $"Sự cố môi trường (IncidentId {evt.IncidentId}) đã được đánh dấu {label} lúc {evt.ResolvedAt:O}. " +
-                       $"{evt.ResolutionNote ?? string.Empty}";
+            // Bỏ Guid trần và định dạng `:O` khỏi câu hiển thị (IncidentId/SiteId không nói gì với
+            // người đọc, và 2026-08-03T14:15:00.0000000Z thì không ai đọc được).
+            // Event không mang tên site nên tiêu đề nói theo sự việc thay vì cố in SiteId ra.
+            var title = evt.WasFalseAlarm
+                ? "Sự cố môi trường: báo động nhầm"
+                : "Sự cố môi trường đã được xử lý";
+
+            var opening = evt.WasFalseAlarm
+                ? $"Sự cố môi trường đã được xác định là báo động nhầm lúc {evt.ResolvedAt:HH:mm dd/MM/yyyy}."
+                : $"Sự cố môi trường đã được xử lý xong lúc {evt.ResolvedAt:HH:mm dd/MM/yyyy}.";
+
+            var note = string.IsNullOrWhiteSpace(evt.ResolutionNote)
+                ? string.Empty
+                : $" Ghi chú: {evt.ResolutionNote}";
+
+            var body = opening + note;
+
+            // Trước đây consumer này không gửi PayloadJson nên khi đã bỏ Guid khỏi câu chữ thì
+            // không còn đường nào tra ra sự cố gốc — đưa định danh xuống đây.
+            var payload = JsonSerializer.Serialize(new
+            {
+                incidentId = evt.IncidentId,
+                siteId = evt.SiteId,
+                wasFalseAlarm = evt.WasFalseAlarm,
+                resolvedAt = evt.ResolvedAt,
+            });
 
             foreach (var userId in recipientIds)
             {
@@ -63,6 +86,7 @@ public class NotificationEnvironmentalIncidentResolvedConsumer : IConsumer<Envir
                     Channel = NotificationChannelEnum.InApp,
                     Title = title,
                     Body = body,
+                    PayloadJson = payload,
                     EntityType = "EnvironmentalIncident",
                     EntityId = evt.IncidentId
                 };

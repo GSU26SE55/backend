@@ -75,12 +75,17 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_uow, nonDeletedIds, ct);
         var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_uow, nonDeletedIds, ct);
         var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_uow, nonDeletedIds, request.ActorUserId, ct);
+        // Mốc "Tin nhắn chưa đọc" ở client cần biết từng tin đã đọc hay chưa.
+        // Tin của chính actor luôn tính là đã đọc — BE không ghi read-receipt cho tác giả.
+        var readChatIds = await ChatChildDataLoader.LoadReadChatIdsForUserAsync(
+            _uow, rawChats.Select(c => c.Id).ToList(), request.ActorUserId, ct);
 
         var items = rawChats.Select(c => new TicketChatDTO
         {
             Id = c.Id.ToString(),
             TicketId = c.TicketId.ToString(),
             AuthorUserId = c.AuthorUserId.ToString(),
+            IsRead = c.AuthorUserId == request.ActorUserId || readChatIds.Contains(c.Id),
             AuthorRole = c.AuthorRole,
             AuthorDisplayName = c.AuthorDisplayName,
             IsInternal = c.IsInternal,
