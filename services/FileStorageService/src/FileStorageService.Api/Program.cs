@@ -1,3 +1,4 @@
+using SharedInfrastructure.RateLimiting;
 using FileStorageService.Application.DependencyInjection;
 using FileStorageService.Infrastructure.DependencyInjection;
 using FileStorageService.Infrastructure.Persistence;
@@ -22,6 +23,9 @@ builder.WebHost.ConfigureKestrel(options =>
         listen => listen.Protocols = HttpProtocols.Http1);
     options.ListenAnyIP(grpcPort, listen => listen.Protocols = HttpProtocols.Http2);
 });
+
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddGrpc();
@@ -94,6 +98,8 @@ if (!app.Environment.IsEnvironment("Docker")
 
 app.UseAuthentication();
 app.UseAuthorization();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 
 app.MapControllers();
 app.MapGrpcService<FileStorageService.Api.Grpc.FileInternalGrpcService>();

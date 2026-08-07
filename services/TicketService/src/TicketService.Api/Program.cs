@@ -1,3 +1,4 @@
+using SharedInfrastructure.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
@@ -39,6 +40,9 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<AutoCloseBackgroundService>();
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+// Policy chặt hơn cho chat write — chạy chồng lên hạn mức nền.
 builder.Services.AddChatRateLimiting();
 
 var signalRBuilder = builder.Services.AddSignalR(options =>
@@ -148,7 +152,8 @@ if (!app.Environment.IsEnvironment("Docker"))
 app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 
 app.MapControllers();
 app.MapHub<TicketChatHub>("/hubs/ticket-chats").RequireAuthorization();

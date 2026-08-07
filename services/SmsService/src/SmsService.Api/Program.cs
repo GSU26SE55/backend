@@ -1,3 +1,4 @@
+using SharedInfrastructure.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
@@ -99,7 +100,12 @@ builder.Services.AddAuthorizationBuilder()
         .RequireAuthenticatedUser()
         .RequireClaim("device_code"));
 
-// ── 9. Rate limiter (60 req/phút/device) ──────────────────────────────────
+// ── 9. Rate limiter ───────────────────────────────────────────────────────
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+
+// Policy chặt hơn cho endpoint gateway của thiết bị SMS (60 req/phút/device) — chạy chồng lên hạn mức nền.
+// KHÔNG đặt OnRejected/RejectionStatusCode ở đây: xem StandardRateLimitingExtensions.
 builder.Services.AddRateLimiter(o =>
 {
     o.AddPolicy("gateway", httpContext =>
@@ -114,7 +120,6 @@ builder.Services.AddRateLimiter(o =>
                 QueueLimit = 0
             });
     });
-    o.RejectionStatusCode = 429;
 });
 
 // ── 10. Background workers (StaleReaper + Redactor) ───────────────────────
@@ -161,9 +166,11 @@ if (!app.Environment.IsEnvironment("Docker")
 }
 
 app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+// PHẢI đứng sau Authentication/Authorization. Trước đây dòng này nằm trước cả hai, nên
+// HttpContext.User còn rỗng và mọi request đều bị xếp vào bậc ẩn danh.
+app.UseStandardRateLimiter();
 
 // ── 13. Endpoints ─────────────────────────────────────────────────────────
 app.MapGet("/", () => "SMS Gateway Service is Running...");

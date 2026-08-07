@@ -139,18 +139,11 @@ public static class RateLimitingExtensions
                     });
             });
 
-            options.OnRejected = async (ctx, token) =>
-            {
-                ctx.HttpContext.Response.StatusCode = 429;
-                ctx.HttpContext.Response.ContentType = "application/json";
-                if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-                {
-                    ctx.HttpContext.Response.Headers["Retry-After"] = ((int)retryAfter.TotalSeconds).ToString();
-                }
-                await ctx.HttpContext.Response.WriteAsync(
-                    "{\"isSuccess\":false,\"statusCode\":429,\"message\":\"Quá nhiều yêu cầu. Vui lòng thử lại sau.\"}",
-                    token);
-            };
+            // OnRejected + RejectionStatusCode CỐ TÌNH không đặt ở đây.
+            // `AddRateLimiter` dùng options pattern nên mọi lần gọi đều ghi vào cùng một object:
+            // hai nơi cùng đặt OnRejected thì nơi đăng ký sau ghi đè nơi trước, và hình dạng response
+            // 429 sẽ đổi theo thứ tự đăng ký. Nơi duy nhất giữ trách nhiệm này là
+            // SharedInfrastructure.RateLimiting.StandardRateLimitingExtensions.
         });
 
         return services;
