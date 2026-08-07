@@ -1,3 +1,4 @@
+using SharedInfrastructure.RateLimiting;
 using AuthService.Api.Extensions;
 using AuthService.Infrastructure.DependencyInjection;
 using AuthService.Infrastructure.Persistence;
@@ -31,6 +32,9 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddAuthServiceInfrastructure(builder.Configuration);
 builder.Services.AddIdempotencyKey(builder.Configuration);
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+// Các policy chặt hơn theo từng endpoint nhạy cảm (login, OTP, 2FA) — chạy chồng lên hạn mức nền.
 builder.Services.AddOtpRateLimiting();
 
 // #AUTH-60: health checks chuẩn k8s — /live (liveness, app process alive),
@@ -134,12 +138,15 @@ if (!app.Environment.IsEnvironment("Docker")
 }
 
 app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
-app.UseRateLimiter();
 app.UseAuthentication();
 // #AUTH-54: chạy SAU JwtBearer authentication, TRƯỚC Authorization.
 // Nếu jti hoặc account đã bị revoke → trả 401 ngay, không cho qua Authorization.
 app.UseMiddleware<AuthService.Api.Middleware.TokenRevocationMiddleware>();
 app.UseAuthorization();
+// PHẢI đứng sau Authentication/Authorization. Trước đây dòng này nằm ngay sau UseCors, tức là
+// chạy khi HttpContext.User còn rỗng — nên các policy khai là "theo UserId" (AuthOtp,
+// TwoFactorDisable, BackupCodeRegenerate) thực tế đều rơi xuống nhánh dự phòng và gom theo IP.
+app.UseStandardRateLimiter();
 
 // Idempotency-Key middleware (sau Auth, trước MapControllers) — chống duplicate POST/PUT/PATCH
 // khi client gửi cùng header "Idempotency-Key".

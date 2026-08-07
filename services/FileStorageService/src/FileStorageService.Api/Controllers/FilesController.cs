@@ -47,7 +47,11 @@ public class FilesController : ControllerBase
     /// Cách hoạt động:
     /// - Hệ thống kiểm tra request có file hay không.
     /// - File được kiểm tra theo purpose, gồm dung lượng tối đa 20 MB và danh sách phần mở rộng được phép.
-    /// - Nếu hợp lệ, file được upload vào bucket đang cấu hình.
+    /// - Nội dung file được đối chiếu với đuôi file bằng magic bytes. File khai đuôi một đằng nội dung một nẻo
+    ///   bị từ chối ngay, ví dụ ảnh HEIC của iPhone đặt tên <c>.JPEG</c> — nếu cho qua thì upload trả 201 nhưng
+    ///   trình duyệt không hiển thị được ảnh khi mở <c>publicUrl</c>.
+    /// - Nếu hợp lệ, file được upload vào bucket đang cấu hình. <c>Content-Type</c> lưu lên object storage được
+    ///   suy ra từ nội dung thật, không lấy nguyên giá trị client khai.
     /// - Tên file trong storage không giữ nguyên tên gốc; hệ thống tạo một tên mới bằng GUID để tránh trùng file.
     /// - Sau khi upload binary thành công, hệ thống tạo record <c>UploadedFile</c> trong database metadata.
     /// - Response trả về cả <c>fileId</c> và <c>objectKey</c>. Các service mới nên ưu tiên lưu <c>fileId</c>.
@@ -67,7 +71,8 @@ public class FilesController : ControllerBase
     /// - <c>publicUrl</c>: URL public nếu hệ thống có cấu hình PublicBaseUrl; ngược lại có thể là null.
     ///
     /// Các lỗi thường gặp:
-    /// - HTTP 400 nếu không gửi file, file rỗng, thiếu phần mở rộng hoặc phần mở rộng không được cho phép theo purpose.
+    /// - HTTP 400 nếu không gửi file, file rỗng, thiếu phần mở rộng, phần mở rộng không được cho phép theo purpose,
+    ///   hoặc nội dung file không khớp với phần mở rộng đã khai.
     /// - HTTP 403 nếu role hiện tại không được upload purpose yêu cầu, ví dụ Firmware không phải Admin.
     /// - HTTP 413 nếu file vượt quá 20 MB.
     /// </remarks>

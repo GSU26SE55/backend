@@ -559,4 +559,230 @@ public class KbWorkflowHandlersTests
         )), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    /// <summary>
+    /// Trạng thái ngay sau khi tạo bài viết: <c>article.Version = 0</c> nhưng đã có sẵn bản 1.0 Pending.
+    /// Direct update tính <c>nextMajor = Version + 1 = 1</c> nên rơi trúng ô 1.0 đã bị chiếm — trước đây
+    /// <c>AddAsync</c> thẳng làm Postgres nổ 23505 trên
+    /// <c>IX_kb_article_versions_article_id_major_version_minor_version</c> và API trả 500.
+    /// </summary>
+    [Fact]
+    public async Task Handle_UpdateCommand_DirectUpdateOnNeverPublishedArticle_ReusesExistingVersionRow()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            CreatedByUserId = ownerId,
+            Version = 0,
+            Status = KbArticleStatusEnum.PendingReview,
+            ReviewRequired = true,
+            PendingReviewBy = ownerId
+        };
+        var initialVersion = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 0,
+            Status = KbVersionStatusEnum.Pending,
+            Title = "Khởi tạo",
+            Content = JsonDocument.Parse("\"init\"")
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { initialVersion });
+        var uow = resultExtended.uow;
+        var kbVersions = resultExtended.kbVersions;
+
+        var handler = new UpdateKbArticleCommandHandler(uow.Object);
+        var command = new UpdateKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserId = ownerId,
+            CurrentUserRole = "Admin",
+            Title = "Updated Title",
+            Content = "Updated content.",
+            ChangeDescription = "aaaaa"
+        };
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        article.Version.Should().Be(1);
+        article.Title.Should().Be("Updated Title");
+
+        // Ghi đè lên row 1.0 có sẵn, KHÔNG chèn row mới.
+        kbVersions.Verify(x => x.AddAsync(It.IsAny<KbArticleVersion>()), Times.Never);
+        kbVersions.Verify(x => x.UpdateAsync(initialVersion), Times.Once);
+        initialVersion.Status.Should().Be(KbVersionStatusEnum.Approved);
+        initialVersion.Title.Should().Be("Updated Title");
+    }
+
+    /// <summary>
+    /// Bản Staff còn chờ duyệt ở cùng major phải bị đánh Rejected khi có cập nhật trực tiếp, nếu không
+    /// lần duyệt sau sẽ ghi đè ngược lại nội dung vừa cập nhật.
+    /// </summary>
+    [Fact]
+    public async Task Handle_UpdateCommand_DirectUpdate_RejectsSiblingPendingVersions()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            CreatedByUserId = ownerId,
+            Version = 0,
+            Status = KbArticleStatusEnum.PendingReview
+        };
+        var initialVersion = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 0,
+            Status = KbVersionStatusEnum.Pending,
+            Content = JsonDocument.Parse("\"init\"")
+        };
+        var staffDraft = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 1,
+            Status = KbVersionStatusEnum.Pending,
+            Content = JsonDocument.Parse("\"staff edit\"")
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { initialVersion, staffDraft });
+
+        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new UpdateKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserId = Guid.NewGuid(),
+            CurrentUserRole = "Manager",
+            Title = "Manager Title",
+            Content = "Manager content."
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        initialVersion.Status.Should().Be(KbVersionStatusEnum.Approved);
+        staffDraft.Status.Should().Be(KbVersionStatusEnum.Rejected);
+        staffDraft.ManagerRejectReason.Should().NotBeNullOrEmpty();
+    }
+
+    /// <summary>Rollback trên bài viết chưa từng publish cũng rơi trúng ô 1.0 đã bị chiếm.</summary>
+    [Fact]
+    public async Task Handle_RollbackCommand_OnNeverPublishedArticle_ReusesExistingVersionRow()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            Title = "Current",
+            Version = 0
+        };
+        var initialVersion = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 0,
+            Status = KbVersionStatusEnum.Pending,
+            Title = "Old Title",
+            Content = JsonDocument.Parse("\"old\"")
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { initialVersion });
+        var kbVersions = resultExtended.kbVersions;
+
+        var handler = new RollbackKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new RollbackKbArticleCommand
+        {
+            ArticleId = articleId,
+            ToVersionId = initialVersion.Id,
+            CurrentUserId = Guid.NewGuid()
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        article.Version.Should().Be(1);
+        article.Title.Should().Be("Old Title");
+        kbVersions.Verify(x => x.AddAsync(It.IsAny<KbArticleVersion>()), Times.Never);
+        kbVersions.Verify(x => x.UpdateAsync(initialVersion), Times.Once);
+        initialVersion.Status.Should().Be(KbVersionStatusEnum.Approved);
+    }
+
+    /// <summary>
+    /// Row đã soft-delete VẪN giữ chỗ vì unique index không lọc <c>is_deleted</c>. Tra cứu ô phải bỏ qua
+    /// điều kiện IsDeleted, nếu không lại INSERT trúng ô đã có và nổ 23505.
+    /// </summary>
+    [Fact]
+    public async Task Handle_UpdateCommand_DirectUpdate_RevivesSoftDeletedVersionRow()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            CreatedByUserId = ownerId,
+            Version = 0,
+            Status = KbArticleStatusEnum.Draft
+        };
+        var deletedVersion = new KbArticleVersion
+        {
+            Id = Guid.NewGuid(),
+            ArticleId = articleId,
+            MajorVersion = 1,
+            MinorVersion = 0,
+            Status = KbVersionStatusEnum.Rejected,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow,
+            Content = JsonDocument.Parse("\"deleted\"")
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(
+            kbSeed: new[] { article },
+            kbVersionSeed: new[] { deletedVersion });
+        var kbVersions = resultExtended.kbVersions;
+
+        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object);
+
+        // Act
+        var result = await handler.Handle(new UpdateKbArticleCommand
+        {
+            ArticleId = articleId,
+            CurrentUserId = ownerId,
+            CurrentUserRole = "Admin",
+            Title = "Revived",
+            Content = "Revived content."
+        }, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        kbVersions.Verify(x => x.AddAsync(It.IsAny<KbArticleVersion>()), Times.Never);
+        deletedVersion.IsDeleted.Should().BeFalse();
+        deletedVersion.DeletedAt.Should().BeNull();
+        deletedVersion.Status.Should().Be(KbVersionStatusEnum.Approved);
+        deletedVersion.Title.Should().Be("Revived");
+    }
 }

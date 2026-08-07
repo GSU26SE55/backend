@@ -63,6 +63,8 @@ public class EmailServiceFactoryWithRealRenderer : WebApplicationFactory<Program
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                // Tắt hạn mức nền — xem chú thích ở TicketApiFactory.
+                ["RateLimiting:Enabled"] = "false",
                 ["MailJet:ApiKey"] = "test-key",
                 ["MailJet:ApiSecret"] = "test-secret",
                 ["MailJet:FromEmail"] = "noreply@test.local",

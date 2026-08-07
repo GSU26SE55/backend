@@ -1,3 +1,4 @@
+using SharedInfrastructure.RateLimiting;
 using System.Threading.RateLimiting;
 using AuditAggregatorService.Infrastructure.DependencyInjection;
 using AuditAggregatorService.Infrastructure.Persistence;
@@ -27,10 +28,13 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddAuditAggregatorServiceInfrastructure(builder.Configuration);
 
-// #AUDIT-18 — rate limit "audit": Admin 200 req/min (fixed window).
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+
+// #AUDIT-18 — rate limit "audit": Admin 200 req/min (fixed window). Chạy chồng lên hạn mức nền.
+// KHÔNG đặt OnRejected/RejectionStatusCode ở đây: xem StandardRateLimitingExtensions.
 builder.Services.AddRateLimiter(options =>
 {
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddFixedWindowLimiter("audit", o =>
     {
         o.Window = TimeSpan.FromMinutes(1);
@@ -74,7 +78,8 @@ if (!app.Environment.IsEnvironment("Docker")
 app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 
 app.MapControllers();
 app.MapMetrics();

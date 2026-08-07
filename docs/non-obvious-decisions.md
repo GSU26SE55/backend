@@ -247,3 +247,75 @@ Hai thứ đi kèm khi đổi tên, quên là hỏng âm thầm:
   giữ nguyên chuỗi khoá cũ thay vì dùng `nameof`.
 - Queue mang tên cũ vẫn tồn tại trên broker sau khi deploy. Phải xoá tay
   (`rabbitmqctl delete_queue`, `rabbitmqadmin delete exchange`), nếu không message cũ nằm lại mãi.
+
+---
+
+## Hạn mức request — hai bậc theo danh tính, và bốn cái bẫy khi ráp (2026-08-07)
+
+Hạn mức nền áp cho **toàn bộ 9 service kể cả ApiGateway**, cấu hình chung ở
+`SharedInfrastructure.RateLimiting`:
+
+| Ai | Hạn mức | Gom theo |
+|----|---------|----------|
+| Chưa đăng nhập | **60 request / 30 giây** | IP client |
+| Đã đăng nhập | **500 request / 30 giây** | từng người dùng / thiết bị |
+
+Các policy chặt hơn theo endpoint (login 10/phút, OTP 5/phút, chat write, sms gateway, audit) **giữ
+nguyên** và chạy chồng lên: request phải qua được cả hai.
+
+### 1. `UseStandardRateLimiter()` phải đứng SAU `UseAuthentication()` và `UseAuthorization()`
+
+Đây không phải chuyện thẩm mỹ mà là điều kiện để phân biệt hai bậc:
+
+- `UseAuthentication` mới gán `HttpContext.User` cho JWT. Đặt limiter trước nó thì **mọi** request kể
+  cả đã đăng nhập đều rơi xuống bậc ẩn danh 60.
+- `UseAuthorization` mới xác thực scheme chỉ định riêng ở endpoint. Thiết bị IoT dùng
+  `[Authorize(AuthenticationSchemes = "ApiKey")]` nên chỉ có danh tính **sau** bước này — đặt limiter
+  trước là bóp toàn bộ thiết bị xuống 60 req/30s.
+
+AuthService và SmsService từng đặt `UseRateLimiter()` ngay sau `UseCors()`, tức trước cả hai. Hệ quả
+âm thầm: các policy khai là "theo UserId" (`AuthOtp`, `TwoFactorDisable`, `BackupCodeRegenerate`) thực
+tế **luôn** rơi xuống nhánh dự phòng và gom theo IP. Đã sửa; `RateLimiterWiringTests` đọc thẳng
+`Program.cs` của cả 9 service để chặn tái diễn.
+
+### 2. JWT hệ thống KHÔNG có claim `UserId` — claim thật là `AccountId`
+
+Gateway từng phân vùng bằng `User.FindFirst("UserId")`, luôn trả null, nên rơi xuống fallback IP:
+**mọi người dùng sau cùng một NAT/reverse proxy dùng chung một bộ đếm**. Claim đúng theo thứ tự ưu
+tiên: `AccountId` → `NameIdentifier` → `sub` → `iot:device_id` → `device_code`.
+
+### 3. Sau gateway, `RemoteIpAddress` của mọi request đều là IP container gateway
+
+Thiếu bù đắp thì hạn mức ẩn danh của từng service gom **toàn bộ** traffic chưa đăng nhập vào một bộ
+đếm. Gateway vì vậy ghi header `X-Client-Ip` cho upstream (`AddGatewayClientIpForwarding`).
+
+Đi kèm bắt buộc: gateway **tự đọc header đó** để chọn bộ đếm cho chính nó, nên phải xoá giá trị client
+gắn vào ở ngay đầu pipeline (`UseClientIpHeaderSanitizer`). Không có bước này thì đổi header mỗi
+request là mở vô số bộ đếm và hạn mức ở biên mất tác dụng hoàn toàn. Service phía sau thì TIN header
+này — giả định là chúng chỉ nhận traffic qua gateway, không expose thẳng ra ngoài.
+
+### 4. Ba nhóm bắt buộc miễn trừ
+
+- **Health check và metrics** (`/health`, `/live`, `/ready`, `/metrics`, `/swagger`). Docker
+  healthcheck gọi mỗi 10 giây và Prometheus scrape đều đặn, đều là request ẩn danh cùng một địa chỉ.
+  Tính chúng vào hạn mức nghĩa là một đợt truy cập bình thường có thể làm health check trả 429 →
+  container bị đánh dấu unhealthy → khởi động lại. Tự gây sự cố bằng chính cơ chế bảo vệ.
+- **gRPC nội bộ** (`Content-Type: application/grpc*`). `BatteryInternalService` và
+  `FileInternalGrpcService` đều không gắn `[Authorize]` và chỉ nghe trên cổng nội bộ 8081; tính vào
+  hạn mức là chúng rơi vào bậc ẩn danh và TicketService dựng một trang danh sách có thể tự làm nghẽn
+  chính nó.
+- **Integration test** — các factory set `RateLimiting:Enabled=false`, nếu không test bắn hàng loạt
+  request sẽ đỏ vì 429 chứ không phải vì logic sai.
+
+### Hai điều còn lại cần biết
+
+- **Token sai/hết hạn = ẩn danh.** Căn cứ là `User.Identity.IsAuthenticated` chứ không phải sự tồn
+  tại của header `Authorization` — nếu không, gắn một chuỗi bất kỳ là nhảy từ 60 lên 500.
+- **Ở tầng service, request bị 401 tại `UseAuthorization` KHÔNG bị tính hạn mức** (limiter đứng sau).
+  Lớp chặn cho luồng đó là gateway: route YARP không gắn authorization policy nào nên request token
+  rác vẫn đi qua limiter của gateway và bị tính ở bậc ẩn danh.
+- Mọi con số chỉnh được qua `RateLimiting__*` (đã khai trong `.env` / `.env.Docker`). Khoá cũ
+  `RateLimiting__PermitLimit` đã bỏ; đừng thêm lại `RateLimiting__WindowSeconds=10` vì nó âm thầm rút
+  cửa sổ xuống 10 giây ở mọi service.
+- Limiter là **in-memory theo từng instance**, không dùng Redis. Chạy N replica thì hạn mức thực tế
+  nhân N.
