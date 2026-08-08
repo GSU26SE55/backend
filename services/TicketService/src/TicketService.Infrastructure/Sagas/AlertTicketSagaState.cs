@@ -51,6 +51,18 @@ public class AlertTicketSagaState : SagaStateMachineInstance, ISagaVersion
     // ===== BE-AI — prescription text (V2 only, chỉ từ SohPredictionBackgroundService) =====
     public string? AiPrescription { get; set; }
 
+    /// <summary>
+    /// BE-AI structured — payload JSON của <see cref="AiSuggestionPayload"/>, forward nguyên
+    /// vẹn từ event V2 sang <c>CreateTicketFromAlertCommand</c>.
+    /// </summary>
+    /// <remarks>
+    /// Cố ý gom vào MỘT cột JSON thay vì rải 12 cột: saga state chỉ là kho tạm giữa hai chặng,
+    /// không ai truy vấn theo từng mục ở đây (nơi truy vấn là bảng <c>ticket_ai_suggestions</c>
+    /// của TicketService). Rải cột chỉ làm bảng saga phình mà không thêm khả năng nào.
+    /// Null với ticket từ threshold engine (không có AI).
+    /// </remarks>
+    public string? AiSuggestionJson { get; set; }
+
     // ===== Ticket info — set sau khi TicketCreated response =====
     public Guid? TicketId { get; set; }
     public string? TicketCode { get; set; }

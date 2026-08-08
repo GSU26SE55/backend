@@ -241,6 +241,17 @@ public static class ManageDependencyInjection
             sp.GetRequiredService<ILogger<AiTicketVerifyGrpcClient>>(),
             aiOptions.TimeoutSeconds));
 
+        // Gợi ý staff + KB — dùng chung AiServiceClient ở trên. Fail-safe: client trả null
+        // khi AI không phản hồi, endpoint trả danh sách rỗng kèm cờ AiAvailable=false.
+        services.AddScoped<IAiStaffSuggestClient>(sp => new AiStaffSuggestGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiStaffSuggestGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+        services.AddScoped<IAiKbSuggestClient>(sp => new AiKbSuggestGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiKbSuggestGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
         // GH-verify-sensor-grpc — gRPC BatteryService client (đọc sensor pin verify), nội bộ, không JWT.
         services.AddGrpcClient<BatteryService.Grpc.BatteryInternal.BatteryInternalClient>(o =>
         {

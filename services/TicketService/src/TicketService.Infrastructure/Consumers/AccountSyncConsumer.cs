@@ -44,6 +44,9 @@ public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                         AccountId = @event.AccountId,
                         Email = @event.Email,
                         FullName = @event.FullName,
+                        // Giữ lại vai trò: bảng chứa cả Staff/Manager/Admin nên không có nó thì
+                        // không tách được "danh sách kỹ thuật viên" khỏi Manager/Admin.
+                        Role = @event.Role,
                         Status = AccountStatusEnum.Active,
                         LastSyncedAt = DateTime.UtcNow
                     };
@@ -53,6 +56,7 @@ public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                 {
                     staff.Email = @event.Email;
                     staff.FullName = @event.FullName;
+                    staff.Role = @event.Role;
                     staff.Status = AccountStatusEnum.Active;
                     staff.LastSyncedAt = DateTime.UtcNow;
                     _uow.StaffAccounts.UpdateAsync(staff);

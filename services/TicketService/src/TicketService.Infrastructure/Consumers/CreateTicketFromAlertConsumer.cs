@@ -124,7 +124,22 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             Title = msg.Title,
             Description = msg.Description,
             DetectedAt = msg.DetectedAt,
-            BatterySerialNumber = msg.AssetSerialNumber
+            BatterySerialNumber = msg.AssetSerialNumber,
+            // BE-AI structured — gói lại để handler ghi `ticket_ai_suggestions`. Null với
+            // ticket từ threshold engine (không gọi AI) và với command do saga cũ publish.
+            AiPrescriptionText = msg.AiPrescription,
+            AiSuggestion = new AiSuggestionPayload(
+                ActionSteps: msg.AiActionSteps,
+                PpeRequired: msg.AiPpeRequired,
+                SopReferences: msg.AiSopReferences,
+                EscalationConditions: msg.AiEscalationConditions,
+                SafetyWarnings: msg.AiSafetyWarnings,
+                KbDocRefs: msg.AiKbDocRefs,
+                HumanVerificationRequired: msg.AiHumanVerificationRequired,
+                Blocked: msg.AiBlocked,
+                Enriched: msg.AiEnriched,
+                LlmProvider: msg.AiLlmProvider,
+                PrescriptionId: msg.AiPrescriptionId)
         };
 
         TicketService.Application.DTOs.Response.Tickets.TicketActionResponse result;

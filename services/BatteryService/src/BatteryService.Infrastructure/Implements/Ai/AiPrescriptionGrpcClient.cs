@@ -72,6 +72,13 @@ public class AiPrescriptionGrpcClient
             PrescriptionId: string.IsNullOrWhiteSpace(resp.PrescriptionId) ? null : resp.PrescriptionId,
             EscalationConditions: resp.EscalationConditions.ToList(),
             Blocked: resp.Blocked,
-            Cached: resp.Cached);
+            Cached: resp.Cached,
+            // Tài liệu AI truy hồi qua RAG. Bỏ `content` — nội dung đầy đủ không cần đi qua
+            // event/saga (nặng, và chính KB đã có). Giữ Source để đối chiếu với KB article.
+            MaintenanceDocs: MapDocs(resp.MaintenanceDocs),
+            SafetyDocs: MapDocs(resp.SafetyDocs));
     }
+
+    private static List<AiRetrievedDoc> MapDocs(IEnumerable<RetrievedDoc> docs) =>
+        docs.Select(d => new AiRetrievedDoc(d.Title, d.Source, d.RelevanceScore)).ToList();
 }

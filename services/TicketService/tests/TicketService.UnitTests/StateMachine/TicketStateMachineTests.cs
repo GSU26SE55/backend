@@ -40,6 +40,10 @@ public class TicketStateMachineTests
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.New, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
+    // Điều chuyển người phụ trách khi Staff đang làm dở — User Guide §3.9 liệt kê
+    // "Đang xử lý" trong các trạng thái hiện nút Điều chuyển.
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
     [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
@@ -185,6 +189,9 @@ public class TicketStateMachineTests
 
     [Theory]
     [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
+    // Staff không tự điều chuyển phiếu mình đang giữ sang người khác — muốn buông thì
+    // gửi Yêu cầu chuyển cấp (§3.12), quyết định là của Manager.
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Assigned)]
     [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
     public void CanTransition_StaffCannotDoManagerActions_ReturnsFalse(
         TicketStatusEnum from, TicketStatusEnum to)

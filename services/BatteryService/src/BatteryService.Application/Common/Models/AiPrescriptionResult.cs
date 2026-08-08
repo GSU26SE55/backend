@@ -1,6 +1,16 @@
 namespace BatteryService.Application.Common.Models;
 
 /// <summary>
+/// BE-AI — một tài liệu KB mà AI đã truy hồi được qua RAG khi sinh prescription.
+/// Map từ <c>RetrievedDoc</c> trong proto (maintenance_docs / safety_docs).
+/// </summary>
+/// <remarks>
+/// KHÔNG mang theo <c>content</c> — nội dung đầy đủ của tài liệu không cần đi qua
+/// event/saga (nặng và trùng lặp với chính KB). Chỉ giữ đủ để đối chiếu và hiển thị.
+/// </remarks>
+public record AiRetrievedDoc(string Title, string Source, double RelevanceScore);
+
+/// <summary>
 /// BE-AI — kết quả /prescribe/ (enrich=true) đã map về domain BE, transport-neutral.
 /// gRPC + HTTP client cùng trả type này. Đổ vào ticket khi Alert P1/P2.
 ///
@@ -13,6 +23,8 @@ namespace BatteryService.Application.Common.Models;
 ///   HumanVerificationRequired  ← human_verification_required (luôn true khi P1/blocked)
 ///   Enriched                   ← enriched (true = LLM chạy; false = rule-based fallback)
 ///   LlmProvider                ← llm_provider ("deepseek"/"gemini"/"none")
+///   MaintenanceDocs            ← maintenance_docs[] (RAG — rỗng khi enrich=false)
+///   SafetyDocs                 ← safety_docs[]      (RAG — rỗng khi enrich=false)
 /// </summary>
 public class AiPrescriptionResult
 {
@@ -28,7 +40,9 @@ public class AiPrescriptionResult
         string? PrescriptionId = null,
         IReadOnlyList<string>? EscalationConditions = null,
         bool Blocked = false,
-        bool Cached = false)
+        bool Cached = false,
+        IReadOnlyList<AiRetrievedDoc>? MaintenanceDocs = null,
+        IReadOnlyList<AiRetrievedDoc>? SafetyDocs = null)
     {
         this.EscalationConditions = EscalationConditions ?? Array.Empty<string>();
         this.Blocked = Blocked;
@@ -42,6 +56,8 @@ public class AiPrescriptionResult
         this.Enriched = Enriched;
         this.LlmProvider = LlmProvider;
         this.PrescriptionId = PrescriptionId;
+        this.MaintenanceDocs = MaintenanceDocs ?? Array.Empty<AiRetrievedDoc>();
+        this.SafetyDocs = SafetyDocs ?? Array.Empty<AiRetrievedDoc>();
     }
 
     public string Prescription { get; }
@@ -100,4 +116,25 @@ public class AiPrescriptionResult
     /// </para>
     /// </remarks>
     public string? PrescriptionId { get; }
+
+    /// <summary>
+    /// Tài liệu bảo trì mà AI truy hồi được qua RAG khi sinh prescription này.
+    /// </summary>
+    /// <remarks>
+    /// Proto có sẵn <c>maintenance_docs = 12</c> nhưng CẢ HAI client (gRPC + HTTP) đều bỏ khi
+    /// map ⇒ danh sách tài liệu AI thực sự tham chiếu chết ngay tại bridge. Đây chính là thứ
+    /// cần để gợi ý KB cho kỹ thuật viên: <c>Source</c> trỏ tới tài liệu AI đã đọc, mạnh hơn
+    /// nhiều so với đoán từ khoá từ mô tả ticket.
+    /// <para>Rỗng khi <c>enrich=false</c> (đường rule-based không chạy RAG).</para>
+    /// </remarks>
+    public IReadOnlyList<AiRetrievedDoc> MaintenanceDocs { get; }
+
+    /// <summary>
+    /// Tài liệu an toàn AI truy hồi được — xem <see cref="MaintenanceDocs"/>.
+    /// </summary>
+    /// <remarks>
+    /// Tách riêng khỏi <see cref="MaintenanceDocs"/> đúng như AI trả về: tài liệu an toàn
+    /// phải hiển thị được độc lập, không lẫn vào hướng dẫn bảo trì thông thường.
+    /// </remarks>
+    public IReadOnlyList<AiRetrievedDoc> SafetyDocs { get; }
 }

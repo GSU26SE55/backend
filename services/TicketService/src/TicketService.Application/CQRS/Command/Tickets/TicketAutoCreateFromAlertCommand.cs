@@ -1,6 +1,7 @@
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using SharedContracts.Saga.AlertTicket;
 using TicketService.Application.DTOs.Response.Tickets;
 
 namespace TicketService.Application.CQRS.Command.Tickets;
@@ -29,6 +30,19 @@ public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, 
 
     /// <summary>Serial pin — hiển thị trên FE (ticket Customer đã có, ticket auto trước đây bỏ trống).</summary>
     public string? BatterySerialNumber { get; set; }
+
+    /// <summary>
+    /// BE-AI structured — gợi ý của AI ở dạng có cấu trúc, ghi vào <c>ticket_ai_suggestions</c>.
+    /// Null với ticket từ threshold engine (không gọi AI).
+    /// </summary>
+    /// <remarks>
+    /// <c>Description</c> ở trên VẪN chứa đoạn "--- AI Prescription ---" như cũ — đây là dữ liệu
+    /// BỔ SUNG để truy vấn/hiển thị được theo từng mục, không thay thế phần text.
+    /// </remarks>
+    public AiSuggestionPayload? AiSuggestion { get; set; }
+
+    /// <summary>Mô tả tổng của prescription (bản gốc, chưa ghép chuỗi).</summary>
+    public string? AiPrescriptionText { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {

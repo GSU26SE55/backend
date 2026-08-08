@@ -85,6 +85,21 @@ public class AiPrescriptionHttpClient : IAiPrescriptionFeedbackClient
                         list.Add(item.GetString()!);
             return list;
         }
+        // Parity với gRPC: bỏ `content`, chỉ giữ title/source/relevance_score.
+        static List<AiRetrievedDoc> DocList(JsonElement e, string p)
+        {
+            var list = new List<AiRetrievedDoc>();
+            if (e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Array)
+                foreach (var item in v.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.Object)
+                        list.Add(new AiRetrievedDoc(
+                            Str(item, "title"),
+                            Str(item, "source"),
+                            item.TryGetProperty("relevance_score", out var s) && s.ValueKind == JsonValueKind.Number
+                                ? s.GetDouble()
+                                : 0d));
+            return list;
+        }
 
         return new AiPrescriptionResult(
             Prescription: Str(root, "prescription"),
@@ -99,7 +114,9 @@ public class AiPrescriptionHttpClient : IAiPrescriptionFeedbackClient
             PrescriptionId: Str(root, "prescription_id") is { Length: > 0 } id ? id : null,
             EscalationConditions: StrList(root, "escalation_conditions"),
             Blocked: Bool(root, "blocked"),
-            Cached: Bool(root, "cached"));
+            Cached: Bool(root, "cached"),
+            MaintenanceDocs: DocList(root, "maintenance_docs"),
+            SafetyDocs: DocList(root, "safety_docs"));
     }
     /// <summary>
     /// GH-778 — gửi phản hồi kỹ thuật viên về AI. Chỉ có ở đường HTTP: <c>ai_service.proto</c>
