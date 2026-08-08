@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using SharedContracts.Saga.AlertTicket;
 
@@ -52,6 +53,21 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         if (!string.IsNullOrWhiteSpace(saga.AiPrescription))
             description += $"\n\n--- AI Prescription ---\n{saga.AiPrescription}";
 
+        // BE-AI structured — mở gói để forward sang TicketService (đích: `ticket_ai_suggestions`).
+        // Best-effort: JSON hỏng KHÔNG được làm chết việc tạo ticket — mất gợi ý còn hơn mất ticket.
+        AiSuggestionPayload? ai = null;
+        if (!string.IsNullOrWhiteSpace(saga.AiSuggestionJson))
+        {
+            try
+            {
+                ai = JsonSerializer.Deserialize<AiSuggestionPayload>(saga.AiSuggestionJson);
+            }
+            catch (JsonException)
+            {
+                ai = null;
+            }
+        }
+
         var command = new CreateTicketFromAlertCommand(
             CorrelationId: saga.CorrelationId,
             AlertId: saga.AlertId,
@@ -66,7 +82,19 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             DetectedAt: saga.DetectedAt,
             AnomalyCategory: MapAnomalyTypeToCategory(saga.AnomalyType),
             Title: $"[Auto] {saga.AssetSerialNumber ?? "Battery"} - {MapAnomalyTypeToTitle(saga.AnomalyType)}",
-            Description: description
+            Description: description,
+            AiPrescription: saga.AiPrescription,
+            AiActionSteps: ai?.ActionSteps,
+            AiPpeRequired: ai?.PpeRequired,
+            AiSopReferences: ai?.SopReferences,
+            AiEscalationConditions: ai?.EscalationConditions,
+            AiSafetyWarnings: ai?.SafetyWarnings,
+            AiKbDocRefs: ai?.KbDocRefs,
+            AiHumanVerificationRequired: ai?.HumanVerificationRequired,
+            AiBlocked: ai?.Blocked,
+            AiEnriched: ai?.Enriched,
+            AiLlmProvider: ai?.LlmProvider,
+            AiPrescriptionId: ai?.PrescriptionId
         );
 
         await publishEndpoint.Publish(command);

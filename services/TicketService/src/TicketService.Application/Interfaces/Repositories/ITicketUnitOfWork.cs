@@ -24,6 +24,7 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<KnowledgeBaseArticle> KnowledgeBaseArticles { get; }
     IGenericRepository<KbArticleVersion> KbArticleVersions { get; }
     IGenericRepository<TicketKbReference> TicketKbReferences { get; }
+    IGenericRepository<TicketAiSuggestion> TicketAiSuggestions { get; }
     IGenericRepository<TicketParticipant> TicketParticipants { get; }
     IGenericRepository<TicketAssignment> TicketAssignments { get; }
     IGenericRepository<TicketChatMention> TicketChatMentions { get; }

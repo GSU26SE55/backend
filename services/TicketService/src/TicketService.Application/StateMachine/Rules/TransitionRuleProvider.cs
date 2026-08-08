@@ -124,6 +124,21 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                 new Dictionary<TicketStatusEnum, Func<Ticket, ActorRoleEnum, Guid, TransitionResult>>
                 {
                     {
+                        // Điều chuyển người phụ trách giữa lúc đang xử lý. User Guide §3.9:
+                        // "Nút Điều chuyển hiện khi phiếu đang ở trạng thái Đã gán, Đang xử lý
+                        // hoặc Đã chuyển cấp." Trước đây thiếu nhánh này nên nút hiện đúng theo
+                        // tài liệu nhưng bấm vào thì TicketReassignCommandHandler
+                        // (CanTransition → Assigned) trả 403 ở InProgress.
+                        TicketStatusEnum.Assigned,
+                        (ticket, role, userId) => new TransitionResult
+                        {
+                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
+                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
+                                ? null
+                                : "Only Managers can reassign."
+                        }
+                    },
+                    {
                         TicketStatusEnum.WaitingCustomer,
                         (ticket, role, userId) => new TransitionResult
                         {

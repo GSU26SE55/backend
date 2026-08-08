@@ -604,8 +604,7 @@ public class SohPredictionBackgroundService : BackgroundService
 
             var existingPresc = await prescribeAsync(ct);
             existing.AiPrescriptionId = existingPresc?.PrescriptionId ?? existing.AiPrescriptionId;
-            await WriteCriticalOutboxAsync(
-                uow, existing, customerId, serial, BuildPrescriptionText(existingPresc), now);
+            await WriteCriticalOutboxAsync(uow, existing, customerId, serial, existingPresc, now);
             return true;
         }
 
@@ -631,7 +630,7 @@ public class SohPredictionBackgroundService : BackgroundService
 
         var presc = await prescribeAsync(ct);
         alert.AiPrescriptionId = presc?.PrescriptionId;
-        await WriteCriticalOutboxAsync(uow, alert, customerId, serial, BuildPrescriptionText(presc), now);
+        await WriteCriticalOutboxAsync(uow, alert, customerId, serial, presc, now);
         return true;
     }
 
@@ -641,8 +640,11 @@ public class SohPredictionBackgroundService : BackgroundService
     /// </summary>
     private static async Task WriteCriticalOutboxAsync(
         IBatteryUnitOfWork uow, AlertEntity alert, Guid customerId, string serial,
-        string? prescriptionText, DateTime now)
+        AiPrescriptionResult? presc, DateTime now)
     {
+        // Text ghép chuỗi VẪN giữ: saga nối vào Description để Manager đọc nhanh, và để mô tả
+        // tiếng Việt còn token chung cho AI dò trùng ticket. Structured bên dưới là BỔ SUNG.
+        var prescriptionText = BuildPrescriptionText(presc);
         var v1 = new BatteryAnomalyDetectedEvent(
             AlertId: alert.Id,
             BatteryAssetId: alert.BatteryAssetId ?? Guid.Empty,
@@ -684,7 +686,26 @@ public class SohPredictionBackgroundService : BackgroundService
             CellVoltageDeltaMv: null,
             EnvironmentalIncidentId: null,
             AiPrescription: prescriptionText,
-            AiActionSteps: null);
+            AiActionSteps: presc?.ActionSteps,
+            // Structured — để TicketService lưu `ticket_ai_suggestions` thay vì chỉ có text
+            // lẫn trong Description. Null khi không prescribe được (best-effort, không block ticket).
+            AiPpeRequired: presc?.PpeRequired,
+            AiSopReferences: presc?.SopReferences,
+            AiEscalationConditions: presc?.EscalationConditions,
+            AiSafetyWarnings: presc?.SafetyWarnings,
+            // Gộp maintenance + safety docs, chỉ lấy Source (đường dẫn tài liệu KB).
+            AiKbDocRefs: presc is null
+                ? null
+                : presc.MaintenanceDocs.Concat(presc.SafetyDocs)
+                    .Select(d => d.Source)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct()
+                    .ToList(),
+            AiHumanVerificationRequired: presc?.HumanVerificationRequired,
+            AiBlocked: presc?.Blocked,
+            AiEnriched: presc?.Enriched,
+            AiLlmProvider: presc?.LlmProvider,
+            AiPrescriptionId: presc?.PrescriptionId);
         await uow.OutboxMessages.AddAsync(new OutboxEntity
         {
             Id = Guid.NewGuid(),

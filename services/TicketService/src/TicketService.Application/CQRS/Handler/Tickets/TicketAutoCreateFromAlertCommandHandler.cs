@@ -8,6 +8,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketEntity = TicketService.Domain.Entities.Ticket;
 
@@ -68,6 +69,8 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
 
         await _uow.Tickets.AddAsync(ticket);
 
+        await SaveAiSuggestionAsync(ticket.Id, request);
+
         await _activityLogger.LogAsync(
             ticket.Id,
             null,
@@ -98,6 +101,51 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
                 Status = ticket.Status
             }
         };
+    }
+
+    /// <summary>
+    /// Ghi gợi ý AI dạng có cấu trúc vào <c>ticket_ai_suggestions</c>.
+    /// </summary>
+    /// <remarks>
+    /// BEST-EFFORT có chủ ý: mọi lỗi ở đây đều bị nuốt. Ticket là thứ bắt buộc phải tạo được
+    /// (nó mở SLA và là đầu vào của cả quy trình xử lý); gợi ý AI chỉ là thông tin thêm.
+    /// Đánh đổi ngược lại — để một lỗi ghi gợi ý làm hỏng việc tạo ticket từ alert — là
+    /// không chấp nhận được.
+    /// <para>
+    /// Không ghi gì khi ticket đến từ threshold engine (<c>AiSuggestion == null</c>) hoặc
+    /// payload rỗng — tránh tạo hàng loạt bản ghi trắng.
+    /// </para>
+    /// </remarks>
+    private async Task SaveAiSuggestionAsync(Guid ticketId, TicketAutoCreateFromAlertCommand request)
+    {
+        var ai = request.AiSuggestion;
+        if (ai is null || ai.IsEmpty)
+            return;
+
+        try
+        {
+            await _uow.TicketAiSuggestions.AddAsync(new TicketAiSuggestion
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                Prescription = request.AiPrescriptionText ?? string.Empty,
+                ActionSteps = ai.ActionSteps?.ToList() ?? new List<string>(),
+                PpeRequired = ai.PpeRequired?.ToList() ?? new List<string>(),
+                SopReferences = ai.SopReferences?.ToList() ?? new List<string>(),
+                EscalationConditions = ai.EscalationConditions?.ToList() ?? new List<string>(),
+                SafetyWarnings = ai.SafetyWarnings?.ToList() ?? new List<string>(),
+                KbDocRefs = ai.KbDocRefs?.ToList() ?? new List<string>(),
+                HumanVerificationRequired = ai.HumanVerificationRequired ?? false,
+                Blocked = ai.Blocked ?? false,
+                Enriched = ai.Enriched ?? false,
+                LlmProvider = ai.LlmProvider ?? "none",
+                PrescriptionId = ai.PrescriptionId
+            });
+        }
+        catch (Exception)
+        {
+            // Nuốt có chủ ý — xem <remarks> ở trên.
+        }
     }
 
     /// <summary>
