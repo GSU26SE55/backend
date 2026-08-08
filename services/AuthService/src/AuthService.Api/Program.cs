@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using AuthService.Api.Extensions;
 using AuthService.Infrastructure.DependencyInjection;
 using AuthService.Infrastructure.Persistence;
@@ -9,6 +8,7 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 

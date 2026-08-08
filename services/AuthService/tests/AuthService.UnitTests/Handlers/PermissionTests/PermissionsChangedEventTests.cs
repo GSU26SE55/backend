@@ -27,7 +27,8 @@ public class PermissionsChangedEventTests
         public Task PublishAsync<T>(T message, CancellationToken cancellationToken = default)
             where T : SharedContracts.Events.Root.IntegrationEvent
         {
-            if (message is PermissionsChangedEvent e) Events.Add(e);
+            if (message is PermissionsChangedEvent e)
+                Events.Add(e);
             return Task.CompletedTask;
         }
     }

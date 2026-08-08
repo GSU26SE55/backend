@@ -21,8 +21,10 @@ public static class BatteryTenantAccessGuard
         BatteryTenantScopeHelper.TenantScope scope,
         CancellationToken cancellationToken)
     {
-        if (scope.IsDenied) return false;
-        if (scope.IsUnrestricted) return true;
+        if (scope.IsDenied)
+            return false;
+        if (scope.IsUnrestricted)
+            return true;
 
         return await unitOfWork.BatteryAssets
             .GetAllAsync()
@@ -44,8 +46,10 @@ public static class BatteryTenantAccessGuard
         BatteryTenantScopeHelper.TenantScope scope,
         CancellationToken cancellationToken)
     {
-        if (scope.IsDenied) return false;
-        if (scope.IsUnrestricted) return true;
+        if (scope.IsDenied)
+            return false;
+        if (scope.IsUnrestricted)
+            return true;
 
         return await unitOfWork.Sites
             .GetAllAsync()

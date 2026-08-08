@@ -88,6 +88,7 @@ public class ChatSloTests : IAsyncLifetime
     [Obsolete]
     public async Task DisposeAsync() => await _pg.DisposeAsync();
 
+    [Obsolete]
     private async Task SeedAsync()
     {
         var sw = Stopwatch.StartNew();
@@ -230,6 +231,7 @@ public class ChatSloTests : IAsyncLifetime
     /// Kiểm luôn tính đúng đắn ngay trong bài đo: nhanh mà lộ tin nội bộ thì vô nghĩa.
     /// </summary>
     [Fact]
+    [Obsolete]
     public async Task ChatList_AsCustomer_FiltersInternal_AndMeetsP95Under200ms()
     {
         var handler = NewHandler(out var db);
@@ -270,12 +272,14 @@ public class ChatSloTests : IAsyncLifetime
 
     // ───────────────────────────────────────────────────────────── hạ tầng đo
 
+    [Obsolete]
     private TicketChatsQueryHandler NewHandler(out TicketDbContext db)
     {
         db = NewContext();
         return new TicketChatsQueryHandler(new UnitOfWork(db), new NoCacheChatCacheService());
     }
 
+    [Obsolete]
     private async Task<(double p50, double p95, double p99, double max)> MeasureAsync(
         Func<int, TicketChatsQuery> queryFactory)
     {

@@ -1,8 +1,8 @@
-using TicketService.Application.Interfaces.Repositories;
-using TicketService.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Audit;
 using SharedInfrastructure.Bus;
+using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Entities;
 
 namespace TicketService.Infrastructure.Consumers;
 

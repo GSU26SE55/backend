@@ -39,7 +39,8 @@ public class AccountStatusChangedEventTests
         public Task PublishAsync<T>(T message, CancellationToken cancellationToken = default)
             where T : SharedContracts.Events.Root.IntegrationEvent
         {
-            if (message is not null) Published.Add(message);
+            if (message is not null)
+                Published.Add(message);
             return Task.CompletedTask;
         }
 

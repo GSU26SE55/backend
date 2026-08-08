@@ -215,7 +215,9 @@ public class PrescriptionFeedbackTests
         // lúc AI sập, và listErrors không bao giờ tới được người dùng.
         var command = new SubmitPrescriptionFeedbackCommand
         {
-            AlertId = Guid.NewGuid(), Status = status, EditedSteps = steps,
+            AlertId = Guid.NewGuid(),
+            Status = status,
+            EditedSteps = steps,
         };
 
         var result = await command.ValidateAsync();
@@ -230,7 +232,9 @@ public class PrescriptionFeedbackTests
         // "edited" mà không kèm bước nào thì AI không có gì để học — nhận vào chỉ tạo bản ghi rỗng.
         var command = new SubmitPrescriptionFeedbackCommand
         {
-            AlertId = Guid.NewGuid(), Status = "edited", EditedSteps = new List<string> { "  " }
+            AlertId = Guid.NewGuid(),
+            Status = "edited",
+            EditedSteps = new List<string> { "  " }
         };
 
         var result = await command.ValidateAsync();

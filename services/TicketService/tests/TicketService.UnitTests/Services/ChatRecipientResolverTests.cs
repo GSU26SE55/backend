@@ -30,19 +30,19 @@ public class ChatRecipientResolverTests
 
     private static TicketParticipant MakeParticipant(
         Ticket ticket, Guid userId, ActorRoleEnum role, bool canViewInternal, DateTime? removedAt = null) => new()
-    {
-        Id = Guid.NewGuid(),
-        TicketId = ticket.Id,
-        Ticket = ticket,
-        UserId = userId,
-        UserRole = role,
-        ParticipantType = ParticipantTypeEnum.Owner,
-        CanPost = true,
-        CanViewInternal = canViewInternal,
-        AddedByUserId = Guid.NewGuid(),
-        AddedAt = DateTime.UtcNow,
-        RemovedAt = removedAt,
-    };
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Ticket = ticket,
+            UserId = userId,
+            UserRole = role,
+            ParticipantType = ParticipantTypeEnum.Owner,
+            CanPost = true,
+            CanViewInternal = canViewInternal,
+            AddedByUserId = Guid.NewGuid(),
+            AddedAt = DateTime.UtcNow,
+            RemovedAt = removedAt,
+        };
 
     private static TicketAssignment MakeAssignment(Ticket ticket, Guid staffId, AssignmentRoleEnum role) => new()
     {

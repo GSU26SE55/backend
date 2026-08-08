@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Entities;
-using Microsoft.Extensions.Logging;
 using SharedContracts.Audit;
 using SharedInfrastructure.Bus;
 

@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using EmailService.Infrastructure.Consumers;
 using EmailService.Infrastructure.Services;
 using EmailService.Infrastructure.Templates;
@@ -8,6 +7,7 @@ using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 

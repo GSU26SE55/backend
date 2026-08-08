@@ -26,6 +26,7 @@ public sealed class RedisDistributedLeaseTests : IAsyncLifetime
 
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
 
+    [Obsolete]
     public async Task InitializeAsync()
     {
         _redis = new RedisBuilder().WithImage("redis:7-alpine").Build();
@@ -38,8 +39,10 @@ public sealed class RedisDistributedLeaseTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_connection is not null) await _connection.DisposeAsync();
-        if (_redis is not null) await _redis.DisposeAsync();
+        if (_connection is not null)
+            await _connection.DisposeAsync();
+        if (_redis is not null)
+            await _redis.DisposeAsync();
     }
 
     /// <summary>Khoá riêng cho từng test — chạy song song không giẫm lên nhau.</summary>

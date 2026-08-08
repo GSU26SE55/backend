@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
@@ -7,6 +6,7 @@ using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.RateLimiting;
 using SmsService.Api.Swagger;
 using SmsService.Application.Interfaces.Repositories;
 using SmsService.Application.Interfaces.Services;

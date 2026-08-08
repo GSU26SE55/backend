@@ -7,8 +7,8 @@ using Microsoft.Extensions.Logging;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
 using SharedContracts.Events.Audit;
-using SharedInfrastructure.Metrics;
 using SharedInfrastructure.Leasing;
+using SharedInfrastructure.Metrics;
 
 namespace NotificationService.Infrastructure.BackgroundJobs;
 

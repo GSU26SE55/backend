@@ -69,6 +69,7 @@ public class SubmitPrescriptionFeedbackCommand : IRequest<CommonResponse<string>
             // tới nơi. 26/28 command khác trong service này đều set 400 — đây là chỗ sót.
             response.StatusCode = 400;
         }
+
         return Task.FromResult(response);
     }
 }

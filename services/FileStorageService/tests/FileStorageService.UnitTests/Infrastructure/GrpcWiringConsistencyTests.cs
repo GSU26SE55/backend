@@ -178,7 +178,8 @@ public class GrpcWiringConsistencyTests
         foreach (var (label, path) in LocalWiringSources)
         {
             var content = TryRead(path);
-            if (content is null) continue;   // máy này không có file đó — không phải lỗi
+            if (content is null)
+                continue;   // máy này không có file đó — không phải lỗi
 
             var port = ValueOf(content, ServerPortKey);
             var address = ValueOf(content, ClientAddressKey);

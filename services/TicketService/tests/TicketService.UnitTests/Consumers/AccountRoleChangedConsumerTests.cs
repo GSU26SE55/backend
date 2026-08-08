@@ -66,8 +66,11 @@ public class AccountRoleChangedConsumerTests
         var accountId = Guid.NewGuid();
         var customer = new CustomerAccount
         {
-            Id = Guid.NewGuid(), AccountId = accountId, Email = "user@example.com",
-            FullName = "Nguyễn Văn A", Status = AccountStatusEnum.Active,
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
+            Email = "user@example.com",
+            FullName = "Nguyễn Văn A",
+            Status = AccountStatusEnum.Active,
         };
         Seed(customer: customer);
 
@@ -87,8 +90,11 @@ public class AccountRoleChangedConsumerTests
         var accountId = Guid.NewGuid();
         var staff = new StaffAccount
         {
-            Id = Guid.NewGuid(), AccountId = accountId, Email = "user@example.com",
-            FullName = "Nguyễn Văn A", Status = AccountStatusEnum.Active,
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
+            Email = "user@example.com",
+            FullName = "Nguyễn Văn A",
+            Status = AccountStatusEnum.Active,
         };
         Seed(staff: staff);
 
@@ -123,8 +129,11 @@ public class AccountRoleChangedConsumerTests
         var accountId = Guid.NewGuid();
         var staff = new StaffAccount
         {
-            Id = Guid.NewGuid(), AccountId = accountId, Email = "old@example.com",
-            FullName = "Tên Cũ", Status = AccountStatusEnum.Inactive,
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
+            Email = "old@example.com",
+            FullName = "Tên Cũ",
+            Status = AccountStatusEnum.Inactive,
         };
         Seed(staff: staff);
 

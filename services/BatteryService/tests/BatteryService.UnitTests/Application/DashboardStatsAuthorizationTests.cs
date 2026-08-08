@@ -41,18 +41,27 @@ public class DashboardStatsAuthorizationTests
             .WithBatteryAssets(
                 new BatteryAsset
                 {
-                    Id = Guid.NewGuid(), SerialNumber = "BAT-A1", SiteId = siteA.Id,
-                    CustomerId = CustomerA, Status = BatteryStatusEnum.Active,
+                    Id = Guid.NewGuid(),
+                    SerialNumber = "BAT-A1",
+                    SiteId = siteA.Id,
+                    CustomerId = CustomerA,
+                    Status = BatteryStatusEnum.Active,
                 },
                 new BatteryAsset
                 {
-                    Id = Guid.NewGuid(), SerialNumber = "BAT-B1", SiteId = siteB.Id,
-                    CustomerId = CustomerB, Status = BatteryStatusEnum.Active,
+                    Id = Guid.NewGuid(),
+                    SerialNumber = "BAT-B1",
+                    SiteId = siteB.Id,
+                    CustomerId = CustomerB,
+                    Status = BatteryStatusEnum.Active,
                 },
                 new BatteryAsset
                 {
-                    Id = Guid.NewGuid(), SerialNumber = "BAT-B2", SiteId = siteB.Id,
-                    CustomerId = CustomerB, Status = BatteryStatusEnum.Active,
+                    Id = Guid.NewGuid(),
+                    SerialNumber = "BAT-B2",
+                    SiteId = siteB.Id,
+                    CustomerId = CustomerB,
+                    Status = BatteryStatusEnum.Active,
                 });
 
         return (uow, siteA.Id, siteB.Id);

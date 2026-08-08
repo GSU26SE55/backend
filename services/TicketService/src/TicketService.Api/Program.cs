@@ -1,9 +1,9 @@
-using SharedInfrastructure.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 using TicketService.Api.Extensions;
 using TicketService.Api.Middleware;
 using TicketService.Application.DependencyInjection;

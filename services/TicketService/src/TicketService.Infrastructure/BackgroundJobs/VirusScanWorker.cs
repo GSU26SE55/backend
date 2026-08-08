@@ -56,7 +56,8 @@ public class VirusScanWorker : BackgroundService
             if (_opts.Features.EnableVirusScan)
                 await ScanPendingAttachmentsAsync(stoppingToken);
 
-            try { await Task.Delay(TimeSpan.FromSeconds(_opts.VirusScan.IntervalSeconds), stoppingToken); }
+            try
+            { await Task.Delay(TimeSpan.FromSeconds(_opts.VirusScan.IntervalSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
 

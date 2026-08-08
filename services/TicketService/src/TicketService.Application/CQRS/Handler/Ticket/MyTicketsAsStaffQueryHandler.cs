@@ -26,7 +26,7 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
     {
         if (!Guid.TryParse(_currentUserService.UserId, out var staffId))
         {
-        return new CommonResponse<PaginationResponse<TicketDTO>>
+            return new CommonResponse<PaginationResponse<TicketDTO>>
             {
                 IsSuccess = false,
                 StatusCode = 401,

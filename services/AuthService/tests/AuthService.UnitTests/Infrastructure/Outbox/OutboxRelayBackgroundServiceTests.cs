@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Entities;
 using AuthService.Infrastructure.BackgroundJobs;
 using AuthService.Infrastructure.Persistence;
@@ -10,7 +11,6 @@ using Microsoft.Extensions.Options;
 using SharedContracts.Events;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
-using AuthService.Application.Interfaces.Services;
 
 namespace AuthService.UnitTests.Infrastructure.Outbox;
 

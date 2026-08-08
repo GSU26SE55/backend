@@ -78,8 +78,10 @@ public class NotificationGroupAddMembersCommandHandler
         var toAdd = new List<Guid>();
         foreach (var userId in requested)
         {
-            if (!knownSet.Contains(userId)) continue;
-            if (existingActive.Contains(userId)) continue;
+            if (!knownSet.Contains(userId))
+                continue;
+            if (existingActive.Contains(userId))
+                continue;
             toAdd.Add(userId);
         }
 
@@ -167,8 +169,10 @@ public class NotificationGroupAddMembersCommandHandler
     private static string BuildMessage(int added, int alreadyMembers, int unknown)
     {
         var parts = new List<string> { $"Đã thêm {added} người" };
-        if (alreadyMembers > 0) parts.Add($"{alreadyMembers} người đã có sẵn trong nhóm");
-        if (unknown > 0) parts.Add($"{unknown} tài khoản không tồn tại");
+        if (alreadyMembers > 0)
+            parts.Add($"{alreadyMembers} người đã có sẵn trong nhóm");
+        if (unknown > 0)
+            parts.Add($"{unknown} tài khoản không tồn tại");
         return string.Join(", ", parts) + ".";
     }
 }

@@ -6,9 +6,9 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
-using SharedContracts.Events;
 using AuthService.UnitTests.Helpers;
 using MediatR;
+using SharedContracts.Events;
 
 namespace AuthService.UnitTests.Handlers.Auth;
 
