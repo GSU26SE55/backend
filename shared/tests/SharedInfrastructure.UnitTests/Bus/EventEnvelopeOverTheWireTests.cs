@@ -32,7 +32,8 @@ public class EventEnvelopeOverTheWireTests
 
         public Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> context)
         {
-            lock (Seen) Seen.Add((context.Message.Id, context.Message.OccurredAt));
+            lock (Seen)
+                Seen.Add((context.Message.Id, context.Message.OccurredAt));
             return Task.CompletedTask;
         }
     }
@@ -52,7 +53,8 @@ public class EventEnvelopeOverTheWireTests
     [Fact]
     public async Task ConsumedEvent_KeepsTheIdAndTimestampThePublisherSet()
     {
-        lock (EnvelopeCapturingConsumer.Seen) EnvelopeCapturingConsumer.Seen.Clear();
+        lock (EnvelopeCapturingConsumer.Seen)
+            EnvelopeCapturingConsumer.Seen.Clear();
 
         await using var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>

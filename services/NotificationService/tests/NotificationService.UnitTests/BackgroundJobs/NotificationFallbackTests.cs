@@ -9,9 +9,8 @@ using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.BackgroundJobs;
 using NotificationService.Infrastructure.Persistence;
-using NotificationEntity = NotificationService.Domain.Entities.Notification;
-
 using NotificationService.UnitTests.Helpers;
+using NotificationEntity = NotificationService.Domain.Entities.Notification;
 
 namespace NotificationService.UnitTests.BackgroundJobs;
 

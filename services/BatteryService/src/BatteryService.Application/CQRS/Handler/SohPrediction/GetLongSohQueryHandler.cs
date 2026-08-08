@@ -84,7 +84,8 @@ public class GetLongSohQueryHandler : IRequestHandler<GetLongSohQuery, CommonRes
         readings = filtered.AcceptedIndices.Select(i => readings[i]).ToList();
         // time phải bắt đầu từ 0 SAU khi lọc, nếu không cột time không còn liên tục từ gốc.
         var baseTime = readings[0][3];
-        foreach (var row in readings) row[3] -= baseTime;
+        foreach (var row in readings)
+            row[3] -= baseTime;
 
         var result = await _longClient.PredictLongAsync(
             request.BatteryAssetId.ToString(), readings, packConfig, cancellationToken);

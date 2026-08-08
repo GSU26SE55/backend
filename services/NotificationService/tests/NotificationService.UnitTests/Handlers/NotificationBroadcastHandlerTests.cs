@@ -60,7 +60,9 @@ public class NotificationBroadcastHandlerTests
 
     private static NotificationGroupMember Member(Guid groupId, Guid userId) => new()
     {
-        Id = Guid.NewGuid(), GroupId = groupId, UserId = userId,
+        Id = Guid.NewGuid(),
+        GroupId = groupId,
+        UserId = userId,
     };
 
     private static NotificationBroadcastCommand Command(

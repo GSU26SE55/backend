@@ -60,11 +60,14 @@ public static class MosquittoPasswordFile
         {
             var line = raw.TrimEnd();
 
-            if (line == BeginMarker) { insideManagedRegion = true; continue; }
-            if (line == EndMarker) { insideManagedRegion = false; continue; }
+            if (line == BeginMarker)
+            { insideManagedRegion = true; continue; }
+            if (line == EndMarker)
+            { insideManagedRegion = false; continue; }
 
             // Trong vùng quản lý ⇒ bỏ, sẽ dựng lại bên dưới (đây là chỗ thiết bị thu hồi biến mất).
-            if (insideManagedRegion) continue;
+            if (insideManagedRegion)
+                continue;
 
             if (line.Length == 0)
                 continue;

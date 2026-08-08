@@ -32,7 +32,8 @@ public class MqttPasswordFileSyncServiceTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
+        if (Directory.Exists(_dir))
+            Directory.Delete(_dir, recursive: true);
         GC.SuppressFinalize(this);
     }
 
@@ -181,7 +182,8 @@ public class MqttPasswordFileSyncServiceTests : IDisposable
     public async Task Sync_WritesFileOnlyReadableByOwner()
     {
         // Mosquitto 2.0 TỪ CHỐI nạp file mà người khác đọc được — quyền sai là broker không lên.
-        if (OperatingSystem.IsWindows()) return;
+        if (OperatingSystem.IsWindows())
+            return;
 
         await Service(Device("gw-001")).SyncOnceAsync(CancellationToken.None);
 

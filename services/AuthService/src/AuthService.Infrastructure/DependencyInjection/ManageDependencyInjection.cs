@@ -1,5 +1,5 @@
-using AuthService.Application.Common.Options;
 using AuthService.Application.Authorization;
+using AuthService.Application.Common.Options;
 using AuthService.Application.Configuration;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;

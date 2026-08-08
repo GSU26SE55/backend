@@ -145,12 +145,18 @@ public class IntegrationEventEnvelopeTests
         if (underlying is not null)
             return SampleValue(underlying);
 
-        if (t == typeof(string)) return "gh789";
-        if (t == typeof(Guid)) return Guid.NewGuid();
-        if (t == typeof(DateTime)) return new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
-        if (t == typeof(DateTimeOffset)) return new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
-        if (t.IsEnum) return Enum.GetValues(t).GetValue(0);
-        if (t.IsValueType) return Activator.CreateInstance(t);
+        if (t == typeof(string))
+            return "gh789";
+        if (t == typeof(Guid))
+            return Guid.NewGuid();
+        if (t == typeof(DateTime))
+            return new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        if (t == typeof(DateTimeOffset))
+            return new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        if (t.IsEnum)
+            return Enum.GetValues(t).GetValue(0);
+        if (t.IsValueType)
+            return Activator.CreateInstance(t);
 
         if (t.IsArray)
             return Array.CreateInstance(t.GetElementType()!, 0);

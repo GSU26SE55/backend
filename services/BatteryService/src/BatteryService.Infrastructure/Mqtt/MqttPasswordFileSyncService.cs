@@ -86,7 +86,8 @@ public class MqttPasswordFileSyncService : BackgroundService
                 _logger.LogError(ex, "MqttPasswordFileSync tick failed");
             }
 
-            try { await Task.Delay(interval, stoppingToken); }
+            try
+            { await Task.Delay(interval, stoppingToken); }
             catch (OperationCanceledException) { /* shutdown */ }
         }
 

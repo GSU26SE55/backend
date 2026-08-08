@@ -132,7 +132,8 @@ public class AuditRetentionScheduleGh729Tests
                 total++;
                 var start = new DateTime(2026, 8, 4, h, m, 0, DateTimeKind.Utc);
                 var hits = Enumerable.Range(1, 4).Any(k => sut.InWindow(start.AddHours(6 * k)));
-                if (!hits) missed++;
+                if (!hits)
+                    missed++;
             }
         }
 

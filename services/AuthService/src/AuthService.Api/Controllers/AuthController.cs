@@ -653,8 +653,8 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthCommand command, CancellationToken cancellationToken)
     {
-       var result = await _mediator.Send(command, cancellationToken);
-       return StatusCode(result.StatusCode, result);
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>

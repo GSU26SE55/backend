@@ -9,8 +9,8 @@ using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
-using SharedInfrastructure.Metrics;
 using SharedInfrastructure.Leasing;
+using SharedInfrastructure.Metrics;
 
 namespace NotificationService.Infrastructure.BackgroundJobs;
 

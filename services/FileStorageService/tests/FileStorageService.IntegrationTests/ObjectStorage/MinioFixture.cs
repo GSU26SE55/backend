@@ -1,11 +1,11 @@
 using Amazon.S3;
 using Amazon.S3.Model;
-using FileStorageService.Application.Interfaces;
-using FileStorageService.Infrastructure.Options;
-using FileStorageService.Infrastructure.Services;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Networks;
+using FileStorageService.Application.Interfaces;
+using FileStorageService.Infrastructure.Options;
+using FileStorageService.Infrastructure.Services;
 using FluentAssertions;
 using Xunit;
 
@@ -82,9 +82,12 @@ public sealed class MinioFixture : IAsyncLifetime
     {
         Http.Dispose();
         S3?.Dispose();
-        if (_mc is not null) await _mc.DisposeAsync();
-        if (_minio is not null) await _minio.DisposeAsync();
-        if (_network is not null) await _network.DeleteAsync();
+        if (_mc is not null)
+            await _mc.DisposeAsync();
+        if (_minio is not null)
+            await _minio.DisposeAsync();
+        if (_network is not null)
+            await _network.DeleteAsync();
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using System.Threading.RateLimiting;
 using AuditAggregatorService.Infrastructure.DependencyInjection;
 using AuditAggregatorService.Infrastructure.Persistence;
@@ -7,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 

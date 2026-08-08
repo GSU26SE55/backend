@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using BatteryService.Api.Authentication;
 using BatteryService.Application.DependencyInjection;
 using BatteryService.Infrastructure.DependencyInjection;
@@ -10,6 +9,7 @@ using Microsoft.OpenApi.Models;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 
 var isEfTooling = string.Equals(
     System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,

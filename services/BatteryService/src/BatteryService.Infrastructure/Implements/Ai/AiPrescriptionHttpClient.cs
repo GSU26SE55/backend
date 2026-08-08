@@ -50,7 +50,8 @@ public class AiPrescriptionHttpClient : IAiPrescriptionFeedbackClient
         }
         if (context is not null)
         {
-            if (context.AgeCycles is int age) payload["age_cycles"] = age;
+            if (context.AgeCycles is int age)
+                payload["age_cycles"] = age;
             if (!string.IsNullOrEmpty(context.LastMaintenanceDate))
                 payload["last_maintenance_date"] = context.LastMaintenanceDate;
             // Thứ tự CŨ → MỚI — AI chỉ lấy 5 phần tử cuối.

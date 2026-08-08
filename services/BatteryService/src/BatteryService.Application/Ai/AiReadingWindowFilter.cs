@@ -58,7 +58,8 @@ public static class AiReadingWindowFilter
     public static FilterResult Filter(IReadOnlyList<double[]> readings, AiPackConfig? packConfig)
     {
         var nSeries = packConfig?.NSeries ?? 1;
-        if (nSeries < 1) nSeries = 1;
+        if (nSeries < 1)
+            nSeries = 1;
 
         // AI: `i_scale = NOMINAL_CAPACITY_AH / capacity_ah if capacity_ah else 1.0`.
         // Trong Python, 0.0 là falsy ⇒ capacity 0 rơi về 1.0 chứ KHÔNG chia cho 0. Phải sao y,

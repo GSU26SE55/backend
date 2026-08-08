@@ -87,14 +87,16 @@ internal static class NotificationDebounce
         {
             // Nhả chỗ giữ để lần gửi lại chạy THẬT. Bọc riêng để lỗi lúc nhả không che lỗi gốc —
             // lỗi gốc mới là thứ quyết định chính sách thử lại của MassTransit.
-            try { await cache.TryReleaseLeaseAsync(key, token, cancellationToken); }
+            try
+            { await cache.TryReleaseLeaseAsync(key, token, cancellationToken); }
             catch { /* nhả hụt thì chỗ giữ tự hết hạn sau MessageLease */ }
             throw;
         }
 
         // Xong rồi mới nâng lên cửa sổ chống trùng dài. Lỗi ở bước này KHÔNG được ném: side effect
         // đã thành công, ném ra sẽ kéo theo một lần gửi lại và tạo notification thứ hai.
-        try { await cache.TryRefreshLeaseAsync(key, token, MessageWindow, cancellationToken); }
+        try
+        { await cache.TryRefreshLeaseAsync(key, token, MessageWindow, cancellationToken); }
         catch { /* chỗ giữ tự hết hạn; cùng lắm là xử lý lại, không mất dữ liệu */ }
 
         return true;
