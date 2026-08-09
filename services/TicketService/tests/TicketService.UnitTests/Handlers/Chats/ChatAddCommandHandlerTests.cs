@@ -11,6 +11,7 @@ using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
@@ -39,6 +40,7 @@ public class ChatAddCommandHandlerTests
 
     private readonly Mock<IChatCacheService> _chatCache = new();
     private readonly Mock<ISlaService> _slaService = new();
+    private readonly Mock<ITicketStateMachine> _stateMachine = new();
     private readonly Mock<IChatRecipientResolver> _recipientResolver = new();
 
     public ChatAddCommandHandlerTests()
@@ -67,7 +69,7 @@ public class ChatAddCommandHandlerTests
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object, _recipientResolver.Object, _publisher.Object);
+            _slaService.Object, _stateMachine.Object, _recipientResolver.Object, _publisher.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()

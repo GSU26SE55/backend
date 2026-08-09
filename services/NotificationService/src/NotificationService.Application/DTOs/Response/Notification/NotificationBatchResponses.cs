@@ -161,7 +161,8 @@ public class NotificationBroadcastResponse : CommonResponse<NotificationBroadcas
 
 /// <summary>Xem trước nội dung theo từng kênh khi bật "dùng mẫu".</summary>
 public class NotificationBroadcastTemplatePreviewResponse
-    : CommonResponse<List<NotificationBroadcastChannelPreviewDto>> { }
+    : CommonResponse<List<NotificationBroadcastChannelPreviewDto>>
+{ }
 
 /// <summary>Kết quả xem trước số người nhận.</summary>
 public class NotificationBroadcastPreviewResponse : CommonResponse<NotificationBroadcastPreviewDto> { }

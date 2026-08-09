@@ -12,6 +12,21 @@ namespace TicketService.Application.CQRS.Handler.Ticket;
 
 public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, CommonResponse<TicketDetailDTO>>
 {
+    private static readonly ActivityActionEnum[] InternalOnlyActions =
+    [
+        ActivityActionEnum.Chatted,
+        ActivityActionEnum.ChatEdited,
+        ActivityActionEnum.ChatDeleted,
+        ActivityActionEnum.ChatRestored,
+        ActivityActionEnum.ChatReplied,
+        ActivityActionEnum.ChatPinned,
+        ActivityActionEnum.ChatUnpinned,
+        ActivityActionEnum.ChatFlagged,
+        ActivityActionEnum.ParticipantAdded,
+        ActivityActionEnum.ParticipantRemoved,
+        ActivityActionEnum.ParticipantRoleChanged
+    ];
+
     private readonly ITicketUnitOfWork _unitOfWork;
 
     public TicketGetByIdQueryHandler(ITicketUnitOfWork unitOfWork)
@@ -108,20 +123,22 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             DuplicateReason = ticket.DuplicateReason,
             MergedIntoTicketId = ticket.MergedIntoTicketId?.ToString(),
             SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer),
-            Activities = ticket.Activities.Select(a => new TicketActivityDTO
-            {
-                Id = a.Id.ToString(),
-                TicketId = a.TicketId.ToString(),
-                SourceTicketId = a.SourceTicketId?.ToString(),
-                ActorUserId = a.ActorUserId?.ToString(),
-                ActorRole = a.ActorRole,
-                ActorDisplayName = a.ActorDisplayName,
-                Action = a.Action,
-                OldValue = a.OldValue,
-                NewValue = a.NewValue,
-                Reason = a.Reason,
-                CreatedAt = a.CreatedAt
-            }).ToList(),
+            Activities = ticket.Activities
+                .Where(a => canViewInternalChats || !InternalOnlyActions.Contains(a.Action))
+                .Select(a => new TicketActivityDTO
+                {
+                    Id = a.Id.ToString(),
+                    TicketId = a.TicketId.ToString(),
+                    SourceTicketId = a.SourceTicketId?.ToString(),
+                    ActorUserId = a.ActorUserId?.ToString(),
+                    ActorRole = a.ActorRole,
+                    ActorDisplayName = a.ActorDisplayName,
+                    Action = a.Action,
+                    OldValue = a.OldValue,
+                    NewValue = a.NewValue,
+                    Reason = a.Reason,
+                    CreatedAt = a.CreatedAt
+                }).ToList(),
             Chats = ticket.Chats
                 .Where(c => canViewInternalChats || !c.IsInternal)
                 .Select(c => new TicketChatDTO

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using SharedContracts.Common.Responses;
 using SharedKernels.Interfaces;
 using SharedKernels.Security;
 using TicketService.Application.Common.Models;
@@ -8,7 +9,6 @@ using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
-using SharedContracts.Common.Responses;
 
 namespace TicketService.UnitTests.Queries;
 

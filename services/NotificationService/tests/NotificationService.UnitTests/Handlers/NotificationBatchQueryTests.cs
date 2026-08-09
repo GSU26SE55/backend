@@ -87,8 +87,10 @@ public class NotificationBatchQueryTests
         var userId = Guid.NewGuid();
         var target = new NotificationBatchTarget
         {
-            Id = Guid.NewGuid(), BatchId = batch.Id,
-            TargetKind = NotificationBatchTargetKindEnum.User, UserId = userId,
+            Id = Guid.NewGuid(),
+            BatchId = batch.Id,
+            TargetKind = NotificationBatchTargetKindEnum.User,
+            UserId = userId,
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(
@@ -113,9 +115,15 @@ public class NotificationBatchQueryTests
         NotificationEntity Row(Guid user, NotificationChannelEnum ch, NotificationStatusEnum st, DateTime? read = null)
             => new()
             {
-                Id = Guid.NewGuid(), UserId = user, BatchId = batch.Id,
-                Type = batch.Type, Channel = ch, Status = st, ReadAt = read,
-                Title = batch.Title, Body = batch.Body,
+                Id = Guid.NewGuid(),
+                UserId = user,
+                BatchId = batch.Id,
+                Type = batch.Type,
+                Channel = ch,
+                Status = st,
+                ReadAt = read,
+                Title = batch.Title,
+                Body = batch.Body,
             };
 
         var rows = new[]
@@ -160,9 +168,14 @@ public class NotificationBatchQueryTests
         NotificationEntity Row(NotificationChannelEnum ch, NotificationStatusEnum st)
             => new()
             {
-                Id = Guid.NewGuid(), UserId = user, BatchId = batch.Id,
-                Type = batch.Type, Channel = ch, Status = st,
-                Title = batch.Title, Body = batch.Body,
+                Id = Guid.NewGuid(),
+                UserId = user,
+                BatchId = batch.Id,
+                Type = batch.Type,
+                Channel = ch,
+                Status = st,
+                Title = batch.Title,
+                Body = batch.Body,
             };
 
         var rows = new[]

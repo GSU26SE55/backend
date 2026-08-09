@@ -2,11 +2,10 @@ using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
-
-using NotificationService.Application.Templates;
 
 namespace NotificationService.Application.Consumers;
 

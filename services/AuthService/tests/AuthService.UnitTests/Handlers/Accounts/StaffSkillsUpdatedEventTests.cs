@@ -32,7 +32,8 @@ public class StaffSkillsUpdatedEventTests
         public Task PublishAsync<T>(T message, CancellationToken cancellationToken = default)
             where T : SharedContracts.Events.Root.IntegrationEvent
         {
-            if (message is StaffSkillsUpdatedEvent e) Events.Add(e);
+            if (message is StaffSkillsUpdatedEvent e)
+                Events.Add(e);
             return Task.CompletedTask;
         }
     }

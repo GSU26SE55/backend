@@ -2,10 +2,10 @@ using System.Text;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mqtt;
 using BatteryService.Infrastructure.Implements.Services;
-using Moq;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using FluentAssertions;
+using Moq;
 using MQTTnet;
 using MQTTnet.Client;
 using Xunit;
@@ -196,7 +196,8 @@ public sealed class GeneratedCredentialAcceptedByBrokerTests : IAsyncLifetime
         var observer = new MqttFactory().CreateMqttClient();
         observer.ApplicationMessageReceivedAsync += e =>
         {
-            lock (received) received.Add(e.ApplicationMessage.Topic);
+            lock (received)
+                received.Add(e.ApplicationMessage.Topic);
             return Task.CompletedTask;
         };
         await observer.ConnectAsync(new MqttClientOptionsBuilder()
@@ -224,7 +225,8 @@ public sealed class GeneratedCredentialAcceptedByBrokerTests : IAsyncLifetime
         // Chờ topic hợp lệ tới — cùng khoảng thời gian đó cũng đủ rộng cho topic bị chặn nếu nó lọt.
         var arrived = await WaitUntilAsync(() =>
         {
-            lock (received) return received.Contains(ownTopic);
+            lock (received)
+                return received.Contains(ownTopic);
         }, TimeSpan.FromSeconds(10));
 
         await device.DisconnectAsync();
@@ -245,7 +247,8 @@ public sealed class GeneratedCredentialAcceptedByBrokerTests : IAsyncLifetime
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (condition()) return true;
+            if (condition())
+                return true;
             await Task.Delay(100);
         }
         return condition();

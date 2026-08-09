@@ -1,4 +1,3 @@
-using SharedInfrastructure.RateLimiting;
 using FileStorageService.Application.DependencyInjection;
 using FileStorageService.Infrastructure.DependencyInjection;
 using FileStorageService.Infrastructure.Persistence;
@@ -8,6 +7,7 @@ using Microsoft.OpenApi.Models;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 

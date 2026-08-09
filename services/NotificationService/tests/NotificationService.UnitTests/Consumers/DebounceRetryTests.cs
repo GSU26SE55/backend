@@ -86,7 +86,8 @@ public class DebounceRetryTests
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
-            if (condition()) return;
+            if (condition())
+                return;
             await Task.Delay(25);
         }
     }

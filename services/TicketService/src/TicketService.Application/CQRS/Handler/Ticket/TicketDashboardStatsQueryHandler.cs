@@ -143,6 +143,24 @@ public class TicketDashboardStatsQueryHandler
             .OrderByDescending(dto => dto.ActiveCount)
             .ToList();
 
+        var slaAbuseFlaggedTickets = await ticketsQuery
+            .Where(t => t.SlaTimer != null
+                        && (t.SlaTimer.PauseEpisodesCount >= 2 || t.SlaTimer.TotalPausedMinutes >= 1440))
+            .Select(t => new SlaAbuseFlaggedTicketDto
+            {
+                TicketId = t.Id.ToString(),
+                Code = t.Code,
+                PrimaryStaffId = t.Assignments
+                    .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                    .Select(a => a.StaffId.ToString())
+                    .FirstOrDefault(),
+                PauseEpisodesCount = t.SlaTimer!.PauseEpisodesCount,
+                TotalPausedMinutes = t.SlaTimer.TotalPausedMinutes
+            })
+            .OrderByDescending(t => t.TotalPausedMinutes)
+            .ThenByDescending(t => t.PauseEpisodesCount)
+            .ToListAsync(cancellationToken);
+
         return new CommonResponse<TicketDashboardStatsDto>
         {
             IsSuccess = true,
@@ -155,7 +173,9 @@ public class TicketDashboardStatsQueryHandler
                 CountByStatus = countByStatus,
                 CountByPriority = countByPriority,
                 CreatedTrend7Days = createdTrend,
-                OpenCountByStaff = openCountByStaff
+                OpenCountByStaff = openCountByStaff,
+                SlaAbuseFlaggedCount = slaAbuseFlaggedTickets.Count,
+                SlaAbuseFlaggedTickets = slaAbuseFlaggedTickets
             }
         };
     }

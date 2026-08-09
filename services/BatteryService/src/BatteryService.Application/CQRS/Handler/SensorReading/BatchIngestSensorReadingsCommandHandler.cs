@@ -1,5 +1,5 @@
-using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.Common;
+using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Interfaces;
@@ -507,8 +507,10 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             return "Ghi nhận sensor readings thành công.";
 
         var parts = new List<string>(2);
-        if (rejectedOutliers > 0) parts.Add($"{rejectedOutliers} outlier bị loại");
-        if (duplicates > 0) parts.Add($"{duplicates} số đo đã có từ trước");
+        if (rejectedOutliers > 0)
+            parts.Add($"{rejectedOutliers} outlier bị loại");
+        if (duplicates > 0)
+            parts.Add($"{duplicates} số đo đã có từ trước");
         return $"Ghi nhận readings — {string.Join(", ", parts)}.";
     }
 

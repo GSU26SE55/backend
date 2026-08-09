@@ -38,8 +38,10 @@ public sealed class RedisDistributedLeaseTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_connection is not null) await _connection.DisposeAsync();
-        if (_redis is not null) await _redis.DisposeAsync();
+        if (_connection is not null)
+            await _connection.DisposeAsync();
+        if (_redis is not null)
+            await _redis.DisposeAsync();
     }
 
     /// <summary>Khoá riêng cho từng test — chạy song song không giẫm lên nhau.</summary>

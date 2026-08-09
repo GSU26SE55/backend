@@ -1,8 +1,8 @@
-using SmsService.Application.Interfaces.Repositories;
-using SmsService.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Audit;
 using SharedInfrastructure.Bus;
+using SmsService.Application.Interfaces.Repositories;
+using SmsService.Domain.Entities;
 
 namespace SmsService.Infrastructure.Consumers;
 

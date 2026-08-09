@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Metrics;
@@ -11,9 +12,11 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
+using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -36,6 +39,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.create/mention
     private readonly IChatCacheService _chatCache;
     private readonly ISlaService _slaService;
+    private readonly ITicketStateMachine _stateMachine;
     private readonly IChatRecipientResolver _recipientResolver;
 
 
@@ -54,6 +58,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
         ISlaService slaService,
+        ITicketStateMachine stateMachine,
         IChatRecipientResolver recipientResolver,
         IPublisher publisher)
     {
@@ -72,6 +77,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
         _slaService = slaService;
+        _stateMachine = stateMachine;
         _recipientResolver = recipientResolver;
     }
 
@@ -327,7 +333,31 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
 
             if (request.UserRole == ActorRoleEnum.Customer)
             {
-                await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, cancellationToken);
+                if (ticket.Status == TicketStatusEnum.WaitingCustomer)
+                {
+                    var oldStatus = ticket.Status;
+                    await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.InProgress, new TransitionContext
+                    {
+                        ActorUserId = Guid.Empty,
+                        ActorRole = ActorRoleEnum.System,
+                        ActorDisplayName = "System"
+                    }, cancellationToken);
+
+                    await _slaService.ResumeSlaAsync(ticket.Id, request.UserId, cancellationToken);
+                    await _activityLogger.LogAsync(ticket.Id, request.UserId, ActorRoleEnum.Customer,
+                        request.UserDisplayName, ActivityActionEnum.SlaResumed,
+                        oldValue: oldStatus.ToString(), newValue: TicketStatusEnum.InProgress.ToString());
+                    await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(
+                        ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), cancellationToken);
+                    await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
+                        ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
+                        (int)oldStatus, (int)TicketStatusEnum.InProgress,
+                        oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), cancellationToken);
+                }
+                else
+                {
+                    await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, cancellationToken);
+                }
             }
 
             await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

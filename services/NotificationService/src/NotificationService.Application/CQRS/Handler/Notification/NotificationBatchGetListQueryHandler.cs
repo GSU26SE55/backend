@@ -38,8 +38,17 @@ public class NotificationBatchGetListQueryHandler
             // không dịch được sang SQL, đưa vào Select là lỗi lúc chạy chứ không phải lúc biên dịch.
             .Select(b => new
             {
-                b.Id, b.Type, b.Title, b.Body, b.ChannelValues,
-                b.Source, b.Status, b.RecipientCount, b.NotificationCount, b.CreatedBy, b.CreatedAt,
+                b.Id,
+                b.Type,
+                b.Title,
+                b.Body,
+                b.ChannelValues,
+                b.Source,
+                b.Status,
+                b.RecipientCount,
+                b.NotificationCount,
+                b.CreatedBy,
+                b.CreatedAt,
             })
             .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 

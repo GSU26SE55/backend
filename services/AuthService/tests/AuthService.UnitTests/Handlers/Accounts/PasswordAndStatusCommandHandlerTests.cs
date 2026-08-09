@@ -4,8 +4,8 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
-using SharedContracts.Interfaces;
 using MediatR;
+using SharedContracts.Interfaces;
 
 namespace AuthService.UnitTests.Handlers.Accounts;
 

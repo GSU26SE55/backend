@@ -32,7 +32,10 @@ public class MqttBrokerEndpointTests
         bool enabled = true, string host = "mosquitto", int port = 8883, bool useTls = true)
         => new(Options.Create(new MqttOptions
         {
-            Enabled = enabled, Host = host, Port = port, UseTls = useTls,
+            Enabled = enabled,
+            Host = host,
+            Port = port,
+            UseTls = useTls,
         }));
 
     [Fact]

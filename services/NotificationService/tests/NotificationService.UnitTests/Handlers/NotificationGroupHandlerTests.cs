@@ -185,7 +185,9 @@ public class NotificationGroupHandlerTests
 
         var existingMember = new NotificationGroupMember
         {
-            Id = Guid.NewGuid(), GroupId = group.Id, UserId = already.Id,
+            Id = Guid.NewGuid(),
+            GroupId = group.Id,
+            UserId = already.Id,
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(

@@ -69,6 +69,10 @@ public class TicketHoldCommandHandler : IRequestHandler<TicketHoldCommand, Ticke
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot put on hold.");
 
+        var pauseEligibility = await _slaService.CheckPauseEligibilityAsync(ticket.Id, ct);
+        if (!pauseEligibility.IsAllowed)
+            return Fail(409, pauseEligibility.Message ?? "Không thể tạm dừng SLA.");
+
         var oldStatus = ticket.Status;
         await _stateMachine.ExecuteAsync(ticket, targetStatus, new TransitionContext
         {

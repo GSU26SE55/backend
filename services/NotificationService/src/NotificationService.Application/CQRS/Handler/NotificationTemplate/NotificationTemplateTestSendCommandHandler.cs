@@ -9,8 +9,8 @@ using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
-using SharedContracts.Interfaces;
 using SharedContracts.Events.Root;
+using SharedContracts.Interfaces;
 
 namespace NotificationService.Application.CQRS.Handler.NotificationTemplate;
 
