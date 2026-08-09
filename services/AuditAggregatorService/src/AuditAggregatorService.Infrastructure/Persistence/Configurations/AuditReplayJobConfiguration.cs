@@ -12,7 +12,6 @@ namespace AuditAggregatorService.Infrastructure.Persistence.Configurations;
 /// </summary>
 public class AuditReplayJobConfiguration : IEntityTypeConfiguration<AuditReplayJob>
 {
-    [Obsolete]
     public void Configure(EntityTypeBuilder<AuditReplayJob> b)
     {
         b.ToTable("audit_replay_job");
