@@ -25,9 +25,9 @@ public static class ManageDependencyInjection
         services.AddScopedInterface();
         services.AddSharedInfrastructure(configuration, "NotificationService.Application", "Notification Service API");
 
-        // MassTransit consumers — Sprint IoT-1 (#249) đăng ký consumer assembly để consume
-        // IotDeviceWentOfflineEvent (và sẵn sàng cho các consumer Sprint 6 khác trong cùng assembly).
-        // GH-728 — thêm assembly Infrastructure để MassTransit thấy NotificationAuditReplayRequestedConsumer.
+        // MassTransit scans the Application assembly, including SlaAutoResumedConsumer (GH-1169),
+        // then ConfigureEndpoints creates each discovered consumer's receive endpoint.
+        // GH-728 also includes Infrastructure for NotificationAuditReplayRequestedConsumer.
         services.AddMessageBus(
             configuration,
             typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly,

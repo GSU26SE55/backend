@@ -26,6 +26,12 @@ public class TicketDashboardStatsDto
 
     /// <summary>Số ticket mở đang gán cho từng staff (sort giảm dần) — phục vụ widget workload của Manager.</summary>
     public List<StaffOpenCountDto> OpenCountByStaff { get; set; } = new();
+
+    /// <summary>Số ticket cần theo dõi do lạm dụng pause SLA.</summary>
+    public int SlaAbuseFlaggedCount { get; set; }
+
+    /// <summary>Các ticket có ít nhất 2 lần pause hoặc tổng thời gian pause từ 1.440 phút.</summary>
+    public List<SlaAbuseFlaggedTicketDto> SlaAbuseFlaggedTickets { get; set; } = new();
 }
 
 /// <summary>Tổng hợp SLA timer theo trạng thái.</summary>
@@ -65,4 +71,13 @@ public class StaffOpenCountDto
 
     /// <summary>Số ticket mở đang phụ trách.</summary>
     public int ActiveCount { get; set; }
+}
+
+public class SlaAbuseFlaggedTicketDto
+{
+    public string TicketId { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string? PrimaryStaffId { get; set; }
+    public int PauseEpisodesCount { get; set; }
+    public int TotalPausedMinutes { get; set; }
 }

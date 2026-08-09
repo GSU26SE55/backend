@@ -159,6 +159,7 @@ public class ChatSloTests : IAsyncLifetime
     /// Đường mặc định FE gọi khi mở tab chat: trang 1, 10 tin mới nhất. Đo với cache TRƯỢT.
     /// </summary>
     [Fact]
+    [Obsolete]
     public async Task ChatList_DefaultPage_With1000ChatsPerTicket_MeetsP95Under200ms()
     {
         var (p50, p95, p99, max) = await MeasureAsync(i => new TicketChatsQuery
@@ -184,6 +185,7 @@ public class ChatSloTests : IAsyncLifetime
     /// sẽ thấy chậm — DoD nói "GET chat list", không nói "chỉ trang 1".
     /// </summary>
     [Fact]
+    [Obsolete]
     public async Task ChatList_DeepPage_MeetsP95Under200ms()
     {
         var (p50, p95, p99, max) = await MeasureAsync(i => new TicketChatsQuery
@@ -207,6 +209,7 @@ public class ChatSloTests : IAsyncLifetime
     /// mọi truy vấn có <c>Search</c>). Tức trong production đây luôn là đường xuống DB.
     /// </summary>
     [Fact]
+    [Obsolete]
     public async Task ChatList_WithSearchFilter_MeetsP95Under200ms()
     {
         var (p50, p95, p99, max) = await MeasureAsync(i => new TicketChatsQuery

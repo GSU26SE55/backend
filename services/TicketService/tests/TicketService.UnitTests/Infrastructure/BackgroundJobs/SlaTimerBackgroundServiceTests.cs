@@ -97,6 +97,68 @@ public class SlaTimerBackgroundServiceTests
         updatedTimer!.WarningSentAt.Should().Be(FixedNow);
     }
 
+    [Fact]
+    public async Task When_WaitingCustomerPause_Exceeds48Hours_Should_AutoResumeOnce()
+    {
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
+        await using var provider = CreateProvider(Guid.NewGuid().ToString());
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
+            {
+                Id = ticketId,
+                Code = "T-AUTO",
+                CustomerId = Guid.NewGuid(),
+                Title = "Test",
+                Description = "Test",
+                Category = TicketCategoryEnum.Other,
+                Status = TicketStatusEnum.WaitingCustomer,
+                Origin = TicketOriginEnum.ManualByCustomer
+            };
+            db.Tickets.Add(ticket);
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                Priority = TicketPriorityEnum.P3Normal,
+                StartedAt = FixedNow.AddDays(-3),
+                DueAt = FixedNow.AddHours(2),
+                OriginalDueAt = FixedNow.AddHours(2),
+                CurrentPauseStartedAt = FixedNow.AddHours(-49),
+                Status = SlaTimerStatusEnum.Paused
+            });
+            db.SlaPauseEvents.Add(new SlaPauseEvent
+            {
+                Id = Guid.NewGuid(),
+                SlaTimerId = timerId,
+                Reason = PauseReasonEnum.WaitingCustomer,
+                PausedAt = FixedNow.AddHours(-49),
+                PausedByUserId = Guid.NewGuid()
+            });
+            await db.SaveChangesAsync();
+        }
+        var clock = new Mock<TimeProvider>();
+        clock.Setup(x => x.GetUtcNow()).Returns(new DateTimeOffset(FixedNow));
+        var service = new TestableSlaTimerService(new Mock<ILogger<SlaTimerBackgroundService>>().Object,
+            provider.GetRequiredService<IServiceScopeFactory>(), clock.Object);
+
+        await service.TriggerCheck(CancellationToken.None);
+
+        using var verificationScope = provider.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var timer = await verificationDb.SlaTimers.FindAsync(timerId);
+        var pauseEvent = await verificationDb.SlaPauseEvents.SingleAsync();
+        var ticketAfter = await verificationDb.Tickets.FindAsync(ticketId);
+        timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
+        timer.LastAutoResumeAt.Should().Be(FixedNow);
+        timer.DueAt.Should().Be(FixedNow.AddHours(51));
+        pauseEvent.ResumedAt.Should().Be(FixedNow);
+        ticketAfter!.Status.Should().Be(TicketStatusEnum.InProgress);
+    }
+
     private ServiceProvider CreateProvider(string dbName)
     {
         var mockProducer = new Mock<IIntegrationEventOutboxWriter>();

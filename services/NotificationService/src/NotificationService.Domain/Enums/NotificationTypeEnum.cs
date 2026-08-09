@@ -115,5 +115,8 @@ public enum NotificationTypeEnum
     /// </summary>
     TicketMerged = 34,
 
+    /// <summary>GH-1169 — an SLA pause was automatically resumed after its maximum duration.</summary>
+    SlaAutoResumed = 35,
+
     System = 99
 }

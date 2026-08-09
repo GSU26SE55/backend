@@ -37,6 +37,8 @@ public class TicketSlaPauseResumeTests
             Note = "Waiting for spare parts"
         };
 
+        _slaService.Setup(x => x.CheckPauseEligibilityAsync(ticketId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlaPauseEligibility(true));
         var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act

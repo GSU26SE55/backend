@@ -116,6 +116,31 @@ public class TicketStateMachineTests
         result.IsAllowed.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.InProgress)]
+    public void CanTransition_PrimaryStaffCanEscalate(TicketStatusEnum status)
+    {
+        var primaryStaffId = Guid.NewGuid();
+        var ticket = CreateTicket(status, primaryStaffId);
+
+        var result = _sut.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, primaryStaffId);
+
+        result.IsAllowed.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.InProgress)]
+    public void CanTransition_SupporterCannotEscalate(TicketStatusEnum status)
+    {
+        var ticket = CreateTicket(status, Guid.NewGuid());
+
+        var result = _sut.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, Guid.NewGuid());
+
+        result.IsAllowed.Should().BeFalse();
+    }
+
     [Fact]
     public void CanTransition_ClosedPendingRateToClosed_CustomerOwner()
     {
