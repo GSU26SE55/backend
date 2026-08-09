@@ -7,7 +7,19 @@ public class AnomalyEngineOptions
 {
     public const string SectionName = "AnomalyEngine";
 
-    public int ScanIntervalSeconds { get; set; } = 30;
+    /// <summary>
+    /// IOT3-80 — chu kỳ quét ngưỡng, hạ 30 → 10 giây.
+    /// </summary>
+    /// <remarks>
+    /// Nếu mục tiêu là <b>phát hiện sự cố nhanh hơn</b> thì đây mới là con số có tác dụng, chứ
+    /// không phải chu kỳ ĐO của thiết bị. Đo dày hơn chỉ làm dữ liệu vào nhanh hơn; cảnh báo vẫn
+    /// phải đợi lượt quét kế tiếp. Với chu kỳ cũ 30 s, một sự cố xảy ra ngay sau lượt quét sẽ nằm
+    /// im gần nửa phút dù số liệu đã có trong DB từ lâu.
+    ///
+    /// Và nó gần như <b>miễn phí</b>: quét là đọc bản ghi mới nhất mỗi pin, không ghi gì thêm —
+    /// khác hẳn việc hạ chu kỳ đo, vốn nhân thẳng số dòng trong hypertable.
+    /// </remarks>
+    public int ScanIntervalSeconds { get; set; } = 10;
     public int DedupWindowMinutes { get; set; } = 30;
     public int OfflineThresholdMinutes { get; set; } = 10;
     public int EscalationAfterMinutes { get; set; } = 5;

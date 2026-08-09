@@ -2805,8 +2805,28 @@ Base route: `/api/admin/iot-devices` — toàn bộ yêu cầu role `Admin`.
 | Field | Type | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `cmdId` | `string?` | Không | Idempotency key; backend sinh GUID nếu null/blank |
-| `type` | `string` | **Có** | Loại command: `reboot`/`ota`/`calibrate`/`sample-now`/`set-config`/... |
-| `params` | `object?` | Không | Param JSON tự do |
+| `type` | `string` | **Có** | Loại command — xem bảng dưới. Kiểu chuỗi tự do, backend KHÔNG kiểm |
+| `params` | `object?` | Không | Param JSON, tuỳ theo `type` |
+
+**Firmware hiện chỉ hiểu BA loại** — nguồn: `iot/firmware-esp32/src/cmd/cmd_logic.cpp`, hàm
+`classifyType`. Mỗi loại chấp cả biến thể gạch dưới lẫn gạch ngang.
+
+| `type` | `params` | Thiết bị làm gì |
+|---|---|---|
+| `set_interval` (= `set-interval`) | `{"pollingSeconds": 5}` hoặc `{"pollingIntervalSeconds": 5}`, dải **[1, 3600]** | Đổi chu kỳ lấy mẫu ngay, không cần khởi động lại |
+| `trigger_ota` (= `trigger-ota`) | không cần | Hỏi backend xem có firmware mới không |
+| `request_heartbeat` (= `request-heartbeat`) | không cần | Gửi heartbeat ngay, không đợi hết chu kỳ |
+
+> ⚠️ **Bảng này từng ghi sai suốt nhiều tuần** (`reboot`/`ota`/`calibrate`/`sample-now`/`set-config`
+> — **không loại nào firmware hiểu**). Frontend chép nguyên vào dropdown, nên Admin gửi lệnh thấy
+> `202` và toast thành công, còn thiết bị ack `status: "unknown"` rồi không làm gì. Sửa 08/08/2026.
+>
+> Nguồn sự thật là `classifyType`, **không phải tài liệu này**. Thêm loại lệnh mới thì sửa firmware
+> trước, rồi mới sửa `IOT_COMMAND_TYPES` ở frontend và bảng này.
+
+> **`202` KHÔNG có nghĩa là thiết bị đã thực thi** — chỉ là "đã đưa được vào broker". Kết quả thật
+> về qua `solar/{deviceCode}/cmd/ack` với `status`: `ok` · `failed` · `rejected` · `unknown`.
+> Backend ghi `LogWarning` cho ba trạng thái sau; hiện **chưa** hiển thị lên UI.
 
 **Response thành công `202 Accepted`:** `CommonResponse<IotDeviceCommandAcceptedDto>`
 

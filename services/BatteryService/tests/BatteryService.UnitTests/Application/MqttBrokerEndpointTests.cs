@@ -80,7 +80,7 @@ public class MqttBrokerEndpointTests
     {
         var uow = new MockUnitOfWorkBuilder()
             .WithSites(new Site { Id = SiteId, Name = "Site 1" });
-        return (new CreateIotDeviceCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), broker), uow);
+        return (new CreateIotDeviceCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), broker, NoopMqttPasswordFileSync.Instance()), uow);
     }
 
     private static readonly Guid SiteId = Guid.NewGuid();

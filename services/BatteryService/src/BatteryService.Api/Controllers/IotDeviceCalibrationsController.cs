@@ -4,6 +4,7 @@ using BatteryService.Application.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Api.Controllers;
@@ -260,9 +261,11 @@ public class IotDeviceCalibrationsController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> chứa list <see cref="IotDeviceCalibrationDto"/> sort ASC theo ExpiresAt.</returns>
     /// <response code="200">Trả danh sách (có thể rỗng nếu không có calibration sắp hết hạn).</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
-    /// <response code="403">Không có role Admin/Manager.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
     [HttpGet("calibrations-expiring")]
-    [Authorize(Roles = "Admin,Manager")]
+    // IOT3-59 — mở cho Staff. Chính Staff là người CẦM MÁY đi hiệu chuẩn (POST calibration đã cho
+    // Staff từ trước); bắt họ hỏi Manager mới biết cái nào sắp hết hạn là chặn đúng người làm việc.
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<List<IotDeviceCalibrationDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -272,6 +275,90 @@ public class IotDeviceCalibrationsController : ControllerBase
         {
             WithinDays = withinDays ?? 30
         }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// IOT3-57 — danh sách IoT device (phân trang, lọc, tìm kiếm) cho <b>Admin, Manager, Staff</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Trước sprint này, đường DUY NHẤT để liệt kê thiết bị là <c>GET /api/admin/iot-devices</c> —
+    /// <c>[Authorize(Roles = "Admin")]</c>. Staff cầm thiết bị ngoài hiện trường chỉ đọc được
+    /// <c>deviceCode</c> in trên thân máy, không có cách nào biết thiết bị đó còn sống hay không,
+    /// firmware nào, lần cuối thấy khi nào.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>KHÔNG lọc theo site của người gọi</b> (quyết định #7 của sprint). Staff xem được mọi
+    /// thiết bị là CỐ Ý, thống nhất với phạm vi tài sản đã chốt ở <c>overall.md §34.10.6</c> — một
+    /// Staff có thể được điều sang site khác giữa ca, và chặn theo site sẽ làm họ mất khả năng tra
+    /// cứu đúng lúc cần nhất.
+    /// </para>
+    /// <para>
+    /// Trả <see cref="IotDeviceDto"/> thường: <b>không</b> có <c>apiKey</c>, <b>không</b> có
+    /// <c>mqttPassword</c>. Hai thứ đó chỉ ở đường admin.
+    /// </para>
+    /// <para>
+    /// ⚠️ Action này nằm trong <c>IotDeviceCalibrationsController</c> vì controller đó đã chiếm
+    /// <c>[Route("api/iot-devices")]</c>. Tạo controller mới cùng route sẽ ra
+    /// <c>AmbiguousMatchException</c> lúc chạy — build vẫn xanh.
+    /// </para>
+    /// </remarks>
+    /// <param name="query">Tham số phân trang + lọc (siteId, status, keyword, sortBy, sortDir).</param>
+    /// <param name="ct">Token huỷ request.</param>
+    /// <response code="200">Trang kết quả (có thể rỗng).</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
+    [HttpGet]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(CommonResponse<PaginationResponse<IotDeviceDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> List([FromQuery] GetIotDevicesQuery query, CancellationToken ct)
+    {
+        var result = await _mediator.Send(query, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// IOT3-58 — lịch sử heartbeat của một thiết bị, phân trang theo <b>con trỏ</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Endpoint này từng được XML doc của <c>AdminIotDevicesController</c> nhắc tới như thể đã có
+    /// ("dùng <c>GET .../{id}/heartbeats</c> (Sprint IoT-2)") trong khi chưa hề được viết. Bảng
+    /// <c>iot_device_heartbeats</c> đã được ghi từ IoT-1 — chỉ thiếu đường đọc ra.
+    /// </para>
+    /// <para>
+    /// <b>Con trỏ, không offset.</b> Đây là hypertable TimescaleDB, mỗi thiết bị một bản ghi mỗi
+    /// 60 giây; <c>OFFSET</c> buộc quét lại từ đầu mỗi trang. Truyền <c>nextCursor</c> của trang
+    /// trước vào <c>cursor</c> để lấy trang kế. <c>totalCount</c> luôn <c>null</c> — FE dùng
+    /// <c>hasMore</c>.
+    /// </para>
+    /// <para>Kết quả sắp xếp MỚI TRƯỚC (<c>time</c> giảm dần).</para>
+    /// </remarks>
+    /// <param name="deviceId">Id thiết bị (GUID). Staff lấy được qua <c>GET by-code/{deviceCode}</c>.</param>
+    /// <param name="query">from · to · limit (1–1000, mặc định 100) · cursor.</param>
+    /// <param name="ct">Token huỷ request.</param>
+    /// <response code="200">Trang kết quả.</response>
+    /// <response code="400">Limit ngoài [1, 1000].</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
+    /// <response code="404">Không tìm thấy thiết bị.</response>
+    /// <response code="422">Khoảng thời gian ngược (to &lt; from).</response>
+    [HttpGet("{deviceId:guid}/heartbeats")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceHeartbeatListDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> Heartbeats(
+        Guid deviceId, [FromQuery] GetIotDeviceHeartbeatsQuery query, CancellationToken ct)
+    {
+        query.DeviceId = deviceId;
+        var result = await _mediator.Send(query, ct);
         return StatusCode(result.StatusCode, result);
     }
 }

@@ -87,7 +87,16 @@ public static class ManageDependencyInjection
 
         // GH-784 — đưa thông tin đăng nhập thiết bị xuống file passwd của broker. Không có nó thì
         // API cấp credential xong nhưng Mosquitto không hề biết, và thiết bị nhận "not authorised".
-        services.AddHostedService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>();
+        // IOT3-29 — MỘT instance dùng cho cả hai vai: worker nền (vòng quét 60s) và
+        // IMqttPasswordFileSync (đồng bộ tức thì sau khi cấp/xoay khoá).
+        //
+        // Đăng ký bằng AddHostedService<T>() THUẦN sẽ tạo instance riêng mà container không
+        // resolve lại được, nên handler không có cách nào gọi SyncOnceAsync. Khuôn ba dòng dưới
+        // giống hệt IMqttBridgePublisher ngay bên dưới.
+        services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>();
+        services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>());
+        services.AddSingleton<Application.Interfaces.IMqttPasswordFileSync>(
+            sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>());
         services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>();
         services.AddSingleton<BatteryService.Application.Services.IMqttBridgePublisher>(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
         services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());

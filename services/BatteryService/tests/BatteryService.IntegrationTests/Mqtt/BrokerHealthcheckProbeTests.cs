@@ -46,10 +46,13 @@ public sealed class BrokerHealthcheckProbeTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         var bootstrap = string.Join(" && ",
-            "mkdir -p /mosquitto/config/conf.d",
-            $"mosquitto_passwd -c -b /mosquitto/config/passwd {HealthUser} {HealthPassword}",
-            "chown mosquitto:mosquitto /mosquitto/config/passwd",
-            "chmod 0700 /mosquitto/config/passwd",
+            // IOT3-106/M1 — `password_file` của repo nay là `/mosquitto/config-src/passwd`
+            // (đường của một THƯ MỤC được mount) thay vì `/mosquitto/config/passwd` (file lẻ).
+            // Test nạp CHÍNH conf của repo nên phải sinh passwd vào đúng đường đó.
+            "mkdir -p /mosquitto/config/conf.d /mosquitto/config-src",
+            $"mosquitto_passwd -c -b /mosquitto/config-src/passwd {HealthUser} {HealthPassword}",
+            "chown mosquitto:mosquitto /mosquitto/config-src/passwd",
+            "chmod 0700 /mosquitto/config-src/passwd",
             "exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf");
 
         _container = new ContainerBuilder()

@@ -78,11 +78,15 @@ public sealed class GeneratedCredentialAcceptedByBrokerTests : IAsyncLifetime
 
         var cfgDir = RepoMqttConfigDir;
         var bootstrap = string.Join(" && ",
-            "mkdir -p /mosquitto/config/conf.d",
+            // IOT3-106/M1 — `password_file` của repo nay là `/mosquitto/config-src/passwd`
+            // (đường của một THƯ MỤC được mount) thay vì `/mosquitto/config/passwd` (file lẻ).
+            // Test nạp CHÍNH conf của repo nên phải sinh passwd vào đúng đường đó.
+            "mkdir -p /mosquitto/config/conf.d /mosquitto/config-src",
+            "cp /mosquitto/config/passwd /mosquitto/config-src/passwd",
             // Broker tụt quyền sang user `mosquitto`; thiếu chown là chết ngay với
             // "Unable to open pwfile". Mosquitto 2.0 cũng từ chối file world-readable.
-            "chown mosquitto:mosquitto /mosquitto/config/passwd",
-            "chmod 0700 /mosquitto/config/passwd",
+            "chown mosquitto:mosquitto /mosquitto/config-src/passwd",
+            "chmod 0700 /mosquitto/config-src/passwd",
             "exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf");
 
         _container = new ContainerBuilder()

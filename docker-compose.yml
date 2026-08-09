@@ -148,7 +148,11 @@ services:
       - ./infra/mqtt/mosquitto/config/acl.conf:/mosquitto/config/acl.conf:ro
       # conf.d rỗng khi chưa sinh cert → broker chạy với 1883, KHÔNG fail to start.
       - ./infra/mqtt/mosquitto/config/conf.d:/mosquitto/config/conf.d:ro
-      - ./infra/mqtt/mosquitto/passwd:/mosquitto/config/passwd:ro
+      # IOT3-106/M1 — mount THƯ MỤC, không phải file lẻ.
+      # Backend ghi passwd bằng `File.Move` (đổi inode); bind mount file lẻ không truyền đủ thay
+      # đổi đó vào container ⇒ `passwd-watch` không thấy mtime đổi ⇒ không SIGHUP ⇒ thiết bị mới
+      # bị từ chối trong im lặng. `password_file` trong mosquitto.conf trỏ vào đường này.
+      - ./infra/mqtt/mosquitto:/mosquitto/config-src:ro
       - ./infra/mqtt/mosquitto/certs:/mosquitto/certs:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
@@ -168,7 +172,7 @@ services:
         (
           last=""
           while :; do
-            cur=$$(stat -c %Y /mosquitto/config/passwd 2>/dev/null || echo none)
+            cur=$$(stat -c %Y /mosquitto/config-src/passwd 2>/dev/null || echo none)
             if [ -n "$$last" ] && [ "$$cur" != "$$last" ]; then
               echo "[passwd-watch] file doi -> SIGHUP mosquitto"
               kill -HUP 1 2>/dev/null || true
@@ -457,7 +461,7 @@ services:
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
       ApiKeys__SensorIngest: ${BATTERY_SENSOR_INGEST_API_KEY:-dev-battery-ingest-key}
-      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-30}
+      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-10}   # IOT3-80 — 30→10 s
       AnomalyEngine__DedupWindowMinutes: ${BATTERY_ANOMALY_DEDUP_WINDOW_MINUTES:-30}
       AnomalyEngine__OfflineThresholdMinutes: ${BATTERY_ANOMALY_OFFLINE_THRESHOLD_MINUTES:-10}
       AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-5}

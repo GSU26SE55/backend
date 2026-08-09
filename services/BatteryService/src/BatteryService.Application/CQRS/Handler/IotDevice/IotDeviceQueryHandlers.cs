@@ -70,7 +70,13 @@ public class GetIotDevicesQueryHandler : IRequestHandler<GetIotDevicesQuery, Com
 public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuery, CommonResponse<IotDeviceDetailDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
-    public GetIotDeviceByIdQueryHandler(IBatteryUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+    private readonly IMqttBrokerEndpointProvider _broker;
+
+    public GetIotDeviceByIdQueryHandler(IBatteryUnitOfWork unitOfWork, IMqttBrokerEndpointProvider broker)
+    {
+        _unitOfWork = unitOfWork;
+        _broker = broker;
+    }
 
     public async Task<CommonResponse<IotDeviceDetailDto>> Handle(GetIotDeviceByIdQuery request, CancellationToken ct)
     {
@@ -85,7 +91,12 @@ public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuer
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = IotDeviceMapper.ToDetailDto(entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version)
+            // IOT3-71 — điểm kết nối MQTT lấy từ cấu hình đang chạy, KHÔNG lưu trong DB:
+            // đổi broker là mọi thiết bị phải thấy địa chỉ mới ngay, không phải chờ ai đó nhớ
+            // chạy một câu UPDATE.
+            Data = IotDeviceMapper.ToDetailDto(
+                entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version,
+                _broker.Resolve(entity.DeviceCode))
         };
     }
 }

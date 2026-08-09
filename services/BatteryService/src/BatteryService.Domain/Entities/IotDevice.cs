@@ -65,6 +65,17 @@ public class IotDevice : AuditableEntity
     /// <summary>Heartbeat interval device tự khai (giây). Default 60.</summary>
     public int HeartbeatIntervalSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// IOT3-77 — chu kỳ đọc cảm biến (giây) mà thiết bị dùng để đặt nhịp poll BMS.
+    /// </summary>
+    /// <remarks>
+    /// Trước IOT3-77 giá trị này là số cứng <c>10</c> trong <c>ProvisionIotDeviceCommandHandler</c>,
+    /// nên Admin không đổi được qua web — chỉ đổi tạm bằng lệnh MQTT <c>set_interval</c> (ghi RAM,
+    /// mất sau reboot). Biên hợp lệ <b>[1, 600]</b> đặt để KHỚP clamp phía firmware
+    /// (<c>provision.cpp</c>): biên rộng hơn thì firmware âm thầm clamp lại và Admin tưởng đã đổi.
+    /// </remarks>
+    public int PollingIntervalSeconds { get; set; } = 10;
+
     /// <summary>Sai lệch đồng hồ device vs server gần nhất (giây). Dùng để cảnh báo clock drift.</summary>
     public double? LastClockSkewSeconds { get; set; }
 
@@ -80,8 +91,28 @@ public class IotDevice : AuditableEntity
     /// <summary>Sprint IoT-2 #IoT2-26 — MQTT username cấp cho device (sync EMQX/Mosquitto ACL).</summary>
     public string? MqttUsername { get; set; }
 
-    /// <summary>Sprint IoT-2 #IoT2-26 — bcrypt hash của MQTT password. Plaintext chỉ trả 1 lần khi tạo/rotate.</summary>
+    /// <summary>
+    /// Sprint IoT-2 #IoT2-26 — hash PBKDF2-SHA512 định dạng <c>$7$</c> của Mosquitto.
+    /// <see cref="MqttPasswordFileSyncService"/> chép giá trị này thẳng vào file <c>passwd</c>.
+    /// </summary>
     public string? MqttPasswordHash { get; set; }
+
+    /// <summary>
+    /// IOT3-25 — plaintext mật khẩu MQTT, để <c>/provision</c> cấp lại cho thiết bị mỗi lần boot.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="MqttPasswordHash"/> là PBKDF2 một chiều — không đọc ngược được. Không lưu
+    /// plaintext thì thiết bị chỉ nhận được mật khẩu ĐÚNG MỘT LẦN lúc admin tạo device, tức là
+    /// vẫn phải nhúng cứng vào firmware — đúng cái Phương án A muốn xoá bỏ.
+    /// </para>
+    /// <para>
+    /// Cùng khuôn <see cref="ApiKeyPlaintext"/> (chốt 16/07/2026): cùng bảng, cùng endpoint admin,
+    /// cùng lớp quyền — không mở ra loại phơi nhiễm mới. <c>null</c> với device tạo trước IOT3-25;
+    /// <c>ProvisionIotDeviceCommandHandler</c> tự sinh lại khi gặp (xem IOT3-28).
+    /// </para>
+    /// </remarks>
+    public string? MqttPasswordPlaintext { get; set; }
 
     /// <summary>Mô tả vị trí, ghi chú lắp đặt.</summary>
     public string? Notes { get; set; }

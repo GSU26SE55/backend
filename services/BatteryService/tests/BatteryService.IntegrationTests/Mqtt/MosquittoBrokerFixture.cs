@@ -30,6 +30,20 @@ public sealed class MosquittoBrokerFixture : IAsyncLifetime
     /// <summary>Device thứ hai — dùng làm "nạn nhân" để chứng minh device A không ghi đè được.</summary>
     public const string DeviceB = "gw-test-b";
 
+    /// <summary>
+    /// IOT3-15 — <c>DeviceCode</c> đúng như <c>CreateIotDeviceCommandHandler</c> lưu vào DB:
+    /// <c>Trim().ToUpperInvariant()</c>. Username MQTT vẫn là bản chữ thường ở trên.
+    /// </summary>
+    /// <remarks>
+    /// Trước đây bài test seed thẳng <c>DeviceCode = DeviceA</c> (chữ thường), tức bỏ qua bước
+    /// chuẩn hoá của handler. Vì thế nó KHÔNG THỂ phát hiện lỗi so sánh phân biệt hoa/thường ở
+    /// bridge — test xanh trong khi hệ thống thật rơi toàn bộ telemetry MQTT.
+    /// </remarks>
+    public const string DeviceACode = "GW-TEST-A";
+
+    /// <inheritdoc cref="DeviceACode"/>
+    public const string DeviceBCode = "GW-TEST-B";
+
     public const string Password = "test-mqtt-pw";
 
     private IContainer _container = null!;
@@ -66,15 +80,25 @@ public sealed class MosquittoBrokerFixture : IAsyncLifetime
         // `mosquitto.conf` của repo có `include_dir conf.d` → thư mục phải tồn tại, nếu không
         // Mosquitto báo lỗi và thoát. Test chạy cổng 1883 plain nên không sinh cert (TLS đã được
         // nghiệm thu riêng ở infra/mqtt/README.md).
+        // IOT3-106/M1 — `password_file` trong mosquitto.conf của repo nay trỏ tới
+        // `/mosquitto/config-src/passwd` (đường của MỘT THƯ MỤC được mount), thay vì
+        // `/mosquitto/config/passwd` (đường của một FILE LẺ). Đổi vì bind mount file lẻ không
+        // truyền đủ thay đổi inode do `File.Move` tạo ra, khiến broker không bao giờ nạp lại
+        // credential của thiết bị mới.
+        //
+        // Fixture nạp CHÍNH file conf của repo (đó là điểm mạnh của nó — test đồng thời kiểm luôn
+        // conf production), nên nó phải sinh passwd vào ĐÚNG đường mà conf đang trỏ tới. Sai chỗ
+        // này thì broker chết ngay lúc khởi động với `Error: Unable to open pwfile`, và triệu
+        // chứng ở tầng test chỉ là "container is not running" — không hề nhắc tới passwd.
         var bootstrap = string.Join(" && ",
-            "mkdir -p /mosquitto/config/conf.d",
-            $"mosquitto_passwd -c -b /mosquitto/config/passwd {BridgeUser} {Password}",
-            $"mosquitto_passwd -b /mosquitto/config/passwd {DeviceA} {Password}",
-            $"mosquitto_passwd -b /mosquitto/config/passwd {DeviceB} {Password}",
+            "mkdir -p /mosquitto/config/conf.d /mosquitto/config-src",
+            $"mosquitto_passwd -c -b /mosquitto/config-src/passwd {BridgeUser} {Password}",
+            $"mosquitto_passwd -b /mosquitto/config-src/passwd {DeviceA} {Password}",
+            $"mosquitto_passwd -b /mosquitto/config-src/passwd {DeviceB} {Password}",
             // `mosquitto_passwd` chạy bằng root nhưng broker tụt quyền sang user `mosquitto`.
-            // Thiếu chown là broker chết ngay với: Error: Unable to open pwfile "/mosquitto/config/passwd".
-            "chown mosquitto:mosquitto /mosquitto/config/passwd",
-            "chmod 0700 /mosquitto/config/passwd",
+            // Thiếu chown là broker chết ngay với: Error: Unable to open pwfile.
+            "chown mosquitto:mosquitto /mosquitto/config-src/passwd",
+            "chmod 0700 /mosquitto/config-src/passwd",
             "exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf");
 
         _container = new ContainerBuilder()
