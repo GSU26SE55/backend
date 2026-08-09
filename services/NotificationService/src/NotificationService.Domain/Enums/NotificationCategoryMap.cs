@@ -39,6 +39,7 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.TicketEscalated] = NotificationCategoryEnum.Sla,
             [NotificationTypeEnum.SlaWarning] = NotificationCategoryEnum.Sla,
             [NotificationTypeEnum.SlaBreached] = NotificationCategoryEnum.Sla,
+            [NotificationTypeEnum.SlaAutoResumed] = NotificationCategoryEnum.Sla,
             [NotificationTypeEnum.IncidentDeclared] = NotificationCategoryEnum.Sla,
             [NotificationTypeEnum.AlertTicketSagaFailed] = NotificationCategoryEnum.Sla,
             [NotificationTypeEnum.ChatEscalatedToAdmin] = NotificationCategoryEnum.Sla,

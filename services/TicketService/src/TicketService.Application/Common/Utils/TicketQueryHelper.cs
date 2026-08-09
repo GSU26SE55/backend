@@ -70,6 +70,7 @@ public static class TicketQueryHelper
             DueAt = sla.DueAt,
             OriginalDueAt = sla.OriginalDueAt,
             TotalPausedMinutes = sla.TotalPausedMinutes,
+            PauseEpisodesCount = sla.PauseEpisodesCount,
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,

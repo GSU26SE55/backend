@@ -38,9 +38,14 @@ public interface IAiKbSuggestClient
     /// <summary>
     /// Trả về danh sách đã xếp hạng, hoặc <c>null</c> khi AI không phản hồi được.
     /// </summary>
+    /// <param name="category"></param>
+    /// <param name="description"></param>
+    /// <param name="candidates"></param>
+    /// <param name="topN"></param>
     /// <param name="aiActionSteps">Các bước AI đã đề xuất cho chính ticket này.</param>
     /// <param name="aiSopReferences">SOP AI tham chiếu — tín hiệu khớp mạnh.</param>
     /// <param name="aiKbDocRefs">Tài liệu AI truy hồi qua RAG — tín hiệu mạnh nhất.</param>
+    /// <param name="ct"></param>
     Task<AiKbSuggestResult?> SuggestKbAsync(
         int category,
         string description,

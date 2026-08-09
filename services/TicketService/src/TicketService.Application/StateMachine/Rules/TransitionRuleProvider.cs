@@ -108,10 +108,12 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.Escalated,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = role is ActorRoleEnum.System or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.System or ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
+                                        || role is ActorRoleEnum.System or ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
+                                     || role is ActorRoleEnum.System or ActorRoleEnum.Admin
                                 ? null
-                                : "Only System can escalate due to SLA breach."
+                                : "Only the assigned Primary Handler can request escalation."
                         }
                     }
                 }

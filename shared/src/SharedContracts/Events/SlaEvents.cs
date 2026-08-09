@@ -34,3 +34,15 @@ public record SlaWarningEvent : IntegrationEvent
     /// </summary>
     public Guid? StaffId { get; init; }
 }
+
+/// <summary>Published once when an overdue SLA pause is automatically resumed.</summary>
+public record SlaAutoResumedEvent : IntegrationEvent
+{
+    public Guid SlaPauseEventId { get; init; }
+    public Guid TicketId { get; init; }
+    public Guid CustomerId { get; init; }
+    public Guid? PrimaryStaffId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public int PauseReason { get; init; }
+    public DateTime ResumedAt { get; init; }
+}

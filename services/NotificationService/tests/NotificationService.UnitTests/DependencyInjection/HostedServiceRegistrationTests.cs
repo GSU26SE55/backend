@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NotificationService.Application.Consumers;
 using NotificationService.Infrastructure.BackgroundJobs;
 
 namespace NotificationService.UnitTests.DependencyInjection;
@@ -65,6 +66,15 @@ public class HostedServiceRegistrationTests
             .ToList();
 
         duplicates.Should().BeEmpty("đăng ký trùng làm người đọc tưởng hai worker cùng chạy");
+    }
+
+    [Fact]
+    public void SlaAutoResumedConsumer_IsRegisteredByApplicationAssemblyScan()
+    {
+        var services = BuildServiceCollection();
+
+        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(SlaAutoResumedConsumer),
+            "AddMessageBus scans NotificationService.Application and ConfigureEndpoints creates this consumer's receive endpoint");
     }
 
     /// <summary>

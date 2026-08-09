@@ -44,8 +44,8 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
         if (CustomerId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "CustomerId", Detail = "CustomerId không hợp lệ." });
 
-        if (BatteryAssetIds.Count == 0)
-            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Phải chọn ít nhất một pin." });
+        if (BatteryAssetIds.Count != 1)
+            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Phải chọn chính xác một pin." });
         else if (BatteryAssetIds.Any(id => id == Guid.Empty))
             response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Danh sách pin không được chứa ID rỗng." });
         else if (BatteryAssetIds.Distinct().Count() != BatteryAssetIds.Count)
