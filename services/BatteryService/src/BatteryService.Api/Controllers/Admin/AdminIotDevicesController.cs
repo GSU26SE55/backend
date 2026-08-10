@@ -4,6 +4,7 @@ using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
+using BatteryService.Infrastructure.Mqtt;   // IOT3-14: MqttTopicMap — dựng topic đúng dạng đã publish
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -325,6 +326,45 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
+    /// IOT3-32 — xoay RIÊNG thông tin đăng nhập MQTT. Thiết bị tự lấy lại, KHÔNG cần ra hiện trường.
+    /// </summary>
+    /// <remarks>
+    /// Khác <c>/rotate-key</c> ở điểm quyết định:
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>/rotate-key</c> đổi cả <c>apiKey</c> ⇒ thiết bị mất CẢ HAI đường; HTTPS trả 401 nên
+    ///     nó không provision lại được. <b>Không tự lành</b> — phải mang laptop/điện thoại tới nạp lại.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>/rotate-mqtt</c> chỉ đổi mật khẩu MQTT ⇒ broker từ chối (<c>state=4</c>), thiết bị đếm
+    ///     đủ ngưỡng thì tự gọi <c>/provision</c> bằng apiKey cũ còn hiệu lực và nhận mật khẩu mới.
+    ///     <b>Tự lành trong vài phút.</b>
+    ///   </description></item>
+    /// </list>
+    /// <para>
+    /// ⇒ Nghi ngờ lộ credential MQTT thì dùng endpoint NÀY. Chỉ dùng <c>/rotate-key</c> khi chính
+    /// <c>apiKey</c> bị lộ, và khi đó đã chấp nhận phải ra hiện trường.
+    /// </para>
+    /// <para>
+    /// Response trả <c>rawApiKey</c> là khoá <b>đang dùng</b> (không đổi) để admin khỏi tưởng bị mất.
+    /// </para>
+    /// </remarks>
+    /// <response code="200">Xoay thành công; thiết bị sẽ tự re-provision.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="404">Không tìm thấy device.</response>
+    [HttpPost("{id:guid}/rotate-mqtt")]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RotateMqttCredential(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RotateIotDeviceMqttCredentialCommand { Id = id }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
     /// Revoke API key — block device khỏi mọi request (ingest, heartbeat, OTA).
     /// </summary>
     /// <remarks>
@@ -438,7 +478,11 @@ public class AdminIotDevicesController : ControllerBase
             {
                 CmdId = cmdId,
                 DeviceCode = device.DeviceCode,
-                Topic = $"solar/{device.DeviceCode}/cmd"
+                // IOT3-14 — phải là topic THẬT đã publish, không phải chuỗi dựng lại tay.
+                // Trước đây chỗ này nội suy `device.DeviceCode` (UPPERCASE) trong khi
+                // MqttBridgeBackgroundService publish qua MqttTopicMap.Command() — nay đã
+                // chuẩn hoá chữ thường. Hai chuỗi lệch nhau làm admin debug sai hướng.
+                Topic = MqttTopicMap.Command(device.DeviceCode)
             }
         });
     }

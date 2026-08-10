@@ -441,8 +441,10 @@ config:
   # hoặc managed service (EMQX Cloud / HiveMQ). Backend chỉ chạy MqttBridgeBackgroundService client.
   # Mqtt__Password đặt trong Secret solar-secrets (xem deploy/README.md).
   Mqtt__Enabled: "false"           # Bật khi broker deployed + cấp credential
-  Mqtt__Host: "mosquitto"          # K8s Service DNS (broker chart cùng namespace) hoặc fqdn external
+  Mqtt__Host: "mosquitto"          # K8s Service DNS chỉ dành cho BatteryService
   Mqtt__Port: "8883"
+  Mqtt__PublicHost: "mqtt.example.com" # DNS mà ESP32 bên ngoài cluster truy cập được
+  Mqtt__PublicPort: "8883"
   Mqtt__UseTls: "true"
   Mqtt__AllowUntrustedCertificates: "false"
   Mqtt__Username: "backend-bridge"

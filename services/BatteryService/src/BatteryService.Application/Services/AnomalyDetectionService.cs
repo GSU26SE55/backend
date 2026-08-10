@@ -60,6 +60,20 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             .Where(t => batteryTypeIds.Contains(t.BatteryTypeId) && t.IsActive && !t.IsDeleted)
             .ToDictionaryAsync(t => t.BatteryTypeId, cancellationToken);
 
+        // IOT3-106/M4 — alert MỚI TẠO trong chính lượt quét này, chưa `SaveChanges`.
+        //
+        // `FindActiveAlertToMergeAsync` hỏi DB bằng `.FirstOrDefaultAsync()`, nên nó KHÔNG thấy
+        // những alert vừa `AddAsync` còn nằm trong change tracker. Hệ quả đo được: 6 reading vi
+        // phạm cách nhau 2 giây, rơi cùng một lượt quét → 5 alert `Open` TRÙNG NHAU cho cùng một
+        // pin, `merged_into_alert_id` toàn NULL. Người trực nhận 5 cảnh báo cho MỘT sự cố.
+        //
+        // Lỗi này chỉ lộ khi DB SẠCH: còn alert cũ trong `DedupWindowEndUtc` thì reading đầu tìm
+        // thấy cha ngay và mọi alert sau đều thành `Merged` — nhìn như dedup hoàn hảo.
+        //
+        // Đây đúng cơ chế mà `ShouldSuppressByNoiseAsync` đã lường trước cho `noise_breach_events`
+        // ("row pending không được DB đếm"); chỗ này thì chưa.
+        var pendingAlerts = new Dictionary<(Guid AssetId, AnomalyTypeEnum Type), AlertEntity>();
+
         foreach (var reading in readings)
         {
             // Sprint Bonus NS-08 (#652, N4) — chỉ Detect trên reading primary. Reading redundant
@@ -89,8 +103,19 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                     continue;
                 }
 
-                var existing = await FindActiveAlertToMergeAsync(
-                    reading.BatteryAssetId, anomaly.Type, now, cancellationToken);
+                // IOT3-106/M4 — tra phần CHƯA LƯU trước, rồi mới hỏi DB.
+                var key = (reading.BatteryAssetId, anomaly.Type);
+                AlertEntity? existing = null;
+                if (pendingAlerts.TryGetValue(key, out var pendingParent)
+                    && pendingParent.DedupWindowEndUtc > now)
+                {
+                    existing = pendingParent;
+                }
+                else
+                {
+                    existing = await FindActiveAlertToMergeAsync(
+                        reading.BatteryAssetId, anomaly.Type, now, cancellationToken);
+                }
 
                 if (existing is not null)
                 {
@@ -128,9 +153,29 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                 await _unitOfWork.Alerts.AddAsync(alert);
                 result.AlertsCreated++;
 
+                // IOT3-106/M4 — ghi vào từ điển để những reading SAU trong cùng lượt quét gộp được
+                // vào alert này thay vì tạo thêm alert `Open` trùng. Ghi đè bản cũ nếu có: reading
+                // xử lý sau luôn có `DedupWindowEndUtc` mới hơn hoặc bằng, nên giữ bản mới là đúng.
+                pendingAlerts[key] = alert;
+
                 // Sprint Bonus NS-10 (#654, N2) — alert nổ từ chuỗi breach suppression → link
                 // chuỗi vào alert (audit "alert này nổ từ chuỗi breach nào") + giữ khỏi retention.
-                if (recordedBreach is not null)
+                //
+                // IOT3-106/M3 — điều kiện gác cũ là `if (recordedBreach is not null)`, và nó khiến
+                // đường này KHÔNG BAO GIỜ CHẠY. Đo được: `promoted_to_alert_id` NULL trên 0/11 bản
+                // ghi toàn bảng.
+                //
+                // Lý do: `ShouldSuppressByNoiseAsync` trả `recorded = null` khi breach của reading
+                // này ĐÃ được ghi ở lượt quét trước (`alreadyRecorded == true`). Mà alert của đường
+                // chống nhiễu CHỈ nổ ở lượt quét lại — lượt đầu `effectiveCount = breachCount + 1`
+                // chưa đạt `NoiseSuppressionCount` nên luôn bị chặn. Hai điều kiện loại trừ nhau:
+                // lượt nào có `recordedBreach` thì không nổ alert; lượt nào nổ alert thì nó đã null.
+                //
+                // Gác đúng phải là "alert này có đi qua đường chống nhiễu không", tức xét chính
+                // `threshold`. `PromoteBreachChainAsync` tự truy vấn cả chuỗi từ DB nên không cần
+                // `recordedBreach` để làm việc — tham số đó giờ nullable, chỉ dùng để xử lý riêng
+                // row còn pending (DB query không thấy row chưa SaveChanges).
+                if (threshold.NoiseSuppressionEnabled && threshold.NoiseSuppressionCount > 1)
                 {
                     await PromoteBreachChainAsync(
                         reading.BatteryAssetId, anomaly.Type, threshold, alert.Id,
@@ -369,7 +414,7 @@ public class AnomalyDetectionService : IAnomalyDetectionService
         AnomalyTypeEnum anomalyType,
         Domain.Entities.ThresholdConfig threshold,
         Guid alertId,
-        Domain.Entities.NoiseBreachEvent pendingBreach,
+        Domain.Entities.NoiseBreachEvent? pendingBreach,
         CancellationToken ct)
     {
         var windowCutoff = DateTime.UtcNow.AddHours(-threshold.NoiseSuppressionWindowHours);
@@ -382,12 +427,16 @@ public class AnomalyDetectionService : IAnomalyDetectionService
 
         foreach (var breach in chain)
         {
-            if (ReferenceEquals(breach, pendingBreach))
+            if (pendingBreach is not null && ReferenceEquals(breach, pendingBreach))
                 continue; // pending set trực tiếp bên dưới (DB query không thấy row pending)
             breach.PromotedToAlertId = alertId;
             _unitOfWork.NoiseBreachEvents.UpdateAsync(breach);
         }
 
-        pendingBreach.PromotedToAlertId = alertId;
+        // IOT3-106/M3 — `pendingBreach` null là trường hợp THƯỜNG GẶP NHẤT, không phải ngoại lệ:
+        // alert nổ ở lượt quét lại thì breach của reading này đã persisted từ lượt trước và đã nằm
+        // trong `chain` ở trên rồi.
+        if (pendingBreach is not null)
+            pendingBreach.PromotedToAlertId = alertId;
     }
 }

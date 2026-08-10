@@ -5002,7 +5002,7 @@ KHÔNG được đảo thứ tự — vi phạm = phải làm lại từ đầu 
 
 ---
 
-## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3 + Sprint 6.4 + Sprint 6.5 + Sprint 6.6
+## 17. Sprint backlog — 8 sprint chính + Sprint 5B + Sprint IoT-1 + Sprint IoT-2 + Sprint SMS + Sprint additional-auth + Sprint audit + Sprint Comment + Sprint BE-IoT-Realtime + Sprint Bonus + Sprint 6.2 + Sprint 6.3 + Sprint 6.4 + Sprint 6.5 + Sprint 6.6 + Sprint IoT-3
 
 ### Sprint 1 (Hiện tại: 11/5–24/5/2026)
 **Goal:** Stabilize foundations + close AuditLog/Permission.
@@ -7227,6 +7227,474 @@ Ngoài ra khảo sát tìm thấy **ba lỗi im lặng độc lập**, không lo
 - **`plan.md` viết hồi tố** (`logs/GH-TBD-push-transport/plan.md`) và **chưa commit** vì `logs/` đang
   bị `.gitignore` chặn. Người ship cần `git add -f` sau khi có số issue thật.
 
+### Sprint IoT-3 (Zero-touch provisioning + sửa lỗi cấu hình phần cứng — khảo sát 2026-08-07)
+
+**Trạng thái: 🚧 ĐANG LÀM — 95/107 task xong 08/08/2026, CHƯA COMMIT.**
+Kiểm chứng: BatteryService **657/657** unit test xanh · firmware **259/259** native test xanh ·
+`pio run -e esp32-s3-real` + `esp32-s3-devkitc-1` **SUCCESS** (RAM 24,3% · Flash 17,8%) ·
+mobile `tsc --noEmit` + `eslint` sạch · frontend `npm run build` xanh ·
+migration `AddIotDeviceMqttPasswordPlaintextAndPollingInterval` và
+`AddSensorReadingsCompressionAndRetention` **rollback đạt** trên DB nháp riêng (không đụng `battery_db`;
+riêng migration nén còn test rollback **khi đã có chunk nén thật**, 500 dòng còn nguyên).
+
+**Kiểm chứng chạy thật (2026-08-08)** — bằng bộ test không cần phần cứng
+(`iot-quy-trinh-test-khong-can-phan-cung.md` + `iot-test-lai.sh --reset`, kết quả **23 đạt · 0 hỏng**):
+provision trả đủ 6 trường MQTT + 5 `batteryMappings` · telemetry MQTT → TimescaleDB qua LAN ·
+downlink `solar/esp-test-2/cmd` chữ thường · alert quá nhiệt ≤ 10 s · chống nhiễu chặn bớt ·
+LWT sinh đúng 5 alert `DeviceOffline` = số pin cùng site.
+
+**Chưa làm (12 task):** #1078/#1079/#1080 + IOT3-105 (chờ mua shunt 200 A/75 mV) · IOT3-03 (đọc serial
+máy thật) · IOT3-92/93/100 (E2E tay + kiểm WiFi demo + đo hàng đợi) · IOT3-101..104 (⚪ tuỳ chọn,
+chỉ làm nếu cần chu kỳ < 1 s).
+Backend, frontend, mobile đã xong **100%** phần thuộc sprint; 12 task còn lại đều là `[HW]`/`[Ops]`/`[E2E]`
+hoặc tuỳ chọn.
+ Toàn bộ task dưới đây sinh ra từ đợt rà soát chéo 4 repo ngày 07/08/2026 (`backend` · `frontend` · `mobile` · `iot` @ `bea80a9`). Tài liệu nguồn: `iot-co-che-hoat-dong.md` (cơ chế + lỗi phát hiện) và `iot-zero-touch-wifi-khach.md` (kế hoạch T0–T5).
+
+**Owner đề xuất:** Thắng (`@Alexdev257`) phần backend · Hoà (`@CodeForFee`) phần firmware · FE/Mobile chia theo phase G+H.
+**Sprint Board (cập nhật 08/08/2026):** **82/94 issue** ở cột **In Review** (`status: reviewing`);
+**12 issue** giữ ở cột **Plan** (`status: init`).
+
+12 issue còn ở Plan — không cái nào bị chặn bởi code:
+`#1078` `#1079` `#1080` `#1167` (chờ **mua shunt 200 A/75 mV**) · `#1154` `#1155` (E2E tay + kiểm
+loại WiFi demo) · `#1162` (đo hàng đợi LittleFS offline dài ngày) · `#1163`–`#1166` (⚪ tuỳ chọn,
+chỉ làm nếu cần chu kỳ < 1 s) · `#1076` (**2/3** — IOT3-01/02 xong, IOT3-03 chờ đọc serial máy thật).
+
+> ⚠️ `#1076` là issue GỘP. Không chuyển sang In Review dù 2/3 task đã xong — chuyển cả issue khi
+> còn một phần chưa làm sẽ khiến IOT3-03 biến mất khỏi tầm nhìn. Ba issue gộp còn lại (`#1077`,
+> `#1084`, `#1086`) đã xong toàn bộ task con nên chuyển được.
+
+**Issue numbers:** ✅ **đã tạo 07/08/2026** — GitHub `#1076..#1167` (**92 issue**, milestone `Sprint IoT-3` #24, label `status: init` = cột **Plan**, assignee `@Alexdev257`). 105 mã task gộp thành 92 issue: 4 issue gộp (`IOT3-01+02+03`, `IOT3-04..10`, `IOT3-17..21`, `IOT3-23+24`) chứa checklist con, 88 issue còn lại ánh xạ 1:1.
+**Phụ thuộc:** Sprint IoT-1 + IoT-2 đã xong. Chạm BatteryService + `shared/` + repo `iot` + `frontend` + `mobile`.
+**Ước lượng:** ~11,75 dev-day (~94h) — gồm IOT3-106 (~0,75d) thêm ngày 08/08.
+
+> **⚠️ Lệch quy ước có chủ ý.** Sprint IoT-2 ghi *"đây là single source of truth cho mọi task **backend** IoT — nhóm firmware chỉ tham chiếu"*. Sprint IoT-3 **chứa cả task firmware/FE/mobile** vì công việc lần này cắt ngang 4 repo và một lỗi ở repo này chặn việc ở repo kia (xem §17.IoT3.6 Phụ thuộc chéo). Nhóm firmware **mirror** phase A/C/E/F về `iot/tasksprint.md`, giữ nguyên mã `IOT3-xx` để đối chiếu.
+
+#### 17.IoT3.0. Vấn đề gốc — bốn lỗi đang sống + một chuỗi chưa nối
+
+**Bài toán 1 — thiết bị không tự lấy được cấu hình MQTT.** Broker host/port/username/password đang **nhúng cứng** trong `iot/firmware-esp32/include/config.h` (dòng 95–99). Mỗi thiết bị cần một bản build riêng. Backend đã có sẵn `IMqttBrokerEndpointProvider` (đăng ký DI, chỉ dùng ở create handler) và `MqttPasswordFileSyncService` (code đủ, **chưa từng chạy**) — tức hạ tầng đã dựng 70 % nhưng chưa nối vào `/provision`.
+
+**Bài toán 2 — WiFi khách hàng không cấu hình lại được tại chỗ.** Đã chốt dùng WiFi của khách (không cấp router 4G). Khách đổi mật khẩu là thiết bị chết, mà cách duy nhất để nạp lại là serial CLI qua USB ⇒ mỗi lần phải cử người mang laptop tới.
+
+**Bốn lỗi cấu hình phần cứng đang sống** (đo trực tiếp trên code, không suy đoán):
+
+| # | Lỗi | Đo được | Vì sao im lặng |
+|---|---|---|---|
+| 1 | `BMS_MODEL = 2` (JBD) trong khi phần cứng là **JK-BD6A24S10P** | Toàn bộ đường JK bị `#if BMS_MODEL == 3` loại khỏi bản biên dịch ⇒ **code JK vừa viết là code chết** | `config.h` nằm trong `.gitignore`; người viết code JK có `=3` ở máy mình, `config.example.h` vẫn `=2` |
+| 2 | `BMS_UNIT_ID_COUNT = 4` nhưng chỉ có **1** BMS trên bus | 3 unitId vắng mặt × (2000 ms timeout + retry) ⇒ **chu kỳ 13,2 giây** thay vì 1,0 giây | Poll fail chỉ tăng `s_pollFail`, không có ngưỡng cảnh báo. `battery_mapping.h` ghi *"khớp `BMS_UNIT_ID_COUNT=1`"* nhưng không ai đồng bộ lại config |
+| 3 | `INA226_SHUNT_OHM = 0.1f` × `MAX_CURRENT_A = 20.0f` | `20 × 0,1 = 2,0 V` vượt **24 lần** trần 81,90 mV ⇒ `ERR_SHUNTVOLTAGE_HIGH` ⇒ **INA226 chưa từng init**, nguồn `redundant` rỗng | `ina226Begin()` trả false rồi thôi; `bms_source` chỉ in *"ina226 init FAIL — redundant readings SKIP"* một lần lúc boot |
+| 4 | `BMS_POLL_TIMEOUT_MS = 500` là **hằng chết** | `grep` toàn `src/` ra **0 kết quả**. Timeout thật là `ku16MBResponseTimeout = 2000` hằng số cứng trong `ModbusMaster.h:252` | Hằng số trông như đang có tác dụng; mọi tính toán thời gian dựa trên nó đều sai gấp 4 lần |
+
+**Ba lỗi hệ thống khác** phát hiện cùng đợt:
+
+| # | Lỗi | Hệ quả |
+|---|---|---|
+| 5 | **Case mismatch `DeviceCode` ở ranh giới MQTT** | DB lưu `GW-ESP32-001` (upper), ACL dùng `%u` = username (lower), backend publish `solar/GW-ESP32-001/cmd`, bridge tra `d.DeviceCode == "gw-esp32-001"`. **Uplink và downlink đứt cả hai, đều im lặng.** Đã có workaround vá tay `user esp-2` trong `acl.conf` — chỉ chạy cho đúng 1 thiết bị |
+| 6 | **`Mqtt__PasswordFilePath` không được đặt ở đâu** | `MqttPasswordFileSyncService` tự tắt ⇒ credential thiết bị **không bao giờ tới broker** ⇒ `state=4 BAD_CREDENTIALS` dù mọi tầng phía trên báo thành công |
+| 7 | **CA nhúng chỉ áp cho MQTT, HTTPS vẫn đọc LittleFS** | Nếu LittleFS không mount (đúng lý do khiến người ta phải nhúng CA), `httpConfigureTls` fail-closed ⇒ **provision + heartbeat + OTA + đẩy bù hàng đợi đều chết**, trong khi telemetry vẫn chảy qua MQTT nên dashboard trông vẫn bình thường |
+
+> **Quan hệ nhân quả cần nhớ:** lỗi #1 và #2 **che** nhau — sửa `BMS_MODEL` mà không sửa `BMS_UNIT_ID_COUNT` thì đọc đúng thanh ghi nhưng vẫn mất 13 giây/chu kỳ; sửa ngược lại thì nhanh nhưng không đọc được gì. Lỗi #3 cần **bốn** thay đổi phối hợp (shunt vật lý + 2 macro + build flag + tham số hàm), thiếu bất kỳ cái nào là chip vẫn không init, chỉ khác mã lỗi.
+
+#### 17.IoT3.1. Quyết định đã chốt (07/08/2026)
+
+| # | Ngã ba | Chọn | Vì sao |
+|---|---|---|---|
+| 1 | Dòng tối đa của hệ? | **100 A liên tục / 200 A đỉnh** — JK-BD6A24S10P (đọc từ nhãn) | Shunt phải chọn theo **đỉnh**: 200A/75mV = 0,375 mΩ. Shunt 100 A chỉ đo tới 109 A, mù hoàn toàn ở đỉnh và toả nhiệt gấp đôi |
+| 2 | TLS của MQTT compile-time hay runtime? | **Compile-time**, giữ `MQTT_USE_TLS=1` | `WiFiClientSecure` và `WiFiClient` là hai kiểu khác nhau, chọn lúc build. Runtime hoá chỉ để đổi một cờ là không đáng |
+| 3 | Ngưỡng tự re-provision? | **5 lần** fail liên tiếp `state()` = 4/5, **cooldown 15 phút** | Chỉ lỗi credential/ACL mới kích hoạt. Lỗi mạng (`-2`/`-4`) mà cũng re-provision thì backend chết là cả fleet quay vòng |
+| 4 | Gộp gán MQTT vào `ToCreatedDto()`? | **Có** | Chính việc không gộp đã khiến `rotate-key` trả DTO có 6 trường MQTT toàn `null` |
+| 5 | `batteryMappings` runtime? | **Có** (T4.1 chuyển từ tuỳ chọn sang trong phạm vi) | Backend đã trả sẵn, firmware bỏ qua hoàn toàn. Đã phải ra hiện trường vì WiFi rồi — đừng ra thêm lần nữa vì khách lắp thêm pin |
+| 6 | Tách `rotate-mqtt` khỏi `rotate-key`? | **Có** | `rotate-key` làm mất **cả hai** đường (HTTPS 401 + MQTT từ chối) và **không tự lành**; `rotate-mqtt` thì thiết bị tự re-provision lấy khoá mới |
+| 7 | Staff xem mọi thiết bị hay chỉ site được gán? | **Mọi thiết bị — không lọc** | Nhất quán tiền lệ §34.10.6 *"Staff xem được mọi asset là CỐ Ý"* |
+| 8 | Lưu `MqttPasswordPlaintext` hay nút xoay khoá? | **Lưu plaintext** | Cùng khuôn `ApiKeyPlaintext` đã chốt 16/07/2026 — cùng bảng, cùng endpoint, cùng lớp quyền Admin, không mở loại phơi nhiễm mới |
+| 9 | Chu kỳ đo? | **5 giây** | Sàn sau khi sửa `BMS_UNIT_ID_COUNT=1` là ~1,0 s. 5 s có biên an toàn khi lắp thêm pin. Kèm nén + retention |
+| 10 | Xử lý `BMS_POLL_TIMEOUT_MS`? | **Xoá hằng + ghi comment** | Patch `ModbusMaster` là gánh nặng bảo trì. Sau khi sửa `COUNT=1` thì timeout gần như không còn ảnh hưởng |
+
+#### 17.IoT3.2. Tasks
+
+Nhãn repo: `[iot]` firmware/infra ESP32 · `[BE]` BatteryService · `[FE]` frontend · `[MB]` mobile · `[HW]` phần cứng · `[Ops]` ngoài code.
+Nhãn hành động: **[SỬA]** đổi code/config sẵn có · **[THÊM]** viết mới · **[XOÁ]** gỡ bỏ · **[ĐO]** kiểm chứng không đổi code.
+
+**Phase 0 — Chẩn đoán tại chỗ (3 phút, không phụ thuộc gì):**
+
+- [x] **IOT3-01** (#1076) `[iot]` [SỬA] `BMS_UNIT_ID_COUNT` **4 → 1** trong `config.example.h` **và** `config.h`. Chu kỳ 13,2 s → ~1,0 s. Khi lắp thêm BMS thật thì tăng lại cho khớp **số thiết bị thực sự trên bus**, không phải số slot trong `battery_mapping.h`. ~0.1d
+- [x] **IOT3-02** (#1076) `[iot]` [SỬA] `BMS_MODEL` **2 → 3** (JK-BMS) trong cả hai file config. Kích hoạt `#if BMS_MODEL == 3` ở `modbus_bms.cpp:214`. ~0.1d
+- [ ] **IOT3-03** (#1076) `[iot]` [ĐO] Cắm USB, đọc serial lúc boot tìm `[http] TLS configured` hay `[http] TLS FAIL`. Quyết định IOT3-23 có gấp không. ~0.1d
+
+**Phase A — Bốn lỗi cấu hình phần cứng (`[iot]` + `[HW]`):**
+
+- [x] **IOT3-04** (#1077) `[iot]` [SỬA] `INA226_SHUNT_OHM` **0.1f → 0.000375f** (shunt 200A/75mV). ~0.1d
+- [x] **IOT3-05** (#1077) `[iot]` [SỬA] `INA226_MAX_CURRENT_A` **20.0f → 200.0f** (dòng đỉnh JK-BD6A24S10P). ~0.1d
+- [x] **IOT3-06** (#1077) `[iot]` [SỬA] `platformio.ini` `[env]`: thêm **`-DINA226_MINIMAL_SHUNT_OHM=0.0001`**. Thư viện chặn mọi shunt < 1 mΩ (`INA226.h:44-45`), thiếu cờ này là `ERR_SHUNT_LOW (0x8002)` **dù shunt vật lý đúng**. Hằng có `#ifndef` nên không cần fork thư viện. ~0.1d
+- [x] **IOT3-07** (#1077) `[iot]` [SỬA] `ina226.cpp:49` — thêm tham số thứ ba **`false`** vào `setMaxCurrentShunt`. Khối normalize chỉ tạo được LSB tối đa 5 000 µA ⇒ chặn ở **163,8 A**; với 200 A sẽ trả `ERR_NORMALIZE_FAILED (0x8003)`. Kiểm lại với `normalize=false`: `LSB = 6,104 mA` · `calib = 2 237` (≤ 32 767) · `_maxCurrent = 200,0 A` — không nhánh nào lỗi. ~0.1d
+- [x] **IOT3-08** (#1077) `[iot]` [SỬA] `ina226.cpp:51,57` — `%.3f` → **`%.6f`** cho shunt. `0.000375` đang in ra `0.000`, nhìn như chưa cấu hình. ~0.1d
+- [x] **IOT3-09** (#1077) `[iot]` [XOÁ] Bỏ `BMS_POLL_TIMEOUT_MS` khỏi cả hai file config + ghi comment rõ timeout thật là **2000 ms** từ `ModbusMaster.h:252` (`static const`, không đổi được nếu không fork). ~0.1d
+- [x] **IOT3-10** (#1077) `[iot]` [SỬA] `platformio.ini` `[env:esp32-s3-real]`: thêm `-UBMS_MODEL` + `-DBMS_MODEL=3` để không phụ thuộc file local gitignore. ~0.1d
+- [ ] **IOT3-11** (#1078) `[HW]` Mua **shunt bắt bu-lông 200A/75mV** (0,375 mΩ, 4 chân). **Không** phải điện trở gốm. Tản 3,75 W @100 A liên tục, 15 W @200 A đỉnh (thoáng qua). Dải đo: 81,90 mV ÷ 0,375 mΩ = **218 A**. — phần cứng
+- [ ] **IOT3-12** (#1079) `[HW]` [ĐO] Sau khi lắp shunt: xác nhận log boot có `[ina226] init OK addr=0x40 shunt=0.000375Ω max=200.0A`, **không** có `setMaxCurrentShunt FAIL`. Chặn bởi IOT3-04/05/06/07/11. ~0.1d
+- [ ] **IOT3-13** (#1080) `[HW]` Hiệu chuẩn INA226 hai điểm bằng ampe kìm (~20 A và ~80 A) → tính `Scale`/`Offset` → `POST /api/iot-devices/{id}/calibrations`. Chặn bởi IOT3-12. ~0.15d
+
+**Phase B — Lỗi MQTT đang sống (`[BE]` + `[iot]`):**
+
+- [x] **IOT3-14** (#1081) `[BE]` [SỬA] **Chuẩn hoá case `DeviceCode` ở ranh giới MQTT** — 5 điểm: (a) `MqttBridgeBackgroundService.cs:184-189` telemetry lookup đổi sang so `d.MqttUsername`; (b) `:214-215` heartbeat; (c) `:238-240` status/LWT; (d) `MqttTopicMap.Command()` lowercase deviceCode; (e) `AdminIotDevicesController.cs:441` trường `Topic` trả về phải khớp topic thật publish. Dùng `MqttUsername` thay `ToLower(DeviceCode)` vì đó là **giá trị đã lưu**, không phải giá trị suy ra. ~0.25d
+- [x] **IOT3-15** (#1082) `[BE]` [SỬA] `MqttBridgeE2ETests` — hiện seed `DeviceCode = "gw-test-a"` chữ thường, bỏ qua `ToUpperInvariant()` của create handler ⇒ **test giả xanh, vĩnh viễn không bắt được lỗi này**. Đổi thành uppercase + `MqttUsername` lowercase. ~0.1d
+- [x] **IOT3-16** (#1083) `[iot]` [XOÁ] Gỡ khối `user esp-2` (5 dòng `topic write/read solar/ESP-2/...`) trong `infra/mqtt/mosquitto/config/acl.conf`. ⚠️ **Phải làm cùng lúc với IOT3-14** — xoá trước là thiết bị ESP-2 đang chạy chết ngay; xoá sau là hai luật chồng nhau gây khó debug. ~0.1d
+- [x] **IOT3-17** (#1084) `[BE]` [SỬA] `.env.Docker`: thêm `Mqtt__PasswordFilePath=/mqtt-config/passwd` + `Mqtt__CredentialSyncIntervalSeconds=60`. Thiếu biến này là `MqttPasswordFileSyncService` tự tắt và ghi log *"thông tin đăng nhập thiết bị sẽ KHÔNG tới được broker"*. ~0.05d
+- [x] **IOT3-18** (#1084) `[BE]` ✅ **ĐÃ CÓ SẴN — không phải làm gì.** Rà lại 08/08/2026: `docker-compose.yml` đã mount `./infra/mqtt/mosquitto:/mosquitto-config:rw` cho `batteryservice` (GH-784). Khẳng định "hiện không có khối nào" ở bản khảo sát là **SAI** — do lệnh grep bị cắt bằng `head`. Việc còn thiếu thật nằm ở **prod**, đã làm trong IOT3-20. ~0d
+- [x] **IOT3-19** (#1084) `[BE]` ❌ **KHÔNG LÀM — đề xuất ban đầu sai.** `:ro` ở volume `passwd` của `mosquitto` là **cố ý và đúng**: backend ghi qua bind mount RIÊNG (`/mosquitto-config`, rw) còn broker chỉ đọc qua `/mosquitto/config/passwd` (ro). Hai mount khác nhau tới cùng file trên host — giữ bất biến "chỉ một bên được ghi, bên ghi là bên sở hữu dữ liệu". Gỡ `:ro` là làm yếu bất biến đó mà không được gì. ~0d
+- [x] **IOT3-20** (#1084) `[BE]` [SỬA] Mirror IOT3-17/18/19 sang `docker-compose.prod.yml`. ~0.1d
+- [x] **IOT3-21** (#1084) `[BE]` [SỬA] Cập nhật `.env.Docker.example` + `env.prod.example` với 2 biến mới. ~0.05d
+- [x] **IOT3-22** (#1085) `[BE]` [SỬA] **Quyền file `passwd` giữa hai container.** Mosquitto 2.0 **từ chối nạp** file mà người khác đọc được; backend ghi mode 0600 với UID của nó, Mosquitto chạy UID 1883. Chọn (A) `user: "1883:1883"` cho batteryservice, hoặc (B) `group_add: ["1883"]` + `WriteAtomicallyAsync` ghi 0640. Kiểm chứng bắt buộc: `docker exec solar-mosquitto cat /mosquitto/config/passwd` đọc được **và** `docker logs solar-mosquitto | grep -i "world readable\|denied"` rỗng. ~0.15d
+
+**Phase C — Đường HTTPS fail-closed (`[iot]`):**
+
+- [x] **IOT3-23** (#1086) `[iot]` [SỬA] `http_client.cpp::loadCaPemOnce()` — **ưu tiên CA nhúng** `kMqttCaCert` trước LittleFS, cùng khuôn `mqtt_client.cpp::loadCaCert()`. Đặt CA nhúng **trước** LittleFS (ngược thứ tự đề xuất ban đầu) vì giữ hai đường TLS **cùng một logic** quan trọng hơn việc tối ưu khả năng thay CA tại hiện trường — hai logic khác nhau chính là thứ tạo ra lỗ hổng này. ~0.1d
+- [x] **IOT3-24** (#1086) `[iot]` [SỬA] Sửa comment sai ở `tls_ca.h:5` — nói phần chạm phần cứng nằm ở `tls_ca_device.cpp`, mà file đó **không tồn tại** trong `src/net/`. ~0.05d
+
+**Phase D — Zero-touch: backend cấp cấu hình MQTT (`[BE]`):**
+
+- [x] **IOT3-25** (#1087) `[BE]` [THÊM] Cột `MqttPasswordPlaintext` — entity `IotDevice` + `IotDeviceConfiguration` (`HasColumnName("mqtt_password_plaintext").HasMaxLength(64)`) + migration + **test rollback** (§14 be.md). Cột nullable ⇒ không cần `defaultValue`. ~0.2d
+- [x] **IOT3-26** (#1088) `[BE]` [SỬA] Thêm 6 trường MQTT vào `IotDeviceProvisionResultDto`: `MqttBrokerHost`, `MqttBrokerPort`, `MqttUseTls`, `MqttTopicPrefix`, `MqttUsername`, `MqttPassword`. **Không** thêm CA cert PEM (đã nhúng firmware, và `respBuf` không đủ chỗ). ~0.1d
+- [x] **IOT3-27** (#1089) `[BE]` [SỬA] `ProvisionIotDeviceCommandHandler` inject `IMqttBrokerEndpointProvider` (đã đăng ký DI, hiện chỉ dùng ở create handler) → điền 6 trường. MQTT tắt ⇒ để **cả 6 null**, không trả nửa vời. ~0.15d
+- [x] **IOT3-28** (#1090) `[BE]` [THÊM] Tự vá device thiếu credential ngay trong provision: `MqttUsername` hoặc `MqttPasswordPlaintext` null → `GenerateMqttCredential()` + ghi DB. Vá tại provision chứ **không** viết script backfill — device không bao giờ boot thì cũng không cần credential. ~0.15d
+- [x] **IOT3-29** (#1091) `[BE]` [THÊM] Tách interface `IMqttCredentialSync` ở `Application/Interfaces` (Infrastructure không được tham chiếu ngược), cho `MqttPasswordFileSyncService` implement, đăng ký **cùng khuôn** `IMqttBridgePublisher`: đổi `AddHostedService<>()` → `AddSingleton` + `AddHostedService(sp => sp.GetRequiredService<>())`. Gọi sau `SaveChangesAsync` ở create/rotate/provision, **bọc try-catch** — sync hỏng không được làm provision fail. ~0.15d
+- [x] **IOT3-30** (#1092) `[BE]` [SỬA] `rotate-key` xoay **cả** credential MQTT (hiện chỉ xoay apiKey) + gọi `IMqttCredentialSync`. ~0.15d
+- [x] **IOT3-31** (#1093) `[BE]` [SỬA] Gộp phần gán 6 trường MQTT vào `IotDeviceMapper.ToCreatedDto()` — hiện mapper **không map trường Mqtt nào**, create handler gán thủ công sau còn rotate thì quên ⇒ admin nhận DTO toàn `null`. ~0.1d
+- [x] **IOT3-32** (#1094) `[BE]` [THÊM] Endpoint **`POST /api/admin/iot-devices/{id}/rotate-mqtt`** — chỉ xoay credential MQTT, **không** đụng apiKey. Thiết bị tự lành qua re-provision (IOT3-44). Phân biệt rõ với `rotate-key` vốn làm mất cả hai đường. ~0.2d
+- [x] **IOT3-33** (#1095) `[BE]` [SỬA] `DeviceLifecycleHandlers.cs:85` — `m.SensorSourceCode = cal?.Channel ?? "primary"` dùng **nhầm khái niệm**: `Channel` mang `"voltage"/"current"/"temperature"`, còn `SensorSourceCode` phải là `"primary"/"redundant"/"external-temp"`. Chưa nổ vì firmware bỏ qua `batteryMappings`, nhưng sẽ nổ ngay khi làm IOT3-49. ~0.1d
+- [x] **IOT3-34** (#1096) `[BE]` [SỬA] Cập nhật XML doc + `docs/`: `DeviceCode` lưu UPPERCASE, `MqttUsername` = lowercase, topic dùng `MqttTopicPrefix`, tuyệt đối không tự ghép topic từ `DeviceCode`. ~0.05d
+
+**Phase E — Zero-touch: firmware đọc cấu hình runtime (`[iot]`):**
+
+- [x] **IOT3-35** (#1097) `[iot]` [THÊM] 8 khoá NVS: `wifissid`, `wifipass`, `mqhost`, `mqport`, `mqtls`, `mqprefix`, `mquser`, `mqpass`. ⚠️ Preferences giới hạn **15 ký tự/khoá**. Cập nhật khối comment liệt kê khoá ở đầu `nvs_store.h`. ~0.15d
+- [x] **IOT3-36** (#1098) `[iot]` [THÊM] `config/wifi_config.{h,cpp}` — nhân bản khuôn `device_identity.cpp`: NVS → fallback compile-time → hot-reload. API: `begin()`, `ssid()`, `password()`, `isConfigured()`, `save()`, `clear()`. ~0.25d
+- [x] **IOT3-37** (#1099) `[iot]` [THÊM] `config/mqtt_config.{h,cpp}` — cùng khuôn + `applyFromProvision(...)`, `topicPrefix()`, `isConfigured()`, `printStatus()` (mask password). **Không** xử lý TLS runtime (quyết định #2). ~0.3d
+- [x] **IOT3-38** (#1100) `[iot]` [SỬA] `mqtt_client.cpp:229-231` + `:125-132` — `setServer()` và `connect()` đọc từ `mqttcfg` thay macro. ~0.15d
+- [x] **IOT3-39** (#1101) `[iot]` [SỬA] **6 chỗ dựng topic** (dòng 137, 185, 354, 361, 368, 375) đổi từ ghép `MQTT_TOPIC_PREFIX + identity::deviceCode()` sang **`mqttcfg::topicPrefix()`** + nối đuôi. Đây là chỗ xoá sạch lớp lỗi hoa/thường ở phía thiết bị — chỉ còn **một nơi** quyết định chuỗi prefix. ~0.15d
+- [x] **IOT3-40** (#1102) `[iot]` [SỬA] `mqttBegin()` trả false khi `!mqttcfg::isConfigured()` (chưa provision thì im lặng, không spam log); viết lại `warnIfCaseMismatch()` so `topicPrefix()` với `"solar/" + lowercase(deviceCode)`. ~0.1d
+- [x] **IOT3-41** (#1103) `[iot]` [THÊM] `mqttApplyConfig()` — cấu hình đổi → `disconnect()` + `s_lastReconnectMs = 0` (khuôn có sẵn ở `mqttOnIdentityChanged()`). ~0.1d
+- [x] **IOT3-42** (#1104) `[iot]` [SỬA] `provision.cpp` parse 6 trường MQTT → `mqttcfg::applyFromProvision()` → `net::mqttApplyConfig()`. `MqttBrokerHost` null ⇒ **không ghi đè NVS**, log *"MQTT chưa bật — HTTPS-only"*. Chặn bởi IOT3-26. ~0.15d
+- [x] **IOT3-43** (#1105) `[iot]` [SỬA] ⚠️ Nâng `respBuf` **2048 → 4096** (`provision.cpp:93`) — `batteryMappings[]` đã ăn gần hết buffer hiện tại, thêm 6 trường nữa là tràn. ~0.05d
+- [x] **IOT3-44** (#1106) `[iot]` [THÊM] Re-provision khi credential hỏng: đếm **riêng** `s_mqtt.state()` = **4** (BAD_CREDENTIALS) / **5** (UNAUTHORIZED) — khác hẳn `-2`/`-4` (mạng). Đủ **5 lần liên tiếp** → `provision::clearProvisionFlag()` + `s_provisionDone = false`. **Cooldown 15 phút** chống vòng lặp khi backend chết. ~0.2d
+- [x] **IOT3-45** (#1107) `[iot]` [SỬA] `main.cpp`: gọi `wificfg::begin()` + `mqttcfg::begin()` sau `identity::identityBegin()`. ~0.1d
+- [x] **IOT3-46** (#1108) `[iot]` [SỬA] ⚠️ **Nhánh đã-provisioned** (`main.cpp:100-107`, khi `provd=1` load từ NVS) **cũng phải** gọi `mqttApplyConfig()`. Bỏ sót là boot lần đầu chạy đẹp, **boot lần hai trở đi âm thầm chạy HTTPS-only mà không có log lỗi nào** (vì HTTPS vẫn hoạt động). Bắt buộc test bằng cách reboot **hai lần**. ~0.05d
+- [x] **IOT3-47** (#1109) `[iot]` [SỬA] `logStatsPeriodic()` in thêm `wifi cfg=nvs|compile` và `mqtt cfg=nvs|compile` để chẩn đoán nguồn cấu hình. ~0.05d
+- [x] **IOT3-48** (#1110) `[iot]` [SỬA] Đổi comment khối WiFi + MQTT trong `config.example.h` thành **fallback**, không còn là nguồn chân lý. Ghi rõ giá trị bắt buộc điền tay chỉ còn `BACKEND_URL` + mật khẩu AP setup. ~0.05d
+- [x] **IOT3-49** (#1111) `[iot]` [THÊM] Parse `batteryMappings[]` từ provision → NVS → `bms_source`/`modbus_bms` đọc runtime thay bảng cứng `config::kBatteryMappings`. Backend **đã trả sẵn** từ IoT-2 nhưng `provision.cpp` chỉ parse 4 trường và **bỏ qua hoàn toàn** mảng này. Đây là nguyên nhân triệu chứng `[ingest] ⚠ NHẬN THIẾU: 2/4 reading vào được` (GH-748). Chặn bởi IOT3-33. ~0.4d
+
+**Phase F — WiFi cấu hình tại hiện trường (`[iot]`):**
+
+- [x] **IOT3-50** (#1112) `[iot]` [SỬA] `wifi_manager.cpp` đọc NVS qua `wificfg::` thay tham số truyền vào + thêm `wifiReconfigure(ssid, pass)` đổi nóng không reboot. Giữ `WiFi.persistent(false)` — ta tự quản NVS, một nguồn chân lý duy nhất. ~0.2d
+- [x] **IOT3-51** (#1113) `[iot]` [THÊM] Máy trạng thái WiFi ba chế độ: chưa cấu hình → `WIFI_AP` chờ vô hạn; mất mạng < 5 phút → `WIFI_STA` thử lại mỗi 5 s; **≥ 5 phút → `WIFI_AP_STA`** (vừa phát AP **vừa tiếp tục thử nối** WiFi cũ, để router khách sống lại thì tự lành); nối lại được → tắt AP. **Không** chặn `loop()` — lấy mẫu + xếp hàng vẫn chạy suốt. ~0.4d
+- [x] **IOT3-52** (#1114) `[iot]` [THÊM] Captive portal — thêm `tzapu/WiFiManager @ ^2.0.17` vào `lib_deps` + `runSetupPortal()` với `WiFiManagerParameter` cho `deviceCode`/`apiKey`. AP **có mật khẩu WPA2**, tên `SolarGW-{4 ký tự cuối MAC}` (tránh trùng khi nhiều thiết bị cùng bật). Timeout **10 phút** ở chế độ phục hồi, **vô hạn** ở lần setup đầu. ~0.75d
+- [x] **IOT3-53** (#1115) `[iot]` [THÊM] Trang setup: hiển thị **RSSI** khi chọn mạng, cảnh báo < −75 dBm; **lọc + cảnh báo** mạng 5 GHz (ESP32-S3 chỉ bắt 2,4 GHz) và **WPA2-Enterprise** (`WiFi.begin(ssid,pass)` không hỗ trợ). Không có hai cảnh báo này thì khách thử đi thử lại rồi gọi hỗ trợ với triệu chứng mơ hồ. ~0.15d
+- [x] **IOT3-54** (#1116) `[iot]` [THÊM] LED 5 trạng thái trong `led_palette.h`: tím nháy (SETUP) · cam (đang tìm WiFi) · tím/cam xen kẽ (RECOVERY có AP) · xanh (bình thường) · xanh nháy (còn hàng đợi). Đây là công cụ chẩn đoán duy nhất khách hàng dùng được qua điện thoại. ~0.15d
+- [x] **IOT3-55** (#1117) `[iot]` [THÊM] Lệnh CLI dự phòng: `set wifi <ssid> <pass>`, `set mqttuser/mqttpass/mqttbroker/mqttprefix`, `wifiscan`, mở rộng `show`. ~0.2d
+- [x] **IOT3-56** (#1118) `[iot]` [SỬA] ⚠️ `set devcode` hiện gọi `core::decideDeviceCodeChange(val, MQTT_USERNAME, kMqttEnabled)` với **macro compile-time**. Khi username thành runtime phải đổi sang `mqttcfg::username()`, không thì lệnh này từ chối sai hoặc chấp nhận sai. ~0.05d
+
+**Phase G — Staff theo dõi thiết bị IoT (`[BE]` + `[FE]` + `[MB]`):**
+
+- [x] **IOT3-57** (#1119) `[BE]` [THÊM] Endpoint **`GET /api/iot-devices`** (list, phân trang, lọc status/site/keyword) quyền `Admin,Manager,Staff` — tái dùng `GetIotDevicesQuery` sẵn có. **KHÔNG lọc theo site** (quyết định #7). Trả `IotDeviceDto` thường, **không** `apiKey`/`mqttPassword`. ⚠️ Đặt action vào **chính `IotDeviceCalibrationsController`** (đã chiếm `[Route("api/iot-devices")]`), đừng tạo controller mới cùng route. ~0.25d
+- [x] **IOT3-58** (#1120) `[BE]` [THÊM] Endpoint **`GET /api/iot-devices/{id}/heartbeats`** — **hiện KHÔNG TỒN TẠI** dù XML doc `AdminIotDevicesController.cs:114` nói *"dùng `GET .../{id}/heartbeats` (Sprint IoT-2)"*. Cursor pagination theo `time` (hypertable, **không dùng offset** — §13 be.md), `totalCount = null`. ~0.25d
+- [x] **IOT3-59** (#1121) `[BE]` [SỬA] Mở `GET /api/iot-devices/calibrations-expiring` cho `Staff` (hiện `Admin,Manager`). ~0.05d
+- [x] **IOT3-60** (#1122) `[MB]` [SỬA] ⭐ **Mở rộng `IotDeviceDto` type** — thêm 9 trường API **đã trả sẵn** nhưng type chỉ khai 6: `lastSeenAt`, `lastProvisionedAt`, `lastOfflineAt`, `currentFirmwareVersion`, `targetFirmwareVersion`, `heartbeatIntervalSeconds`, `lastClockSkewSeconds`, `apiKeyLastFour`, `hardwareRevision`. **Không đụng backend.** Việc rẻ nhất toàn sprint — 80 % giá trị với 6 % công sức. ~0.15d
+- [x] **IOT3-61** (#1123) `[MB]` [THÊM] Thẻ trạng thái thiết bị trong màn hình `app/(staff)/tools/calibration` — trạng thái, thấy lần cuối, firmware, lệch đồng hồ. Chặn bởi IOT3-60. ~0.15d
+- [x] **IOT3-62** (#1124) `[MB]` [THÊM] Màn hình `app/(staff)/tools/devices/index.tsx` — danh sách thiết bị. Chặn bởi IOT3-57. ~0.25d
+- [x] **IOT3-63** (#1125) `[MB]` [THÊM] Màn hình `app/(staff)/tools/devices/[id].tsx` — chi tiết + heartbeat. Chặn bởi IOT3-58. ~0.25d
+- [x] **IOT3-64** (#1126) `[MB]` [SỬA] Thêm mục vào `app/(staff)/tools/index.tsx` — ⚠️ **nhớ mở rộng union type `href`**, nó liệt kê tường minh từng route nên không mở rộng là TypeScript đỏ. ~0.05d
+- [x] **IOT3-65** (#1127) `[MB]` [THÊM] Cài `expo-camera` (SDK 51+ `CameraView` + `barcodeScannerSettings`) + màn hình quét QR nhãn để tra cứu thiết bị. Hiện `package.json` chỉ có `react-native-qrcode-svg` (**hiển thị**, không quét). ~0.25d
+- [x] **IOT3-66** (#1128) `[FE]` [THÊM] Trang `/staff/iot-devices` — bảng danh sách, badge trạng thái, lọc status/site, tìm kiếm. Chặn bởi IOT3-57. ~0.4d
+- [x] **IOT3-67** (#1129) `[FE]` [THÊM] Trang chi tiết thiết bị + biểu đồ heartbeat (RSSI, uptime, lệch đồng hồ, số bản ghi đang xếp hàng). Chặn bởi IOT3-58. ~0.3d
+- [x] **IOT3-68** (#1130) `[FE]` [SỬA] Thêm mục vào `src/features/staff/config/staffNav.ts`, cạnh "Calibration thiết bị". ~0.05d
+- [x] **IOT3-69** (#1131) `[FE]` [SỬA] Tái dùng `shared/components/iot/IoTDeviceStatusBadge` (đã có) cho trang mới thay vì viết lại. ~0.05d
+
+**Phase H — QR + nhãn thiết bị (`[BE]` + `[FE]`):**
+
+- [x] **IOT3-70** (#1132) `[BE]` [SỬA] Mở rộng `IotDeviceDetailDto` — thêm 7 trường: `ProvisioningQrCode`, `MqttUsername`, `MqttPassword`, `MqttBrokerHost`, `MqttBrokerPort`, `MqttUseTls`, `MqttTopicPrefix`. Chặn bởi IOT3-25. ~0.1d
+- [x] **IOT3-71** (#1133) `[BE]` [SỬA] `GetIotDeviceByIdQueryHandler` — inject `IMqttBrokerEndpointProvider`, dựng lại chuỗi QR từ `ApiKeyPlaintext`, điền 6 trường MQTT. ~0.15d
+- [x] **IOT3-72** (#1134) `[FE]` [SỬA] Render QR **thành hình** bằng `QRCodeSVG` (`qrcode.react@^4.2.0` **đã cài sẵn**, size 200, `level="M"`) — hiện `DeviceKeyRevealDialog` hiển thị chuỗi `iot://provision?...` trong ô input, **không quét được**. ~0.15d
+- [x] **IOT3-73** (#1135) `[FE]` [THÊM] Nút **"Xem lại thông tin"** ở `IoTDeviceTable` → `GET /api/admin/iot-devices/{id}` → mở dialog. ~0.15d
+- [x] **IOT3-74** (#1136) `[FE]` [SỬA] Sửa cảnh báo `DeviceKeyRevealDialog` — hiện ghi *"chỉ hiển thị MỘT LẦN"* nhưng **sai với `apiKey`** (GH-724 ghi rõ key đọc lại được qua `GET /{id}`). Tách hai nhóm: xem-lại-được (apiKey · QR · MQTT username/broker) vs chỉ-hiện-lúc-tạo (MQTT password). ~0.1d
+- [x] **IOT3-75** (#1137) `[FE]` [THÊM] Nút **In nhãn** + CSS `@media print` khổ 50×30 mm: QR + `deviceCode` + tên/mật khẩu AP setup. ⚠️ **Vẫn giữ nhãn giấy** — lúc khách đổi WiFi, KTV đứng trước tủ pin có thể không có mạng để mở web admin. UI QR là để **in ra nhãn**, không phải thay thế nhãn. ~0.2d
+- [x] **IOT3-76** (#1138) `[FE]` [THÊM] Nút **"Xoay khoá MQTT"** riêng, tách khỏi "Xoay API key", kèm cảnh báo khác nhau (một cái thiết bị tự lành, một cái phải ra hiện trường). Chặn bởi IOT3-32. ~0.15d
+
+**Phase I — Chu kỳ đo + lưu trữ (`[BE]`):**
+
+- [x] **IOT3-77** (#1139) `[BE]` [THÊM] Cột `PollingIntervalSeconds` — entity + `HasDefaultValue(10)` + validate **[1, 600]** ở `CreateIotDeviceCommand`/`UpdateIotDeviceCommand` (khớp clamp `provision.cpp:133-134`; biên rộng hơn là firmware âm thầm clamp lại, admin tưởng đã đổi mà không đổi) + migration `defaultValue: 10`. ~0.2d
+- [x] **IOT3-78** (#1140) `[BE]` [SỬA] Bỏ số cứng `PollingIntervalSeconds = 10` ở `DeviceLifecycleHandlers.cs:111` → đọc từ DB. Đặt mặc định **5 giây** (quyết định #9). ~0.05d
+- [x] **IOT3-79** (#1141) `[BE]` [THÊM] Migration **nén + retention** cho `sensor_readings`: `compress_segmentby='battery_asset_id'`, `compress_orderby='time DESC'`, `add_compression_policy(7 days)`, `add_retention_policy(180 days)`. An toàn với continuous aggregate vì `sensor_readings_agg_1h` chỉ materialize `[now−3h, now−5m]`. ⚠️ Kiểm `SELECT extversion FROM pg_extension WHERE extname='timescaledb'` ≥ 2.11 (chunk đã nén không insert được ở bản cũ hơn). `Down()` phải `remove_compression_policy` + `remove_retention_policy` + `SET (timescaledb.compress = false)`. **Test rollback.** ~0.15d
+- [x] **IOT3-80** (#1142) `[BE]` [SỬA] ⚪ (tuỳ chọn) Hạ `AnomalyEngine__ScanIntervalSeconds` **30 → 10**. Nếu mục tiêu là *phát hiện sự cố nhanh hơn* thì đây mới là thứ có tác dụng — và nó **miễn phí** về lưu trữ, khác hẳn việc hạ chu kỳ đo. ~0.05d
+
+**Phase J — Hạ tầng production (`[iot]` + `[BE]`):**
+
+- [x] **IOT3-81** (#1143) `[iot]` [THÊM] **Viết `infra/docker-compose.prod.yml`** — `backend/docker-compose.prod.yml:429` trỏ tới file này nhưng nó **chưa tồn tại**. Sáu điểm khác bản dev: `user: "1883:1883"` · chỉ publish cổng **8883** (không 1883) · volume `passwd` **không** `:ro` · mount `config/conf.d` (tls.conf do `gen-certs.sh` sinh) · vòng `passwd-watch` + SIGHUP (copy từ `backend/docker-compose.yml:165-180`) · `networks: solar-net: {external: true, name: backend_solar-net}`. ~0.25d
+- [x] **IOT3-82** (#1144) `[iot]` [SỬA] `gen-certs.sh` **regen luôn** `src/net/ca_cert_embedded.h` (hoặc in cảnh báo to). Hiện script chỉ hướng dẫn `cp ca.crt → data/` + `uploadfs` — chạy lại script là broker có CA mới, firmware vẫn nhúng CA cũ ⇒ MQTT bắt tay hỏng với `-9984 X509 Certificate verification failed`, **không có cảnh báo nào**. ~0.05d
+- [x] **IOT3-83** (#1145) `[BE]` [THÊM] Quy trình sinh + lưu mật khẩu `backend-bridge` an toàn cho production: sinh **ngoài** server, **không in stdout** (`bootstrap.sh` hiện `echo` mật khẩu + `chmod 0644`), lưu `/opt/solar/.env.prod` mode 600 hoặc K8s `Secret solar-secrets` + quy trình xoay định kỳ (dòng `backend-bridge` nằm ngoài vùng có mốc nên `MosquittoPasswordFile.Compose()` giữ nguyên). ~0.15d
+- [x] **IOT3-84** (#1146) `[iot]` [SỬA] Hạ `CORE_DEBUG_LEVEL` từ **5** về 1–3 trong `platformio.ini` trước khi ship. ~0.05d
+
+**Phase K — Test:**
+
+- [x] **IOT3-85** (#1147) `[BE]` [THÊM] Unit test provision: MQTT bật → đủ 6 trường; MQTT tắt → cả 6 null; device thiếu credential → tự sinh + lưu DB; `SyncOnceAsync` ném exception → provision **vẫn trả 200**. ~0.2d
+- [x] **IOT3-86** (#1148) `[BE]` [THÊM] Unit test rotate: `rotate-key` xoay cả MQTT + DTO đủ trường; `rotate-mqtt` **không** đụng apiKey. ~0.1d
+- [x] **IOT3-87** (#1149) `[BE]` [THÊM] Unit test `MqttTopicMap.Command("GW-ABC")` → `solar/gw-abc/cmd` (chặn regression IOT3-14). ~0.05d
+- [x] **IOT3-88** (#1150) `[BE]` [THÊM] Integration test passwd sync: device `Disabled` biến mất khỏi vùng có mốc, dòng `backend-bridge` **còn nguyên**. ~0.15d
+- [x] **IOT3-89** (#1151) `[iot]` [THÊM] Test `env:native` cho `wificfg` + `mqttcfg`: fallback compile-time, validate độ dài, dựng topic từ prefix. Tách phần thuần khỏi phần đụng NVS theo khuôn `tls_ca.cpp`, thêm vào `build_src_filter` của `[env:native]`. ~0.25d
+- [x] **IOT3-90** (#1152) `[iot]` [THÊM] Test `env:native` máy trạng thái WiFi: ngưỡng 5 phút, mở/đóng AP, **không** mở AP khi < 5 phút. ~0.15d
+- [x] **IOT3-91** (#1153) `[iot]` [THÊM] Test `env:native` re-provision: chỉ state 4/5 kích hoạt, lỗi mạng thì không, cooldown 15 phút có hiệu lực. ~0.15d
+- [ ] **IOT3-92** (#1154) `[E2E]` Bảy kịch bản E2E tay trên phần cứng thật — xem §17.IoT3.3. ~0.5d
+
+**Phase L — Ngoài code (`[Ops]`):**
+
+- [ ] **IOT3-93** (#1155) `[Ops]` 🔴 **Kiểm tra WiFi định demo là WPA2-Personal 2,4 GHz.** Nếu là mạng trường (WPA2-Enterprise) thì `WiFi.begin(ssid,pass)` **không hỗ trợ** — cần API `esp_wpa2_*`. Triệu chứng duy nhất là `[wifi] reconnecting...` lặp vô hạn, không gợi ý gì về nguyên nhân. Né rẻ nhất: hotspot điện thoại hoặc router riêng của nhóm. ~0.05d
+- [x] **IOT3-94** (#1156) `[Ops]` Thiết kế + in **nhãn dán** thiết bị: QR (`iot://provision?dc=…&key=…`) + `deviceCode` + tên/mật khẩu AP setup + 4 ký tự cuối MAC. ~0.15d
+- [x] **IOT3-95** (#1157) `[Ops]` **Hướng dẫn A4** dán trong nắp tủ để khách tự cấu hình lại WiFi — chỗ tiết kiệm chi phí lớn nhất khi khách đổi mật khẩu. ~0.15d
+- [x] **IOT3-96** (#1158) `[Ops]` **Quy trình lắp đặt** 9 bước cho KTV (§17.IoT3.3 kịch bản 2). ~0.15d
+- [x] **IOT3-97** (#1159) `[Ops]` **Kịch bản hỗ trợ** cho Staff khi có alert `DeviceOffline` → gọi khách hỏi "có đổi WiFi không". Đây sẽ là loại ticket phổ biến nhất sau khi triển khai. ~0.05d
+- [x] **IOT3-98** (#1160) `[Ops]` **Điều khoản hợp đồng** về việc thiết bị dùng mạng của khách: chỉ gửi số liệu pin, không truy cập thiết bị khác trong mạng. ~0.15d
+- [x] **IOT3-99** (#1161) `[Ops]` Ghi vào **báo cáo KLTN**: chọn WiFi khách + bảng đánh đổi + captive portal là cơ chế phục hồi. Hội đồng chắc chắn hỏi *"lắp ở nhà khách thì mạng ở đâu ra?"*. ~0.1d
+- [ ] **IOT3-100** (#1162) `[Ops]` ⚪ Đo dung lượng thực của hàng đợi LittleFS khi offline dài ngày; cân nhắc nới chu kỳ khi offline. ~0.1d
+
+**Tuỳ chọn — chỉ làm nếu cần chu kỳ < 1 giây (`[iot]`):**
+
+- [ ] **IOT3-101** (#1163) `[iot]` ⚪ `DS18B20_RESOLUTION` **12 → 10** — `requestTemperatures()` từ **750 ms → 187 ms**. Đổi lại độ phân giải 0,0625 → 0,25 °C (thừa sức cho nhiệt độ pin). ~0.05d
+- [ ] **IOT3-102** (#1164) `[iot]` ⚪ `BMS_RS485_BAUD` **9600 → 19200** — Modbus 9 giao dịch/pin từ ~240 ms → ~130 ms. JK-BMS phải hỗ trợ (thường có). ~0.1d
+- [ ] **IOT3-103** (#1165) `[iot]` ⚪ `setWaitForConversion(false)` + đọc DS18B20 ở chu kỳ sau — 750 ms → ~0 ms, đổi lại nhiệt độ trễ 1 chu kỳ. ~0.15d
+- [ ] **IOT3-104** (#1166) `[iot]` ⚪ Bỏ 4 khối tuỳ chọn của JK (`cycleCount` · `soh` · `switches` · `alarm`) — 9 giao dịch → 5, ~240 ms → ~135 ms. Đổi lại mất SOH, chu kỳ, trạng thái sạc, mã lỗi. ~0.1d
+- [ ] **IOT3-105** (#1167) `[HW]` ⚪ Hiệu chuẩn DS18B20 — chỉ cần nếu so chéo với nhiệt độ BMS (chênh 0,5 °C có thể kích hoạt cảnh báo lệch nguồn giả). Nếu chỉ để cảnh báo quá nhiệt ngưỡng 60 °C thì **không cần**. ~0.05d
+
+**Phase M — Bốn nợ kỹ thuật lộ ra khi chạy thật (`[BE]`) — thêm 2026-08-08:**
+
+> Bốn lỗi này **không do Sprint IoT-3 tạo ra**. `git log -S` cho thấy chúng ra đời ở
+> `e7b2fb7a` (01/08), `7e350fe1` (05/08), `8e71dfb7` (#654, 16/07) và `82b56569` (16/07) — tức là
+> code đã merge từ trước. Sprint này chỉ **làm chúng lộ ra**: lần đầu có thiết bị tạo lúc chạy
+> (IOT3-25/26/42), lần đầu uplink MQTT đi tới nơi (IOT3-14/39), và lần đầu có trang để nhìn thấy
+> dữ liệu (IOT3-57/58/67).
+>
+> Cả bốn có chung một tính chất: **mọi tầng đều báo thành công trong khi dữ liệu biến mất**.
+> Không cái nào bị 657 unit test bắt được, vì chúng chỉ lộ khi đi qua bind mount thật, payload thật,
+> hai lượt quét liên tiếp, và DB sạch.
+>
+> Chi tiết đầy đủ: `backend/docs/non-obvious-decisions.md` §"Bốn nợ kỹ thuật phát hiện khi chạy thật".
+> Kịch bản tái hiện: `backend/iot-quy-trinh-test-khong-can-phan-cung.md` + `backend/iot-test-lai.sh --reset`.
+
+- [x] **IOT3-106** (#1172) `[BE]` [SỬA] **Sửa bốn nợ kỹ thuật + test chặn hồi quy.** Bốn phần độc lập, làm được song song. ~0.75d
+  - **M1 — `passwd` không tự nạp lại ⇒ thiết bị mới KHÔNG đăng nhập được.**
+    `MqttPasswordFileSyncService.WriteAtomicallyAsync` ghi file tạm rồi `File.Move` (đổi inode — đúng,
+    để broker không đọc phải file ghi dở), nhưng compose mount **một file lẻ**
+    `./infra/mqtt/mosquitto/passwd:/mosquitto/config/passwd:ro`. Đo trên macOS: nội dung theo kịp
+    nhưng **mtime trong container chậm 720 giây**, vòng `passwd-watch` (so `stat -c %Y`) chạy **0 lần**
+    ⇒ không bao giờ bắn SIGHUP. Ép `kill -HUP 1` là đăng nhập được ngay.
+    **Sửa:** mount **thư mục** thay vì file lẻ, ở **cả ba** file compose — `backend/docker-compose.yml`,
+    `backend/docker-compose.prod.yml`, `iot/infra/docker-compose.prod.yml` (file viết ở IOT3-81 dính y hệt).
+    ⚠️ **Chưa đo được trên Linux** — bind mount file lẻ gắn theo inode nên container có thể thấy **cả
+    nội dung lẫn mtime đều cũ**, tệ hơn macOS. Phải kiểm trên VPS trước khi ship, đừng suy luận.
+    **KHÔNG** đổi sang ghi in-place: bỏ mất tính nguyên tử đang bảo vệ đúng chỗ.
+  - **M2 — telemetry rơi im lặng khi payload sai tên mảng.**
+    `MqttBridgeBackgroundService.DispatchTelemetryAsync` deserialize thành
+    `BatchIngestSensorReadingsCommand` rồi duyệt `cmd.Items`. Payload dùng sai tên (vd `readings`
+    thay `items`) deserialize **thành công** với `Items` rỗng — không ngoại lệ, không log, không bản ghi.
+    **Sửa:** `LogWarning` khi `cmd.Items.Count == 0`, kèm cả `payload` để truy được. Rà cả
+    `DispatchHeartbeatAsync`.
+  - **M3 — `PromotedToAlertId` không bao giờ được gán.**
+    Đo: `promoted_to_alert_id` NULL trên **0/11** bản ghi toàn bảng. `AnomalyDetectionService.cs:133`
+    gác `if (recordedBreach is not null)`, nhưng alert của đường chống nhiễu **chỉ nổ ở lượt quét LẠI**
+    — lượt đó `ShouldSuppressByNoiseAsync` trả `recorded = null`. Hai điều kiện **loại trừ nhau**.
+    Hậu quả nặng: XML doc ghi *"retention sẽ giữ các row đã promote"*, không row nào được đánh dấu ⇒
+    retention sẽ **xoá sạch chuỗi breach làm bằng chứng cho alert**.
+    **Sửa:** bỏ gác theo `recordedBreach`, đổi tham số `pendingBreach` thành nullable — hàm đã tự truy
+    vấn cả chuỗi từ DB.
+  - **M4 — dedup alert mù với alert do CHÍNH lượt quét đó tạo.**
+    Đo trên DB sạch: 6 reading quá áp cách nhau 2 giây → **5 alert `status=1` Open**, cùng
+    `battery_asset_id`, cùng `anomaly_type`, trong 9 giây, `merged_into_alert_id` toàn NULL.
+    `FindActiveAlertToMergeAsync` truy vấn **DB** bằng `.FirstOrDefaultAsync()`; alert vừa `AddAsync`
+    còn **pending trong change tracker** nên không thấy. Đây đúng cơ chế mà `ShouldSuppressByNoiseAsync`
+    đã lường trước cho `noise_breach_events` (*"row pending không được DB đếm"*) — hàm này thì không.
+    ⚠️ **Chỉ lộ khi DB SẠCH.** Còn alert cũ trong `DedupWindowEndUtc` thì mọi alert mới đều thành
+    `Merged` và bài test **báo đạt trong khi lỗi còn nguyên**.
+    **Sửa:** tra change tracker cục bộ trước khi hỏi DB (một `Dictionary<(Guid, AnomalyTypeEnum), Alert>`
+    trong phạm vi một lượt quét). **KHÔNG** dùng `SaveChangesAsync` sau mỗi alert: sửa được triệu chứng
+    nhưng đánh đổi N round-trip mỗi lượt và làm mất tính nguyên tử của cả lượt.
+  - **Test chặn hồi quy — bắt buộc, mỗi nợ một bài:**
+    - M1: integration test ghi `passwd` qua đường mount rồi kiểm broker **nạp lại được** (không phải chỉ kiểm nội dung file).
+    - M2: unit test `DispatchTelemetryAsync` với payload `{"readings":[…]}` → phải có `LogWarning`, không im lặng.
+    - M3: unit test — alert nổ ở **lượt quét thứ hai** ⇒ `PromotedToAlertId` của cả chuỗi breach phải được gán.
+    - M4: unit test — N reading vi phạm trong **một** lượt quét ⇒ đúng **1** alert `Open` + N−1 `Merged`.
+  - **Điều kiện DoD:** `./iot-test-lai.sh --reset` chạy hết, mục 5.3 chuyển từ `⊘ nợ #4 còn nguyên`
+    sang `✔ đúng 1 alert Open`, và `promoted_to_alert_id` khác 0.
+
+> **✅ XONG 08/08/2026 — đo trên hệ thống đang chạy, không phải chỉ trong test:**
+>
+> | Nợ | Trước | Sau |
+> |---|---|---|
+> | M1 | mtime container chậm **720 s**, `passwd-watch` chạy **0 lần** | mtime khớp tức thì · SIGHUP tự bắn · user mới đăng nhập được **không cần thao tác tay**; gỡ user thì bị từ chối lại |
+> | M2 | không log gì | `MQTT telemetry từ ESP-TEST-2 KHÔNG có mục nào — Mảng phải tên \`items\`` |
+> | M3 | `promoted_to_alert_id` **0/11** | **6/10** |
+> | M4 | **5 alert Open** trùng nhau | **1 Open + 2 Merged** cùng trỏ một cha |
+>
+> Kiểm chứng: solution build ✅ · UnitTests **657/657** · IntegrationTests **62/62** (thêm 6 bài mới) ·
+> `./iot-test-lai.sh --reset` **24 đạt · 0 hỏng**.
+>
+> **Test đã kiểm chứng NGƯỢC** — lùi từng bản sửa thì test phải đỏ, và chúng đỏ: lùi M3+M4 → 3/5 bài
+> integration đỏ; lùi M2 → bài `Telemetry_WithWrongArrayName` đỏ.
+>
+> **⚠️ Hai bài học phải giữ lại:**
+> 1. **Test cho M3/M4 KHÔNG viết được ở `BatteryService.UnitTests`.** `MockUnitOfWorkBuilder:126`
+>    cài `AddAsync` là `list.Add(e)` ngay lập tức, mà `GetAllAsync()` trả về chính list đó ⇒ với
+>    mock, row pending **hiện ra ngay** với mọi truy vấn — ngược hẳn EF Core. Bộ test viết trên mock
+>    vẫn XANH cả 4 bài dù đã lùi bản sửa. Đây chính là lý do 657 unit test không bắt được hai lỗi
+>    này. Bài test bắt buộc dùng `ApplicationDbContext` thật ⇒ nằm ở `BatteryService.IntegrationTests`.
+> 2. **M1 làm vỡ 9 test MQTT có sẵn.** Ba fixture TestContainers nạp CHÍNH `mosquitto.conf` của repo
+>    nhưng tự sinh `passwd` vào `/mosquitto/config/passwd` (đường cũ) ⇒ broker chết lúc khởi động,
+>    và triệu chứng ở tầng test chỉ là `container is not running`, không nhắc gì tới passwd. Đổi
+>    `password_file` thì PHẢI sửa cả `MosquittoBrokerFixture`, `BrokerHealthcheckProbeTests`,
+>    `GeneratedCredentialAcceptedByBrokerTests`.
+>
+> **Chưa kiểm được:** hành vi bind mount trên **Linux**. Bản sửa (mount thư mục) đúng cho cả hai nền,
+> nhưng giả thuyết "file lẻ trên Linux còn tệ hơn macOS" vẫn chưa có số liệu — xác nhận trên VPS
+> trước khi ship.
+
+- [x] **IOT3-107** (#1173) `[BE]` `[FE]` [SỬA] **Dropdown "Gửi command" liệt kê 5 loại lệnh firmware KHÔNG hiểu loại nào.** ~0.25d
+  - **Đo được:** `IOT_COMMAND_TYPES` (frontend) liệt kê `reboot` · `ota` · `sample-now` ·
+    `calibrate` · `set-config`; `classifyType` (`iot/firmware-esp32/src/cmd/cmd_logic.cpp:33-39`)
+    phân loại **cả 5 thành `Unknown`**. Firmware chỉ hiểu ba loại: `set_interval` · `trigger_ota` ·
+    `request_heartbeat`.
+  - **Vì sao ẩn lâu:** Admin bấm Gửi → backend trả **202** + toast thành công → thiết bị **nhận đúng
+    topic** → ack `status: "unknown"` → backend ghi `LogInformation` → chìm giữa hàng nghìn dòng.
+    Mọi tầng báo thành công; chỉ có việc là không xảy ra. Cùng họ với bốn nợ ở IOT3-106.
+  - **Gốc:** XML doc `IotDeviceCommandPayloadDto` ghi danh sách chưa bao giờ khớp firmware; frontend
+    chép vào dropdown, `docs/api-battery.md` chép lại lần nữa — **ba nơi cùng sai**.
+  - **Đã sửa (đợt 1, 08/08):** `IOT_COMMAND_TYPES` → ba loại đúng · XML doc + `api-battery.md` ghi
+    rõ nguồn sự thật là `classifyType` · `DispatchCommandAck` nâng `failed`/`rejected`/`unknown` lên
+    **`LogWarning`** · toast nói rõ 202 chỉ là "đã đẩy xuống broker".
+  - **Đã sửa (đợt 2, 09/08) — bỏ hẳn JSON khỏi đường đi thường ngày.** Đợt 1 mới thay ba chuỗi
+    trong dropdown, hình thức nhập vẫn là *tự gõ JSON vào ô Params* — tức đẩy việc của lập trình
+    viên sang người vận hành, và `[{"pollingSeconds":5}]` thì **parse được nhưng firmware bỏ qua**.
+    Thiết kế lại `DeviceCommandDialog.tsx`: ba thẻ chọn tên tiếng Việt kèm mô tả · nút nhanh
+    1s/5s/10s/30s/1p/5p + ô số (chỉ hiện với `set_interval`) · chặn dải [1, 3600] ngay tại form theo
+    `kPollingMinSec`/`kPollingMaxSec` · mỗi lệnh kèm hệ quả đọc từ mã firmware (RAM-only ·
+    trả lời bằng HTTPS · có thể bị OTA từ chối) · cảnh báo khi thiết bị **không** ở trạng thái Hoạt
+    động vì broker không giữ lệnh hộ máy offline (`PubSubClient.cpp:220` bật Clean Session vô điều
+    kiện) · ô tự nhập + JSON dời vào `<details>` "Tuỳ chọn nâng cao" đóng sẵn. Kiểm tra chuyển hết
+    vào `deviceCommandSchema` (zod) thay vì `JSON.parse` trong `onSubmit`.
+  - **Chốt hồi quy (đã kiểm chứng ngược):** `test_cmd_logic` 3 bài mới — thêm `reboot` vào
+    `classifyType` thì đỏ; `CommandAck_WithUnknownStatus_LogsWarning` trên broker thật — lùi bản sửa
+    log thì đỏ. ⚠️ Frontend **không có test runner**, nên chốt đặt phía firmware; luật của
+    `deviceCommandSchema` kiểm bằng bộ 25 trường hợp chạy tạm (gỡ chặn cận trên → đúng 1 case đỏ)
+    rồi xoá — chi tiết ở `docs/non-obvious-decisions.md`.
+  - **Kiểm chứng:** firmware `pio test -e native` **262/262** · IntegrationTests **63/63** ·
+    solution build ✅ · frontend `tsc` + `eslint --max-warnings=0` + `npm run build` ✅ ·
+    schema 25/25.
+  - **Còn thiếu (việc riêng):** ack của thiết bị **chưa hiển thị lên UI** — Admin vẫn phải đọc log
+    backend mới biết lệnh có được thực thi hay không.
+
+#### 17.IoT3.3. Definition of Done
+
+**Hạ tầng:**
+- [ ] `docker logs solar-batteryservice | grep MqttPasswordFileSync` → **"started (file=…)"**, không phải "tắt"
+- [ ] `docker logs solar-batteryservice | grep "MQTT bridge connected"` → có, kèm "4 subscriptions"
+- [ ] `docker exec solar-mosquitto cat /mosquitto/config/passwd` → **đọc được**, có vùng `# >>> BatteryService managed devices`
+- [ ] `docker logs solar-mosquitto | grep -i "world readable\|denied\|Error"` → **rỗng**
+
+**Phần cứng:**
+- [ ] Log boot có `[ina226] init OK addr=0x40 shunt=0.000375Ω max=200.0A`, **không** có `setMaxCurrentShunt FAIL`
+- [ ] Log boot có `[setup] BMS source mode:` với đường JK (không phải JBD)
+- [ ] `[stats]` cho thấy chu kỳ thực tế ≤ 5 giây (không phải ~13 s)
+
+**Bảy kịch bản E2E trên phần cứng thật (IOT3-92):**
+
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 1 | Thiết bị mới, chưa cấu hình | LED tím, phát `SolarGW-XXXX`, trang setup tự mở trên điện thoại |
+| 2 | Cấu hình đủ 4 giá trị → Lưu | ~15 s sau có row trong `sensor_readings` |
+| 3 | **Reboot 2 LẦN** | Lần 2 vẫn nối MQTT (bắt lỗi IOT3-46) |
+| 4 | Rút WiFi 2 phút | **Không** mở AP; nối lại tự động; đẩy bù đủ, không trùng |
+| 5 | Đổi mật khẩu WiFi router | 5 phút sau mở AP; cấu hình lại qua điện thoại; đẩy bù đủ |
+| 6 | Tắt mosquitto | Rơi về HTTPS sau 3 fail; **số liệu vẫn vào DB đủ** |
+| 7 | `rotate-mqtt` trên admin | Sau ≤ 5 lần fail tự re-provision, nối lại **không cần chạm thiết bị** |
+
+> ⚠️ **Phép thử quyết định — đừng bỏ:** sau khi serial báo `[mqtt-ingest] pub … → OK`, phải kiểm log backend **không** có `MQTT telemetry from unknown device` **và** bảng `sensor_readings` **thật sự** có row mới. Publish là **QoS 0**; `ok` chỉ nghĩa là *"đã đẩy vào socket TCP"*, **không** phải *"broker đã nhận"* (`mqtt_client.cpp:307-311`). Đây chính xác là cách lỗi case-mismatch ẩn mình bấy lâu — mọi tầng đều báo thành công trong khi dữ liệu rơi.
+
+**Bốn nợ kỹ thuật (Phase M / IOT3-106):**
+- [ ] Tạo thiết bị mới → nối MQTT được **mà KHÔNG cần** `kill -HUP 1` thủ công (M1)
+- [ ] Publish payload sai tên mảng → có `LogWarning`, không im lặng (M2)
+- [ ] `SELECT count(*) FROM noise_breach_events WHERE promoted_to_alert_id IS NOT NULL` → **khác 0** (M3)
+- [ ] Trên DB sạch, 6 reading vi phạm liên tiếp → đúng **1** alert `status=1` + N−1 `status=3` (M4)
+- [ ] `./iot-test-lai.sh --reset` → mục 5.3 chuyển từ `⊘ nợ #4 còn nguyên` sang `✔ đúng 1 alert Open`
+
+**Chất lượng:**
+- [ ] BE coverage ≥ 80 % (nhớ `make ci-build` **trước** `make ci-test` — `ci-test` dùng `--no-build`)
+- [ ] `pio test -e native` xanh (bao gồm 3 bộ test mới IOT3-89/90/91)
+- [ ] Migration IOT3-25 + IOT3-77 + IOT3-79 **test rollback** 2 vòng
+- [ ] `tsc --noEmit` + `eslint --max-warnings=0` + `npm run build` xanh (frontend)
+
+#### 17.IoT3.4. Rủi ro
+
+| Mã | Rủi ro | Mức | Giảm thiểu |
+|---|---|---|---|
+| R-62 | **Đường HTTPS đang chết hoàn toàn** — CA nhúng chỉ áp cho MQTT, `http_client` vẫn `LittleFS.begin(false)` + `TLS_ALLOW_INSECURE=0` fail-closed. Telemetry vẫn chảy qua MQTT nên dashboard trông bình thường trong khi provision/heartbeat/OTA/đẩy bù đều chết | 🔴 Cao | IOT3-03 kiểm 1 phút bằng serial; IOT3-23 sửa ~30 phút. **Làm trước mọi việc khác của Phase D** |
+| R-63 | **WiFi khách là WPA2-Enterprise** ⇒ `WiFi.begin(ssid,pass)` không bao giờ nối được, triệu chứng chỉ là `reconnecting...` lặp vô hạn | 🔴 Cao | IOT3-93 kiểm trước khi demo. IOT3-53 phát hiện + cảnh báo trên trang setup. Né bằng hotspot điện thoại |
+| R-64 | **ACL vá tay `user esp-2` chồng với fix chuẩn hoá case** — hai luật song song, sửa gốc xong mà quên gỡ thì debug rất khó | 🟡 TB | IOT3-16 gỡ **cùng lúc** IOT3-14, không tách hai PR |
+| R-65 | **`gen-certs.sh` không regen CA nhúng** — chạy lại script là broker CA mới, firmware CA cũ → `-9984`, không cảnh báo | 🟡 TB | IOT3-82. Trước đó ghi cảnh báo vào `infra/mqtt/README.md` |
+| R-66 | **`config.h` nằm trong `.gitignore`** ⇒ mọi sửa hằng số ở Phase 0/A chỉ có tác dụng trên máy người sửa; người khác pull về vẫn dính lỗi cũ | 🔴 Cao | **Sửa CẢ `config.example.h`**; và với `BMS_MODEL` thì thêm build flag ở `platformio.ini` (IOT3-10) để không phụ thuộc file local |
+| R-67 | **Backend chết trong lúc device publish MQTT** ⇒ QoS 0 + không retain, telemetry lúc đó **mất thật**, không cứu được bằng hàng đợi | 🟡 TB | Chấp nhận trong phạm vi capstone. Nâng QoS 1 + persistent session là thay đổi kiến trúc, để sau |
+| R-68 | **WiFi 5 GHz-only hoặc mesh chung SSID** — điện thoại vào được, ESP32 thì không, dễ tưởng gõ sai mật khẩu | 🟡 TB | IOT3-53 chỉ liệt kê mạng dò được (2,4 GHz) + ghi chú "không thấy mạng của bạn?" |
+| R-69 | **Chunk `sensor_readings` đã nén không insert được** trên TimescaleDB < 2.11 ⇒ thiết bị offline > 7 ngày rồi đẩy bù sẽ lỗi | 🟢 Thấp | Kiểm `extversion` trước khi chạy IOT3-79. Thực tế hàng đợi LittleFS đầy trước đó rất lâu |
+| R-70 | **Sprint chạm 4 repo cùng lúc** ⇒ merge lệch nhịp làm hỏng phần đang chạy (đã có tiền lệ: NOTI6-23 mất code khi rebase) | 🟡 TB | Cắt 4 PR theo repo, merge theo thứ tự Phase; sau mỗi rebase lớn chạy đủ L0→L3 **và** E2E thật, không dừng ở "test xanh" |
+
+#### 17.IoT3.5. Phụ thuộc chéo repo
+
+> **84 % số task (86/103 không tính tuỳ chọn) không phụ thuộc gì — bắt đầu song song được ngay.**
+> Bảng dưới chỉ liệt kê 17 task có việc phải xong trước.
+
+| Task bị chặn | Chặn bởi | Loại | Ghi chú |
+|---|---|---|---|
+| IOT3-12 (xác nhận INA226) | IOT3-04/05/06/07/11 | Một việc chẻ nhỏ | 4 file + 1 con shunt = **một** việc "làm INA226 chạy". Tổng 6 phút gõ phím; cái chặn thật là con shunt chưa mua |
+| IOT3-13 (hiệu chuẩn) | IOT3-12 | Kỹ thuật | Chưa init được thì không có số để hiệu chuẩn |
+| IOT3-16 (xoá `user esp-2`) | IOT3-14 | **An toàn** | Xoá trước là thiết bị ESP-2 đang chạy chết ngay |
+| IOT3-42 (parse provision) | IOT3-26 | Hợp đồng | Cần biết tên trường JSON. **Chỉ task này** cần BE-side, 12 task firmware còn lại của Phase E chạy song song |
+| IOT3-49 (`batteryMappings`) | IOT3-33 | Đúng đắn | Sửa `Channel`/`SensorSourceCode` trước, không thì rơi số liệu khi lọc `primary` |
+| IOT3-61 (thẻ trạng thái MB) | IOT3-60 | Kỹ thuật | |
+| IOT3-62, IOT3-66 (danh sách) | IOT3-57 | Full-stack | Client không hiển thị được thứ API chưa trả |
+| IOT3-63, IOT3-67 (chi tiết) | IOT3-58 | Full-stack | |
+| IOT3-70, IOT3-71 (detail DTO) | IOT3-25 | Kỹ thuật | `MqttPassword` cần cột plaintext |
+| IOT3-72..75 (QR/nhãn FE) | IOT3-70, IOT3-71 | Full-stack | |
+| IOT3-76 (nút xoay MQTT) | IOT3-32 | Full-stack | |
+| IOT3-79 (nén + retention) | IOT3-77, IOT3-78 | Điều kiện | Chỉ cần khi hạ chu kỳ xuống ≤ 5 s |
+
+**Hai nút thắt duy nhất, cộng lại đúng 2 tiếng:** IOT3-26 (~0.1d) mở khoá IOT3-42 · IOT3-25 (~0.2d) mở khoá IOT3-70/71 → mở khoá 4 task frontend. Làm hai việc này trong ngày đầu là hết chặn.
+
+#### 17.IoT3.6. Thứ tự thực thi đề xuất
+
+```
+NGÀY 0 (3 phút)   IOT3-01 · IOT3-02 · IOT3-03            ← 0 phụ thuộc
+NGÀY 0 (~1d)      Phase A code + Phase B + Phase C        ← 0 phụ thuộc chéo repo
+                  ─────► MỐC 1: MQTT chạy được khi cấu hình tay — DEMO ĐƯỢC
+
+NGÀY 1 (~0.5d)    IOT3-60 · IOT3-59 · IOT3-33             ← rẻ, giá trị cao
+NGÀY 1 (~0.3d)    IOT3-25 · IOT3-26                       ← gỡ hết nút thắt
+
+NGÀY 2-4 (~2.5d)  ├─ [BE]  Phase D còn lại + Phase K test
+                  └─ [iot] Phase E (12 task song song)
+                  ─────► MỐC 2: zero-touch trừ WiFi
+
+NGÀY 5-6 (~2d)    [iot] Phase F (WiFi hiện trường)
+                  ─────► MỐC 3: zero-touch đầy đủ
+
+NGÀY 7-9 (~2.5d)  Phase G + H + I (BE → FE/MB theo phụ thuộc)
+NGÀY 10 (~0.7d)   Phase J (production) + Phase L (ngoài code)
+NGÀY 11 (~0.5d)   IOT3-92 E2E 7 kịch bản trên phần cứng thật
+```
+
+**Ba mốc đều demo được.** Hết thời gian ở giữa thì dừng ở mốc gần nhất — hệ thống vẫn nguyên vẹn.
+
+#### 17.IoT3.7. Còn treo
+
+- ~~Chưa tạo GitHub issue.~~ ✅ **Đã tạo 07/08/2026**: milestone `Sprint IoT-3` (#24) + **92 issue** `#1076..#1167`, toàn bộ ở repo `GSU26SE55/backend`, assignee `@Alexdev257`, label `status: init`. Task firmware/FE/mobile mang tag repo trong title (`[iot]`/`[FE]`/`[MB]`) vì nhãn `role:` không có giá trị `IoT`.
+- **Chưa chốt owner cho FE/Mobile** (Phase G + H, ~1,5 dev-day).
+- **`iot/tasksprint.md` chưa mirror** phase A/C/E/F. Cần giữ nguyên mã `IOT3-xx` để đối chiếu hai chiều.
+- **R-62 (HTTPS chết) chưa kiểm chứng trên phần cứng** — mới là suy luận từ code. IOT3-03 sẽ trả lời trong 1 phút.
+- **Số đo thời gian là tính toán, không phải đo.** Chu kỳ ~13,2 s / ~1,0 s tính từ baud rate, số giao dịch Modbus và timeout thư viện, giả định BMS quay đầu ~10 ms/giao dịch. `[stats]` log sẽ cho con số thật.
+- **Tính năng "khách hàng tự đổi WiFi"** đã khảo sát (khả thi, ~10h thêm: tách 2 chế độ trang setup + mật khẩu AP per-device + thông báo `DeviceOffline` cho Customer) nhưng **chưa đưa vào sprint** theo yêu cầu của chủ dự án — để lại làm mở rộng sau.
+
 ---
 
 ## 18. Definition of Done
@@ -7574,7 +8042,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 
 ## 23. Risk register
 
-> **41 risk items** chia 7 nhóm chính:
+> **50 risk items** chia 8 nhóm chính:
 > - **R-01..R-13**: Technical baseline (state machine, SLA, dedup, migration, performance, security)
 > - **R-14..R-18**: Sprint 5B Saga design (forward recovery, duplicate, scope creep, cutover, restart)
 > - **R-19..R-22**: Sprint 5B operational (preflight cleanup, mapping, Quartz schema, notification spam)
@@ -7582,6 +8050,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 > - **R-28..R-29**: IoT v2 pivot (ESP32 firmware codebase mới, BMS procurement / register map — xem §52, `overall.iot.md` §D)
 > - **R-30..R-35**: Sprint audit (migration backfill duration, AuditAggregatorService SPOF, causation chain break, schema versioning, GeoIP rate limit, multi-instance relay duplicate)
 > - **R-47..R-52**: Sprint 6.4 notification audience (nhận trùng, gửi cho người đã nghỉ, read-model lệch lại, đổi chữ ký helper, fan-out treo request, bịa batch cho dữ liệu cũ)
+> - **R-62..R-70**: Sprint IoT-3 zero-touch + phần cứng (HTTPS fail-closed, WPA2-Enterprise, ACL vá tay, CA nhúng lệch, `config.h` gitignore, QoS 0 mất telemetry, WiFi 5 GHz, nén Timescale, 4-repo merge)
 >
 > *(R-36..R-39 là risk cục bộ của **Sprint Chat** — xem §17 Sprint Chat và §70. R-40..R-46 là risk
 > cục bộ của **Sprint 6.3** — xem §17.6.3.4. Cả hai nhóm không lặp lại ở bảng dưới.
@@ -7633,6 +8102,15 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 | R-50 | **Đổi chữ ký `NotificationWriter` làm vỡ 20 lời gọi ở 13 file** (Sprint 6.4) | Low | Med | Tham số `batchId` để **tuỳ chọn** (`Guid? batchId = null`) ⇒ lời gọi cũ vẫn hợp lệ, sửa dần từng consumer; regression bằng 506 unit test NotificationService | Thắng |
 | R-51 | **Fan-out đồng bộ treo request khi nhóm lớn** ⇒ admin bấm lại, gửi 2 lần | Low | Med | Quy mô hiện tại 10 tài khoản ⇒ 40 dòng, chưa chạm ngưỡng. Ngưỡng chuyển sang chạy nền đã ghi sẵn (~2.000 dòng hoặc >2s) và schema đã chừa `status`/`recipient_count` để chuyển **không đổi schema** | Thắng |
 | R-52 | **Bịa `batch_id` cho 1.282 dòng cũ** khi di trú | Med | High | **Cấm gom theo thời gian** — dữ liệu cũ không có thông tin để gom, và đã chứng minh gom nhầm (50 dòng/giây cùng entity thực chất là rác test tải). Để `batch_id = NULL`, UI ghi rõ chỉ hiện lần gửi từ khi bật tính năng | Thắng |
+| R-62 | **Đường HTTPS của firmware có thể đang chết hoàn toàn** — CA nhúng (`ca_cert_embedded.h`) chỉ áp cho MQTT; `http_client.cpp::loadCaPemOnce()` vẫn `LittleFS.begin(false)` + `TLS_ALLOW_INSECURE=0` fail-closed. Telemetry vẫn chảy qua MQTT nên dashboard trông bình thường trong khi provision/heartbeat/OTA/đẩy bù hàng đợi đều chết | High | High | IOT3-03 kiểm 1 phút bằng serial (`[http] TLS FAIL` vs `TLS configured`); IOT3-23 cho `http_client` dùng CA nhúng cùng khuôn `mqtt_client`. Làm trước mọi việc khác của Sprint IoT-3 Phase D | Hoà |
+| R-63 | **WiFi khách hàng là WPA2-Enterprise** ⇒ `WiFi.begin(ssid,pass)` không hỗ trợ, thiết bị không bao giờ lên mạng; triệu chứng duy nhất là `[wifi] reconnecting...` lặp vô hạn, không gợi ý nguyên nhân | Med | High | IOT3-93 kiểm **trước khi demo**; IOT3-53 phát hiện `WIFI_AUTH_WPA2_ENTERPRISE` lúc quét và cảnh báo trên trang setup; né bằng hotspot điện thoại hoặc router riêng của nhóm | Leader |
+| R-64 | **ACL vá tay `user esp-2` chồng với fix chuẩn hoá case `DeviceCode`** — hai luật song song sau khi sửa gốc, gây khó debug; hoặc gỡ trước khi sửa thì thiết bị đang chạy chết ngay | Med | Med | IOT3-16 gỡ khối `user esp-2` **cùng PR** với IOT3-14, không tách hai lần merge | Thắng |
+| R-65 | **`gen-certs.sh` không regen `ca_cert_embedded.h`** ⇒ chạy lại script là broker có CA mới, firmware vẫn nhúng CA cũ → MQTT bắt tay hỏng `-9984 X509 Certificate verification failed`, không có cảnh báo nào | Med | Med | IOT3-82 cho script sinh luôn header (hoặc in cảnh báo to); ghi vào `infra/mqtt/README.md` | Hoà |
+| R-66 | **`iot/firmware-esp32/include/config.h` nằm trong `.gitignore`** ⇒ mọi sửa hằng số (`BMS_MODEL`, `BMS_UNIT_ID_COUNT`, `INA226_*`) chỉ có tác dụng trên máy người sửa; người khác pull về vẫn dính lỗi cũ. Đã xảy ra thật: code JK-BMS viết xong nhưng `config.example.h` vẫn `BMS_MODEL=2` nên là code chết | High | High | Sửa **CẢ** `config.example.h`; với `BMS_MODEL` thì thêm `-DBMS_MODEL=3` vào `platformio.ini` (IOT3-10) để không phụ thuộc file local | Hoà |
+| R-67 | **Backend chết trong lúc thiết bị publish MQTT** ⇒ QoS 0 + không retain, telemetry khoảng đó **mất thật**, hàng đợi HTTPS không cứu được vì bản ghi đã "gửi thành công" | Med | Med | Chấp nhận trong phạm vi capstone. Nâng QoS 1 + persistent session là thay đổi kiến trúc, để sau. Ghi rõ giới hạn trong `iot-co-che-hoat-dong.md` §2 | Thắng |
+| R-68 | **WiFi 5 GHz-only hoặc mesh dùng chung một SSID** — điện thoại vào được, ESP32-S3 (chỉ 2,4 GHz) thì không, dễ tưởng gõ sai mật khẩu | Med | Med | IOT3-53 chỉ liệt kê mạng thiết bị **dò được** (tự lọc 2,4 GHz) + ghi chú "không thấy mạng của bạn? kiểm tra router có phát 2,4 GHz không" | Hoà |
+| R-69 | **Chunk `sensor_readings` đã nén không insert được** trên TimescaleDB < 2.11 ⇒ thiết bị offline > 7 ngày rồi đẩy bù sẽ lỗi | Low | Low | Kiểm `SELECT extversion FROM pg_extension WHERE extname='timescaledb'` trước khi chạy IOT3-79; thực tế hàng đợi LittleFS đầy trước đó rất lâu | Thắng |
+| R-70 | **Sprint IoT-3 chạm 4 repo cùng lúc** (`backend`/`frontend`/`mobile`/`iot`) ⇒ merge lệch nhịp làm hỏng phần đang chạy — đã có tiền lệ NOTI6-23 mất code khi rebase mà git không báo xung đột | Med | High | Cắt 4 PR theo repo, merge theo thứ tự Phase (§17.IoT3.6); sau mỗi rebase lớn chạy đủ L0→L3 **và** E2E thật, không dừng ở "test xanh" | Leader |
 
 ---
 

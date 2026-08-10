@@ -127,6 +127,24 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
+    public async Task Create_SiteCustomerMismatch_IsReportedBeforeMissingCustomerMirror()
+    {
+        var site = MakeSite(customerId: Guid.NewGuid());
+        var cmd = BuildCreateCmd();
+        cmd.SiteId = site.Id;
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryTypes(MakeType())
+            .WithSites(site);
+
+        var r = await new CreateBatteryAssetCommandHandler(
+            b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>())
+            .Handle(cmd, CancellationToken.None);
+
+        r.StatusCode.Should().Be(409);
+        r.Message.Should().Contain("Site không thuộc khách hàng");
+    }
+
+    [Fact]
     public async Task Create_HappyPath_Returns201()
     {
         var site = MakeSite();

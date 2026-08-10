@@ -29,13 +29,16 @@ namespace BatteryService.UnitTests.Application;
 public class MqttBrokerEndpointTests
 {
     private static MqttBrokerEndpointProvider Provider(
-        bool enabled = true, string host = "mosquitto", int port = 8883, bool useTls = true)
+        bool enabled = true, string host = "mosquitto", int port = 8883,
+        bool useTls = true, string? publicHost = null, int? publicPort = null)
         => new(Options.Create(new MqttOptions
         {
             Enabled = enabled,
             Host = host,
             Port = port,
             UseTls = useTls,
+            PublicHost = publicHost,
+            PublicPort = publicPort,
         }));
 
     [Fact]
@@ -46,6 +49,19 @@ public class MqttBrokerEndpointTests
         ep.Host.Should().Be("mosquitto");
         ep.Port.Should().Be(8883);
         ep.UseTls.Should().BeTrue("thiếu cờ này thiết bị phải đoán TLS từ số cổng");
+    }
+
+    [Fact]
+    public void Resolve_HandsDeviceThePublicEndpoint_NotDockerInternalHost()
+    {
+        var ep = Provider(
+            host: "mosquitto",
+            port: 1883,
+            publicHost: "solar-broker.example.com",
+            publicPort: 8883).Resolve("ESP-006");
+
+        ep.Host.Should().Be("solar-broker.example.com");
+        ep.Port.Should().Be(8883);
     }
 
     [Theory]
@@ -80,7 +96,7 @@ public class MqttBrokerEndpointTests
     {
         var uow = new MockUnitOfWorkBuilder()
             .WithSites(new Site { Id = SiteId, Name = "Site 1" });
-        return (new CreateIotDeviceCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), broker), uow);
+        return (new CreateIotDeviceCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), broker, NoopMqttPasswordFileSync.Instance()), uow);
     }
 
     private static readonly Guid SiteId = Guid.NewGuid();

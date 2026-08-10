@@ -386,12 +386,20 @@ services:
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
       Mqtt__Port: ${Mqtt__Port:-8883}
+      Mqtt__PublicHost: ${Mqtt__PublicHost:-}
+      Mqtt__PublicPort: ${Mqtt__PublicPort:-}
       Mqtt__UseTls: ${Mqtt__UseTls:-true}
       Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-false}
       Mqtt__Username: ${Mqtt__Username:-backend-bridge}
       Mqtt__Password: ${Mqtt__Password}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      # IOT3-20 — đường ghi file passwd của broker. Thiếu là MqttPasswordFileSyncService
+      # TỰ TẮT: credential thiết bị nằm yên trong DB, broker không hề biết, và thiết bị bị
+      # từ chối với state=4 BAD_CREDENTIALS trong khi mọi tầng phía trên báo thành công.
+      # Giá trị là đường TRONG container, khớp bind mount ở khối `volumes:` bên dưới.
+      Mqtt__PasswordFilePath: ${Mqtt__PasswordFilePath:-/mosquitto-config/passwd}
+      Mqtt__CredentialSyncIntervalSeconds: ${Mqtt__CredentialSyncIntervalSeconds:-60}
       # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage.
       # Production khuyến nghị: dùng object storage (S3/MinIO) + set PublicBaseUrl tới CDN.
       # Local FS fallback: bind mount /opt/solar/firmware-storage để giữ qua container restart.
@@ -401,6 +409,15 @@ services:
       - "4006:8080"
     volumes:
       - /opt/solar/firmware-storage:/data/firmware-storage
+      # IOT3-20 — thư mục chứa `passwd` của Mosquitto, mount READ-WRITE.
+      #
+      # Broker KHÔNG nằm trong compose này (quyết định kiến trúc: broker thuộc capstone/iot,
+      # xem ghi chú ở cuối file). Nên đường dẫn host phải là thư mục mà iot compose cũng
+      # mount — mặc định /opt/solar/iot/infra/mqtt/mosquitto. Đổi qua biến nếu khác.
+      #
+      # Chỉ backend được GHI (nó sở hữu dữ liệu thiết bị); phía broker mount file đó :ro.
+      # ⚠️ Xem IOT3-22 về quyền: backend chạy root, Mosquitto chạy uid 1883.
+      - ${MQTT_PASSWD_DIR:-/opt/solar/iot/infra/mqtt/mosquitto}:/mosquitto-config:rw
     depends_on:
       postgres:
         condition: service_healthy

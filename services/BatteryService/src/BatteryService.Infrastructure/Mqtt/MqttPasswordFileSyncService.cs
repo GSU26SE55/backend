@@ -25,7 +25,7 @@ namespace BatteryService.Infrastructure.Mqtt;
 /// ứng dụng — quá đắt cho việc chỉ cần bảo broker đọc lại một file.
 /// </para>
 /// </remarks>
-public class MqttPasswordFileSyncService : BackgroundService
+public class MqttPasswordFileSyncService : BackgroundService, Application.Interfaces.IMqttPasswordFileSync
 {
     /// <summary>
     /// Trạng thái ĐƯỢC phép nối broker.
@@ -138,7 +138,25 @@ public class MqttPasswordFileSyncService : BackgroundService
     /// <remarks>
     /// Ghi thẳng lên file đang được mount sẽ có khoảnh khắc nội dung mới một nửa; nếu đúng lúc đó
     /// broker nạp lại thì nó gặp bản ghi hỏng và TỪ CHỐI CẢ FILE — mất quyền của mọi thiết bị.
-    /// <para>Quyền 0600: Mosquitto 2.0 từ chối nạp file mà người khác đọc được.</para>
+    /// <para>
+    /// <b>IOT3-22 — quyền đổi từ 0600 sang 0644.</b> Ghi chú cũ nói "0600 vì Mosquitto 2.0 từ chối
+    /// nạp file mà người khác đọc được". Điều đó khiến file KHÔNG BAO GIỜ dùng được: container
+    /// backend chạy <c>root</c> (Dockerfile không có <c>USER</c>), còn <c>eclipse-mosquitto</c>
+    /// chạy <c>uid 1883</c> — file 0600 của root thì uid 1883 không đọc nổi, đây là quy tắc
+    /// Unix cơ bản chứ không phải chính sách của Mosquitto.
+    /// </para>
+    /// <para>
+    /// Bằng chứng ngược lại nằm ngay trong repo: <c>iot/infra/mqtt/mosquitto/bootstrap.sh</c>
+    /// <c>chmod 0644</c> kèm ghi chú đã kiểm nghiệm — <i>"Mosquitto 2.0 sẽ warn 'world readable'
+    /// nhưng vẫn load"</i>. (Dòng tiêu đề của chính script đó nói 0700; nó lỗi thời, phần thân mới
+    /// là thứ đang chạy.) Nội dung file chỉ là hash PBKDF2-SHA512 <c>$7$</c>, không có plaintext.
+    /// </para>
+    /// <para>
+    /// Muốn siết lại 0600 ở production thì phải cho hai container CÙNG uid — đặt
+    /// <c>user: "1883:1883"</c> cho <c>batteryservice</c> — nhưng khi đó volume
+    /// <c>firmware-storage</c> (Docker tạo, thuộc root) sẽ không ghi được nữa, cần xử lý riêng.
+    /// Đó là việc của khâu triển khai, không phải của lớp này.
+    /// </para>
     /// </remarks>
     private static async Task WriteAtomicallyAsync(string path, string content, CancellationToken ct)
     {
@@ -150,7 +168,14 @@ public class MqttPasswordFileSyncService : BackgroundService
         await File.WriteAllTextAsync(temp, content, ct);
 
         if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(temp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        {
+            // 0644 — chủ ghi, mọi tiến trình khác CHỈ ĐỌC. Ghi được cho uid khác là điều
+            // kiện cần để broker (uid 1883) nạp được file do backend (root) sinh ra.
+            File.SetUnixFileMode(temp,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.GroupRead |
+                UnixFileMode.OtherRead);
+        }
 
         File.Move(temp, path, overwrite: true);
     }

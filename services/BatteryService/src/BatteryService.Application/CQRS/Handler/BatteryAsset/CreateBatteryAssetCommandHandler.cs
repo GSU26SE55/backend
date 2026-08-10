@@ -28,23 +28,6 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
 
     public async Task<CommonResponse<BatteryAssetDto>> Handle(CreateBatteryAssetCommand request, CancellationToken cancellationToken)
     {
-        var customer = await _unitOfWork.CustomerAccounts
-            .GetAllAsync()
-            .FirstOrDefaultAsync(account =>
-                account.Id == request.CustomerId &&
-                account.IsActive &&
-                !account.IsDeleted, cancellationToken);
-
-        if (customer is null)
-        {
-            return new CommonResponse<BatteryAssetDto>
-            {
-                IsSuccess = false,
-                StatusCode = 404,
-                Message = "Không tìm thấy khách hàng đang hoạt động.",
-            };
-        }
-
         var serial = request.SerialNumber.Trim().ToUpperInvariant();
         var duplicate = await _unitOfWork.BatteryAssets
             .GetAllAsync()
@@ -93,6 +76,23 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
         var relationError = ValidateSite(request.CustomerId, site);
         if (relationError is not null)
             return relationError;
+
+        var customer = await _unitOfWork.CustomerAccounts
+            .GetAllAsync()
+            .FirstOrDefaultAsync(account =>
+                account.Id == request.CustomerId &&
+                account.IsActive &&
+                !account.IsDeleted, cancellationToken);
+
+        if (customer is null)
+        {
+            return new CommonResponse<BatteryAssetDto>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy khách hàng đang hoạt động trong BatteryService. Hãy đồng bộ lại tài khoản từ AuthService.",
+            };
+        }
 
         var entity = new BatteryAssetEntity
         {

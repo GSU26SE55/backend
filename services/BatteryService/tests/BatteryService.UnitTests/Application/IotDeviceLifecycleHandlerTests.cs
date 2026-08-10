@@ -32,7 +32,7 @@ public class IotDeviceLifecycleHandlerTests
         var deviceId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -48,12 +48,46 @@ public class IotDeviceLifecycleHandlerTests
     }
 
     [Fact]
+    public async Task Provision_MapsSiteBatteriesToStableModbusUnitIds()
+    {
+        var deviceId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var otherSiteId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithIotDevices(ActiveDevice(deviceId, siteId))
+            .WithBatteryAssets(
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-002", SiteId = siteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-001", SiteId = siteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-OTHER", SiteId = otherSiteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-DELETED", SiteId = siteId, IsDeleted = true });
+        var handler = new ProvisionIotDeviceCommandHandler(
+            uow.Build(), TestMqttBrokerEndpointProvider.Enabled(),
+            new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
+
+        var result = await handler.Handle(new ProvisionIotDeviceCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.BatteryMappings.Should().BeEquivalentTo(
+            new[]
+            {
+                new { BatteryAssetSerial = "BAT-001", UnitId = (int?)1, SensorSourceCode = "primary" },
+                new { BatteryAssetSerial = "BAT-002", UnitId = (int?)2, SensorSourceCode = "primary" }
+            }, options => options.WithStrictOrdering());
+    }
+
+    [Fact]
     public async Task Provision_Fails_WhenClockSkewExceedsThreshold()
     {
         var deviceId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -74,7 +108,7 @@ public class IotDeviceLifecycleHandlerTests
         var device = ActiveDevice(deviceId, Guid.NewGuid());
         device.ApiKeyPlaintext = "iotk_old-key-abcd"; // key cũ đã lưu
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var rotateHandler = new RotateIotDeviceApiKeyCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()));
+        var rotateHandler = new RotateIotDeviceApiKeyCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), TestMqttBrokerEndpointProvider.Enabled(), NoopMqttPasswordFileSync.Instance());
 
         var rotated = await rotateHandler.Handle(new RotateIotDeviceApiKeyCommand { Id = deviceId }, default);
 
@@ -83,7 +117,7 @@ public class IotDeviceLifecycleHandlerTests
         newRawKey.Should().StartWith("iotk_").And.NotBe("iotk_old-key-abcd");
 
         // GET by id phải trả key MỚI (đã replace), không phải key cũ.
-        var getById = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var getById = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
         var detail = await getById.Handle(new GetIotDeviceByIdQuery { Id = deviceId }, default);
 
         detail.Data!.ApiKey.Should().Be(newRawKey);

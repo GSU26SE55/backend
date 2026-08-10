@@ -175,14 +175,75 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         }
     }
 
+    /// <summary>
+    /// IOT3-14 — tra <see cref="Domain.Entities.IotDevice"/> từ PHÂN ĐOẠN TOPIC, không phải từ <c>DeviceCode</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Thiết bị publish lên <c>solar/{username}/...</c> vì ACL Mosquitto dùng <c>pattern write solar/%u/...</c>
+    /// với <c>%u</c> = username = <c>deviceCode.ToLowerInvariant()</c>. Nhưng <c>IotDevice.DeviceCode</c>
+    /// lưu UPPERCASE. So sánh <c>d.DeviceCode == deviceCode</c> nên KHÔNG BAO GIỜ khớp trên Postgres
+    /// (so chuỗi phân biệt hoa/thường) ⇒ mọi telemetry/heartbeat/LWT qua MQTT bị bỏ với log
+    /// "unknown device", trong khi thiết bị vẫn báo publish thành công (QoS 0).
+    /// </para>
+    /// <para>
+    /// Khớp theo <c>MqttUsername</c> — giá trị ĐÃ LƯU, không phải giá trị suy ra. Nhánh dự phòng
+    /// <c>MqttUsername == null</c> giữ cho thiết bị tạo trước #IoT2-26 (chưa có credential MQTT)
+    /// vẫn tra được; những thiết bị đó dù sao cũng chưa nối broker nên nhánh này gần như không chạy.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Đọc trường <c>status</c> của ack. Trả <c>null</c> khi payload không phải JSON object hoặc
+    /// thiếu trường — khi đó caller coi như bình thường, vì không có cơ sở để kết luận là hỏng.
+    /// </summary>
+    private static string? TryReadAckStatus(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && doc.RootElement.TryGetProperty("status", out var s)
+                   && s.ValueKind == JsonValueKind.String
+                ? s.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// IOT3-106/M2 — cắt payload trước khi đưa vào log.
+    /// </summary>
+    /// <remarks>
+    /// `MQTT_MAX_PACKET_SIZE` là 4096 byte; ghi nguyên payload vào log mỗi lần một thiết bị gửi sai
+    /// định dạng sẽ làm log phình rất nhanh — mà thiết bị sai định dạng thì gửi sai LIÊN TỤC.
+    /// 512 ký tự đủ để nhìn ra tên trường bị đặt nhầm, tức đủ để chẩn đoán.
+    /// </remarks>
+    private static string Truncate(string? payload, int max = 512)
+    {
+        if (string.IsNullOrEmpty(payload)) return string.Empty;
+        return payload.Length <= max ? payload : payload[..max] + "…(cắt bớt)";
+    }
+
+    private static IQueryable<Domain.Entities.IotDevice> WhereTopicSegment(
+        IQueryable<Domain.Entities.IotDevice> query, string topicSegment)
+    {
+        var seg = (topicSegment ?? string.Empty).Trim().ToLowerInvariant();
+        return query.Where(d => !d.IsDeleted
+                                && (d.MqttUsername == seg
+                                    || (d.MqttUsername == null && d.DeviceCode.ToLower() == seg)));
+    }
+
     private async Task DispatchTelemetryAsync(string deviceCode, string batterySerial, string payload)
     {
         using var scope = _scopeFactory.CreateScope();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
 
-        var device = await unitOfWork.IotDevices.GetAllAsync()
-            .FirstOrDefaultAsync(d => d.DeviceCode == deviceCode && !d.IsDeleted);
+        var device = await WhereTopicSegment(unitOfWork.IotDevices.GetAllAsync(), deviceCode)
+            .FirstOrDefaultAsync();
         if (device is null)
         {
             _logger.LogWarning("MQTT telemetry from unknown device {DeviceCode}", deviceCode);
@@ -191,8 +252,32 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
 
         var cmd = JsonSerializer.Deserialize<BatchIngestSensorReadingsCommand>(payload, JsonOptions);
         if (cmd is null)
+        {
+            _logger.LogWarning(
+                "MQTT telemetry từ {DeviceCode}: payload không giải được thành JSON object. Payload: {Payload}",
+                device.DeviceCode, Truncate(payload));
             return;
-        cmd.DeviceCode = deviceCode;
+        }
+
+        // IOT3-106/M2 — payload giải được nhưng KHÔNG có mục nào.
+        //
+        // `System.Text.Json` bỏ qua trường lạ, nên payload đặt sai tên mảng (ví dụ `readings` thay
+        // vì `items`) sẽ deserialize THÀNH CÔNG với `Items` rỗng: không ngoại lệ, không log, không
+        // bản ghi nào vào DB. Firmware báo publish OK (QoS 0), broker chuyển tin OK, cầu nối chạy
+        // OK — chỉ có dữ liệu là không tồn tại. Kiểu thất bại tệ nhất, và đã tốn 15 phút truy vết
+        // ngay trong buổi kiểm thử end-to-end đầu tiên.
+        if (cmd.Items.Count == 0)
+        {
+            _logger.LogWarning(
+                "MQTT telemetry từ {DeviceCode} KHÔNG có mục nào — nhiều khả năng payload sai tên "
+                + "trường. Mảng phải tên `items` (không phải `readings`). Payload: {Payload}",
+                device.DeviceCode, Truncate(payload));
+            return;
+        }
+        // IOT3-14 — truyền DeviceCode CHUẨN từ DB (UPPERCASE), không phải phân đoạn topic
+        // (chữ thường). Nhờ vậy handler phía sau thấy đúng một dạng chuỗi cho cả hai đường
+        // vào (MQTT và HTTPS), tránh bản ghi idempotency tách làm hai theo kiểu chữ.
+        cmd.DeviceCode = device.DeviceCode;
         cmd.AuthenticatedDeviceId = device.Id;
 
         // Inject batterySerial cho item nào còn null/empty (topic-level binding).
@@ -211,16 +296,23 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
 
-        var device = await unitOfWork.IotDevices.GetAllAsync()
-            .FirstOrDefaultAsync(d => d.DeviceCode == deviceCode && !d.IsDeleted);
+        var device = await WhereTopicSegment(unitOfWork.IotDevices.GetAllAsync(), deviceCode)
+            .FirstOrDefaultAsync();
         if (device is null)
             return;
 
+        // IOT3-106/M2 — cùng lý do với telemetry: `null` ở đây nghĩa là payload không phải JSON
+        // object, và im lặng bỏ qua sẽ giấu mất một thiết bị đang gửi sai định dạng suốt nhiều ngày.
         var cmd = JsonSerializer.Deserialize<IotDeviceHeartbeatCommand>(payload, JsonOptions);
         if (cmd is null)
+        {
+            _logger.LogWarning(
+                "MQTT heartbeat từ {DeviceCode}: payload không giải được thành JSON object. Payload: {Payload}",
+                device.DeviceCode, Truncate(payload));
             return;
+        }
         cmd.DeviceId = device.Id;
-        cmd.DeviceCode = deviceCode;
+        cmd.DeviceCode = device.DeviceCode;   // IOT3-14 — dạng chuẩn từ DB
         await mediator.Send(cmd);
     }
 
@@ -235,9 +327,9 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
 
         using var scope = _scopeFactory.CreateScope();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
-        var device = await unitOfWork.IotDevices.GetAllAsync()
-            .Include(d => d.Site)
-            .FirstOrDefaultAsync(d => d.DeviceCode == deviceCode && !d.IsDeleted);
+        var device = await WhereTopicSegment(
+                unitOfWork.IotDevices.GetAllAsync().Include(d => d.Site), deviceCode)
+            .FirstOrDefaultAsync();
         if (device is null)
             return;
 
@@ -304,7 +396,25 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
     {
         // Sprint IoT-2 #IoT2-25 — log ack để admin trace.
         // Payload kỳ vọng: {"cmdId":"...","status":"ok"|"failed","error":"..."}
-        _logger.LogInformation("MQTT cmd/ack from {DeviceCode}: {Payload}", deviceCode, payload);
+        // Thiết bị trả `status`: "ok" | "failed" | "rejected" | "unknown"
+        // (`iot/firmware-esp32/src/cmd/command_handler.cpp`).
+        //
+        // Ghi TẤT CẢ ở mức Information như trước là chôn mất ba trạng thái hỏng giữa hàng nghìn
+        // dòng "ok". Đúng lỗi đã xảy ra: dropdown frontend liệt kê 5 loại lệnh mà firmware KHÔNG
+        // hiểu loại nào; mọi lệnh gửi đi đều ack "unknown" và không ai nhận ra suốt nhiều tuần,
+        // vì backend trả 202 và toast báo thành công.
+        var status = TryReadAckStatus(payload);
+        if (status is "ok" or null)
+        {
+            _logger.LogInformation("MQTT cmd/ack from {DeviceCode}: {Payload}", deviceCode, payload);
+            return;
+        }
+
+        _logger.LogWarning(
+            "MQTT cmd/ack từ {DeviceCode} báo status={Status} — lệnh KHÔNG được thực thi. "
+            + "`unknown` nghĩa là firmware không hiểu loại lệnh (chỉ hiểu set_interval / "
+            + "trigger_ota / request_heartbeat). Payload: {Payload}",
+            deviceCode, status, Truncate(payload));
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

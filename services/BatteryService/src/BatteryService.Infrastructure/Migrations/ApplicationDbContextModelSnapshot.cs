@@ -1068,6 +1068,11 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("mqtt_password_hash");
 
+                    b.Property<string>("MqttPasswordPlaintext")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("mqtt_password_plaintext");
+
                     b.Property<string>("MqttUsername")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -1087,6 +1092,12 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Property<DateTime?>("OutlierWindowStartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("outlier_window_started_at");
+
+                    b.Property<int>("PollingIntervalSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10)
+                        .HasColumnName("polling_interval_seconds");
 
                     b.Property<Guid>("SiteId")
                         .HasColumnType("uuid")

@@ -319,3 +319,250 @@ này — giả định là chúng chỉ nhận traffic qua gateway, không expos
   cửa sổ xuống 10 giây ở mọi service.
 - Limiter là **in-memory theo từng instance**, không dùng Redis. Chạy N replica thì hạn mức thực tế
   nhân N.
+
+---
+
+## Năm nợ kỹ thuật phát hiện khi chạy thật (2026-08-08, cuối Sprint IoT-3)
+
+Nợ #1–#4 **đã sửa** ở IOT3-106 (#1172); nợ #5 đã sửa cùng ngày. Giữ lại nguyên văn vì cách chúng
+ẩn mình mới là bài học, không phải bản vá.
+
+Bốn cái đầu ban đầu **chưa sửa**, không nằm trong 105 task của sprint, và cùng một tính chất: **mọi tầng đều
+báo thành công trong khi dữ liệu biến mất**. Không cái nào bị 657 unit test bắt được, vì cả ba chỉ
+lộ ra khi chạy qua bind mount thật, payload thật, và hai lượt quét liên tiếp.
+
+Hai cái đầu thuộc đường MQTT; #3–#4 thuộc `AnomalyDetectionService`; #5 là lệch hợp đồng giữa frontend và firmware.
+
+Ba trong bốn cái chỉ lộ ra khi **dữ liệu ở trạng thái nhất định** — nợ #4 chỉ thấy được sau khi
+dọn sạch DB, nợ #3 chỉ thấy khi đọc đúng một cột. Đó là lý do nên chạy
+`iot-test-lai.sh --reset` chứ không phải chạy chồng lên dữ liệu cũ.
+
+### 1. File `passwd` không tự nạp lại → thiết bị mới KHÔNG đăng nhập được
+
+**Triệu chứng.** Tạo thiết bị trên UI → backend log `MqttPasswordFileSync: đã ghi N bản ghi` → file
+trên đĩa có dòng mới, đúng định dạng `$7$` → container mosquitto `grep` cũng thấy dòng đó. Nhưng
+thiết bị nối vào thì `Connection Refused: not authorised`. Không có dòng lỗi nào ở bất kỳ đâu.
+
+**Đo được (macOS + Docker Desktop).**
+
+| | Giá trị |
+|---|---|
+| mtime host | `1786187127` |
+| mtime container thấy | `1786186407` — **chậm 720 giây** |
+| Số lần vòng `passwd-watch` in ra | **0** |
+| Sau khi `docker exec solar-mosquitto kill -HUP 1` | đăng nhập được **ngay** |
+
+**Nguyên nhân.** `MqttPasswordFileSyncService.WriteAtomicallyAsync` ghi file tạm rồi
+`File.Move(temp, path, overwrite: true)` — đổi tên, tạo **inode mới**. Đó là lựa chọn đúng để broker
+không đọc phải file ghi dở. Nhưng `docker-compose.yml` mount **một file lẻ** cho mosquitto:
+
+```yaml
+- ./infra/mqtt/mosquitto/passwd:/mosquitto/config/passwd:ro
+```
+
+Nội dung theo kịp, **mtime thì không**. Vòng `passwd-watch` so `stat -c %Y` → thấy không đổi → không
+bao giờ gửi SIGHUP → mosquitto giữ nguyên bảng mật khẩu nạp lúc khởi động.
+
+**Hệ quả:** mọi thiết bị tạo sau khi broker khởi động đều câm cho tới khi ai đó restart broker.
+
+**⚠️ Trên Linux có thể TỆ HƠN — chưa đo được.** Bind mount một file lẻ gắn theo **inode**; sau
+`File.Move` inode đổi nên container nhiều khả năng thấy **cả nội dung lẫn mtime đều cũ**. Đây là suy
+luận từ hành vi đã biết của Docker, **chưa phải số liệu** — phải kiểm trên VPS trước khi ship.
+
+**Hướng sửa.** Mount **thư mục** thay vì file lẻ, để lần đổi tên hiện ra được với container. Phải sửa
+cả ba nơi: `backend/docker-compose.yml`, `backend/docker-compose.prod.yml`,
+`iot/infra/docker-compose.prod.yml` (file viết ở IOT3-81 dính đúng lỗi này).
+Đổi cách ghi sang in-place là **sai hướng** — nó bỏ mất tính nguyên tử vốn đang bảo vệ đúng chỗ.
+
+**Cách chữa cháy tạm:** `docker exec solar-mosquitto kill -HUP 1` sau mỗi lần tạo/xoay thiết bị.
+
+### 2. `DispatchTelemetryAsync` im lặng khi payload sai tên trường
+
+`MqttBridgeBackgroundService.DispatchTelemetryAsync` deserialize payload thành
+`BatchIngestSensorReadingsCommand` rồi duyệt `cmd.Items`. Payload dùng sai tên mảng (ví dụ
+`"readings"` thay vì `"items"`) sẽ deserialize **thành công** với `Items` rỗng — không ngoại lệ,
+không log, không bản ghi nào vào DB.
+
+Đây là kiểu thất bại tệ nhất: firmware báo publish OK (QoS 0), broker chuyển tin OK, cầu nối chạy
+OK, chỉ có dữ liệu là không tồn tại. Đã làm mất 15 phút truy vết ngay trong buổi kiểm thử đầu tiên;
+ngoài hiện trường thì đó là hàng ngày mất số liệu không ai biết.
+
+**Hướng sửa.** Một dòng trong `DispatchTelemetryAsync`, sau khi deserialize:
+
+```csharp
+if (cmd.Items.Count == 0)
+{
+    _logger.LogWarning(
+        "MQTT telemetry từ {DeviceCode} không có mục nào — payload sai tên trường? "
+        + "Mảng phải tên `items`. Payload: {Payload}", device.DeviceCode, payload);
+    return;
+}
+```
+
+Cùng lý do đó, `DispatchHeartbeatAsync` nên được rà lại một lượt.
+
+### 3. `PromotedToAlertId` không bao giờ được gán — chuỗi breach mất dấu vết
+
+**Đo được (2026-08-08).** Sau khi test chống nhiễu sinh 3 alert từ 6 breach:
+`SELECT count(*) FILTER (WHERE promoted_to_alert_id IS NOT NULL) FROM noise_breach_events` → **0/11**
+trên toàn bảng.
+
+**Nguyên nhân.** `AnomalyDetectionService.cs:133` gác lời gọi bằng `if (recordedBreach is not null)`.
+Nhưng `ShouldSuppressByNoiseAsync` trả `recorded = null` khi `alreadyRecorded == true`, tức ở lượt
+quét LẠI — mà alert của đường chống nhiễu **chỉ nổ ở lượt quét lại**: lượt đầu
+`effectiveCount = breachCount + 1` chưa đạt `NoiseSuppressionCount` nên luôn bị chặn. Hai điều kiện
+loại trừ nhau: lượt nào có `recordedBreach` thì không nổ alert; lượt nào nổ alert thì nó đã null.
+
+**Hậu quả.** (1) Mất dấu vết kiểm toán "alert này nổ từ chuỗi vi phạm nào" — đúng thứ NS-10/N2 sinh
+ra để làm. (2) Nghiêm trọng hơn: XML doc ghi *"retention sẽ giữ các row đã promote"*, mà không row
+nào được đánh dấu ⇒ retention sẽ **xoá sạch** chuỗi breach làm bằng chứng cho alert.
+
+**Hướng sửa.** Bỏ gác theo `recordedBreach`, đổi tham số `pendingBreach` thành nullable — hàm đã tự
+truy vấn cả chuỗi từ DB, `pendingBreach` chỉ dùng để xử lý riêng row còn pending:
+
+```csharp
+if (threshold.NoiseSuppressionEnabled && threshold.NoiseSuppressionCount > 1)
+{
+    await PromoteBreachChainAsync(
+        reading.BatteryAssetId, anomaly.Type, threshold, alert.Id,
+        recordedBreach, cancellationToken);   // nhận null
+}
+```
+
+**Ghi chú kèm — hành vi ĐÚNG, đừng "sửa" nhầm:** số alert của một đợt vi phạm liên tiếp phụ thuộc
+nhịp quét, không phải hằng số. Test 6 gói quá áp cho ra 6 breach + 3 alert (không phải 2) vì lượt
+quét sau đánh giá lại những reading còn nằm trong tầm lookback. Chống nhiễu vẫn đúng: 3 gói đầu
+không sinh alert nào.
+
+### 4. Dedup alert không thấy alert do CHÍNH lượt quét đó vừa tạo
+
+**Đo được (2026-08-08, sau khi dọn sạch DB).** 6 reading quá áp gửi cách nhau 2 giây →
+**5 alert `status=1` (Open)**, cùng `battery_asset_id`, cùng `anomaly_type`, trong 9 giây,
+`merged_into_alert_id` đều NULL.
+
+```sql
+SELECT detected_at, status, merged_into_alert_id FROM alerts
+WHERE anomaly_type=2 AND detected_at BETWEEN '2026-08-08 12:16:00+00' AND '2026-08-08 12:17:00+00';
+-- 12:16:20 | 1 | (null)
+-- 12:16:22 | 1 | (null)
+-- 12:16:24 | 1 | (null)
+-- 12:16:27 | 1 | (null)
+-- 12:16:29 | 1 | (null)
+```
+
+**Nguyên nhân.** `FindActiveAlertToMergeAsync` truy vấn **DB** bằng `.FirstOrDefaultAsync()`. Các
+alert vừa `AddAsync` trong cùng lượt quét còn **pending trong change tracker**, chưa `SaveChanges`,
+nên truy vấn không thấy. Mỗi reading vì thế tự tạo một alert Open mới.
+
+Đây đúng cơ chế mà `ShouldSuppressByNoiseAsync` đã lường trước cho `noise_breach_events` — ghi chú
+ngay trong file: *"row pending không được DB đếm"*. `FindActiveAlertToMergeAsync` thì không.
+
+**Vì sao lâu nay không lộ.** Cần có sẵn một alert cùng loại **đã persisted** và còn trong
+`DedupWindowEndUtc` thì dedup mới chạy đúng. Lần đo trước đó (DB còn alert cũ từ 11:44) cho ra 12
+alert **đều Merged** — nhìn như dedup hoàn hảo. Xoá sạch DB rồi chạy lại mới lộ.
+**Nghịch lý: DB càng sạch, lỗi càng dễ thấy** — nên nó sống sót qua cả 657 unit test.
+
+**Hậu quả.** Chống nhiễu chặn được *báo động giả*; nó KHÔNG chặn *báo động trùng*. Một pin lỗi thật
+(điện áp vọt và giữ nguyên) đẩy 5–10 alert Open giống hệt nhau vào hàng đợi trực.
+
+**Hướng sửa.** Cho `FindActiveAlertToMergeAsync` nhìn cả phần chưa lưu — kiểm change tracker trước,
+rồi mới hỏi DB. Ví dụ giữ một `Dictionary<(Guid assetId, AnomalyTypeEnum type), AlertEntity>` cục bộ
+trong một lượt quét, tra nó trước khi gọi DB. Cách khác — `SaveChangesAsync` sau mỗi alert — sửa
+được triệu chứng nhưng đánh đổi bằng N round-trip mỗi lượt quét, và làm mất tính nguyên tử của
+cả lượt.
+
+**Cách đo lại:** xoá sạch `alerts` + `noise_breach_events` của loại đang thử, gửi ≥6 reading vi phạm
+cách nhau 2 giây, rồi đếm `status=1`. Nhiều hơn **1** là lỗi còn nguyên.
+
+### 5. Dropdown "Gửi command" liệt kê 5 loại lệnh mà firmware KHÔNG hiểu loại nào
+
+**Đo được (2026-08-08).** Đối chiếu `IOT_COMMAND_TYPES` (frontend) với `classifyType`
+(`iot/firmware-esp32/src/cmd/cmd_logic.cpp:33-39`):
+
+| Dropdown admin liệt kê | Firmware phân loại |
+|---|---|
+| `reboot` · `ota` · `sample-now` · `calibrate` · `set-config` | **`Unknown`** — cả 5 |
+
+Firmware chỉ hiểu **ba** loại: `set_interval` · `trigger_ota` · `request_heartbeat` (chấp cả biến
+thể gạch ngang).
+
+**Chuỗi nhân quả.** XML doc của `IotDeviceCommandPayloadDto` ghi *"reboot | ota | calibrate |
+sample-now | set-config | …"* — một danh sách **chưa bao giờ khớp firmware**. Frontend chép nguyên
+vào dropdown; `docs/api-battery.md` chép lại lần nữa. Ba nơi cùng sai, và không nơi nào là nguồn
+sự thật.
+
+**Vì sao không ai phát hiện.** Admin chọn `reboot` → backend trả **202** + toast *"Đã gửi command"*
+→ thiết bị **nhận đúng topic** → ack `status: "unknown"` → backend ghi `LogInformation` → chìm giữa
+hàng nghìn dòng log. Mọi tầng báo thành công; chỉ có việc là không xảy ra.
+
+Đây cũng là lý do phép thử downlink ngày 08/08 (dùng `sample-now`) *vẫn kết luận đúng* rằng đường
+truyền thông — nhưng nếu là thiết bị thật thì nó đã không làm gì cả.
+
+**Đã sửa (cùng ngày).**
+1. `IOT_COMMAND_TYPES` → đúng ba loại.
+2. XML doc `IotDeviceCommandPayloadDto` + `docs/api-battery.md` — ghi rõ nguồn sự thật là
+   `classifyType`, **không phải tài liệu**.
+3. `DispatchCommandAck` — `status` khác `ok` (tức `failed` · `rejected` · `unknown`) nay là
+   **`LogWarning`** kèm danh sách ba loại hợp lệ, thay vì `LogInformation` cho mọi thứ.
+4. Toast đổi thành *"Đã đẩy lệnh xuống {topic} — thiết bị sẽ báo kết quả riêng"*: **202 không có
+   nghĩa là đã thực thi**.
+
+### Bỏ hẳn ô JSON khỏi đường đi thường ngày (09/08/2026)
+
+Bản sửa 08/08 mới thay đúng ba chuỗi trong dropdown, còn hình thức nhập thì giữ nguyên: chọn tên
+lệnh dạng mã nguồn (`set_interval`), rồi **tự gõ JSON** vào ô Params. Đó là đẩy việc của lập trình
+viên sang người vận hành — và JSON gõ tay hỏng theo những kiểu không ai thấy: `{"pollingSeconds": 5}`
+đúng, `{'pollingSeconds': 5}` sai, `[{"pollingSeconds": 5}]` **parse được nhưng firmware bỏ qua**
+vì nó đọc `params["pollingSeconds"]` trên một mảng.
+
+Thiết kế lại (`DeviceCommandDialog.tsx`):
+
+| Trước | Sau |
+|---|---|
+| Dropdown `set_interval` \| `trigger_ota` \| `request_heartbeat` | Ba thẻ chọn, tên tiếng Việt + một dòng mô tả |
+| Ô textarea "Params (JSON)" | Nút nhanh 1s/5s/10s/30s/1p/5p + ô số, chỉ hiện với `set_interval` |
+| Không kiểm dải giá trị | Chặn tại form theo `kPollingMinSec`/`kPollingMaxSec` = [1, 3600] |
+| Không nói hệ quả | Mỗi lệnh kèm điều người bấm cần biết trước (xem dưới) |
+| Không biết thiết bị còn sống | Cảnh báo khi thiết bị không ở trạng thái Hoạt động |
+| Ô "Khác (tự nhập)" nằm ngay trên form chính | Chuyển vào `<details>` "Tuỳ chọn nâng cao", đóng sẵn |
+
+Ba dòng "hệ quả" đọc ra từ **mã firmware**, không phải từ tài liệu — đây là thứ tên lệnh không nói:
+
+| Lệnh | Điều không đoán được từ tên | Nguồn |
+|---|---|---|
+| `set_interval` | Chỉ đổi RAM, **mất khi reboot** | `main.cpp:672` gán `s_provCfg.pollingIntervalMs` rồi thôi; `nvsPutInt32` chỉ được gọi lúc provision |
+| `request_heartbeat` | Xuống bằng MQTT, **trả lời bằng HTTPS** | `heartbeat.cpp:105` gọi `net::httpPostJson` |
+| `trigger_ota` | Bị từ chối khi OTA tắt / đang xác minh bản vừa nạp | `ota_update.cpp:517` |
+
+**Cảnh báo thiết bị offline** không phải trang trí: `PubSubClient.cpp:220` bật cờ Clean Session vô
+điều kiện, nên broker **không giữ lệnh hộ** thiết bị đang ngắt kết nối. Gửi lệnh cho máy offline vẫn
+được 202, vẫn hiện toast xanh, và lệnh mất luôn — không hề "chờ tới khi thiết bị online lại".
+
+**Chế độ thô giữ lại nhưng dời chỗ.** Vẫn cần đường gửi lệnh mới trước khi giao diện kịp cập nhật,
+nhưng nó nằm sau một `<details>` đóng sẵn + một công tắc, nên người dùng thường ngày không gặp JSON.
+Đóng phần nâng cao thì form **quay hẳn** về chế độ hướng dẫn — nếu không, có thể còn ở chế độ thô mà
+mọi ô nhập của nó bị giấu, tức một cái nút Gửi không rõ sẽ gửi cái gì.
+
+Kiểm tra chuyển hết vào `deviceCommandSchema` (zod) thay vì `JSON.parse` trong `onSubmit`: chặn số
+thập phân, số âm, `"5s"`, ngoài dải [1, 3600], và JSON không phải object. `pollingSeconds` **giữ dạng
+chuỗi** ở tầng form — `z.coerce.number()` biến `""` thành `0`, tức bỏ trống sẽ báo "phải ≥ 1" thay vì
+"chưa nhập".
+
+**Chốt chặn hồi quy — hai bài, đã kiểm chứng ngược:**
+- `iot/firmware-esp32/test/test_cmd_logic`: `test_admin_dropdown_legacy_types_are_all_unknown` +
+  `test_only_three_supported_types_exist`. Thêm `reboot` vào `classifyType` → test đỏ.
+- `BatteryService.IntegrationTests`: `CommandAck_WithUnknownStatus_LogsWarning` (broker thật).
+  Lùi bản sửa log → test đỏ.
+
+> ⚠️ **Frontend KHÔNG có test runner** (CLAUDE.md: *"FE — không có test suite, chỉ build + lint"*),
+> nên không đặt được chốt chặn ngay tại `IOT_COMMAND_TYPES`. Chốt nằm ở phía firmware: ai thêm loại
+> lệnh mới buộc phải sửa `classifyType` trước, và test sẽ nhắc cập nhật cả ba nơi.
+>
+> Luật của `deviceCommandSchema` (09/08) cũng vì lý do đó **không có test thường trực**. Nó được
+> kiểm bằng một bộ 25 trường hợp chạy tạm ngoài repo (`node` v26 chạy thẳng TypeScript), có kiểm
+> chứng ngược — gỡ chặn cận trên thì đúng một trường hợp `3601` đỏ — rồi **xoá bỏ**. Sửa schema này
+> về sau thì phải dựng lại bộ đó, `tsc`/`eslint`/`build` không bắt được lỗi luật.
+
+**Còn thiếu.** Ack của thiết bị **chưa hiển thị lên UI** — Admin vẫn không có cách nào biết lệnh có
+được thực thi hay không, ngoài việc đọc log backend. Cần lưu ack vào DB rồi hiện ở trang chi tiết
+thiết bị; đây là việc riêng, chưa làm.

@@ -22,15 +22,36 @@ public static class MqttTopicMap
     public const string StatusWildcard = "solar/+/status";
     public const string CommandAckWildcard = "solar/+/cmd/ack";
 
-    public static string Telemetry(string deviceCode, string batterySerial) => $"solar/{deviceCode}/{batterySerial}/telemetry";
+    /// <summary>
+    /// IOT3-14 — chuẩn hoá phân đoạn thiết bị của topic về CHỮ THƯỜNG.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ACL Mosquitto dùng <c>pattern write solar/%u/...</c>, trong đó <c>%u</c> là username —
+    /// mà username sinh bằng <c>deviceCode.ToLowerInvariant()</c>
+    /// (<c>IotApiKeyService.GenerateMqttCredential</c>). Còn <c>IotDevice.DeviceCode</c> lưu
+    /// UPPERCASE (<c>CreateIotDeviceCommandHandler</c> gọi <c>ToUpperInvariant()</c>).
+    /// </para>
+    /// <para>
+    /// So khớp topic của MQTT phân biệt hoa/thường và không tắt được. Publish downlink lên
+    /// <c>solar/GW-ESP32-001/cmd</c> trong khi thiết bị chỉ được ACL cho đọc
+    /// <c>solar/gw-esp32-001/cmd</c> ⇒ lệnh không bao giờ tới nơi, và <b>không bên nào báo lỗi</b>.
+    /// Đó là lý do trước đây phải vá tay từng thiết bị bằng khối <c>user esp-2</c> trong
+    /// <c>acl.conf</c> — nay gỡ được nhờ chuẩn hoá tại đây.
+    /// </para>
+    /// </remarks>
+    public static string NormalizeDeviceSegment(string? deviceCode)
+        => (deviceCode ?? string.Empty).Trim().ToLowerInvariant();
 
-    public static string Heartbeat(string deviceCode) => $"solar/{deviceCode}/heartbeat";
+    public static string Telemetry(string deviceCode, string batterySerial) => $"solar/{NormalizeDeviceSegment(deviceCode)}/{batterySerial}/telemetry";
 
-    public static string Status(string deviceCode) => $"solar/{deviceCode}/status";
+    public static string Heartbeat(string deviceCode) => $"solar/{NormalizeDeviceSegment(deviceCode)}/heartbeat";
 
-    public static string Command(string deviceCode) => $"solar/{deviceCode}/cmd";
+    public static string Status(string deviceCode) => $"solar/{NormalizeDeviceSegment(deviceCode)}/status";
 
-    public static string CommandAck(string deviceCode) => $"solar/{deviceCode}/cmd/ack";
+    public static string Command(string deviceCode) => $"solar/{NormalizeDeviceSegment(deviceCode)}/cmd";
+
+    public static string CommandAck(string deviceCode) => $"solar/{NormalizeDeviceSegment(deviceCode)}/cmd/ack";
 
     /// <summary>
     /// Parse topic, trả về deviceCode + classify segment cuối.

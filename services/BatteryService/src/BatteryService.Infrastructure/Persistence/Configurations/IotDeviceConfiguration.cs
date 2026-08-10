@@ -76,6 +76,13 @@ public class IotDeviceConfiguration : IEntityTypeConfiguration<IotDevice>
             .HasDefaultValue(60)
             .IsRequired();
 
+        // IOT3-77 — HasDefaultValue BẮT BUỘC: cột NOT NULL thêm vào bảng đã có dữ liệu,
+        // thiếu default là migration đổ ở bước ALTER (be.md §14).
+        builder.Property(d => d.PollingIntervalSeconds)
+            .HasColumnName("polling_interval_seconds")
+            .HasDefaultValue(10)
+            .IsRequired();
+
         builder.Property(d => d.LastClockSkewSeconds).HasColumnName("last_clock_skew_seconds");
 
         // Sprint IoT-2 #IoT2-17 — auto-disable outlier tracking.
@@ -86,6 +93,10 @@ public class IotDeviceConfiguration : IEntityTypeConfiguration<IotDevice>
         // Sprint IoT-2 #IoT2-26 — MQTT per-device credential.
         builder.Property(d => d.MqttUsername).HasColumnName("mqtt_username").HasMaxLength(128);
         builder.Property(d => d.MqttPasswordHash).HasColumnName("mqtt_password_hash").HasMaxLength(256);
+        // IOT3-25 — raw password là base64url của 18 byte (~24 ký tự); 64 là dư thoải mái.
+        builder.Property(d => d.MqttPasswordPlaintext)
+            .HasColumnName("mqtt_password_plaintext")
+            .HasMaxLength(64);
 
         builder.Property(d => d.Notes).HasColumnName("notes").HasMaxLength(1000);
 

@@ -82,6 +82,34 @@ public class RotateIotDeviceApiKeyCommand : IRequest<CommonResponse<IotDeviceCre
     public Guid Id { get; set; }
 }
 
+/// <summary>
+/// IOT3-32 — xoay RIÊNG thông tin đăng nhập MQTT, KHÔNG đụng API key.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Tách khỏi <see cref="RotateIotDeviceApiKeyCommand"/> vì hai thao tác có hậu quả khác hẳn nhau:
+/// </para>
+/// <list type="bullet">
+///   <item><description>
+///     <b>rotate-key</b> đổi <c>apiKey</c> ⇒ thiết bị mất CẢ HAI đường. HTTPS trả 401 nên nó không
+///     provision lại được để lấy khoá mới — <b>không tự lành</b>, phải ra hiện trường nạp lại.
+///   </description></item>
+///   <item><description>
+///     <b>rotate-mqtt</b> chỉ đổi mật khẩu MQTT ⇒ thiết bị bị broker từ chối (<c>state=4</c>),
+///     đếm đủ ngưỡng thì tự gọi lại <c>/provision</c> bằng apiKey CŨ vẫn còn hiệu lực và nhận
+///     mật khẩu mới. <b>Tự lành, không cần chạm thiết bị.</b>
+///   </description></item>
+/// </list>
+/// <para>Vì vậy thao tác thường dùng khi nghi ngờ lộ credential MQTT là cái này, không phải rotate-key.</para>
+/// </remarks>
+public class RotateIotDeviceMqttCredentialCommand : IRequest<CommonResponse<IotDeviceCreatedDto>>
+{
+    /// <summary>Định danh resource.</summary>
+    [JsonIgnore]
+    [BindNever]
+    public Guid Id { get; set; }
+}
+
 public class RevokeIotDeviceApiKeyCommand : IRequest<CommonResponse<object>>
 {
     /// <summary>Định danh resource.</summary>
