@@ -1,0 +1,674 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>BatteryService.Domain</name>
+    </assembly>
+    <members>
+        <member name="P:BatteryService.Domain.Entities.Alert.BatteryAssetId">
+            <summary>
+            Sprint 5B #100 — nullable: site-level alert (EnvironmentalIncident) không có asset.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.SiteId">
+            <summary>
+            Sprint 5B #100 — site-level alert (EnvironmentalIncident) đặt SiteId.
+            Battery-level alert có thể leave null hoặc populate từ BatteryAsset.SiteId.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.EnvironmentalIncidentId">
+            <summary>
+            Sprint 5B #100 — link tới EnvironmentalIncident nếu alert được sinh
+            từ site-level incident.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.ThresholdValue">
+            <summary>§1.3.5 — nullable: incident-based alert (smoke/water) không có threshold.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.ActualValue">
+            <summary>§1.3.5 — nullable: incident-based alert không có measured value.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.Unit">
+            <summary>§1.3.5 — nullable: incident-based alert không có unit.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.Alert.AiPrescriptionId">
+            <summary>
+            GH-778 — id prescription do AI cấp cho alert này, dùng để gửi phản hồi của kỹ thuật viên
+            (accepted/edited/rejected) về AI. Null khi chưa prescribe hoặc AI không trả id.
+            </summary>
+            <remarks>
+            Không lưu ở đây thì id chết ngay sau khi dựng xong đoạn text nhét vào ticket, và vòng học
+            của AI không bao giờ khép lại — kỹ thuật viên đọc được lời khuyên nhưng không nói lại được
+            nó đúng hay sai.
+            </remarks>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.AmbientReading">
+            <summary>
+            Sprint 5B #89 — time-series ambient (temperature + humidity + irradiance) per site.
+            Hypertable (TimescaleDB) — không inherit AuditableEntity.
+            Source: OpenMeteo sync hoặc IoT ingest (xem #91).
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AmbientReading.Humidity">
+            <summary>%RH 0–100. Nullable — OpenMeteo có thể bỏ qua.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AmbientReading.SolarIrradiance">
+            <summary>W/m² — `shortwave_radiation` từ OpenMeteo hoặc pyranometer. Nullable.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AmbientReading.Source">
+            <summary>Sprint 5B — đổi từ string sang enum (IotSensor / WeatherApi).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AmbientReading.SourceDeviceId">
+            <summary>DeviceId của IoT sensor; "openmeteo" cho WeatherApi.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.AmbientThresholdConfig">
+            <summary>
+            Sprint 5B #89/#92 — per-Site ngưỡng ambient temp + humidity.
+            Regular table, có audit.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AmbientThresholdConfig.ComboTempThreshold">
+            <summary>
+            Combo rule: nếu temp >= threshold AND humidity >= threshold → Combo anomaly.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.AnomalyClassification">
+            <summary>
+            Sprint Bonus NS-26 (#666, F2, Q12=A — spec §30.3) — kết quả phân loại AI cho 1 alert/asset.
+            Bảng RIÊNG (không nhét vào <see cref="P:BatteryService.Domain.Entities.AnomalyClassification.Alert"/>) để giữ bằng chứng model chạy thật (score/confidence/
+            latency/modelVersion) + feedback loop cho retrain. Insert flow do Sprint AI (aibeiotrealtime.md) làm;
+            NS-26 dựng persistence + endpoint feedback.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.AlertId">
+            <summary>Link Alert nếu classify cho 1 alert cụ thể (nullable).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.Classification">
+            <summary>Output: Normal / Degrading / Failed (Isolation Forest + LSTM).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.AnomalyScore">
+            <summary>Isolation Forest decision score (âm = bất thường hơn).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.ModelVersion">
+            <summary>"1.0" / "1.1" — khớp artifact versioning.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.LatencyMs">
+            <summary>Monitoring SLA inference &lt; 100ms.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.AnomalyClassification.StaffFeedback">
+            <summary>Staff confirm sau resolve — null khi chưa có feedback.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.BatteryAsset.CascadeRiskScore">
+            <summary>Sprint 7 B4 (§31.7) — điểm rủi ro lan truyền 0.0–1.0, recompute bởi CascadeRiskBackgroundService.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.BatteryAsset.CascadeRiskUpdatedAt">
+            <summary>Sprint 7 B4 (§31.7) — thời điểm tính CascadeRiskScore lần cuối.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.BatteryAsset.ElectricalTopology">
+            <summary>Sprint 7 B4 (§31.7) — cách đấu nối điện, dùng cho topology factor khi tính cascade risk.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.BatteryAuditLog">
+            <summary>
+            Audit log forensic của BatteryService (Sprint audit #AUDIT-20). 14 cột chuẩn Hybrid Audit.
+            Bao gồm cả Alert audit (#AUDIT-31 — Alert host trong BatteryService, D14) — phân biệt qua <see cref="P:BatteryService.Domain.Entities.BatteryAuditLog.ActionCategory"/>/<see cref="P:BatteryService.Domain.Entities.BatteryAuditLog.ActionCode"/>.
+            Append-only (trigger soft mode). Source-of-truth; publish AuditCreatedEventV1 qua audit_outbox.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.BatteryAuditOutbox">
+            <summary>Outbox riêng cho audit pipeline BatteryService (Sprint audit #AUDIT-21). Pattern giống AuthService #AUDIT-07.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.CustomerAccount.Role">
+            <summary>
+            Role hiện tại của account (single — quan hệ 1-N: Role → Account).
+            Trước đây là <c>RolesCsv</c> (multi-role) — đã đổi sang single sau khi AuthService
+            chuyển sang quan hệ 1-N.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.EnvironmentalIncident">
+            <summary>
+            Sprint 5B #100 — incident environmental site-level (smoke/fire/gas/flood).
+            Regular table với lifecycle. Tách khỏi Alert (battery-level) — Alert có thể
+            reference incident qua <c>EnvironmentalIncidentId</c>.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.IotDevice">
+            <summary>
+            Sprint IoT-1 (#242) — ESP32 edge device đặt tại site, đẩy sensor batch + heartbeat lên backend.
+            1 device có thể nối nhiều <see cref="T:BatteryService.Domain.Entities.BatteryAsset"/> qua RS485/Modbus multi-drop (xem §52.10).
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.DeviceCode">
+            <summary>Code duy nhất cấp cho device, in qua label/QR (vd "ESP32-001").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.DisplayName">
+            <summary>Tên gợi nhớ (vd "Site A - Rack 1 gateway").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.SiteId">
+            <summary>Site mà device đang đặt. Bắt buộc — không cho phép device "orphan".</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.HardwareRevision">
+            <summary>Hardware revision (vd "v1.0-S3-MAX485").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.CurrentFirmwareVersion">
+            <summary>Firmware version device báo lên trong heartbeat gần nhất (vd "1.2.3").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.TargetFirmwareReleaseId">
+            <summary>Firmware admin đặt làm target — OTA pipeline kiểm tra mismatch.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.ApiKeyHash">
+            <summary>Hash SHA-256 của API key. Dùng để verify constant-time khi device gọi API.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.ApiKeyPlaintext">
+            <summary>
+            Plaintext API key đầy đủ (prefix <c>iotk_</c>) — lưu để Admin xem lại trên
+            <c>GET /api/admin/iot-devices/{id}</c>. <c>null</c> cho device tạo trước khi bật lưu plaintext
+            (rotate-key để populate). Set/replace mỗi lần create + rotate.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.ApiKeyLastFour">
+            <summary>4 ký tự cuối của key — hiển thị trong UI để admin nhận diện ("…ab12").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.ApiKeyScopes">
+            <summary>Bitmask <see cref="T:BatteryService.Domain.Enums.IotApiKeyScopeEnum"/>.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.LastSeenAt">
+            <summary>Heartbeat gần nhất nhận được. Null = chưa từng heartbeat.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.LastProvisionedAt">
+            <summary>Lần cuối device báo provision thành công.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.LastOfflineAt">
+            <summary>Lần cuối hệ thống chuyển device từ Active → Offline.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.HeartbeatIntervalSeconds">
+            <summary>Heartbeat interval device tự khai (giây). Default 60.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.PollingIntervalSeconds">
+            <summary>
+            IOT3-77 — chu kỳ đọc cảm biến (giây) mà thiết bị dùng để đặt nhịp poll BMS.
+            </summary>
+            <remarks>
+            Trước IOT3-77 giá trị này là số cứng <c>10</c> trong <c>ProvisionIotDeviceCommandHandler</c>,
+            nên Admin không đổi được qua web — chỉ đổi tạm bằng lệnh MQTT <c>set_interval</c> (ghi RAM,
+            mất sau reboot). Biên hợp lệ <b>[1, 600]</b> đặt để KHỚP clamp phía firmware
+            (<c>provision.cpp</c>): biên rộng hơn thì firmware âm thầm clamp lại và Admin tưởng đã đổi.
+            </remarks>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.LastClockSkewSeconds">
+            <summary>Sai lệch đồng hồ device vs server gần nhất (giây). Dùng để cảnh báo clock drift.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.OutlierIncidentCount">
+            <summary>Sprint IoT-2 #IoT2-17 — số outlier reading tích lũy trong cửa sổ 1h gần nhất. &gt;50 → auto-Decommissioned.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.OutlierWindowStartedAt">
+            <summary>Sprint IoT-2 #IoT2-17 — mốc bắt đầu cửa sổ đếm outlier hiện tại. Vượt 1h kể từ lúc này → reset counter.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.AutoDecommissionedAt">
+            <summary>Sprint IoT-2 #IoT2-17 — lần cuối hệ thống auto-decommission do outlier vượt ngưỡng.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.MqttUsername">
+            <summary>Sprint IoT-2 #IoT2-26 — MQTT username cấp cho device (sync EMQX/Mosquitto ACL).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.MqttPasswordHash">
+            <summary>
+            Sprint IoT-2 #IoT2-26 — hash PBKDF2-SHA512 định dạng <c>$7$</c> của Mosquitto.
+            <see cref="!:MqttPasswordFileSyncService"/> chép giá trị này thẳng vào file <c>passwd</c>.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.MqttPasswordPlaintext">
+            <summary>
+            IOT3-25 — plaintext mật khẩu MQTT, để <c>/provision</c> cấp lại cho thiết bị mỗi lần boot.
+            </summary>
+            <remarks>
+            <para>
+            <see cref="P:BatteryService.Domain.Entities.IotDevice.MqttPasswordHash"/> là PBKDF2 một chiều — không đọc ngược được. Không lưu
+            plaintext thì thiết bị chỉ nhận được mật khẩu ĐÚNG MỘT LẦN lúc admin tạo device, tức là
+            vẫn phải nhúng cứng vào firmware — đúng cái Phương án A muốn xoá bỏ.
+            </para>
+            <para>
+            Cùng khuôn <see cref="P:BatteryService.Domain.Entities.IotDevice.ApiKeyPlaintext"/> (chốt 16/07/2026): cùng bảng, cùng endpoint admin,
+            cùng lớp quyền — không mở ra loại phơi nhiễm mới. <c>null</c> với device tạo trước IOT3-25;
+            <c>ProvisionIotDeviceCommandHandler</c> tự sinh lại khi gặp (xem IOT3-28).
+            </para>
+            </remarks>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDevice.Notes">
+            <summary>Mô tả vị trí, ghi chú lắp đặt.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.IotDeviceCalibration">
+            <summary>
+            Sprint IoT-1 (#242, #247) — calibration profile cho 1 sensor channel của <see cref="P:BatteryService.Domain.Entities.IotDeviceCalibration.IotDevice"/>.
+            Backend áp dụng <c>raw_value * Scale + Offset</c> trước khi lưu vào sensor_readings.
+            1 device có thể có nhiều calibration entries (mỗi entry 1 channel: voltage/current/temperature/...).
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.Channel">
+            <summary>Channel ngắn ("voltage", "current", "temperature"). Khớp với SensorReading field.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.BatteryAssetId">
+            <summary>BatteryAsset cụ thể nếu device đo nhiều pin (nullable cho calibration scope device-level).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.Scale">
+            <summary>Hệ số nhân raw → engineering unit. Default 1.0.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.Offset">
+            <summary>Hệ số cộng raw → engineering unit. Default 0.0.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.Unit">
+            <summary>Đơn vị engineering output ("V", "A", "°C").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.CalibratedAt">
+            <summary>Ngày calibration lấy mẫu vật lý. Manager đối chứng với calibrator chuẩn.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceCalibration.ExpiresAt">
+            <summary>Ngày calibration hết hạn — nên recalibrate.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.IotDeviceHeartbeat">
+            <summary>
+            Sprint IoT-1 (#242) — heartbeat sample từ <see cref="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.IotDevice"/>.
+            Hypertable TimescaleDB partition theo <c>Time</c>. Append-only — không AuditableEntity.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.FirmwareVersion">
+            <summary>Firmware version device báo trong heartbeat (vd "1.2.3").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.RssiDbm">
+            <summary>Tín hiệu WiFi RSSI (dBm). Thường âm: -50 mạnh, -90 yếu.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.FreeMemoryPercent">
+            <summary>% RAM free (0-100). Null nếu device không gửi.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.UptimeSeconds">
+            <summary>Uptime device (giây).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.QueuedReadingCount">
+            <summary>Số sensor reading đã queue local mà chưa flush được do mất mạng.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.DeviceTimestamp">
+            <summary>Đồng hồ device gửi lên — backend tính skew vs server clock.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotDeviceHeartbeat.ClockSkewSeconds">
+            <summary>Skew device-vs-server (giây), tính khi nhận heartbeat.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.IotFirmwareRelease">
+            <summary>
+            Sprint IoT-1 (#242, #244) — bản firmware ESP32 admin upload để OTA.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.Version">
+            <summary>SemVer "1.2.3".</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.HardwareRevision">
+            <summary>Hardware revision tương thích ("v1.0-S3-MAX485"). Match với <see cref="P:BatteryService.Domain.Entities.IotDevice.HardwareRevision"/>.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.ArtifactUrl">
+            <summary>URL artifact (FileStorageService presigned). Device GET trực tiếp.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.Sha256Checksum">
+            <summary>SHA-256 của artifact để device verify sau khi download.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.ArtifactSizeBytes">
+            <summary>Kích thước artifact (bytes).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.ReleaseNotes">
+            <summary>Changelog/release notes markdown.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.IsPublished">
+            <summary>Đánh dấu bản này là rollout chính thức.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.IsArchived">
+            <summary>Bản này đã bị admin rollback / disable.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.IsRequired">
+            <summary>Buộc OTA — device phải apply (force update). Default false.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.Channel">
+            <summary>Channel rollout: <c>Stable</c> | <c>Beta</c>. Default Stable.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareRelease.DeviceModel">
+            <summary>Model device tương thích (vd "ESP32-S3-WROOM-1"). Khác HardwareRevision (revision PCB).</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.IotFirmwareUpdateLog">
+            <summary>
+            Sprint IoT-1 (#242, #245) — log mỗi attempt OTA của 1 <see cref="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.IotDevice"/> với 1 <see cref="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.IotFirmwareRelease"/>.
+            Device PUT progress qua <c>/api/iot-devices/firmware-update-log/{id}</c>.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.FromVersion">
+            <summary>Version device đang chạy trước khi flash. Snapshot cho rollback debug.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.ToVersion">
+            <summary>Version target.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.FailureReason">
+            <summary>Error message khi Status = Failed.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.IotFirmwareUpdateLog.BytesDownloaded">
+            <summary>Số byte device đã download (cho progress UI).</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.NoiseBreachEvent">
+             <summary>
+             Sprint 5B B1 (#152) — time-series append-only ghi 1 lần threshold breach trước khi
+             frequency-based logic quyết định raise alert hay không.
+            
+             Hypertable (TimescaleDB) — retention 7 ngày (background job dọn dẹp).
+             </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.NoiseBreachEvent.PromotedToAlertId">
+            <summary>
+            Nullable. Set khi breach này được promote thành Alert thật (đạt ngưỡng frequency).
+            Giữ vĩnh viễn (không bị purge bởi retention) để audit.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.NoiseBreachEvent.SourceType">
+            <summary>Sprint 5B B9 — phân biệt breach từ BMS hay IoT (cho cross-source analysis).</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.OutboxMessage">
+            <summary>
+            Outbox pattern: event được ghi trong CÙNG transaction với entity gốc (Alert), sau đó
+            background relay đọc và publish lên RabbitMQ → đảm bảo exactly-once delivery.
+            Non-auditable entity exception: technical outbox rows do not need user audit fields.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.OutboxMessage.AggregateId">
+            <summary>Id của entity gốc phát sinh event (vd AlertId).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.OutboxMessage.Type">
+            <summary>Tên type của integration event (vd "BatteryAnomalyDetectedEvent").</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.OutboxMessage.Payload">
+            <summary>Payload JSON serialized.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.OutboxMessage.ProcessedAtUtc">
+            <summary>Null nếu chưa publish thành công.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.SensorIngestIdempotencyRecord">
+            <summary>
+            Sprint IoT-2 #IoT2-16 (S3-BE-03) — idempotency persistence cho POST /api/sensor-readings/batch.
+            Lookup key = <c>(DeviceCode, IdempotencyKey)</c>; trùng → trả response cũ (200), không insert reading.
+            TTL 24h — <c>IotIdempotencyRetentionBackgroundService</c> dọn dẹp.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SensorIngestIdempotencyRecord.Inserted">
+            <summary>Số reading đã insert ở request đầu (để trả lại y nguyên cho retry).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SensorIngestIdempotencyRecord.ExpiresAt">
+            <summary>Hết hạn — record sau ngày này được background xoá.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.SensorReading">
+            <summary>
+            Time-series append-only sensor sample. This intentionally does not inherit AuditableEntity.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SensorReading.BmsErrorCode">
+            <summary>BMS error raw code (vd "0x0A", "OverCurrent,CellImbalance"). Nullable.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SensorReading.SensorSourceCode">
+            <summary>
+            §52.9 — phân biệt nhiều sensor cùng đo 1 pin (vd "primary"/"redundant"/"external-temp").
+            1 pin có thể có nhiều reading cùng timestamp khác <c>SensorSourceCode</c>.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Entities.SohPrediction">
+            <summary>
+            Sprint Bonus NS-26 (#666, F2, Q12=A — spec §30.3) — kết quả dự đoán SOH của LSTM/CNN-LSTM cho 1 asset.
+            Lưu lịch sử prediction (score/confidence/latency/modelVersion) để chart lên dashboard + đối chiếu
+            chất lượng giữa các model version. Insert flow do Sprint AI làm.
+            </summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.PredictedSohPercent">
+            <summary>SOH% dự đoán (0–100).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.ModelVersion">
+            <summary>"1.0" / "1.1".</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.PredictedAt">
+            <summary>Indexed DESC — lấy prediction mới nhất per asset.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.RawResponse">
+            <summary>Raw response AI (jsonb) — debug.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.HealthStage">
+            <summary>"Healthy" / "Degrading" / "Maintenance Required" / "End Of Life" (GH-86).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.StageConfidence">
+            <summary>Tỉ lệ mẫu MC Dropout rơi vào <see cref="P:BatteryService.Domain.Entities.SohPrediction.HealthStage"/>, 0–1.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.IsBorderline">
+            <summary>Kết luận sát ngưỡng — không stage nào chiếm đa số rõ (&lt; 0.7).</summary>
+            <remarks>
+            Cần khi đọc chart: pin borderline nhảy qua lại giữa hai stage ở hai lượt liên tiếp là
+            bình thường. Thiếu cờ này thì trông như pin vừa xấu đi đột ngột.
+            </remarks>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.SohStd">
+            <summary>Độ lệch chuẩn MC Dropout, tính bằng ĐIỂM SOH (không phải [0,1]).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.RulCyclesEstimate">
+            <summary>Ước lượng số chu kỳ còn lại tới EOL (SOH 80%).</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.AiPriority">
+            <summary>"P1"/"P2"/"P3"/"None" — tín hiệu URGENCY do AI đề xuất.</summary>
+            <remarks>
+            ⚠️ KHÔNG phải Priority của ticket. AI không biết ImpactScope; Priority thật do BE tính
+            từ ma trận Impact × Urgency lúc Manager triage.
+            </remarks>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.RiskLevel">
+            <summary>"Critical" / "High" / "Medium" / "Low".</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.ActionCode">
+            <summary>MONITOR / SCHEDULE_MAINTENANCE / SCHEDULE_REPLACEMENT / REPLACE_IMMEDIATELY.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.SohTrend">
+            <summary>"accelerating" / "stable" / "slowing".</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.DegradationRatePerCycle">
+            <summary>%SOH mất mỗi chu kỳ sạc-xả.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.CyclesToMaintenance">
+            <summary>Số chu kỳ ước tính tới ngưỡng bảo trì 85%. 0 nếu đã dưới ngưỡng.</summary>
+        </member>
+        <member name="P:BatteryService.Domain.Entities.SohPrediction.IsTemperatureOod">
+            <summary>GH-91 — nhiệt độ ngoài mọi buồng nhiệt lúc train ⇒ model đang NGOẠI SUY.</summary>
+            <remarks>
+            Prediction vẫn trả bình thường, không có cảnh báo nào khác. Đây là tín hiệu duy nhất
+            cho biết SOH kém tin cậy vì miền dữ liệu chứ không phải vì pin xấu.
+            </remarks>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.AlertAuditActionEnum">
+            <summary>
+            5 action audit của Alert (Sprint audit #AUDIT-31). Host trong BatteryService (D14 — không tách Alert service riêng).
+            Enum bắt đầu từ 1.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.AmbientReadingSourceEnum">
+            <summary>
+            Nguồn của <c>AmbientReading</c> — phân biệt IoT thật vs Weather API (OpenMeteo).
+            Sprint 5B mở rộng — thay cho string field cũ.
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AmbientReadingSourceEnum.IotSensor">
+            <summary>Cảm biến IoT thật tại site (vd DHT22, BME280).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AmbientReadingSourceEnum.WeatherApi">
+            <summary>OpenMeteo HTTP API qua WeatherSyncBackgroundService.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.AnomalyClassificationEnum">
+            <summary>
+            Sprint Bonus NS-26 (#666, F2, Q12=A) — output phân loại AI (Isolation Forest + LSTM) theo spec §30.3.
+            Giá trị: <c>1</c> Normal (bình thường) · <c>2</c> Degrading (đang suy giảm) · <c>3</c> Failed (hỏng/EOL).
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AnomalyClassificationEnum.Normal">
+            <summary>Pin bình thường.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AnomalyClassificationEnum.Degrading">
+            <summary>Pin đang suy giảm (degrading) — cần theo dõi.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AnomalyClassificationEnum.Failed">
+            <summary>Pin hỏng / end-of-life (SOH &lt; 80%).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.AnomalyTypeEnum.Undertemp">
+            <summary>
+            Sprint Bonus NS-25 (#665, F1, Q11=A) — nhiệt độ dưới <c>ThresholdConfig.TemperatureMin</c>.
+            Sạc pin lithium dưới 0°C gây lithium plating (nguy hiểm thật) — citation B2 (Feng et al.,
+            J. Power Sources 2018). ⚠️ Wire value cross-service — đồng bộ FE + TicketService/NotificationService.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.AuditOutboxStatusEnum">
+            <summary>Trạng thái entry battery_audit_outbox (Sprint audit #AUDIT-21). Enum bắt đầu từ 1.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.BatteryAuditActionEnum">
+            <summary>12 action audit của BatteryService (Sprint audit #AUDIT-20). Enum bắt đầu từ 1.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.ChargingStateEnum">
+            <summary>
+            Trạng thái nạp/xả của pin tại thời điểm đo. Được report từ BMS.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.ElectricalTopologyEnum">
+            <summary>
+            Sprint 7 B4 (§31.7) — cách đấu nối điện của pin trong site, dùng để đánh giá
+            rủi ro lan truyền (cascade risk) khi 1 pin hỏng.
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.ElectricalTopologyEnum.Independent">
+            <summary>Pin đơn lẻ, không kết nối điện với pin khác — hỏng không lây.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.ElectricalTopologyEnum.SeriesString">
+            <summary>Mắc nối tiếp (string voltage) — mất 1 pin có thể ngắt cả string.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.ElectricalTopologyEnum.ParallelBank">
+            <summary>Mắc song song (bank capacity) — 1 pin hỏng tăng tải pin còn lại.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.ElectricalTopologyEnum.SeriesParallel">
+            <summary>Hỗn hợp nối tiếp + song song.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.EnvironmentalIncidentTypeEnum">
+            <summary>
+            Sprint 5B #100 — loại environmental incident được report.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.EnvironmentalIncidentStatusEnum">
+            <summary>
+            Sprint 5B #100 — lifecycle state của 1 environmental incident.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.IotApiKeyScopeEnum">
+            <summary>
+            Sprint IoT-1 (#243) — scope cấp cho API key per-device.
+            Dùng bitmask để 1 key có thể có nhiều scope.
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.SensorIngest">
+            <summary>Cho phép POST /api/sensor-readings/batch (telemetry).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.DeviceHeartbeat">
+            <summary>Cho phép POST /api/iot-devices/heartbeat.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.EnvironmentalIngest">
+            <summary>Cho phép POST /api/ambient/ingest + environmental incident report.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.FirmwareCheck">
+            <summary>Cho phép GET /api/iot-devices/firmware-check + log update.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.EdgeDeviceDefault">
+            <summary>Default bundle cho ESP32 edge device.</summary>
+            <remarks>
+            GH-785 — PHẢI gồm <see cref="F:BatteryService.Domain.Enums.IotApiKeyScopeEnum.EnvironmentalIngest"/>. Firmware xuất xưởng đã mang sẵn SHT31
+            (nhiệt/ẩm môi trường), MQ2 (khí gas/khói) và cảm biến rò nước, nhưng bundle cũ
+            (<c>SensorIngest | DeviceHeartbeat | FirmwareCheck</c> = 11) không cho gửi dữ liệu môi
+            trường ⇒ thiết bị tạo theo mặc định bị chặn khi báo khói/gas/rò nước.
+            <para>
+            Đây không phải bất tiện nhỏ: đó là đường báo cháy và rò nước. Thiết bị chạy bình thường,
+            telemetry vào đều, nên không ai nghi ngờ gì cho tới lúc cần cảnh báo an toàn thì nó im.
+            </para>
+            </remarks>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.IotDeviceStatusEnum">
+            <summary>
+            Sprint IoT-1 (#242) — vòng đời của một IoT edge device (ESP32-S3).
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotDeviceStatusEnum.Pending">
+            <summary>Đã tạo nhưng chưa provision (chưa có firmware/credential bind).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotDeviceStatusEnum.Active">
+            <summary>Đã provision và heartbeat trong threshold (5 phút).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotDeviceStatusEnum.Offline">
+            <summary>Mất heartbeat &gt; 5 phút — đánh dấu bởi OfflineDetection job.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotDeviceStatusEnum.Disabled">
+            <summary>Bị admin vô hiệu hoá (API key revoked, không nhận ingest).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotDeviceStatusEnum.Decommissioned">
+            <summary>Đã ngưng sử dụng — không tham gia ingest/heartbeat nữa.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.IotFirmwareChannelEnum">
+            <summary>
+            Sprint IoT-2 #IoT2-35 (S7-BE-04) — channel rollout cho firmware release.
+            </summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum">
+            <summary>
+            Sprint IoT-1 (#242) — trạng thái OTA firmware update của 1 device.
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Pending">
+            <summary>Đã ra lệnh, device chưa báo kết quả.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Downloading">
+            <summary>Device đang download artifact.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Installing">
+            <summary>Device đang flash.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Success">
+            <summary>Update thành công, đã reboot.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Failed">
+            <summary>Update fail (CRC/checksum/rollback).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.Skipped">
+            <summary>Device không đủ điều kiện (battery thấp, không tải) → bỏ qua round này.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.IotFirmwareUpdateStatusEnum.RolledBack">
+            <summary>Sprint IoT-2 #IoT2-37 — flash xong nhưng device fail boot → rollback về bản trước.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.SensorReadingSourceTypeEnum">
+             <summary>
+             Sprint 5B B9 (#154) — phân biệt nguồn đo của <c>SensorReading</c>.
+            
+             Dùng để:
+             - Phục vụ cross-source validation (B10 §1.6.6) so sánh BMS vs IoT cùng asset.
+             - Audit traceability — biết reading đến từ BMS hay IoT edge device.
+             </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.SensorReadingSourceTypeEnum.Bms">
+            <summary>Từ BMS gắn trực tiếp trong pack (qua RS485/Modbus).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.SensorReadingSourceTypeEnum.IotGateway">
+            <summary>Từ IoT edge device (ESP32-S3 + sensor ngoài INA226/DS18B20). Tên giữ legacy "Gateway".</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.SensorReadingSourceTypeEnum.External">
+            <summary>Manual import, third-party feed.</summary>
+        </member>
+        <member name="T:BatteryService.Domain.Enums.StaffFeedbackEnum">
+            <summary>
+            Sprint Bonus NS-26 (#666, F2, Q12=A) — feedback loop: Staff xác nhận classification của AI sau khi
+            resolve (spec §30.3). Phục vụ đánh giá precision/recall + xuất dữ liệu retrain (§30.12).
+            Giá trị: <c>1</c> Correct (AI đúng) · <c>2</c> FalsePositive (AI báo nhầm) · <c>3</c> FalseNegative (AI bỏ sót).
+            </summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.StaffFeedbackEnum.Correct">
+            <summary>AI phân loại đúng.</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.StaffFeedbackEnum.FalsePositive">
+            <summary>AI báo bất thường nhưng thực tế bình thường (false positive).</summary>
+        </member>
+        <member name="F:BatteryService.Domain.Enums.StaffFeedbackEnum.FalseNegative">
+            <summary>AI bỏ sót bất thường thật (false negative).</summary>
+        </member>
+    </members>
+</doc>

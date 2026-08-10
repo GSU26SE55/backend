@@ -486,8 +486,13 @@ services:
       # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. DEV: listener 1883 plaintext.
       # Bật: Mqtt__Enabled=true sau khi mosquitto container up + đã sinh passwd cho user backend-bridge.
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      # Internal broker address for the BatteryService container.
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
       Mqtt__Port: ${Mqtt__Port:-1883}
+      # Stable address returned to ESP32 devices. It must be reachable from the
+      # customer LAN; never expose the Docker-only name "mosquitto" here.
+      Mqtt__PublicHost: ${Mqtt__PublicHost:-}
+      Mqtt__PublicPort: ${Mqtt__PublicPort:-}
       Mqtt__UseTls: ${Mqtt__UseTls:-false}
       Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-true}
       Mqtt__Username: ${Mqtt__Username:-backend-bridge}

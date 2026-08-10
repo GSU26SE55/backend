@@ -108,37 +108,25 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             catch { /* vòng quét nền sẽ bù */ }
         }
 
-        // Sprint IoT-2 #IoT2-09 — populate configJson: batteryMappings cho site +
-        // calibration profile để device map serial → unitId Modbus + sensorSourceCode.
-        var batteryMappings = await _unitOfWork.BatteryAssets.GetAllAsync()
+        // MVP provisioning: một gateway quản tối đa 8 pin trong cùng site. Thứ tự serial ổn định
+        // giúp mỗi lần đồng bộ vẫn nhận cùng Modbus unitId (pin đầu tiên = 1). Khi có UI gán pin
+        // riêng cho từng gateway, thay đoạn này bằng bảng IotDeviceBatteryMapping.
+        var batterySerials = await _unitOfWork.BatteryAssets.GetAllAsync()
             .Where(a => !a.IsDeleted && a.SiteId == device.SiteId)
-            .Select(a => new BatteryMappingEntry
-            {
-                BatteryAssetSerial = a.SerialNumber
-            })
+            .OrderBy(a => a.SerialNumber)
+            .Select(a => a.SerialNumber)
+            .Take(8)
             .ToListAsync(ct);
 
-        // SensorSourceCode lấy từ calibration nếu có.
-        var calibrations = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
-            .Where(c => !c.IsDeleted && c.IotDeviceId == device.Id)
-            .ToListAsync(ct);
-        foreach (var m in batteryMappings)
-        {
-            var asset = await _unitOfWork.BatteryAssets.GetAllAsync()
-                .FirstOrDefaultAsync(a => a.SerialNumber == m.BatteryAssetSerial && a.SiteId == device.SiteId, ct);
-            if (asset is null)
-                continue;
-            // IOT3-33 — `Channel` mang "voltage"/"current"/"temperature" (KÊNH ĐO), còn
-            // `SensorSourceCode` phải là "primary"/"redundant"/"external-temp" (NGUỒN ĐO).
-            // Gán chéo hai khái niệm khiến thiết bị khai sensorSourceCode = "voltage", và mọi
-            // truy vấn tính toán lọc `primary` sẽ rơi bản ghi đó (quy ước 3 nguồn/pin).
-            //
-            // Calibration KHÔNG quyết định nguồn đo — một pin có thể có calibration cho cả ba
-            // kênh mà vẫn chỉ có một nguồn `primary`. Nên luôn trả "primary": đó là nguồn BMS,
-            // thứ duy nhất backend biết chắc thiết bị sẽ gửi. Nguồn phụ (redundant từ INA226,
-            // external-temp từ DS18B20) do firmware tự gắn nhãn khi dựng payload.
-            m.SensorSourceCode = SensorSource.Primary;
-        }
+        var batteryMappings = batterySerials
+            .Select((serial, index) => new BatteryMappingEntry
+            {
+                BatteryAssetSerial = serial,
+                UnitId = index + 1,
+                // Calibration mô tả kênh đo; nguồn BMS chính luôn dùng nhãn "primary".
+                SensorSourceCode = SensorSource.Primary
+            })
+            .ToList();
 
         // Scope-driven supported sensors.
         var supported = new List<string> { "voltage", "current", "temperature", "soc" };

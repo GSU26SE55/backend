@@ -386,6 +386,8 @@ services:
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
       Mqtt__Port: ${Mqtt__Port:-8883}
+      Mqtt__PublicHost: ${Mqtt__PublicHost:-}
+      Mqtt__PublicPort: ${Mqtt__PublicPort:-}
       Mqtt__UseTls: ${Mqtt__UseTls:-true}
       Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-false}
       Mqtt__Username: ${Mqtt__Username:-backend-bridge}

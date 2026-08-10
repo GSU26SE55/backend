@@ -17,9 +17,16 @@ public class MqttBrokerEndpointProvider : IMqttBrokerEndpointProvider
         if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.Host))
             return MqttBrokerEndpoint.Disabled;
 
+        var publicHost = string.IsNullOrWhiteSpace(_options.PublicHost)
+            ? _options.Host
+            : _options.PublicHost.Trim();
+        var publicPort = _options.PublicPort is > 0 and <= 65535
+            ? _options.PublicPort.Value
+            : _options.Port;
+
         return new MqttBrokerEndpoint(
-            _options.Host,
-            _options.Port,
+            publicHost,
+            publicPort,
             _options.UseTls,
             TopicPrefixFor(deviceCode));
     }

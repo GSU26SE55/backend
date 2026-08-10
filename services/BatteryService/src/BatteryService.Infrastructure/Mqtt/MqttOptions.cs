@@ -8,8 +8,16 @@ public class MqttOptions
     public const string SectionName = "Mqtt";
 
     public bool Enabled { get; set; }
+    /// <summary>Broker address used by BatteryService inside its deployment network.</summary>
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 8883;
+    /// <summary>
+    /// Stable DNS/mDNS address handed to physical devices. This is deliberately
+    /// separate from <see cref="Host"/> because a Docker-only name such as
+    /// <c>mosquitto</c> is not resolvable by an ESP32 on the customer LAN.
+    /// </summary>
+    public string? PublicHost { get; set; }
+    public int? PublicPort { get; set; }
     public bool UseTls { get; set; } = true;
     public bool AllowUntrustedCertificates { get; set; }
     public string Username { get; set; } = "backend-bridge";
