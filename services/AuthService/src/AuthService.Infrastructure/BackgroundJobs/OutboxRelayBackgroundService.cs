@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AuthService.Application.Interfaces.Services;
 using AuthService.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,19 @@ namespace AuthService.Infrastructure.BackgroundJobs;
 /// Cap MaxRetries để tránh poison message lặp vô tận.
 ///
 /// #AUTH-37: honor CancellationToken graceful shutdown — mỗi async call pass token, loop check
-/// IsCancellationRequested, mid-batch cancel sẽ flush các message đã publish thành công bằng SaveChanges
-/// ngắn (5s timeout) để không mất state.
+/// IsCancellationRequested. GH-794: mỗi message được đánh dấu ngay sau khi publish nên shutdown
+/// giữa lô không làm mất trạng thái; không còn cần flush cuối lô.
 /// </summary>
 public class OutboxRelayBackgroundService : BackgroundService
 {
-    // #AUTH-37: timeout cho final flush khi shutdown.
-    private static readonly TimeSpan ShutdownFlushTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// GH-794 — thời hạn giữ một dòng outbox. Phải dài hơn hẳn một lần publish chậm nhất: ngắn quá
+    /// là quyền hết hạn khi lần publish vẫn đang chạy, và replica khác publish lại chính dòng đó.
+    /// </summary>
+    private static readonly TimeSpan ClaimLease = TimeSpan.FromMinutes(2);
+
+    /// <summary>Định danh instance — dùng làm chủ sở hữu của quyền giữ dòng.</summary>
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly OutboxOptions _options;
@@ -78,9 +85,16 @@ public class OutboxRelayBackgroundService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var publishEndpoint = scope.ServiceProvider.GetRequiredService<IPublishEndpoint>();
+        var claims = scope.ServiceProvider.GetRequiredService<IOutboxClaimService>();
 
+        // GH-794 — chỉ lấy những dòng thật sự nhận được: chưa xử lý VÀ chưa ai giữ (hoặc quyền đã
+        // hết hạn). Đây mới chỉ là lọc sơ bộ; ai được dòng nào do câu UPDATE ở TryClaimAsync quyết.
+        var now = DateTime.UtcNow;
         var pending = await dbContext.OutboxMessages
-            .Where(o => o.ProcessedAt == null && o.RetryCount < _options.MaxRetries)
+            .AsNoTracking()
+            .Where(o => o.ProcessedAt == null
+                        && o.RetryCount < _options.MaxRetries
+                        && (o.LeaseUntilUtc == null || o.LeaseUntilUtc <= now))
             .OrderBy(o => o.OccurredAt)
             .Take(_options.BatchSize)
             .ToListAsync(cancellationToken);
@@ -102,34 +116,42 @@ public class OutboxRelayBackgroundService : BackgroundService
                 break;
             }
 
+            // GH-794 — GIÀNH dòng trước khi làm bất cứ điều gì. Không giành được nghĩa là replica
+            // khác đang publish chính dòng này; bỏ qua, không phải lỗi.
+            var claimed = await claims.TryClaimAsync(msg.Id, _instanceId, ClaimLease, cancellationToken);
+            if (claimed is null)
+                continue;
+
             try
             {
-                var eventType = Type.GetType(msg.EventType);
+                var eventType = Type.GetType(claimed.EventType);
                 if (eventType is null)
                 {
-                    msg.RetryCount += 1;
-                    msg.LastError = $"Cannot resolve type '{msg.EventType}'.";
-                    _logger.LogError("OutboxRelay cannot resolve type {Type} for message {Id}.", msg.EventType, msg.Id);
+                    var reason = $"Cannot resolve type '{claimed.EventType}'.";
+                    await claims.MarkFailedAsync(msg.Id, _instanceId, reason, cancellationToken);
+                    _logger.LogError("OutboxRelay cannot resolve type {Type} for message {Id}.", claimed.EventType, msg.Id);
                     AppMetrics.OutboxFailures.WithLabels("type_not_found").Inc();
-                    if (msg.RetryCount >= _options.MaxRetries)
+                    if (claimed.RetryCount + 1 >= _options.MaxRetries)
                         AppMetrics.OutboxSkippedMaxRetry.Inc();
                     continue;
                 }
 
-                var eventObj = JsonSerializer.Deserialize(msg.Payload, eventType);
+                var eventObj = JsonSerializer.Deserialize(claimed.Payload, eventType);
                 if (eventObj is null)
                 {
-                    msg.RetryCount += 1;
-                    msg.LastError = $"Deserialize returned null for type '{msg.EventType}'.";
+                    var reason = $"Deserialize returned null for type '{claimed.EventType}'.";
+                    await claims.MarkFailedAsync(msg.Id, _instanceId, reason, cancellationToken);
                     AppMetrics.OutboxFailures.WithLabels("deserialize_null").Inc();
-                    if (msg.RetryCount >= _options.MaxRetries)
+                    if (claimed.RetryCount + 1 >= _options.MaxRetries)
                         AppMetrics.OutboxSkippedMaxRetry.Inc();
                     continue;
                 }
 
                 await publishEndpoint.Publish(eventObj, eventType, cancellationToken);
-                msg.ProcessedAt = DateTime.UtcNow;
-                msg.LastError = null;
+
+                // Đánh dấu NGAY sau khi publish, không gom tới cuối lô: tiến trình chết giữa lô mà
+                // mới ghi ở cuối thì mọi message đã gửi trong lô đó sẽ được gửi lại từ đầu.
+                await claims.MarkProcessedAsync(msg.Id, _instanceId, cancellationToken);
 
                 // Label = short event-type name (vd "UserRegisteredEvent") để Prometheus aggregate by event.
                 AppMetrics.OutboxProcessed.WithLabels(eventType.Name).Inc();
@@ -142,35 +164,22 @@ public class OutboxRelayBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                msg.RetryCount += 1;
-                msg.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                var reason = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                await claims.MarkFailedAsync(msg.Id, _instanceId, reason, cancellationToken);
                 _logger.LogWarning(ex, "OutboxRelay failed to publish message {Id} (retry {Retry}/{Max}).",
-                    msg.Id, msg.RetryCount, _options.MaxRetries);
+                    msg.Id, claimed.RetryCount + 1, _options.MaxRetries);
 
                 // Reason = exception type (vd "BrokerUnreachableException") để dashboard breakdown nguyên nhân fail.
                 AppMetrics.OutboxFailures.WithLabels(ex.GetType().Name).Inc();
-                if (msg.RetryCount >= _options.MaxRetries)
+                if (claimed.RetryCount + 1 >= _options.MaxRetries)
                     AppMetrics.OutboxSkippedMaxRetry.Inc();
             }
         }
 
-        // #AUTH-37: nếu shutdown giữa chừng, vẫn flush các thay đổi đã thành công bằng token mới
-        // có timeout ngắn (5s) — đảm bảo ProcessedAt được persist, không re-publish duplicate khi restart.
+        // GH-794 — không còn flush cuối lô: mỗi message được đánh dấu ngay sau khi publish, nên
+        // shutdown giữa chừng không làm mất trạng thái của phần đã gửi. Cờ stopRequested chỉ còn
+        // nhiệm vụ ghi log cho rõ vì sao lô dừng sớm.
         if (stopRequested)
-        {
-            using var flushCts = new CancellationTokenSource(ShutdownFlushTimeout);
-            try
-            {
-                await dbContext.SaveChangesAsync(flushCts.Token);
-                _logger.LogInformation("OutboxRelay flushed batch before shutdown.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "OutboxRelay final flush failed; processed messages may re-publish on restart (idempotent consumer required).");
-            }
-            return;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("OutboxRelay stopped mid-batch on shutdown; processed rows already persisted.");
     }
 }

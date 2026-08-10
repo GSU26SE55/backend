@@ -8,6 +8,7 @@ using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
 using MediatR;
+using SharedContracts.Events;
 
 namespace AuthService.UnitTests.Handlers.Auth;
 
@@ -31,7 +32,14 @@ public class LoginCommandHandlerTests
     }
 
     private LoginCommandHandler CreateHandler(Mock<AuthService.Application.Interfaces.Repositories.IAuthUnitOfWork> uow)
-        => new(uow.Object, _hasher.Object, _tokenIssuer.Object, _challengeStore.Object, _publisher.Object);
+        => CreateHandler(uow, new Mock<SharedContracts.Interfaces.IMessageProducerService>().Object);
+
+    /// <summary>GH-766 — bản cho phép truyền producer riêng để bắt event outbox.</summary>
+    private LoginCommandHandler CreateHandler(
+        Mock<AuthService.Application.Interfaces.Repositories.IAuthUnitOfWork> uow,
+        SharedContracts.Interfaces.IMessageProducerService producer)
+        => new(uow.Object, _hasher.Object, _tokenIssuer.Object, _challengeStore.Object, _publisher.Object,
+            producer);
 
     private static Account ActiveAccount(string passwordHash = "HASHED", bool twoFactorEnabled = false)
     {
@@ -197,6 +205,56 @@ public class LoginCommandHandlerTests
         _publisher.Verify(p => p.Publish(
             It.Is<AuditTrailNotification>(n => n.Action == AuditActionEnum.AccountAutoLocked && n.IsSuccess),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Login_FifthWrong_PublishesAccountStatusChangedEvent()
+    {
+        // GH-766 — tự khoá là đường đổi trạng thái DỄ XẢY RA NHẤT (không cần admin thao tác).
+        // Không phát event ở đây thì read-model bên Battery/Ticket vẫn coi tài khoản đang bị
+        // brute-force là hoàn toàn bình thường.
+        var account = ActiveAccount();
+        account.FailedLoginAttempts = 4;
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
+
+        var captured = new List<AccountStatusChangedEvent>();
+        var producer = new Mock<SharedContracts.Interfaces.IMessageProducerService>();
+        producer
+            .Setup(x => x.PublishAsync(It.IsAny<AccountStatusChangedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<AccountStatusChangedEvent, CancellationToken>((e, _) => captured.Add(e))
+            .Returns(Task.CompletedTask);
+
+        await CreateHandler(uow, producer.Object).Handle(
+            new LoginCommand { Email = account.Email, Password = "wrong" }, CancellationToken.None);
+
+        var evt = captured.Should().ContainSingle().Subject;
+        evt.AccountId.Should().Be(account.Id);
+        evt.OldStatus.Should().Be((int)AccountStatusEnum.Active);
+        evt.NewStatus.Should().Be((int)AccountStatusEnum.Locked);
+    }
+
+    [Fact]
+    public async Task Login_WrongPasswordButNotYetLocked_PublishesNoStatusEvent()
+    {
+        // Sai mật khẩu lần 1-4 KHÔNG đổi trạng thái. Phát event ở đây sẽ dội vô nghĩa xuống mọi
+        // service downstream mỗi lần ai đó gõ nhầm mật khẩu.
+        var account = ActiveAccount();
+        account.FailedLoginAttempts = 1;
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        _hasher.Setup(h => h.Verify(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
+
+        var captured = new List<AccountStatusChangedEvent>();
+        var producer = new Mock<SharedContracts.Interfaces.IMessageProducerService>();
+        producer
+            .Setup(x => x.PublishAsync(It.IsAny<AccountStatusChangedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<AccountStatusChangedEvent, CancellationToken>((e, _) => captured.Add(e))
+            .Returns(Task.CompletedTask);
+
+        await CreateHandler(uow, producer.Object).Handle(
+            new LoginCommand { Email = account.Email, Password = "wrong" }, CancellationToken.None);
+
+        captured.Should().BeEmpty();
     }
 
     [Fact]

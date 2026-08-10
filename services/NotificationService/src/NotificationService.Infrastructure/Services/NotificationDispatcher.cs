@@ -16,14 +16,35 @@ namespace NotificationService.Infrastructure.Services;
 
 public class NotificationDispatcher : INotificationDispatcher
 {
-    // Conversation events must stay realtime. A burst of admin/alert notifications must not
-    // postpone an actual chat message for an hour, otherwise Android bubbles cannot behave as chat.
+    /// <summary>
+    /// Sự kiện hội thoại phải tới ngay, không được xếp hàng chờ.
+    ///
+    /// <para>Hai cơ chế làm chậm bị bỏ qua cho nhóm này:</para>
+    /// <list type="bullet">
+    ///   <item><description><b>Hạn mức người dùng</b> — một đợt cảnh báo dồn dập không được đẩy tin
+    ///   nhắn thật sang digest hàng giờ sau.</description></item>
+    ///   <item><description><b>Quiet hours</b> — từ khi kênh Push trở thành đường realtime chính của
+    ///   chat (ADR-0019), hoãn tới hết giờ yên lặng nghĩa là buổi tối nhắn tin không ai nhận được
+    ///   gì. Quiet hours sinh ra để chặn thông báo hệ thống làm phiền, không phải để chặn người
+    ///   thật đang nói chuyện với nhau.</description></item>
+    /// </list>
+    ///
+    /// <para>Người dùng vẫn tắt được hoàn toàn bằng tuỳ chọn kênh hoặc tuỳ chọn nhóm "Trao đổi" —
+    /// đó mới là công tắc dành cho ý muốn "đừng làm phiền tôi vì chat".</para>
+    /// </summary>
     private static readonly IReadOnlySet<NotificationTypeEnum> RealtimeConversationTypes =
         new HashSet<NotificationTypeEnum>
         {
             NotificationTypeEnum.ChatCreated,
             NotificationTypeEnum.ChatMentioned
         };
+
+    /// <summary>
+    /// Loại này có được bỏ qua các cơ chế làm chậm (hạn mức, quiet hours) hay không.
+    /// Gom một chỗ để hai đường gửi (fan-out và worker) không bao giờ lệch luật nhau.
+    /// </summary>
+    private static bool IsRealtimeConversation(NotificationTypeEnum type) =>
+        RealtimeConversationTypes.Contains(type);
 
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
@@ -79,10 +100,14 @@ public class NotificationDispatcher : INotificationDispatcher
 
         bool isCritical = request.BypassQuietHours || _criticalTypes.Contains(request.Type);
 
+        // Chat xuyên qua quiet hours nhưng KHÔNG vì thế mà thành "critical": critical còn kéo theo
+        // bỏ qua hạn mức ở mọi kênh và đổi độ ưu tiên của gói push. Tách hai khái niệm ra.
+        bool bypassQuietHours = isCritical || IsRealtimeConversation(request.Type);
+
         foreach (var recipient in request.Recipients)
         {
             var pref = await LoadPreferenceAsync(recipient.UserId, ct);
-            bool isQuiet = !isCritical && IsQuietHours(pref);
+            bool isQuiet = !bypassQuietHours && IsQuietHours(pref);
 
             // Push: one policy/delivery record per recipient. SignalR needs no device token.
             if (targetChannels.Contains(NotificationChannelEnum.Push))
@@ -224,7 +249,12 @@ public class NotificationDispatcher : INotificationDispatcher
         // 2) Digest (NOTI-12) — gom notification không-critical của user bật digest,
         //    NotificationDigestBackgroundService sẽ gộp và gửi 1 lần.
         //    Bản digest tổng hợp thì KHÔNG gom tiếp (nếu không sẽ tự hoãn chính nó mãi mãi).
+        //    ADR-0019: chat cũng được miễn gom digest, cùng lý do với quiet hours ở bước 3. Người
+        //    dùng đặt Frequency=Daily mà tin nhắn cũng bị gom thì mỗi ngày mới nhận chat một lần —
+        //    digest sinh ra để gộp thông báo hệ thống, không phải để gộp người đang nói chuyện.
+        //    Muốn tắt hẳn thông báo chat thì tắt kênh Push hoặc tắt nhóm "Trao đổi" trong tuỳ chọn.
         if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
             && notification.EntityType != NotificationDigest.EntityType
             && IsDigestChannel(notification.Channel)
             && TryGetDigestWindow(pref, out var window))
@@ -239,7 +269,7 @@ public class NotificationDispatcher : INotificationDispatcher
             && _rateLimiter is not null
             && notification.Channel != NotificationChannelEnum.InApp
             && notification.EntityType != NotificationDigest.EntityType
-            && !RealtimeConversationTypes.Contains(notification.Type))
+            && !IsRealtimeConversation(notification.Type))
         {
             var decision = await _rateLimiter.TryConsumeAsync(notification.UserId, notification.Type, ct);
 
@@ -255,7 +285,12 @@ public class NotificationDispatcher : INotificationDispatcher
         }
 
         // 3) Quiet hours — InApp vẫn ghi được (im lặng), các kênh chủ động thì hoãn tới hết giờ yên.
-        if (!isCritical && notification.Channel != NotificationChannelEnum.InApp && IsQuietHours(pref))
+        //    ADR-0019: chat được miễn. Push nay là đường realtime chính của hội thoại, hoãn nó tới
+        //    sáng hôm sau tức là buổi tối nhắn tin không ai nhận được gì.
+        if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
+            && notification.Channel != NotificationChannelEnum.InApp
+            && IsQuietHours(pref))
             return await DeferAsync(notification, ResolveQuietHoursEndUtc(pref),
                 "Đang trong quiet hours — hoãn tới khi hết.", ct, "quiet_hours");
 
@@ -278,13 +313,42 @@ public class NotificationDispatcher : INotificationDispatcher
             Title = title,
             Body = body,
             PayloadJson = notification.PayloadJson,
-            IsCritical = isCritical,
+            // Để kênh push gửi kèm, giúp client mở đúng màn hình mà danh sách trong app cũng mở.
             EntityType = notification.EntityType,
             EntityId = notification.EntityId,
+            IsCritical = isCritical,
             CreatedAt = notification.CreatedAt,
             Email = account?.Email,
             PhoneNumber = account?.PhoneNumber,
         };
+
+        // GH-792 — CHIẾM bản ghi và ghi xuống DB TRƯỚC khi gọi provider.
+        //
+        // Trước đây bản ghi ở nguyên Pending trong suốt lúc gọi provider; tiến trình chết sau khi
+        // provider đã nhận nhưng trước khi kịp ghi Sent là vòng quét sau gửi lại — người dùng nhận
+        // email/SMS/push lần thứ hai. Ghi Processing trước thu hẹp cửa sổ đó xuống còn "chết trước
+        // khi kịp gửi", trường hợp mà gửi lại là ĐÚNG.
+        //
+        // DispatchAttemptCount tăng ngay tại đây, không đợi kết quả: một lần chiếm việc rồi chết
+        // vẫn là một lần thử. Đếm theo kết quả thì sự cố lặp lại sẽ quay vòng mãi mà số đếm không
+        // nhích, và MaxAttempts không bao giờ chạm tới.
+        // GH-793 — chiếm bằng MỘT câu UPDATE có điều kiện, không phải "đọc rồi ghi": hai replica
+        // cùng thấy Pending thì cơ sở dữ liệu chọn đúng một bên. Không dựa vào leader lease, vì
+        // lease hết hạn giữa chừng hay Redis sự cố là lại có hai chủ.
+        var claimedAt = DateTime.UtcNow;
+        if (!await _unitOfWork.TryClaimForDispatchAsync(notification.Id, claimedAt, ct))
+        {
+            _logger.LogDebug(
+                "Dispatch: notification {Id} đã được instance khác chiếm — bỏ qua.", notification.Id);
+            return DispatchOutcome.Deferred;
+        }
+
+        // Đồng bộ bản trong bộ nhớ với những gì câu UPDATE vừa ghi: ExecuteUpdate không đi qua bộ
+        // theo dõi thay đổi của EF, nên nếu bỏ bước này thì mọi đoạn phía sau (và bản ghi audit)
+        // vẫn nhìn thấy trạng thái cũ.
+        notification.Status = NotificationStatusEnum.Processing;
+        notification.ProcessingStartedAt = claimedAt;
+        notification.DispatchAttemptCount += 1;
 
         ChannelResult result;
         try
@@ -304,7 +368,8 @@ public class NotificationDispatcher : INotificationDispatcher
             notification.SentAt = DateTime.UtcNow;
             notification.FailureReason = null;
             notification.NextAttemptAt = null;
-            notification.DispatchAttemptCount += 1;
+            // GH-792 — số lần thử đã tăng lúc chiếm việc; tăng lại ở đây là đếm đôi.
+            notification.ProcessingStartedAt = null;
             _unitOfWork.Notifications.UpdateAsync(notification);
 
             // NOTI3-07 (#707) — delivery-rate tách theo channel là metric cơ bản nhất.
@@ -320,7 +385,8 @@ public class NotificationDispatcher : INotificationDispatcher
         }
 
         // Lỗi → retry có backoff cho tới MaxAttempts.
-        notification.DispatchAttemptCount += 1;
+        // GH-792 — số lần thử đã tăng lúc chiếm việc.
+        notification.ProcessingStartedAt = null;
         notification.FailureReason = Truncate(result.ErrorMessage, 1000);
 
         if (notification.DispatchAttemptCount >= _options.MaxAttempts)
@@ -341,6 +407,9 @@ public class NotificationDispatcher : INotificationDispatcher
             return DispatchOutcome.Failed;
         }
 
+        // GH-792 — trả về hàng đợi tường minh: bản ghi đang ở Processing (đã chiếm), không tự quay
+        // lại Pending được. Quên dòng này là nó kẹt ở Processing tới khi bộ thu hồi nhặt lên.
+        notification.Status = NotificationStatusEnum.Pending;
         notification.NextAttemptAt = DateTime.UtcNow.Add(BackoffFor(notification.DispatchAttemptCount));
         _unitOfWork.Notifications.UpdateAsync(notification);
         await _unitOfWork.SaveChangesAsync(ct);

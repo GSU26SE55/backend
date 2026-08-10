@@ -134,7 +134,11 @@ public class BatteryAlertEscalationRequestedConsumerTests
         await harness.Bus.Publish(MakeEvent());
         (await harness.Consumed.Any<BatteryAlertEscalationRequestedEvent>()).Should().BeTrue();
 
-        captured.Should().AllSatisfy(c => c.Title.Should().Contain("6 phút"));
+        // Số phút chưa tiếp nhận chuyển từ tiêu đề xuống body: tiêu đề nêu việc gì đang xảy ra
+        // (pin nào chưa được xử lý), phần "đã bao lâu" thuộc về phần diễn giải.
+        // Email dùng template HTML riêng nên chỉ xét Push/InApp.
+        captured.Where(c => c.Channel != NotificationChannelEnum.Email).Should()
+            .AllSatisfy(c => c.Body.Should().Contain("6 phút"));
         await harness.Stop();
     }
 

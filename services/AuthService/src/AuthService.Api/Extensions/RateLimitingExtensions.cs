@@ -21,6 +21,15 @@ public static class RateLimitingExtensions
     public const string PolicyTwoFactorDisable = "TwoFactorDisable";
     /// <summary>Rate limit cho /api/accounts/me/2fa/backup-codes/regenerate: 3 req/giờ theo UserId.</summary>
     public const string PolicyBackupCodeRegenerate = "BackupCodeRegenerate";
+    /// <summary>
+    /// GH-776 — rate limit cho /api/auth/introspect: 60 req/phút theo IP.
+    /// </summary>
+    /// <remarks>
+    /// Khoá truy cập đã chặn người lạ; giới hạn này là lớp thứ hai cho ca khoá bị lộ, và chặn luôn
+    /// việc dò khoá bằng vét cạn. 60/phút thoải mái cho một resource server thật (nó cache kết quả
+    /// theo vòng đời token, không hỏi lại mỗi request) mà vẫn quá thấp để dùng làm oracle.
+    /// </remarks>
+    public const string PolicyIntrospect = "Introspect";
 
     public static IServiceCollection AddOtpRateLimiting(this IServiceCollection services, TimeSpan? window = null)
     {
@@ -28,6 +37,17 @@ public static class RateLimitingExtensions
 
         services.AddRateLimiter(options =>
         {
+            options.AddPolicy(PolicyIntrospect, ctx =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                    }));
+
             options.AddPolicy(PolicyAnonOtp, ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
@@ -119,18 +139,11 @@ public static class RateLimitingExtensions
                     });
             });
 
-            options.OnRejected = async (ctx, token) =>
-            {
-                ctx.HttpContext.Response.StatusCode = 429;
-                ctx.HttpContext.Response.ContentType = "application/json";
-                if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-                {
-                    ctx.HttpContext.Response.Headers["Retry-After"] = ((int)retryAfter.TotalSeconds).ToString();
-                }
-                await ctx.HttpContext.Response.WriteAsync(
-                    "{\"isSuccess\":false,\"statusCode\":429,\"message\":\"Quá nhiều yêu cầu. Vui lòng thử lại sau.\"}",
-                    token);
-            };
+            // OnRejected + RejectionStatusCode CỐ TÌNH không đặt ở đây.
+            // `AddRateLimiter` dùng options pattern nên mọi lần gọi đều ghi vào cùng một object:
+            // hai nơi cùng đặt OnRejected thì nơi đăng ký sau ghi đè nơi trước, và hình dạng response
+            // 429 sẽ đổi theo thứ tự đăng ký. Nơi duy nhất giữ trách nhiệm này là
+            // SharedInfrastructure.RateLimiting.StandardRateLimitingExtensions.
         });
 
         return services;

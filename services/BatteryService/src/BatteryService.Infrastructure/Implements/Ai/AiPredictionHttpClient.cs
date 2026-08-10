@@ -46,8 +46,11 @@ public class AiPredictionHttpClient
             return null;
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        // Đọc thành CHUỖI thay vì stream: cần giữ nguyên văn để ghi vào
+        // soh_predictions.raw_response. AI trả ~35 field mà AiPredictionResult chỉ mang 9;
+        // phần còn lại chỉ tồn tại ở đây, parse xong stream là mất hẳn.
+        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(rawBody);
         var root = doc.RootElement;
 
         static decimal Dec(JsonElement e, string p) =>
@@ -57,10 +60,19 @@ public class AiPredictionHttpClient
             e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
         static string Str(JsonElement e, string p) =>
             e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : string.Empty;
+        static bool Bool(JsonElement e, string p) =>
+            e.TryGetProperty(p, out var v)
+            && (v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.False)
+            && v.GetBoolean();
 
         // risk.priority (nested) + metadata.model_version (nested)
-        var priority = root.TryGetProperty("risk", out var risk) ? Str(risk, "priority") : "None";
-        var modelVersion = root.TryGetProperty("metadata", out var meta) ? Str(meta, "model_version") : string.Empty;
+        var hasRisk = root.TryGetProperty("risk", out var risk);
+        var priority = hasRisk ? Str(risk, "priority") : "None";
+        var hasMeta = root.TryGetProperty("metadata", out var meta);
+        var modelVersion = hasMeta ? Str(meta, "model_version") : string.Empty;
+        // GH-86 — khối prediction lồng nhau chứa toàn bộ thông tin bất định. Không có field
+        // phẳng nào tương ứng, nên bỏ khối này là mất hẳn.
+        var hasPrediction = root.TryGetProperty("prediction", out var prediction);
         // anomaly.anomaly_confidence (nested) — KHÔNG có field phẳng tương ứng; field phẳng
         // "confidence" là soh_confidence, dùng cho SohPrediction chứ không phải classification.
         var anomalyConfidence = root.TryGetProperty("anomaly", out var anomaly)
@@ -75,6 +87,19 @@ public class AiPredictionHttpClient
             RulCyclesEstimate: Int(root, "rul_cycles_estimate"),
             Priority: string.IsNullOrEmpty(priority) ? "None" : priority,
             ModelVersion: modelVersion,
-            LatencyMs: (int)Math.Round((double)Dec(root, "inference_ms")));
+            LatencyMs: (int)Math.Round((double)Dec(root, "inference_ms")),
+            RawResponse: rawBody,
+            // Khối nested — không có field phẳng tương ứng. Phải parity với gRPC, nếu không
+            // cùng một pin sẽ lưu khác nhau tuỳ transport nào đang sống.
+            HealthStage: hasPrediction ? Str(prediction, "health_stage") : null,
+            StageConfidence: hasPrediction ? Dec(prediction, "stage_confidence") : null,
+            IsBorderline: hasPrediction && Bool(prediction, "is_borderline"),
+            SohStd: hasPrediction ? Dec(prediction, "soh_std") : null,
+            RiskLevel: hasRisk ? Str(risk, "risk_level") : null,
+            ActionCode: hasRisk ? Str(risk, "action_code") : null,
+            SohTrend: Str(root, "soh_trend"),
+            DegradationRatePerCycle: Dec(root, "degradation_rate_per_cycle"),
+            CyclesToMaintenance: Int(root, "cycles_to_maintenance"),
+            IsTemperatureOod: hasMeta && Bool(meta, "is_temperature_ood"));
     }
 }

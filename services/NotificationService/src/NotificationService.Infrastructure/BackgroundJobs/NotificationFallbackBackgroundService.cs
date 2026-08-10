@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,6 +9,7 @@ using NotificationService.Application.Services;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
+using SharedInfrastructure.Leasing;
 using SharedInfrastructure.Metrics;
 
 namespace NotificationService.Infrastructure.BackgroundJobs;
@@ -39,7 +39,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IDistributedCache _cache;
+    private readonly IDistributedLease _lease;
     private readonly NotificationFallbackOptions _options;
     private readonly NotificationDispatchOptions _dispatchOptions;
     private readonly ExpoReceiptOptions _receiptOptions;
@@ -47,7 +47,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
     public NotificationFallbackBackgroundService(
         IServiceScopeFactory scopeFactory,
-        IDistributedCache cache,
+        IDistributedLease lease,
         IOptions<NotificationFallbackOptions> options,
         IOptions<NotificationDispatchOptions> dispatchOptions,
         ILogger<NotificationFallbackBackgroundService> logger,
@@ -55,7 +55,7 @@ public class NotificationFallbackBackgroundService : BackgroundService
         IOptions<ExpoReceiptOptions>? receiptOptions = null)
     {
         _scopeFactory = scopeFactory;
-        _cache = cache;
+        _lease = lease;
         _options = options.Value;
         _dispatchOptions = dispatchOptions.Value;
         _receiptOptions = receiptOptions?.Value ?? new ExpoReceiptOptions();
@@ -121,7 +121,11 @@ public class NotificationFallbackBackgroundService : BackgroundService
 
             try
             {
-                if (await IsLeaderAsync(stoppingToken))
+                // ADR-0019 — chuỗi bù này đọc dữ liệu receipt của Expo, nên chỉ có nghĩa khi đường
+                // vận chuyển hiện tại còn dùng Expo. Chạy thuần SignalR mà vẫn quét thì mọi push
+                // critical đều "không có receipt Ok" và sẽ lãnh thêm một SMS thừa.
+                // Hỏi lại mỗi vòng vì transport đổi được lúc chạy.
+                if (await IsExpoActiveAsync(stoppingToken) && await IsLeaderAsync(stoppingToken))
                     await ProcessOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
@@ -129,23 +133,48 @@ public class NotificationFallbackBackgroundService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// ADR-0019 — chuỗi bù chỉ chạy khi đường vận chuyển hiện tại có dùng Expo.
+    ///
+    /// <para>Đọc lỗi thì trả <c>false</c> (NGƯỢC với worker đối soát biên nhận): ở đây "chạy thừa"
+    /// không vô hại — nó bắn SMS thật cho người dùng thật. Bỏ lỡ một vòng bù thì vòng sau vẫn bắt
+    /// được vì điều kiện lọc dựa trên mốc thời gian, không phải trên lần quét.</para>
+    /// </summary>
+    private async Task<bool> IsExpoActiveAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var setting = scope.ServiceProvider.GetRequiredService<IPushTransportSettingService>();
+            var transport = await setting.GetAsync(ct);
+            return transport is PushTransportEnum.Expo or PushTransportEnum.Both;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "NotificationFallback: không đọc được đường vận chuyển push — bỏ qua vòng này để không bắn SMS thừa.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// GH-793 — giành quyền bằng MỘT lệnh nguyên tử có token chủ sở hữu.
+    /// </summary>
+    /// <remarks>
+    /// Khuôn cũ <c>GET</c> rồi <c>SET</c> để lọt hai replica cùng đọc thấy khoá trống trong cùng một
+    /// khoảnh khắc, và cả hai đều tự coi là chủ. <see cref="IDistributedLease"/> gộp kiểm-và-ghi vào
+    /// một lệnh Redis nên khe hở đó biến mất.
+    /// </remarks>
     private async Task<bool> IsLeaderAsync(CancellationToken ct)
     {
         try
         {
-            var current = await _cache.GetStringAsync(LeaderKey, ct);
-            if (current is null || current == _instanceId)
-            {
-                await _cache.SetStringAsync(LeaderKey, _instanceId,
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = LeaseTtl }, ct);
-                return true;
-            }
-            return false;
+            return await _lease.TryAcquireAsync(LeaderKey, _instanceId, LeaseTtl, ct);
         }
         catch (Exception ex)
         {
-            // Redis lỗi ⇒ vẫn chạy. Cảnh báo critical đến hai lần vẫn hơn là không đến.
-            _logger.LogWarning(ex, "NotificationFallback: leader-election lỗi — vẫn xử lý.");
+            // Redis sự cố → vẫn chạy: không ai làm gì cả là hỏng nặng hơn làm trùng.
+            _logger.LogWarning(ex, "Lease lỗi — chạy tiếp lượt này.");
             return true;
         }
     }

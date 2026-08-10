@@ -13,11 +13,19 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIotApiKeyService _apiKeyService;
+    private readonly IMqttBrokerEndpointProvider _brokerEndpoint;
+    private readonly IMqttPasswordFileSync _passwordFileSync;   // IOT3-29
 
-    public CreateIotDeviceCommandHandler(IBatteryUnitOfWork unitOfWork, IIotApiKeyService apiKeyService)
+    public CreateIotDeviceCommandHandler(
+        IBatteryUnitOfWork unitOfWork,
+        IIotApiKeyService apiKeyService,
+        IMqttBrokerEndpointProvider brokerEndpoint,
+        IMqttPasswordFileSync passwordFileSync)
     {
         _unitOfWork = unitOfWork;
         _apiKeyService = apiKeyService;
+        _brokerEndpoint = brokerEndpoint;
+        _passwordFileSync = passwordFileSync;
     }
 
     public async Task<CommonResponse<IotDeviceCreatedDto>> Handle(CreateIotDeviceCommand request, CancellationToken cancellationToken)
@@ -62,9 +70,17 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
         await _unitOfWork.IotDevices.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var dto = IotDeviceMapper.ToCreatedDto(entity, key.RawKey, site.Name);
-        dto.MqttUsername = mqttCred.Username;
-        dto.MqttPassword = mqttCred.RawPassword;
+        // IOT3-31 — mapper lo hết sáu trường MQTT; không còn gán tay ở đây nữa để đường
+        // create và đường rotate không thể lệch nhau (rotate từng quên và trả toàn null).
+        var broker = _brokerEndpoint.Resolve(entity.DeviceCode);
+        var dto = IotDeviceMapper.ToCreatedDto(entity, key.RawKey, site.Name, broker, mqttCred.RawPassword);
+
+        // IOT3-29 — đẩy thông tin đăng nhập xuống broker NGAY, đừng để thiết bị lắp xong mà
+        // phải chờ hết vòng quét 60s mới nối được. Hỏng thì vòng quét nền bù, không làm fail create.
+        try { await _passwordFileSync.SyncOnceAsync(cancellationToken); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch { /* vòng quét nền sẽ bù */ }
+
         return new CommonResponse<IotDeviceCreatedDto>
         {
             IsSuccess = true,

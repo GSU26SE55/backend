@@ -15,7 +15,7 @@ public class CreateIotDeviceHandlerTests
     {
         var uow = new MockUnitOfWorkBuilder();
         var key = new IotApiKeyService(uow.Build());
-        var handler = new CreateIotDeviceCommandHandler(uow.Build(), key);
+        var handler = new CreateIotDeviceCommandHandler(uow.Build(), key, TestMqttBrokerEndpointProvider.Enabled(), NoopMqttPasswordFileSync.Instance());
         return (handler, uow, key);
     }
 
@@ -64,7 +64,7 @@ public class CreateIotDeviceHandlerTests
         rawKey.Should().StartWith("iotk_");
 
         // Đọc lại qua GetById (cùng store) — apiKey phải khớp raw key lúc create.
-        var getById = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var getById = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
         var detail = await getById.Handle(new GetIotDeviceByIdQuery { Id = Guid.Parse(created.Data.Id) }, default);
 
         detail.IsSuccess.Should().BeTrue();

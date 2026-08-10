@@ -34,7 +34,7 @@ public class GetIotDeviceByIdHandlerTests
         var id = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(Device(id, Guid.NewGuid(), "iotk_full-plaintext-key-aB12"));
-        var handler = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var handler = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new GetIotDeviceByIdQuery { Id = id }, default);
 
@@ -54,7 +54,7 @@ public class GetIotDeviceByIdHandlerTests
         var id = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(Device(id, Guid.NewGuid(), apiKeyPlaintext: null));
-        var handler = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var handler = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new GetIotDeviceByIdQuery { Id = id }, default);
 
@@ -69,7 +69,7 @@ public class GetIotDeviceByIdHandlerTests
     {
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(Device(Guid.NewGuid(), Guid.NewGuid(), "iotk_x"));
-        var handler = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var handler = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new GetIotDeviceByIdQuery { Id = Guid.NewGuid() }, default);
 
@@ -85,7 +85,7 @@ public class GetIotDeviceByIdHandlerTests
         var id = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(Device(id, Guid.NewGuid(), "iotk_x", isDeleted: true));
-        var handler = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var handler = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new GetIotDeviceByIdQuery { Id = id }, default);
 
@@ -101,7 +101,7 @@ public class GetIotDeviceByIdHandlerTests
         var device = Device(id, siteId, "iotk_x");
         device.Site = new Site { Id = siteId, Name = "Solar Farm A" };
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new GetIotDeviceByIdQueryHandler(uow.Build());
+        var handler = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
 
         var result = await handler.Handle(new GetIotDeviceByIdQuery { Id = id }, default);
 

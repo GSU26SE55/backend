@@ -80,7 +80,11 @@ public class ExpoReceiptReconcileBackgroundService : BackgroundService
         {
             try
             {
-                await ReconcileOnceAsync(stoppingToken);
+                // ADR-0019 — đường vận chuyển push đổi được lúc chạy, nên phải hỏi lại MỖI VÒNG
+                // chứ không chốt một lần lúc khởi động. Admin chuyển sang Expo giữa chừng thì worker
+                // này phải tự sống lại mà không cần restart service.
+                if (await IsExpoActiveAsync(stoppingToken))
+                    await ReconcileOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -100,6 +104,30 @@ public class ExpoReceiptReconcileBackgroundService : BackgroundService
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>
+    /// ADR-0019 — chỉ đối soát khi đường vận chuyển hiện tại có dùng Expo. Chạy ở chế độ thuần
+    /// SignalR thì bảng <c>push_receipts</c> không có gì mới, quét tiếp chỉ tốn truy vấn.
+    ///
+    /// <para>Đọc lỗi thì trả <c>true</c>: thà đối soát thừa một vòng (vô hại, không có receipt nào
+    /// để xử lý) còn hơn im lặng bỏ sót biên nhận thật vì một sự cố tạm thời của database.</para>
+    /// </summary>
+    private async Task<bool> IsExpoActiveAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var setting = scope.ServiceProvider.GetRequiredService<IPushTransportSettingService>();
+            var transport = await setting.GetAsync(ct);
+            return transport is PushTransportEnum.Expo or PushTransportEnum.Both;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "ExpoReceiptReconcile: không đọc được đường vận chuyển push — vẫn đối soát vòng này.");
+            return true;
         }
     }
 

@@ -1,5 +1,6 @@
 using FileStorageService.Application.Authorization;
 using FileStorageService.Application.DTOs;
+using FileStorageService.Application.Validation;
 using FileStorageService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -16,11 +17,14 @@ public class UploadFileCommand : IRequest<CommonResponse<FileUploadResponse>>, I
 
     public FilePurposeEnum Purpose { get; set; } = FilePurposeEnum.Other;
 
-    public Task<CommonResponse<FileUploadResponse>> ValidateAsync()
+    public async Task<CommonResponse<FileUploadResponse>> ValidateAsync()
     {
         var response = new CommonResponse<FileUploadResponse>();
-        FileUploadPolicy.Validate(File, Purpose, response);
 
-        return Task.FromResult(response);
+        // Đọc magic bytes để đối chiếu nội dung thật với đuôi file — xem FileSignatureInspector.
+        var contentHeader = File is null ? null : await FileSignatureInspector.ReadHeaderAsync(File);
+        FileUploadPolicy.Validate(File, Purpose, response, contentHeader);
+
+        return response;
     }
 }

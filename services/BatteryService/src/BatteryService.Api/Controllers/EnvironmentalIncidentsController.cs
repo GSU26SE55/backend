@@ -74,6 +74,9 @@ public class EnvironmentalIncidentsController : ControllerBase
     [IotApiKeyScopeRequirement(IotApiKeyScopeEnum.EnvironmentalIngest)]
     public async Task<IActionResult> Report([FromBody] ReportEnvironmentalIncidentCommand cmd, CancellationToken ct)
     {
+        // GH-806 — site LẤY TỪ CLAIM của thiết bị đã xác thực, không tin SiteId trong body.
+        cmd.AuthenticatedDeviceSiteId = ReadDeviceSiteIdClaim();
+
         var result = await _mediator.Send(cmd, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -270,5 +273,16 @@ public class EnvironmentalIncidentsController : ControllerBase
     {
         var result = await _mediator.Send(new ActiveEnvironmentalIncidentsBySiteQuery { SiteId = siteId }, ct);
         return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// GH-806 — đọc claim <c>iot:site_id</c> do <c>ApiKeyAuthenticationHandler</c> phát ra.
+    /// Trả <c>null</c> khi người gọi là con người dùng JWT (endpoint report thủ công) — lúc đó chỉ
+    /// còn kiểm tồn tại site.
+    /// </summary>
+    private Guid? ReadDeviceSiteIdClaim()
+    {
+        var raw = User.FindFirst(ApiKeyAuthenticationHandler.ClaimDeviceSiteId)?.Value;
+        return Guid.TryParse(raw, out var siteId) ? siteId : null;
     }
 }

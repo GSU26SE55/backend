@@ -44,6 +44,21 @@ public class NotificationDispatchOptions
     public int MaxBackoffSeconds { get; set; } = 900;
 
     /// <summary>
+    /// GH-792 — bản ghi ở <c>Processing</c> quá bao lâu thì coi là việc bị bỏ dở và thu hồi về
+    /// <c>Pending</c> (giây).
+    /// </summary>
+    /// <remarks>
+    /// Ngưỡng phải LỚN hơn hẳn thời gian gọi provider chậm nhất: đặt ngắn quá là thu hồi một việc
+    /// vẫn đang chạy, và lúc đó có hai tiến trình cùng gửi một thông báo. 5 phút bỏ xa timeout HTTP
+    /// của mọi kênh hiện có, đồng thời đủ ngắn để sự cố không làm nghẽn hàng đợi cả tiếng.
+    /// <para>
+    /// Lần gửi lại sau khi thu hồi vẫn được chặn trùng ở phía nhận, vì ID message sinh theo
+    /// <c>NotificationId</c> (xem <c>DeterministicEventId</c>) nên trùng với lần gửi trước.
+    /// </para>
+    /// </remarks>
+    public int ProcessingTimeoutSeconds { get; set; } = 300;
+
+    /// <summary>
     /// Ưu tiên render Title/Body từ bảng <c>notification_templates</c> nếu có template active khớp
     /// (Type × Channel); không có thì dùng Title/Body inline mà consumer đã ghi sẵn.
     /// Đây là "1 pattern" chốt cho NOTI-14: DB template thắng, inline là fallback.
@@ -74,7 +89,7 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.TicketEscalated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaWarning] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.SlaBreached] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-            // Sms bổ sung 03/08/2026: BatteryAnomalyDetectedConsumer gửi bằng
+            // Sms bổ sung 03/08/2026: NotificationBatteryAnomalyDetectedConsumer gửi bằng
             // NotificationWriter.AllChannels (có Sms) nên thực tế đã sinh 98 dòng SMS, trong khi ma
             // trận này lại thiếu Sms — mà seeder template dựng theo ma trận. Hệ quả: SMS gửi đi
             // không có template nào khớp, âm thầm rơi về nội dung hardcode. Khai đúng để hai đường

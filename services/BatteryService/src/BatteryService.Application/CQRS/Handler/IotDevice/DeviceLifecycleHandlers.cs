@@ -1,3 +1,4 @@
+using BatteryService.Application.Common;          // IOT3-33: SensorSource.Primary
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
@@ -20,7 +21,21 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
     private const double ClockSkewWarnThresholdSeconds = 300; // 5 phút (§247).
 
     private readonly IBatteryUnitOfWork _unitOfWork;
-    public ProvisionIotDeviceCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+    private readonly IMqttBrokerEndpointProvider _brokerEndpoint;   // IOT3-27
+    private readonly IIotApiKeyService _apiKeyService;              // IOT3-28
+    private readonly IMqttPasswordFileSync _passwordFileSync;       // IOT3-29
+
+    public ProvisionIotDeviceCommandHandler(
+        IBatteryUnitOfWork uow,
+        IMqttBrokerEndpointProvider brokerEndpoint,
+        IIotApiKeyService apiKeyService,
+        IMqttPasswordFileSync passwordFileSync)
+    {
+        _unitOfWork = uow;
+        _brokerEndpoint = brokerEndpoint;
+        _apiKeyService = apiKeyService;
+        _passwordFileSync = passwordFileSync;
+    }
 
     public async Task<CommonResponse<IotDeviceProvisionResultDto>> Handle(ProvisionIotDeviceCommand request, CancellationToken ct)
     {
@@ -50,6 +65,26 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             };
         }
 
+        // IOT3-28 — tự vá thiết bị chưa có thông tin đăng nhập MQTT.
+        //
+        // Ba nhóm rơi vào đây: (a) tạo trước #IoT2-26 nên chưa từng có username/hash;
+        // (b) tạo sau #IoT2-26 nhưng trước IOT3-25 nên có hash mà KHÔNG có plaintext —
+        // hash là PBKDF2 một chiều, không dựng lại mật khẩu được; (c) dữ liệu lỗi.
+        //
+        // Vá tại đây thay vì viết script backfill: thiết bị không bao giờ boot thì cũng
+        // không cần thông tin đăng nhập, và cách này tự đúng cho cả thiết bị mới lẫn cũ.
+        var mqttCredentialRegenerated = false;
+        if (string.IsNullOrWhiteSpace(device.MqttUsername)
+            || string.IsNullOrWhiteSpace(device.MqttPasswordHash)
+            || string.IsNullOrWhiteSpace(device.MqttPasswordPlaintext))
+        {
+            var cred = _apiKeyService.GenerateMqttCredential(device.DeviceCode);
+            device.MqttUsername = cred.Username;
+            device.MqttPasswordHash = cred.PasswordHash;
+            device.MqttPasswordPlaintext = cred.RawPassword;
+            mqttCredentialRegenerated = true;
+        }
+
         device.CurrentFirmwareVersion = request.FirmwareVersion.Trim();
         if (!string.IsNullOrWhiteSpace(request.HardwareRevision))
             device.HardwareRevision = request.HardwareRevision.Trim();
@@ -60,6 +95,18 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
 
         _unitOfWork.IotDevices.UpdateAsync(device);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // IOT3-29 — đẩy thông tin đăng nhập xuống broker NGAY khi vừa sinh mới, đừng đợi vòng
+        // quét 60s. Thiết bị nhận mật khẩu trong chính response này và nối broker sau vài giây.
+        //
+        // Bọc try-catch: hạ tầng đồng bộ hỏng KHÔNG được làm provision thất bại — thiết bị vẫn
+        // dùng được đường HTTPS, và vòng quét nền sẽ thử lại.
+        if (mqttCredentialRegenerated)
+        {
+            try { await _passwordFileSync.SyncOnceAsync(ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch { /* vòng quét nền sẽ bù */ }
+        }
 
         // Sprint IoT-2 #IoT2-09 — populate configJson: batteryMappings cho site +
         // calibration profile để device map serial → unitId Modbus + sensorSourceCode.
@@ -81,8 +128,16 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
                 .FirstOrDefaultAsync(a => a.SerialNumber == m.BatteryAssetSerial && a.SiteId == device.SiteId, ct);
             if (asset is null)
                 continue;
-            var cal = calibrations.FirstOrDefault(c => c.BatteryAssetId == asset.Id);
-            m.SensorSourceCode = cal?.Channel ?? "primary";
+            // IOT3-33 — `Channel` mang "voltage"/"current"/"temperature" (KÊNH ĐO), còn
+            // `SensorSourceCode` phải là "primary"/"redundant"/"external-temp" (NGUỒN ĐO).
+            // Gán chéo hai khái niệm khiến thiết bị khai sensorSourceCode = "voltage", và mọi
+            // truy vấn tính toán lọc `primary` sẽ rơi bản ghi đó (quy ước 3 nguồn/pin).
+            //
+            // Calibration KHÔNG quyết định nguồn đo — một pin có thể có calibration cho cả ba
+            // kênh mà vẫn chỉ có một nguồn `primary`. Nên luôn trả "primary": đó là nguồn BMS,
+            // thứ duy nhất backend biết chắc thiết bị sẽ gửi. Nguồn phụ (redundant từ INA226,
+            // external-temp từ DS18B20) do firmware tự gắn nhãn khi dựng payload.
+            m.SensorSourceCode = SensorSource.Primary;
         }
 
         // Scope-driven supported sensors.
@@ -94,6 +149,9 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             supported.Add("smoke");
             supported.Add("water-leak");
         }
+
+        // IOT3-27 — điểm kết nối broker. Trả Disabled khi Mqtt:Enabled=false hoặc thiếu Host.
+        var broker = _brokerEndpoint.Resolve(device.DeviceCode);
 
         return new CommonResponse<IotDeviceProvisionResultDto>
         {
@@ -108,10 +166,20 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
                 HeartbeatIntervalSeconds = device.HeartbeatIntervalSeconds,
                 ApiKeyScopes = device.ApiKeyScopes,
                 TargetFirmwareVersion = device.TargetFirmwareRelease?.Version,
-                PollingIntervalSeconds = 10,
+                // IOT3-78 — đọc từ DB thay vì số cứng 10. Admin đổi được qua web (biên [1,600]).
+                PollingIntervalSeconds = device.PollingIntervalSeconds,
                 NtpServer = "time.google.com",
                 BatteryMappings = batteryMappings,
-                SupportedSensors = supported
+                SupportedSensors = supported,
+
+                // IOT3-27 — cấu hình MQTT. Cả sáu trường ĐỒNG THỜI có hoặc ĐỒNG THỜI null:
+                // broker tắt ⇒ thiết bị chạy HTTPS-only, không thử nối rồi thất bại vòng lặp.
+                MqttBrokerHost = broker.Host,
+                MqttBrokerPort = broker.Host is null ? null : broker.Port,
+                MqttUseTls = broker.Host is null ? null : broker.UseTls,
+                MqttTopicPrefix = broker.Host is null ? null : broker.TopicPrefix,
+                MqttUsername = broker.Host is null ? null : device.MqttUsername,
+                MqttPassword = broker.Host is null ? null : device.MqttPasswordPlaintext
             }
         };
     }

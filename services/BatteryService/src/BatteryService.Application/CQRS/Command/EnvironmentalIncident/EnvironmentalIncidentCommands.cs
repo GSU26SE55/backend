@@ -27,6 +27,18 @@ public class ReportEnvironmentalIncidentCommand
     /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// GH-806 — site của thiết bị đã xác thực, lấy từ claim <c>iot:site_id</c>.
+    /// <c>null</c> khi người gọi là con người dùng JWT (endpoint report thủ công).
+    /// </summary>
+    /// <remarks>
+    /// <c>[JsonIgnore][BindNever]</c>: client KHÔNG được đặt trường này qua body — nếu không, thiết
+    /// bị chỉ cần tự khai site của mình là đi vòng qua toàn bộ hàng rào.
+    /// </remarks>
+    [JsonIgnore]
+    [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+    public Guid? AuthenticatedDeviceSiteId { get; set; }
+
     public Task<EnvironmentalIncidentResponse> ValidateAsync()
     {
         var response = new EnvironmentalIncidentResponse();

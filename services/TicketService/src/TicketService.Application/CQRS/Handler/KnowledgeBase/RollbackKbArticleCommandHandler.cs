@@ -65,7 +65,11 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
             ChangeDescription = $"Khôi phục từ phiên bản v{version.MajorVersion}.{version.MinorVersion}",
             ChangedBy = command.CurrentUserId
         };
-        await _uow.KbArticleVersions.AddAsync(restoredVersion);
+        // Ô (nextMajor, 0) có thể đã bị chiếm bởi bản Pending sinh lúc khởi tạo bài viết (article.Version
+        // vẫn là 0 trong khi row 1.0 đã tồn tại) — xem KbArticleVersionSlot. AddAsync thẳng là 23505 → 500.
+        await KbArticleVersionSlot.UpsertAsync(_uow, restoredVersion, ct);
+        await KbArticleVersionSlot.RejectOtherPendingAsync(
+            _uow, article.Id, nextMajor, 0, "Bài viết đã được hoàn tác về phiên bản khác.", ct);
 
         await _uow.SaveChangesAsync(ct);
 

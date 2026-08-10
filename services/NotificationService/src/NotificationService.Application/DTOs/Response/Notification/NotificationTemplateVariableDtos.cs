@@ -56,8 +56,10 @@ public class NotificationTemplateCoverageDto
 
 /// <summary>Danh sách biến hợp lệ theo từng loại thông báo.</summary>
 public class NotificationTemplateVariableListResponse
-    : CommonResponse<List<NotificationTemplateVariableGroupDto>> { }
+    : CommonResponse<List<NotificationTemplateVariableGroupDto>>
+{ }
 
 /// <summary>Bảng độ phủ template so với thông báo thật đã sinh.</summary>
 public class NotificationTemplateCoverageResponse
-    : CommonResponse<List<NotificationTemplateCoverageDto>> { }
+    : CommonResponse<List<NotificationTemplateCoverageDto>>
+{ }

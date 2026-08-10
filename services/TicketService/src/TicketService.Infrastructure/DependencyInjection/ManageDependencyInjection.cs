@@ -45,14 +45,14 @@ public static class ManageDependencyInjection
         services.AddAlertTicketSaga(configuration);
 
         // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
-        // FIX duplicate-ticket — khi Saga bật, consumer cũ BatteryAnomalyDetectedConsumer
+        // FIX duplicate-ticket — khi Saga bật, consumer cũ TicketBatteryAnomalyDetectedConsumer
         // ([Obsolete] #238) PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
         // (gây trùng mã ticket → 23505 duplicate key IX_tickets_code).
         var sagaEnabled = configuration.GetValue(
             $"{AlertTicketSagaOptions.SectionName}:{nameof(AlertTicketSagaOptions.AlertTicketSagaEnabled)}",
             true);
         var excludedConsumers = sagaEnabled
-            ? new[] { typeof(Consumers.BatteryAnomalyDetectedConsumer) }
+            ? new[] { typeof(Consumers.TicketBatteryAnomalyDetectedConsumer) }
             : Array.Empty<Type>();
 
         services.AddMessageBus(
@@ -191,13 +191,11 @@ public static class ManageDependencyInjection
             http.Timeout = TimeSpan.FromSeconds(Math.Max(10, opts.VirusScan.TimeoutSeconds));
         });
 
-        // #514 — Named HttpClient cho VirusScanWorker download file từ FileStorageService
-        services.AddHttpClient("FileDownload", (sp, http) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ChatOptions>>().Value;
-            http.BaseAddress = new Uri(opts.VirusScan.FileStorageBaseUrl);
-            http.Timeout = TimeSpan.FromSeconds(30);
-        });
+        // GH-790 — đã BỎ named HttpClient "FileDownload".
+        // Nó gọi GET /api/files/{id}/download mà không gắn token, trong khi endpoint đó có
+        // [Authorize] ⇒ mọi lần tải đều 401. Việc tải file để quét virus đã chuyển sang kênh gRPC
+        // nội bộ FileInternal (đăng ký ngay bên dưới, dùng chung với voice transcription).
+        // Giữ lại registration này chỉ tạo ra một đường chết mà người sau tưởng là đang dùng.
 
         // #567 — Gemini voice transcription client (multimodal, timeout từ Chat:Voice:TranscribeTimeoutSeconds)
         services.AddHttpClient<IVoiceTranscriptionService, GeminiVoiceTranscriptionService>((sp, http) =>
@@ -241,6 +239,17 @@ public static class ManageDependencyInjection
         services.AddScoped<IAiTicketVerifyClient>(sp => new AiTicketVerifyGrpcClient(
             sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
             sp.GetRequiredService<ILogger<AiTicketVerifyGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+
+        // Gợi ý staff + KB — dùng chung AiServiceClient ở trên. Fail-safe: client trả null
+        // khi AI không phản hồi, endpoint trả danh sách rỗng kèm cờ AiAvailable=false.
+        services.AddScoped<IAiStaffSuggestClient>(sp => new AiStaffSuggestGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiStaffSuggestGrpcClient>>(),
+            aiOptions.TimeoutSeconds));
+        services.AddScoped<IAiKbSuggestClient>(sp => new AiKbSuggestGrpcClient(
+            sp.GetRequiredService<AiModule.V1.AiService.AiServiceClient>(),
+            sp.GetRequiredService<ILogger<AiKbSuggestGrpcClient>>(),
             aiOptions.TimeoutSeconds));
 
         // GH-verify-sensor-grpc — gRPC BatteryService client (đọc sensor pin verify), nội bộ, không JWT.

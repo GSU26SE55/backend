@@ -11,6 +11,18 @@ namespace TicketService.UnitTests.Utils;
 
 public static class MockTicketUnitOfWork
 {
+    /// <summary>
+    /// Lấy mock repo <see cref="TicketAiSuggestion"/> từ một UoW đã dựng.
+    /// </summary>
+    /// <remarks>
+    /// Không thêm vào tuple trả về vì <c>Build</c>/<c>BuildExtended</c> đang có 88/186 call
+    /// site destructure theo vị trí. Cũng KHÔNG dùng static field: xUnit chạy các test class
+    /// song song nên field dùng chung bị lớp khác ghi đè giữa chừng — đúng lỗi đã gặp.
+    /// Lấy ngược từ chính instance UoW là an toàn với mọi kiểu chạy song song.
+    /// </remarks>
+    public static Mock<IGenericRepository<TicketAiSuggestion>> AiSuggestionsOf(
+        Mock<ITicketUnitOfWork> uow) => Mock.Get(uow.Object.TicketAiSuggestions);
+
     public static (Mock<ITicketUnitOfWork> uow,
                    Mock<IGenericRepository<Ticket>> tickets,
                    Mock<IGenericRepository<TicketActivity>> activities,
@@ -64,7 +76,8 @@ public static class MockTicketUnitOfWork
             IEnumerable<KbArticleVersion>? kbVersionSeed = null,
             IEnumerable<TicketKbReference>? kbRefSeed = null,
             IEnumerable<TicketParticipant>? participantSeed = null,
-            IEnumerable<TicketAssignment>? assignmentSeed = null)
+            IEnumerable<TicketAssignment>? assignmentSeed = null,
+            IEnumerable<TicketAiSuggestion>? aiSuggestionSeed = null)
     {
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
@@ -117,6 +130,11 @@ public static class MockTicketUnitOfWork
 
         var kbRefMock = (kbRefSeed ?? Array.Empty<TicketKbReference>()).BuildMock();
         var kbRefs = new Mock<IGenericRepository<TicketKbReference>>();
+        var aiSuggestions = new Mock<IGenericRepository<TicketAiSuggestion>>();
+        // BuildMock() để query async (FirstOrDefaultAsync) chạy được — thiếu nó thì EF ném
+        // "provider doesn't implement IAsyncQueryProvider" ngay lần đọc đầu.
+        aiSuggestions.Setup(r => r.GetAllAsync())
+            .Returns((aiSuggestionSeed ?? Array.Empty<TicketAiSuggestion>()).BuildMock());
         kbRefs.Setup(r => r.GetAllAsync()).Returns(kbRefMock);
         kbRefs.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<TicketKbReference, bool>>>()))
               .ReturnsAsync((Expression<Func<TicketKbReference, bool>> p) => (kbRefSeed ?? Array.Empty<TicketKbReference>()).AsQueryable().Any(p));
@@ -155,6 +173,7 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.KnowledgeBaseArticles).Returns(kb.Object);
         uow.SetupGet(u => u.KbArticleVersions).Returns(kbVersion.Object);
         uow.SetupGet(u => u.TicketKbReferences).Returns(kbRefs.Object);
+        uow.SetupGet(u => u.TicketAiSuggestions).Returns(aiSuggestions.Object);
         uow.SetupGet(u => u.OutboxMessages).Returns(outbox.Object);
         uow.SetupGet(u => u.TicketParticipants).Returns(participants.Object);
         uow.SetupGet(u => u.TicketAssignments).Returns(ticketAssignments.Object);

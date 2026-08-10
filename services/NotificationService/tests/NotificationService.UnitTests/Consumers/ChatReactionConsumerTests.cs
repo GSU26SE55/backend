@@ -40,8 +40,8 @@ public class ChatReactionConsumerTests
     private static Mock<IInboxStore> MakeInboxStore()
     {
         var store = new Mock<IInboxStore>();
-        store.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true);
+        store.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         return store;
     }
 
@@ -113,9 +113,9 @@ public class ChatReactionConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
         var inboxStore = new Mock<IInboxStore>();
-        inboxStore.SetupSequence(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        inboxStore.SetupSequence(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var evt = MakeEvent(Guid.NewGuid(), Guid.NewGuid(), isRemoved: false);
         var harness = await StartHarness(mediator.Object, inboxStore);

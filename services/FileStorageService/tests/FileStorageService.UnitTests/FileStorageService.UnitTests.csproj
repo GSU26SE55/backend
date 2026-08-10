@@ -27,6 +27,8 @@
     <ItemGroup>
       <ProjectReference Include="..\..\src\FileStorageService.Application\FileStorageService.Application.csproj" />
       <ProjectReference Include="..\..\src\FileStorageService.Domain\FileStorageService.Domain.csproj" />
+      <!-- GH-788 — cần Infrastructure để test ObjectStorageCredentialGuard (chặn credential mặc định). -->
+      <ProjectReference Include="..\..\src\FileStorageService.Infrastructure\FileStorageService.Infrastructure.csproj" />
     </ItemGroup>
 
 </Project>

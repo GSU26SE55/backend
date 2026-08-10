@@ -1,5 +1,6 @@
 using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Command.Ambient;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
@@ -26,6 +27,27 @@ public class BatchIngestAmbientReadingsCommandHandler
 
     public async Task<CommonResponse<int>> Handle(BatchIngestAmbientReadingsCommand request, CancellationToken cancellationToken)
     {
+        // GH-806 — thiết bị chỉ được ghi cho ĐÚNG site của nó, và site phải có thật.
+        // Trước đây SiteId lấy thẳng từ body: thiết bị Site A ghi được cho Site B (201), còn site
+        // không tồn tại thì rơi xuống DB và nổ lỗi khoá ngoại → 500.
+        var requestedSites = request.Items.Select(x => x.SiteId).Distinct().ToList();
+        var existingSites = await _uow.Sites.GetAllAsync()
+            .Where(site => !site.IsDeleted && requestedSites.Contains(site.Id))
+            .Select(site => site.Id)
+            .ToListAsync(cancellationToken);
+
+        var access = IotSiteAccessGuard.Check(request.AuthenticatedDeviceSiteId, requestedSites, existingSites);
+        if (!access.Allowed)
+        {
+            return new CommonResponse<int>
+            {
+                IsSuccess = false,
+                StatusCode = access.StatusCode,
+                Message = access.Message,
+                Data = 0
+            };
+        }
+
         var readings = new List<AmbientReading>();
         foreach (var x in request.Items)
         {

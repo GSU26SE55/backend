@@ -71,7 +71,7 @@ public class TicketCreatedConsumerTests
     }
 
     [Fact]
-    public async Task TicketCreated_FirstMessage_ShouldSetDebounceKey_30Min()
+    public async Task TicketCreated_FirstMessage_ClaimsShortLease_ThenExtendsTo30MinAfterWriting()
     {
         var cache = new Mock<ICacheService>();
         cache.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -88,9 +88,23 @@ public class TicketCreatedConsumerTests
         // Notification ghi ra bình thường
         written.Should().HaveCount(2);
 
-        // Sprint 6.3 NOTI3-09 (#709) — debounce chiếm key bằng 1 lệnh atomic SET NX EX,
-        // không còn cặp GetAsync/SetAsync. Window vẫn phải là 30 phút (MessageWindow).
+        // Sprint 6.3 NOTI3-09 (#709) — vẫn chiếm key bằng 1 lệnh atomic SET NX EX (không còn cặp
+        // GetAsync/SetAsync).
+        //
+        // GH-765 — nhưng lần chiếm đầu chỉ là CHỖ GIỮ ngắn. Chiếm thẳng 30 phút như bản cũ nghĩa là
+        // một lỗi DB/resolver ở lần đầu sẽ khoá message suốt 30 phút: mọi lần MassTransit gửi lại
+        // đều bị coi là trùng và notification biến mất hẳn.
         cache.Verify(x => x.TrySetIfNotExistsAsync(
+            It.Is<string>(k => k.StartsWith("notif_msg:")),
+            It.IsAny<string>(),
+            // Không ghim đúng một con số: giá trị chỗ giữ có thể được chỉnh theo độ chậm thực tế
+            // của resolver/DB. Điều PHẢI đúng là nó ngắn hơn hẳn cửa sổ chống trùng — bằng hoặc
+            // dài hơn thì lỗi lần đầu lại khoá message suốt cả cửa sổ như bản cũ.
+            It.Is<TimeSpan>(t => t > TimeSpan.Zero && t < TimeSpan.FromMinutes(30)),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        // Cửa sổ chống trùng 30 phút chỉ được đặt SAU KHI đã ghi notification xong.
+        cache.Verify(x => x.TryRefreshLeaseAsync(
             It.Is<string>(k => k.StartsWith("notif_msg:")),
             It.IsAny<string>(),
             It.Is<TimeSpan>(t => t == TimeSpan.FromMinutes(30)),

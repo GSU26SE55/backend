@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
@@ -237,6 +238,23 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
         saga.CellVoltageDeltaMv = evt.CellVoltageDeltaMv;
         saga.EnvironmentalIncidentId = evt.EnvironmentalIncidentId;
         saga.AiPrescription = evt.AiPrescription;            // BE-AI (nullable — chỉ V2 từ SohPrediction job)
+
+        // BE-AI structured — gói lại thành 1 JSON để mang qua chặng sau. Ticket từ threshold
+        // engine không có tín hiệu AI nào ⇒ để null, không ghi chuỗi "{}" vô nghĩa vào DB.
+        var aiPayload = new AiSuggestionPayload(
+            ActionSteps: evt.AiActionSteps,
+            PpeRequired: evt.AiPpeRequired,
+            SopReferences: evt.AiSopReferences,
+            EscalationConditions: evt.AiEscalationConditions,
+            SafetyWarnings: evt.AiSafetyWarnings,
+            KbDocRefs: evt.AiKbDocRefs,
+            HumanVerificationRequired: evt.AiHumanVerificationRequired,
+            Blocked: evt.AiBlocked,
+            Enriched: evt.AiEnriched,
+            LlmProvider: evt.AiLlmProvider,
+            PrescriptionId: evt.AiPrescriptionId);
+        saga.AiSuggestionJson = aiPayload.IsEmpty ? null : JsonSerializer.Serialize(aiPayload);
+
         saga.StartedAt = DateTime.UtcNow;
     }
 

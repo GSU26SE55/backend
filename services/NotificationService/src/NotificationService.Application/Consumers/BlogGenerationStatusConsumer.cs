@@ -40,9 +40,14 @@ public class BlogGenerationStatusConsumer : IConsumer<BlogGenerationStatusChange
                 ? "Blog đã được tạo thành công"
                 : "Tạo blog bằng AI thất bại";
 
+            // KHÔNG dán ErrorMessage (message exception .NET) vào Body: người đọc là Manager/Admin
+            // chứ không phải người debug, và chuỗi kiểu "The request was canceled due to the
+            // configured HttpClient.Timeout of 60 seconds elapsing." vừa không nói họ phải làm gì
+            // vừa lộ chi tiết nội bộ. Diễn giải sang nguyên nhân + hành động tiếp theo;
+            // message gốc đẩy xuống PayloadJson cho ai cần tra.
             var body = isSuccess
                 ? $"Bài blog \"{Truncate(evt.BlogTitle)}\" đã được AI tạo thành công và đang ở trạng thái Nháp. Hãy review và publish khi sẵn sàng."
-                : $"Tạo blog \"{Truncate(evt.BlogTitle)}\" thất bại: {Truncate(evt.ErrorMessage ?? "Lỗi không xác định")}.";
+                : $"Bài blog \"{Truncate(evt.BlogTitle)}\" chưa tạo được: {DescribeFailure(evt.ErrorMessage)}";
 
             var cmd = new CreateNotificationCommand
             {
@@ -51,7 +56,13 @@ public class BlogGenerationStatusConsumer : IConsumer<BlogGenerationStatusChange
                 Channel = NotificationChannelEnum.InApp,
                 Title = title,
                 Body = body,
-                PayloadJson = JsonSerializer.Serialize(new { blogPostId = evt.BlogPostId }),
+                PayloadJson = JsonSerializer.Serialize(new
+                {
+                    blogPostId = evt.BlogPostId,
+                    // Giữ nguyên message kỹ thuật ở đây — FE hiện trong mục "Dữ liệu kèm theo"
+                    // (gập lại), ai cần tra vẫn có, người dùng thường không phải đọc.
+                    errorMessage = isSuccess ? null : evt.ErrorMessage,
+                }),
                 EntityType = "BlogPost",
                 EntityId = evt.BlogPostId,
             };
@@ -64,6 +75,35 @@ public class BlogGenerationStatusConsumer : IConsumer<BlogGenerationStatusChange
                     evt.BlogPostId, result.Message);
             }
         });
+    }
+
+    /// <summary>
+    /// Quy message lỗi kỹ thuật về một câu người dùng hiểu được, kèm việc họ có thể làm tiếp.
+    ///
+    /// Nhận diện theo từ khoá vì lỗi đến từ nhiều nguồn (HttpClient, AI provider, chính service)
+    /// và không có mã lỗi chung; không khớp mẫu nào thì trả câu chung chứ KHÔNG rơi về việc
+    /// đọc nguyên message gốc.
+    /// </summary>
+    private static string DescribeFailure(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            return "Lỗi không xác định. Bạn hãy thử tạo lại.";
+
+        var e = errorMessage.ToLowerInvariant();
+
+        if (e.Contains("timeout") || e.Contains("canceled") || e.Contains("cancelled"))
+            return "AI xử lý quá lâu nên đã dừng. Bạn hãy thử tạo lại, hoặc rút ngắn bài gốc nếu nội dung quá dài.";
+
+        if (e.Contains("429") || e.Contains("rate limit") || e.Contains("quota"))
+            return "Dịch vụ AI đang quá tải. Bạn hãy thử lại sau ít phút.";
+
+        if (e.Contains("unauthorized") || e.Contains("401") || e.Contains("api key") || e.Contains("forbidden") || e.Contains("403"))
+            return "Kết nối tới dịch vụ AI bị từ chối. Việc này cần quản trị viên kiểm tra cấu hình.";
+
+        if (e.Contains("connection") || e.Contains("socket") || e.Contains("host") || e.Contains("network"))
+            return "Không kết nối được tới dịch vụ AI. Bạn hãy thử lại sau ít phút.";
+
+        return "Dịch vụ AI gặp sự cố khi xử lý. Bạn hãy thử tạo lại.";
     }
 
     private static string Truncate(string? text, int max = 100)

@@ -7,10 +7,16 @@ using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+// EmailService không có endpoint nghiệp vụ và không có tầng xác thực, nên thực tế mọi request đều
+// nằm ở bậc ẩn danh. Vẫn bật để không có service nào là ngoại lệ khi sau này thêm endpoint.
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 // 1. Register EmailSender (MailJet via HttpClient)
 builder.Services.AddHttpClient<EmailSenderService>();
@@ -40,6 +46,10 @@ app.UseSharedInfrastructure();
 
 // Prometheus HTTP metrics
 app.UseHttpMetrics();
+
+// Không có Authentication/Authorization ở service này nên không có ràng buộc thứ tự;
+// đặt trước endpoint là đủ.
+app.UseStandardRateLimiter();
 
 app.MapGet("/", () => "Email Service is Running...");
 

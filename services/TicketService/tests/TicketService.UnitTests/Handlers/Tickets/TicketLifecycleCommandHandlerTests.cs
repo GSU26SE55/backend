@@ -169,6 +169,8 @@ public class TicketLifecycleCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
+        _slaService.Setup(x => x.CheckPauseEligibilityAsync(ticketId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlaPauseEligibility(true));
         var handler = new TicketHoldCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _slaService.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
         var result = await handler.Handle(command, CancellationToken.None);
 

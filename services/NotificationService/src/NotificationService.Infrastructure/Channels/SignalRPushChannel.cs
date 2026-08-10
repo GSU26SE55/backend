@@ -8,7 +8,7 @@ namespace NotificationService.Infrastructure.Channels;
 /// Self-hosted push transport. Existing Push preferences, quiet hours and rate limits still apply;
 /// mobile receives the rendered payload over SignalR and creates the OS notification locally.
 /// </summary>
-public sealed class SignalRPushChannel : INotificationChannel
+public sealed class SignalRPushChannel : ISignalRPushChannel
 {
     private readonly INotificationRealtimeNotifier _realtime;
 

@@ -108,10 +108,12 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                         TicketStatusEnum.Escalated,
                         (ticket, role, userId) => new TransitionResult
                         {
-                            IsAllowed = role is ActorRoleEnum.System or ActorRoleEnum.Admin,
-                            Reason = role is ActorRoleEnum.System or ActorRoleEnum.Admin
+                            IsAllowed = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
+                                        || role is ActorRoleEnum.System or ActorRoleEnum.Admin,
+                            Reason = (role is ActorRoleEnum.Staff && ticket.PrimaryHandlerStaffId == userId)
+                                     || role is ActorRoleEnum.System or ActorRoleEnum.Admin
                                 ? null
-                                : "Only System can escalate due to SLA breach."
+                                : "Only the assigned Primary Handler can request escalation."
                         }
                     }
                 }
@@ -123,6 +125,21 @@ public class TransitionRuleProvider : ITransitionRuleProvider
                 TicketStatusEnum.InProgress,
                 new Dictionary<TicketStatusEnum, Func<Ticket, ActorRoleEnum, Guid, TransitionResult>>
                 {
+                    {
+                        // Điều chuyển người phụ trách giữa lúc đang xử lý. User Guide §3.9:
+                        // "Nút Điều chuyển hiện khi phiếu đang ở trạng thái Đã gán, Đang xử lý
+                        // hoặc Đã chuyển cấp." Trước đây thiếu nhánh này nên nút hiện đúng theo
+                        // tài liệu nhưng bấm vào thì TicketReassignCommandHandler
+                        // (CanTransition → Assigned) trả 403 ở InProgress.
+                        TicketStatusEnum.Assigned,
+                        (ticket, role, userId) => new TransitionResult
+                        {
+                            IsAllowed = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin,
+                            Reason = role is ActorRoleEnum.Manager or ActorRoleEnum.Admin
+                                ? null
+                                : "Only Managers can reassign."
+                        }
+                    },
                     {
                         TicketStatusEnum.WaitingCustomer,
                         (ticket, role, userId) => new TransitionResult

@@ -88,7 +88,17 @@ public class MassTransitProducerTests
     public async Task PublishAsync_FromBaseTypeVariable_ReachesConcreteConsumer()
     {
         await using var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<AnomalyProbeConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<AnomalyProbeConsumer>();
+                // Mặc định inactivity timeout của MassTransit v8 chỉ **1 giây**, mà
+                // `harness.Consumed.Any<T>()` ngừng chờ khi bus im quá ngưỡng đó rồi trả `false` —
+                // nên HẾT GIỜ và HỎNG THẬT cho ra cùng một kết quả. Chạy cả solution song song
+                // (~9 assembly) thì điều phối luồng trượt quá 1 giây là đỏ dù code đúng: chính test
+                // này đỏ ở `make ci-test` nhưng chạy riêng pass trong 216ms.
+                // Nới trần theo đúng khuôn đã dùng ở NotificationService/EmailService.
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+            })
             .AddScoped<IMessageProducerService, MassTransitProducer>()
             .BuildServiceProvider(true);
 
@@ -108,7 +118,17 @@ public class MassTransitProducerTests
     public async Task PublishAsync_FromConcreteType_ReachesConsumer()
     {
         await using var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<AnomalyProbeConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<AnomalyProbeConsumer>();
+                // Mặc định inactivity timeout của MassTransit v8 chỉ **1 giây**, mà
+                // `harness.Consumed.Any<T>()` ngừng chờ khi bus im quá ngưỡng đó rồi trả `false` —
+                // nên HẾT GIỜ và HỎNG THẬT cho ra cùng một kết quả. Chạy cả solution song song
+                // (~9 assembly) thì điều phối luồng trượt quá 1 giây là đỏ dù code đúng: chính test
+                // này đỏ ở `make ci-test` nhưng chạy riêng pass trong 216ms.
+                // Nới trần theo đúng khuôn đã dùng ở NotificationService/EmailService.
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+            })
             .AddScoped<IMessageProducerService, MassTransitProducer>()
             .BuildServiceProvider(true);
 

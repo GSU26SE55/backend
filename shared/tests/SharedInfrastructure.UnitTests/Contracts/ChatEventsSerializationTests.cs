@@ -3,6 +3,15 @@ using SharedContracts.Events.Chats;
 
 namespace SharedInfrastructure.UnitTests.Contracts;
 
+/// <summary>
+/// GH-789 — round-trip PHẢI so cả <c>Id</c> lẫn <c>OccurredAt</c>.
+/// </summary>
+/// <remarks>
+/// Bản trước loại đúng hai trường không round-trip được (<c>Excluding(e =&gt; e.Id)</c>,
+/// <c>Excluding(e =&gt; e.OccurredAt)</c>). Test vì thế xanh liên tục trong khi mỗi lần deserialize
+/// lại sinh một <c>Id</c> mới — mà <c>Id</c> chính là khoá chống trùng của inbox. Nói cách khác,
+/// phần bị loại trừ đúng là phần đang hỏng.
+/// </remarks>
 public class ChatEventsSerializationTests
 {
     [Fact]
@@ -15,7 +24,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatCreatedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -26,7 +35,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatEditedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -36,7 +45,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatDeletedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -47,7 +56,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatMentionedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -57,7 +66,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatReactedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -67,7 +76,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ParticipantAddedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -77,7 +86,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ParticipantRemovedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -87,7 +96,7 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ParticipantRoleChangedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 
     [Fact]
@@ -98,6 +107,6 @@ public class ChatEventsSerializationTests
 
         var result = JsonSerializer.Deserialize<ChatEscalationReviewRequestedEvent>(JsonSerializer.Serialize(evt));
 
-        result.Should().BeEquivalentTo(evt, options => options.Excluding(e => e.Id).Excluding(e => e.OccurredAt));
+        result.Should().BeEquivalentTo(evt);
     }
 }

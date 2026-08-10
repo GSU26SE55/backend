@@ -63,6 +63,60 @@ public class AccountSyncSnapshotPublishTests
     // ── Đổi role ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task ChangeRole_AlsoPublishesAccountRoleChangedEvent_WithBothSides()
+    {
+        // GH-769 — Battery và Ticket KHÔNG nghe AccountSyncSnapshotEvent (chỉ NotificationService
+        // nghe), nên trước đây đổi role xong bản sao ở hai service đó giữ nguyên role cũ: thiếu
+        // StaffAccount thì không giao ticket được, thừa CustomerAccount thì vẫn giữ quyền cũ.
+        var oldRole = NewRole("Customer");
+        var newRole = NewRole("Staff");
+        var account = NewAccount(oldRole);
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { newRole });
+
+        var captured = new List<AccountRoleChangedEvent>();
+        _producer
+            .Setup(p => p.PublishAsync(It.IsAny<AccountRoleChangedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<AccountRoleChangedEvent, CancellationToken>((e, _) => captured.Add(e))
+            .Returns(Task.CompletedTask);
+
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
+        var resp = await handler.Handle(
+            new ChangeAccountRoleCommand { AccountId = account.Id, RoleId = newRole.Id },
+            CancellationToken.None);
+
+        resp.IsSuccess.Should().BeTrue();
+        var evt = captured.Should().ContainSingle().Subject;
+        evt.AccountId.Should().Be(account.Id);
+        // Cả HAI vế: chỉ có role mới thì consumer không suy ra được bản sao NÀO phải dọn.
+        evt.OldRole.Should().Be("Customer");
+        evt.NewRole.Should().Be("Staff");
+        evt.Email.Should().Be(account.Email);
+        evt.FullName.Should().Be(account.FullName);
+    }
+
+    [Fact]
+    public async Task ChangeRole_NoOp_PublishesNoRoleChangedEvent()
+    {
+        // Gán lại đúng role đang có ⇒ handler trả sớm. Phát event ở đây chỉ làm consumer chạy không công.
+        var role = NewRole("Customer");
+        var account = NewAccount(role);
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account }, roleSeed: new[] { role });
+
+        var captured = new List<AccountRoleChangedEvent>();
+        _producer
+            .Setup(p => p.PublishAsync(It.IsAny<AccountRoleChangedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<AccountRoleChangedEvent, CancellationToken>((e, _) => captured.Add(e))
+            .Returns(Task.CompletedTask);
+
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
+        await handler.Handle(
+            new ChangeAccountRoleCommand { AccountId = account.Id, RoleId = role.Id },
+            CancellationToken.None);
+
+        captured.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ChangeRole_PhatSnapshot_KemRoleMoi()
     {
         var oldRole = NewRole("Staff");

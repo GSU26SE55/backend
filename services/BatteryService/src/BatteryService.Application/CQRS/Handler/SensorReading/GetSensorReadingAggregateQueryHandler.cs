@@ -1,6 +1,7 @@
 using BatteryService.Application.Common;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,14 +12,39 @@ namespace BatteryService.Application.CQRS.Handler.SensorReading;
 public class GetSensorReadingAggregateQueryHandler : IRequestHandler<GetSensorReadingAggregateQuery, CommonResponse<List<SensorReadingAggregateDto>>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetSensorReadingAggregateQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetSensorReadingAggregateQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<List<SensorReadingAggregateDto>>> Handle(GetSensorReadingAggregateQuery request, CancellationToken cancellationToken)
     {
+        // GH-722 — telemetry thuộc tenant qua asset; Customer chỉ đọc được asset của mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<List<SensorReadingAggregateDto>>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Không xác định được người dùng hiện tại."
+            };
+        }
+
+        // 404 thay vì 403: không tiết lộ rằng asset của tenant khác có tồn tại.
+        if (!await BatteryTenantAccessGuard.CanAccessAssetAsync(_unitOfWork, request.BatteryAssetId, scope, cancellationToken))
+        {
+            return new CommonResponse<List<SensorReadingAggregateDto>>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy tài sản pin."
+            };
+        }
+
         var baseQuery = _unitOfWork.SensorReadings
             .GetAllAsync()
             .AsNoTracking()

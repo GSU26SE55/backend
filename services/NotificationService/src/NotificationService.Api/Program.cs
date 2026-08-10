@@ -7,10 +7,14 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -131,6 +135,8 @@ if (!app.Environment.IsEnvironment("Docker")
 app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 app.UseIdempotencyKey();
 
 app.MapControllers();

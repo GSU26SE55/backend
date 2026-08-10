@@ -1,5 +1,6 @@
 using AuthService.Domain.Enums;
 using SharedKernels.Domain;
+using SharedKernels.Interfaces;
 
 namespace AuthService.Domain.Entities;
 
@@ -10,7 +11,7 @@ namespace AuthService.Domain.Entities;
 /// <para>Ghi CÙNG transaction với <see cref="AuditLog"/> (#AUDIT-09) → <c>AuditOutboxRelayBackgroundService</c>
 /// (#AUDIT-08) poll publish <c>AuditCreatedEventV1</c> lên exchange <c>audit.events</c>.</para>
 /// </summary>
-public class AuditOutbox : AuditableEntity
+public class AuditOutbox : AuditableEntity, IAuditOutboxMessage
 {
     /// <summary>Idempotency key — = AuditLog.EventId. Unique.</summary>
     public Guid EventId { get; set; }

@@ -47,3 +47,11 @@ deploy/helm/*/charts/
 
 # ---------- Playwright MCP artifacts (local only) ----------
 .playwright-mcp/
+
+# loop-engine — sinh tự động, không commit
+.loop/out/
+.loop/cache/
+.loop/runs/
+.loop/guard.json
+.loop/last-run.json
+.loop/dispute.md

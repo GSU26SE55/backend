@@ -1,3 +1,4 @@
+using System.Data.Common;
 using AuditAggregatorService.Application.Consumers;
 using AuditAggregatorService.Application.Interfaces;
 using AuditAggregatorService.Domain.Entities;
@@ -80,7 +81,7 @@ public class AuditRetentionAndRaceTests : IAsyncLifetime
         var uow = new Mock<IAuditAggregatorUnitOfWork>();
         uow.Setup(u => u.AuditAggregates).Returns(repo.Object);
         uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
-           .ThrowsAsync(new DbUpdateException("duplicate key value violates unique constraint \"ux_agg_event_occurred\""));
+           .ThrowsAsync(Gh775.UniqueViolationOn(DuplicateAuditDetection.EventUniqueIndexName));
 
         var geo = new Mock<IGeoIpResolver>();
         geo.Setup(x => x.Lookup(It.IsAny<string?>())).Returns((GeoIpResult?)null);
@@ -103,6 +104,121 @@ public class AuditRetentionAndRaceTests : IAsyncLifetime
 
         await act.Should().NotThrowAsync(
             "đụng unique khi hai instance cùng chèn là chuyện bình thường — ném lên broker sẽ tạo báo động giả");
+    }
+
+    // ── GH-775 ───────────────────────────────────────────────────────────────────────────────
+    // Bản cũ bắt TRỌN DbUpdateException và coi mọi thứ là đua khoá trùng. Cấu hình bảng còn có ràng
+    // buộc độ dài và cột jsonb, nên ServiceName quá dài (22001) hay payload không phải JSON hợp lệ
+    // (22P02) cũng rơi vào đúng nhánh đó: ACK, mất bản ghi kiểm toán, không retry, không DLQ, log
+    // ghi "trùng lặp". Với hệ thống kiểm toán thì đó là kiểu mất mát tệ nhất.
+
+    /// <summary>
+    /// Dựng ngoại lệ GIỐNG THẬT: Npgsql luôn bọc một <see cref="DbException"/> mang SQLSTATE.
+    /// Test cũ chỉ tạo <c>DbUpdateException("…duplicate key…")</c> — chuỗi thông điệp không phải là
+    /// thứ đáng tin để phân loại lỗi, và một bản giả như vậy sẽ xanh cả với code không kiểm gì.
+    /// </summary>
+    private static class Gh775
+    {
+        private sealed class FakeDbException : DbException
+        {
+            private readonly string _sqlState;
+
+            public FakeDbException(string sqlState, string message, string? constraintName)
+                : base(message)
+            {
+                _sqlState = sqlState;
+                if (constraintName is not null)
+                    Data["ConstraintName"] = constraintName;
+            }
+
+            public override string SqlState => _sqlState;
+        }
+
+        public static DbUpdateException UniqueViolationOn(string constraintName)
+            => new("An error occurred while saving the entity changes.",
+                new FakeDbException("23505",
+                    $"duplicate key value violates unique constraint \"{constraintName}\"", constraintName));
+
+        public static DbUpdateException WithSqlState(string sqlState, string message)
+            => new("An error occurred while saving the entity changes.",
+                new FakeDbException(sqlState, message, constraintName: null));
+    }
+
+    private static (Mock<IAuditAggregatorUnitOfWork> Uow, Mock<IGeoIpResolver> Geo) FailingUow(Exception onSave)
+    {
+        var repo = new Mock<IGenericRepository<AuditAggregate>>();
+        repo.Setup(r => r.AnyAsync(It.IsAny<System.Linq.Expressions.Expression<Func<AuditAggregate, bool>>>()))
+            .ReturnsAsync(false);
+        repo.Setup(r => r.AddAsync(It.IsAny<AuditAggregate>())).Returns(Task.CompletedTask);
+
+        var uow = new Mock<IAuditAggregatorUnitOfWork>();
+        uow.Setup(u => u.AuditAggregates).Returns(repo.Object);
+        uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(onSave);
+
+        var geo = new Mock<IGeoIpResolver>();
+        geo.Setup(x => x.Lookup(It.IsAny<string?>())).Returns((GeoIpResult?)null);
+        return (uow, geo);
+    }
+
+    private static ConsumeContext<AuditCreatedEventV1> Gh775Context()
+    {
+        var evt = new AuditCreatedEventV1(
+            Guid.NewGuid(), "AuthService", "LoginSucceeded", "Authentication", "Info",
+            "Account", Guid.NewGuid(), "x@example.com",
+            Guid.NewGuid(), "Admin", "Admin User", "127.0.0.1", "ua",
+            true, null, null, null, Guid.NewGuid(), null,
+            DateTime.UtcNow.AddSeconds(-1), DateTime.UtcNow);
+
+        var ctx = new Mock<ConsumeContext<AuditCreatedEventV1>>();
+        ctx.SetupGet(c => c.Message).Returns(evt);
+        ctx.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+        return ctx.Object;
+    }
+
+    [Theory]
+    // 22001 = string_data_right_truncation — ServiceName/ActorDisplay vượt giới hạn cột.
+    [InlineData("22001", "value too long for type character varying(64)")]
+    // 22P02 = invalid_text_representation — MetadataJson không phải JSON hợp lệ cho cột jsonb.
+    [InlineData("22P02", "invalid input syntax for type json")]
+    // 23503 = foreign_key_violation — lỗi dữ liệu thật, không phải trùng.
+    [InlineData("23503", "insert or update violates foreign key constraint")]
+    // 40001 = serialization_failure — lỗi TẠM THỜI, phải retry chứ không được nuốt.
+    [InlineData("40001", "could not serialize access due to concurrent update")]
+    public async Task Consume_RealDatabaseError_IsRethrown_NotSwallowedAsDuplicate(string sqlState, string message)
+    {
+        var (uow, geo) = FailingUow(Gh775.WithSqlState(sqlState, message));
+        var consumer = new AuditCreatedConsumer(uow.Object, geo.Object, NullLogger<AuditCreatedConsumer>.Instance);
+
+        var act = async () => await consumer.Consume(Gh775Context());
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            $"SQLSTATE {sqlState} là lỗi DB thật — nuốt nó là mất bản ghi kiểm toán trong im lặng");
+    }
+
+    [Fact]
+    public async Task Consume_UniqueViolationOnADifferentConstraint_IsRethrown()
+    {
+        // Vi phạm unique ở ràng buộc KHÁC không phải chuyện trùng event; nuốt nó là che mất lỗi dữ liệu.
+        var (uow, geo) = FailingUow(Gh775.UniqueViolationOn("ux_some_other_constraint"));
+        var consumer = new AuditCreatedConsumer(uow.Object, geo.Object, NullLogger<AuditCreatedConsumer>.Instance);
+
+        var act = async () => await consumer.Consume(Gh775Context());
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task Consume_DbUpdateExceptionWithoutSqlState_IsRethrown()
+    {
+        // Không đọc được mã lỗi ⇒ KHÔNG có cơ sở nào để gọi là trùng lặp. Fail closed: ném lên để
+        // message vào retry/DLQ, thay vì im lặng vứt một bản ghi kiểm toán.
+        var (uow, geo) = FailingUow(new DbUpdateException("duplicate key value violates unique constraint"));
+        var consumer = new AuditCreatedConsumer(uow.Object, geo.Object, NullLogger<AuditCreatedConsumer>.Instance);
+
+        var act = async () => await consumer.Consume(Gh775Context());
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            "chuỗi thông điệp không phải căn cứ để phân loại lỗi");
     }
 
     /// <summary>
@@ -162,7 +278,9 @@ public class AuditRetentionAndRaceTests : IAsyncLifetime
         bool windowOpen)
         : AuditRetentionBackgroundService(factory, logger)
     {
-        protected override TimeSpan CheckInterval => TimeSpan.FromMilliseconds(500);
+        // GH-729 — seam đổi từ CheckInterval sang DelayUntilNextRun (service nay ngủ tới đúng
+        // mốc 03:00 UTC thay vì tick chu kỳ). Rút ngắn để test không phải chờ tới 3 giờ sáng.
+        protected override TimeSpan DelayUntilNextRun(DateTime utcNow) => TimeSpan.FromMilliseconds(500);
         protected override bool IsWithinMaintenanceWindow(DateTime utcNow) => windowOpen;
     }
 

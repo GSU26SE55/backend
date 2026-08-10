@@ -63,6 +63,11 @@ public class OutboxRelayBackgroundServiceTests : IAsyncLifetime
             // catch chung → test chỉ thấy "không có gì xảy ra" mà không biết vì sao.
             .AddScoped<ICurrentUserService, NoUserCurrentUserService>()
             .AddScoped<AuditableEntityInterceptor>()
+            // GH-794 — relay giành quyền từng dòng trước khi publish. Thiếu đăng ký này thì
+            // GetRequiredService ném ngay dòng đầu ProcessBatchAsync, relay nuốt lỗi ở catch chung,
+            // và test chỉ thấy "không có gì xảy ra".
+            .AddScoped<SmsService.Application.Interfaces.Services.IOutboxClaimService,
+                SmsService.Infrastructure.Implements.Services.OutboxClaimService>()
             .AddLogging()
             .AddMassTransitTestHarness(x =>
                 x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15)));
@@ -101,8 +106,12 @@ public class OutboxRelayBackgroundServiceTests : IAsyncLifetime
         NullLogger<OutboxRelayBackgroundService>.Instance);
 
     /// <summary>Chạy relay tới khi <paramref name="until"/> đúng, hoặc hết hạn.</summary>
+    /// <summary>
+    /// Chạy relay tới khi <paramref name="until"/> thành đúng, hoặc <b>ném lỗi</b> khi hết giờ —
+    /// để "job chưa chạy" không bị báo nhầm thành "job chạy sai".
+    /// </summary>
     private static async Task RunUntilAsync(OutboxRelayBackgroundService relay, Func<Task<bool>> until,
-        int timeoutSeconds = 20)
+        int timeoutSeconds = 60)
     {
         await relay.StartAsync(CancellationToken.None);
         try
@@ -114,6 +123,10 @@ public class OutboxRelayBackgroundServiceTests : IAsyncLifetime
                     return;
                 await Task.Delay(200);
             }
+
+            throw new TimeoutException(
+                $"Relay không đạt điều kiện trong {timeoutSeconds}s — relay chưa chạy hoặc đứng, "
+                + "KHÔNG phải kết quả nghiệp vụ sai.");
         }
         finally
         {

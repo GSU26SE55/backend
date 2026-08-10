@@ -62,9 +62,17 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
             return;
         }
 
-        var title = $"[Escalation] Alert chưa ack {evt.MinutesSinceDetection} phút — {evt.AssetSerialNumber}";
-        var plainBody = $"Critical anomaly detected at {evt.DetectedAt:O}. Manager attention required. " +
-                        $"Value: {evt.ActualValue} {evt.Unit}.";
+        // Bỏ tiếng Anh và định dạng ngày ISO (`:O` in ra 2026-08-03T14:15:00.0000000Z — không ai đọc).
+        // "ack" cũng là từ nội bộ. ActualValue/Unit nullable (alert theo sự cố không có số đo) nên
+        // chỉ ghép mệnh đề giá trị khi thực sự có, tránh in ra "Giá trị đo:  ." cụt lủn.
+        var measured = evt.ActualValue.HasValue
+            ? $" Giá trị đo được: {evt.ActualValue}{(string.IsNullOrWhiteSpace(evt.Unit) ? "" : $" {evt.Unit}")}."
+            : string.Empty;
+
+        var title = $"Cảnh báo pin {evt.AssetSerialNumber} chưa được xử lý";
+        var plainBody = $"Cảnh báo nghiêm trọng trên pin {evt.AssetSerialNumber} phát hiện lúc " +
+                        $"{evt.DetectedAt:HH:mm dd/MM/yyyy}, đã {evt.MinutesSinceDetection} phút chưa có ai tiếp nhận." +
+                        $"{measured} Cần kiểm tra ngay.";
 
         var htmlBody = _templateRenderer.Render("battery-alert-escalation-pending", new
         {

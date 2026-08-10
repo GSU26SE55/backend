@@ -1051,6 +1051,27 @@
             "description": "Tổng số tin chưa đọc trên mọi ticket — dùng cho badge trên thanh điều hướng."
           },
           "response": []
+        },
+        {
+          "name": "Số chưa đọc theo customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/unread-count/by-customer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chats",
+                "unread-count",
+                "by-customer"
+              ]
+            },
+            "description": "Số tin chưa đọc của người đang đăng nhập, nhóm theo customer. Customer không có tin chưa đọc không xuất hiện trong danh sách."
+          },
+          "response": []
         }
       ]
     },

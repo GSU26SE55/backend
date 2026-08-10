@@ -36,39 +36,38 @@ public class TicketEscalatedConsumer : IConsumer<TicketEscalatedEvent>
 
     public async Task Consume(ConsumeContext<TicketEscalatedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "TicketEscalated", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate TicketEscalated message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No Manager/Admin recipient resolved for TicketEscalated ticket={TicketId} — skip.", evt.TicketId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for TicketEscalated ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
+            var title = $"Ticket {evt.Code} đã escalate";
+            var body = string.IsNullOrWhiteSpace(evt.Note)
+                ? $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason})."
+                : $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason}): {evt.Note}";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                reason = evt.Reason,
+                note = evt.Note,
+                staffId = evt.StaffId,
+                staffName = evt.StaffName,
+                screen = "TicketDetail"
+            });
 
-        var title = $"Ticket {evt.Code} đã escalate";
-        var body = string.IsNullOrWhiteSpace(evt.Note)
-            ? $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason})."
-            : $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason}): {evt.Note}";
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            reason = evt.Reason,
-            note = evt.Note,
-            staffId = evt.StaffId,
-            staffName = evt.StaffName,
-            screen = "TicketDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.TicketEscalated, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.TicketEscalated, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

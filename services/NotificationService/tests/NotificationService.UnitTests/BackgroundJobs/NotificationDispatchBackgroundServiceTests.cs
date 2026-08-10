@@ -10,6 +10,8 @@ using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.BackgroundJobs;
 using NotificationService.Infrastructure.Persistence;
 
+using NotificationService.UnitTests.Helpers;
+
 namespace NotificationService.UnitTests.BackgroundJobs;
 
 /// <summary>
@@ -36,16 +38,9 @@ public class NotificationDispatchBackgroundServiceTests
         services.AddSingleton(dispatcher);
         var provider = services.BuildServiceProvider();
 
-        var cache = new Mock<IDistributedCache>();
-        cache.Setup(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync((byte[]?)null);
-        cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<byte[]>(),
-                It.IsAny<DistributedCacheEntryOptions>(), It.IsAny<CancellationToken>()))
-             .Returns(Task.CompletedTask);
-
         return new NotificationDispatchBackgroundService(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            cache.Object,
+            new InMemoryLease(),
             Options.Create(new NotificationDispatchOptions()),
             NullLogger<NotificationDispatchBackgroundService>.Instance);
     }

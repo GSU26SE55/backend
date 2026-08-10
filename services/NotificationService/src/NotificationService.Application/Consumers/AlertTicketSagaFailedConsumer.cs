@@ -62,9 +62,13 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
             return;
         }
 
-        var title = $"[Saga Failed] Alert {evt.AlertId} — {evt.FailedAtStage}";
-        var plainBody = $"Alert-Ticket Saga failed at stage '{evt.FailedAtStage}': {evt.Reason}. " +
-                        $"Admin reprocess required. Asset: {evt.AssetSerialNumber}";
+        // Người nhận là Admin/Manager nghiệp vụ, không phải người vận hành saga: "Saga", "stage",
+        // và Guid alert trần không giúp họ quyết định gì. Nêu HẬU QUẢ (cảnh báo chưa thành ticket)
+        // + việc cần làm; định danh kỹ thuật giữ trong PayloadJson bên dưới.
+        var title = $"Cảnh báo pin {evt.AssetSerialNumber} chưa tạo được ticket";
+        var plainBody = $"Hệ thống không tự tạo được ticket cho cảnh báo của pin {evt.AssetSerialNumber} " +
+                        $"lúc {evt.FailedAt:HH:mm dd/MM/yyyy}. Cảnh báo này đang không được theo dõi bằng ticket " +
+                        $"— cần kiểm tra và xử lý thủ công.";
 
         var htmlBody = _templateRenderer.Render("alert-ticket-saga-failed", new
         {

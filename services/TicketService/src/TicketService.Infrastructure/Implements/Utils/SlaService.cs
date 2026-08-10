@@ -15,6 +15,25 @@ public class SlaService : ISlaService
         _uow = uow;
     }
 
+    public async Task<SlaPauseEligibility> CheckPauseEligibilityAsync(Guid ticketId, CancellationToken ct)
+    {
+        var slaTimer = await _uow.SlaTimers.GetAllAsync()
+            .FirstOrDefaultAsync(st => st.TicketId == ticketId && st.Status == SlaTimerStatusEnum.Running && !st.IsDeleted, ct);
+
+        if (slaTimer == null)
+            return new SlaPauseEligibility(true);
+
+        var maxEpisodes = slaTimer.MaxPauseEpisodes > 0 ? slaTimer.MaxPauseEpisodes : 3;
+        if (slaTimer.PauseEpisodesCount >= maxEpisodes)
+            return new SlaPauseEligibility(false, $"Ticket đã đạt giới hạn tạm dừng tối đa ({maxEpisodes} lần).");
+
+        var maxMinutes = slaTimer.MaxTotalPauseMinutes > 0 ? slaTimer.MaxTotalPauseMinutes : 2880;
+        if (slaTimer.TotalPausedMinutes >= maxMinutes)
+            return new SlaPauseEligibility(false, "Tổng thời gian tạm dừng của ticket đã đạt giới hạn tối đa.");
+
+        return new SlaPauseEligibility(true);
+    }
+
     public async Task PauseSlaAsync(Guid ticketId, PauseReasonEnum reason, string? note, Guid userId, CancellationToken ct)
     {
         if (await IsClosedOrMergedAsync(ticketId, ct))

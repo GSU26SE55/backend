@@ -81,6 +81,29 @@ Versions tuân theo [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Mobile: 95,6% thông báo bấm vào không đi đâu cả.**
+
+  Danh sách thông báo chỉ mở được `entityType === 'Ticket'`. Đo trên DB: **1.228/1.285 dòng** mang
+  `entityType = 'Battery'` — bấm vào không điều hướng. Đó đúng là nhóm gửi cho Customer, người dùng
+  chính của app, và màn hình `batteries/[id]`, `alerts/[id]`, `incidents/[id]` **đã có sẵn từ lâu**,
+  chỉ chưa ai nối.
+
+  Thêm `notificationHref` phân giải theo `entityType`, nối 5 loại **có màn hình thật và id khớp**.
+  Loại chưa có màn hình vẫn trả `null` — nối tới màn không tồn tại thì bấm vào là văng lỗi, tệ hơn
+  không nối.
+
+- **Mobile: `PushResponseHandler` ghi cứng nhóm route `(customer)`.** Staff bấm push bị quăng vào
+  nhóm route của Customer. Cùng dòng đó chỉ đọc `ticketId` nên push về pin cũng không đi đâu. Nay
+  lấy vai trò từ phiên đăng nhập và dùng chung một bộ phân giải với danh sách trong app.
+
+- **Push không mang `entityType`/`entityId` nên client phải đoán màn hình.** `data` chỉ có
+  `notificationId` + khoá payload. Mobile đoán bằng `ticketId`, trong khi danh sách trong app dùng
+  `entityType` — cùng một thông báo mà hai đường mở ra hai màn khác nhau. `SendRequest` +
+  `NotificationDispatcher` + `ExpoPushChannel` nay gửi kèm cặp định tuyến, lấy từ bản ghi
+  notification và **không cho payload ghi đè** (giống cách bảo vệ `notificationId`).
+
+  Client cũ bỏ qua khoá lạ nên không vỡ; push cũ thiếu hai khoá này thì mobile tự lùi về `ticketId`.
+
 - **Gửi hàng loạt thủ công bị template đè mất nội dung admin gõ.**
 
   Màn hình gửi hàng loạt cho chọn **bất kỳ** loại thông báo nào (loại quyết định nhóm tuỳ chọn nhận

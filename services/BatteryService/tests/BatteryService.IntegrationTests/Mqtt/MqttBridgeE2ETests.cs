@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -66,7 +67,8 @@ public class MqttBridgeE2ETests
     /// bắt được command mà bridge gửi đi.
     /// </summary>
     private static (MqttBridgeBackgroundService Bridge, ServiceProvider Provider) BuildBridge(
-        string dbName, IMediator mediator, string host, int port, string user)
+        string dbName, IMediator mediator, string host, int port, string user,
+        ILogger<MqttBridgeBackgroundService>? logger = null)
     {
         var services = new ServiceCollection();
         // Scoped + context MỚI mỗi scope — giống hệt runtime, và tránh đụng context của test.
@@ -89,7 +91,7 @@ public class MqttBridgeE2ETests
         var bridge = new MqttBridgeBackgroundService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             options,
-            NullLogger<MqttBridgeBackgroundService>.Instance);
+            logger ?? NullLogger<MqttBridgeBackgroundService>.Instance);
 
         return (bridge, provider);
     }
@@ -129,7 +131,10 @@ public class MqttBridgeE2ETests
         var device = new IotDevice
         {
             Id = Guid.NewGuid(),
-            DeviceCode = MosquittoBrokerFixture.DeviceA,
+            // IOT3-15 — DeviceCode UPPERCASE (như create handler lưu) + MqttUsername lowercase
+            // (như IotApiKeyService sinh). Chính cặp lệch nhau này là thứ bridge phải xử lý đúng.
+            DeviceCode = MosquittoBrokerFixture.DeviceACode,
+            MqttUsername = MosquittoBrokerFixture.DeviceA,
             DisplayName = "GW test A",
             SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
@@ -181,13 +186,178 @@ public class MqttBridgeE2ETests
             await bridge.StopAsync(CancellationToken.None);
         }
 
-        captured!.DeviceCode.Should().Be(MosquittoBrokerFixture.DeviceA);
+        // IOT3-15 — thiết bị publish lên topic CHỮ THƯỜNG (`solar/gw-test-a/...`) nhưng lệnh gửi
+        // xuống handler phải mang DeviceCode dạng CHUẨN của DB (UPPERCASE). Khẳng định này là thứ
+        // phân biệt "bridge tra đúng device" với "bridge chỉ chép lại phân đoạn topic".
+        captured!.DeviceCode.Should().Be(MosquittoBrokerFixture.DeviceACode,
+            "bridge phải truyền DeviceCode chuẩn từ DB, không phải phân đoạn topic chữ thường");
         captured.AuthenticatedDeviceId.Should().Be(device.Id,
-            "bridge phải resolve deviceCode → IotDevice.Id trước khi gửi command");
+            "bridge phải resolve phân đoạn topic (= MqttUsername) → IotDevice.Id trước khi gửi command");
         captured.Items.Should().ContainSingle();
         // batterySerial nằm ở segment topic, KHÔNG ở payload — bridge phải bơm xuống item.
         captured.Items[0].BatteryAssetSerial.Should().Be("BAT-SERIAL-1");
         captured.Items[0].Voltage.Should().Be(51.2m);
+    }
+
+    // -------------------------------------------- IOT3-106/M2) payload sai tên mảng
+
+    /// <summary>
+    /// IOT3-106/M2 — payload đặt sai tên mảng phải sinh <c>LogWarning</c>, KHÔNG được rơi im lặng.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>System.Text.Json</c> bỏ qua trường lạ, nên payload dùng <c>readings</c> thay vì
+    /// <c>items</c> sẽ deserialize <b>thành công</b> với <c>Items</c> rỗng. Trước bản sửa: không
+    /// ngoại lệ, không log, không bản ghi — firmware báo publish OK (QoS 0), broker chuyển tin OK,
+    /// cầu nối chạy OK, chỉ có dữ liệu là không tồn tại.
+    /// </para>
+    /// <para>
+    /// Bài test khẳng định hai điều: (a) có cảnh báo, (b) cảnh báo <b>nói ra tên trường đúng</b> —
+    /// vì một dòng "payload rỗng" chung chung không giúp người trực tìm ra nguyên nhân.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Telemetry_WithWrongArrayName_LogsWarningInsteadOfSilentlyDropping()
+    {
+        var dbName = $"mqtt-m2-{Guid.NewGuid()}";
+        await using var db = NewDb(dbName);
+        db.IotDevices.Add(new IotDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCode = MosquittoBrokerFixture.DeviceACode,
+            MqttUsername = MosquittoBrokerFixture.DeviceA,
+            DisplayName = "GW test M2",
+            SiteId = Guid.NewGuid(),
+            Status = IotDeviceStatusEnum.Active
+        });
+        await db.SaveChangesAsync();
+
+        var mediator = new Mock<IMediator>();
+        mediator
+            .Setup(m => m.Send(It.IsAny<BatchIngestSensorReadingsCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommonResponse<SensorReadingBatchIngestResult>());
+
+        var logger = new CapturingLogger<MqttBridgeBackgroundService>();
+
+        var (bridge, provider) = BuildBridge(dbName, mediator.Object, _broker.Host, _broker.Port,
+            MosquittoBrokerFixture.BridgeUser, logger);
+        await using (provider)
+        {
+            await bridge.StartAsync(CancellationToken.None);
+            await Task.Delay(1500);
+
+            var publisher = await ConnectAsync(MosquittoBrokerFixture.BridgeUser);
+
+            // `readings` thay vì `items` — đúng payload đã làm mất 15 phút truy vết ngày 08/08.
+            var payload = JsonSerializer.Serialize(new
+            {
+                readings = new[]
+                {
+                    new { time = DateTime.UtcNow, voltage = 12.6m, current = 1.5m,
+                          temperature = 25.3m, socPercent = 80m }
+                }
+            }, Json);
+
+            await publisher.PublishAsync(new MqttApplicationMessageBuilder()
+                .WithTopic(MqttTopicMap.Telemetry(MosquittoBrokerFixture.DeviceA, "BAT-SERIAL-1"))
+                .WithPayload(payload)
+                .Build());
+
+            (await WaitUntilAsync(() => logger.Warnings.Count > 0, TimeSpan.FromSeconds(15)))
+                .Should().BeTrue(
+                    "payload sai tên mảng PHẢI để lại cảnh báo — im lặng chính là nợ #2");
+
+            await publisher.DisconnectAsync();
+            await bridge.StopAsync(CancellationToken.None);
+        }
+
+        logger.Warnings.Should().Contain(w => w.Contains("items"),
+            "cảnh báo phải nói ra tên trường ĐÚNG, nếu không người trực vẫn không biết sửa gì");
+
+        mediator.Verify(
+            m => m.Send(It.IsAny<BatchIngestSensorReadingsCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "payload rỗng thì không được gửi command ingest xuống dưới");
+    }
+
+    /// <summary>
+    /// Ack báo <c>status: "unknown"</c> phải thành <c>LogWarning</c>, không chìm trong dòng "ok".
+    /// </summary>
+    /// <remarks>
+    /// Phát hiện 08/08/2026: dropdown "Gửi command" của web admin liệt kê 5 loại lệnh
+    /// (<c>reboot</c> · <c>ota</c> · <c>sample-now</c> · <c>calibrate</c> · <c>set-config</c>) mà
+    /// firmware KHÔNG hiểu loại nào — `classifyType` phân loại tất cả thành <c>Unknown</c>. Admin
+    /// bấm Gửi thấy 202 và toast thành công; thiết bị ack <c>unknown</c> rồi không làm gì.
+    /// <para>
+    /// Backend trước đây ghi MỌI ack ở mức Information, nên ba trạng thái hỏng (<c>failed</c>,
+    /// <c>rejected</c>, <c>unknown</c>) chìm giữa hàng nghìn dòng <c>ok</c>. Sửa danh sách ở
+    /// frontend là chặn nguồn; nâng mức log là để lần sau còn nhìn thấy.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task CommandAck_WithUnknownStatus_LogsWarning()
+    {
+        var dbName = $"mqtt-ack-{Guid.NewGuid()}";
+        await using var db = NewDb(dbName);
+        db.IotDevices.Add(new IotDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCode = MosquittoBrokerFixture.DeviceACode,
+            MqttUsername = MosquittoBrokerFixture.DeviceA,
+            DisplayName = "GW ack test",
+            SiteId = Guid.NewGuid(),
+            Status = IotDeviceStatusEnum.Active
+        });
+        await db.SaveChangesAsync();
+
+        var logger = new CapturingLogger<MqttBridgeBackgroundService>();
+        var (bridge, provider) = BuildBridge(dbName, new Mock<IMediator>().Object,
+            _broker.Host, _broker.Port, MosquittoBrokerFixture.BridgeUser, logger);
+
+        await using (provider)
+        {
+            await bridge.StartAsync(CancellationToken.None);
+            await Task.Delay(1500);
+
+            var publisher = await ConnectAsync(MosquittoBrokerFixture.BridgeUser);
+
+            // Đúng ack mà firmware trả khi gặp loại lệnh nó không hiểu
+            // (`command_handler.cpp`: publishAck(cmdId, "unknown", "unsupported command type")).
+            await publisher.PublishAsync(new MqttApplicationMessageBuilder()
+                .WithTopic(MqttTopicMap.CommandAck(MosquittoBrokerFixture.DeviceA))
+                .WithPayload("""{"cmdId":"c-1","status":"unknown","error":"unsupported command type"}""")
+                .Build());
+
+            (await WaitUntilAsync(() => logger.Warnings.Count > 0, TimeSpan.FromSeconds(15)))
+                .Should().BeTrue("ack `unknown` PHẢI để lại cảnh báo, không chìm ở mức Information");
+
+            await publisher.DisconnectAsync();
+            await bridge.StopAsync(CancellationToken.None);
+        }
+
+        logger.Warnings.Should().Contain(w => w.Contains("unknown"),
+            "cảnh báo phải nêu status thật để người trực biết lệnh không được thực thi");
+        logger.Warnings.Should().Contain(w => w.Contains("set_interval"),
+            "và phải nói ra ba loại lệnh hợp lệ, nếu không người đọc log vẫn không biết sửa gì");
+    }
+
+    /// <summary>Ghi lại mọi dòng log mức Warning để test khẳng định được nội dung.</summary>
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Warnings { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Warning)
+            {
+                // Khoá lại: bridge xử lý message trên thread của MQTT client, test đọc trên thread khác.
+                lock (Warnings) Warnings.Add(formatter(state, exception));
+            }
+        }
     }
 
     // ---------------------------------------------------------------- 2) LWT → Offline + Alert
@@ -202,7 +372,9 @@ public class MqttBridgeE2ETests
         var device = new IotDevice
         {
             Id = Guid.NewGuid(),
-            DeviceCode = MosquittoBrokerFixture.DeviceB,
+            // IOT3-15 — xem ghi chú ở test device A.
+            DeviceCode = MosquittoBrokerFixture.DeviceBCode,
+            MqttUsername = MosquittoBrokerFixture.DeviceB,
             DisplayName = "GW test B",
             SiteId = siteId,
             Status = IotDeviceStatusEnum.Active,

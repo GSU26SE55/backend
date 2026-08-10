@@ -184,6 +184,107 @@ namespace AuditAggregatorService.Infrastructure.Migrations
 
                     b.ToTable("audit_aggregate", (string)null);
                 });
+
+            modelBuilder.Entity("AuditAggregatorService.Domain.Entities.AuditReplayJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error");
+
+                    b.Property<int>("ExpectedResponders")
+                        .HasColumnType("integer")
+                        .HasColumnName("expected_responders");
+
+                    b.Property<DateTime?>("FromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("from_utc");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("RepublishedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("republished_count");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<Guid?>("RequestedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_account_id");
+
+                    b.Property<int>("RespondedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("responded_count");
+
+                    b.Property<string>("RespondedServices")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("responded_services");
+
+                    b.Property<string>("ServiceName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("service_name");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("ToUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("to_utc");
+
+                    b.Property<bool>("Truncated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("truncated");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedAtUtc")
+                        .HasDatabaseName("ix_audit_replay_job_requested_at");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_audit_replay_job_status");
+
+                    b.ToTable("audit_replay_job", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

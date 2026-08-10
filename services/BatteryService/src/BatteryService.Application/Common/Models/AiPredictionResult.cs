@@ -52,8 +52,30 @@ public class AiPredictionResult
         int RulCyclesEstimate,
         string Priority,
         string ModelVersion,
-        int LatencyMs)
+        int LatencyMs,
+        string? RawResponse = null,
+        string? HealthStage = null,
+        decimal? StageConfidence = null,
+        bool IsBorderline = false,
+        decimal? SohStd = null,
+        string? RiskLevel = null,
+        string? ActionCode = null,
+        string? SohTrend = null,
+        decimal? DegradationRatePerCycle = null,
+        int? CyclesToMaintenance = null,
+        bool IsTemperatureOod = false)
     {
+        this.HealthStage = HealthStage;
+        this.StageConfidence = StageConfidence;
+        this.IsBorderline = IsBorderline;
+        this.SohStd = SohStd;
+        this.RiskLevel = RiskLevel;
+        this.ActionCode = ActionCode;
+        this.SohTrend = SohTrend;
+        this.DegradationRatePerCycle = DegradationRatePerCycle;
+        this.CyclesToMaintenance = CyclesToMaintenance;
+        this.IsTemperatureOod = IsTemperatureOod;
+        this.RawResponse = RawResponse;
         this.SohPercent = SohPercent;
         this.Confidence = Confidence;
         this.Classification = Classification;
@@ -74,6 +96,80 @@ public class AiPredictionResult
     public string Priority { get; }
     public string ModelVersion { get; }
     public int LatencyMs { get; }
+
+    // ── GH-86 bất định ────────────────────────────────────────────────────
+    // AI chấm ngưỡng bằng median của 10 mẫu MC Dropout. Ba field dưới đây nói cho
+    // caller biết kết luận đó CHẮC tới đâu — thứ mà một con số SOH đơn lẻ không nói được.
+
+    /// <summary>"Healthy" / "Degrading" / "Maintenance Required" / "End Of Life".</summary>
+    public string? HealthStage { get; }
+
+    /// <summary>Tỉ lệ mẫu MC rơi vào <see cref="HealthStage"/> đã chọn, 0–1.</summary>
+    public decimal? StageConfidence { get; }
+
+    /// <summary>
+    /// <c>true</c> khi không stage nào chiếm đa số rõ (&lt; 0.7) — kết luận nằm sát ngưỡng.
+    /// </summary>
+    /// <remarks>
+    /// Quan trọng ở mốc EOL 80%: một pin borderline có thể nhảy qua lại giữa hai stage
+    /// ở hai lượt chạy liên tiếp mà không có gì bất thường. Không có cờ này thì Staff
+    /// thấy stage đổi và tưởng pin vừa xấu đi.
+    /// </remarks>
+    public bool IsBorderline { get; }
+
+    /// <summary>Độ lệch chuẩn MC Dropout, tính bằng điểm SOH (không phải [0,1]).</summary>
+    public decimal? SohStd { get; }
+
+    // ── Rủi ro & xu hướng ─────────────────────────────────────────────────
+
+    /// <summary>"Critical" / "High" / "Medium" / "Low" — hiển thị mức nghiêm trọng.</summary>
+    public string? RiskLevel { get; }
+
+    /// <summary>MONITOR / SCHEDULE_MAINTENANCE / SCHEDULE_REPLACEMENT / REPLACE_IMMEDIATELY.</summary>
+    public string? ActionCode { get; }
+
+    /// <summary>"accelerating" / "stable" / "slowing" — vận tốc suy giảm.</summary>
+    public string? SohTrend { get; }
+
+    /// <summary>%SOH mất đi mỗi chu kỳ sạc-xả, quan sát từ cửa sổ.</summary>
+    public decimal? DegradationRatePerCycle { get; }
+
+    /// <summary>Số chu kỳ ước tính tới khi SOH chạm ngưỡng bảo trì 85%. 0 nếu đã dưới.</summary>
+    public int? CyclesToMaintenance { get; }
+
+    /// <summary>
+    /// GH-91 — <c>true</c> khi nhiệt độ cửa sổ nằm quá xa mọi buồng nhiệt lúc train,
+    /// tức model đang NGOẠI SUY.
+    /// </summary>
+    /// <remarks>
+    /// Prediction vẫn trả về bình thường và không có cảnh báo nào khác. Đây là tín hiệu
+    /// duy nhất cho biết con số SOH đó kém tin cậy vì lý do miền dữ liệu, chứ không phải
+    /// vì pin xấu.
+    /// </remarks>
+    public bool IsTemperatureOod { get; }
+
+    /// <summary>
+    /// Nguyên văn JSON response của AI — đổ vào cột <c>soh_predictions.raw_response</c> (jsonb).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cột này có từ migration đầu tiên nhưng CHƯA BAO GIỜ được ghi: chỗ tạo
+    /// <c>new SohPrediction { ... }</c> không set nó, nên nó luôn NULL.
+    /// </para>
+    /// <para>
+    /// Hậu quả không nhỏ: AI trả về ~35 field, class này chỉ mang 9. Toàn bộ phần còn lại
+    /// (<c>health_stage</c>, <c>stage_probabilities</c>, <c>is_borderline</c>, <c>soh_trend</c>,
+    /// <c>soh_trajectory</c>, <c>degradation_rate_per_cycle</c>, <c>warnings</c>,
+    /// <c>feature_summary</c>, <c>is_temperature_ood</c>, …) bị vứt ngay tại ranh giới bridge
+    /// và KHÔNG cách nào lấy lại — muốn phân tích lại phải chạy inference lại trên dữ liệu cũ.
+    /// Giữ nguyên văn ở đây là cách rẻ nhất để không mất chúng, mà không phải thêm cột cho
+    /// từng field một.
+    /// </para>
+    /// <para>
+    /// <c>null</c> khi client không dựng được (không nên xảy ra) — cột nullable nên vẫn ghi được.
+    /// </para>
+    /// </remarks>
+    public string? RawResponse { get; }
 
     /// <summary>Map chuỗi classification của AI → enum BE (Normal=1/Degrading=2/Failed=3).</summary>
     public static AnomalyClassificationEnum ParseClassification(string? raw) => raw?.Trim() switch

@@ -243,6 +243,15 @@ public static class AppMetrics
         "Current message count in NotificationService dead-letter (_error) queues.",
         new GaugeConfiguration { LabelNames = new[] { "queue" } });
 
+    /// <summary>
+    /// Request HTTP bị chặn bởi hạn mức nền (<c>StandardRateLimitOptions</c>).
+    /// Labels: scope (authenticated|anonymous) — biết bậc nào đang chạm trần mới chỉnh đúng con số.
+    /// </summary>
+    public static readonly Counter HttpRateLimitedTotal = Prometheus.Metrics.CreateCounter(
+        "http_rate_limited_total",
+        "Total HTTP requests rejected with 429 by the standard rate limiter.",
+        new CounterConfiguration { LabelNames = new[] { "scope" } });
+
     /// <summary>Notification bị chặn bởi rate limit per-user (NOTI3-06). Labels: type.</summary>
     public static readonly Counter NotificationRateLimitedTotal = Prometheus.Metrics.CreateCounter(
         "notification_rate_limited_total",

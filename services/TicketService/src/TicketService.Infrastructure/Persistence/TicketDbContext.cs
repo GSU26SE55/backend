@@ -33,6 +33,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
     public virtual DbSet<KbArticleVersion> KbArticleVersions { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
+    public virtual DbSet<TicketAiSuggestion> TicketAiSuggestions { get; set; }
     public virtual DbSet<BlogPost> BlogPosts { get; set; }
     public virtual DbSet<BlogPostVersion> BlogPostVersions { get; set; }
     public virtual DbSet<BlogTemplate> BlogTemplates { get; set; }

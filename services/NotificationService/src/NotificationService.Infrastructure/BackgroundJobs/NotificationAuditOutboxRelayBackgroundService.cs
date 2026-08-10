@@ -1,13 +1,13 @@
 using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
 using SharedContracts.Events.Audit;
+using SharedInfrastructure.Leasing;
 using SharedInfrastructure.Metrics;
 
 namespace NotificationService.Infrastructure.BackgroundJobs;
@@ -23,14 +23,14 @@ public class NotificationAuditOutboxRelayBackgroundService : BackgroundService
 
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IDistributedCache _cache;
+    private readonly IDistributedLease _lease;
     private readonly ILogger<NotificationAuditOutboxRelayBackgroundService> _logger;
 
-    public NotificationAuditOutboxRelayBackgroundService(IServiceScopeFactory scopeFactory, IDistributedCache cache,
+    public NotificationAuditOutboxRelayBackgroundService(IServiceScopeFactory scopeFactory, IDistributedLease lease,
         ILogger<NotificationAuditOutboxRelayBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
-        _cache = cache;
+        _lease = lease;
         _logger = logger;
     }
 
@@ -55,22 +55,24 @@ public class NotificationAuditOutboxRelayBackgroundService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// GH-793 — giành quyền bằng MỘT lệnh nguyên tử có token chủ sở hữu.
+    /// </summary>
+    /// <remarks>
+    /// Khuôn cũ <c>GET</c> rồi <c>SET</c> để lọt hai replica cùng đọc thấy khoá trống trong cùng một
+    /// khoảnh khắc, và cả hai đều tự coi là chủ. <see cref="IDistributedLease"/> gộp kiểm-và-ghi vào
+    /// một lệnh Redis nên khe hở đó biến mất.
+    /// </remarks>
     private async Task<bool> IsLeaderAsync(CancellationToken ct)
     {
         try
         {
-            var current = await _cache.GetStringAsync(LeaderKey, ct);
-            if (current is null || current == _instanceId)
-            {
-                await _cache.SetStringAsync(LeaderKey, _instanceId,
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = LeaseTtl }, ct);
-                return true;
-            }
-            return false;
+            return await _lease.TryAcquireAsync(LeaderKey, _instanceId, LeaseTtl, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "NotificationAuditOutboxRelay leader-election lỗi — fallback process.");
+            // Redis sự cố → vẫn chạy: không ai làm gì cả là hỏng nặng hơn làm trùng.
+            _logger.LogWarning(ex, "Lease lỗi — chạy tiếp lượt này.");
             return true;
         }
     }

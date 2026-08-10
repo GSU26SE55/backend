@@ -3,6 +3,8 @@ using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace BatteryService.Infrastructure.Realtime;
 
@@ -44,9 +46,9 @@ ORDER BY bucket;";
         {
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = Sql;
-            AddParam(cmd, "@assetId", batteryAssetId);
-            AddParam(cmd, "@from", (object?)ToUtc(from) ?? DBNull.Value);
-            AddParam(cmd, "@to", (object?)ToUtc(to) ?? DBNull.Value);
+            AddParam(cmd, "@assetId", NpgsqlDbType.Uuid, batteryAssetId);
+            AddParam(cmd, "@from", NpgsqlDbType.TimestampTz, (object?)ToUtc(from) ?? DBNull.Value);
+            AddParam(cmd, "@to", NpgsqlDbType.TimestampTz, (object?)ToUtc(to) ?? DBNull.Value);
 
             var result = new List<SensorReadingAggregateDto>();
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -84,11 +86,14 @@ ORDER BY bucket;";
         }
     }
 
-    private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
+    /// <summary>
+    /// Type PHẢI khai báo tường minh: <c>@from</c>/<c>@to</c> có thể là <see cref="DBNull"/>, khi đó Npgsql
+    /// không suy được kiểu từ value nên gửi OID 0 → Postgres không resolve nổi <c>$n IS NULL</c> trong
+    /// mệnh đề WHERE và trả 42P08 "could not determine data type of parameter".
+    /// </summary>
+    private static void AddParam(System.Data.Common.DbCommand cmd, string name, NpgsqlDbType type, object value)
     {
-        var p = cmd.CreateParameter();
-        p.ParameterName = name;
-        p.Value = value;
+        var p = new NpgsqlParameter(name, type) { Value = value };
         cmd.Parameters.Add(p);
     }
 

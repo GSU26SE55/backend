@@ -1,6 +1,7 @@
 using FileStorageService.Application.CQRS.Command;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
+using FileStorageService.Application.Validation;
 using FileStorageService.Domain.Entities;
 using FileStorageService.Domain.Enums;
 using MediatR;
@@ -40,11 +41,19 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
             };
         }
 
-        await using var stream = request.File!.OpenReadStream();
+        // Content-Type suy từ nội dung thật, không lấy nguyên giá trị client khai: object storage phục vụ
+        // file trực tiếp cho trình duyệt qua publicUrl, khai sai header là ảnh/audio không mở được.
+        var contentHeader = await FileSignatureInspector.ReadHeaderAsync(request.File!, cancellationToken);
+        var contentType = FileSignatureInspector.ResolveContentType(
+            contentHeader,
+            request.File!.FileName,
+            request.File.ContentType);
+
+        await using var stream = request.File.OpenReadStream();
         var result = await _objectStorageService.UploadAsync(
             stream,
             request.File.FileName,
-            request.File.ContentType,
+            contentType,
             request.File.Length,
             request.FolderName,
             cancellationToken);

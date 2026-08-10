@@ -1,12 +1,19 @@
-# TEMPORARY test override — points batteryservice at the natively-run ai-module
-# via Docker Desktop's native host.docker.internal (192.168.65.254). ai-module has
-# no Dockerfile to build as a container, so it runs on the host for this test.
-# Created by connectivity test; deleted afterward. Does NOT touch committed compose/.env.
+version: "3.8"
 services:
-  batteryservice:
-    environment:
-      Ai__Enabled: "true"
-      Ai__GrpcAddress: "http://host.docker.internal:50051"
-      Ai__HttpBaseUrl: "http://host.docker.internal:8000"
-      Ai__IntervalMinutes: "1"
-      Ai__MinReadings: "30"
+  ai-module-http:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ai-module-grpc:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

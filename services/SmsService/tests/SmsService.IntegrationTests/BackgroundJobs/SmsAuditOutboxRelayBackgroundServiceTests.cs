@@ -89,8 +89,12 @@ public class SmsAuditOutboxRelayBackgroundServiceTests : IAsyncLifetime
             cache ?? provider.GetRequiredService<IDistributedCache>(),
             NullLogger<SmsAuditOutboxRelayBackgroundService>.Instance);
 
+    /// <summary>
+    /// Chạy relay tới khi <paramref name="until"/> thành đúng, hoặc <b>ném lỗi</b> khi hết giờ —
+    /// để "job chưa chạy" không bị báo nhầm thành "job chạy sai".
+    /// </summary>
     private static async Task RunUntilAsync(SmsAuditOutboxRelayBackgroundService relay,
-        Func<Task<bool>> until, int timeoutSeconds = 25)
+        Func<Task<bool>> until, int timeoutSeconds = 60)
     {
         await relay.StartAsync(CancellationToken.None);
         try
@@ -102,6 +106,10 @@ public class SmsAuditOutboxRelayBackgroundServiceTests : IAsyncLifetime
                     return;
                 await Task.Delay(250);
             }
+
+            throw new TimeoutException(
+                $"Relay không đạt điều kiện trong {timeoutSeconds}s — relay chưa chạy hoặc đứng, "
+                + "KHÔNG phải kết quả nghiệp vụ sai.");
         }
         finally
         {

@@ -7,42 +7,56 @@ namespace TicketService.Application.Common.Utils;
 
 public static class TicketQueryHelper
 {
-    internal static TicketDTO MapToTicketDTO(Ticket t, bool hasUnreadChat = false) => new()
-    {
-        Id = t.Id.ToString(),
-        Code = t.Code,
-        // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
-        // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
-        BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
-        BatteryAssetIds = t.BatteryAssets.Select(b => b.BatteryAssetId.ToString()).ToList(),
-        CustomerId = t.CustomerId.ToString(),
-        Assignments = t.Assignments
+    /// <param name="t">Entity Ticket nguồn.</param>
+    /// <param name="hasUnreadChat">Ticket có tin nhắn chưa đọc với actor hiện tại.</param>
+    /// <param name="staffNames">
+    /// Map StaffId → FullName để điền <c>TicketAssignmentDTO.StaffName</c>.
+    /// Truyền null thì StaffName để trống (FE tự fallback sang StaffId).
+    /// </param>
+    internal static TicketDTO MapToTicketDTO(
+        Ticket t,
+        bool hasUnreadChat = false,
+        IReadOnlyDictionary<Guid, string>? staffNames = null) => new()
+        {
+            Id = t.Id.ToString(),
+            Code = t.Code,
+            // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
+            // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
+            BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
+            BatteryAssetIds = t.BatteryAssets.Select(b => b.BatteryAssetId.ToString()).ToList(),
+            CustomerId = t.CustomerId.ToString(),
+            Assignments = t.Assignments
             .Where(a => !a.IsDeleted)
-            .Select(a => new TicketAssignmentDTO { StaffId = a.StaffId.ToString(), Role = a.Role })
+            .Select(a => new TicketAssignmentDTO
+            {
+                StaffId = a.StaffId.ToString(),
+                Role = a.Role,
+                StaffName = staffNames != null && staffNames.TryGetValue(a.StaffId, out var n) ? n : null,
+            })
             .ToList(),
-        Title = t.Title,
-        Category = t.Category,
-        Priority = t.Priority,
-        ImpactScope = t.ImpactScope,
-        UrgencyLevel = t.UrgencyLevel,
-        Status = t.Status,
-        Origin = t.Origin,
-        ReopenCount = t.ReopenCount,
-        IsIncident = t.IsIncident,
-        CreatedAt = t.CreatedAt,
-        UpdatedAt = t.UpdatedAt,
-        SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
-        HasUnreadChat = hasUnreadChat,
-        DetectedAt = t.DetectedAt,
-        BatterySerialNumber = t.BatterySerialNumber,
-        AiVerifyStatus = t.AiVerifyStatus,
-        AiVerifyScore = t.AiVerifyScore,
-        AiVerifyReason = t.AiVerifyReason,
-        SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
-        DuplicateReason = t.DuplicateReason,
-        MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
-        CloseReason = t.CloseReason
-    };
+            Title = t.Title,
+            Category = t.Category,
+            Priority = t.Priority,
+            ImpactScope = t.ImpactScope,
+            UrgencyLevel = t.UrgencyLevel,
+            Status = t.Status,
+            Origin = t.Origin,
+            ReopenCount = t.ReopenCount,
+            IsIncident = t.IsIncident,
+            CreatedAt = t.CreatedAt,
+            UpdatedAt = t.UpdatedAt,
+            SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
+            HasUnreadChat = hasUnreadChat,
+            DetectedAt = t.DetectedAt,
+            BatterySerialNumber = t.BatterySerialNumber,
+            AiVerifyStatus = t.AiVerifyStatus,
+            AiVerifyScore = t.AiVerifyScore,
+            AiVerifyReason = t.AiVerifyReason,
+            SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
+            DuplicateReason = t.DuplicateReason,
+            MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
+            CloseReason = t.CloseReason
+        };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)
     {
@@ -56,6 +70,7 @@ public static class TicketQueryHelper
             DueAt = sla.DueAt,
             OriginalDueAt = sla.OriginalDueAt,
             TotalPausedMinutes = sla.TotalPausedMinutes,
+            PauseEpisodesCount = sla.PauseEpisodesCount,
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,

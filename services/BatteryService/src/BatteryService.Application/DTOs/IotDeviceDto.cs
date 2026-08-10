@@ -59,11 +59,51 @@ public class IotDeviceDetailDto : IotDeviceDto
     /// <c>null</c> nếu device được tạo trước khi bật lưu plaintext key — gọi <c>rotate-key</c> để sinh key mới + lưu.
     /// </summary>
     public string? ApiKey { get; set; }
+
+    // ================= IOT3-70 =================
+    // Bảy trường dưới đây làm cho `GET /api/admin/iot-devices/{id}` trở thành nguồn XEM LẠI ĐƯỢC
+    // của mọi thứ cần để đưa một thiết bị vào hoạt động.
+    //
+    // Trước đây chỉ `POST` (lúc tạo) mới trả QR + thông tin MQTT, nên mất tab trình duyệt là mất
+    // luôn — phải xoay khoá, tức là phải mang cáp ra tận nơi nạp lại thiết bị đang chạy tốt.
+
+    /// <summary>
+    /// Chuỗi QR nạp thiết bị: <c>iot://provision?dc=...&amp;key=...</c>.
+    /// <c>null</c> khi <see cref="ApiKey"/> null (thiết bị tạo trước khi bật lưu key plaintext) —
+    /// dựng QR từ một key không có thật thì quét xong thiết bị cũng không dùng được.
+    /// </summary>
+    public string? ProvisioningQrCode { get; set; }
+
+    /// <summary>Username MQTT (= <c>DeviceCode</c> chữ thường).</summary>
+    public string? MqttUsername { get; set; }
+
+    /// <summary>
+    /// Mật khẩu MQTT plaintext. <c>null</c> với thiết bị tạo trước IOT3-25 (chưa lưu plaintext) —
+    /// khi đó dùng <c>POST /{id}/rotate-mqtt</c> để cấp mật khẩu mới; thiết bị tự lành qua
+    /// re-provision, KHÔNG cần ra hiện trường.
+    /// </summary>
+    public string? MqttPassword { get; set; }
+
+    /// <summary>Host broker. <c>null</c> khi <c>Mqtt:Enabled=false</c>.</summary>
+    public string? MqttBrokerHost { get; set; }
+
+    /// <summary>Cổng broker (1883 plain / 8883 TLS).</summary>
+    public int? MqttBrokerPort { get; set; }
+
+    /// <summary>Broker có yêu cầu TLS không.</summary>
+    public bool? MqttUseTls { get; set; }
+
+    /// <summary>Tiền tố topic đã chuẩn hoá chữ thường, vd <c>solar/gw-esp32-001</c>.</summary>
+    public string? MqttTopicPrefix { get; set; }
 }
 
 public class IotDeviceCreatedDto : IotDeviceDto
 {
-    /// <summary>Plaintext API key. Trả 1 lần duy nhất khi create/rotate.</summary>
+    /// <summary>
+    /// Plaintext API key trả về ngay khi create/rotate.
+    /// GH-724 — KHÔNG phải "chỉ 1 lần": key vẫn đọc lại được qua
+    /// <c>GET /api/admin/iot-devices/{id}</c> (<see cref="IotDeviceDetailDto.ApiKey"/>).
+    /// </summary>
     public string RawApiKey { get; set; } = string.Empty;
 
     /// <summary>
@@ -84,6 +124,22 @@ public class IotDeviceCreatedDto : IotDeviceDto
 
     /// <summary>MQTT broker port (1883 plain / 8883 TLS).</summary>
     public int? MqttBrokerPort { get; set; }
+
+    /// <summary>
+    /// GH-784 — broker có yêu cầu TLS không. Thiếu trường này thiết bị phải đoán từ số cổng.
+    /// </summary>
+    public bool? MqttUseTls { get; set; }
+
+    /// <summary>
+    /// GH-784 — tiền tố topic thiết bị PHẢI dùng, đã chuẩn hoá chữ thường.
+    /// </summary>
+    /// <remarks>
+    /// ACL dùng <c>solar/%u/...</c> với <c>%u</c> = username (chữ thường), nên publish lên
+    /// <c>solar/{DeviceCode}</c> nguyên bản chữ hoa sẽ bị broker từ chối dù credential đúng.
+    /// So khớp topic MQTT phân biệt hoa/thường và không tắt được — nên phía cấp credential nói
+    /// thẳng tiền tố dùng được, thay vì để mỗi bên tự suy rồi lệch nhau.
+    /// </remarks>
+    public string? MqttTopicPrefix { get; set; }
 }
 
 public class IotFirmwareReleaseDto
@@ -201,6 +257,45 @@ public class IotDeviceProvisionResultDto
 
     /// <summary>Danh sách sensor type device được phép push: ["voltage","current","temperature","soc","sensor-ambient",...]</summary>
     public List<string> SupportedSensors { get; set; } = new();
+
+    // ================= IOT3-26 — cấu hình MQTT cấp lúc chạy =================
+    //
+    // Trước IOT3-26, broker host/port/username/password nằm trong `config.h` của firmware
+    // (nhúng lúc biên dịch) ⇒ mỗi thiết bị một bản build riêng. Sáu trường dưới đây đưa
+    // chúng xuống Tầng 3 "backend cấp lúc chạy": kỹ thuật viên chỉ còn nạp deviceCode +
+    // apiKey, mọi thứ khác thiết bị tự hỏi qua /provision.
+    //
+    // ⚠️ Quy ước ĐỒNG THỜI: cả sáu trường cùng có giá trị, hoặc cả sáu cùng `null`.
+    //    `null` = MQTT chưa bật ⇒ thiết bị chạy HTTPS-only. Trả nửa vời (có host, thiếu
+    //    password) khiến firmware thử nối rồi thất bại vòng lặp mà không biết vì sao.
+    //
+    // ⚠️ KHÔNG thêm CA cert PEM vào đây: `respBuf` của provision.cpp là 4096 byte và
+    //    `BatteryMappings[]` đã chiếm phần lớn. CA đi đường nhúng firmware (ca_cert_embedded.h).
+
+    /// <summary>Host broker MQTT. <c>null</c> khi <c>Mqtt:Enabled=false</c>.</summary>
+    public string? MqttBrokerHost { get; set; }
+
+    /// <summary>Cổng broker (1883 plain / 8883 TLS).</summary>
+    public int? MqttBrokerPort { get; set; }
+
+    /// <summary>Broker có yêu cầu TLS không — thiết bị cần biết để cấu hình đúng, không phải đoán từ số cổng.</summary>
+    public bool? MqttUseTls { get; set; }
+
+    /// <summary>
+    /// Tiền tố topic thiết bị PHẢI dùng, đã chuẩn hoá chữ thường (vd <c>solar/gw-esp32-001</c>).
+    /// </summary>
+    /// <remarks>
+    /// ACL Mosquitto dùng <c>solar/%u/...</c> với <c>%u</c> = username (chữ thường), trong khi
+    /// <c>DeviceCode</c> lưu chữ hoa. Trả thẳng tiền tố dùng được để firmware chỉ việc nối đuôi
+    /// (<c>/telemetry</c>, <c>/heartbeat</c>…) thay vì tự ghép rồi lệch chữ hoa/thường.
+    /// </remarks>
+    public string? MqttTopicPrefix { get; set; }
+
+    /// <summary>Username MQTT (= deviceCode chữ thường).</summary>
+    public string? MqttUsername { get; set; }
+
+    /// <summary>Mật khẩu MQTT plaintext — lấy từ <c>IotDevice.MqttPasswordPlaintext</c> (IOT3-25).</summary>
+    public string? MqttPassword { get; set; }
 }
 
 /// <summary>Sprint IoT-2 #IoT2-09 — Modbus address + sensor channel cho 1 battery.</summary>

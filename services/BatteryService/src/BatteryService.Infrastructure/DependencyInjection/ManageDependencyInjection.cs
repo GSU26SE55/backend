@@ -28,7 +28,7 @@ public static class ManageDependencyInjection
         services.AddScoped<BatteryDataSeeder>();
         services.AddScoped<EnvironmentDataSeeder>();
         services.AddSharedInfrastructure(configuration, "BatteryService.Application", "Battery Service API");
-        services.AddMessageBus(configuration, typeof(AccountActivatedConsumer).Assembly);
+        services.AddMessageBus(configuration, typeof(BatteryAccountActivatedConsumer).Assembly);
         services.AddInboxIdempotency(configuration);
 
         // Anomaly engine config (Sprint 3) — service/AnomalyRules dùng options này
@@ -79,6 +79,24 @@ public static class ManageDependencyInjection
 
         // Sprint IoT-1 (#253) — MQTT bridge (P3, optional).
         services.Configure<BatteryService.Infrastructure.Mqtt.MqttOptions>(configuration.GetSection(BatteryService.Infrastructure.Mqtt.MqttOptions.SectionName));
+
+        // GH-784 — cấp điểm kết nối broker cho luồng tạo/xoay khoá thiết bị. Trước đây DTO có sẵn
+        // MqttBrokerHost/Port nhưng không nơi nào gán ⇒ luôn null.
+        services.AddScoped<Application.Interfaces.IMqttBrokerEndpointProvider,
+            BatteryService.Infrastructure.Mqtt.MqttBrokerEndpointProvider>();
+
+        // GH-784 — đưa thông tin đăng nhập thiết bị xuống file passwd của broker. Không có nó thì
+        // API cấp credential xong nhưng Mosquitto không hề biết, và thiết bị nhận "not authorised".
+        // IOT3-29 — MỘT instance dùng cho cả hai vai: worker nền (vòng quét 60s) và
+        // IMqttPasswordFileSync (đồng bộ tức thì sau khi cấp/xoay khoá).
+        //
+        // Đăng ký bằng AddHostedService<T>() THUẦN sẽ tạo instance riêng mà container không
+        // resolve lại được, nên handler không có cách nào gọi SyncOnceAsync. Khuôn ba dòng dưới
+        // giống hệt IMqttBridgePublisher ngay bên dưới.
+        services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>();
+        services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>());
+        services.AddSingleton<Application.Interfaces.IMqttPasswordFileSync>(
+            sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttPasswordFileSyncService>());
         services.AddSingleton<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>();
         services.AddSingleton<BatteryService.Application.Services.IMqttBridgePublisher>(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
         services.AddHostedService(sp => sp.GetRequiredService<BatteryService.Infrastructure.Mqtt.MqttBridgeBackgroundService>());
@@ -109,7 +127,20 @@ public static class ManageDependencyInjection
         services.AddHostedService<WeatherSyncBackgroundService>();
 
         // BE-AI — AI bridge (gRPC primary → HTTP fallback) + SohPredictionBackgroundService.
-        services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
+        // GH-780 — chặn cấu hình bất khả thi NGAY LÚC KHỞI ĐỘNG. Trước đây `Ai:MinReadings` đóng
+        // cả hai vai (ngưỡng lịch sử + số dòng payload), nên đặt 29 hay 31 là service vẫn lên bình
+        // thường rồi mọi prediction bị AI từ chối im lặng. Sai cấu hình thì phải gãy ở chỗ dễ thấy
+        // nhất — lúc bật service — chứ không phải hiện ra dưới dạng "AI không chạy nữa".
+        services.AddOptions<AiOptions>()
+            .Bind(configuration.GetSection(AiOptions.SectionName))
+            .Validate(o => o.MinReadings >= AiOptions.WindowSize,
+                $"Ai:MinReadings phải ≥ {AiOptions.WindowSize} — AI từ chối mọi payload khác "
+                + $"{AiOptions.WindowSize} dòng, nên đòi ít mẫu hơn thì đến lúc gửi vẫn không dựng nổi payload.")
+            .Validate(o => o.MaxScanReadings >= o.MinReadings,
+                "Ai:MaxScanReadings phải ≥ Ai:MinReadings — quét về ít hơn ngưỡng thì không bao giờ đủ mẫu.")
+            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes phải lớn hơn 0.")
+            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds phải lớn hơn 0.")
+            .ValidateOnStart();
         var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
 
         // gRPC channel (primary) — 1 AiServiceClient dùng chung cho Predict + Prescribe wrapper.
@@ -119,6 +150,7 @@ public static class ManageDependencyInjection
         });
         services.AddScoped<Implements.Ai.AiPredictionGrpcClient>();
         services.AddScoped<Implements.Ai.AiPrescriptionGrpcClient>();
+        services.AddScoped<Implements.Ai.AiHealthGrpcClient>();
 
         // HTTP clients (fallback) — Polly retry giống OpenMeteo. BaseUrl = FastAPI :8000.
         var aiRetry = HttpPolicyExtensions.HandleTransientHttpError()
@@ -137,10 +169,37 @@ public static class ManageDependencyInjection
                 http.Timeout = TimeSpan.FromSeconds(Math.Max(30, aiOptions.TimeoutSeconds));
             })
             .AddPolicyHandler(aiRetry);
+        services.AddHttpClient<Implements.Ai.AiHealthHttpClient>((sp, http) =>
+            {
+                http.BaseAddress = new Uri(aiOptions.HttpBaseUrl);
+                http.Timeout = TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds));
+            })
+            .AddPolicyHandler(aiRetry);
 
         // Composite fallback clients — cái được inject vào job.
         services.AddScoped<IAiPredictionClient, Implements.Ai.FallbackAiPredictionClient>();
         services.AddScoped<IAiPrescriptionClient, Implements.Ai.FallbackAiPrescriptionClient>();
+        // Health: job đọc soc_mode + lfp_loaded từ đây thay vì hardcode theo chemistry.
+        services.AddScoped<IAiHealthClient, Implements.Ai.FallbackAiHealthClient>();
+
+        // Phản hồi prescription: proto nay ĐÃ có rpc SubmitFeedback, nên đường này cũng theo
+        // khuôn gRPC primary → HTTP fallback như Predict/Prescribe. (Trước đây trỏ thẳng vào
+        // bản HTTP vì proto chưa có RPC tương ứng — ràng buộc đó không còn.)
+        services.AddScoped<Implements.Ai.AiPrescriptionFeedbackGrpcClient>();
+        services.AddScoped<IAiPrescriptionFeedbackClient, Implements.Ai.FallbackAiPrescriptionFeedbackClient>();
+
+        // F4 — phản hồi PHÂN LOẠI (khác phản hồi prescription ở trên: nhãn vs lời khuyên).
+        // Chỉ gRPC, không fallback: phản hồi đã lưu vào DB trước khi gọi nên mất một lần
+        // gửi chỉ làm chậm vòng học, không hỏng thao tác của người dùng.
+        services.AddScoped<IAiClassificationFeedbackClient, Implements.Ai.AiClassificationFeedbackGrpcClient>();
+
+        // C10 — dự đoán nhiều pin trong 1 kết nối (màn hình giám sát). Chỉ gRPC: REST không
+        // có endpoint streaming tương ứng, nên cũng không có gì để fallback sang.
+        services.AddScoped<IAiPredictionStreamClient, Implements.Ai.AiPredictionStreamGrpcClient>();
+
+        // GH-10 — SOH chuỗi dài. Chỉ gRPC: REST của AI có /predict/long nhưng đường này
+        // không nằm trên hot-path nên không cần fallback, thất bại thì báo 503.
+        services.AddScoped<IAiPredictionLongClient, Implements.Ai.AiPredictionLongGrpcClient>();
         services.AddHostedService<SohPredictionBackgroundService>();
 
         // Sprint 5B B1 (#152) — NoiseBreachEvent retention 7 ngày.
@@ -155,6 +214,10 @@ public static class ManageDependencyInjection
         // Sprint Bonus NS-06 (#650) — đọc continuous aggregate 1h (scoped, dùng ApplicationDbContext).
         services.AddScoped<ISensorReadingAggregateViewReader, BatteryService.Infrastructure.Realtime.SensorReadingAggregateViewReader>();
         services.AddScoped<IBatteryRealtimeAuthorizationService, BatteryService.Infrastructure.Implements.Services.BatteryRealtimeAuthorizationService>();
+
+        // GH-722 — role của caller cho tầng REST, phục vụ giới hạn dữ liệu theo tenant.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IBatteryCurrentUserService, BatteryService.Infrastructure.Implements.Services.BatteryCurrentUserService>();
 
         return services;
     }

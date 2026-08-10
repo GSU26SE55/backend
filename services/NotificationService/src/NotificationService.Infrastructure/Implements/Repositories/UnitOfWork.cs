@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Entities;
+using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
 using SharedInfrastructure.Persistence.Repositories;
 using SharedKernels.Interfaces;
@@ -30,6 +32,7 @@ public class UnitOfWork : INotificationUnitOfWork
     public IGenericRepository<NotificationGroupMember> NotificationGroupMembers => new GenericRepository<NotificationGroupMember>(_context); // Sprint 6.4 NOTI4-01
     public IGenericRepository<NotificationBatch> NotificationBatches => new GenericRepository<NotificationBatch>(_context);                  // Sprint 6.4 NOTI4-06
     public IGenericRepository<NotificationBatchTarget> NotificationBatchTargets => new GenericRepository<NotificationBatchTarget>(_context); // Sprint 6.4 NOTI4-06
+    public IGenericRepository<NotificationSetting> NotificationSettings => new GenericRepository<NotificationSetting>(_context);             // ADR-0019 — push transport đổi lúc chạy
 
     public async Task BeginTransactionAsync()
     {
@@ -80,6 +83,24 @@ public class UnitOfWork : INotificationUnitOfWork
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => _context.SaveChangesAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<bool> TryClaimForDispatchAsync(
+        Guid notificationId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        // Điều kiện Status == Pending nằm NGAY TRONG câu UPDATE, nên cơ sở dữ liệu quyết định ai
+        // thắng. Đọc trước rồi ghi sau sẽ để hai replica cùng thấy Pending và cùng gửi.
+        var affected = await _context.Notifications
+            .Where(n => n.Id == notificationId
+                        && !n.IsDeleted
+                        && n.Status == NotificationStatusEnum.Pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(n => n.Status, NotificationStatusEnum.Processing)
+                .SetProperty(n => n.ProcessingStartedAt, nowUtc)
+                .SetProperty(n => n.DispatchAttemptCount, n => n.DispatchAttemptCount + 1), ct);
+
+        return affected == 1;
+    }
 
     public void Dispose() => _context.Dispose();
 }

@@ -4,6 +4,7 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection.Extensions;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 
@@ -25,12 +26,16 @@ builder.Services.AddCorsExtentions(builder.Configuration, builder.Environment);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddAuthorization();
 
-// Sprint 7 #115 — rate limiting (fixed-window theo userId/IP).
-builder.Services.AddGatewayRateLimiting(builder.Configuration);
+// Hạn mức nền dùng chung với mọi service: chưa đăng nhập 60 req/30s theo IP,
+// đã đăng nhập 500 req/30s theo từng người dùng. Xem SharedInfrastructure.RateLimiting.
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
-    .AddGatewayClaimForwarding();
+    .AddGatewayClaimForwarding()
+    // Gửi IP thật xuống upstream — nếu không, hạn mức ẩn danh của mỗi service sẽ gom
+    // toàn bộ traffic vào một bộ đếm mang IP của gateway.
+    .AddGatewayClientIpForwarding();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -73,6 +78,10 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Chống giả mạo: bỏ X-Client-Ip do client tự gắn TRƯỚC mọi thứ khác. Gateway dùng header này để chọn
+// bộ đếm hạn mức, nên tin giá trị client gửi lên là mở đường bypass — xem UseClientIpHeaderSanitizer.
+app.UseClientIpHeaderSanitizer();
+
 // SecurityHeaders + CorrelationId + RequestLogging — đặt sớm nhất để mọi route đều có.
 // Gateway forward Correlation ID xuống upstream service qua YARP (header pass-through tự nhiên).
 app.UseMiddleware<SecurityHeadersMiddleware>();
@@ -81,6 +90,12 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 // Prometheus HTTP metrics — track latency, status code, route distribution at gateway layer.
 app.UseHttpMetrics();
+
+// GH-800 — PHẢI đứng ngay SAU UseHttpMetrics, tức nằm BÊN TRONG nó.
+// `http_requests_received_total` đọc Response.StatusCode sau khi phần còn lại của pipeline chạy
+// xong; đặt ở đây thì trạng thái đã được chuẩn hoá trước lúc bộ đếm nhìn vào. Đặt trước
+// UseHttpMetrics là bộ đếm vẫn ghi 502 và dashboard vẫn báo 5xx giả mỗi lần client đóng luồng SSE.
+app.UseMiddleware<ClientDisconnectStatusMiddleware>();
 
 // Bật Swagger UI cho mọi non-Production environment (Development, Docker, Staging...).
 // Production thực sự nên tắt để giảm attack surface.
@@ -119,7 +134,9 @@ app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyNa
 // gateway chỉ parse token nếu có để forward claim.
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+// PHẢI đứng sau hai dòng trên: chỉ khi User đã được gán mới phân biệt được bậc 500 req/30s
+// (đã đăng nhập) với bậc 60 req/30s (ẩn danh).
+app.UseStandardRateLimiter();
 
 // Bọc mọi response status-only (404/401/403/405/...) thành CommonResponse để client luôn parse cùng schema.
 // Phải đặt TRƯỚC MapReverseProxy/MapMetrics để bắt được cả 404 do YARP không match route lẫn 404 do controller.

@@ -251,7 +251,9 @@ rabbitmq:
 minio:
   enabled: true
   image: minio/minio:latest
-  rootUser: minioadmin
+  # GH-788 — root user/password đều lấy từ Secret `solar-secrets`
+  # (ObjectStorage__AccessKey / ObjectStorage__SecretKey). values.yaml nằm trong Git nên không
+  # chứa credential; khoá `rootUser` cũ đã bỏ để không ai vô tình đặt lại giá trị mặc định.
   bucketName: solar-battery-files
   storage: 10Gi
   resources:
@@ -264,7 +266,12 @@ minio:
       requests: { cpu: 20m, memory: 64Mi }
       limits:   { cpu: 100m, memory: 128Mi }
   ingress:
-    enabled: false   # bật trong values-staging.yaml — expose files.{domain} + minio.{domain}
+    enabled: false   # bật trong values-staging.yaml — expose files.{domain} (S3 API) cho client
+  # GH-788 — console quản trị TÁCH khỏi cờ trên và mặc định tắt ở MỌI môi trường.
+  # Console đăng nhập bằng chính root credential ⇒ mở ra Internet là mở toàn quyền mọi bucket.
+  # Cần vào console: `kubectl port-forward svc/minio 9001:9001`.
+  consoleIngress:
+    enabled: false
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)
@@ -296,6 +303,35 @@ config:
   # (⚠️ để 0 thì key của pin đã ngừng gửi sẽ nằm lại Redis vĩnh viễn).
   Realtime__ReplayMaxEvents: "200"
   Realtime__ReplayTtlMinutes: "5"
+
+  # ---------- ADR-0019 — đường vận chuyển push (SignalR ∥ Expo) ----------
+  # Kênh Push có hai đường: hub SignalR tự vận hành và Expo Push API.
+  #
+  # ⚠️ Giá trị dưới CHỈ được đọc khi bảng `notification_settings` còn TRỐNG, tức lần đầu dựng một
+  # môi trường mới. Sau khi Admin gọi PUT /api/admin/notification-settings/push-transport một lần
+  # thì database là nguồn sự thật vĩnh viễn — `helm upgrade` KHÔNG ghi đè lựa chọn đó (cố ý).
+  # Muốn ép lại thì xoá dòng `push.transport` trong bảng, hoặc gọi lại endpoint.
+  #
+  # SignalR — không cần khoá EAS/FCM, không cần device token, nhưng KHÔNG có bằng chứng giao hàng
+  #           ⇒ trạng thái Delivered không bao giờ đạt tới và chuỗi bù SMS cho push critical tự nghỉ.
+  # Expo    — cần device token còn hạn; có đối soát biên nhận nên mới có Delivered.
+  # Both    — gửi cả hai, thành công khi ít nhất một đường thành công.
+  Notification__Push__DefaultTransport: "SignalR"
+  # Bao lâu thì lựa chọn của Admin lan tới worker nền và các pod khác (giây).
+  Notification__Push__CacheSeconds: "30"
+
+  # Hai worker phụ thuộc Expo (ExpoReceiptReconcile, NotificationFallback) tự bật/tắt theo
+  # `push.transport` ở MỖI vòng lặp, nên đổi transport không cần restart pod. Công tắc cứng của
+  # chúng — `Notification__ExpoReceipt__*` và `Notification__Fallback__*` — khai ở khối Sprint 6.3
+  # phía dưới trong file này; đặt `Enabled: false` thì tắt hẳn kể cả khi transport có Expo.
+
+  # ---------- Độ trễ thông báo chat: hai vòng poll nối tiếp ----------
+  # chat → outbox (TicketService) --Outbox__IntervalSeconds--> RabbitMQ
+  #      → dòng Pending (NotificationService) --Dispatch__PollIntervalSeconds--> SignalR
+  # Mặc định trong code của cả hai là 5s ⇒ tổng ~10 giây, đủ để người dùng cho là hỏng.
+  # Từ khi kênh Push thành đường realtime của chat (ADR-0019), phải ghim xuống 1s như compose.
+  Outbox__IntervalSeconds: "1"
+  Notification__Dispatch__PollIntervalSeconds: "1"
 
   MailJet__FromEmail: thangbpse180445@fpt.edu.vn
   MailJet__DisplayName: Solar Panel Battery Maintainance

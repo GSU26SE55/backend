@@ -33,6 +33,9 @@ public class TicketApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "SkipMigration", "true" },
+                // Tắt hạn mức nền: integration test bắn hàng loạt request trong vài giây, dính
+                // trần 60 req/30s của bậc ẩn danh sẽ đỏ vì 429 chứ không phải vì logic sai.
+                { "RateLimiting:Enabled", "false" },
                 // Seeder INSERT alert_ticket_saga_states gặp NOT NULL `xmin` (Postgres system column).
                 // SQLite không support xmin → skip seeder trong integration test.
                 { "SkipSeeder", "true" },

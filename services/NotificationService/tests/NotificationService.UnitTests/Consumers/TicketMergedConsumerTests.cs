@@ -45,8 +45,10 @@ public class TicketMergedConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
         var inbox = new Mock<IInboxStore>();
         var inboxClaims = 0;
-        inbox.Setup(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => Interlocked.Increment(ref inboxClaims) == 1);
+        inbox.Setup(x => x.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Interlocked.Increment(ref inboxClaims) == 1
+                ? new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token")
+                : InboxClaim.Completed);
         var harness = await StartHarness(mediator.Object, inbox);
         var evt = new TicketMergedEvent(Guid.NewGuid(), "TKT-001", Guid.NewGuid(), Guid.NewGuid(), "TKT-002", Guid.NewGuid());
 
@@ -63,8 +65,8 @@ public class TicketMergedConsumerTests
         if (inbox is null)
         {
             inbox = new Mock<IInboxStore>();
-            inbox.Setup(x => x.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
+            inbox.Setup(x => x.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         }
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>

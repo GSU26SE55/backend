@@ -9,8 +9,13 @@ namespace TicketService.Api.Extensions;
 /// <summary>
 /// Built-in .NET 8 rate limiter cho chat write endpoint (Add/Edit/Delete/Pin/Unpin) — theo đúng pattern
 /// đã có ở <c>AuthService.Api.Extensions.RateLimitingExtensions</c> (#520).
-/// Limit: Customer 10/phút/ticket, Staff 30/phút/global, Manager 60/phút/global, Admin unlimited.
+/// Limit: Customer 30/phút/ticket, Staff 60/phút/global, Manager 90/phút/global, Admin không giới hạn.
 /// </summary>
+/// <remarks>
+/// Chạy CHỒNG LÊN hạn mức nền của <c>SharedInfrastructure.RateLimiting</c> (60 req/30s ẩn danh ·
+/// 500 req/30s đã đăng nhập): request phải qua được cả hai. KHÔNG đặt <c>OnRejected</c> hay
+/// <c>RejectionStatusCode</c> ở đây — hai nơi cùng đặt thì nơi đăng ký sau ghi đè nơi trước.
+/// </remarks>
 public static class ChatRateLimitingExtensions
 {
     public const string ChatWritePolicy = "ChatWrite";
@@ -19,8 +24,6 @@ public static class ChatRateLimitingExtensions
     {
         services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
             options.AddPolicy(ChatWritePolicy, httpContext =>
             {
                 var role = httpContext.User.FindFirst(ClaimTypes.Role)?.Value

@@ -30,7 +30,10 @@ public class AiPredictionGrpcClient
         foreach (var row in readings)
         {
             var reading = new Reading();
-            reading.Values.AddRange(row);   // [voltage, current, temperature, time]
+            // GH-777 — chuyển tiếp NGUYÊN số cột của hàng: 4 cột
+            // [voltage, current, temperature, time] hoặc 6 cột khi có thêm
+            // [cycle_count, soc_percent]. Proto khai `repeated double` nên không cần sửa gì.
+            reading.Values.AddRange(row);
             request.Readings.Add(reading);
         }
         if (packConfig is not null)
@@ -57,6 +60,23 @@ public class AiPredictionGrpcClient
             RulCyclesEstimate: resp.RulCyclesEstimate,
             Priority: resp.Risk?.Priority ?? "None",
             ModelVersion: resp.Metadata?.ModelVersion ?? string.Empty,
-            LatencyMs: (int)Math.Round(resp.InferenceMs));
+            LatencyMs: (int)Math.Round(resp.InferenceMs),
+            // Nguyên văn response → soh_predictions.raw_response. Đường gRPC không có sẵn
+            // JSON như HTTP nên phải format lại. JsonFormatter dùng đúng tên field khai
+            // trong proto, nên hai transport ghi ra cùng một hình dạng và truy vấn jsonb
+            // sau này không phải phân biệt request đã đi đường nào.
+            RawResponse: Google.Protobuf.JsonFormatter.Default.Format(resp),
+            // Khối nested — KHÔNG có field phẳng tương ứng, nên trước đây chúng biến mất
+            // hoàn toàn ở ranh giới bridge dù AI vẫn trả đủ.
+            HealthStage: resp.Prediction?.HealthStage,
+            StageConfidence: resp.Prediction is null ? null : (decimal)resp.Prediction.StageConfidence,
+            IsBorderline: resp.Prediction?.IsBorderline ?? false,
+            SohStd: resp.Prediction is null ? null : (decimal)resp.Prediction.SohStd,
+            RiskLevel: resp.Risk?.RiskLevel,
+            ActionCode: resp.Risk?.ActionCode,
+            SohTrend: resp.SohTrend,
+            DegradationRatePerCycle: (decimal)resp.DegradationRatePerCycle,
+            CyclesToMaintenance: resp.CyclesToMaintenance,
+            IsTemperatureOod: resp.Metadata?.IsTemperatureOod ?? false);
     }
 }

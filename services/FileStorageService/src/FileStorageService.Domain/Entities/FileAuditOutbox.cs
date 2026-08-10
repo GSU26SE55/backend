@@ -1,10 +1,11 @@
 using FileStorageService.Domain.Enums;
 using SharedKernels.Domain;
+using SharedKernels.Interfaces;
 
 namespace FileStorageService.Domain.Entities;
 
 /// <summary>Outbox riêng cho audit pipeline FileStorageService (Sprint audit #AUDIT-29). Pattern giống AuthService #AUDIT-07.</summary>
-public class FileAuditOutbox : AuditableEntity
+public class FileAuditOutbox : AuditableEntity, IAuditOutboxMessage
 {
     public Guid EventId { get; set; }
     public string EventType { get; set; } = "AuditCreatedEventV1";

@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,14 +12,39 @@ namespace BatteryService.Application.CQRS.Handler.SensorReading;
 public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorReadingHistoryQuery, CommonResponse<SensorReadingHistoryResponseDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetSensorReadingHistoryQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetSensorReadingHistoryQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<SensorReadingHistoryResponseDto>> Handle(GetSensorReadingHistoryQuery request, CancellationToken cancellationToken)
     {
+        // GH-722 — telemetry thuộc tenant qua asset; Customer chỉ đọc được asset của mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<SensorReadingHistoryResponseDto>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Không xác định được người dùng hiện tại."
+            };
+        }
+
+        // 404 thay vì 403: không tiết lộ rằng asset của tenant khác có tồn tại.
+        if (!await BatteryTenantAccessGuard.CanAccessAssetAsync(_unitOfWork, request.BatteryAssetId, scope, cancellationToken))
+        {
+            return new CommonResponse<SensorReadingHistoryResponseDto>
+            {
+                IsSuccess = false,
+                StatusCode = 404,
+                Message = "Không tìm thấy tài sản pin."
+            };
+        }
+
         var query = _unitOfWork.SensorReadings
             .GetAllAsync()
             .AsNoTracking()

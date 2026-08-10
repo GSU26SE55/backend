@@ -719,7 +719,7 @@ Dữ liệu trả về khi Staff xem lịch sử nhật ký cá nhân (đã gom 
 | `url` | `string?` | Null | URL truy cập file |
 | `isInline` | `bool` | Không | Hiển thị inline trong nội dung chat hay là file đính kèm rời |
 | `downloadCount` | `int` | Không | Số lượt tải |
-| `virusScanStatus` | `VirusScanStatusEnum` | Không | Trạng thái quét virus (chuỗi) — quyết định `GET .../download` trả `200`/`202`/`451` |
+| `virusScanStatus` | `VirusScanStatusEnum` | Không | Trạng thái quét virus (chuỗi) — quyết định `GET .../download` trả `200`/`202`/`451`/`503` |
 | `createdAt` | `string` | Không | Thời điểm upload (UTC) |
 
 **`AttachmentSourceEnum`:**
@@ -734,10 +734,18 @@ Dữ liệu trả về khi Staff xem lịch sử nhật ký cá nhân (đã gom 
 
 | Giá trị | Int | Ý nghĩa | Ảnh hưởng tới `GET .../download` |
 |---|---|---|---|
-| `Pending` | 1 | Chưa quét xong | `202` — thử lại sau |
+| `Pending` | 1 | Chờ tới lượt quét | `202` — thử lại sau |
 | `Clean` | 2 | Sạch | `200` — trả URL download |
 | `Infected` | 3 | Nhiễm virus | `451` — chặn tải |
-| `Failed` | 4 | Quét thất bại | `202` — coi như chưa xác định |
+| `Failed` | 4 | Hỏng hẳn: đã thử đủ số lần cho phép mà vẫn không quét được | `503` — cần quản trị viên xem |
+| `Scanning` | 5 | **GH-790** — đang quét (đã chiếm để xử lý) | `202` — thử lại sau |
+
+> **GH-790 — hai thay đổi FE cần biết:**
+> 1. Thêm giá trị `Scanning` (5). Client nào so khớp đủ nhánh (`switch`/`match`) phải bổ sung, nếu
+>    không sẽ rơi vào nhánh mặc định.
+> 2. `Failed` KHÔNG còn trả `202` mà trả **`503`**. Trước đây mọi trạng thái ngoài `Clean`/`Infected`
+>    đều là `202` "đang quét, thử lại sau" — với một lượt quét đã hỏng hẳn thì đó là lời nói dối:
+>    client hỏi lại mãi mãi và không bao giờ nhận được file.
 
 > ⚠️ Nếu cấu hình `Features.EnableVirusScan = false`, handler **bỏ qua toàn bộ bảng trên** và luôn trả `200` + URL download bất kể `virusScanStatus`.
 
@@ -2493,7 +2501,13 @@ Base path: `/api/admin/tickets`
 
 ### `POST /api/admin/tickets/{id}/re-verify`
 
-**Mục đích:** Kích hoạt AI kiểm tra lại tính hợp lệ của 1 ticket. **Chỉ áp dụng cho ticket tạo tay** đang ở `aiVerifyStatus ∈ {Skipped, Pending}`.
+**Mục đích:** Kích hoạt AI kiểm tra lại tính hợp lệ của 1 ticket — phát hiện ticket spam / trùng lặp.
+**Chỉ áp dụng cho ticket do Customer tự tạo** (`origin = ManualByCustomer` = `1`) đang ở
+`aiVerifyStatus ∈ {Pending, Skipped}`.
+
+**Cách chạy:** handler reset `aiVerifyStatus` về `Pending`, xoá kết quả cũ
+(`aiVerifyScore`, `aiVerifyReason`, `suspectedDuplicateOfTicketId`, `duplicateReason`), rồi gọi AI
+**đồng bộ ngay trong request** — không qua event, vì ticket đã tồn tại nên không có race.
 
 **Auth:** Bắt buộc — **chỉ role `Manager`**.
 
@@ -2501,9 +2515,25 @@ Base path: `/api/admin/tickets`
 
 **Request body:** Không có.
 
-**Response thành công `200`:** `TicketActionResponse` — sau đó đọc lại `aiVerifyStatus`/`aiVerifyScore`/`aiVerifyReason` trên ticket detail.
+**Response thành công `200`:** `TicketActionResponse` (`data`: `id`, `ticketId`, `code`, `status`),
+`message` = `"Đã kiểm tra lại bằng AI."` — sau đó đọc lại
+`aiVerifyStatus` / `aiVerifyScore` / `aiVerifyReason` trên ticket detail.
 
-**Lỗi thường gặp:** `401` · `403` (không phải Manager) · `404` (không tìm thấy ticket).
+**Lỗi thường gặp** (✅ = đã kiểm chứng bằng request thật trên môi trường Docker, 2026-08-06):
+
+| Mã | Khi nào | `message` | |
+|---|---|---|---|
+| `401` | Chưa đăng nhập | — | |
+| `403` | Không phải Manager | — | |
+| `404` | Không tìm thấy ticket hoặc đã soft-delete | `"Không tìm thấy ticket."` | |
+| `400` | `origin ≠ ManualByCustomer` — ticket auto từ alert / Staff tạo / hệ thống tạo | `"Chỉ ticket do khách hàng tạo mới có AI kiểm tra."` | ✅ |
+| `400` | `aiVerifyStatus` đã là `Legitimate` hoặc `Suspicious` | `"Ticket đã được AI đánh giá — không cần kiểm tra lại."` | ✅ |
+| `409` | Ticket đã đóng — chặn bởi `ClosedTicketMutationBehavior` **trước khi** vào handler | `"Ticket đã đóng nên không thể thay đổi."` | ✅ |
+
+> ⚠️ Hai nhánh `400` ở trên **không** được ghi trong tài liệu cũ. Client chỉ bắt `404` sẽ hiển thị sai
+> nguyên nhân cho Manager: nút "kiểm tra lại" trông như hỏng, trong khi thực ra ticket không đủ điều kiện.
+
+> ℹ️ Muốn biết ticket nào gọi được: `origin = 1` **và** `aiVerifyStatus ∈ {1, 4}` **và** ticket chưa đóng.
 
 ---
 
@@ -4147,7 +4177,7 @@ Payload nhẹ dùng cho các hành động chuyển trạng thái.
 | `AutoCloseBackgroundService` | định kỳ | Ticket treo ở `ClosedPendingRate` quá **7 ngày** → `Closed`, ghi activity `AutoClosed`, publish `TicketClosedEvent(IsAutoClosed: true)` |
 | `RatingRequestBackgroundService` | mặc định **60 phút** | Nhắc Customer đánh giá sau **3 ngày** (`Ticket:RatingRequest:*`), idempotent bằng activity `RatingRequested` |
 | `ChatRetentionService` | **hằng ngày 03:00 UTC** | Soft-delete (`IsDeleted = true`) chat cũ hơn `Chat:Retention:ArchiveAfterYears` (**mặc định 2 năm**). Không xoá row — chat cũ **biến mất khỏi mọi query** nhưng vẫn còn trong DB |
-| `VirusScanWorker` | poll | Quét attachment `VirusScanStatus = Pending` qua ClamAV. **Mặc định TẮT** — chỉ bật khi `Chat:Features:EnableVirusScan = true` |
+| `VirusScanWorker` | poll | Quét attachment `VirusScanStatus = Pending` qua ClamAV. **Mặc định TẮT** — chỉ bật khi `Chat:Features:EnableVirusScan = true`.<br>**GH-790:** tải file qua kênh gRPC nội bộ `FileInternal` (trước đây gọi REST `/api/files/{id}/download` không token ⇒ luôn 401). Chiếm bản ghi sang `Scanning` trước khi tải; hỏng tạm thời thì thử lại có giãn cách (`Chat:VirusScan:MaxAttempts`, `RetryBackoffSeconds`), chỉ vào `Failed` khi hết lượt; bản ghi kẹt ở `Scanning` quá `ScanTimeoutSeconds` được thu hồi |
 | `TicketAuditOutboxRelayBackgroundService` | **2 giây**, batch 50, retry tối đa 5 | Đẩy audit event sang AuditAggregator. Có **Redis leader election** (`ticket_audit_outbox_leader`) nên chỉ 1 instance relay |
 
 > **Vì sao quan trọng với FE:**

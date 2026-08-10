@@ -28,5 +28,24 @@ public enum NotificationStatusEnum
     /// Sprint 6.3 NOTI3-14 (#714) — user đã mở notification (bấm vào push / deep link).
     /// Mạnh hơn <see cref="Read"/>: Read có thể chỉ do lướt qua feed.
     /// </summary>
-    Opened = 6
+    Opened = 6,
+
+    /// <summary>
+    /// GH-792 — đã CHIẾM để gửi, chưa biết kết quả.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Trước đây bản ghi ở nguyên <see cref="Pending"/> trong suốt lúc gọi provider, và chỉ chuyển
+    /// <see cref="Sent"/> SAU khi provider đã nhận. Tiến trình chết đúng khoảng giữa hai việc đó là
+    /// bản ghi vẫn <see cref="Pending"/>: vòng quét sau gửi lại, người dùng nhận email/SMS/push lần
+    /// thứ hai và không cách nào đối soát được đã gửi mấy lần.
+    /// </para>
+    /// <para>
+    /// Trạng thái này được ghi và COMMIT <b>trước</b> khi gọi provider, nên sau sự cố bản ghi nằm ở
+    /// đây chứ không rơi lại hàng đợi. Bản ghi kẹt quá lâu sẽ được thu hồi về <see cref="Pending"/>
+    /// (xem <c>NotificationDispatchBackgroundService</c>) — và lần gửi lại đó được chặn trùng ở phía
+    /// nhận nhờ ID message sinh theo <c>NotificationId</c>.
+    /// </para>
+    /// </remarks>
+    Processing = 7
 }

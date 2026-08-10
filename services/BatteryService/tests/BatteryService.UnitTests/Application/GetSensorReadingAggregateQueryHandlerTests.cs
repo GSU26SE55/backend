@@ -32,7 +32,7 @@ public class GetSensorReadingAggregateQueryHandlerTests
             SensorSourceCode = sourceCode
         };
 
-    private static GetSensorReadingAggregateQueryHandler Sut(MockUnitOfWorkBuilder b) => new(b.Build());
+    private static GetSensorReadingAggregateQueryHandler Sut(MockUnitOfWorkBuilder b) => new(b.Build(), TestBatteryCurrentUserService.Admin());
 
     private static GetSensorReadingAggregateQuery Query() => new()
     {

@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Query.Site;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using MediatR;
@@ -13,17 +14,33 @@ namespace BatteryService.Application.CQRS.Handler.Site;
 public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, CommonResponse<PaginationResponse<BatteryAssetDto>>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetSiteAssetsQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetSiteAssetsQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<PaginationResponse<BatteryAssetDto>>> Handle(GetSiteAssetsQuery request, CancellationToken cancellationToken)
     {
-        var siteExists = await _unitOfWork.Sites
-            .GetAllAsync()
-            .AnyAsync(site => site.Id == request.SiteId && !site.IsDeleted, cancellationToken);
+        // GH-722 — Customer chỉ liệt kê được asset của site thuộc mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<PaginationResponse<BatteryAssetDto>>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Không xác định được người dùng hiện tại."
+            };
+        }
+
+        // 404 thay vì 403: không tiết lộ rằng site của tenant khác có tồn tại.
+        var siteExists = await BatteryTenantAccessGuard.CanAccessSiteAsync(_unitOfWork, request.SiteId, scope, cancellationToken)
+            && await _unitOfWork.Sites
+                .GetAllAsync()
+                .AnyAsync(site => site.Id == request.SiteId && !site.IsDeleted, cancellationToken);
 
         if (!siteExists)
         {

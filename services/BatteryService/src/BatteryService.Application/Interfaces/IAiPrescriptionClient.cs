@@ -16,10 +16,21 @@ public interface IAiPrescriptionClient
     /// <see cref="AiPrescriptionResult"/> nếu thành công; <c>null</c> nếu cả gRPC lẫn HTTP fail
     /// (caller bỏ qua enrichment — ticket vẫn tạo được từ Alert, chỉ thiếu prescription text).
     /// </returns>
+    /// <param name="context">
+    /// Lịch sử pin (tuổi chu kỳ, lần bảo trì gần nhất, các lần sửa trước). CHỈ có tác dụng khi
+    /// <paramref name="enrich"/>=true. <c>null</c> = không gửi, giữ nguyên hành vi cũ.
+    /// </param>
+    /// <param name="agentic">
+    /// Bật chain agentic của AI (LLM tự sinh 3–5 truy vấn trước khi retrieve — 2 lượt LLM).
+    /// Chỉ dùng cho thao tác THỦ CÔNG của người dùng; luồng auto-ticket phải để <c>false</c>
+    /// vì nó tốn thêm một lượt LLM trong cùng ngân sách giờ.
+    /// </param>
     Task<AiPrescriptionResult?> PrescribeAsync(
         string batteryId,
         IReadOnlyList<double[]> readings,
         bool enrich = true,
         AiPackConfig? packConfig = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        AiPrescriptionContext? context = null,
+        bool agentic = false);
 }

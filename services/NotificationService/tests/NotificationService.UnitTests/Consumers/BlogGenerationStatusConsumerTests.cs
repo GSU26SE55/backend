@@ -41,8 +41,8 @@ public class BlogGenerationStatusConsumerTests
     private static Mock<IInboxStore> MakeInboxStore()
     {
         var store = new Mock<IInboxStore>();
-        store.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true);
+        store.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         return store;
     }
 
@@ -94,7 +94,13 @@ public class BlogGenerationStatusConsumerTests
         captured.Should().ContainSingle();
         captured[0].UserId.Should().Be(userId);
         captured[0].Type.Should().Be(NotificationTypeEnum.BlogGenerationFailed);
-        captured[0].Body.Should().Contain("thất bại");
+        captured[0].Body.Should().Contain("chưa tạo được");
+        // "DeepSeek timeout" là lỗi timeout → phải được diễn giải thành câu hướng dẫn,
+        // KHÔNG dán message kỹ thuật vào body cho người dùng đọc.
+        captured[0].Body.Should().Contain("thử tạo lại");
+        captured[0].Body.Should().NotContain("DeepSeek");
+        // Message gốc vẫn phải giữ được để tra cứu — nằm ở payload, không phải body.
+        captured[0].PayloadJson.Should().Contain("DeepSeek timeout");
 
         await harness.Stop();
     }
@@ -107,9 +113,9 @@ public class BlogGenerationStatusConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
         var inboxStore = new Mock<IInboxStore>();
-        inboxStore.SetupSequence(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        inboxStore.SetupSequence(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var evt = new BlogGenerationStatusChangedEvent(Guid.NewGuid(), Guid.NewGuid(), "Draft", "Blog", null);
 

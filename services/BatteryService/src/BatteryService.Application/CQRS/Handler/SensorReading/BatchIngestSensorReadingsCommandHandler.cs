@@ -1,5 +1,5 @@
-using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.Common;
+using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.DTOs.Realtime;
 using BatteryService.Application.Interfaces;
@@ -233,8 +233,41 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 c => c);
         }
 
+        // ─── GH-763: lọc trùng TRƯỚC khi add ───
+        //
+        // `sensor_readings` có PK tổ hợp (time, battery_asset_id). Handler cũ add mọi item hợp lệ
+        // rồi mới `SaveChangesAsync`, nên chỉ cần một số đo đã tồn tại là Postgres ném 23505 và
+        // API trả 500 — kéo theo CẢ batch bị rollback, kể cả các số đo MỚI. Thiết bị gửi lại thì
+        // lại 500 y hệt, nên dữ liệu mới không bao giờ vào được.
+        //
+        // Lấy sẵn các khoá đã có trong DB, giới hạn theo tập asset và khoảng thời gian của batch
+        // (một truy vấn, không phải N). KHÔNG lọc `IsDeleted` — `SensorReading` không có cột đó,
+        // và kể cả có thì một dòng đã xoá mềm vẫn chiếm PK nên vẫn phải coi là trùng.
+        var batchKeys = request.Items
+            .Select(i => (i.BatteryAssetId, Time: NormalizeToUtc(i.Time)))
+            .ToList();
+
+        // Vừa là ảnh chụp DB, vừa là sổ ghi các khoá đã gặp trong batch — xem vòng lặp bên dưới.
+        var seenKeys = new HashSet<(Guid AssetId, DateTime Time)>();
+        if (batchKeys.Count > 0)
+        {
+            var dedupeAssetIds = batchKeys.Select(k => k.BatteryAssetId).Distinct().ToList();
+            var minTime = batchKeys.Min(k => k.Time);
+            var maxTime = batchKeys.Max(k => k.Time);
+
+            var found = await _unitOfWork.SensorReadings.GetAllAsync()
+                .Where(r => dedupeAssetIds.Contains(r.BatteryAssetId)
+                            && r.Time >= minTime && r.Time <= maxTime)
+                .Select(r => new { r.BatteryAssetId, r.Time })
+                .ToListAsync(cancellationToken);
+
+            foreach (var row in found)
+                seenKeys.Add((row.BatteryAssetId, row.Time));
+        }
+
         var inserted = 0;
         var skipped = 0;
+        var duplicates = 0;
         var rejectedOutliers = 0;
         var liveReadings = new List<LiveReadingDto>(request.Items.Count);
         foreach (var item in request.Items)
@@ -257,12 +290,24 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 continue;
             }
 
-            var readingTime = item.Time.Kind == DateTimeKind.Unspecified
-                ? DateTime.SpecifyKind(item.Time, DateTimeKind.Utc)
-                : item.Time.ToUniversalTime();
-            // Legacy/current clients do not send SensorSourceCode. Some deployed
-            // Timescale schemas include this column in the composite primary key,
-            // so persist the canonical primary-source tag instead of null.
+            var readingTime = NormalizeToUtc(item.Time);
+
+            // GH-763 — số đo đã có (hoặc lặp ngay trong batch này) thì BỎ QUA, không phải lỗi.
+            // Thiết bị gửi lại sau timeout là chuyện thường; câu trả lời đúng là "đã có rồi",
+            // chứ không phải 500 kéo đổ cả batch.
+            // `Add` trả false khi khoá ĐÃ có — nên một phép này bắt cả hai ca: trùng với dòng
+            // trong DB, và trùng với item trước đó trong CHÍNH batch này (hai item cùng khoá sẽ
+            // làm EF ném ngay ở change tracker, cũng ra 500, chỉ khác thông báo).
+            if (!seenKeys.Add((item.BatteryAssetId, readingTime)))
+            {
+                duplicates++;
+                _metrics.RejectionRecorded("duplicate_reading");
+                continue;
+            }
+
+            // Client hiện tại (và firmware cũ) không gửi SensorSourceCode. Một số schema Timescale
+            // đã triển khai đưa cột này vào khoá chính tổ hợp, nên ghi thẳng nhãn nguồn chuẩn
+            // thay vì null.
             var sensorSourceCode = string.IsNullOrWhiteSpace(item.SensorSourceCode)
                 ? SensorSource.Primary
                 : item.SensorSourceCode.Trim();
@@ -393,11 +438,9 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 DeviceCode = request.DeviceCode!,
                 IdempotencyKey = request.IdempotencyKey!,
                 Inserted = inserted,
-                Skipped = skipped + rejectedOutliers,
+                Skipped = skipped + rejectedOutliers + duplicates,
                 TotalReceived = request.Items.Count,
-                Message = rejectedOutliers > 0
-                    ? $"Ghi nhận readings — {rejectedOutliers} outlier bị loại."
-                    : "Ghi nhận sensor readings thành công.",
+                Message = BuildMessage(rejectedOutliers, duplicates),
                 ExpiresAt = DateTime.UtcNow.Add(IdempotencyTtl)
             });
         }
@@ -422,14 +465,15 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = rejectedOutliers > 0
-                ? $"Ghi nhận readings — {rejectedOutliers} outlier bị loại."
-                : "Ghi nhận sensor readings thành công.",
+            Message = BuildMessage(rejectedOutliers, duplicates),
             Data = new SensorReadingBatchIngestResult
             {
                 TotalReceived = request.Items.Count,
                 Inserted = inserted,
-                Skipped = skipped + rejectedOutliers
+                // GH-763 — số đo trùng tính vào `skipped`, KHÔNG phải lỗi: thiết bị gửi lại sau
+                // timeout là chuyện thường, và firmware đọc chính hai con số này để biết backend
+                // đã nhận đủ hay chưa (xem GH-748).
+                Skipped = skipped + rejectedOutliers + duplicates
             }
         };
     }
@@ -452,6 +496,33 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     /// Loại reading vượt cực biên phần cứng: V&gt;1000 hoặc &lt;0, |I|&gt;1000, T ngoài [-50..150],
     /// SOC ngoài [0..100], SOH ngoài [0..100] (nullable — bỏ qua khi null).
     /// </summary>
+    /// <summary>
+    /// GH-763 — thông báo phải TÁCH số đo trùng khỏi outlier: hai thứ này đòi hai cách xử lý
+    /// khác hẳn nhau. Trùng là thiết bị gửi lại (bình thường); outlier là cảm biến đang hỏng.
+    /// Gộp chung một câu thì người trực không biết có phải đi kiểm phần cứng hay không.
+    /// </summary>
+    private static string BuildMessage(int rejectedOutliers, int duplicates)
+    {
+        if (rejectedOutliers == 0 && duplicates == 0)
+            return "Ghi nhận sensor readings thành công.";
+
+        var parts = new List<string>(2);
+        if (rejectedOutliers > 0)
+            parts.Add($"{rejectedOutliers} outlier bị loại");
+        if (duplicates > 0)
+            parts.Add($"{duplicates} số đo đã có từ trước");
+        return $"Ghi nhận readings — {string.Join(", ", parts)}.";
+    }
+
+    /// <summary>
+    /// GH-763 — chuẩn hoá mốc thời gian về UTC. Tách riêng để việc DÒ TRÙNG và việc GHI dùng
+    /// đúng một phép biến đổi: lệch nhau là dò hụt rồi vẫn dính 23505 lúc lưu.
+    /// </summary>
+    private static DateTime NormalizeToUtc(DateTime time)
+        => time.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(time, DateTimeKind.Utc)
+            : time.ToUniversalTime();
+
     private static bool IsOutlier(decimal voltage, decimal current, decimal temperature, decimal socPercent, decimal? sohPercent)
     {
         if (voltage < 0 || voltage > MaxVoltage)

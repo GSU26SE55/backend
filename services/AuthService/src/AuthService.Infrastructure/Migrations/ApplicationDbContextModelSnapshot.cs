@@ -17,7 +17,7 @@ namespace AuthService.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.2")
+                .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -800,6 +800,15 @@ namespace AuthService.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("last_error");
 
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<DateTime?>("LeaseUntilUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until_utc");
+
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occurred_at");
@@ -827,6 +836,10 @@ namespace AuthService.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAt", "OccurredAt")
                         .HasDatabaseName("ix_outbox_messages_processed_at_occurred_at");
+
+                    b.HasIndex("ProcessedAt", "LeaseUntilUtc", "OccurredAt")
+                        .HasDatabaseName("idx_outbox_claimable")
+                        .HasFilter("processed_at IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
                 });

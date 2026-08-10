@@ -24,6 +24,23 @@ public class SohPredictionConfiguration : IEntityTypeConfiguration<SohPrediction
         builder.Property(p => p.LatencyMs).HasColumnName("latency_ms");
         builder.Property(p => p.RawResponse).HasColumnName("raw_response").HasColumnType("jsonb");
 
+        // Cột rút từ response AI. Bảng này KHÔNG có naming convention tự động — mọi cột
+        // đều phải khai HasColumnName thủ công, nếu không EF lấy thẳng tên property và
+        // sinh ra cột PascalCase giữa một bảng snake_case. Postgres sẽ bắt buộc phải quote
+        // định danh đó mãi mãi ("HealthStage"), và mọi truy vấn tay đều dễ sai.
+        builder.Property(p => p.HealthStage).HasColumnName("health_stage").HasMaxLength(32);
+        builder.Property(p => p.StageConfidence).HasColumnName("stage_confidence").HasPrecision(4, 3);
+        builder.Property(p => p.IsBorderline).HasColumnName("is_borderline").HasDefaultValue(false);
+        builder.Property(p => p.SohStd).HasColumnName("soh_std").HasPrecision(5, 2);
+        builder.Property(p => p.RulCyclesEstimate).HasColumnName("rul_cycles_estimate");
+        builder.Property(p => p.AiPriority).HasColumnName("ai_priority").HasMaxLength(8);
+        builder.Property(p => p.RiskLevel).HasColumnName("risk_level").HasMaxLength(16);
+        builder.Property(p => p.ActionCode).HasColumnName("action_code").HasMaxLength(32);
+        builder.Property(p => p.SohTrend).HasColumnName("soh_trend").HasMaxLength(16);
+        builder.Property(p => p.DegradationRatePerCycle).HasColumnName("degradation_rate_per_cycle").HasPrecision(8, 5);
+        builder.Property(p => p.CyclesToMaintenance).HasColumnName("cycles_to_maintenance");
+        builder.Property(p => p.IsTemperatureOod).HasColumnName("is_temperature_ood").HasDefaultValue(false);
+
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(p => p.CreatedBy).HasColumnName("created_by");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");

@@ -147,7 +147,7 @@ public class SohAlertDedupFlowIntegrationTests
         prescription
             .Setup(c => c.PrescribeAsync(
                 It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
-                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ReturnsAsync(new AiPrescriptionResult(
                 Prescription: "Thay pin",
                 ActionSteps: new[] { "Ngat tai" },
@@ -158,10 +158,29 @@ public class SohAlertDedupFlowIntegrationTests
                 Enriched: true,
                 LlmProvider: "deepseek"));
 
+        // Job đọc soc_mode từ Health để biết gửi 4 hay 6 cột. Khai đúng bộ artifact thật:
+        // NASA/NMC train soc_mode="window", LFP train "cycle".
+        var health = new Mock<IAiHealthClient>();
+        health
+            .Setup(c => c.GetHealthAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiHealthResult(
+                Status: "ok",
+                ModelVersion: "1.6",
+                ScalerLoaded: true,
+                MambaLoaded: true,
+                IsolationForestLoaded: true,
+                LfpLoaded: true,
+                LfpModelVersion: "2.0-lfp",
+                SocMode: "window",
+                LfpSocMode: "cycle",
+                LongLoaded: false,
+                LongModelVersion: "2.2"));
+
         var provider = new Mock<IServiceProvider>();
         provider.Setup(p => p.GetService(typeof(IBatteryUnitOfWork))).Returns(new UnitOfWork(db));
         provider.Setup(p => p.GetService(typeof(IAiPredictionClient))).Returns(prediction.Object);
         provider.Setup(p => p.GetService(typeof(IAiPrescriptionClient))).Returns(prescription.Object);
+        provider.Setup(p => p.GetService(typeof(IAiHealthClient))).Returns(health.Object);
 
         var scope = new Mock<IServiceScope>();
         scope.SetupGet(s => s.ServiceProvider).Returns(provider.Object);
@@ -170,7 +189,16 @@ public class SohAlertDedupFlowIntegrationTests
 
         return new SohPredictionBackgroundService(
             scopeFactory.Object,
-            Options.Create(new AiOptions { Enabled = true, MinReadings = 3, PrescriptionEnabled = true }),
+            // GH-780 — MinReadings = 3 là cấu hình BẤT KHẢ THI: AI từ chối mọi payload khác
+            // AiOptions.WindowSize dòng, nên bộ test cũ đang kiểm một thiết lập không tồn tại được
+            // ở production.
+            Options.Create(new AiOptions
+            {
+                Enabled = true,
+                MinReadings = AiOptions.WindowSize,
+                MaxScanReadings = AiOptions.WindowSize * 2,
+                PrescriptionEnabled = true,
+            }),
             NullLogger<SohPredictionBackgroundService>.Instance);
     }
 
@@ -206,7 +234,7 @@ public class SohAlertDedupFlowIntegrationTests
         });
 
         var t0 = DateTime.UtcNow.AddMinutes(-5);
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < AiOptions.WindowSize; i++)
         {
             db.SensorReadings.Add(new SensorReading
             {
@@ -216,6 +244,10 @@ public class SohAlertDedupFlowIntegrationTests
                 Current = -1.2m,
                 Temperature = 31m,
                 SocPercent = 40m,
+                // Asset seed là LiFePO4, mà bộ LFP train soc_mode="cycle" ⇒ nó từ chối
+                // payload 4 cột. Thiếu cycle_count ở đây là dựng một cửa sổ không thể dự
+                // đoán được ngoài thực tế, và job sẽ bỏ qua asset trước khi gọi AI.
+                CycleCount = 150 + i,
                 SourceType = SensorReadingSourceTypeEnum.Bms,
             });
         }

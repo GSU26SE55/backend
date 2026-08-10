@@ -20,7 +20,7 @@ namespace NotificationService.Infrastructure.Channels;
 /// Sprint 6.3 NOTI3-02 (#702) — lưu ticket id vào <c>push_receipts</c> để
 /// <c>ExpoReceiptReconcileBackgroundService</c> đối soát sau, và chặn payload vượt trần 4KB của Expo.
 /// </summary>
-public class ExpoPushChannel : INotificationChannel
+public class ExpoPushChannel : IExpoPushChannel
 {
     private const string ExpoUrl = "https://exp.host/--/api/v2/push/send";
 
@@ -44,6 +44,8 @@ public class ExpoPushChannel : INotificationChannel
     /// (<c>chatId</c>, <c>ticketId</c>, …) nên không bao giờ có sẵn id này.
     /// </summary>
     private const string NotificationIdKey = "notificationId";
+    private const string EntityTypeKey = "entityType";
+    private const string EntityIdKey = "entityId";
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly INotificationUnitOfWork _unitOfWork;
@@ -185,6 +187,11 @@ public class ExpoPushChannel : INotificationChannel
             ["notificationType"] = (int)request.Type,
         };
 
+        // Gán cặp định tuyến NGAY, trước mọi nhánh thoát sớm. Đặt nó ở cuối hàm là bỏ sót trường
+        // hợp PayloadJson rỗng — mà đó lại là trường hợp thường gặp, và chính là lúc client cần
+        // entityType nhất vì không còn khoá payload nào để đoán.
+        ApplyRoutingKeys(data, request);
+
         if (string.IsNullOrWhiteSpace(request.PayloadJson))
             return data;
 
@@ -211,6 +218,10 @@ public class ExpoPushChannel : INotificationChannel
                 request.NotificationId);
         }
 
+        // Gọi LẠI sau vòng lặp payload: consumer có thể đã ghi một khoá trùng tên vào payload, và
+        // cặp định tuyến phải lấy từ bản ghi notification chứ không phải từ chữ consumer tự viết.
+        ApplyRoutingKeys(data, request);
+
         return data;
     }
 
@@ -224,6 +235,19 @@ public class ExpoPushChannel : INotificationChannel
             or NotificationTypeEnum.ChatReacted
             ? "chat-messages"
             : "alerts-default";
+    }
+
+    /// <summary>
+    /// Ghi cặp <c>entityType</c>/<c>entityId</c> — thứ client dùng để chọn màn hình khi người dùng
+    /// bấm vào push. Lấy từ bản ghi notification nên luôn khớp với danh sách trong ứng dụng.
+    /// </summary>
+    private static void ApplyRoutingKeys(Dictionary<string, object?> data, SendRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.EntityType))
+            data[EntityTypeKey] = request.EntityType;
+
+        if (request.EntityId is not null)
+            data[EntityIdKey] = request.EntityId;
     }
 
     /// <summary>

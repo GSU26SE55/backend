@@ -160,6 +160,59 @@ Base: `/api/admin/tickets/{ticketId}/chats` · **Admin only** · mọi thao tác
 Field liên quan chat: `notifyOnChat`, `notifyOnMention`, `notifyOnReaction`, `digestWindowMinutes`.
 Thuộc **NotificationService** — chi tiết ở [`api-notification.md`](../api-notification.md).
 
+### Ai được báo khi có chat mới *(ADR-0019)*
+
+Danh sách người nhận do **TicketService tính sẵn** và gắn vào `ChatCreatedEvent.RecipientUserIds` —
+NotificationService không có bảng assignment lẫn participant nên không tự suy ra được.
+
+**Ứng viên (cả chat công khai lẫn nội bộ):** chủ ticket + primary handler + supporter + participant
+còn hoạt động (`removed_at IS NULL`) + **mọi người đã từng nhắn trên ticket**.
+`PreviousPrimaryHandler` **không** tính — đã bàn giao thì thôi.
+Tác giả của chính tin nhắn đó luôn bị loại.
+
+> Nguồn "đã từng nhắn" tồn tại vì Admin/Manager nhảy vào trả lời một lần **không** được thêm vào
+> assignment lẫn participant — chỉ dựa vào hai nguồn kia thì họ nhắn xong là mất hút, không bao giờ
+> biết có người trả lời lại.
+
+**Chat công khai:** lấy hết ứng viên.
+
+**Ghi chú nội bộ (`isInternal = true`):** lọc bằng **đúng luật đọc đang chạy** —
+`TicketQueryHelper.CanViewInternalChats(roles, participantCanViewInternal)`, tức là:
+
+```
+Admin | Manager | Staff   (theo vai trò)
+  HOẶC  participant bất kỳ đã được cấp cờ CanViewInternal   (#522)
+```
+
+Danh sách "được báo" vì thế **trùng khít** danh sách "đọc được" — không bỏ sót người có quyền, và
+không hé nội dung nội bộ cho người không có quyền.
+
+⚠️ **Customer mặc định KHÔNG nhận** thông báo ghi chú nội bộ (`TicketCreateCommandHandler` đặt
+`CanViewInternal = false`), **kể cả khi họ đã nhắn công khai trên ticket đó**. Nhưng nếu được cấp cờ
+`CanViewInternal = true` qua `PATCH /api/tickets/{ticketId}/participants/{userId}` (chỉ Manager/Admin)
+thì họ **đọc được** ghi chú nội bộ, và do đó **cũng được báo** — đây là hành vi có chủ đích của #522,
+không phải rò rỉ.
+
+> **Vì sao phải chính xác tới mức này:** nội dung tin nhắn đi **nguyên văn** vào `title`/`body` của
+> thông báo đẩy (mẫu `ChatCreated` là `{{Title}}`/`{{Body}}`), nên nó hiện trên **màn hình khoá**.
+> Danh sách người nhận là ranh giới bảo mật thật sự chứ không chỉ là chuyện tiện dụng.
+
+**Mỗi người nhận sinh 2 record:** `InApp` (vào feed) + `Push` (dựng thông báo hệ điều hành).
+Tiêu đề khác nhau theo loại: `"Tin nhắn mới trên ticket"` / `"Ghi chú nội bộ mới trên ticket"`.
+
+**Payload gửi kèm:**
+
+| Khoá | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `chatId` | `Guid` | Không | Id tin nhắn |
+| `ticketId` | `Guid` | Không | Id ticket |
+| `senderName` | `string` | Không | Tên hiển thị người gửi |
+| `isInternal` | `bool` | Không | `true` ⇒ ghi chú nội bộ. Client nên hiển thị khác đi (nhãn "Nội bộ") |
+
+**Chat bỏ qua quiet hours, digest và hạn mức** — xem
+[Tầng dispatch](../api-notification.md#tầng-dispatch--thứ-tự-cổng-chặn). Muốn tắt thông báo chat thì
+tắt kênh Push hoặc tắt nhóm `Chat` trong tuỳ chọn, quiet hours không còn tác dụng với chúng.
+
 ## Endpoint đã gỡ — không còn tồn tại
 
 | Endpoint | Ghi chú |

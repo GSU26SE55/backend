@@ -25,8 +25,8 @@ public class AccountSyncConsumerTests
 
         _uowMock.SetupGet(u => u.StaffAccounts).Returns(_staffRepoMock.Object);
         _uowMock.SetupGet(u => u.CustomerAccounts).Returns(_customerRepoMock.Object);
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
     }
 
     #region TicketAccountActivatedConsumer Tests
@@ -35,8 +35,8 @@ public class AccountSyncConsumerTests
     public async Task TicketAccountActivatedConsumer_DuplicateMessage_ShouldReturnEarly()
     {
         // Arrange
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var consumer = new TicketAccountActivatedConsumer(_uowMock.Object, _inboxMock.Object);
         var message = new AccountActivatedEvent(Guid.NewGuid(), "staff@test.com", "Staff Name", "12345", "Staff", "Register");
@@ -156,8 +156,8 @@ public class AccountSyncConsumerTests
     [Fact]
     public async Task TicketAccountStatusChangedConsumer_DuplicateMessage_ShouldReturnEarly()
     {
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var consumer = new TicketAccountStatusChangedConsumer(_uowMock.Object, _inboxMock.Object);
         var message = new AccountStatusChangedEvent(Guid.NewGuid(), "staff@test.com", 1, 5, "Reason");
@@ -201,8 +201,8 @@ public class AccountSyncConsumerTests
     [Fact]
     public async Task TicketAccountProfileUpdatedConsumer_DuplicateMessage_ShouldReturnEarly()
     {
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var consumer = new TicketAccountProfileUpdatedConsumer(_uowMock.Object, _inboxMock.Object);
         var message = new AccountProfileUpdatedEvent(Guid.NewGuid(), "test@test.com", "New Name", "98765", null);
@@ -247,8 +247,8 @@ public class AccountSyncConsumerTests
     [Fact]
     public async Task TicketStaffProfileUpdatedConsumer_DuplicateMessage_ShouldReturnEarly()
     {
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var consumer = new TicketStaffProfileUpdatedConsumer(_uowMock.Object, _inboxMock.Object);
         var message = new StaffProfileUpdatedEvent(Guid.NewGuid(), "STF01", 3, true, 2);
@@ -290,8 +290,8 @@ public class AccountSyncConsumerTests
     [Fact]
     public async Task TicketStaffSkillsUpdatedConsumer_DuplicateMessage_ShouldReturnEarly()
     {
-        _inboxMock.Setup(i => i.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var consumer = new TicketStaffSkillsUpdatedConsumer(_uowMock.Object, _inboxMock.Object);
         var message = new StaffSkillsUpdatedEvent(Guid.NewGuid(), new List<string> { "SKL1" });

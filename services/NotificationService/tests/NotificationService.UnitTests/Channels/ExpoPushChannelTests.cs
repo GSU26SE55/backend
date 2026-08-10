@@ -101,6 +101,78 @@ public class ExpoPushChannelTests
         message.GetProperty("channelId").GetString().Should().Be("alerts-critical");
     }
 
+    /// <summary>
+    /// 03/08/2026 — push phải mang theo cặp <c>entityType</c>/<c>entityId</c>.
+    ///
+    /// <para><b>Vì sao:</b> trước đó <c>data</c> chỉ có <c>notificationId</c> cộng các khoá payload,
+    /// nên client phải <i>đoán</i> mở màn nào. Mobile đoán bằng <c>ticketId</c> ⇒ thông báo về pin
+    /// (1.228/1.285 dòng = 95,6%) bấm vào không đi đâu cả, còn danh sách trong app lại dùng
+    /// <c>entityType</c> — cùng một thông báo mà hai đường mở hai màn khác nhau.</para>
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_GuiKemEntityTypeVaEntityId_DeClientMoDungManHinh()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), req =>
+        {
+            captured = req.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var batteryId = Guid.NewGuid();
+        var request = MakeRequest();
+        request.EntityType = "Battery";
+        request.EntityId = batteryId;
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("entityType").GetString().Should().Be("Battery");
+        data.GetProperty("entityId").GetString().Should().Be(batteryId.ToString());
+    }
+
+    /// <summary>
+    /// Payload do consumer viết KHÔNG được ghi đè cặp định tuyến — nếu ghi đè được thì một consumer
+    /// vô tình đặt khoá trùng tên sẽ đẩy người dùng sang màn hình sai.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_PayloadKhongGhiDeDuocEntityType()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), req =>
+        {
+            captured = req.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var request = MakeRequest();
+        request.EntityType = "Battery";
+        request.EntityId = Guid.NewGuid();
+        request.PayloadJson = """{"entityType":"Ticket","screen":"TicketDetail"}""";
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("entityType").GetString().Should().Be("Battery",
+            "cặp định tuyến lấy từ bản ghi notification, không phải từ payload consumer tự viết");
+        data.GetProperty("screen").GetString().Should().Be("TicketDetail",
+            "các khoá payload khác vẫn được gửi kèm như thường");
+    }
+
     [Fact]
     public async Task SendAsync_DeviceNotRegistered_DeactivatesTokenAndReturnsFalse()
     {

@@ -73,6 +73,8 @@ public class EmailTemplateFilesTests
         { EmailTemplates.NotificationGeneric, ["AppName", "Subject", "Body"] },
         { EmailTemplates.SuspiciousLogin, ["AppName", "UserName", "IpAddress", "UserAgent", "Reason", "DetectedAt"] },
         { EmailTemplates.RefreshTokenReuse, ["AppName", "UserName", "IpAddress", "UserAgent", "DetectedAt", "RevokedSessions"] },
+        // GH-768 — link xác nhận bật 2FA xuyên thiết bị.
+        { EmailTemplates.TwoFactorCrossDeviceConfirm, ["AppName", "UserName", "Email", "ConfirmUrl", "ExpiresInMinutes"] },
     };
 
     public static TheoryData<string> AllTemplateNames()
@@ -143,15 +145,23 @@ public class EmailTemplateFilesTests
         CountOccurrences(html, "<tr").Should().Be(CountOccurrences(html, "</tr>"));
     }
 
+    /// <summary>
+    /// GH-768 — dò hằng bằng PHẢN CHIẾU thay vì liệt kê tay.
+    /// </summary>
+    /// <remarks>
+    /// Bản cũ chép tay danh sách hằng, nên thêm template mới mà quên sửa test là test vẫn xanh —
+    /// đúng thứ nó sinh ra để chặn. Phản chiếu thì hằng mới tự động được kiểm.
+    /// </remarks>
     [Fact]
     public void EveryTemplateConstant_HasFileOnDisk()
     {
-        string[] declared =
-        [
-            EmailTemplates.OtpRegister, EmailTemplates.OtpPasswordReset, EmailTemplates.OtpEmailChange,
-            EmailTemplates.AdminInvite, EmailTemplates.NotificationGeneric,
-            EmailTemplates.SuspiciousLogin, EmailTemplates.RefreshTokenReuse,
-        ];
+        var declared = typeof(EmailTemplates)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToArray();
+
+        declared.Should().NotBeEmpty("phản chiếu phải tìm ra được các hằng, nếu không test này rỗng tuếch");
 
         foreach (var name in declared)
         {

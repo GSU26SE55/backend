@@ -79,6 +79,12 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .HasColumnName("dedup_window_end_utc")
             .IsRequired();
 
+        // GH-778 — id prescription của AI (uuid dạng chuỗi). 64 ký tự dư sức, và giới hạn độ dài
+        // để một id dị thường không âm thầm phình cột.
+        builder.Property(a => a.AiPrescriptionId)
+            .HasColumnName("ai_prescription_id")
+            .HasMaxLength(64);
+
         builder.Property(alert => alert.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

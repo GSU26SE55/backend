@@ -7,21 +7,25 @@ using Microsoft.OpenApi.Models;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
-var grpcPort = builder.Configuration.GetValue<int?>("FILE_STORAGE_SERVICE_GRPC_SERVER_PORT")
-    ?? builder.Configuration.GetValue<int?>("Grpc:Port")
-    ?? throw new InvalidOperationException("FILE_STORAGE_SERVICE_GRPC_SERVER_PORT (or Grpc:Port) must be configured.");
-if (grpcPort == 8080)
-    throw new InvalidOperationException("Grpc:Port must differ from HTTP port 8080.");
+// GH-790 — luật đọc cổng gRPC chuyển vào GrpcServerPort để CÓ TEST.
+// Nó quyết định service khởi động được hay không, nhưng nằm ở câu lệnh cấp cao nhất thì không test
+// nào chạm tới; đó là lý do env.prod.example và Helm thiếu biến suốt thời gian dài mà không ai biết.
+var grpcPort = FileStorageService.Infrastructure.Options.GrpcServerPort.Resolve(builder.Configuration);
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(8080, listen => listen.Protocols = HttpProtocols.Http1);
+    options.ListenAnyIP(FileStorageService.Infrastructure.Options.GrpcServerPort.HttpPort,
+        listen => listen.Protocols = HttpProtocols.Http1);
     options.ListenAnyIP(grpcPort, listen => listen.Protocols = HttpProtocols.Http2);
 });
+
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddGrpc();
@@ -38,7 +42,13 @@ builder.Services.AddSwaggerGen(options =>
     }
 });
 builder.Services.AddFileStorageApplication();
-builder.Services.AddFileStorageInfrastructure(builder.Configuration);
+// GH-788 — "cục bộ" phải gồm CẢ môi trường `Docker` chứ không chỉ `Development`: docker-compose của
+// repo đặt ASPNETCORE_ENVIRONMENT=Docker, nên `IsDevelopment()` ở đây từng làm service crash-loop
+// (exit 133) với credential minioadmin hợp lệ của máy cá nhân.
+builder.Services.AddFileStorageInfrastructure(
+    builder.Configuration,
+    FileStorageService.Infrastructure.Options.ObjectStorageCredentialGuard.IsLocalEnvironment(
+        builder.Environment.EnvironmentName));
 builder.Services.AddSharedInfrastructure(builder.Configuration, "FileStorageService.Application", "File Storage Service API");
 
 // Sprint audit #AUDIT-29 — thêm MassTransit (FileStorage chưa có) cho audit pipeline + relay.
@@ -88,6 +98,8 @@ if (!app.Environment.IsEnvironment("Docker")
 
 app.UseAuthentication();
 app.UseAuthorization();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 
 app.MapControllers();
 app.MapGrpcService<FileStorageService.Api.Grpc.FileInternalGrpcService>();

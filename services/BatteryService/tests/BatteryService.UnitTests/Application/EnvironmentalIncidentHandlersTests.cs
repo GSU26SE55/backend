@@ -45,13 +45,18 @@ public class EnvironmentalIncidentHandlersTests
     [Fact]
     public async Task Report_NoActiveIncident_ShouldCreateNewIncidentAlertAndPublishEvent()
     {
-        var (uow, incRepo, aleRepo) = BuildUow(new List<IncidentEntity>());
+        // GH-806 — handler giờ kiểm site tồn tại trước khi tạo (site lạ ⇒ 404 thay vì lỗi khoá
+        // ngoại 500), nên site phải có mặt trong DB giả lập.
+        var siteId = Guid.NewGuid();
+        var (uow, incRepo, aleRepo) = BuildUow(
+            new List<IncidentEntity>(),
+            sites: [new BatteryService.Domain.Entities.Site { Id = siteId, Name = "Site", Status = SiteStatusEnum.Active }]);
         var outbox = new Mock<IIntegrationEventOutboxWriter>();
 
         var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);
         var result = await handler.Handle(new ReportEnvironmentalIncidentCommand
         {
-            SiteId = Guid.NewGuid(),
+            SiteId = siteId,
             IncidentType = EnvironmentalIncidentTypeEnum.Smoke,
             Severity = AlertSeverityEnum.Critical,
             DetectedAt = DateTime.UtcNow.AddMinutes(-1),
@@ -85,7 +90,9 @@ public class EnvironmentalIncidentHandlersTests
             DetectedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
-        var (uow, incRepo, aleRepo) = BuildUow(new List<IncidentEntity> { existing });
+        var (uow, incRepo, aleRepo) = BuildUow(
+            new List<IncidentEntity> { existing },
+            sites: [new BatteryService.Domain.Entities.Site { Id = siteId, Name = "Site", Status = SiteStatusEnum.Active }]);
         var outbox = new Mock<IIntegrationEventOutboxWriter>();
 
         var handler = new ReportEnvironmentalIncidentCommandHandler(uow.Object, outbox.Object, new Mock<IEnvironmentalMetricsRecorder>().Object);

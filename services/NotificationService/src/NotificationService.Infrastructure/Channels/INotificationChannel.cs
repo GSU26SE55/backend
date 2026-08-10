@@ -9,6 +9,22 @@ public interface INotificationChannel
 }
 
 /// <summary>
+/// ADR-0019 — đường push qua hub SignalR tự vận hành.
+///
+/// <para>Hai đường push cần interface riêng vì cả hai đều có <c>ChannelType = Push</c>: đăng ký
+/// chúng dưới <see cref="INotificationChannel"/> thì dispatcher chỉ thấy cái đầu tiên và cái còn
+/// lại chết im lặng. Chỉ <c>CompositePushChannel</c> mới đăng ký dưới interface chung.</para>
+/// </summary>
+public interface ISignalRPushChannel : INotificationChannel
+{
+}
+
+/// <summary>ADR-0019 — đường push qua Expo Push API. Xem ghi chú ở <see cref="ISignalRPushChannel"/>.</summary>
+public interface IExpoPushChannel : INotificationChannel
+{
+}
+
+/// <summary>
 /// Dữ liệu đủ để gửi qua bất kỳ channel nào.
 /// Dispatcher populate các field channel-specific trước khi gọi SendAsync.
 /// </summary>
@@ -25,14 +41,25 @@ public class SendRequest
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public string? PayloadJson { get; set; }
-    public bool IsCritical { get; set; }
 
-    /// <summary>Entity linked to the notification; used by clients for deep links.</summary>
+    /// <summary>
+    /// 03/08/2026 — cặp (loại thực thể, id) mà thông báo này trỏ tới, chép thẳng từ bản ghi
+    /// notification.
+    ///
+    /// <para><b>Vì sao cần đưa xuống tận kênh gửi:</b> push chỉ mang <c>notificationId</c> cộng các
+    /// khoá payload, nên client phải <i>đoán</i> mở màn nào — mà đoán theo khoá payload thì lệch
+    /// ngay với danh sách trong ứng dụng (vốn dùng <c>entityType</c>). Cùng một thông báo, bấm ở
+    /// feed ra một màn, bấm ở push ra màn khác. Gửi kèm cặp này để hai đường dùng chung một nguồn.</para>
+    /// </summary>
     public string? EntityType { get; set; }
 
     public Guid? EntityId { get; set; }
+    public bool IsCritical { get; set; }
 
-    /// <summary>Original creation time, used by clients for ordering and deduplication.</summary>
+    /// <summary>
+    /// ADR-0019 — thời điểm tạo bản ghi gốc (UTC). Client dùng để sắp xếp và khử trùng giữa hai
+    /// đường push: cùng một thông báo có thể tới qua SignalR và qua Expo ở chế độ <c>Both</c>.
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
     /// <summary>

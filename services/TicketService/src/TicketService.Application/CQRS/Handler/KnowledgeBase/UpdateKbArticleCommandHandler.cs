@@ -115,7 +115,12 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                 ChangedBy = command.CurrentUserId
             };
             ApplyContentToVersion(newVersion, command);
-            await _uow.KbArticleVersions.AddAsync(newVersion);
+
+            // Ô (nextMajor, 0) thường đã bị chiếm sẵn bởi bản Pending tạo lúc khởi tạo bài viết —
+            // xem KbArticleVersionSlot. AddAsync thẳng vào đây là 23505 → 500.
+            await KbArticleVersionSlot.UpsertAsync(_uow, newVersion, ct);
+            await KbArticleVersionSlot.RejectOtherPendingAsync(
+                _uow, article.Id, nextMajor, 0, "Đã có bản cập nhật trực tiếp thay thế.", ct);
 
             ApplyContentToArticle(article, command);
             article.Category = command.Category;
@@ -152,32 +157,19 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
 
             if (article.Status == KbArticleStatusEnum.Draft)
             {
-                var currentVersion = await _uow.KbArticleVersions.GetAllAsync()
-                    .FirstOrDefaultAsync(v => v.ArticleId == article.Id
-                        && v.MajorVersion == article.Version + 1
-                        && v.Status == KbVersionStatusEnum.Pending
-                        && !v.IsDeleted, ct);
+                var pending = new KbArticleVersion
+                {
+                    Id = Guid.NewGuid(),
+                    ArticleId = article.Id,
+                    MajorVersion = article.Version + 1,
+                    MinorVersion = 0,
+                    Status = KbVersionStatusEnum.Pending,
+                    ChangeDescription = command.ChangeDescription ?? "Admin cập nhật template",
+                    ChangedBy = command.CurrentUserId
+                };
+                ApplyContentToVersion(pending, command);
 
-                if (currentVersion != null)
-                {
-                    ApplyContentToVersion(currentVersion, command);
-                    _uow.KbArticleVersions.UpdateAsync(currentVersion);
-                }
-                else
-                {
-                    var newPending = new KbArticleVersion
-                    {
-                        Id = Guid.NewGuid(),
-                        ArticleId = article.Id,
-                        MajorVersion = article.Version + 1,
-                        MinorVersion = 0,
-                        Status = KbVersionStatusEnum.Pending,
-                        ChangeDescription = command.ChangeDescription ?? "Admin cập nhật template",
-                        ChangedBy = command.CurrentUserId
-                    };
-                    ApplyContentToVersion(newPending, command);
-                    await _uow.KbArticleVersions.AddAsync(newPending);
-                }
+                await KbArticleVersionSlot.UpsertAsync(_uow, pending, ct);
             }
             else if (article.Status == KbArticleStatusEnum.Published)
             {
@@ -196,7 +188,8 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                     ChangedBy = command.CurrentUserId
                 };
                 ApplyContentToVersion(newVersion, command);
-                await _uow.KbArticleVersions.AddAsync(newVersion);
+
+                await KbArticleVersionSlot.UpsertAsync(_uow, newVersion, ct);
             }
 
             _uow.KnowledgeBaseArticles.UpdateAsync(article);

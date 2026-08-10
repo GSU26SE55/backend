@@ -23,5 +23,23 @@ public record CreateTicketFromAlertCommand(
     DateTime DetectedAt,
     string AnomalyCategory,
     string Title,
-    string Description
+    string Description,
+    // BE-AI structured — forward từ BatteryAnomalyDetectedV2Event để TicketService lưu vào
+    // `ticket_ai_suggestions`. `Description` ở trên VẪN chứa đoạn "--- AI Prescription ---"
+    // (text ghép chuỗi) như cũ — các field này là BỔ SUNG, không thay thế.
+    //
+    // Nullable + CUỐI constructor: saga đã deploy publish command không có field này vẫn
+    // deserialize được ở consumer mới (cùng quy ước với BatteryAnomalyDetectedV2Event).
+    string? AiPrescription = null,
+    IReadOnlyList<string>? AiActionSteps = null,
+    IReadOnlyList<string>? AiPpeRequired = null,
+    IReadOnlyList<string>? AiSopReferences = null,
+    IReadOnlyList<string>? AiEscalationConditions = null,
+    IReadOnlyList<string>? AiSafetyWarnings = null,
+    IReadOnlyList<string>? AiKbDocRefs = null,
+    bool? AiHumanVerificationRequired = null,
+    bool? AiBlocked = null,
+    bool? AiEnriched = null,
+    string? AiLlmProvider = null,
+    string? AiPrescriptionId = null
 ) : IntegrationEvent;

@@ -15,4 +15,11 @@ public static class EmailTemplates
 
     /// <summary>Sprint 6.2 NOTI-04 (#675) — cảnh báo refresh token bị dùng lại (nghi bị đánh cắp).</summary>
     public const string RefreshTokenReuse = "RefreshTokenReuse";
+
+    /// <summary>
+    /// GH-768 — link xác nhận bật 2FA xuyên thiết bị. AuthService đã publish event từ #AUTH-51
+    /// nhưng EmailService chưa từng có consumer, nên người dùng không bao giờ nhận được link và
+    /// không thể hoàn tất — API vẫn báo thành công.
+    /// </summary>
+    public const string TwoFactorCrossDeviceConfirm = "TwoFactorCrossDeviceConfirm";
 }

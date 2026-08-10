@@ -28,7 +28,22 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
             .AsNoTracking()
             .Include(t => t.SlaTimer)
             .Include(t => t.BatteryAssets)
-            .Where(t => !t.IsDeleted && t.Status == TicketStatusEnum.New && t.MergedIntoTicketId == null);
+            // Thiếu Include này thì t.Assignments luôn rỗng → mọi card danh sách
+            // đều hiện "Chưa phân công" dù ticket đã gán Staff (detail thì đúng
+            // vì TicketGetByIdQueryHandler có Include). Lọc !IsDeleted như bên detail.
+            .Include(t => t.Assignments.Where(a => !a.IsDeleted))
+            // Hàng chờ = mọi ticket CHƯA có người quyết mức ưu tiên:
+            //  - New: chờ Manager triage (luồng Customer tạo).
+            //  - Open + Origin=AutoFromAlert: ticket do alert/AI tự tạo — đã được gán sẵn
+            //    Impact/Urgency/Priority trong TicketAutoCreateFromAlertCommandHandler nên
+            //    KHÔNG đi qua TicketTriageCommandHandler. Trước đây chúng rơi khỏi mọi hàng
+            //    chờ: Manager không có chỗ nào rà lại mức AI đoán trước khi gán Staff.
+            //    Đưa vào đây để Manager xác nhận/sửa priority (nút Đổi mức ưu tiên) trước
+            //    khi phân công. Ticket Open do người triage thủ công KHÔNG lọt vào —
+            //    mức ưu tiên của chúng đã có người chịu trách nhiệm.
+            .Where(t => !t.IsDeleted && t.MergedIntoTicketId == null &&
+                        (t.Status == TicketStatusEnum.New ||
+                         (t.Status == TicketStatusEnum.Open && t.Origin == TicketOriginEnum.AutoFromAlert)));
 
         if (request.Priority.HasValue)
             query = query.Where(t => t.Priority == request.Priority.Value);
@@ -36,8 +51,11 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
         if (request.Category.HasValue)
             query = query.Where(t => t.Category == request.Category.Value);
 
-        // P1 first, then P2, P3; within same priority older tickets first
-        query = query.OrderBy(t => t.Priority).ThenBy(t => t.CreatedAt)
+        // Ticket New chưa có Priority (null). Postgres xếp NULL CUỐI khi ORDER BY ASC, nên
+        // nếu sort thẳng theo Priority thì ticket chưa triage bị đẩy xuống sau ticket auto —
+        // ngược với ý nghĩa hàng chờ. Ưu tiên nhóm New lên trước, rồi mới P1→P2→P3.
+        query = query.OrderBy(t => t.Priority == null ? 0 : 1)
+            .ThenBy(t => t.Priority).ThenBy(t => t.CreatedAt)
             .ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
         // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,
@@ -68,11 +86,24 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
             unreadTicketIds = unreadList.ToHashSet();
         }
 
+        // Tên staff cho phần "phụ trách": gom StaffId của cả trang rồi tra 1 lần
+        // (không phải mỗi ticket 1 query). Nhờ vậy MỌI role đọc được tên mà không
+        // cần gọi /api/staff — endpoint đó chỉ mở cho Admin/Manager.
+        var staffIds = page.Items
+            .SelectMany(t => t.Assignments.Where(a => !a.IsDeleted).Select(a => a.StaffId))
+            .Distinct()
+            .ToList();
+        var staffNames = staffIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _unitOfWork.StaffAccounts.GetAllAsync().AsNoTracking()
+                .Where(s => staffIds.Contains(s.AccountId) && !s.IsDeleted)
+                .ToDictionaryAsync(s => s.AccountId, s => s.FullName, cancellationToken);
+
         return new CommonResponse<PaginationResponse<TicketDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id)))
+            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id), staffNames))
         };
     }
 }
