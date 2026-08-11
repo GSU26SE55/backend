@@ -23,7 +23,7 @@ public class GetKbUsageStatsQueryHandler : IRequestHandler<GetKbUsageStatsQuery,
             .FirstOrDefaultAsync(a => a.Id == query.KbArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return new CommonResponse<KbUsageStatsDTO> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy bài viết Knowledge Base." };
+            return new CommonResponse<KbUsageStatsDTO> { IsSuccess = false, StatusCode = 404, Message = "Knowledge Base article not found." };
 
         var references = await _uow.TicketKbReferences.GetAllAsync()
             .Where(r => r.KbArticleId == query.KbArticleId && !r.IsDeleted)

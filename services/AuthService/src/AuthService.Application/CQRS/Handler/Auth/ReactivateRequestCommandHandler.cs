@@ -60,7 +60,7 @@ public class ReactivateRequestCommandHandler : IRequestHandler<ReactivateRequest
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Nếu tài khoản trong window restore 90 ngày, OTP đã được gửi tới email.",
+            Message = "If the account is within the 90-day restore window, an OTP has been sent to the email.",
             Data = normalizedEmail
         };
     }

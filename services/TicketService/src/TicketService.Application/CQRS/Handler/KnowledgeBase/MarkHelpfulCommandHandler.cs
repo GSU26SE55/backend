@@ -22,13 +22,13 @@ public class MarkHelpfulCommandHandler : IRequestHandler<MarkHelpfulCommand, Com
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         article.HelpfulCount++;
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<KbArticleActionDTO> { IsSuccess = true, StatusCode = 200, Message = "Cảm ơn bạn đã phản hồi." };
+        return new CommonResponse<KbArticleActionDTO> { IsSuccess = true, StatusCode = 200, Message = "Thank you for your feedback." };
     }
 
     private static CommonResponse<KbArticleActionDTO> Fail(int statusCode, string message)

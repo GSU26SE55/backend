@@ -35,10 +35,10 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
             .FirstOrDefaultAsync(r => r.Id == request.RoleId && !r.IsDeleted, cancellationToken);
 
         if (role == null)
-            return Fail(404, "Role không tồn tại.");
+            return Fail(404, "Role does not exist.");
 
         if (role.IsSystemRole && !request.AllowSystemRole)
-            return Fail(403, "Không thể thay đổi permission của system role mặc định. Set AllowSystemRole=true nếu muốn override.");
+            return Fail(403, "Cannot change permissions of a default system role. Set AllowSystemRole=true to override.");
 
         var requestedIds = request.PermissionIds.Distinct().ToList();
         var validIds = await _unitOfWork.Permissions
@@ -49,7 +49,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
 
         var missing = requestedIds.Except(validIds).ToList();
         if (missing.Count > 0)
-            return Fail(404, $"Có {missing.Count} permission không tồn tại.");
+            return Fail(404, $"{missing.Count} permission(s) do not exist.");
 
         var existing = await _unitOfWork.RolePermissions
             .GetAllAsync()
@@ -138,7 +138,7 @@ public class SetRolePermissionsCommandHandler : IRequestHandler<SetRolePermissio
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã set {requestedSet.Count} permission cho role {role.Name} (+{toAdd.Count} / -{toRemove.Count}).",
+            Message = $"Set {requestedSet.Count} permission(s) for role {role.Name} (+{toAdd.Count} / -{toRemove.Count}).",
             Data = role.Id
         };
     }

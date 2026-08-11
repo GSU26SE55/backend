@@ -10,8 +10,8 @@ public class CreateNotificationCommandValidationTests
         UserId = userId,
         Type = NotificationTypeEnum.TicketCreated,
         Channel = NotificationChannelEnum.InApp,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
     };
 
     /// <summary>

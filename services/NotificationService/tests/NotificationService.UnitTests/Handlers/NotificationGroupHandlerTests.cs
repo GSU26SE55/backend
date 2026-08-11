@@ -211,7 +211,7 @@ public class NotificationGroupHandlerTests
         resp.Data!.Added.Should().Be(1, "chỉ có fresh là mới; id lặp trong payload phải được gộp");
         resp.Data.AlreadyMembers.Should().Be(1);
         resp.Data.UnknownAccounts.Should().Be(1);
-        resp.Message.Should().Contain("đã có sẵn").And.Contain("không tồn tại");
+        resp.Message.Should().Contain("already in the group").And.Contain("not found");
     }
 
     [Fact]

@@ -45,7 +45,7 @@ public class SendPasswordResetOtpConsumer : IConsumer<SendPasswordResetOtpEvent>
                 var values = new Dictionary<string, string?>
                 {
                     ["AppName"] = appName,
-                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToEmail) ? "bạn" : msg.ToEmail,
+                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToEmail) ? "there" : msg.ToEmail,
                     ["Otp"] = msg.Otp,
                     ["ExpireMinutes"] = OtpExpireMinutes.ToString()
                 };

@@ -27,14 +27,14 @@ public class TicketReVerifyCommandHandler : IRequestHandler<TicketReVerifyComman
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket is null || ticket.IsDeleted)
-            return Fail(404, "Không tìm thấy ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.Origin != TicketOriginEnum.ManualByCustomer)
-            return Fail(400, "Chỉ ticket do khách hàng tạo mới có AI kiểm tra.");
+            return Fail(400, "Only tickets created by a customer are AI-checked.");
 
         if (ticket.AiVerifyStatus != TicketVerifyStatusEnum.Skipped
             && ticket.AiVerifyStatus != TicketVerifyStatusEnum.Pending)
-            return Fail(400, "Ticket đã được AI đánh giá — không cần kiểm tra lại.");
+            return Fail(400, "Ticket has already been evaluated by AI — no need to re-check.");
 
         // Reset về Pending + xóa kết quả cũ (runner chỉ chạy khi Pending), rồi verify NGAY.
         ticket.AiVerifyStatus = TicketVerifyStatusEnum.Pending;
@@ -52,7 +52,7 @@ public class TicketReVerifyCommandHandler : IRequestHandler<TicketReVerifyComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã kiểm tra lại bằng AI.",
+            Message = "Re-checked with AI.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

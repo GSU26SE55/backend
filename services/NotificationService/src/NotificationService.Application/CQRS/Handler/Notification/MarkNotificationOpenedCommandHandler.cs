@@ -38,7 +38,7 @@ public class MarkNotificationOpenedCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy notification."
+                Message = "Notification not found."
             };
         }
 
@@ -49,7 +49,7 @@ public class MarkNotificationOpenedCommandHandler
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Notification đã được đánh dấu đã mở.",
+                Message = "Notification has already been marked as opened.",
                 Data = entity.Id
             };
         }
@@ -114,7 +114,7 @@ public class MarkNotificationOpenedCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh dấu đã mở thành công.",
+            Message = "Marked as opened successfully.",
             Data = entity.Id
         };
     }

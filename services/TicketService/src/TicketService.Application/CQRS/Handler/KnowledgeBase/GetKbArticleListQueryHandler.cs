@@ -31,7 +31,7 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 

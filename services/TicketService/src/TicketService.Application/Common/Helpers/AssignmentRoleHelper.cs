@@ -22,8 +22,8 @@ public static class AssignmentRoleHelper
     public static string GetTierRequirementMessage(TicketPriorityEnum priority) => priority switch
     {
         TicketPriorityEnum.P1Critical => "SeniorSpecialist (Tier 3)",
-        TicketPriorityEnum.P2High => "ModuleSpecialist (Tier 2) trở lên",
-        TicketPriorityEnum.P3Normal => "Generalist (Tier 1) trở lên",
-        _ => "không xác định"
+        TicketPriorityEnum.P2High => "ModuleSpecialist (Tier 2) or higher",
+        TicketPriorityEnum.P3Normal => "Generalist (Tier 1) or higher",
+        _ => "unknown"
     };
 }

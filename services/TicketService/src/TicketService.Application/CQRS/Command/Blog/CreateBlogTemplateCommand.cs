@@ -20,18 +20,18 @@ public class CreateBlogTemplateCommand : IRequest<CommonResponse<BlogTemplateDTO
         var response = new CommonResponse<BlogTemplateDTO>();
 
         if (string.IsNullOrWhiteSpace(Name))
-            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Tên template không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Template name is required." });
         else if (Name.Length > 200)
-            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Tên template tối đa 200 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Template name must be at most 200 characters." });
 
         if (string.IsNullOrWhiteSpace(ContentHtml))
-            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Nội dung template không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Template content is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

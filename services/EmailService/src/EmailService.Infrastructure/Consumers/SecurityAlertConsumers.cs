@@ -61,8 +61,8 @@ public class SuspiciousLoginDetectedConsumer : IConsumer<SuspiciousLoginDetected
                 {
                     ["AppName"] = appName,
                     ["UserName"] = msg.Email,
-                    ["IpAddress"] = string.IsNullOrWhiteSpace(msg.IpAddress) ? "không xác định" : msg.IpAddress,
-                    ["UserAgent"] = string.IsNullOrWhiteSpace(msg.UserAgent) ? "không xác định" : msg.UserAgent,
+                    ["IpAddress"] = string.IsNullOrWhiteSpace(msg.IpAddress) ? "Unknown" : msg.IpAddress,
+                    ["UserAgent"] = string.IsNullOrWhiteSpace(msg.UserAgent) ? "Unknown" : msg.UserAgent,
                     ["Reason"] = SecurityAlertText.DescribeSuspiciousReason(msg.Reason),
                     ["DetectedAt"] = SecurityAlertText.FormatUtc(msg.DetectedAt),
                 };
@@ -71,7 +71,7 @@ public class SuspiciousLoginDetectedConsumer : IConsumer<SuspiciousLoginDetected
                     EmailTemplates.SuspiciousLogin, values, context.CancellationToken);
 
                 await _emailSender.SendAsync(
-                    msg.Email, $"[Cảnh báo bảo mật] Đăng nhập mới trên tài khoản của bạn - {appName}",
+                    msg.Email, $"[Security Alert] New login on your account - {appName}",
                     htmlBody, context.CancellationToken);
 
                 _logger.LogInformation("Suspicious login alert email sent to {Email}.", msg.Email);
@@ -139,8 +139,8 @@ public class RefreshTokenReuseDetectedConsumer : IConsumer<RefreshTokenReuseDete
                 {
                     ["AppName"] = appName,
                     ["UserName"] = msg.Email,
-                    ["IpAddress"] = string.IsNullOrWhiteSpace(msg.IpAddress) ? "không xác định" : msg.IpAddress,
-                    ["UserAgent"] = string.IsNullOrWhiteSpace(msg.UserAgent) ? "không xác định" : msg.UserAgent,
+                    ["IpAddress"] = string.IsNullOrWhiteSpace(msg.IpAddress) ? "Unknown" : msg.IpAddress,
+                    ["UserAgent"] = string.IsNullOrWhiteSpace(msg.UserAgent) ? "Unknown" : msg.UserAgent,
                     ["DetectedAt"] = SecurityAlertText.FormatUtc(msg.DetectedAt),
                     ["RevokedSessions"] = msg.RevokedFamilyCount.ToString(CultureInfo.InvariantCulture),
                 };
@@ -149,7 +149,7 @@ public class RefreshTokenReuseDetectedConsumer : IConsumer<RefreshTokenReuseDete
                     EmailTemplates.RefreshTokenReuse, values, context.CancellationToken);
 
                 await _emailSender.SendAsync(
-                    msg.Email, $"[Cảnh báo bảo mật] Phiên đăng nhập đáng ngờ - {appName}",
+                    msg.Email, $"[Security Alert] Suspicious login session - {appName}",
                     htmlBody, context.CancellationToken);
 
                 _logger.LogInformation("Refresh token reuse alert email sent to {Email}.", msg.Email);
@@ -167,10 +167,10 @@ internal static class SecurityAlertText
 {
     public static string DescribeSuspiciousReason(string? reason) => reason switch
     {
-        "new_ip" => "địa chỉ IP lạ",
-        "new_user_agent" => "thiết bị / trình duyệt lạ",
-        "new_ip_and_user_agent" => "cả địa chỉ IP lẫn thiết bị đều lạ",
-        _ => "dấu hiệu bất thường",
+        "new_ip" => "an unfamiliar IP address",
+        "new_user_agent" => "an unfamiliar device / browser",
+        "new_ip_and_user_agent" => "both an unfamiliar IP address and device",
+        _ => "unusual activity",
     };
 
     public static string FormatUtc(DateTime utc) =>

@@ -54,7 +54,7 @@ public class UpdateBlogPostCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(409);
-        result.Message.Should().Contain("cập nhật bởi người khác");
+        result.Message.Should().Contain("updated by someone else");
     }
 
     [Fact]

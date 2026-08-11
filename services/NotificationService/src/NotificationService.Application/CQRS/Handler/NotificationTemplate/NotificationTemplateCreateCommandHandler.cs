@@ -72,7 +72,7 @@ public class NotificationTemplateCreateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Cặp (loại × kênh) này đã có template. Dùng chức năng sửa để tạo phiên bản mới.",
+                Message = "This (type × channel) pair already has a template. Use the revise function to create a new version.",
             };
         }
 
@@ -103,7 +103,7 @@ public class NotificationTemplateCreateCommandHandler
                 entity.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Tạo template",
+                reason: "Create template",
                 metadata: new Dictionary<string, object?>
                 {
                     ["type"] = entity.Type.ToString(),
@@ -123,7 +123,7 @@ public class NotificationTemplateCreateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không tạo được template.",
+                Message = "Failed to create the template.",
             };
         }
 
@@ -135,7 +135,7 @@ public class NotificationTemplateCreateCommandHandler
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Đã tạo template.",
+            Message = "Template created.",
             Data = entity.Id,
         };
     }

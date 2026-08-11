@@ -31,7 +31,7 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy role."
+                Message = "Role not found."
             };
         }
 
@@ -41,7 +41,7 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không thể chỉnh sửa role hệ thống."
+                Message = "Cannot edit a system role."
             };
         }
 
@@ -57,7 +57,7 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên role đã tồn tại.",
+                Message = "Role name already exists.",
             };
         }
 
@@ -78,7 +78,7 @@ public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, RoleA
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật role thành công.",
+            Message = "Role updated successfully.",
             Data = role.Id
         };
     }

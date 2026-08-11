@@ -41,11 +41,11 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Ticket không tìm thấy.");
+            return Fail(404, "Ticket not found.");
 
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Customer, request.CustomerId);
         if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Không thể đánh giá ticket này.");
+            return Fail(403, transitionResult.Reason ?? "Cannot rate this ticket.");
 
         // Execute rate transition (to Closed)
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Closed, new TransitionContext
@@ -82,7 +82,7 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh giá thành công. Ticket đã được đóng.",
+            Message = "Rating submitted successfully. The ticket has been closed.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

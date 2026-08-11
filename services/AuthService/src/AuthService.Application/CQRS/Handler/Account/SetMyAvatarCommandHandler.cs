@@ -35,7 +35,7 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (account is null)
-            return new AccountResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy tài khoản." };
+            return new AccountResponse { IsSuccess = false, StatusCode = 404, Message = "Account not found." };
 
         var createdProfile = account.Profile is null;
         var profile = account.Profile ?? new AccountProfile
@@ -69,7 +69,7 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật avatar thành công.",
+            Message = "Avatar updated successfully.",
             Data = AccountProfileMapper.ToAccountDto(account)
         };
     }

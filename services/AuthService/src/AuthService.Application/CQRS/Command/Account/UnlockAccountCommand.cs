@@ -18,8 +18,8 @@ public class UnlockAccountCommand : IRequest<AccountActionResponse>, IValidatabl
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Id account không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id account không hợp lệ." });
+            response.Message = "Invalid account Id.";
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid account Id." });
         }
         return Task.FromResult(response);
     }

@@ -75,6 +75,7 @@ public static class ManageDependencyInjection
 
         // Sprint IoT-1 (#248) — offline detection.
         services.AddScoped<IIotDeviceOfflineDetectionService, IotDeviceOfflineDetectionService>();
+        services.AddScoped<IIotDeviceAvailabilityService, IotDeviceAvailabilityService>();
         services.AddHostedService<IotDeviceOfflineDetectionBackgroundService>();
 
         // Sprint IoT-1 (#253) — MQTT bridge (P3, optional).
@@ -134,12 +135,12 @@ public static class ManageDependencyInjection
         services.AddOptions<AiOptions>()
             .Bind(configuration.GetSection(AiOptions.SectionName))
             .Validate(o => o.MinReadings >= AiOptions.WindowSize,
-                $"Ai:MinReadings phải ≥ {AiOptions.WindowSize} — AI từ chối mọi payload khác "
-                + $"{AiOptions.WindowSize} dòng, nên đòi ít mẫu hơn thì đến lúc gửi vẫn không dựng nổi payload.")
+                $"Ai:MinReadings must be >= {AiOptions.WindowSize} — the AI rejects any payload that "
+                + $"does not have exactly {AiOptions.WindowSize} rows, so requiring fewer samples still makes the payload impossible to build.")
             .Validate(o => o.MaxScanReadings >= o.MinReadings,
-                "Ai:MaxScanReadings phải ≥ Ai:MinReadings — quét về ít hơn ngưỡng thì không bao giờ đủ mẫu.")
-            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes phải lớn hơn 0.")
-            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds phải lớn hơn 0.")
+                "Ai:MaxScanReadings must be >= Ai:MinReadings — scanning back fewer rows than the threshold never yields enough samples.")
+            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes must be greater than 0.")
+            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds must be greater than 0.")
             .ValidateOnStart();
         var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
 

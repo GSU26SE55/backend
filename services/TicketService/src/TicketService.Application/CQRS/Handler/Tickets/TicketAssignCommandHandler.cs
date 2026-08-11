@@ -54,19 +54,19 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             .FirstOrDefaultAsync(ct);
 
         if (primaryStaff == null)
-            return Fail(404, "Không tìm thấy thông tin nhân viên PrimaryHandler trong hệ thống.");
+            return Fail(404, "PrimaryHandler staff information not found in the system.");
 
         if (primaryStaff.Status != AccountStatusEnum.Active)
-            return Fail(403, "Tài khoản nhân viên PrimaryHandler đang bị khóa hoặc vô hiệu hóa.");
+            return Fail(403, "The PrimaryHandler staff account is locked or disabled.");
 
         if (!primaryStaff.IsAvailable)
-            return Fail(403, "Nhân viên PrimaryHandler hiện đang không sẵn sàng nhận ticket mới.");
+            return Fail(403, "The PrimaryHandler staff member is currently unavailable to take on new tickets.");
 
         // Tier validation — PrimaryHandler phải đủ tier theo priority của ticket
         if (ticket.Priority.HasValue && !AssignmentRoleHelper.ValidatePrimaryHandlerTier(ticket.Priority.Value, primaryStaff.SkillTier))
         {
             var required = AssignmentRoleHelper.GetTierRequirementMessage(ticket.Priority.Value);
-            return Fail(403, $"Ticket priority {ticket.Priority} yêu cầu PrimaryHandler phải có tier {required}. Nhân viên được chỉ định hiện có tier {primaryStaff.SkillTier}.");
+            return Fail(403, $"Ticket priority {ticket.Priority} requires the PrimaryHandler to have tier {required}. The assigned staff member currently has tier {primaryStaff.SkillTier}.");
         }
 
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, request.ManagerId);

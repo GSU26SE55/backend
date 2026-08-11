@@ -33,7 +33,7 @@ public static class FileAccessGrant
     public static string Issue(string secretKey, Guid fileId, Guid userId, DateTimeOffset expiresAt)
     {
         if (string.IsNullOrWhiteSpace(secretKey))
-            throw new ArgumentException("secretKey không được rỗng.", nameof(secretKey));
+            throw new ArgumentException("secretKey must not be empty.", nameof(secretKey));
 
         var expiry = expiresAt.ToUnixTimeSeconds();
         var signature = Sign(secretKey, fileId, userId, expiry);

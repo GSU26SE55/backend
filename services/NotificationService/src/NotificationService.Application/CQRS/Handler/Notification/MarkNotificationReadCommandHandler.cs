@@ -36,7 +36,7 @@ public class MarkNotificationReadCommandHandler : IRequestHandler<MarkNotificati
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy notification."
+                Message = "Notification not found."
             };
         }
 
@@ -48,7 +48,7 @@ public class MarkNotificationReadCommandHandler : IRequestHandler<MarkNotificati
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Notification đã được đánh dấu đã đọc.",
+                Message = "Notification has already been marked as read.",
                 Data = entity.Id
             };
         }
@@ -123,7 +123,7 @@ public class MarkNotificationReadCommandHandler : IRequestHandler<MarkNotificati
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh dấu đã đọc thành công.",
+            Message = "Marked as read successfully.",
             Data = entity.Id
         };
     }

@@ -61,7 +61,7 @@ public class GetBatteryDashboardStatsQueryHandler
                 {
                     IsSuccess = false,
                     StatusCode = 403,
-                    Message = "Chỉ Admin/Manager được xem thống kê toàn hệ thống. Truyền siteId để xem theo site."
+                    Message = "Only Admin/Manager can view system-wide statistics. Pass siteId to view by site."
                 };
             }
         }
@@ -73,7 +73,7 @@ public class GetBatteryDashboardStatsQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 

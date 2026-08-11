@@ -74,6 +74,6 @@ public class SendOtpRegisterConsumerIntegrationTests : IAsyncLifetime
 
         var renderCalls = _factory.RenderCallsForOtp(otp);
         renderCalls.Should().ContainSingle();
-        renderCalls[0].Values.Should().Contain(kvp => kvp.Key == "UserName" && kvp.Value == "bạn");
+        renderCalls[0].Values.Should().Contain(kvp => kvp.Key == "UserName" && kvp.Value == "there");
     }
 }

@@ -53,14 +53,14 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         }
 
         if (ticket.EscalatedAt.HasValue && ticket.PrimaryHandlerStaffId != request.StaffId)
-            return Fail(403, "Chỉ Staff đang được assign sau escalation mới có thể resolve.");
+            return Fail(403, "Only the Staff assigned after escalation can resolve this ticket.");
 
         if (ticket.EscalationReason == EscalationReasonEnum.SkillGap)
         {
             var staff = await _uow.StaffAccounts.GetAllAsync()
                 .FirstOrDefaultAsync(s => s.AccountId == request.StaffId && !s.IsDeleted, ct);
             if (staff == null || (int)staff.SkillTier < 2)
-                return Fail(403, "Cần Staff Tier cao hơn hiện tại cho SkillGap escalation.");
+                return Fail(403, "A higher Staff Tier is required for SkillGap escalation.");
         }
 
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Resolved, ActorRoleEnum.Staff, request.StaffId);
@@ -75,7 +75,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         foreach (var log in activeLogs)
         {
             log.CompletedAt = DateTime.UtcNow;
-            if (string.IsNullOrEmpty(log.Summary) || log.Summary == "Đang thực hiện...")
+            if (string.IsNullOrEmpty(log.Summary) || log.Summary == "In progress...")
             {
                 log.Summary = request.ResolutionSummary;
             }

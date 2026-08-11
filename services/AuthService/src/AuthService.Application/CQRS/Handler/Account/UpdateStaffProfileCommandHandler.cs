@@ -31,7 +31,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
             .AnyAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         var employeeCode = string.IsNullOrWhiteSpace(request.EmployeeCode) ? null : request.EmployeeCode.Trim();
         if (employeeCode is not null)
@@ -41,7 +41,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
                 .AnyAsync(profile => profile.AccountId != request.AccountId && profile.EmployeeCode == employeeCode && !profile.IsDeleted, cancellationToken);
 
             if (duplicated)
-                return Fail(409, "EmployeeCode đã được sử dụng.");
+                return Fail(409, "EmployeeCode is already in use.");
         }
 
         var profile = await _unitOfWork.StaffProfiles
@@ -85,7 +85,7 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật staff profile thành công.",
+            Message = "Staff profile updated successfully.",
             Data = request.AccountId
         };
     }

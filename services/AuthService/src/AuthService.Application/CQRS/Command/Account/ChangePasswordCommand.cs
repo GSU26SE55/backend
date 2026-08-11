@@ -20,24 +20,24 @@ public class ChangePasswordCommand : IRequest<AccountActionResponse>, IValidatab
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (string.IsNullOrWhiteSpace(CurrentPassword))
-            response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Mật khẩu hiện tại không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Current password is required." });
 
-        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "Mật khẩu mới");
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "New password");
 
         var hasCrossFieldError = false;
 
         if (NewPassword != ConfirmPassword)
         {
-            response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });
+            response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Confirm password does not match." });
             hasCrossFieldError = true;
         }
 
         if (!string.IsNullOrEmpty(CurrentPassword) && CurrentPassword == NewPassword)
         {
-            response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "Mật khẩu mới phải khác mật khẩu hiện tại." });
+            response.ListErrors.Add(new Errors { Field = "NewPassword", Detail = "New password must be different from the current password." });
             hasCrossFieldError = true;
         }
 
@@ -46,7 +46,7 @@ public class ChangePasswordCommand : IRequest<AccountActionResponse>, IValidatab
             response.IsSuccess = false;
             // 422 nếu có cross-field business rule (confirm không match / new = old), 400 cho field validation đơn
             response.StatusCode = hasCrossFieldError ? 422 : 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

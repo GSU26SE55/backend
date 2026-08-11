@@ -35,7 +35,7 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên role đã tồn tại.",
+                Message = "Role name already exists.",
             };
         }
 
@@ -62,7 +62,7 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleA
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo role thành công.",
+            Message = "Role created successfully.",
             Data = role.Id
         };
     }

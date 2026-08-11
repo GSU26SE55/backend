@@ -26,13 +26,13 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (string.IsNullOrEmpty(account.GoogleId))
-            return Fail(409, "Tài khoản chưa được liên kết với Google.");
+            return Fail(409, "Account is not linked to Google.");
 
         if (string.IsNullOrEmpty(account.PasswordHash))
-            return Fail(422, "Không thể bỏ liên kết: tài khoản chưa có mật khẩu local. Vui lòng đặt mật khẩu trước.");
+            return Fail(422, "Cannot unlink: account does not have a local password yet. Please set a password first.");
 
         account.GoogleId = null;
         account.Provider = null;
@@ -48,7 +48,7 @@ public class UnlinkGoogleCommandHandler : IRequestHandler<UnlinkGoogleCommand, A
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Bỏ liên kết Google thành công.",
+            Message = "Google account unlinked successfully.",
             Data = account.Id
         };
     }

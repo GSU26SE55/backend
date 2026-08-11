@@ -22,26 +22,26 @@ public class CreateBlogPostCommand : IRequest<CommonResponse<BlogPostActionDTO>>
         var response = new CommonResponse<BlogPostActionDTO>();
 
         if (string.IsNullOrWhiteSpace(Title))
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title is required." });
         else if (Title.Length > 256)
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề tối đa 256 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 256 characters." });
 
         if (string.IsNullOrWhiteSpace(Slug))
-            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug is required." });
         else if (Slug.Length > 300)
-            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug tối đa 300 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug must be at most 300 characters." });
 
         if (string.IsNullOrWhiteSpace(Summary))
-            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Tóm tắt không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary is required." });
 
         if (string.IsNullOrWhiteSpace(ContentHtml))
-            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Nội dung không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Content is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

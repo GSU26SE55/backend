@@ -33,7 +33,7 @@ public class CreateBlogTemplateCommandHandler : IRequestHandler<CreateBlogTempla
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo template thành công.",
+            Message = "Template created successfully.",
             Data = MapToDto(template)
         };
     }

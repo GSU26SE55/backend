@@ -233,7 +233,7 @@ public class VirusScanWorker : BackgroundService
             // Tải về 0 byte rồi báo "sạch" nghĩa là đính kèm được đánh dấu an toàn mà chưa ai quét
             // nội dung thật của nó.
             throw new RpcException(new Status(StatusCode.DataLoss,
-                $"Tải file {fileId} qua kênh nội bộ trả về 0 byte."));
+                $"Downloading file {fileId} over the internal channel returned 0 bytes."));
         }
 
         return bytes;

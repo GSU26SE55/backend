@@ -23,7 +23,7 @@ public class GetKbArticleVersionByIdQueryHandler : IRequestHandler<GetKbArticleV
             .FirstOrDefaultAsync(v => v.Id == query.VersionId, ct);
 
         if (version == null)
-            return Fail(404, "Không tìm thấy phiên bản bài viết.");
+            return Fail(404, "Article version not found.");
 
         return new CommonResponse<KbArticleVersionDTO>
         {

@@ -18,7 +18,7 @@ public class UpdateSiteCommand : CreateSiteCommand, IRequest<CommonResponse<Site
         ValidateShared(response);
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id site là bắt buộc.");
+            AddError(response, nameof(Id), "Site Id is required.");
 
         return Task.FromResult(response);
     }

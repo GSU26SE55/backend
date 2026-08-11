@@ -65,9 +65,9 @@ public class NotificationEnvironmentalIncidentDetectedConsumer : IConsumer<Envir
             }
 
             // Push title/body — §15.2 EnvironmentalIncidentCritical format
-            var title = $"🚨 Sự cố môi trường: {evt.IncidentType} tại {evt.SiteName}";
+            var title = $"🚨 Environmental incident: {evt.IncidentType} at {evt.SiteName}";
             var plainBody = $"Severity {evt.Severity} — {evt.Description ?? string.Empty}. " +
-                            $"Phát hiện lúc {evt.DetectedAt:HH:mm}. Xử lý ngay!";
+                            $"Detected at {evt.DetectedAt:HH:mm}. Immediate action required!";
 
             var htmlBody = _templateRenderer.Render("environmental-incident-detected", new
             {

@@ -121,5 +121,7 @@ public class IotDevice : AuditableEntity
 
     public ICollection<IotDeviceCalibration> Calibrations { get; set; } = new List<IotDeviceCalibration>();
 
+    public ICollection<Alert> Alerts { get; set; } = new List<Alert>();
+
     public ICollection<IotFirmwareUpdateLog> FirmwareUpdateLogs { get; set; } = new List<IotFirmwareUpdateLog>();
 }

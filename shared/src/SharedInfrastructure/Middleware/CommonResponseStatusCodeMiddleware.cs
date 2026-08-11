@@ -24,16 +24,16 @@ public static class CommonResponseStatusCodeMiddleware
 
             var message = response.StatusCode switch
             {
-                StatusCodes.Status401Unauthorized => "Chưa xác thực hoặc token không hợp lệ.",
-                StatusCodes.Status403Forbidden => "Không có quyền truy cập tài nguyên này.",
-                StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên hoặc endpoint yêu cầu.",
-                StatusCodes.Status405MethodNotAllowed => "HTTP method không được hỗ trợ cho endpoint này.",
-                StatusCodes.Status415UnsupportedMediaType => "Content-Type không được hỗ trợ.",
-                StatusCodes.Status429TooManyRequests => "Quá nhiều request, vui lòng thử lại sau.",
-                StatusCodes.Status502BadGateway => "Upstream service không phản hồi hợp lệ.",
-                StatusCodes.Status503ServiceUnavailable => "Service đang tạm ngừng phục vụ.",
-                StatusCodes.Status504GatewayTimeout => "Upstream service phản hồi quá thời gian cho phép.",
-                _ => $"Request thất bại với mã trạng thái {response.StatusCode}."
+                StatusCodes.Status401Unauthorized => "Not authenticated or invalid token.",
+                StatusCodes.Status403Forbidden => "You do not have permission to access this resource.",
+                StatusCodes.Status404NotFound => "The requested resource or endpoint was not found.",
+                StatusCodes.Status405MethodNotAllowed => "This HTTP method is not supported for this endpoint.",
+                StatusCodes.Status415UnsupportedMediaType => "This Content-Type is not supported.",
+                StatusCodes.Status429TooManyRequests => "Too many requests. Please try again later.",
+                StatusCodes.Status502BadGateway => "The upstream service returned an invalid response.",
+                StatusCodes.Status503ServiceUnavailable => "The service is temporarily unavailable.",
+                StatusCodes.Status504GatewayTimeout => "The upstream service response timed out.",
+                _ => $"Request failed with status code {response.StatusCode}."
             };
 
             await CommonResponseWriter.WriteAsync(

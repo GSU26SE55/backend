@@ -28,21 +28,21 @@ public class ConfirmCrossDevice2FACommand : IRequest<CommonResponse<string>>,
     {
         var response = new CommonResponse<string>();
         if (string.IsNullOrWhiteSpace(ConfirmToken))
-            response.ListErrors.Add(new Errors { Field = "ConfirmToken", Detail = "ConfirmToken là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "ConfirmToken", Detail = "ConfirmToken is required." });
         else if (ConfirmToken.Length != 64 || !ConfirmToken.All(c => Uri.IsHexDigit(c)))
-            response.ListErrors.Add(new Errors { Field = "ConfirmToken", Detail = "ConfirmToken không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ConfirmToken", Detail = "Invalid ConfirmToken." });
         if (string.IsNullOrWhiteSpace(TotpCode))
-            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode is required." });
         else if (TotpCode.Length != 6 || !TotpCode.All(char.IsDigit))
-            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode phải gồm 6 chữ số." });
+            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode must be 6 digits." });
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

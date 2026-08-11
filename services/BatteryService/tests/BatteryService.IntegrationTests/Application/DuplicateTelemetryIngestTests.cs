@@ -218,7 +218,7 @@ public class DuplicateTelemetryIngestTests
         result.Data!.Inserted.Should().Be(1);
         result.Data.Skipped.Should().Be(2);
         result.Message.Should().Contain("outlier");
-        result.Message.Should().Contain("đã có từ trước");
+        result.Message.Should().Contain("already existed");
     }
 
     [Fact]
@@ -236,6 +236,6 @@ public class DuplicateTelemetryIngestTests
 
         result.Data!.Inserted.Should().Be(2);
         result.Data.Skipped.Should().Be(0);
-        result.Message.Should().Be("Ghi nhận sensor readings thành công.");
+        result.Message.Should().Be("Sensor readings recorded successfully.");
     }
 }

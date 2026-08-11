@@ -22,7 +22,7 @@ public class GenerateBlogFromKbCommand : IRequest<CommonResponse<BlogPostActionD
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.ListErrors.Add(new Errors { Field = "KbArticleId", Detail = "ID bài viết KB không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "KbArticleId", Detail = "Invalid KB article ID." });
         }
 
         return Task.FromResult(response);

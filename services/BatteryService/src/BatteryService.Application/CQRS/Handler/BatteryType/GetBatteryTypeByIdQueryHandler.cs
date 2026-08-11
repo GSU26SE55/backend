@@ -30,7 +30,7 @@ public class GetBatteryTypeByIdQueryHandler : IRequestHandler<GetBatteryTypeById
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin."
+                Message = "Battery type not found."
             };
         }
 

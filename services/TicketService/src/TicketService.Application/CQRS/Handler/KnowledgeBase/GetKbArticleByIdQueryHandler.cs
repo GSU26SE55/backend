@@ -25,17 +25,17 @@ public class GetKbArticleByIdQueryHandler : IRequestHandler<GetKbArticleByIdQuer
     public async Task<CommonResponse<KbArticleDTO>> Handle(GetKbArticleByIdQuery query, CancellationToken ct)
     {
         if (!Guid.TryParse(_currentUserService.UserId, out _))
-            return Fail(401, "Chưa đăng nhập.");
+            return Fail(401, "Not logged in.");
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == query.ArticleId, ct);
 
         if (article == null || article.IsDeleted)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         // Block template access on Customer-facing endpoints
         if (query.RequireNonTemplate && article.IsTemplate)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         return new CommonResponse<KbArticleDTO>
         {

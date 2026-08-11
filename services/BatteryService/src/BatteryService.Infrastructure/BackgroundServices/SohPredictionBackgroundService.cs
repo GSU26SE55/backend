@@ -501,7 +501,7 @@ public class SohPredictionBackgroundService : BackgroundService
             var history = resolved
                 .OrderBy(a => a.ResolvedAt)    // đảo lại thành CŨ → MỚI đúng hợp đồng AI
                 .Select(a =>
-                    $"{a.ResolvedAt!.Value:yyyy-MM-dd}: {a.AnomalyType} ({a.Severity}) — đã xử lý")
+                    $"{a.ResolvedAt!.Value:yyyy-MM-dd}: {a.AnomalyType} ({a.Severity}) — resolved")
                 .ToList();
 
             var lastMaintenance = resolved.Count > 0
@@ -532,11 +532,11 @@ public class SohPredictionBackgroundService : BackgroundService
         // AI trả sẵn điều kiện nên escalate; trước đây bridge bỏ luôn nên Staff không có
         // mốc nào để biết khi nào phải nâng cấp xử lý.
         if (presc.EscalationConditions.Count > 0)
-            text += "\nEscalate khi:\n" + string.Join("\n", presc.EscalationConditions.Select(s => "- " + s));
+            text += "\nEscalate when:\n" + string.Join("\n", presc.EscalationConditions.Select(s => "- " + s));
         // Nội dung dưới đây KHÔNG do LLM sinh — nó đã bị safety gate chặn và thay bằng bản
         // rule-based. Không nói ra thì người đọc tưởng đây là khuyến nghị đầy đủ của AI.
         if (presc.Blocked)
-            text += "\n⚠ Nội dung LLM bị chặn bởi safety gate — đây là bản rule-based thay thế.";
+            text += "\n⚠ LLM content blocked by safety gate — this is a rule-based replacement.";
         if (presc.HumanVerificationRequired)
             text += "\n⚠ Human verification required.";
         return text;

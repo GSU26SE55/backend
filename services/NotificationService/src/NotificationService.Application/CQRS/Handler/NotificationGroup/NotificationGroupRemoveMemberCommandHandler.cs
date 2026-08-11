@@ -38,7 +38,7 @@ public class NotificationGroupRemoveMemberCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy nhóm.",
+                Message = "Group not found.",
             };
         }
 
@@ -48,7 +48,7 @@ public class NotificationGroupRemoveMemberCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Nhóm theo vai trò tự suy ra thành viên — không bỏ tay được.",
+                Message = "Role-based group membership is inferred automatically — members cannot be removed manually.",
             };
         }
 
@@ -63,7 +63,7 @@ public class NotificationGroupRemoveMemberCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Người này không có trong nhóm.",
+                Message = "This user is not in the group.",
             };
         }
 
@@ -77,7 +77,7 @@ public class NotificationGroupRemoveMemberCommandHandler
                 group.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Bỏ thành viên khỏi nhóm",
+                reason: "Remove member from group",
                 metadata: new Dictionary<string, object?>
                 {
                     ["groupName"] = group.Name,
@@ -96,7 +96,7 @@ public class NotificationGroupRemoveMemberCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không bỏ được thành viên.",
+                Message = "Failed to remove the member.",
             };
         }
 
@@ -104,7 +104,7 @@ public class NotificationGroupRemoveMemberCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã bỏ thành viên khỏi nhóm.",
+            Message = "Member removed from the group.",
             Data = group.Id,
         };
     }

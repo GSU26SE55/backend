@@ -26,13 +26,13 @@ public class TransferBatteryAssetOwnerCommand : IRequest<CommonResponse<object>>
         var response = new CommonResponse<object>();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(Id), "Battery asset Id is required.");
 
         if (NewCustomerId == Guid.Empty)
-            AddError(response, nameof(NewCustomerId), "Id khách hàng mới là bắt buộc.");
+            AddError(response, nameof(NewCustomerId), "New customer Id is required.");
 
         if (Reason?.Length > 500)
-            AddError(response, nameof(Reason), "Lý do chuyển chủ sở hữu tối đa 500 ký tự.");
+            AddError(response, nameof(Reason), "Ownership transfer reason must not exceed 500 characters.");
 
         return Task.FromResult(response);
     }
@@ -41,7 +41,7 @@ public class TransferBatteryAssetOwnerCommand : IRequest<CommonResponse<object>>
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu chuyển chủ sở hữu pin không hợp lệ.";
+        response.Message = "Invalid battery ownership transfer data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

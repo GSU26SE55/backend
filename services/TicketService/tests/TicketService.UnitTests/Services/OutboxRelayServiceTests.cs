@@ -103,7 +103,7 @@ public class OutboxRelayServiceTests
     public async Task RelayBatchAsync_ChatCreatedEvent_PublishesThroughTransportAndMarksProcessed()
     {
         var evt = new ChatCreatedEvent(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, "Nhân viên", "Nội dung thật",
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, "Staff", "Real content",
             false, [], Guid.NewGuid(), Guid.NewGuid());
         var msg = new OutboxMessage
         {

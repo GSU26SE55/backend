@@ -40,10 +40,10 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(409, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
+            return Fail(409, "Account is already verified or is not in a pending-verification state.");
 
         if (account.OtpExpiredAt.HasValue)
         {
@@ -52,7 +52,7 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
             if (elapsed < ResendCooldownSeconds)
             {
                 var waitSeconds = (int)Math.Ceiling(ResendCooldownSeconds - elapsed);
-                return Fail(429, $"Vui lòng đợi {waitSeconds} giây trước khi yêu cầu gửi lại OTP.");
+                return Fail(429, $"Please wait {waitSeconds} seconds before requesting another OTP.");
             }
         }
 
@@ -72,7 +72,7 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, CommonR
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã gửi lại OTP. Vui lòng kiểm tra email.",
+            Message = "OTP has been resent. Please check your email.",
             Data = normalizedEmail
         };
     }

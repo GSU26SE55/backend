@@ -94,28 +94,28 @@ public static class ObjectStorageCredentialGuard
 
         // Thiếu credential là lỗi ở MỌI môi trường: không có mặc định để rơi về nữa.
         if (string.IsNullOrWhiteSpace(options.AccessKey))
-            errors.Add("ObjectStorage__AccessKey chưa được cấu hình.");
+            errors.Add("ObjectStorage__AccessKey is not configured.");
 
         if (string.IsNullOrWhiteSpace(options.SecretKey))
-            errors.Add("ObjectStorage__SecretKey chưa được cấu hình.");
+            errors.Add("ObjectStorage__SecretKey is not configured.");
 
         if (isLocalEnvironment)
             return errors;
 
         if (IsForbidden(options.AccessKey))
             errors.Add(
-                $"ObjectStorage__AccessKey đang dùng giá trị mặc định/dễ đoán ('{options.AccessKey}'). "
-                + "Sinh giá trị mới: openssl rand -hex 16");
+                $"ObjectStorage__AccessKey is using a default/guessable value ('{options.AccessKey}'). "
+                + "Generate a new one: openssl rand -hex 16");
 
         if (IsForbidden(options.SecretKey))
             errors.Add(
-                "ObjectStorage__SecretKey đang dùng giá trị mặc định/dễ đoán. "
-                + "Sinh giá trị mới: openssl rand -base64 32");
+                "ObjectStorage__SecretKey is using a default/guessable value. "
+                + "Generate a new one: openssl rand -base64 32");
         else if (!string.IsNullOrWhiteSpace(options.SecretKey)
                  && options.SecretKey.Length < MinimumSecretKeyLength)
             errors.Add(
-                $"ObjectStorage__SecretKey quá ngắn ({options.SecretKey.Length} ký tự, "
-                + $"tối thiểu {MinimumSecretKeyLength}).");
+                $"ObjectStorage__SecretKey is too short ({options.SecretKey.Length} characters, "
+                + $"minimum {MinimumSecretKeyLength}).");
 
         return errors;
     }
@@ -134,7 +134,7 @@ public static class ObjectStorageCredentialGuard
             return;
 
         throw new InvalidOperationException(
-            "Cấu hình ObjectStorage không hợp lệ — FileStorageService từ chối khởi động (GH-788):"
+            "Invalid ObjectStorage configuration — FileStorageService refuses to start (GH-788):"
             + Environment.NewLine
             + string.Join(Environment.NewLine, errors.Select(e => "  - " + e)));
     }

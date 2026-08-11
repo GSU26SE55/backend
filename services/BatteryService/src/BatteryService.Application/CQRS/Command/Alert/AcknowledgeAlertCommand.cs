@@ -18,8 +18,8 @@ public class AcknowledgeAlertCommand : IRequest<CommonResponse<object>>, IValida
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Id cảnh báo không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Id cảnh báo là bắt buộc." });
+            response.Message = "Invalid alert Id.";
+            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Alert Id is required." });
         }
 
         return Task.FromResult(response);

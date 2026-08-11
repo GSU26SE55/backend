@@ -34,7 +34,7 @@ public class DeleteBatteryTypeCommandHandler : IRequestHandler<DeleteBatteryType
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể xóa loại pin đang được gán cho tài sản pin."
+                Message = "Cannot delete a battery type that is assigned to battery assets."
             };
         }
 
@@ -45,7 +45,7 @@ public class DeleteBatteryTypeCommandHandler : IRequestHandler<DeleteBatteryType
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa loại pin thành công."
+            Message = "Battery type deleted successfully."
         };
     }
 
@@ -55,7 +55,7 @@ public class DeleteBatteryTypeCommandHandler : IRequestHandler<DeleteBatteryType
         {
             IsSuccess = false,
             StatusCode = 404,
-            Message = "Không tìm thấy loại pin."
+            Message = "Battery type not found."
         };
     }
 }

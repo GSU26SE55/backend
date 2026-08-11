@@ -24,20 +24,20 @@ public class ChatAttachmentBatchAddCommand : IRequest<CommonResponse<List<Ticket
         var response = new CommonResponse<List<TicketAttachmentDTO>>();
 
         if (Files == null || Files.Count == 0)
-            response.ListErrors.Add(new Errors { Field = "Files", Detail = "Danh sách file không được rỗng." });
+            response.ListErrors.Add(new Errors { Field = "Files", Detail = "File list must not be empty." });
         else
         {
             for (int i = 0; i < Files.Count; i++)
             {
                 var f = Files[i];
                 if (f.FileId == Guid.Empty)
-                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].FileId", Detail = "FileId không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].FileId", Detail = "FileId is required." });
                 if (string.IsNullOrWhiteSpace(f.FileName))
-                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].FileName", Detail = "FileName không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].FileName", Detail = "FileName is required." });
                 if (string.IsNullOrWhiteSpace(f.ContentType))
-                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].ContentType", Detail = "ContentType không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].ContentType", Detail = "ContentType is required." });
                 if (f.SizeBytes <= 0)
-                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].SizeBytes", Detail = "SizeBytes phải lớn hơn 0." });
+                    response.ListErrors.Add(new Errors { Field = $"Files[{i}].SizeBytes", Detail = "SizeBytes must be greater than 0." });
             }
         }
 
@@ -45,7 +45,7 @@ public class ChatAttachmentBatchAddCommand : IRequest<CommonResponse<List<Ticket
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

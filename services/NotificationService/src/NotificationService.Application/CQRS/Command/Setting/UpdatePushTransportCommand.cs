@@ -25,14 +25,14 @@ public class UpdatePushTransportCommand : IRequest<PushTransportResponse>, IVali
             response.ListErrors.Add(new Errors
             {
                 Field = "Transport",
-                Detail = "Transport không hợp lệ. Chỉ nhận 1 (SignalR), 2 (Expo) hoặc 3 (Both).",
+                Detail = "Invalid Transport. Only 1 (SignalR), 2 (Expo), or 3 (Both) are accepted.",
             });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

@@ -134,7 +134,7 @@ public class ChatAddCommandHandlerTests
             "Staff User",
             ActivityActionEnum.Chatted,
             null,
-            "[Công khai]",
+            "[Public]",
             It.IsAny<string>()), Times.Once);
 
         _realtimeNotifier.Verify(x => x.NotifyChatAddedAsync(

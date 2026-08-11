@@ -60,7 +60,7 @@ public sealed class TicketReprioritizeCommandHandler : IRequestHandler<TicketRep
             // TicketEscalateRequestCommand) — bổ sung nhân lực, không đụng vào mức ưu tiên.
             if (ticket.Status is not TicketStatusEnum.Open)
             {
-                response = Fail(409, "Chỉ đổi được mức ưu tiên khi phiếu chưa giao cho nhân viên. Phiếu đang xử lý thì dùng chuyển cấp.");
+                response = Fail(409, "Priority can only be changed while the ticket has not yet been assigned to staff. Use escalation for tickets already in progress.");
                 return;
             }
 

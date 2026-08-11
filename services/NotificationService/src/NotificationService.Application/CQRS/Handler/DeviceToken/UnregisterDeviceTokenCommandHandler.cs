@@ -31,7 +31,7 @@ public class UnregisterDeviceTokenCommandHandler : IRequestHandler<UnregisterDev
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy thiết bị đang đăng ký."
+                Message = "No registered device found."
             };
         }
 
@@ -43,7 +43,7 @@ public class UnregisterDeviceTokenCommandHandler : IRequestHandler<UnregisterDev
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Hủy đăng ký thiết bị thành công.",
+            Message = "Device unregistered successfully.",
             Data = entity.Id
         };
     }

@@ -29,7 +29,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
     {
         if (request.ChatIds.Count == 0)
         {
-            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "Không có chat nào để mark-read.", Data = 0 };
+            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "No chats to mark as read.", Data = 0 };
         }
 
         var ticket = await _uow.Tickets.GetAllAsync()
@@ -38,10 +38,10 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
             .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
-            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Ticket." };
+            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
-            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền truy cập ticket." };
+            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
@@ -58,7 +58,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
 
         if (validChatIds.Count == 0)
         {
-            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "Không có chat hợp lệ để mark-read.", Data = 0 };
+            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "No valid chats to mark as read.", Data = 0 };
         }
 
         var alreadyReadChatIds = await _uow.TicketChatReads.GetAllAsync()
@@ -81,7 +81,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Mark-read thành công.",
+            Message = "Marked as read successfully.",
             Data = enqueuedCount
         };
     }

@@ -26,7 +26,7 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "AccountId không hợp lệ."
+                Message = "Invalid AccountId."
             };
         }
 
@@ -36,7 +36,7 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
             {
                 IsSuccess = false,
                 StatusCode = 422,
-                Message = "FromUtc phải nhỏ hơn ToUtc."
+                Message = "FromUtc must be earlier than ToUtc."
             };
         }
 

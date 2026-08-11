@@ -51,17 +51,17 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
         var response = new CommonResponse<SensorReadingHistoryResponseDto>();
 
         if (BatteryAssetId == Guid.Empty)
-            AddError(response, nameof(BatteryAssetId), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(BatteryAssetId), "Battery asset Id is required.");
 
         if (Limit < 1 || Limit > MaxLimit)
-            AddError(response, nameof(Limit), $"Limit phải nằm trong khoảng 1-{MaxLimit}.");
+            AddError(response, nameof(Limit), $"Limit must be between 1 and {MaxLimit}.");
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
-            AddCrossFieldError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
+            AddCrossFieldError(response, nameof(To), "The end time must be greater than or equal to the start time.");
 
         // Hướng B: sort theo cột value (khác time) yêu cầu khoảng [from, to] để giới hạn scan (tránh full-scan hypertable).
         if (NormalizedValueSort() != null && (!From.HasValue || !To.HasValue))
-            AddError(response, nameof(SortBy), "Khi sort theo cột khác 'time' phải truyền cả 'from' và 'to'.");
+            AddError(response, nameof(SortBy), "When sorting by a column other than 'time', both 'from' and 'to' must be provided.");
 
         return Task.FromResult(response);
     }
@@ -70,7 +70,7 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 
@@ -81,7 +81,7 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
         // Do not overwrite 400 (field-level format errors take precedence).
         if (response.StatusCode != 400)
             response.StatusCode = 422;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 

@@ -187,8 +187,8 @@ public class EmailBusChannelUnsubscribeTests
         NotificationId = Guid.NewGuid(),
         UserId = Guid.NewGuid(),
         Type = type,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
         Email = "user@x.com",
     };
 

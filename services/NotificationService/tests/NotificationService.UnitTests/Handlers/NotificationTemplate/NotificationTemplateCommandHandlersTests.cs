@@ -26,7 +26,7 @@ public class NotificationTemplateCommandHandlersTests
     // khi TemplateVariableGuard được nối vào handler, mọi test dùng chúng đều trả 400. Chính là
     // bộ chặn làm đúng việc.
     private static NotificationTemplateCreateCommand CreateCommand(
-        string title = "Tiêu đề {{percentage}}", string body = "Nội dung {{ticketId}}") => new()
+        string title = "Title {{percentage}}", string body = "Content {{ticketId}}") => new()
         {
             Type = NotificationTypeEnum.SlaWarning,
             Channel = NotificationChannelEnum.Email,
@@ -88,7 +88,7 @@ public class NotificationTemplateCommandHandlersTests
     {
         var h = new TemplateHandlerHarness();
 
-        var result = await CreateHandler(h).Handle(CreateCommand(body: "Hỏng {{#if x}} thiếu đóng"), default);
+        var result = await CreateHandler(h).Handle(CreateCommand(body: "Broken {{#if x}} unclosed"), default);
 
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(400);
@@ -111,7 +111,7 @@ public class NotificationTemplateCommandHandlersTests
         // {{ticketCode}} — đúng cú pháp, nhưng SlaWarning không có khoá đó (consumer chỉ ghi
         // ticketId/staffId/percentage/warningAt/screen).
         var result = await CreateHandler(h).Handle(
-            CreateCommand(title: "Cảnh báo SLA {{ticketCode}}"), default);
+            CreateCommand(title: "SLA warning {{ticketCode}}"), default);
 
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(400);
@@ -125,7 +125,7 @@ public class NotificationTemplateCommandHandlersTests
         var h = new TemplateHandlerHarness();
 
         var result = await CreateHandler(h).Handle(
-            CreateCommand(body: "Còn {{percent}} phần trăm"), default);
+            CreateCommand(body: "{{percent}} percent remaining"), default);
 
         result.Message.Should().Contain("percentage",
             "báo sai thôi chưa đủ — phải chỉ luôn tên đúng thì người soạn mới sửa được ngay");
@@ -146,8 +146,8 @@ public class NotificationTemplateCommandHandlersTests
         var result = await ReviseHandler(h).Handle(new NotificationTemplateReviseCommand
         {
             Id = current.Id,
-            TitleTemplate = "Tiêu đề mới {{code}}",
-            BodyTemplate = "Nội dung mới",
+            TitleTemplate = "New title {{code}}",
+            BodyTemplate = "New content",
             ActorUserId = Actor,
         }, default);
 
@@ -158,7 +158,7 @@ public class NotificationTemplateCommandHandlersTests
         var revision = h.Templates.Single(t => t.Id != current.Id);
         revision.Version.Should().Be(2);
         revision.IsActive.Should().BeTrue();
-        revision.TitleTemplate.Should().Be("Tiêu đề mới {{code}}");
+        revision.TitleTemplate.Should().Be("New title {{code}}");
         revision.Type.Should().Be(current.Type, "sửa không được đổi cặp (Type × Channel)");
         revision.Channel.Should().Be(current.Channel);
     }
@@ -212,7 +212,7 @@ public class NotificationTemplateCommandHandlersTests
         var result = await ReviseHandler(h).Handle(new NotificationTemplateReviseCommand
         {
             Id = current.Id,
-            TitleTemplate = "{{#each}} hỏng",
+            TitleTemplate = "{{#each}} broken",
             BodyTemplate = "ok",
             ActorUserId = Actor,
         }, default);

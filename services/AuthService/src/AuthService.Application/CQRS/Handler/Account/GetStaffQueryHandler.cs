@@ -25,7 +25,7 @@ public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, StaffAssignme
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "TicketPriority không hợp lệ. Giá trị hợp lệ: P1Critical, P2High, P3Normal."
+                Message = "Invalid TicketPriority. Valid values: P1Critical, P2High, P3Normal."
             };
         }
 
@@ -60,7 +60,7 @@ public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, StaffAssignme
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Lấy danh sách staff thành công.",
+            Message = "Staff list retrieved successfully.",
             Data = staff.Select(AccountProfileMapper.ToStaffAssignmentProfileDto).ToList()
         };
     }

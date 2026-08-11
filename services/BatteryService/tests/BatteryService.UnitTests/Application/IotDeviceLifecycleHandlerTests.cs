@@ -125,11 +125,13 @@ public class IotDeviceLifecycleHandlerTests
     }
 
     [Fact]
-    public async Task Heartbeat_InsertsHistoryRowAndUpdatesLastSeen()
+    public async Task Heartbeat_RequiresTwoConsecutiveSignalsBeforeOfflineDeviceRecovers()
     {
         var deviceId = Guid.NewGuid();
         var device = ActiveDevice(deviceId, Guid.NewGuid());
-        device.Status = IotDeviceStatusEnum.Offline; // sẽ flip lên Active
+        device.Status = IotDeviceStatusEnum.Offline;
+        device.LastSeenAt = DateTime.UtcNow.AddMinutes(-10);
+        device.LastOfflineAt = DateTime.UtcNow.AddMinutes(-5);
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
         var handler = new IotDeviceHeartbeatCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder());
 
@@ -148,7 +150,25 @@ public class IotDeviceLifecycleHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Data!.NextHeartbeatInSeconds.Should().Be(60);
         result.Data.ClockSkewWarning.Should().BeFalse();
-        uow.IotDeviceHeartbeats.Verify(r => r.AddAsync(It.IsAny<IotDeviceHeartbeat>()), Times.Once);
+        device.Status.Should().Be(IotDeviceStatusEnum.Offline,
+            "one isolated heartbeat must not revive a flapping device");
+
+        var second = await handler.Handle(new IotDeviceHeartbeatCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow,
+            RssiDbm = -54,
+            FreeMemoryPercent = 66m,
+            UptimeSeconds = 3660,
+            QueuedReadingCount = 0
+        }, default);
+
+        second.IsSuccess.Should().BeTrue();
+        device.Status.Should().Be(IotDeviceStatusEnum.Active,
+            "the second healthy signal inside the expected cadence confirms recovery");
+        uow.IotDeviceHeartbeats.Verify(r => r.AddAsync(It.IsAny<IotDeviceHeartbeat>()), Times.Exactly(2));
     }
 
     [Fact]

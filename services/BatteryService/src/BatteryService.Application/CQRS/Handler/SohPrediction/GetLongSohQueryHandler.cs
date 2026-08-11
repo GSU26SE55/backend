@@ -41,7 +41,7 @@ public class GetLongSohQueryHandler : IRequestHandler<GetLongSohQuery, CommonRes
             .FirstOrDefaultAsync(cancellationToken);
 
         if (asset is null)
-            return Fail(404, "Không tìm thấy pin.");
+            return Fail(404, "Battery not found.");
 
         var limit = Math.Clamp(request.Limit, MinSeq, MaxSeq);
 
@@ -59,7 +59,7 @@ public class GetLongSohQueryHandler : IRequestHandler<GetLongSohQuery, CommonRes
             .ToListAsync(cancellationToken);
 
         if (desc.Count < MinSeq)
-            return Fail(409, $"Pin cần ít nhất {MinSeq} số đo cho phân tích chuỗi dài, hiện có {desc.Count}.");
+            return Fail(409, $"Battery needs at least {MinSeq} readings for long-sequence analysis, currently has {desc.Count}.");
 
         var window = desc.OrderBy(r => r.Time).ToList();
         var packConfig = BuildPackConfig(asset.NominalVoltage, asset.NominalCapacityAh, asset.Chemistry);
@@ -80,7 +80,7 @@ public class GetLongSohQueryHandler : IRequestHandler<GetLongSohQuery, CommonRes
             window.Select(r => new[] { (double)r.Voltage, (double)r.Current, (double)r.Temperature }).ToList(),
             packConfig);
         if (filtered.AcceptedCount < MinSeq)
-            return Fail(409, $"Chỉ còn {filtered.AcceptedCount} số đo hợp lệ sau khi loại ngoại lai.");
+            return Fail(409, $"Only {filtered.AcceptedCount} valid readings remain after removing outliers.");
         readings = filtered.AcceptedIndices.Select(i => readings[i]).ToList();
         // time phải bắt đầu từ 0 SAU khi lọc, nếu không cột time không còn liên tục từ gốc.
         var baseTime = readings[0][3];
@@ -91,7 +91,7 @@ public class GetLongSohQueryHandler : IRequestHandler<GetLongSohQuery, CommonRes
             request.BatteryAssetId.ToString(), readings, packConfig, cancellationToken);
 
         if (result is null)
-            return Fail(503, "AI không phản hồi cho phân tích chuỗi dài.");
+            return Fail(503, "AI did not respond for long-sequence analysis.");
 
         return new CommonResponse<LongSohDto>
         {

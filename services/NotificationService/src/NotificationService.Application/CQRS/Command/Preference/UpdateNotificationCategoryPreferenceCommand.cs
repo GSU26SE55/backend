@@ -37,10 +37,10 @@ public class UpdateNotificationCategoryPreferenceCommand
         var response = new NotificationPreferenceMatrixResponse();
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Không xác định được user." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Unable to determine the user." });
 
         if (Items.Count == 0)
-            response.ListErrors.Add(new Errors { Field = "Items", Detail = "Cần ít nhất một nhóm để cập nhật." });
+            response.ListErrors.Add(new Errors { Field = "Items", Detail = "At least one category must be provided to update." });
 
         foreach (var item in Items)
         {
@@ -49,7 +49,7 @@ public class UpdateNotificationCategoryPreferenceCommand
                 response.ListErrors.Add(new Errors
                 {
                     Field = "Items.Category",
-                    Detail = $"Nhóm '{(int)item.Category}' không hợp lệ.",
+                    Detail = $"Category '{(int)item.Category}' is invalid.",
                 });
             }
         }
@@ -61,7 +61,7 @@ public class UpdateNotificationCategoryPreferenceCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "Items.Category",
-                Detail = $"Nhóm '{category}' xuất hiện nhiều lần trong cùng một request.",
+                Detail = $"Category '{category}' appears more than once in the same request.",
             });
         }
 
@@ -69,7 +69,7 @@ public class UpdateNotificationCategoryPreferenceCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

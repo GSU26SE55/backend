@@ -30,7 +30,7 @@ public class GetAlertByIdQueryHandler : IRequestHandler<GetAlertByIdQuery, Commo
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Unable to determine the current user."
             };
         }
 
@@ -56,7 +56,7 @@ public class GetAlertByIdQueryHandler : IRequestHandler<GetAlertByIdQuery, Commo
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy cảnh báo."
+                Message = "Alert not found."
             };
         }
 

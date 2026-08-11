@@ -40,24 +40,24 @@ public class ChatOverrideDeleteCommand : IRequest<TicketActionResponse>, IValida
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (ChatId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "ChatId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "Invalid ChatId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (string.IsNullOrWhiteSpace(OverrideReason))
-            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "Bắt buộc nhập lý do override khi ticket đã đóng." });
+            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "An override reason is required when the ticket is closed." });
         else if (OverrideReason.Length > 1000)
-            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "Lý do override tối đa 1000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "Override reason must be at most 1000 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

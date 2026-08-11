@@ -36,7 +36,7 @@ public class RevokeTrustedDeviceCommandHandler : IRequestHandler<RevokeTrustedDe
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy thiết bị tin cậy."
+                Message = "Trusted device not found."
             };
         }
 
@@ -46,7 +46,7 @@ public class RevokeTrustedDeviceCommandHandler : IRequestHandler<RevokeTrustedDe
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Thiết bị đã được thu hồi trước đó.",
+                Message = "Device was already revoked.",
                 Data = device.Id
             };
         }
@@ -69,7 +69,7 @@ public class RevokeTrustedDeviceCommandHandler : IRequestHandler<RevokeTrustedDe
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã thu hồi thiết bị '{device.Label}'.",
+            Message = $"Revoked device '{device.Label}'.",
             Data = device.Id
         };
     }

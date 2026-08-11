@@ -21,31 +21,31 @@ public static class BatteryAnomalyLabels
     private static readonly IReadOnlyDictionary<string, string> AnomalyTypes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Overheat"] = "Quá nhiệt",
-            ["Overvoltage"] = "Quá áp",
-            ["Undervoltage"] = "Sụt áp",
-            ["LowSoc"] = "Dung lượng thấp",
-            ["RapidDischarge"] = "Xả nhanh bất thường",
-            ["AbnormalCharging"] = "Sạc bất thường",
-            ["DeviceOffline"] = "Thiết bị mất kết nối",
-            ["SohDegradation"] = "Suy giảm tuổi thọ pin",
-            ["HighAmbientTemp"] = "Nhiệt độ môi trường cao",
-            ["HighHumidity"] = "Độ ẩm cao",
-            ["HighTempHumidityCombo"] = "Nhiệt độ và độ ẩm cùng cao",
-            ["HighInternalResistance"] = "Điện trở trong cao",
-            ["CellImbalance"] = "Lệch cân bằng cell",
-            ["EnvironmentalIncident"] = "Sự cố môi trường",
-            ["SensorMismatch"] = "Cảm biến sai lệch",
-            ["Undertemp"] = "Nhiệt độ quá thấp",
+            ["Overheat"] = "Overheating",
+            ["Overvoltage"] = "Overvoltage",
+            ["Undervoltage"] = "Undervoltage",
+            ["LowSoc"] = "Low state of charge",
+            ["RapidDischarge"] = "Abnormally rapid discharge",
+            ["AbnormalCharging"] = "Abnormal charging",
+            ["DeviceOffline"] = "Device offline",
+            ["SohDegradation"] = "Battery health degradation",
+            ["HighAmbientTemp"] = "High ambient temperature",
+            ["HighHumidity"] = "High humidity",
+            ["HighTempHumidityCombo"] = "High temperature and humidity combined",
+            ["HighInternalResistance"] = "High internal resistance",
+            ["CellImbalance"] = "Cell imbalance",
+            ["EnvironmentalIncident"] = "Environmental incident",
+            ["SensorMismatch"] = "Sensor mismatch",
+            ["Undertemp"] = "Low temperature",
         };
 
     /// <summary>Khớp <c>BatteryService.Domain.Enums.AlertSeverityEnum</c> (3 giá trị).</summary>
     private static readonly IReadOnlyDictionary<string, string> Severities =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Info"] = "Thông tin",
-            ["Warning"] = "Cảnh báo",
-            ["Critical"] = "Nghiêm trọng",
+            ["Info"] = "Info",
+            ["Warning"] = "Warning",
+            ["Critical"] = "Critical",
         };
 
     /// <summary>

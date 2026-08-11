@@ -45,20 +45,20 @@ public class Confirm2FACommandHandler : IRequestHandler<Confirm2FACommand, Commo
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
-            return Fail(409, "2FA đã được bật.");
+            return Fail(409, "2FA is already enabled.");
 
         var pending = await _pending.GetAsync(account.Id, cancellationToken);
         if (pending == null)
-            return Fail(422, "Phiên setup đã hết hạn hoặc chưa init. Hãy gọi /2fa/init lại.");
+            return Fail(422, "Setup session has expired or was not initialized. Please call /2fa/init again.");
 
         if (!string.Equals(pending.PendingToken, request.PendingToken, StringComparison.Ordinal))
-            return Fail(422, "PendingToken không khớp.");
+            return Fail(422, "PendingToken does not match.");
 
         if (!_totp.VerifyCode(pending.Secret, request.Code))
-            return Fail(422, "Mã xác thực không đúng. Hãy kiểm tra thời gian thiết bị + thử lại.");
+            return Fail(422, "Invalid verification code. Please check your device time and try again.");
 
         // Encrypt secret trước khi lưu DB
         account.TwoFactorSecret = _protector.Protect(pending.Secret);
@@ -94,7 +94,7 @@ public class Confirm2FACommandHandler : IRequestHandler<Confirm2FACommand, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Bật 2FA thành công. LƯU LẠI 8 backup codes — chúng chỉ hiển thị 1 lần.",
+            Message = "2FA enabled successfully. SAVE the 8 backup codes — they are shown only once.",
             Data = new TwoFactorConfirmDto
             {
                 Enabled = true,

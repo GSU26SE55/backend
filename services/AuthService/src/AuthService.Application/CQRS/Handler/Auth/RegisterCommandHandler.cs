@@ -44,7 +44,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (existing != null && existing.Status != AccountStatusEnum.PendingVerification)
-            return Fail(409, "Email đã được sử dụng.");
+            return Fail(409, "Email is already in use.");
 
         if (!string.IsNullOrEmpty(phone))
         {
@@ -55,7 +55,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (phoneOwnerId.HasValue && (existing == null || phoneOwnerId.Value != existing.Id))
-                return Fail(409, "Số điện thoại đã được sử dụng.");
+                return Fail(409, "Phone number is already in use.");
         }
 
         var otp = OtpHelper.GenerateOtp(6);
@@ -73,7 +73,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
             if (customerRoleId is null)
             {
                 _logger.LogError("Register failed: system role 'CUSTOMER' không tồn tại trong DB. Cần seed roles trước khi cho phép đăng ký.");
-                return Fail(500, "Đăng ký thất bại do lỗi hệ thống. Vui lòng thử lại.");
+                return Fail(500, "Registration failed due to a system error. Please try again.");
             }
         }
 
@@ -151,15 +151,15 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
                 {
                     var c = constraint.ToLowerInvariant();
                     if (c.Contains("email"))
-                        return Fail(409, "Email đã được sử dụng.");
+                        return Fail(409, "Email is already in use.");
                     if (c.Contains("phone"))
-                        return Fail(409, "Số điện thoại đã được sử dụng.");
+                        return Fail(409, "Phone number is already in use.");
                 }
-                return Fail(409, "Email hoặc số điện thoại đã được sử dụng.");
+                return Fail(409, "Email or phone number is already in use.");
             }
             // Lỗi DB khác → log + 500.
             _logger.LogError(ex, "Register SaveChanges failed with non-unique-violation DB error.");
-            return Fail(500, "Đăng ký thất bại do lỗi hệ thống. Vui lòng thử lại.");
+            return Fail(500, "Registration failed due to a system error. Please try again.");
         }
 
         return BuildSuccess(normalizedEmail);
@@ -169,7 +169,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
     {
         IsSuccess = true,
         StatusCode = 201,
-        Message = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực OTP.",
+        Message = "Registration successful. Please check your email to verify the OTP.",
         Data = new RegisterResponseData
         {
             Email = normalizedEmail,

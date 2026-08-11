@@ -65,7 +65,7 @@ public class SmsFailedConsumer : IConsumer<SmsFailedEvent>
         notification.Status = NotificationStatusEnum.Failed;
         notification.SentAt = null;
         notification.FailureReason = Truncate(
-            $"SMS gateway thất bại ({evt.PhoneNumber}): {evt.ErrorMessage ?? "không rõ lý do"}", 1000);
+            $"SMS gateway failed ({evt.PhoneNumber}): {evt.ErrorMessage ?? "unknown reason"}", 1000);
         notification.NextAttemptAt = null;
 
         _unitOfWork.Notifications.UpdateAsync(notification);

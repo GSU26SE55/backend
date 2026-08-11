@@ -27,7 +27,7 @@ public class RestoreSiteCommandHandler : IRequestHandler<RestoreSiteCommand, Com
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site đã xóa."
+                Message = "Deleted site not found."
             };
         }
 
@@ -45,7 +45,7 @@ public class RestoreSiteCommandHandler : IRequestHandler<RestoreSiteCommand, Com
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể khôi phục vì tên site đã được sử dụng cho khách hàng này."
+                Message = "Cannot restore because the site name is already used by this customer."
             };
         }
 
@@ -58,7 +58,7 @@ public class RestoreSiteCommandHandler : IRequestHandler<RestoreSiteCommand, Com
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Khôi phục site thành công."
+            Message = "Site restored successfully."
         };
     }
 }

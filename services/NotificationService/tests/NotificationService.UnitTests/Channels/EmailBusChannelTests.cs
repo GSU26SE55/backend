@@ -26,8 +26,8 @@ public class EmailBusChannelTests
         {
             NotificationId = notificationId,
             UserId = Guid.NewGuid(),
-            Title = "Ticket được giao",
-            Body = "Ticket #123 đã được giao cho bạn.",
+            Title = "Ticket assigned",
+            Body = "Ticket #123 has been assigned to you.",
             Email = "staff@example.com"
         };
 
@@ -38,8 +38,8 @@ public class EmailBusChannelTests
             It.Is<SendNotificationEmailEvent>(evt =>
                 evt.NotificationId == notificationId &&
                 evt.ToEmail == "staff@example.com" &&
-                evt.Subject == "Ticket được giao" &&
-                evt.Body == "Ticket #123 đã được giao cho bạn." &&
+                evt.Subject == "Ticket assigned" &&
+                evt.Body == "Ticket #123 has been assigned to you." &&
                 evt.SourceService == "notification"),
             It.IsAny<CancellationToken>()), Times.Once);
     }

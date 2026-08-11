@@ -16,15 +16,15 @@ public class DownloadFileQuery : IRequest<CommonResponse<FileDownloadResponse>>,
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "ObjectKey là bắt buộc.";
-            response.ListErrors.Add(new Errors { Field = nameof(ObjectKey), Detail = "ObjectKey là bắt buộc." });
+            response.Message = "ObjectKey is required.";
+            response.ListErrors.Add(new Errors { Field = nameof(ObjectKey), Detail = "ObjectKey is required." });
         }
         else if (ObjectKey.Contains("..", StringComparison.Ordinal))
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "ObjectKey không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(ObjectKey), Detail = "ObjectKey không được chứa '..'." });
+            response.Message = "Invalid ObjectKey.";
+            response.ListErrors.Add(new Errors { Field = nameof(ObjectKey), Detail = "ObjectKey must not contain '..'." });
         }
 
         return Task.FromResult(response);

@@ -18,7 +18,7 @@ public class GetBlogPostVersionsQueryHandler : IRequestHandler<GetBlogPostVersio
     {
         var postExists = await _uow.BlogPosts.AnyAsync(x => x.Id == request.BlogPostId && !x.IsDeleted);
         if (!postExists)
-            return new CommonResponse<List<BlogPostVersionDTO>> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+            return new CommonResponse<List<BlogPostVersionDTO>> { IsSuccess = false, StatusCode = 404, Message = "Post not found." };
 
         var entities = await _uow.BlogPostVersions.GetAllAsync()
             .Where(x => x.BlogPostId == request.BlogPostId && !x.IsDeleted)

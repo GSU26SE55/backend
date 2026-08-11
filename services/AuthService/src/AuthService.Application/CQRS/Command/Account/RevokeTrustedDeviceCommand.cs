@@ -27,14 +27,14 @@ public class RevokeTrustedDeviceCommand : IRequest<AccountActionResponse>, IVali
     {
         var response = new AccountActionResponse();
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
         if (TrustedDeviceId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TrustedDeviceId", Detail = "Id thiết bị không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TrustedDeviceId", Detail = "Invalid device Id." });
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

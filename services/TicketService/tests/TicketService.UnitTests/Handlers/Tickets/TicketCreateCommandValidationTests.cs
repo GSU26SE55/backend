@@ -16,7 +16,7 @@ public class TicketCreateCommandValidationTests
 
         result.IsSuccess.Should().BeFalse();
         result.ListErrors.Should().Contain(error => error.Field == "BatteryAssetIds"
-            && error.Detail.Contains("chính xác một pin"));
+            && error.Detail.Contains("Exactly one battery"));
     }
 
     [Fact]

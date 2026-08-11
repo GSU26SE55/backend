@@ -42,10 +42,10 @@ public class RegenerateBackupCodesCommandHandler : IRequestHandler<RegenerateBac
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (!account.TwoFactorEnabled || string.IsNullOrEmpty(account.TwoFactorSecret))
-            return Fail(409, "2FA chưa được bật. Hãy enroll trước.");
+            return Fail(409, "2FA is not enabled. Please enroll first.");
 
         var plaintextSecret = _protector.Unprotect(account.TwoFactorSecret);
         if (!_totp.VerifyCode(plaintextSecret, request.TotpCode))
@@ -57,7 +57,7 @@ public class RegenerateBackupCodesCommandHandler : IRequestHandler<RegenerateBac
                 Reason: "Wrong TOTP for backup code regenerate"
             ), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(422, "Mã xác thực không đúng.");
+            return Fail(422, "Invalid verification code.");
         }
 
         // Xóa hết codes cũ (hard delete via soft-delete flag — interceptor handle)
@@ -98,7 +98,7 @@ public class RegenerateBackupCodesCommandHandler : IRequestHandler<RegenerateBac
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã sinh 8 backup codes mới. Codes cũ đã bị vô hiệu hóa.",
+            Message = "8 new backup codes generated. The old codes have been invalidated.",
             Data = new BackupCodesDto { BackupCodes = newPlain.ToList() }
         };
     }

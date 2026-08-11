@@ -43,7 +43,7 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
         var isManagerOrAdmin = TicketQueryHelper.IsManagerOrAdmin(request.ActorRoles);
 
         if (chat is null || (chat.IsInternal && !canViewInternalChats))
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var loadChildData = !chat.IsDeleted || isManagerOrAdmin;
 
@@ -93,7 +93,7 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
             PinnedAt = chat.PinnedAt,
             PinnedByUserId = chat.PinnedByUserId?.ToString(),
             IsDeleted = chat.IsDeleted,
-            Body = chat.IsDeleted && !isManagerOrAdmin ? "Tin nhắn này đã bị xóa." : chat.Body,
+            Body = chat.IsDeleted && !isManagerOrAdmin ? "This message has been deleted." : chat.Body,
             BodyHtml = chat.IsDeleted && !isManagerOrAdmin ? null : chat.BodyHtml,
             BodyFormat = chat.IsDeleted && !isManagerOrAdmin ? default : chat.BodyFormat,
             AttachmentFileIds = loadChildData ? attachments.Select(a => a.FileId).ToList() : [],

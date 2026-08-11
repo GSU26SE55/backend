@@ -499,6 +499,7 @@ services:
       Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      Mqtt__LwtOfflineGraceSeconds: ${Mqtt__LwtOfflineGraceSeconds:-90}
       # GH-784 — nơi ghi thông tin đăng nhập thiết bị để broker biết chúng tồn tại. Bỏ trống ⇒
       # KHÔNG đồng bộ, và thiết bị vừa cấp sẽ nhận "not authorised" dù API trả 201.
       Mqtt__PasswordFilePath: ${Mqtt__PasswordFilePath:-/mosquitto-config/passwd}

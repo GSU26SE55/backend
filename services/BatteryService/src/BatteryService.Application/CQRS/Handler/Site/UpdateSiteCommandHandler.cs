@@ -33,7 +33,7 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể đổi chủ sở hữu site qua endpoint cập nhật."
+                Message = "Cannot change the site owner via the update endpoint."
             };
         }
 
@@ -52,7 +52,7 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên site đã tồn tại cho khách hàng này.",
+                Message = "Site name already exists for this customer.",
             };
         }
 
@@ -79,7 +79,7 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật site thành công.",
+            Message = "Site updated successfully.",
             Data = BatteryMapper.ToDto(entity, customerName)
         };
     }
@@ -90,7 +90,7 @@ public class UpdateSiteCommandHandler : IRequestHandler<UpdateSiteCommand, Commo
         {
             IsSuccess = false,
             StatusCode = 404,
-            Message = "Không tìm thấy site."
+            Message = "Site not found."
         };
     }
 

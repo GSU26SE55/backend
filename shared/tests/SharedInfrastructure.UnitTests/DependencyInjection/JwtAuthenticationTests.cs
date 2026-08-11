@@ -181,7 +181,7 @@ public class JwtAuthenticationTests
         var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
         // Handler trả Vietnamese localized + data.errorCode = "FORBIDDEN" (xem AddJWTAuthenticationAuthorization.cs).
-        doc.RootElement.GetProperty("message").GetString().Should().Be("Bạn không có quyền truy cập tài nguyên này.");
+        doc.RootElement.GetProperty("message").GetString().Should().Be("You do not have permission to access this resource.");
         doc.RootElement.GetProperty("data").GetProperty("errorCode").GetString().Should().Be("FORBIDDEN");
     }
 }

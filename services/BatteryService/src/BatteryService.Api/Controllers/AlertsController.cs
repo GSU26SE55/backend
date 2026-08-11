@@ -45,7 +45,7 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Liệt kê Alert có phân trang + filter (severity/status/anomalyType/assetId/site/time range) — sort theo DetectedAt DESC. Manager/Staff dashboard dùng query này.
+    /// Liệt kê Alert có phân trang + filter (severity/status/assetId/time range) — sort theo DetectedAt DESC. Manager/Staff dashboard dùng query này.
     /// </summary>
     /// <remarks>
     /// Query parameters:
@@ -62,9 +62,9 @@ public class AlertsController : ControllerBase
     /// - Sort theo <c>DetectedAt</c> giảm dần (alert mới nhất lên đầu).
     ///
     /// Lưu ý phân quyền dữ liệu:
-    /// - Endpoint cho phép tất cả role đăng nhập gọi. Hiện <b>chưa</b> có server-side filter để giới hạn Customer
-    ///   chỉ thấy alert của asset thuộc mình. FE/Mobile nên truyền <c>BatteryAssetId</c> trỏ về asset của Customer
-    ///   để giới hạn dữ liệu.
+    /// - Admin/Manager/Staff có phạm vi không giới hạn; Customer được server tự lọc theo cả
+    ///   BatteryAsset.CustomerId và Site.CustomerId. Client không thể mở rộng tenant scope bằng
+    ///   cách tự truyền BatteryAssetId.
     /// </remarks>
     /// <param name="query">Filter + phân trang.</param>
     /// <param name="cancellationToken">Token hủy request.</param>

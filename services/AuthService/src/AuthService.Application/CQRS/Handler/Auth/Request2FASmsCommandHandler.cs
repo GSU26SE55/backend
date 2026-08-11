@@ -39,22 +39,22 @@ public class Request2FASmsCommandHandler : IRequestHandler<Request2FASmsCommand,
     {
         var challenge = await _challengeStore.GetAsync(request.ChallengeToken, cancellationToken);
         if (challenge == null)
-            return Fail(422, "Phiên xác thực không hợp lệ hoặc đã hết hạn.");
+            return Fail(422, "Authentication session is invalid or has expired.");
 
         var account = await _unitOfWork.Accounts.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == challenge.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại.");
+            return Fail(404, "Account does not exist.");
 
         if (!account.PhoneConfirmed || string.IsNullOrEmpty(account.PhoneNumber))
-            return Fail(409, "Tài khoản chưa verify số điện thoại — không thể nhận SMS OTP fallback.");
+            return Fail(409, "Account has not verified a phone number — cannot receive SMS OTP fallback.");
 
         var otp = OtpHelper.GenerateOtp(6);
         await _smsOtpStore.SetAsync(request.ChallengeToken, otp, OtpTtl, cancellationToken);
 
         await _messageProducer.PublishAsync(new SendSmsCommand(
             PhoneNumber: account.PhoneNumber,
-            Message: $"Mã xác thực 2FA của bạn: {otp}. Có hiệu lực trong {OtpTtl.TotalMinutes:F0} phút.",
+            Message: $"Your 2FA verification code: {otp}. Valid for {OtpTtl.TotalMinutes:F0} minutes.",
             SourceService: "auth",
             CorrelationId: challenge.AccountId,
             Category: "2fa_sms"), cancellationToken);
@@ -63,7 +63,7 @@ public class Request2FASmsCommandHandler : IRequestHandler<Request2FASmsCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"OTP đã gửi tới số điện thoại đã đăng ký. Có hiệu lực {OtpTtl.TotalMinutes:F0} phút.",
+            Message = $"OTP has been sent to your registered phone number. Valid for {OtpTtl.TotalMinutes:F0} minutes.",
             Data = MaskPhoneNumber(account.PhoneNumber)
         };
     }

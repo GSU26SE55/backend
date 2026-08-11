@@ -37,7 +37,7 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -135,7 +135,7 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa tài khoản thành công. PII đã được ẩn danh.",
+            Message = "Account deleted successfully. PII has been anonymized.",
             Data = account.Id
         };
     }

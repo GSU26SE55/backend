@@ -53,22 +53,22 @@ public class BatteryAnomalyWarningConsumer : IConsumer<BatteryAnomalyWarningDete
             }
 
             var isInfo = evt.Severity == SeverityInfo;
-            var serial = string.IsNullOrWhiteSpace(evt.AssetSerialNumber) ? "(không rõ serial)" : evt.AssetSerialNumber;
+            var serial = string.IsNullOrWhiteSpace(evt.AssetSerialNumber) ? "(unknown serial)" : evt.AssetSerialNumber;
 
             // T#11 Info → chỉ InApp; T#12 Warning → InApp + Push.
             var type = isInfo ? NotificationTypeEnum.BatteryAnomalyInfo : NotificationTypeEnum.BatteryAnomalyWarning;
             var channels = isInfo ? NotificationWriter.InAppOnly : NotificationWriter.InAppPush;
 
             var title = isInfo
-                ? $"Ghi nhận thông số pin {serial}"
-                : $"⚠️ Cảnh báo pin {serial}";
+                ? $"Battery reading recorded for {serial}"
+                : $"⚠️ Battery alert {serial}";
             // 03/08/2026 — xem chú thích cùng chủ đề ở NotificationBatteryAnomalyDetectedConsumer.
             var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
             var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
 
-            var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {serial} " +
-                       $"lúc {evt.DetectedAt:dd/MM HH:mm}" +
-                       (evt.ActualValue.HasValue ? $" (giá trị {evt.ActualValue} {evt.Unit})." : ".");
+            var body = $"{anomalyLabel} (level {severityLabel}) on battery {serial} " +
+                       $"at {evt.DetectedAt:dd/MM HH:mm}" +
+                       (evt.ActualValue.HasValue ? $" (value {evt.ActualValue} {evt.Unit})." : ".");
 
             var payload = JsonSerializer.Serialize(new
             {

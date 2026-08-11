@@ -25,16 +25,16 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         if (article.IsTemplate && !command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-            return Fail(403, "Chỉ Admin mới có thể hoàn tác phiên bản của template.");
+            return Fail(403, "Only Admin can roll back a template version.");
 
         var version = await _uow.KbArticleVersions.GetAllAsync()
             .FirstOrDefaultAsync(v => v.Id == command.ToVersionId, ct);
 
         if (version == null)
-            return Fail(404, "Không tìm thấy phiên bản yêu cầu.");
+            return Fail(404, "Requested version not found.");
 
         var nextMajor = article.Version + 1;
 
@@ -62,14 +62,14 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
             Title = article.Title,
             Content = article.Content,
             Tags = article.Tags.ToList(),
-            ChangeDescription = $"Khôi phục từ phiên bản v{version.MajorVersion}.{version.MinorVersion}",
+            ChangeDescription = $"Restored from version v{version.MajorVersion}.{version.MinorVersion}",
             ChangedBy = command.CurrentUserId
         };
         // Ô (nextMajor, 0) có thể đã bị chiếm bởi bản Pending sinh lúc khởi tạo bài viết (article.Version
         // vẫn là 0 trong khi row 1.0 đã tồn tại) — xem KbArticleVersionSlot. AddAsync thẳng là 23505 → 500.
         await KbArticleVersionSlot.UpsertAsync(_uow, restoredVersion, ct);
         await KbArticleVersionSlot.RejectOtherPendingAsync(
-            _uow, article.Id, nextMajor, 0, "Bài viết đã được hoàn tác về phiên bản khác.", ct);
+            _uow, article.Id, nextMajor, 0, "Article has been rolled back to a different version.", ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -77,7 +77,7 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Bài viết đã được hoàn tác về phiên bản v{version.MajorVersion}.{version.MinorVersion}.",
+            Message = $"Article has been rolled back to version v{version.MajorVersion}.{version.MinorVersion}.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

@@ -27,7 +27,7 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Accou
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not authenticated."
             };
         }
 
@@ -46,7 +46,7 @@ public class GetMyProfileQueryHandler : IRequestHandler<GetMyProfileQuery, Accou
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 

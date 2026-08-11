@@ -25,13 +25,13 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         if (article.IsTemplate)
-            return Fail(400, "Template không có approval flow. Dùng endpoint publish để xuất bản template.");
+            return Fail(400, "Templates do not have an approval flow. Use the publish endpoint to publish templates.");
 
         if (article.Status != KbArticleStatusEnum.PendingReview)
-            return Fail(409, "Bài viết không ở trạng thái Chờ phê duyệt.");
+            return Fail(409, "Article is not in Pending Review status.");
 
         // Find the latest pending version to approve
         var nextMajor = article.Version + 1;
@@ -63,7 +63,7 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
                 foreach (var v in otherPendingVersions)
                 {
                     v.Status = KbVersionStatusEnum.Rejected;
-                    v.ManagerRejectReason = "Đã phê duyệt một phiên bản khác.";
+                    v.ManagerRejectReason = "Another version has been approved.";
                     _uow.KbArticleVersions.UpdateAsync(v);
                 }
             }
@@ -86,7 +86,7 @@ public class ApproveReviewCommandHandler : IRequestHandler<ApproveReviewCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Yêu cầu thay đổi đã được phê duyệt và cập nhật nội dung thành công.",
+            Message = "Change request has been approved and the content updated successfully.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

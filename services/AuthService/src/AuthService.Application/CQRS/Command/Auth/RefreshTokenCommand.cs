@@ -16,8 +16,8 @@ public class RefreshTokenCommand : IRequest<LoginResponse>, IValidatable<LoginRe
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Refresh token không được để trống.";
-            response.ListErrors.Add(new Errors { Field = "RefreshToken", Detail = "Refresh token không được để trống." });
+            response.Message = "Refresh token is required.";
+            response.ListErrors.Add(new Errors { Field = "RefreshToken", Detail = "Refresh token is required." });
         }
         return Task.FromResult(response);
     }

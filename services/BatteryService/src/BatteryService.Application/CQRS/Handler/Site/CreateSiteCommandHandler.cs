@@ -33,7 +33,7 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy khách hàng đang hoạt động.",
+                Message = "Active customer not found.",
             };
         }
 
@@ -51,7 +51,7 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên site đã tồn tại cho khách hàng này.",
+                Message = "Site name already exists for this customer.",
             };
         }
 
@@ -76,7 +76,7 @@ public class CreateSiteCommandHandler : IRequestHandler<CreateSiteCommand, Commo
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo site thành công.",
+            Message = "Site created successfully.",
             Data = BatteryMapper.ToDto(entity, customer.FullName)
         };
     }

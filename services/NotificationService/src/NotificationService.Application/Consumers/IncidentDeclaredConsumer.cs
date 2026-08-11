@@ -50,7 +50,7 @@ public class IncidentDeclaredConsumer : IConsumer<IncidentDeclaredEvent>
             }
 
             var title = $"🚨 Critical Incident: {evt.Code}";
-            var body = $"Ticket {evt.Code} đã được declare thành Critical Incident. Cần xử lý khẩn.";
+            var body = $"Ticket {evt.Code} has been declared a Critical Incident. Urgent action is required.";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,

@@ -89,10 +89,10 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
     public async Task Handle_WithAiSuggestion_PersistsStructuredData()
     {
         var command = BaseCommand();
-        command.AiPrescriptionText = "Thay module BMS";
+        command.AiPrescriptionText = "Replace the BMS module";
         command.AiSuggestion = new AiSuggestionPayload(
-            ActionSteps: new[] { "Ngắt tải", "Đo điện áp cell" },
-            PpeRequired: new[] { "Găng cách điện" },
+            ActionSteps: new[] { "Disconnect the load", "Measure cell voltage" },
+            PpeRequired: new[] { "Insulating gloves" },
             SopReferences: new[] { "SOP-BMS-01" },
             KbDocRefs: new[] { "maintenance/bms_warning_codes.md" },
             HumanVerificationRequired: true,
@@ -107,7 +107,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         aiRepo.Verify(x => x.AddAsync(It.Is<TicketAiSuggestion>(s =>
-            s.Prescription == "Thay module BMS" &&
+            s.Prescription == "Replace the BMS module" &&
             s.ActionSteps.Count == 2 &&
             s.SopReferences.Contains("SOP-BMS-01") &&
             s.KbDocRefs.Contains("maintenance/bms_warning_codes.md") &&
@@ -151,7 +151,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
     {
         // Best-effort: hỏng chỗ ghi gợi ý KHÔNG được làm chết việc tạo ticket.
         var command = BaseCommand();
-        command.AiSuggestion = new AiSuggestionPayload(ActionSteps: new[] { "Ngắt tải" });
+        command.AiSuggestion = new AiSuggestionPayload(ActionSteps: new[] { "Disconnect the load" });
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
         MockTicketUnitOfWork.AiSuggestionsOf(uow)

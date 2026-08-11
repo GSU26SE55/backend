@@ -51,10 +51,10 @@ public static class AddCORS
         if (origins.Length == 0 && isProduction)
         {
             throw new InvalidOperationException(
-                $"[#AUTH-05] Thiếu cấu hình '{ConfigKey}' trong môi trường Production. " +
-                "CORS sẽ phải mở cho MỌI origin — đây là lỗ hổng P0 nên service từ chối khởi động. " +
-                "Đặt biến môi trường Cors__AllowedOrigins__0, Cors__AllowedOrigins__1, ... " +
-                "với danh sách domain FE/Mobile do Leader chốt.");
+                $"[#AUTH-05] Missing configuration '{ConfigKey}' in the Production environment. " +
+                "CORS would have to allow EVERY origin — that is a P0 vulnerability, so the service refuses to start. " +
+                "Set the environment variables Cors__AllowedOrigins__0, Cors__AllowedOrigins__1, ... " +
+                "with the FE/Mobile domain list approved by the Leader.");
         }
 
         service.AddCors();
@@ -75,8 +75,8 @@ public static class AddCORS
                     // Chỉ tới được nhánh này ở Development (Production đã ném ở trên).
                     // KHÔNG dùng AllowAnyOrigin() vì nó không đi cùng AllowCredentials() được.
                     loggerFactory.CreateLogger(typeof(AddCORS).FullName!).LogWarning(
-                        $"[CORS][CẢNH BÁO] '{ConfigKey}' đang rỗng — cho phép MỌI origin. " +
-                        "Chỉ chấp nhận ở Development. Production sẽ không khởi động được nếu thiếu khoá này.");
+                        $"[CORS][WARNING] '{ConfigKey}' is empty — allowing EVERY origin. " +
+                        "Acceptable only in Development. Production will not start without this key.");
                     policy.SetIsOriginAllowed(_ => true)
                           .AllowAnyMethod()
                           .AllowAnyHeader()

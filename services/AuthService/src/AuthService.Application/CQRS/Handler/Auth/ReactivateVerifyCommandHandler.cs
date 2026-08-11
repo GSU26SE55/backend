@@ -54,14 +54,14 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
                 cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy account trong window restore hoặc OTP không hợp lệ.");
+            return Fail(404, "Account not found within the restore window, or the OTP is invalid.");
 
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow
             || string.IsNullOrEmpty(account.OtpCode))
-            return Fail(401, "OTP đã hết hạn. Yêu cầu OTP mới.");
+            return Fail(401, "OTP has expired. Please request a new OTP.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, "Incorrect OTP.");
 
         // Restore: clear soft-delete + reset auth state.
         var oldStatus = account.Status;   // GH-766 — bắt trước khi ghi đè.
@@ -108,7 +108,7 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Khôi phục tài khoản thành công. Vui lòng đăng nhập lại.",
+            Message = "Account restored successfully. Please log in again.",
             Data = account.Id.ToString()
         };
     }

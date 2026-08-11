@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="vi" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="x-apple-disable-message-reformatting" />
     <meta name="format-detection" content="telephone=no,address=no,email=no,date=no" />
-    <title>Cảnh báo đăng nhập mới — {{AppName}}</title>
+    <title>New Login Alert — {{AppName}}</title>
     <style type="text/css">
         body, table, td, a {
             -webkit-text-size-adjust: 100%;
@@ -54,7 +54,7 @@
     </style>
 </head>
 <body style="margin:0; padding:0; width:100%; background-color:#eef2f6;">
-    <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all; font-size:1px; line-height:1px; color:#eef2f6;">Có đăng nhập với {{Reason}} vào tài khoản của bạn lúc {{DetectedAt}}.</div>
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all; font-size:1px; line-height:1px; color:#eef2f6;">A login with {{Reason}} was detected on your account at {{DetectedAt}}.</div>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background-color:#eef2f6;">
         <tr>
@@ -72,27 +72,27 @@
 
                     <tr>
                         <td class="sbm-pad" style="padding:30px 32px 8px 32px;">
-                    <h1 class="sbm-h1" style="margin:0 0 18px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:23px; line-height:31px; color:#c0392b; font-weight:bold;">⚠️ Có đăng nhập mới trên tài khoản của bạn</h1>
-                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Xin chào <strong>{{UserName}}</strong>,</p>
-                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Chúng tôi ghi nhận một lần đăng nhập có <strong>{{Reason}}</strong> vào tài khoản của bạn:</p>
+                    <h1 class="sbm-h1" style="margin:0 0 18px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:23px; line-height:31px; color:#c0392b; font-weight:bold;">⚠️ New Login Detected on Your Account</h1>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Hello <strong>{{UserName}}</strong>,</p>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">We noticed a login with <strong>{{Reason}}</strong> on your account:</p>
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:0 0 20px 0; border:1px solid #e3e9ef; border-radius:6px;">
                         <tr style="background-color:#ffffff;">
-                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Thời điểm</td>
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Time</td>
                             <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{DetectedAt}}</td>
                         </tr>
                         <tr style="background-color:#f7f9fb;">
-                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Địa chỉ IP</td>
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">IP Address</td>
                             <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{IpAddress}}</td>
                         </tr>
                         <tr style="background-color:#ffffff;">
-                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Thiết bị</td>
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Device</td>
                             <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{UserAgent}}</td>
                         </tr>
                     </table>
-                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;"><strong>Nếu đây là bạn</strong>, có thể bỏ qua email này.</p>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;"><strong>If this was you</strong>, you can safely ignore this email.</p>
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:0 0 20px 0;">
                         <tr>
-                            <td style="padding:14px 18px; background-color:#fdeeec; border-left:4px solid #c0392b; border-radius:0 6px 6px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:23px; color:#c0392b;"><strong>Nếu KHÔNG phải bạn</strong>: đổi mật khẩu ngay và bật xác thực 2 lớp (2FA) trong phần Cài đặt bảo mật.</td>
+                            <td style="padding:14px 18px; background-color:#fdeeec; border-left:4px solid #c0392b; border-radius:0 6px 6px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:23px; color:#c0392b;"><strong>If this was NOT you</strong>: change your password immediately and enable two-factor authentication (2FA) in Security Settings.</td>
                         </tr>
                     </table>
                         </td>
@@ -100,7 +100,7 @@
 
                     <tr>
                         <td class="sbm-pad" style="padding:18px 32px 24px 32px; border-top:1px solid #e3e9ef;">
-                            <p style="margin:0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:12px; line-height:19px; color:#6b7785;">Đây là email tự động từ hệ thống Solar Battery Monitor. Vui lòng không trả lời email này.</p>
+                            <p style="margin:0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:12px; line-height:19px; color:#6b7785;">This is an automated email from the Solar Battery Monitor system. Please do not reply to this email.</p>
                         </td>
                     </tr>
 

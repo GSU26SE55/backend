@@ -21,16 +21,16 @@ public class GetFilePresignedUrlByIdQuery : IRequest<CommonResponse<string>>, IV
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "FileId không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "FileId không hợp lệ." });
+            response.Message = "Invalid FileId.";
+            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Invalid FileId." });
         }
 
         if (ExpiresInMinutes is < 1 or > 1440)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "ExpiresInMinutes phải nằm trong khoảng 1 đến 1440.";
-            response.ListErrors.Add(new Errors { Field = nameof(ExpiresInMinutes), Detail = "ExpiresInMinutes phải nằm trong khoảng 1 đến 1440." });
+            response.Message = "ExpiresInMinutes must be between 1 and 1440.";
+            response.ListErrors.Add(new Errors { Field = nameof(ExpiresInMinutes), Detail = "ExpiresInMinutes must be between 1 and 1440." });
         }
 
         return Task.FromResult(response);

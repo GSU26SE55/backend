@@ -25,7 +25,7 @@ public sealed class ChatVoiceTranscriptionRetryCommandHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Equal(202, result.StatusCode);
         Assert.Equal(VoiceTranscriptionStatusEnum.Pending, chat.VoiceTranscriptionStatus);
-        Assert.Equal("Audio đang được xử lý…", chat.Body);
+        Assert.Equal("Audio is being processed…", chat.Body);
         outbox.Verify(x => x.WriteAsync(It.Is<VoiceTranscriptionRequestedEvent>(e => e.ChatId == chat.Id && e.FileId == chat.AttachmentFileIds[0]), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.CommitTransactionAsync(), Times.Once);
     }

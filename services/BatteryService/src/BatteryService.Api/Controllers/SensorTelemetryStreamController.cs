@@ -39,14 +39,14 @@ public class SensorTelemetryStreamController : ControllerBase
         if (parsed is null)
         {
             await CommonResponseWriter.WriteAsync(
-                Response, StatusCodes.Status400BadRequest, "Dữ liệu không hợp lệ.",
+                Response, StatusCodes.Status400BadRequest, "Invalid data.",
                 new[]
                 {
                     new Errors
                     {
                         Field = "scope",
-                        Detail = "scope không hợp lệ. Dùng: asset:{id} | assets:{id1,id2} | customer:{id} | "
-                               + "site:{id} | sites:{id1,id2} | type:{id} | all | site:none (mỗi list ≤ 50 id)."
+                        Detail = "Invalid scope. Use: asset:{id} | assets:{id1,id2} | customer:{id} | "
+                               + "site:{id} | sites:{id1,id2} | type:{id} | all | site:none (each list ≤ 50 id)."
                     }
                 });
             return;
@@ -55,7 +55,7 @@ public class SensorTelemetryStreamController : ControllerBase
         if (!TryGetUserId(out var actorUserId))
         {
             await CommonResponseWriter.WriteAsync(
-                Response, StatusCodes.Status401Unauthorized, "Không xác định được người dùng.");
+                Response, StatusCodes.Status401Unauthorized, "Unable to determine the user.");
             return;
         }
 
@@ -63,7 +63,7 @@ public class SensorTelemetryStreamController : ControllerBase
         if (!await _authz.CanAccessScopeAsync(parsed.Value, actorUserId, roles, cancellationToken))
         {
             await CommonResponseWriter.WriteAsync(
-                Response, StatusCodes.Status403Forbidden, "Không có quyền với scope này.");
+                Response, StatusCodes.Status403Forbidden, "You do not have permission for this scope.");
             return;
         }
 

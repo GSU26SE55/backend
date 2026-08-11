@@ -20,23 +20,23 @@ public class CreateGatewayDeviceCommand : IRequest<CommonResponse<CreateGatewayD
         var response = new CommonResponse<CreateGatewayDeviceResponseDto>();
 
         if (string.IsNullOrWhiteSpace(DeviceName))
-            response.ListErrors.Add(new Errors { Field = nameof(DeviceName), Detail = "Bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(DeviceName), Detail = "Required." });
         else if (DeviceName.Length > 64)
-            response.ListErrors.Add(new Errors { Field = nameof(DeviceName), Detail = "Tối đa 64 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(DeviceName), Detail = "Maximum 64 characters." });
 
         if (string.IsNullOrWhiteSpace(DeviceCode))
-            response.ListErrors.Add(new Errors { Field = nameof(DeviceCode), Detail = "Bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(DeviceCode), Detail = "Required." });
         else if (DeviceCode.Length > 64)
-            response.ListErrors.Add(new Errors { Field = nameof(DeviceCode), Detail = "Tối đa 64 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(DeviceCode), Detail = "Maximum 64 characters." });
 
         if (DailyLimit < 1 || DailyLimit > 10000)
-            response.ListErrors.Add(new Errors { Field = nameof(DailyLimit), Detail = "Phải trong khoảng [1..10000]." });
+            response.ListErrors.Add(new Errors { Field = nameof(DailyLimit), Detail = "Must be in range [1..10000]." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

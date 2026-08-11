@@ -69,7 +69,7 @@ public class NotificationUnsubscribeController : ControllerBase
             return BadRequest(new CommonResponse<object>
             {
                 IsSuccess = false,
-                Message = "Liên kết hủy đăng ký không hợp lệ hoặc đã hết hạn.",
+                Message = "The unsubscribe link is invalid or has expired.",
             });
         }
 
@@ -110,7 +110,7 @@ public class NotificationUnsubscribeController : ControllerBase
         return Ok(new CommonResponse<object>
         {
             IsSuccess = true,
-            Message = $"Đã ngừng gửi email nhóm '{category}'. Các kênh khác không thay đổi.",
+            Message = $"Emails for the '{category}' category have been stopped. Other channels are unchanged.",
         });
     }
 
@@ -136,14 +136,14 @@ public class NotificationUnsubscribeController : ControllerBase
             return BadRequest(new CommonResponse<object>
             {
                 IsSuccess = false,
-                Message = "Liên kết hủy đăng ký không hợp lệ hoặc đã hết hạn.",
+                Message = "The unsubscribe link is invalid or has expired.",
             });
         }
 
         return Ok(new CommonResponse<object>
         {
             IsSuccess = true,
-            Message = "Xác nhận để ngừng nhận email nhóm này.",
+            Message = "Confirm to stop receiving emails for this category.",
             Data = new { category = category.ToString(), confirmMethod = "POST" },
         });
     }

@@ -138,7 +138,7 @@ public class BatteryAlertEscalationRequestedConsumerTests
         // (pin nào chưa được xử lý), phần "đã bao lâu" thuộc về phần diễn giải.
         // Email dùng template HTML riêng nên chỉ xét Push/InApp.
         captured.Where(c => c.Channel != NotificationChannelEnum.Email).Should()
-            .AllSatisfy(c => c.Body.Should().Contain("6 phút"));
+            .AllSatisfy(c => c.Body.Should().Contain("6 minutes"));
         await harness.Stop();
     }
 

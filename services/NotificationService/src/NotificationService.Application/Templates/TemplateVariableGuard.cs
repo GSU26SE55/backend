@@ -54,14 +54,14 @@ public static class TemplateVariableGuard
         var details = unknown.Select(v =>
         {
             var suggestion = Suggest(v, allowed);
-            return suggestion is null ? $"{{{{{v}}}}}" : $"{{{{{v}}}}} (ý bạn là {{{{{suggestion}}}}}?)";
+            return suggestion is null ? $"{{{{{v}}}}}" : $"{{{{{v}}}}} (did you mean {{{{{suggestion}}}}}?)";
         });
 
         var allowedList = string.Join(", ", allowed.OrderBy(a => a, StringComparer.OrdinalIgnoreCase));
 
-        return $"Template dùng biến không tồn tại trong dữ liệu của loại thông báo này: "
-             + $"{string.Join(", ", details)}. Biến sẽ render ra rỗng nên người nhận đọc phải câu cụt. "
-             + $"Biến hợp lệ: {allowedList}.";
+        return $"Template uses variables that don't exist in this notification type's data: "
+             + $"{string.Join(", ", details)}. These variables will render as empty, so recipients will see a truncated message. "
+             + $"Valid variables: {allowedList}.";
     }
 
     /// <summary>

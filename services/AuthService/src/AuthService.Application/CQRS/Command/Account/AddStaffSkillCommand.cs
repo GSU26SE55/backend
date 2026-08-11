@@ -22,21 +22,21 @@ public class AddStaffSkillCommand : IRequest<AccountActionResponse>, IValidatabl
         var response = new AccountActionResponse();
 
         if (StaffAccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "StaffAccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "Invalid StaffAccountId." });
 
         if (string.IsNullOrWhiteSpace(SkillCode))
-            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode không được để trống." });
+            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode is required." });
         else if (SkillCode.Trim().Length > 64)
-            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode tối đa 64 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode must not exceed 64 characters." });
 
         if (SkillLevel is < 1 or > 5)
-            response.ListErrors.Add(new Errors { Field = nameof(SkillLevel), Detail = "SkillLevel phải nằm trong khoảng 1 đến 5." });
+            response.ListErrors.Add(new Errors { Field = nameof(SkillLevel), Detail = "SkillLevel must be between 1 and 5." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

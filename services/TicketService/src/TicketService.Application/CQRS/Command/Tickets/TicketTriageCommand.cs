@@ -41,19 +41,19 @@ public class TicketTriageCommand : IRequest<TicketActionResponse>, IValidatable<
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (!Enum.IsDefined(typeof(ImpactScopeEnum), Impact))
-            response.ListErrors.Add(new Errors { Field = "Impact", Detail = "ImpactScope không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Impact", Detail = "Invalid ImpactScope." });
 
         if (!Enum.IsDefined(typeof(UrgencyLevelEnum), Urgency))
-            response.ListErrors.Add(new Errors { Field = "Urgency", Detail = "UrgencyLevel không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Urgency", Detail = "Invalid UrgencyLevel." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

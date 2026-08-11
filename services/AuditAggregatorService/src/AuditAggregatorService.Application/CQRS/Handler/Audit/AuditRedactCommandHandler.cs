@@ -16,7 +16,7 @@ public class AuditRedactCommandHandler : IRequestHandler<AuditRedactCommand, Com
         if (request.AccountId == Guid.Empty)
         {
             var bad = new CommonResponse<object> { IsSuccess = false, StatusCode = 400 };
-            bad.ListErrors.Add(new Errors { Field = "accountId", Detail = "accountId là bắt buộc." });
+            bad.ListErrors.Add(new Errors { Field = "accountId", Detail = "accountId is required." });
             return bad;
         }
 
@@ -32,7 +32,7 @@ public class AuditRedactCommandHandler : IRequestHandler<AuditRedactCommand, Com
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Redacted {count} audit row(s) cho account {request.AccountId}. Source tables giữ nguyên (legal hold).",
+            Message = $"Redacted {count} audit row(s) for account {request.AccountId}. Source tables remain unchanged (legal hold).",
         };
     }
 }

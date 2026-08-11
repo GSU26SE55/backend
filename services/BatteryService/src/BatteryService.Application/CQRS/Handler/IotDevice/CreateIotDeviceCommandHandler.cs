@@ -36,12 +36,12 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
             .GetAllAsync()
             .AnyAsync(d => !d.IsDeleted && d.DeviceCode == code, cancellationToken);
         if (duplicate)
-            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 409, Message = "Device code đã tồn tại." };
+            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 409, Message = "Device code already exists." };
 
         var site = await _unitOfWork.Sites.GetAllAsync()
             .FirstOrDefaultAsync(s => s.Id == request.SiteId && !s.IsDeleted, cancellationToken);
         if (site is null)
-            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Site." };
+            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Site not found." };
 
         var key = _apiKeyService.GenerateKey();
         var mqttCred = _apiKeyService.GenerateMqttCredential(code);
@@ -85,7 +85,7 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo IoT device thành công.",
+            Message = "IoT device created successfully.",
             Data = dto
         };
     }

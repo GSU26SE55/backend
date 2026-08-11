@@ -35,7 +35,7 @@ public class SubmitPrescriptionFeedbackCommandHandler
             .FirstOrDefaultAsync(a => a.Id == request.AlertId && !a.IsDeleted, cancellationToken);
 
         if (alert is null)
-            return Fail(404, "Không tìm thấy alert.");
+            return Fail(404, "Alert not found.");
 
         // Giới hạn theo tenant: alert của khách khác trả 404 chứ không 403 — 403 xác nhận alert đó
         // có thật, biến endpoint thành công cụ dò. Khớp quy ước GH-722/GH-774.
@@ -51,7 +51,7 @@ public class SubmitPrescriptionFeedbackCommandHandler
                     && await BatteryTenantAccessGuard.CanAccessSiteAsync(
                         _unitOfWork, alert.SiteId.Value, scope, cancellationToken);
             if (!owns)
-                return Fail(404, "Không tìm thấy alert.");
+                return Fail(404, "Alert not found.");
         }
 
         if (string.IsNullOrWhiteSpace(alert.AiPrescriptionId))
@@ -60,7 +60,7 @@ public class SubmitPrescriptionFeedbackCommandHandler
             // XUNG ĐỘT trạng thái chứ không phải "không tìm thấy": alert có thật, chỉ là không có
             // gì để phản hồi. Trả 404 ở đây sẽ khiến người dùng đi tìm một alert vốn đang hiện ra
             // trước mắt họ.
-            return Fail(409, "Alert này chưa có prescription của AI để phản hồi.");
+            return Fail(409, "This alert does not yet have an AI prescription to give feedback on.");
         }
 
         var outcome = await _feedbackClient.SubmitFeedbackAsync(
@@ -76,16 +76,16 @@ public class SubmitPrescriptionFeedbackCommandHandler
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Đã ghi nhận phản hồi.",
+                Message = "Feedback recorded.",
                 Data = alert.AiPrescriptionId
             },
 
             // AI không còn giữ id này. Thử lại cũng vô ích nên KHÔNG trả 5xx — client sẽ retry vô nghĩa.
             AiFeedbackOutcome.NotFound =>
-                Fail(410, "Prescription đã hết hạn ở phía AI — không ghi nhận được phản hồi nữa."),
+                Fail(410, "The prescription has expired on the AI side — feedback can no longer be recorded."),
 
             // AI sập: đây là lỗi TẠM THỜI, phải nói rõ để client biết thử lại sau.
-            _ => Fail(503, "Không kết nối được AI để ghi nhận phản hồi. Thử lại sau.")
+            _ => Fail(503, "Unable to connect to AI to record feedback. Please try again later.")
         };
     }
 

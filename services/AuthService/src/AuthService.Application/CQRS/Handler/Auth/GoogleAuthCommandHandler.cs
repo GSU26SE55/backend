@@ -52,10 +52,10 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
     {
         var googleUser = await _googleOAuthHelper.ValidateAsync(request.IdToken, cancellationToken);
         if (googleUser == null || string.IsNullOrWhiteSpace(googleUser.Email))
-            return Fail(401, "Google ID token không hợp lệ.");
+            return Fail(401, "Invalid Google ID token.");
 
         if (!googleUser.EmailVerified)
-            return Fail(401, "Email Google chưa được xác thực.");
+            return Fail(401, "Google email is not verified.");
 
         var normalizedEmail = EmailNormalizer.Normalize(googleUser.Email);
 
@@ -76,7 +76,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         {
             customerRoleId = await SystemRoleResolver.ResolveCustomerRoleIdAsync(_unitOfWork, cancellationToken);
             if (customerRoleId is null)
-                return Fail(500, "Đăng nhập Google thất bại do lỗi hệ thống. Vui lòng thử lại.");
+                return Fail(500, "Google login failed due to a system error. Please try again.");
 
             account = new Domain.Entities.Account
             {
@@ -113,10 +113,10 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         else
         {
             if (account!.IsDeleted || account.Status == AccountStatusEnum.Banned || account.Status == AccountStatusEnum.Suspended)
-                return Fail(403, "Tài khoản không khả dụng.");
+                return Fail(403, "Account is not available.");
 
             if (account.Status == AccountStatusEnum.PendingVerification)
-                return Fail(409, "Email đã đăng ký nhưng chưa xác thực. Vui lòng verify OTP trước.");
+                return Fail(409, "Email is already registered but not verified. Please verify OTP first.");
 
             // #AUTH-20: Google OAuth email mismatch policy.
             // 3 branches:
@@ -127,13 +127,13 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
             if (string.IsNullOrEmpty(account.GoogleId))
             {
                 if (!account.EmailConfirmed)
-                    return Fail(409, "Vui lòng verify email trước khi liên kết Google.");
+                    return Fail(409, "Please verify your email before linking Google.");
                 account.GoogleId = googleUser.Subject;
                 account.Provider = ProviderName;
             }
             else if (!string.Equals(account.GoogleId, googleUser.Subject, StringComparison.Ordinal))
             {
-                return Fail(409, "Email này đã liên kết với một Google account khác. Vui lòng dùng đúng Google account đã đăng ký, hoặc đăng nhập bằng email/mật khẩu.");
+                return Fail(409, "This email is already linked to a different Google account. Please use the correct registered Google account, or log in with your email/password.");
             }
 
             account.LastLoginAt = DateTime.UtcNow;
@@ -190,7 +190,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đăng nhập Google thành công.",
+            Message = "Google login successful.",
             Data = new LoginResultDto
             {
                 Tokens = new TokenDTO

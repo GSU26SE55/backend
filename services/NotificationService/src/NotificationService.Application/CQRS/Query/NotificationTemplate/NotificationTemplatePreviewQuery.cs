@@ -31,13 +31,13 @@ public class NotificationTemplatePreviewQuery
         var response = new NotificationTemplatePreviewResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id template không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid template Id." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

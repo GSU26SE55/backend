@@ -89,6 +89,6 @@ return 0";
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
         if (ttl <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(ttl), ttl, "Thời hạn phải dương.");
+            throw new ArgumentOutOfRangeException(nameof(ttl), ttl, "Duration must be positive.");
     }
 }

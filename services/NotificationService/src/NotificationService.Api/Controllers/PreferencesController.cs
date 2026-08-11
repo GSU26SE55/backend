@@ -44,7 +44,7 @@ public class PreferencesController : ControllerBase
     public async Task<IActionResult> GetMyPreference()
     {
         if (!TryGetUserId(out var userId))
-            return BadRequest(new CommonResponse<object> { IsSuccess = false, Message = "Không xác định được UserId từ token." });
+            return BadRequest(new CommonResponse<object> { IsSuccess = false, Message = "Unable to determine the UserId from the token." });
 
         var result = await _mediator.Send(new GetNotificationPreferenceQuery { UserId = userId });
         return Ok(result);
@@ -70,7 +70,7 @@ public class PreferencesController : ControllerBase
     public async Task<IActionResult> UpdateMyPreference([FromBody] UpdateNotificationPreferenceCommand cmd)
     {
         if (!TryGetUserId(out var userId))
-            return BadRequest(new NotificationPreferenceResponse { IsSuccess = false, Message = "Không xác định được UserId từ token." });
+            return BadRequest(new NotificationPreferenceResponse { IsSuccess = false, Message = "Unable to determine the UserId from the token." });
 
         cmd.UserId = userId;
         var result = await _mediator.Send(cmd);
@@ -104,7 +104,7 @@ public class PreferencesController : ControllerBase
     public async Task<IActionResult> GetMyPreferenceMatrix()
     {
         if (!TryGetUserId(out var userId))
-            return BadRequest(new CommonResponse<object> { IsSuccess = false, Message = "Không xác định được UserId từ token." });
+            return BadRequest(new CommonResponse<object> { IsSuccess = false, Message = "Unable to determine the UserId from the token." });
 
         var result = await _mediator.Send(new GetNotificationPreferenceMatrixQuery { UserId = userId });
         return Ok(result);
@@ -135,7 +135,7 @@ public class PreferencesController : ControllerBase
             return BadRequest(new NotificationPreferenceMatrixResponse
             {
                 IsSuccess = false,
-                Message = "Không xác định được UserId từ token."
+                Message = "Unable to determine the UserId from the token."
             });
 
         cmd.UserId = userId;

@@ -26,7 +26,7 @@ public class AdminReset2FACommandHandler : IRequestHandler<AdminReset2FACommand,
             .FirstOrDefaultAsync(a => a.Id == request.TargetAccountId, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         var wasEnabled = account.TwoFactorEnabled || !string.IsNullOrEmpty(account.TwoFactorSecret);
 
@@ -64,8 +64,8 @@ public class AdminReset2FACommandHandler : IRequestHandler<AdminReset2FACommand,
             IsSuccess = true,
             StatusCode = 200,
             Message = wasEnabled
-                ? "Đã reset 2FA cho tài khoản. User phải enroll lại nếu muốn dùng 2FA."
-                : "Tài khoản vốn chưa bật 2FA. Đã clear sạch dữ liệu liên quan để chắc chắn.",
+                ? "2FA has been reset for the account. The user must enroll again to use 2FA."
+                : "The account did not have 2FA enabled. Related data has been cleared to be safe.",
             Data = account.Id.ToString(),
         };
     }

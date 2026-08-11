@@ -61,7 +61,7 @@ public class CreateNotificationCommandHandler : IRequestHandler<CreateNotificati
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo notification thành công.",
+            Message = "Notification created successfully.",
             Data = entity.Id
         };
     }

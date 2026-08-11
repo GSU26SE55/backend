@@ -15,8 +15,8 @@ public class NotificationTemplateValidationTests
     {
         Type = NotificationTypeEnum.SlaWarning,
         Channel = NotificationChannelEnum.Email,
-        TitleTemplate = "Tiêu đề",
-        BodyTemplate = "Nội dung",
+        TitleTemplate = "Title",
+        BodyTemplate = "Content",
         ActorUserId = Actor,
     };
 

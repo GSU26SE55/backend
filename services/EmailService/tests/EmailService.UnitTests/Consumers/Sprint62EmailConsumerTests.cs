@@ -186,7 +186,7 @@ public class Sprint62EmailConsumerTests : IAsyncLifetime
         _renderer.Verify(r => r.RenderAsync(
             EmailTemplates.SuspiciousLogin,
             It.Is<IReadOnlyDictionary<string, string?>>(d =>
-                d["IpAddress"] == "không xác định" && d["UserAgent"] == "không xác định"),
+                d["IpAddress"] == "Unknown" && d["UserAgent"] == "Unknown"),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 

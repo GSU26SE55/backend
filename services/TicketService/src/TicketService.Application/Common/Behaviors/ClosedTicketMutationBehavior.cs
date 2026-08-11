@@ -41,7 +41,7 @@ public sealed class ClosedTicketMutationBehavior<TRequest, TResponse> : IPipelin
             ?? throw new InvalidOperationException($"Cannot create response type {typeof(TResponse).Name} for closed ticket guard.");
         Set(response, "IsSuccess", false);
         Set(response, "StatusCode", 409);
-        Set(response, "Message", "Ticket đã đóng nên không thể thay đổi.");
+        Set(response, "Message", "Ticket is closed and cannot be changed.");
         return response;
     }
 

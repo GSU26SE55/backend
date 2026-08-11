@@ -61,11 +61,11 @@ public class AiWindowSizeContractTests
         services.AddOptions<AiOptions>()
             .Bind(config.GetSection(AiOptions.SectionName))
             .Validate(o => o.MinReadings >= AiOptions.WindowSize,
-                $"Ai:MinReadings phải ≥ {AiOptions.WindowSize}")
+                $"Ai:MinReadings must be >= {AiOptions.WindowSize}")
             .Validate(o => o.MaxScanReadings >= o.MinReadings,
-                "Ai:MaxScanReadings phải ≥ Ai:MinReadings")
-            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes phải lớn hơn 0.")
-            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds phải lớn hơn 0.")
+                "Ai:MaxScanReadings must be >= Ai:MinReadings")
+            .Validate(o => o.IntervalMinutes > 0, "Ai:IntervalMinutes must be greater than 0.")
+            .Validate(o => o.TimeoutSeconds > 0, "Ai:TimeoutSeconds must be greater than 0.")
             .ValidateOnStart();
         return services.BuildServiceProvider();
     }

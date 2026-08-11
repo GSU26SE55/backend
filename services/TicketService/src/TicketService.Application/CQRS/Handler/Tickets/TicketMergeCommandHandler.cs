@@ -31,18 +31,18 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
             .FirstOrDefaultAsync(t => t.Id == request.TargetTicketId && !t.IsDeleted, ct);
 
         if (source is null || master is null)
-            return Fail(404, "Không tìm thấy ticket nguồn hoặc ticket master.");
+            return Fail(404, "Source ticket or master ticket not found.");
         if (source.Id == master.Id)
-            return Fail(400, "Không thể gộp ticket vào chính nó.");
+            return Fail(400, "Cannot merge a ticket into itself.");
         if (source.Status == TicketStatusEnum.Closed || master.Status == TicketStatusEnum.Closed ||
             source.MergedIntoTicketId.HasValue || master.MergedIntoTicketId.HasValue)
-            return Fail(409, "Ticket đã đóng hoặc đã được gộp nên không thể thay đổi.");
+            return Fail(409, "Ticket is closed or already merged and cannot be changed.");
         if (source.Status != TicketStatusEnum.New)
-            return Fail(409, "Chỉ ticket nguồn ở trạng thái New mới được gộp.");
+            return Fail(409, "Only a source ticket in New status can be merged.");
         if (master.Status is not (TicketStatusEnum.New or TicketStatusEnum.Open or TicketStatusEnum.Assigned or TicketStatusEnum.InProgress))
-            return Fail(409, "Ticket master phải ở New, Open, Assigned hoặc InProgress.");
+            return Fail(409, "Master ticket must be in New, Open, Assigned, or InProgress status.");
         if (source.CustomerId != master.CustomerId)
-            return Fail(409, "Hai ticket phải thuộc cùng customer.");
+            return Fail(409, "Both tickets must belong to the same customer.");
 
         var sourceBatteryIds = await _uow.TicketBatteryAssets.GetAllAsync()
             .Where(x => x.TicketId == source.Id && !x.IsDeleted)
@@ -51,7 +51,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
         var hasCommonBattery = await _uow.TicketBatteryAssets.GetAllAsync()
             .AnyAsync(x => x.TicketId == master.Id && !x.IsDeleted && sourceBatteryIds.Contains(x.BatteryAssetId), ct);
         if (!hasCommonBattery)
-            return Fail(409, "Hai ticket phải có ít nhất một battery asset chung.");
+            return Fail(409, "Both tickets must share at least one battery asset.");
 
         var managerDisplayName = request.ManagerName!;
 
@@ -95,7 +95,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     Action = ActivityActionEnum.StatusChanged,
                     Ticket = source,
                     NewValue = TicketStatusEnum.Closed.ToString(),
-                    Reason = $"Đã gộp vào master ticket {master.Code} ({master.Id})."
+                    Reason = $"Merged into master ticket {master.Code} ({master.Id})."
                 });
                 await _uow.TicketActivities.AddAsync(new TicketActivity
                 {
@@ -107,7 +107,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     ActorDisplayName = managerDisplayName,
                     Action = ActivityActionEnum.StatusChanged,
                     Ticket = master,
-                    Reason = $"source ticket {source.Code} ({source.Id}) đã được gộp vào ticket này."
+                    Reason = $"Source ticket {source.Code} ({source.Id}) was merged into this ticket."
                 });
 
                 await _outboxWriter.WriteAsync(new TicketMergedEvent(
@@ -116,7 +116,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Fail(409, "Ticket đã được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.");
+            return Fail(409, "Ticket was changed by another operation. Please reload and try again.");
         }
         catch
         {
@@ -127,7 +127,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Gộp ticket thành công.",
+            Message = "Tickets merged successfully.",
             Data = new TicketActionDTO { Id = source.Id.ToString(), TicketId = source.Id.ToString(), Code = source.Code, Status = source.Status }
         };
     }

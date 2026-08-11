@@ -29,7 +29,7 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Could not identify the current user."
             };
         }
 
@@ -77,7 +77,7 @@ public class GetSiteByIdQueryHandler : IRequestHandler<GetSiteByIdQuery, CommonR
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 

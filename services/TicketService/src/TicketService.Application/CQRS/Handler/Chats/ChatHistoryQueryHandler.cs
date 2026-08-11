@@ -38,14 +38,14 @@ public class ChatHistoryQueryHandler : IRequestHandler<ChatHistoryQuery, CommonR
             .FirstOrDefaultAsync(cancellationToken);
 
         if (chat is null)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var isAuthor = chat.AuthorUserId == request.ActorUserId;
         var isStaffOrAbove = TicketQueryHelper.CanViewInternalChats(request.ActorRoles); // Staff/Manager/Admin
 
         // Customer chỉ xem được history của chat do CHÍNH MÌNH viết — không thấy history chat của Staff.
         if (!isAuthor && !isStaffOrAbove)
-            return Fail(403, "Không có quyền xem lịch sử bình luận này.");
+            return Fail(403, "You do not have permission to view this comment's history.");
 
         var edits = await _unitOfWork.TicketChatEdits.GetAllAsync()
             .AsNoTracking()

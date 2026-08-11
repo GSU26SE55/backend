@@ -59,8 +59,8 @@ public class ChatRecipientResolverTests
         Ticket = ticket,
         AuthorUserId = authorId,
         AuthorRole = authorRole,
-        AuthorDisplayName = "Người gửi",
-        Body = "nội dung",
+        AuthorDisplayName = "Sender",
+        Body = "content",
         CreatedAt = DateTime.UtcNow,
     };
 

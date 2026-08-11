@@ -81,7 +81,7 @@ public class ChangeAccountStatusCommandHandlerTests
         var resp = await handler.Handle(new ChangeAccountStatusCommand { Id = account.Id, Status = AccountStatusEnum.Active }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Message.Should().Contain("không thay đổi");
+        resp.Message.Should().Contain("unchanged");
     }
 
     [Fact]

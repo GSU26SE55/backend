@@ -143,7 +143,7 @@ public class S3CompatibleFileStorageService : IObjectStorageService
     {
         var normalized = objectKey.Trim().TrimStart('/', '\\').Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(normalized) || normalized.Contains("..", StringComparison.Ordinal))
-            throw new InvalidOperationException("ObjectKey không hợp lệ.");
+            throw new InvalidOperationException("Invalid ObjectKey.");
 
         return normalized;
     }

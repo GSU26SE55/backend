@@ -21,8 +21,8 @@ public class GetStaffAssignmentProfileQuery : IRequest<StaffAssignmentProfileRes
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "StaffAccountId không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "StaffAccountId không hợp lệ." });
+            response.Message = "Invalid StaffAccountId.";
+            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "Invalid StaffAccountId." });
         }
 
         return Task.FromResult(response);

@@ -44,7 +44,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -55,13 +55,13 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             await _publisher.Publish(new AuditTrailNotification(
                 AuditActionEnum.PasswordChanged, account.Id, IsSuccess: false,
                 TargetEmail: account.Email,
-                Reason: "Mật khẩu mới trùng mật khẩu hiện tại."), cancellationToken);
+                Reason: "New password matches the current password."), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return new AccountActionResponse
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Mật khẩu mới phải khác mật khẩu hiện tại.",
+                Message = "New password must be different from the current password.",
             };
         }
 
@@ -70,13 +70,13 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             await _publisher.Publish(new AuditTrailNotification(
                 AuditActionEnum.PasswordChanged, account.Id, IsSuccess: false,
                 TargetEmail: account.Email,
-                Reason: "Mật khẩu hiện tại không chính xác."), cancellationToken);
+                Reason: "Current password is incorrect."), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return new AccountActionResponse
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Mật khẩu hiện tại không chính xác.",
+                Message = "Current password is incorrect.",
             };
         }
 
@@ -135,7 +135,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tài khoản đã bị thay đổi bởi tiến trình khác. Vui lòng thử lại."
+                Message = "The account was modified by another process. Please try again."
             };
         }
 
@@ -156,7 +156,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
+            Message = "Password changed successfully. Please log in again.",
             Data = account.Id
         };
     }

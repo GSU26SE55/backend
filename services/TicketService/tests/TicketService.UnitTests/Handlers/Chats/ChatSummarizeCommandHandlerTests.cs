@@ -32,8 +32,8 @@ public class ChatSummarizeCommandHandlerTests
     {
         Id = id,
         Code = "TKT-001",
-        Title = "Pin bị lỗi",
-        Description = "Mô tả lỗi",
+        Title = "Battery fault",
+        Description = "Fault description",
         Status = TicketStatusEnum.Open,
     };
 
@@ -44,7 +44,7 @@ public class ChatSummarizeCommandHandlerTests
         Ticket = BuildTicket(ticketId),
         Body = body,
         AuthorRole = role,
-        AuthorDisplayName = role == ActorRoleEnum.Customer ? "Khách hàng" : "Kỹ thuật viên",
+        AuthorDisplayName = role == ActorRoleEnum.Customer ? "Customer" : "Technician",
         IsInternal = false,
         CreatedAt = DateTime.UtcNow,
     };
@@ -118,10 +118,10 @@ public class ChatSummarizeCommandHandlerTests
         var ticketId = Guid.NewGuid();
         SetupTickets(BuildTicket(ticketId));
         SetupChats(
-            BuildChat(ticketId, "Pin của tôi không sạc được"),
-            BuildChat(ticketId, "Chúng tôi sẽ kiểm tra", ActorRoleEnum.Staff)
+            BuildChat(ticketId, "My battery will not charge"),
+            BuildChat(ticketId, "We will check it", ActorRoleEnum.Staff)
         );
-        const string expectedSummary = "- Khách báo pin không sạc\n- Kỹ thuật viên đang kiểm tra";
+        const string expectedSummary = "- Customer reports the battery is not charging\n- Technician is checking it";
         _aiClient.Setup(c => c.SummarizeAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                  .ReturnsAsync(expectedSummary);
 
@@ -145,7 +145,7 @@ public class ChatSummarizeCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         SetupTickets(BuildTicket(ticketId));
-        SetupChats(BuildChat(ticketId, "Tin nhắn test"));
+        SetupChats(BuildChat(ticketId, "Test message"));
 
         var opts = Options.Create(new ChatOptions
         {
@@ -154,7 +154,7 @@ public class ChatSummarizeCommandHandlerTests
         var handler = new ChatSummarizeCommandHandler(_uow.Object, _aiClient.Object, _piiDetector.Object, opts, NullLogger<ChatSummarizeCommandHandler>.Instance);
 
         _aiClient.Setup(c => c.SummarizeAsync(It.IsAny<string>(), 3, It.IsAny<CancellationToken>()))
-                 .ReturnsAsync("- ý 1\n- ý 2\n- ý 3");
+                 .ReturnsAsync("- point 1\n- point 2\n- point 3");
 
         var result = await handler.Handle(new ChatSummarizeCommand
         {
@@ -175,7 +175,7 @@ public class ChatSummarizeCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         SetupTickets(BuildTicket(ticketId));
-        SetupChats(BuildChat(ticketId, "Tin nhắn test"));
+        SetupChats(BuildChat(ticketId, "Test message"));
         _aiClient.Setup(c => c.SummarizeAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                  .ThrowsAsync(new HttpRequestException("Gemini down"));
 
@@ -200,15 +200,15 @@ public class ChatSummarizeCommandHandlerTests
         var ticketId = Guid.NewGuid();
         SetupTickets(BuildTicket(ticketId));
         SetupChats(
-            BuildChat(ticketId, "Xin chào", ActorRoleEnum.Customer),
-            BuildChat(ticketId, "Chào bạn", ActorRoleEnum.Staff),
+            BuildChat(ticketId, "Hello", ActorRoleEnum.Customer),
+            BuildChat(ticketId, "Hi there", ActorRoleEnum.Staff),
             BuildChat(ticketId, "Note internal", ActorRoleEnum.Manager)
         );
 
         string? capturedContext = null;
         _aiClient.Setup(c => c.SummarizeAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                  .Callback((string ctx, int _, CancellationToken _) => capturedContext = ctx)
-                 .ReturnsAsync("- tóm tắt");
+                 .ReturnsAsync("- summary");
 
         await CreateHandler().Handle(new ChatSummarizeCommand
         {

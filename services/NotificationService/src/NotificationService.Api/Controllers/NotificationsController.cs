@@ -69,7 +69,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var query = new GetNotificationsQuery
@@ -126,7 +126,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var result = await _mediator.Send(
@@ -201,7 +201,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var command = new MarkNotificationReadCommand { Id = id, UserId = userId };
@@ -241,7 +241,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var command = new MarkNotificationOpenedCommand { Id = id, UserId = userId };
@@ -276,7 +276,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var command = new MarkAllNotificationsReadCommand { UserId = userId };
@@ -308,7 +308,7 @@ public class NotificationsController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var result = await _mediator.Send(new GetUnreadCountQuery { UserId = userId }, cancellationToken);

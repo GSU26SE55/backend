@@ -72,7 +72,7 @@ public class AccountSnapshotSyncConsumerTests
         bool isDeleted = false,
         DateTime? at = null,
         string reason = "Resync") =>
-        new(id, "U@X.Z", " Người Dùng ", " 0901234567 ", role, isActive, isDeleted, at ?? T1, reason);
+        new(id, "U@X.Z", " User ", " 0901234567 ", role, isActive, isDeleted, at ?? T1, reason);
 
     private static AccountReadModel Existing(
         Guid id,
@@ -83,7 +83,7 @@ public class AccountSnapshotSyncConsumerTests
         {
             Id = id,
             Email = "old@x.z",
-            FullName = "Tên Cũ",
+            FullName = "Old Name",
             Role = role,
             IsActive = isActive,
             IsDeleted = isDeleted,
@@ -107,7 +107,7 @@ public class AccountSnapshotSyncConsumerTests
         added.Role.Should().Be("Admin");
         added.IsActive.Should().BeTrue();
         added.Email.Should().Be("u@x.z", "email phải hạ về chữ thường");
-        added.FullName.Should().Be("Người Dùng", "phải trim");
+        added.FullName.Should().Be("User", "phải trim");
         added.PhoneNumber.Should().Be("0901234567", "phải trim");
         added.LastSnapshotAtUtc.Should().Be(T1, "mốc chống-về-trễ phải lấy từ event, không phải lúc consume");
     }

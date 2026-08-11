@@ -82,8 +82,8 @@ catch (Exception ex)
         // Fail loud — block startup. OPS phải fix volume mount trước khi cho service chạy lại.
         throw new InvalidOperationException(
             $"[DataProtection] CRITICAL — Cannot write to '{dpKeysPath}' in {builder.Environment.EnvironmentName} environment. " +
-            $"Ephemeral fallback bị disable trong production để tránh mất 2FA secret hàng loạt khi restart. " +
-            $"Hành động: kiểm tra Docker volume `auth-dataprotection-keys` mount đúng + quyền ghi cho user container. " +
+            $"Ephemeral fallback is disabled in production to avoid mass-losing 2FA secrets on restart. " +
+            $"Action: verify the Docker volume `auth-dataprotection-keys` is mounted correctly and writable by the container user. " +
             $"Inner: {ex.Message}", ex);
     }
     Console.WriteLine($"[DataProtection] Local dev fallback to ephemeral keys (path '{dpKeysPath}' unwritable): {ex.Message}");

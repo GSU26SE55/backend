@@ -34,22 +34,22 @@ public class TicketAssignCommand : IRequest<TicketActionResponse>, IValidatable<
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (PrimaryHandlerStaffId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "PrimaryHandlerStaffId", Detail = "PrimaryHandlerStaffId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "PrimaryHandlerStaffId", Detail = "Invalid PrimaryHandlerStaffId." });
 
         if (SupporterStaffIds.Contains(PrimaryHandlerStaffId))
-            response.ListErrors.Add(new Errors { Field = "SupporterStaffIds", Detail = "PrimaryHandler không được đồng thời là Supporter." });
+            response.ListErrors.Add(new Errors { Field = "SupporterStaffIds", Detail = "PrimaryHandler cannot also be a Supporter." });
 
         if (SupporterStaffIds.Count != SupporterStaffIds.Distinct().Count())
-            response.ListErrors.Add(new Errors { Field = "SupporterStaffIds", Detail = "Danh sách Supporter không được chứa ID trùng lặp." });
+            response.ListErrors.Add(new Errors { Field = "SupporterStaffIds", Detail = "Supporter list must not contain duplicate IDs." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

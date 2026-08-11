@@ -54,16 +54,16 @@ public class NotificationEnvironmentalIncidentResolvedConsumer : IConsumer<Envir
             // người đọc, và 2026-08-03T14:15:00.0000000Z thì không ai đọc được).
             // Event không mang tên site nên tiêu đề nói theo sự việc thay vì cố in SiteId ra.
             var title = evt.WasFalseAlarm
-                ? "Sự cố môi trường: báo động nhầm"
-                : "Sự cố môi trường đã được xử lý";
+                ? "Environmental incident: false alarm"
+                : "Environmental incident resolved";
 
             var opening = evt.WasFalseAlarm
-                ? $"Sự cố môi trường đã được xác định là báo động nhầm lúc {evt.ResolvedAt:HH:mm dd/MM/yyyy}."
-                : $"Sự cố môi trường đã được xử lý xong lúc {evt.ResolvedAt:HH:mm dd/MM/yyyy}.";
+                ? $"The environmental incident was determined to be a false alarm at {evt.ResolvedAt:HH:mm dd/MM/yyyy}."
+                : $"The environmental incident was resolved at {evt.ResolvedAt:HH:mm dd/MM/yyyy}.";
 
             var note = string.IsNullOrWhiteSpace(evt.ResolutionNote)
                 ? string.Empty
-                : $" Ghi chú: {evt.ResolutionNote}";
+                : $" Note: {evt.ResolutionNote}";
 
             var body = opening + note;
 

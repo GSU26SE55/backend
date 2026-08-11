@@ -42,8 +42,8 @@ public sealed class TicketMergedConsumer : IConsumer<TicketMergedEvent>
                 UserId = evt.SourceCustomerId,
                 Type = NotificationTypeEnum.TicketMerged,
                 Channel = NotificationChannelEnum.InApp,
-                Title = $"Ticket {evt.SourceTicketCode} đã được gộp",
-                Body = $"Ticket {evt.SourceTicketCode} đã được gộp vào ticket {evt.MasterTicketCode}.",
+                Title = $"Ticket {evt.SourceTicketCode} has been merged",
+                Body = $"Ticket {evt.SourceTicketCode} has been merged into ticket {evt.MasterTicketCode}.",
                 PayloadJson = JsonSerializer.Serialize(new
                 {
                     sourceTicketId = evt.SourceTicketId,

@@ -85,7 +85,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         // Ticket.PrimaryHandlerStaffId là [NotMapped] — nguồn sự thật nằm ở ticket_assignments.
         // Không có dòng PrimaryHandler thì đây là null, và ChatCreatedEvent.AssignedStaffId cũng null;
@@ -101,7 +101,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             return Fail(400, blockReason);
 
         if (!_chatAuthorizationService.CanCreateChat(request.IsInternal, request.UserPermissions))
-            return Fail(403, request.IsInternal ? "Không có quyền tạo tin nhắn nội bộ." : "Không có quyền tạo tin nhắn.");
+            return Fail(403, request.IsInternal ? "You do not have permission to create internal messages." : "You do not have permission to create messages.");
 
         var spamLease = await _spamDetector.TryAcquireLeaseAsync(request.TicketId, request.UserId, cancellationToken);
         if (spamLease is null)
@@ -117,9 +117,9 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
 
             var warnings = new List<string>();
             if (_profanityFilter.ContainsProfanity(request.Body, out var profanityMatches))
-                warnings.Add($"Nội dung có thể chứa từ ngữ không phù hợp: {string.Join(", ", profanityMatches)}.");
+                warnings.Add($"Content may contain inappropriate language: {string.Join(", ", profanityMatches)}.");
             if (_piiDetector.ContainsPii(request.Body, out var piiMatches))
-                warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
+                warnings.Add($"Content may contain personal information: {string.Join(", ", piiMatches)}.");
 
             List<TicketParticipant> activeParticipants = new();
             bool needParticipants = (request.Mentions != null && request.Mentions.Any())
@@ -144,12 +144,12 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                         {
                             IsSuccess = false,
                             StatusCode = 400,
-                            Message = "Dữ liệu đầu vào không hợp lệ."
+                            Message = "Invalid input data."
                         };
                         response.ListErrors.Add(new Errors
                         {
                             Field = $"Mentions[{i}].UserId",
-                            Detail = "User được mention phải là participant active của ticket."
+                            Detail = "The mentioned user must be an active participant of the ticket."
                         });
                         return response;
                     }
@@ -288,7 +288,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                         ticket.Id,
                         ticket.Code,
                         managerMention.MentionedUserId,
-                        $"Manager được mention trên ticket P1 Critical #{ticket.Code}."), cancellationToken);
+                        $"Manager was mentioned on P1 Critical ticket #{ticket.Code}."), cancellationToken);
                 }
             }
 
@@ -299,8 +299,8 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 request.UserDisplayName,
                 ActivityActionEnum.Chatted,
                 null,
-                request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-                $"Đã thêm tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+                request.IsInternal ? "[Internal]" : "[Public]",
+                $"Added a chat message: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
             if (warnings.Count > 0)
             {
@@ -423,7 +423,7 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
             {
                 IsSuccess = true,
                 StatusCode = 201,
-                Message = "Thêm tin nhắn chat thành công.",
+                Message = "Chat message added successfully.",
                 Data = new TicketActionDTO
                 {
                     Id = chat.Id.ToString(),
