@@ -7,6 +7,17 @@ namespace BatteryService.Application.Services;
 public interface IIotDeviceOfflineDetectionService
 {
     Task<IotDeviceOfflineDetectionResult> DetectAsync(int offlineAfterSeconds, int batchSize, CancellationToken ct);
+
+    Task<IotDeviceOfflineTransitionResult> TryMarkOfflineAsync(
+        Guid deviceId,
+        DateTime detectedAtUtc,
+        int minimumSilenceSeconds,
+        CancellationToken ct);
 }
 
 public record IotDeviceOfflineDetectionResult(int Scanned, int MarkedOffline);
+
+public readonly record struct IotDeviceOfflineTransitionResult(
+    bool MarkedOffline,
+    Guid? AlertId,
+    bool EventQueued);

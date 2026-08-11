@@ -23,7 +23,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Slug đã tồn tại. Vui lòng chọn slug khác."
+                Message = "Slug already exists. Please choose a different slug."
             };
 
         if (request.BlogTemplateId.HasValue)
@@ -34,7 +34,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
                 {
                     IsSuccess = false,
                     StatusCode = 404,
-                    Message = "Template không tồn tại."
+                    Message = "Template not found."
                 };
         }
 
@@ -63,7 +63,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
             Summary = request.Summary,
             ContentHtml = contentDoc,
             ChangedByUserId = request.CurrentUserId,
-            ChangeNote = "Tạo bài viết",
+            ChangeNote = "Created post",
         };
 
         await _uow.BeginTransactionAsync();
@@ -83,7 +83,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo bài blog thành công.",
+            Message = "Blog post created successfully.",
             Data = new BlogPostActionDTO
             {
                 Id = post.Id.ToString(),

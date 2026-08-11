@@ -17,16 +17,16 @@ public class LinkGoogleCommand : IRequest<AccountActionResponse>, IValidatable<A
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (string.IsNullOrWhiteSpace(IdToken))
-            response.ListErrors.Add(new Errors { Field = "IdToken", Detail = "IdToken không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "IdToken", Detail = "IdToken is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
         return Task.FromResult(response);
     }

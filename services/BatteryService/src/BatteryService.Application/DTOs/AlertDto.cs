@@ -13,6 +13,9 @@ public class AlertDto
     /// </summary>
     public string BatteryAssetId { get; set; } = string.Empty;
 
+    /// <summary>IoT device id for a device-level offline incident; null for other alerts.</summary>
+    public string? IotDeviceId { get; set; }
+
     /// <summary>
     /// Sprint Bonus NS-21 (#661) — ID Site cho alert cấp site (ambient 9/10/11, environmental
     /// incident 14). Null cho alert cấp pin thông thường. Giúp FE route alert về đúng site.
@@ -57,6 +60,9 @@ public class AlertDto
 
     /// <summary>Timestamp kết thúc cửa sổ dedup alert.</summary>
     public DateTime DedupWindowEndUtc { get; set; }
+
+    /// <summary>Current AI prescription id, if a prescription has been generated.</summary>
+    public string? AiPrescriptionId { get; set; }
 
     /// <summary>Timestamp tạo (UTC).</summary>
     public DateTime CreatedAt { get; set; }

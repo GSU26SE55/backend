@@ -263,7 +263,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<TwoFactorSecretDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<TwoFactorSecretDto> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var result = await _mediator.Send(new Enable2FACommand { AccountId = userId.Value }, cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -290,7 +290,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<TwoFactorSetupDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<TwoFactorSetupDto> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var result = await _mediator.Send(new Init2FACommand { AccountId = userId.Value }, cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -316,7 +316,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<TwoFactorConfirmDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<TwoFactorConfirmDto> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
@@ -358,7 +358,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<BackupCodesDto> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<BackupCodesDto> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
@@ -552,7 +552,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var query = new AuthService.Application.CQRS.Query.Account.ExportMyDataQuery { AccountId = userId.Value };
         var result = await _mediator.Send(query, cancellationToken);
@@ -574,7 +574,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new AccountResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new AccountResponse { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var result = await _mediator.Send(new GetMyProfileQuery(), cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -609,7 +609,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null || userId.Value != id)
-            return StatusCode(403, new AccountActionResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền." });
+            return StatusCode(403, new AccountActionResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to perform this action." });
 
         command.Id = id;
         var result = await _mediator.Send(command, cancellationToken);
@@ -679,7 +679,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new LoginAttemptListResponse { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new LoginAttemptListResponse { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var query = new GetLoginHistoryQuery
         {
@@ -714,7 +714,7 @@ public class AccountsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId == null)
-            return Unauthorized(new CommonResponse<List<TrustedDeviceDto>> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<List<TrustedDeviceDto>> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         var response = await _mediator.Send(new GetMyTrustedDevicesQuery { AccountId = userId.Value }, cancellationToken);
         return StatusCode(response.StatusCode, response);
@@ -786,13 +786,13 @@ public class AccountsController : ControllerBase
     {
         IsSuccess = false,
         StatusCode = 401,
-        Message = "Chưa đăng nhập."
+        Message = "Not logged in."
     };
 
     private static CommonResponse<string> UnauthString() => new()
     {
         IsSuccess = false,
         StatusCode = 401,
-        Message = "Chưa đăng nhập."
+        Message = "Not logged in."
     };
 }

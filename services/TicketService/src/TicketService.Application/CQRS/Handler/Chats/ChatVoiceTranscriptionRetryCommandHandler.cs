@@ -13,7 +13,7 @@ namespace TicketService.Application.CQRS.Handler.Chats;
 
 public sealed class ChatVoiceTranscriptionRetryCommandHandler : IRequestHandler<ChatVoiceTranscriptionRetryCommand, TicketActionResponse>
 {
-    private const string PENDINGBODY = "Audio đang được xử lý…";
+    private const string PENDINGBODY = "Audio is being processed…";
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatAuthorizationService _authorization;
     private readonly IIntegrationEventOutboxWriter _outbox;
@@ -23,15 +23,15 @@ public sealed class ChatVoiceTranscriptionRetryCommandHandler : IRequestHandler<
     public async Task<TicketActionResponse> Handle(ChatVoiceTranscriptionRetryCommand request, CancellationToken ct)
     {
         if (!await _authorization.CanAccessTicketAsync(request.TicketId, request.UserId, new[] { request.UserRole.ToString() }, ct))
-            return Fail(403, "Không có quyền truy cập ticket này.");
+            return Fail(403, "You do not have permission to access this ticket.");
         var chat = await _uow.TicketChats.GetAllAsync().FirstOrDefaultAsync(c => c.Id == request.ChatId && c.TicketId == request.TicketId && !c.IsDeleted, ct);
         if (chat is null)
-            return Fail(404, "Không tìm thấy chat audio.");
+            return Fail(404, "Audio chat not found.");
         if (chat.VoiceTranscriptionStatus != VoiceTranscriptionStatusEnum.Failed)
-            return Fail(409, "Chỉ có thể thử lại transcription đã thất bại.");
+            return Fail(409, "Can only retry a failed transcription.");
         var fileId = chat.AttachmentFileIds.FirstOrDefault();
         if (fileId == Guid.Empty)
-            return Fail(409, "Chat audio không có file đính kèm.");
+            return Fail(409, "Audio chat has no attached file.");
 
         chat.Body = PENDINGBODY;
         chat.VoiceTranscriptionStatus = VoiceTranscriptionStatusEnum.Pending;
@@ -50,7 +50,7 @@ public sealed class ChatVoiceTranscriptionRetryCommandHandler : IRequestHandler<
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Audio đang được xử lý lại.",
+            Message = "Audio is being reprocessed.",
             Data = new TicketActionDTO { Id = chat.Id.ToString(), TicketId = chat.TicketId.ToString() }
         };
     }

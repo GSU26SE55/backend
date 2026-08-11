@@ -29,21 +29,21 @@ public class ChatBulkDeleteCommand : IRequest<ChatBulkDeleteResponse>, IValidata
         var response = new ChatBulkDeleteResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (ChatIds == null || ChatIds.Count == 0)
-            response.ListErrors.Add(new Errors { Field = "ChatIds", Detail = "Danh sách ChatIds không được rỗng." });
+            response.ListErrors.Add(new Errors { Field = "ChatIds", Detail = "ChatIds list must not be empty." });
         else if (ChatIds.Count > MaxBatchSize)
-            response.ListErrors.Add(new Errors { Field = "ChatIds", Detail = $"Tối đa {MaxBatchSize} chat mỗi lần xóa." });
+            response.ListErrors.Add(new Errors { Field = "ChatIds", Detail = $"A maximum of {MaxBatchSize} chats can be deleted at once." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

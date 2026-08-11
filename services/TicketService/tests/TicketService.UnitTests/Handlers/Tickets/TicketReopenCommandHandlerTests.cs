@@ -40,7 +40,7 @@ public class TicketReopenCommandHandlerTests
             TicketId = ticketId,
             CustomerId = customerId,
             CustomerName = "Customer A",
-            ReopenReason = "Vấn đề vẫn chưa được giải quyết triệt để."
+            ReopenReason = "The issue has still not been fully resolved."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
@@ -90,7 +90,7 @@ public class TicketReopenCommandHandlerTests
         {
             TicketId = ticketId,
             CustomerId = customerId,
-            ReopenReason = "Vẫn còn lỗi."
+            ReopenReason = "Still faulty."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
@@ -136,7 +136,7 @@ public class TicketReopenCommandHandlerTests
         {
             TicketId = ticketId,
             CustomerId = customerId,
-            ReopenReason = "Lâu quá rồi."
+            ReopenReason = "It has taken far too long."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });

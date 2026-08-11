@@ -112,7 +112,7 @@ public class AuthDataSeeder
             "Password", "203.0.113.11", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "win-desk-01", now.AddDays(-1)));
         attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.WrongPassword,
             "Password", "203.0.113.99", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "unknown-01", now.AddHours(-3),
-            "Sai mật khẩu — còn 4 lần thử"));
+            "Wrong password — 4 attempts remaining"));
 
         // Sample accounts: 2 success + 1 fail mỗi account
         foreach (var account in sampleAccounts)
@@ -123,13 +123,13 @@ public class AuthDataSeeder
                 "Google", "192.168.1.51", "Mozilla/5.0 Chrome/124.0", "web-chrome-001", now.AddDays(-2)));
             attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,
                 "Password", "10.0.0.5", "ExpoMobile/1.0 (iOS 17.4)", "expo-ios-001", now.AddHours(-12),
-                "Sai mật khẩu"));
+                "Wrong password"));
         }
 
         // 1 attempt cho email không tồn tại (AccountNotFound)
         attempts.Add(NewAttempt(null, "ghost@solarbattery.local", LoginAttemptResult.AccountNotFound,
             "Password", "198.51.100.1", "curl/8.6.0", null, now.AddHours(-6),
-            "Email không tồn tại"));
+            "Email does not exist"));
 
         _dbContext.LoginAttempts.AddRange(attempts);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -245,10 +245,10 @@ public class AuthDataSeeder
     {
         var seedRoles = new[]
         {
-            CreateRole(Guid.NewGuid(), "Admin", "ADMIN", "Quản trị viên hệ thống, có toàn quyền."),
-            CreateRole(Guid.NewGuid(), "Manager", "MANAGER", "Quản lý vận hành và điều phối nhân sự."),
-            CreateRole(Guid.NewGuid(), "Staff", "STAFF", "Nhân viên vận hành hệ thống."),
-            CreateRole(Guid.NewGuid(), "Customer", "CUSTOMER", "Khách hàng sử dụng dịch vụ.")
+            CreateRole(Guid.NewGuid(), "Admin", "ADMIN", "System administrator with full access."),
+            CreateRole(Guid.NewGuid(), "Manager", "MANAGER", "Manages operations and coordinates staff."),
+            CreateRole(Guid.NewGuid(), "Staff", "STAFF", "System operations staff."),
+            CreateRole(Guid.NewGuid(), "Customer", "CUSTOMER", "Customer using the service.")
         };
         var seedRoleNames = seedRoles.Select(seed => seed.NormalizedName).ToList();
 
@@ -263,7 +263,7 @@ public class AuthDataSeeder
         {
             technicianRole.Name = "Staff";
             technicianRole.NormalizedName = "STAFF";
-            technicianRole.Description = "Nhân viên vận hành hệ thống.";
+            technicianRole.Description = "System operations staff.";
             technicianRole.Status = RoleStatusEnum.Active;
             technicianRole.IsSystemRole = true;
             technicianRole.IsDeleted = false;

@@ -74,22 +74,22 @@ public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
 
             var title = tier switch
             {
-                PriorityTier.P1 => $"🔴 SLA P1 bị vi phạm{codeSuffix} — cần xử lý ngay",
-                PriorityTier.P2 => $"🟠 SLA P2 bị vi phạm{codeSuffix}",
-                _ => $"🟡 SLA P3 bị vi phạm{codeSuffix}",
+                PriorityTier.P1 => $"🔴 SLA P1 breached{codeSuffix} — immediate action required",
+                PriorityTier.P2 => $"🟠 SLA P2 breached{codeSuffix}",
+                _ => $"🟡 SLA P3 breached{codeSuffix}",
             };
 
             var body = tier switch
             {
                 PriorityTier.P1 =>
-                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                    "Cần reassign Senior (Tier 3) và báo Admin ngay.",
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Reassign to Senior (Tier 3) and notify Admin immediately.",
                 PriorityTier.P2 =>
-                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                    "Manager cân nhắc reassign Tier 2/3.",
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Manager should consider reassigning to Tier 2/3.",
                 _ =>
-                    $"Ticket ưu tiên {evt.Priority} đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. " +
-                    "Cần Manager review khi có thể.",
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Manager review required when possible.",
             };
 
             var payload = JsonSerializer.Serialize(new

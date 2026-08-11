@@ -24,25 +24,25 @@ public class ChatAttachKbReferenceCommandHandler : IRequestHandler<ChatAttachKbR
     {
         var role = _currentUser.Role;
         if (role != "Staff" && role != "Manager" && role != "Admin")
-            return Fail(403, "Chỉ Staff, Manager hoặc Admin mới được gắn tài liệu KB vào chat.");
+            return Fail(403, "Only Staff, Manager, or Admin may attach a KB article to chat.");
 
         var chat = await _uow.TicketChats.GetAllAsync()
             .FirstOrDefaultAsync(c => c.Id == command.ChatId && c.TicketId == command.TicketId && !c.IsDeleted, ct);
         if (chat == null)
-            return Fail(404, "Không tìm thấy chat.");
+            return Fail(404, "Chat not found.");
 
         var ticket = await _uow.Tickets.GetAllAsync()
             .FirstOrDefaultAsync(t => t.Id == command.TicketId && !t.IsDeleted, ct);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(403, "Ticket đã đóng, không thể gắn tài liệu KB.");
+            return Fail(403, "Ticket is closed, cannot attach a KB article.");
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.KbArticleId && !a.IsDeleted, ct);
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
+            return Fail(404, "Knowledge Base article not found.");
 
         var existing = await _uow.TicketKbReferences.GetAllAsync()
             .IgnoreQueryFilters()
@@ -80,7 +80,7 @@ public class ChatAttachKbReferenceCommandHandler : IRequestHandler<ChatAttachKbR
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã gắn bài viết KB vào chat thành công."
+            Message = "KB article attached to chat successfully."
         };
     }
 

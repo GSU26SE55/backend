@@ -46,7 +46,7 @@ public class NotificationGroupAddMembersCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "UserIds",
-                Detail = "Phải chọn ít nhất một người.",
+                Detail = "At least one person must be selected.",
             });
         }
         else if (UserIds.Count > MaxUserIdsPerRequest)
@@ -54,7 +54,7 @@ public class NotificationGroupAddMembersCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "UserIds",
-                Detail = $"Tối đa {MaxUserIdsPerRequest} người mỗi lần thêm.",
+                Detail = $"A maximum of {MaxUserIdsPerRequest} people per add.",
             });
         }
         else if (UserIds.Any(id => id == Guid.Empty))
@@ -62,7 +62,7 @@ public class NotificationGroupAddMembersCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "UserIds",
-                Detail = "Danh sách chứa id rỗng.",
+                Detail = "The list contains an empty id.",
             });
         }
 
@@ -72,7 +72,7 @@ public class NotificationGroupAddMembersCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

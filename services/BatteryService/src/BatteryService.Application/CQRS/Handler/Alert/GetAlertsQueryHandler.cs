@@ -30,7 +30,7 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Unable to determine the current user."
             };
         }
 
@@ -78,6 +78,7 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             {
                 Id = alert.Id.ToString(),
                 BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+                IotDeviceId = alert.IotDeviceId.HasValue ? alert.IotDeviceId.Value.ToString() : null,
                 // Sprint Bonus NS-21 (#661) — null cho alert cấp pin, GUID cho alert cấp site.
                 SiteId = alert.SiteId.HasValue ? alert.SiteId.Value.ToString() : null,
                 // Alert cấp site (ambient/env) không có BatteryAsset → serial rỗng thay vì null.
@@ -94,6 +95,7 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
                 AcknowledgedAt = alert.AcknowledgedAt,
                 ResolvedAt = alert.ResolvedAt,
                 DedupWindowEndUtc = alert.DedupWindowEndUtc,
+                AiPrescriptionId = alert.AiPrescriptionId,
                 CreatedAt = alert.CreatedAt
             })
             .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);

@@ -22,7 +22,7 @@ public class HeartbeatCommandHandler : IRequestHandler<HeartbeatCommand, CommonR
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Device không tồn tại.",
+                Message = "Device not found.",
                 Data = string.Empty
             };
 

@@ -22,7 +22,7 @@ public class DeleteSiteCommandHandler : IRequestHandler<DeleteSiteCommand, Commo
             .FirstOrDefaultAsync(site => site.Id == request.Id && !site.IsDeleted, cancellationToken);
 
         if (entity is null)
-            return NotFound("Không tìm thấy site.");
+            return NotFound("Site not found.");
 
         var hasAssets = await _unitOfWork.BatteryAssets
             .GetAllAsync()
@@ -34,7 +34,7 @@ public class DeleteSiteCommandHandler : IRequestHandler<DeleteSiteCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể xóa site vì vẫn còn tài sản pin."
+                Message = "Cannot delete site because it still has battery assets."
             };
         }
 
@@ -45,7 +45,7 @@ public class DeleteSiteCommandHandler : IRequestHandler<DeleteSiteCommand, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa site thành công."
+            Message = "Site deleted successfully."
         };
     }
 

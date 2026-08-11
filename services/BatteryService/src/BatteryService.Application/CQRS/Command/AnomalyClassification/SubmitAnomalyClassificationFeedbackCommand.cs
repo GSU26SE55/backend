@@ -34,10 +34,10 @@ public class SubmitAnomalyClassificationFeedbackCommand
         var response = new CommonResponse<AnomalyClassificationDto>();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id classification là bắt buộc.");
+            AddError(response, nameof(Id), "Classification Id is required.");
 
         if (!Enum.IsDefined(typeof(StaffFeedbackEnum), Feedback))
-            AddError(response, nameof(Feedback), "Feedback không hợp lệ (Correct/FalsePositive/FalseNegative).");
+            AddError(response, nameof(Feedback), "Invalid Feedback (Correct/FalsePositive/FalseNegative).");
 
         return Task.FromResult(response);
     }
@@ -46,7 +46,7 @@ public class SubmitAnomalyClassificationFeedbackCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

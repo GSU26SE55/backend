@@ -43,15 +43,15 @@ public class IntrospectTokenCommandHandler : IRequestHandler<IntrospectTokenComm
         {
             // Thiếu cấu hình ⇒ TỪ CHỐI TẤT CẢ. Mặc định mở khi chưa cấu hình chính là lỗi đang sửa.
             return Unauthorized(
-                "Token introspection chưa được cấu hình khoá truy cập. Đặt Introspection:ApiKey "
-                + $"(tối thiểu {IntrospectionOptions.MinKeyLength} ký tự) rồi thử lại.");
+                "Token introspection access key is not configured. Set Introspection:ApiKey "
+                + $"(at least {IntrospectionOptions.MinKeyLength} characters) and try again.");
         }
 
         if (!SecureCompareHelper.FixedTimeEquals(_options.ApiKey!.Trim(), request.PresentedApiKey?.Trim()))
         {
             // So sánh theo thời gian cố định: so bằng == sẽ dừng ở ký tự lệch đầu tiên, biến chính
             // độ trễ phản hồi thành kênh dò từng ký tự của khoá.
-            return Unauthorized("Thiếu hoặc sai khoá truy cập introspection.");
+            return Unauthorized("Missing or invalid introspection access key.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Token))

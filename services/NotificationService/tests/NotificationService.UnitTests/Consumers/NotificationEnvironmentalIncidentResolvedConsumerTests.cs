@@ -50,7 +50,7 @@ public class EnvironmentalIncidentResolvedConsumerTests
         ResolvedAt: new DateTime(2026, 6, 22, 12, 0, 0, DateTimeKind.Utc),
         ResolvedByUserId: Guid.NewGuid(),
         WasFalseAlarm: falseAlarm,
-        ResolutionNote: "Đã kiểm tra, an toàn");
+        ResolutionNote: "Checked, everything is safe");
 
     private static Mock<IMediator> CaptureMediator(List<CreateNotificationCommand> sink)
     {
@@ -91,7 +91,7 @@ public class EnvironmentalIncidentResolvedConsumerTests
 
         calls.Should().ContainSingle();
         // Tiêu đề nói bằng tiếng Việt cho người dùng, không dùng nhãn kỹ thuật "false-alarm".
-        calls[0].Title.Should().Contain("báo động nhầm");
+        calls[0].Title.Should().Contain("false alarm");
         // Guid không được lọt vào câu chữ hiển thị — định danh nằm ở payload.
         calls[0].Title.Should().NotContain(evt.IncidentId.ToString());
         calls[0].PayloadJson.Should().Contain(evt.IncidentId.ToString());

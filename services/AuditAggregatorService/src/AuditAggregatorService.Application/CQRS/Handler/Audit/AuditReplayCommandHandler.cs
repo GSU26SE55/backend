@@ -55,7 +55,7 @@ public class AuditReplayCommandHandler : IRequestHandler<AuditReplayCommand, Com
             errors.Add(new Errors
             {
                 Field = nameof(request.Service),
-                Detail = $"Service không hợp lệ. Chỉ nhận: {string.Join(", ", AuditServiceNames.All)} (hoặc bỏ trống = tất cả)."
+                Detail = $"Invalid service. Allowed values: {string.Join(", ", AuditServiceNames.All)} (or leave blank for all)."
             });
         }
 
@@ -64,13 +64,13 @@ public class AuditReplayCommandHandler : IRequestHandler<AuditReplayCommand, Com
 
         if (from.HasValue && to.HasValue && from > to)
         {
-            errors.Add(new Errors { Field = nameof(request.From), Detail = "From phải nhỏ hơn hoặc bằng To." });
+            errors.Add(new Errors { Field = nameof(request.From), Detail = "From must be less than or equal to To." });
         }
 
         // Mốc trong tương lai gần như luôn là gõ nhầm; replay khoảng đó chắc chắn rỗng.
         var now = DateTime.UtcNow;
         if (from > now)
-            errors.Add(new Errors { Field = nameof(request.From), Detail = "From không được ở tương lai." });
+            errors.Add(new Errors { Field = nameof(request.From), Detail = "From must not be in the future." });
 
         if (errors.Count > 0)
         {
@@ -78,7 +78,7 @@ public class AuditReplayCommandHandler : IRequestHandler<AuditReplayCommand, Com
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Yêu cầu replay không hợp lệ.",
+                Message = "Invalid replay request.",
                 ListErrors = errors
             };
         }
@@ -120,8 +120,8 @@ public class AuditReplayCommandHandler : IRequestHandler<AuditReplayCommand, Com
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = $"Đã tạo job replay cho service='{normalizedService ?? "all"}'. "
-                      + "Theo dõi tiến độ tại GET /api/admin/audit/replay/{jobId}.",
+            Message = $"Replay job created for service='{normalizedService ?? "all"}'. "
+                      + "Track progress at GET /api/admin/audit/replay/{jobId}.",
             Data = new
             {
                 jobId = job.Id,

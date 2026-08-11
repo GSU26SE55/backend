@@ -38,7 +38,7 @@ public class GetThresholdConfigByBatteryTypeQueryHandler : IRequestHandler<GetTh
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy cấu hình ngưỡng cho loại pin."
+                Message = "Threshold configuration not found for this battery type."
             };
         }
 

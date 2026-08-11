@@ -42,10 +42,10 @@ public class GetPresignedUrlQueryHandler : IRequestHandler<GetPresignedUrlQuery,
             return Forbidden();
 
         if (file.Status == FileStatusEnum.Quarantined)
-            return Conflict("File đang bị cách ly và không thể tải.");
+            return Conflict("File is quarantined and cannot be downloaded.");
 
         if (file.Status == FileStatusEnum.Processing)
-            return Conflict("File đang được xử lý, vui lòng thử lại sau.");
+            return Conflict("File is being processed, please try again later.");
 
         var result = await _objectStorageService.GetPresignedUrlAsync(
             objectKey,
@@ -56,7 +56,7 @@ public class GetPresignedUrlQueryHandler : IRequestHandler<GetPresignedUrlQuery,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Tạo presigned URL thành công.",
+            Message = "Presigned URL created successfully.",
             Data = result
         };
     }
@@ -70,14 +70,14 @@ public class GetPresignedUrlQueryHandler : IRequestHandler<GetPresignedUrlQuery,
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<string> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền tạo presigned URL cho file này."
+        Message = "You do not have permission to create a presigned URL for this file."
     };
 
     private static CommonResponse<string> Conflict(string message) => new()

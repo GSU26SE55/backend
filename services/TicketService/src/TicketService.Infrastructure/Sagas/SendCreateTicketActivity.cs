@@ -45,8 +45,8 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         // trùng không bao giờ phát hiện được cặp (ticket auto ↔ ticket thủ công) trên cùng pin.
         var description =
             $"{DescribeAnomaly(saga.AnomalyType)} " +
-            $"Giá trị đo được {saga.ActualValue} {saga.Unit}, vượt ngưỡng cho phép {saga.ThresholdValue} {saga.Unit}. " +
-            $"Phát hiện lúc {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) trên thiết bị {saga.AssetSerialNumber}.";
+            $"Measured value {saga.ActualValue} {saga.Unit}, exceeding the allowed threshold {saga.ThresholdValue} {saga.Unit}. " +
+            $"Detected at {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) on device {saga.AssetSerialNumber}.";
         // BE-AI — nếu AI có prescription (chỉ V2 từ SohPredictionBackgroundService), ghép vào
         // Description để Manager thấy khuyến nghị ngay khi ticket vào hàng chờ. Nullable → không đổi
         // ticket từ threshold engine (AiPrescription = null).
@@ -115,22 +115,22 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
     /// </summary>
     private static string DescribeAnomaly(int anomalyType) => anomalyType switch
     {
-        1 => "Pin quá nhiệt — cảm biến ghi nhận nhiệt độ pin vượt ngưỡng an toàn.",
-        2 => "Pin quá áp — điện áp vượt ngưỡng cho phép.",
-        3 => "Pin sụt áp — điện áp tụt dưới ngưỡng an toàn.",
-        4 => "Pin cạn — mức pin (SOC) xuống rất thấp.",
-        5 => "Pin xả nhanh bất thường — tốc độ xả vượt ngưỡng.",
-        6 => "Sạc bất thường — dòng sạc vượt ngưỡng cho phép.",
-        7 => "Thiết bị mất kết nối — không nhận được dữ liệu cảm biến.",
-        8 => "Pin chai, suy giảm sức khoẻ (SOH) — hiệu suất giảm dưới ngưỡng.",
-        9 => "Nhiệt độ môi trường quanh pin cao bất thường.",
-        10 => "Độ ẩm quanh pin cao bất thường.",
-        11 => "Nhiệt độ và độ ẩm quanh pin cùng cao bất thường.",
-        12 => "Điện trở trong của pin tăng cao — dấu hiệu pin xuống cấp.",
-        13 => "Lệch áp giữa các cell pin vượt ngưỡng.",
-        14 => "Sự cố môi trường tại site ảnh hưởng tới pin.",
-        15 => "Cảm biến báo số liệu không khớp — nghi ngờ lỗi cảm biến.",
-        _ => "Phát hiện bất thường trên pin."
+        1 => "Battery overheating — the sensor recorded a battery temperature above the safe threshold.",
+        2 => "Battery overvoltage — the voltage exceeded the allowed threshold.",
+        3 => "Battery undervoltage — the voltage dropped below the safe threshold.",
+        4 => "Battery nearly empty — the state of charge (SOC) dropped very low.",
+        5 => "Abnormally rapid discharge — the discharge rate exceeded the threshold.",
+        6 => "Abnormal charging — the charging current exceeded the allowed threshold.",
+        7 => "Device offline — no sensor data has been received.",
+        8 => "Battery degradation, declining state of health (SOH) — performance dropped below the threshold.",
+        9 => "Abnormally high ambient temperature around the battery.",
+        10 => "Abnormally high humidity around the battery.",
+        11 => "Both temperature and humidity around the battery are abnormally high.",
+        12 => "Battery internal resistance has risen — a sign of degradation.",
+        13 => "Voltage imbalance between battery cells exceeded the threshold.",
+        14 => "An environmental incident at the site is affecting the battery.",
+        15 => "Sensor readings do not match — a sensor fault is suspected.",
+        _ => "An anomaly was detected on the battery."
     };
 
     private static string MapAnomalyTypeToCategory(int anomalyType) => anomalyType switch

@@ -31,7 +31,7 @@ public class RevokeAllSessionsCommandHandler : IRequestHandler<RevokeAllSessions
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 
@@ -67,7 +67,7 @@ public class RevokeAllSessionsCommandHandler : IRequestHandler<RevokeAllSessions
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã thu hồi {sessions.Count} session.",
+            Message = $"Revoked {sessions.Count} session(s).",
             Data = sessions.Count
         };
     }

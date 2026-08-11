@@ -30,14 +30,14 @@ public static class ChatClosedStateHelper
             return null;
 
         if (ticketStatus == TicketStatusEnum.Closed)
-            return BuildMessage(action, "đã đóng");
+            return BuildMessage(action, "closed");
 
         if (ticketStatus == TicketStatusEnum.ClosedPendingRate)
         {
             if (action == ChatAction.Add && actorRole == ActorRoleEnum.Customer)
                 return null;
 
-            return BuildMessage(action, "đang chờ đánh giá");
+            return BuildMessage(action, "pending rating");
         }
 
         return null;
@@ -45,9 +45,9 @@ public static class ChatClosedStateHelper
 
     private static string BuildMessage(ChatAction action, string statusText) => action switch
     {
-        ChatAction.Add => $"Không thể thêm bình luận khi ticket {statusText}.",
-        ChatAction.Edit => $"Không thể sửa bình luận khi ticket {statusText}.",
-        ChatAction.Delete => $"Không thể xóa bình luận khi ticket {statusText}.",
-        _ => $"Không thể thực hiện khi ticket {statusText}."
+        ChatAction.Add => $"Cannot add a comment while the ticket is {statusText}.",
+        ChatAction.Edit => $"Cannot edit a comment while the ticket is {statusText}.",
+        ChatAction.Delete => $"Cannot delete a comment while the ticket is {statusText}.",
+        _ => $"Cannot perform this action while the ticket is {statusText}."
     };
 }

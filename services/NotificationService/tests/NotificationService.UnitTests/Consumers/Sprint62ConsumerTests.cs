@@ -132,7 +132,7 @@ public class TicketLifecycleConsumerTests
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketApprovedConsumer>();
         var customerId = Guid.NewGuid();
         var evt = new TicketApprovedEvent(
-            Guid.NewGuid(), "TKT-100", customerId, Guid.NewGuid(), "Đạt yêu cầu", DateTime.UtcNow);
+            Guid.NewGuid(), "TKT-100", customerId, Guid.NewGuid(), "Meets requirements", DateTime.UtcNow);
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketApprovedEvent>()).Should().BeTrue();
@@ -143,7 +143,7 @@ public class TicketLifecycleConsumerTests
             n.UserId.Should().Be(customerId);
             n.Type.Should().Be(NotificationTypeEnum.TicketApproved);
             n.PayloadJson.Should().Contain("TicketRate");
-            n.Body.Should().Contain("đánh giá");
+            n.Body.Should().Contain("rate the quality");
         });
 
         await harness.Stop();
@@ -157,7 +157,7 @@ public class TicketLifecycleConsumerTests
         var staffId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
         var evt = new TicketRejectedEvent(
-            Guid.NewGuid(), "TKT-101", customerId, staffId, "Chưa thay cell", IsClosedRejected: false, DateTime.UtcNow);
+            Guid.NewGuid(), "TKT-101", customerId, staffId, "Cell not yet replaced", IsClosedRejected: false, DateTime.UtcNow);
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketRejectedEvent>()).Should().BeTrue();
@@ -176,7 +176,7 @@ public class TicketLifecycleConsumerTests
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketRejectedConsumer>();
         var customerId = Guid.NewGuid();
         var evt = new TicketRejectedEvent(
-            Guid.NewGuid(), "TKT-102", customerId, Guid.NewGuid(), "Ngoài phạm vi", IsClosedRejected: true, DateTime.UtcNow);
+            Guid.NewGuid(), "TKT-102", customerId, Guid.NewGuid(), "Out of scope", IsClosedRejected: true, DateTime.UtcNow);
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketRejectedEvent>()).Should().BeTrue();
@@ -202,7 +202,7 @@ public class TicketLifecycleConsumerTests
         {
             customerId, ConsumerTestHarness.DefaultRecipient
         });
-        written.Should().AllSatisfy(n => n.Body.Should().Contain("tự động đóng"));
+        written.Should().AllSatisfy(n => n.Body.Should().Contain("automatically closed"));
 
         await harness.Stop();
     }
@@ -217,7 +217,7 @@ public class TicketLifecycleConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketClosedEvent>()).Should().BeTrue();
 
-        written.Should().AllSatisfy(n => n.Body.Should().Contain("5 sao"));
+        written.Should().AllSatisfy(n => n.Body.Should().Contain("5-star"));
         await harness.Stop();
     }
 
@@ -227,7 +227,7 @@ public class TicketLifecycleConsumerTests
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketReopenedConsumer>();
         var staffId = Guid.NewGuid();
         var evt = new TicketReopenedEvent(
-            Guid.NewGuid(), "TKT-105", Guid.NewGuid(), staffId, "Vẫn lỗi", 2, DateTime.UtcNow);
+            Guid.NewGuid(), "TKT-105", Guid.NewGuid(), staffId, "Still broken", 2, DateTime.UtcNow);
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketReopenedEvent>()).Should().BeTrue();
@@ -278,7 +278,7 @@ public class TicketLifecycleConsumerTests
         {
             n.UserId.Should().Be(customerId);
             n.Type.Should().Be(NotificationTypeEnum.TicketRatingRequested);
-            n.Body.Should().Contain("4 ngày");
+            n.Body.Should().Contain("4 day(s)");
         });
 
         await harness.Stop();
@@ -305,7 +305,7 @@ public class SmsFailedConsumerTests
         CorrelationId: correlationId,
         PhoneNumber: "0901234567",
         SourceService: source,
-        ErrorMessage: "SIM hết tiền",
+        ErrorMessage: "SIM out of credit",
         FailedAt: DateTime.UtcNow,
         FinalFailure: true);
 
@@ -336,7 +336,7 @@ public class SmsFailedConsumerTests
 
         noti.Status.Should().Be(NotificationStatusEnum.Failed);
         noti.SentAt.Should().BeNull();
-        noti.FailureReason.Should().Contain("SIM hết tiền");
+        noti.FailureReason.Should().Contain("SIM out of credit");
     }
 
     [Fact]

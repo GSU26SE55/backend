@@ -63,7 +63,7 @@ public class NotificationFallbackTests : IDisposable
             Channel = NotificationChannelEnum.Push,
             Status = status,
             Title = "SLA breach",
-            Body = "Ticket sắp quá hạn",
+            Body = "Ticket is about to breach SLA",
             EntityType = "Ticket",
             EntityId = Guid.NewGuid(),
             SentAt = sentAt,

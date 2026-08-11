@@ -27,6 +27,8 @@ internal static class NotificationDebounce
 
     private static string Key(Guid alertId) => $"notif_debounce:{alertId}";
     private static string MessageKey(Guid messageId) => $"notif_msg:{messageId}";
+    private static string BusinessKey(string scope, Guid aggregateId) =>
+        $"notif_business:{scope}:{aggregateId:N}";
 
     /// <summary>
     /// Trả <c>true</c> nếu đây là lần đầu trong cửa sổ (→ tiếp tục gửi); <c>false</c> nếu đã gửi
@@ -36,6 +38,44 @@ internal static class NotificationDebounce
     public static Task<bool> TryBeginAsync(ICacheService cache, Guid alertId, CancellationToken cancellationToken)
         => cache.TrySetIfNotExistsAsync(
             Key(alertId), DateTime.UtcNow.ToString("O"), Window, cancellationToken);
+
+    /// <summary>
+    /// Runs a business incident exactly once within <paramref name="window"/>. Unlike the legacy
+    /// TryBegin API, this uses a short ownership lease and only promotes it to the full dedupe
+    /// window after the side effect succeeds, so a transient database failure cannot swallow the
+    /// notification on retry.
+    /// </summary>
+    public static async Task<bool> ProcessOnceByBusinessKeyAsync(
+        ICacheService cache,
+        string scope,
+        Guid aggregateId,
+        TimeSpan window,
+        CancellationToken cancellationToken,
+        Func<Task> action)
+    {
+        var key = BusinessKey(scope, aggregateId);
+        var token = Guid.NewGuid().ToString("N");
+        if (!await cache.TrySetIfNotExistsAsync(key, token, MessageLease, cancellationToken))
+            return false;
+
+        try
+        {
+            await action();
+        }
+        catch
+        {
+            try
+            { await cache.TryReleaseLeaseAsync(key, token, cancellationToken); }
+            catch { }
+            throw;
+        }
+
+        try
+        { await cache.TryRefreshLeaseAsync(key, token, window, cancellationToken); }
+        catch { }
+
+        return true;
+    }
 
     /// <summary>
     /// GH-765 — hạn CHỖ GIỮ trong lúc consumer đang chạy (ngắn), tách khỏi

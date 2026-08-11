@@ -32,15 +32,15 @@ public sealed class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>,
     {
         var response = new TicketActionResponse();
         if (FileId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(FileId), Detail = "fileId là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(FileId), Detail = "fileId is required." });
         if (string.IsNullOrWhiteSpace(FileName))
-            response.ListErrors.Add(new Errors { Field = nameof(FileName), Detail = "fileName là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(FileName), Detail = "fileName is required." });
         if (!AllowedAudioMimeTypes.Contains(ContentType))
-            response.ListErrors.Add(new Errors { Field = nameof(ContentType), Detail = "Định dạng audio không được hỗ trợ." });
+            response.ListErrors.Add(new Errors { Field = nameof(ContentType), Detail = "Audio format is not supported." });
         if (SizeBytes <= 0 || SizeBytes > MaxAudioFileSizeDefault)
-            response.ListErrors.Add(new Errors { Field = nameof(SizeBytes), Detail = "Kích thước audio phải trong khoảng 1 byte đến 20 MB." });
+            response.ListErrors.Add(new Errors { Field = nameof(SizeBytes), Detail = "Audio size must be between 1 byte and 20 MB." });
         if (string.IsNullOrWhiteSpace(Url))
-            response.ListErrors.Add(new Errors { Field = nameof(Url), Detail = "url là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(Url), Detail = "url is required." });
         response.IsSuccess = response.ListErrors.Count == 0;
         response.StatusCode = response.IsSuccess ? 200 : 400;
         return Task.FromResult(response);

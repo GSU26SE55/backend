@@ -39,7 +39,7 @@ public class NotificationGroupUpdateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy nhóm.",
+                Message = "Group not found.",
             };
         }
 
@@ -49,7 +49,7 @@ public class NotificationGroupUpdateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Nhóm hệ thống không sửa được.",
+                Message = "System groups cannot be edited.",
             };
         }
 
@@ -67,7 +67,7 @@ public class NotificationGroupUpdateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Đã có nhóm khác trùng tên.",
+                Message = "Another group with this name already exists.",
             };
         }
 
@@ -86,7 +86,7 @@ public class NotificationGroupUpdateCommandHandler
                 group.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Sửa nhóm người nhận",
+                reason: "Edit recipient group",
                 metadata: new Dictionary<string, object?>
                 {
                     ["previousName"] = previousName,
@@ -105,7 +105,7 @@ public class NotificationGroupUpdateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Đã có nhóm khác trùng tên.",
+                Message = "Another group with this name already exists.",
             };
         }
         catch (Exception ex)
@@ -117,7 +117,7 @@ public class NotificationGroupUpdateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không sửa được nhóm.",
+                Message = "Failed to update the group.",
             };
         }
 
@@ -125,7 +125,7 @@ public class NotificationGroupUpdateCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã cập nhật nhóm.",
+            Message = "Group updated.",
             Data = group.Id,
         };
     }

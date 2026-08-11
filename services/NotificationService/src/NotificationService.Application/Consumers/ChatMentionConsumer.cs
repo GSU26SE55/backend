@@ -31,8 +31,8 @@ public class ChatMentionConsumer : IConsumer<ChatMentionedEvent>
         {
             var evt = context.Message;
 
-            var title = "Bạn được mention trong 1 chat";
-            var body = $"{evt.MentionedDisplayName} được mention trong ticket.";
+            var title = "You were mentioned in a chat";
+            var body = $"{evt.MentionedDisplayName} was mentioned in the ticket.";
             // 03/08/2026 — dựng bằng JsonSerializer thay cho chuỗi nội suy. Payload hiện chỉ chứa
             // Guid/int/bool nên chuỗi nội suy chưa từng sinh JSON hỏng, nhưng nó đúng chỉ nhờ
             // may: người sau thêm một trường chữ (tên người, tiêu đề ticket) mà quên escape là

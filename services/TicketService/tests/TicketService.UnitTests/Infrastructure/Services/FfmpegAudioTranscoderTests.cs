@@ -44,9 +44,9 @@ public class FfmpegAudioTranscoderTests
     }
 
     [Theory]
-    [InlineData("ghi-am.wav", "ghi-am.m4a")]
+    [InlineData("recording.wav", "recording.m4a")]
     [InlineData("a.b.ogg", "a.b.m4a")]
-    [InlineData("khong-duoi", "khong-duoi.m4a")]
+    [InlineData("no-extension", "no-extension.m4a")]
     [InlineData("", "voice-message.m4a")]
     public async Task ToM4a_NormalizesFileName(string source, string expected)
     {

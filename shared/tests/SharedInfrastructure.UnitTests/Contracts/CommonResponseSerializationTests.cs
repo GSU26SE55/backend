@@ -34,7 +34,7 @@ public class CommonResponseSerializationTests
             IsSuccess = false,
             StatusCode = 400
         };
-        response.ListErrors.Add(new Errors { Field = "Email", Detail = "Email không hợp lệ." });
+        response.ListErrors.Add(new Errors { Field = "Email", Detail = "Invalid email format." });
 
         var json = JsonSerializer.Serialize(response, JsonOptions);
         using var doc = JsonDocument.Parse(json);
@@ -43,6 +43,6 @@ public class CommonResponseSerializationTests
         listErrors.ValueKind.Should().Be(JsonValueKind.Array);
         listErrors.GetArrayLength().Should().Be(1);
         listErrors[0].GetProperty("field").GetString().Should().Be("Email");
-        listErrors[0].GetProperty("detail").GetString().Should().Be("Email không hợp lệ.");
+        listErrors[0].GetProperty("detail").GetString().Should().Be("Invalid email format.");
     }
 }

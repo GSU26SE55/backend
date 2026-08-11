@@ -24,7 +24,7 @@ public class CreateIotFirmwareReleaseCommandHandler : IRequestHandler<CreateIotF
         var dup = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .AnyAsync(f => !f.IsDeleted && f.Version == ver && f.HardwareRevision == hw, ct);
         if (dup)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Version đã tồn tại cho hardware này." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Version already exists for this hardware." };
 
         var entity = new FirmwareEntity
         {
@@ -49,7 +49,7 @@ public class CreateIotFirmwareReleaseCommandHandler : IRequestHandler<CreateIotF
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo firmware release thành công.",
+            Message = "Firmware release created successfully.",
             Data = IotDeviceMapper.ToDto(entity)
         };
     }
@@ -65,9 +65,9 @@ public class PublishIotFirmwareReleaseCommandHandler : IRequestHandler<PublishIo
         var entity = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy firmware release." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 404, Message = "Firmware release not found." };
         if (entity.IsArchived)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Release đã archived." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Release is already archived." };
 
         entity.IsPublished = true;
         entity.PublishedAt ??= DateTime.UtcNow;
@@ -78,7 +78,7 @@ public class PublishIotFirmwareReleaseCommandHandler : IRequestHandler<PublishIo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã publish.",
+            Message = "Published.",
             Data = IotDeviceMapper.ToDto(entity)
         };
     }
@@ -94,11 +94,11 @@ public class ArchiveIotFirmwareReleaseCommandHandler : IRequestHandler<ArchiveIo
         var entity = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy firmware release." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Firmware release not found." };
         entity.IsArchived = true;
         _unitOfWork.IotFirmwareReleases.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã archive." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Archived." };
     }
 }
 

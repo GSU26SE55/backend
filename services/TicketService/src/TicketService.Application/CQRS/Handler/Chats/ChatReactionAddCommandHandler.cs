@@ -54,17 +54,17 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
             })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
-            return Fail(403, "Không có quyền truy cập ticket.");
+            return Fail(403, "You do not have permission to access this ticket.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.IsInternal && !TicketQueryHelper.CanViewInternalChats(request.ActorRoles))
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         // Không filter !IsDeleted — unique index (ChatId, UserId, ReactionType) không phải partial index,
         // nên row soft-deleted vẫn chiếm key. Nếu tồn tại (kể cả đã xóa) → restore thay vì insert mới.
@@ -147,7 +147,7 @@ public class ChatReactionAddCommandHandler : IRequestHandler<ChatReactionAddComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Thêm reaction thành công.",
+            Message = "Reaction added successfully.",
             Data = aggregate
         };
     }

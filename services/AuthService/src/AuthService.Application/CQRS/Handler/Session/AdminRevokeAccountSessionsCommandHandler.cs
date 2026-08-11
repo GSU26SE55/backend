@@ -37,7 +37,7 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -69,7 +69,7 @@ public class AdminRevokeAccountSessionsCommandHandler : IRequestHandler<AdminRev
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Admin đã thu hồi {sessions.Count} session.",
+            Message = $"Admin revoked {sessions.Count} session(s).",
             Data = sessions.Count
         };
     }

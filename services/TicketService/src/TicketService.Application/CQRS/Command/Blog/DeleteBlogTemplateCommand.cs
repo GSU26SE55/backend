@@ -19,7 +19,7 @@ public class DeleteBlogTemplateCommand : IRequest<CommonResponse<BlogTemplateDTO
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.ListErrors.Add(new Errors { Field = "TemplateId", Detail = "ID template không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TemplateId", Detail = "Invalid template ID." });
         }
 
         return Task.FromResult(response);

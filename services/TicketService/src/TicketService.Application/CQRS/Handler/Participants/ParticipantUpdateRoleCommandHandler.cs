@@ -32,19 +32,19 @@ public class ParticipantUpdateRoleCommandHandler : IRequestHandler<ParticipantUp
     {
         var isManagerOrAdmin = request.ActorRole == ActorRoleEnum.Manager || request.ActorRole == ActorRoleEnum.Admin;
         if (!isManagerOrAdmin)
-            return Fail(403, "Chỉ Manager/Admin mới có quyền cập nhật vai trò participant.");
+            return Fail(403, "Only Manager/Admin has permission to update a participant's role.");
 
         var participant = await _uow.TicketParticipants.GetAllAsync()
             .FirstOrDefaultAsync(p => p.TicketId == request.TicketId && p.UserId == request.UserId
                 && p.RemovedAt == null && !p.IsDeleted, ct);
 
         if (participant == null)
-            return Fail(404, "Không tìm thấy participant active của ticket.");
+            return Fail(404, "Active participant of the ticket not found.");
 
         if (participant.ParticipantType == ParticipantTypeEnum.Owner
             || participant.ParticipantType == ParticipantTypeEnum.PrimaryAssignee
             || participant.ParticipantType == ParticipantTypeEnum.PreviousAssignee)
-            return Fail(403, "Không thể đổi vai trò Owner/PrimaryAssignee/PreviousAssignee — vai trò này do hệ thống tự quản lý.");
+            return Fail(403, "Cannot change the role of Owner/PrimaryAssignee/PreviousAssignee — this role is managed automatically by the system.");
 
         var oldType = participant.ParticipantType;
         participant.ParticipantType = request.ParticipantType;
@@ -75,7 +75,7 @@ public class ParticipantUpdateRoleCommandHandler : IRequestHandler<ParticipantUp
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật vai trò participant thành công.",
+            Message = "Participant role updated successfully.",
             Data = ToDto(participant)
         };
     }

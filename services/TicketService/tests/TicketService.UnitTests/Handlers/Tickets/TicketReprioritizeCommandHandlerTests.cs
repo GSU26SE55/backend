@@ -30,7 +30,7 @@ public class TicketReprioritizeCommandHandlerTests
             TicketId = ticket.Id,
             Impact = ImpactScopeEnum.Site,
             Urgency = UrgencyLevelEnum.High,
-            Reason = "Cả trạm bị ảnh hưởng",
+            Reason = "The whole site is affected",
             ManagerId = Guid.NewGuid(),
             ManagerName = "Manager"
         }, CancellationToken.None);
@@ -42,7 +42,7 @@ public class TicketReprioritizeCommandHandlerTests
         ticket.UrgencyLevel.Should().Be(UrgencyLevelEnum.High);
         logger.Verify(x => x.LogAsync(ticket.Id, It.IsAny<Guid>(), ActorRoleEnum.Manager, "Manager",
             ActivityActionEnum.PriorityAssigned, "P3Normal",
-            "P1Critical (Impact: Site, Urgency: High)", "Cả trạm bị ảnh hưởng"), Times.Once);
+            "P1Critical (Impact: Site, Urgency: High)", "The whole site is affected"), Times.Once);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class TicketReprioritizeCommandHandlerTests
             TicketId = ticket.Id,
             Impact = ImpactScopeEnum.SingleAsset,
             Urgency = UrgencyLevelEnum.High,
-            Reason = "Chỉ một viên pin nhưng gấp"
+            Reason = "Only one battery but urgent"
         }, CancellationToken.None);
 
         timer.Priority.Should().Be(TicketPriorityEnum.P2High);
@@ -134,7 +134,7 @@ public class TicketReprioritizeCommandHandlerTests
             TicketId = ticket.Id,
             Impact = ImpactScopeEnum.MultiSite,
             Urgency = UrgencyLevelEnum.High,
-            Reason = "Nâng mức"
+            Reason = "Raise the priority"
         }, CancellationToken.None);
 
         result.StatusCode.Should().Be(409);

@@ -61,14 +61,14 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
     {
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var blockReason = ChatClosedStateHelper.GetBlockReason(
             ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Delete, _chatOptions.BlockEditOnClosed);
@@ -98,7 +98,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Đã ẩn bình luận.",
+                Message = "Comment hidden.",
                 Data = new TicketActionDTO
                 {
                     Id = chat.Id.ToString(),
@@ -171,7 +171,7 @@ public class ChatDeleteCommandHandler : IRequestHandler<ChatDeleteCommand, Ticke
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa bình luận thành công.",
+            Message = "Comment deleted successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

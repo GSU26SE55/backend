@@ -33,7 +33,7 @@ public class NotificationTemplateReviseCommand
         var response = new NotificationTemplateActionResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id template không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid template Id." });
 
         NotificationTemplateContentRules.Validate(
             response.ListErrors, type: null, channel: null, TitleTemplate, BodyTemplate);
@@ -43,7 +43,7 @@ public class NotificationTemplateReviseCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "ActorUserId",
-                Detail = "Không xác định được người thực hiện từ token.",
+                Detail = "Unable to determine the actor from the token.",
             });
         }
 
@@ -51,7 +51,7 @@ public class NotificationTemplateReviseCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

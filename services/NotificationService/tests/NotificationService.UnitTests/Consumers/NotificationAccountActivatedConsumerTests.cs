@@ -16,7 +16,7 @@ public class AccountActivatedConsumerTests
         var evt = new AccountActivatedEvent(
             AccountId: accountId,
             Email: "user@example.com",
-            FullName: "Nguyễn Văn A",
+            FullName: "John Doe",
             PhoneNumber: null,
             Role: "Customer",
             CreationSource: "SelfRegister");
@@ -31,7 +31,7 @@ public class AccountActivatedConsumerTests
         n.UserId.Should().Be(accountId);
         n.EntityType.Should().Be("Account");
         n.EntityId.Should().Be(accountId);
-        n.Body.Should().Contain("Nguyễn Văn A");
+        n.Body.Should().Contain("John Doe");
 
         await harness.Stop();
     }

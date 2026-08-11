@@ -21,7 +21,7 @@ public class UpdateBlogTemplateCommandHandler : IRequestHandler<UpdateBlogTempla
             .FirstOrDefaultAsync(ct);
 
         if (template == null)
-            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template không tìm thấy." };
+            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template not found." };
 
         template.Name = request.Name;
         template.Description = request.Description;
@@ -35,7 +35,7 @@ public class UpdateBlogTemplateCommandHandler : IRequestHandler<UpdateBlogTempla
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật template thành công.",
+            Message = "Template updated successfully.",
             Data = new BlogTemplateDTO
             {
                 Id = template.Id.ToString(),

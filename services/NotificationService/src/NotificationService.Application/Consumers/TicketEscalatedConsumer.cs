@@ -50,10 +50,10 @@ public class TicketEscalatedConsumer : IConsumer<TicketEscalatedEvent>
                 return;
             }
 
-            var title = $"Ticket {evt.Code} đã escalate";
+            var title = $"Ticket {evt.Code} escalated";
             var body = string.IsNullOrWhiteSpace(evt.Note)
-                ? $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason})."
-                : $"Ticket {evt.Code} vừa được escalate (lý do #{evt.Reason}): {evt.Note}";
+                ? $"Ticket {evt.Code} has just been escalated (reason #{evt.Reason})."
+                : $"Ticket {evt.Code} has just been escalated (reason #{evt.Reason}): {evt.Note}";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,

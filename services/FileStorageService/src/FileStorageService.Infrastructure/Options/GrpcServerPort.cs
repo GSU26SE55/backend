@@ -43,7 +43,7 @@ public static class GrpcServerPort
         // được cấu hình để gọi tới sẽ trỏ vào hư không. Hỏng kiểu đó im lặng hơn hẳn việc không lên.
         if (port <= 0 || port > 65535)
             throw new InvalidOperationException(
-                $"{PrimaryKey} phải nằm trong khoảng 1–65535 (nhận được {port}).");
+                $"{PrimaryKey} must be between 1 and 65535 (received {port}).");
 
         return port;
     }

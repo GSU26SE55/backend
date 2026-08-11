@@ -25,15 +25,15 @@ public sealed class TicketReprioritizeCommand : IRequest<TicketActionResponse>, 
     {
         var response = new TicketActionResponse();
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(TicketId), Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(TicketId), Detail = "Invalid TicketId." });
         if (!Enum.IsDefined(Impact))
-            response.ListErrors.Add(new Errors { Field = nameof(Impact), Detail = "Phạm vi ảnh hưởng không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(Impact), Detail = "Invalid impact scope." });
         if (!Enum.IsDefined(Urgency))
-            response.ListErrors.Add(new Errors { Field = nameof(Urgency), Detail = "Mức khẩn cấp không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(Urgency), Detail = "Invalid urgency level." });
         if (string.IsNullOrWhiteSpace(Reason) || Reason.Trim().Length > 1000)
-            response.ListErrors.Add(new Errors { Field = nameof(Reason), Detail = "Lý do là bắt buộc và tối đa 1000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(Reason), Detail = "Reason is required and must be at most 1000 characters." });
         if (response.ListErrors.Count > 0)
-        { response.IsSuccess = false; response.StatusCode = 400; response.Message = "Dữ liệu đầu vào không hợp lệ."; }
+        { response.IsSuccess = false; response.StatusCode = 400; response.Message = "Invalid input data."; }
         return Task.FromResult(response);
     }
 }

@@ -41,7 +41,7 @@ public class TicketStatusChangedConsumer : IConsumer<TicketStatusChangedEvent>
             if (evt.CustomerId == Guid.Empty)
                 return;
 
-            var title = $"Ticket {evt.Code} chuyển trạng thái";
+            var title = $"Ticket {evt.Code} status changed";
             var body = $"Ticket {evt.Code}: {evt.OldStatusName} → {evt.NewStatusName}.";
             var payload = JsonSerializer.Serialize(new
             {
@@ -86,10 +86,10 @@ public class TicketApprovedConsumer : IConsumer<TicketApprovedEvent>
             if (evt.CustomerId == Guid.Empty)
                 return;
 
-            var title = $"Ticket {evt.Code} đã được duyệt hoàn tất";
+            var title = $"Ticket {evt.Code} approved";
             var body = string.IsNullOrWhiteSpace(evt.ManagerComment)
-                ? $"Ticket {evt.Code} đã được duyệt. Mời bạn đánh giá chất lượng xử lý."
-                : $"Ticket {evt.Code} đã được duyệt: {evt.ManagerComment}. Mời bạn đánh giá chất lượng xử lý.";
+                ? $"Ticket {evt.Code} has been approved. Please rate the quality of the service."
+                : $"Ticket {evt.Code} has been approved: {evt.ManagerComment}. Please rate the quality of the service.";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,
@@ -138,14 +138,14 @@ public class TicketRejectedConsumer : IConsumer<TicketRejectedEvent>
             if (evt.IsClosedRejected)
             {
                 recipient = evt.CustomerId;
-                title = $"Ticket {evt.Code} bị từ chối";
-                body = $"Yêu cầu {evt.Code} nằm ngoài phạm vi dịch vụ nên đã được đóng. Lý do: {evt.Reason}";
+                title = $"Ticket {evt.Code} rejected";
+                body = $"Request {evt.Code} is outside the service scope and has been closed. Reason: {evt.Reason}";
             }
             else
             {
                 recipient = evt.StaffId ?? Guid.Empty;
-                title = $"Kết quả xử lý ticket {evt.Code} bị trả lại";
-                body = $"Manager yêu cầu xử lý lại ticket {evt.Code}. Lý do: {evt.Reason}";
+                title = $"Ticket {evt.Code} resolution returned";
+                body = $"The Manager requested that ticket {evt.Code} be reworked. Reason: {evt.Reason}";
             }
 
             if (recipient == Guid.Empty)
@@ -201,12 +201,12 @@ public class TicketClosedConsumer : IConsumer<TicketClosedEvent>
         {
             var evt = context.Message;
 
-            var title = $"Ticket {evt.Code} đã đóng";
+            var title = $"Ticket {evt.Code} closed";
             var body = evt.IsAutoClosed
-                ? $"Ticket {evt.Code} tự động đóng do quá hạn đánh giá."
+                ? $"Ticket {evt.Code} was automatically closed due to the rating deadline passing."
                 : evt.Rating.HasValue
-                    ? $"Cảm ơn bạn đã đánh giá {evt.Rating} sao. Ticket {evt.Code} đã đóng."
-                    : $"Ticket {evt.Code} đã đóng.";
+                    ? $"Thank you for your {evt.Rating}-star rating. Ticket {evt.Code} is now closed."
+                    : $"Ticket {evt.Code} is now closed.";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,
@@ -265,8 +265,8 @@ public class TicketReopenedConsumer : IConsumer<TicketReopenedEvent>
         {
             var evt = context.Message;
 
-            var title = $"Ticket {evt.Code} được mở lại";
-            var body = $"Khách hàng mở lại ticket {evt.Code} (lần {evt.ReopenCount}). Lý do: {evt.ReopenReason}";
+            var title = $"Ticket {evt.Code} reopened";
+            var body = $"The customer reopened ticket {evt.Code} (occurrence {evt.ReopenCount}). Reason: {evt.ReopenReason}";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,
@@ -319,11 +319,11 @@ public class TicketRatingRequestedConsumer : IConsumer<TicketRatingRequestedEven
             if (evt.CustomerId == Guid.Empty)
                 return;
 
-            var title = $"Mời đánh giá ticket {evt.Code}";
+            var title = $"Please rate ticket {evt.Code}";
             var body = evt.DaysUntilAutoClose > 0
-                ? $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá trong " +
-                  $"{evt.DaysUntilAutoClose} ngày tới, sau đó ticket sẽ tự đóng."
-                : $"Ticket {evt.Code} đã xử lý xong {evt.DaysPending} ngày trước. Vui lòng đánh giá để hoàn tất.";
+                ? $"Ticket {evt.Code} was resolved {evt.DaysPending} day(s) ago. Please rate it within " +
+                  $"the next {evt.DaysUntilAutoClose} day(s), after which the ticket will close automatically."
+                : $"Ticket {evt.Code} was resolved {evt.DaysPending} day(s) ago. Please rate it to complete the process.";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,

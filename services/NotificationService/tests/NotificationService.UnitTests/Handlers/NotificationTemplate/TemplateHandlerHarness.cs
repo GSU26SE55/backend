@@ -70,7 +70,7 @@ internal sealed class TemplateHandlerHarness
         bool isActive = true,
         bool isDeleted = false,
         string title = "Ticket {{code}}",
-        string body = "Ticket ưu tiên {{priority}}.") => new()
+        string body = "Ticket priority {{priority}}.") => new()
         {
             Id = Guid.NewGuid(),
             Type = type,

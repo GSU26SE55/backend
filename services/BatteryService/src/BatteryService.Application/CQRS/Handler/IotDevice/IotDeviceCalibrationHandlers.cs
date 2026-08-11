@@ -44,7 +44,7 @@ public class CreateIotDeviceCalibrationCommandHandler : IRequestHandler<CreateIo
         var device = await _unitOfWork.IotDevices.GetAllAsync()
             .FirstOrDefaultAsync(d => d.Id == request.IotDeviceId && !d.IsDeleted, ct);
         if (device is null)
-            return new CommonResponse<IotDeviceCalibrationDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceCalibrationDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         var entity = new IotDeviceCalibration
         {
@@ -69,7 +69,7 @@ public class CreateIotDeviceCalibrationCommandHandler : IRequestHandler<CreateIo
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo calibration thành công.",
+            Message = "Calibration created successfully.",
             Data = IotDeviceCalibrationMapper.ToDto(entity)
         };
     }
@@ -91,13 +91,13 @@ public class DeleteIotDeviceCalibrationCommandHandler : IRequestHandler<DeleteIo
         var entity = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
             .FirstOrDefaultAsync(c => c.Id == request.CalibrationId && c.IotDeviceId == request.IotDeviceId && !c.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy calibration." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Calibration not found." };
 
         _unitOfWork.IotDeviceCalibrations.DeleteAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
         await _cache.InvalidateAsync(request.IotDeviceId, ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã xoá calibration." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Calibration deleted." };
     }
 }
 

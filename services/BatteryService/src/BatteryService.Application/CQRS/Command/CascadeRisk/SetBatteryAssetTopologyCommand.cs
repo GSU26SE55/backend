@@ -23,11 +23,11 @@ public class SetBatteryAssetTopologyCommand
         var response = new CommonResponse<CascadeRiskDto>();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(Id), "Battery asset Id is required.");
 
         if (!Enum.IsDefined(typeof(ElectricalTopologyEnum), ElectricalTopology))
             AddError(response, nameof(ElectricalTopology),
-                "ElectricalTopology không hợp lệ (1=Independent, 2=SeriesString, 3=ParallelBank, 4=SeriesParallel).");
+                "Invalid ElectricalTopology (1=Independent, 2=SeriesString, 3=ParallelBank, 4=SeriesParallel).");
 
         return Task.FromResult(response);
     }
@@ -36,7 +36,7 @@ public class SetBatteryAssetTopologyCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu cập nhật electrical topology không hợp lệ.";
+        response.Message = "Invalid electrical topology update data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

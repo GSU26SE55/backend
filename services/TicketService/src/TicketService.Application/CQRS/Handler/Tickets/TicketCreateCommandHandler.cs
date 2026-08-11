@@ -48,17 +48,17 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             .FirstOrDefaultAsync(c => c.AccountId == request.CustomerId, ct);
 
         if (customer == null)
-            return Fail(404, "Không tìm thấy thông tin khách hàng trong hệ thống Ticket.");
+            return Fail(404, "Customer information not found in the Ticket system.");
 
         if (customer.Status != AccountStatusEnum.Active)
-            return Fail(403, "Tài khoản khách hàng đang bị khóa hoặc vô hiệu hóa.");
+            return Fail(403, "The customer account is locked or disabled.");
 
         var batterySerialNumbers = new Dictionary<Guid, string>();
         foreach (var batteryAssetId in request.BatteryAssetIds)
         {
             var serialNumber = await _batteryLookup.GetSerialAsync(batteryAssetId, ct);
             if (string.IsNullOrWhiteSpace(serialNumber))
-                return Fail(403, "Pin được chọn không tồn tại hoặc bạn không có quyền truy cập.");
+                return Fail(403, "The selected battery does not exist or you do not have access to it.");
 
             batterySerialNumbers[batteryAssetId] = serialNumber;
         }

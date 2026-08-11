@@ -26,16 +26,16 @@ public class ChatReadersQueryHandler : IRequestHandler<ChatReadersQuery, ChatRea
             .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
-            return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Ticket." };
+            return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles))
-            return new ChatReadersResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền truy cập ticket." };
+            return new ChatReadersResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId
             || (chat.IsInternal && !TicketQueryHelper.CanViewInternalChats(request.ActorRoles)))
         {
-            return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy bình luận." };
+            return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Comment not found." };
         }
 
         var reads = await _uow.TicketChatReads.GetAllAsync()

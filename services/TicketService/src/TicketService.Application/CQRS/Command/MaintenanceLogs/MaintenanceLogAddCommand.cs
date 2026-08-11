@@ -57,25 +57,25 @@ public class MaintenanceLogAddCommand : IRequest<TicketActionResponse>, IValidat
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (StaffId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "StaffId", Detail = "StaffId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "StaffId", Detail = "Invalid StaffId." });
 
         if (string.IsNullOrWhiteSpace(Summary))
-            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Tóm tắt không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary is required." });
 
         if (DurationMinutes < 0)
-            response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Thời gian thực hiện không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Invalid duration." });
 
         if (StartedAt == default)
-            response.ListErrors.Add(new Errors { Field = "StartedAt", Detail = "Thời gian bắt đầu không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "StartedAt", Detail = "Invalid start time." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

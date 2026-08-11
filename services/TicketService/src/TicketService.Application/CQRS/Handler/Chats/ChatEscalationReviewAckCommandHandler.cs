@@ -27,21 +27,21 @@ public class ChatEscalationReviewAckCommandHandler : IRequestHandler<ChatEscalat
     public async Task<CommonResponse<object>> Handle(ChatEscalationReviewAckCommand request, CancellationToken ct)
     {
         if (request.CurrentUserRole is not (ActorRoleEnum.Manager or ActorRoleEnum.Admin))
-            return Fail(403, "Chỉ Manager hoặc Admin mới có thể ACK escalation review.");
+            return Fail(403, "Only Manager or Admin can ACK an escalation review.");
 
         var chat = await _uow.TicketChats.GetAllAsync()
             .Where(c => c.Id == request.ChatId && c.TicketId == request.TicketId && !c.IsDeleted)
             .FirstOrDefaultAsync(ct);
 
         if (chat == null)
-            return Fail(404, "Không tìm thấy chat.");
+            return Fail(404, "Chat not found.");
 
         await _outboxWriter.WriteAsync(new ChatEscalationReviewAckedEvent(
             request.ChatId,
             request.CurrentUserId,
             DateTime.UtcNow), ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã ACK escalation review." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Escalation review ACKed." };
     }
 
     private static CommonResponse<object> Fail(int statusCode, string message)

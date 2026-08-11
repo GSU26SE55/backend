@@ -19,28 +19,28 @@ public class UpdateRoleCommand : IRequest<RoleActionResponse>, IValidatable<Role
 
         if (Id == Guid.Empty)
         {
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id role không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid role Id." });
         }
 
         if (string.IsNullOrWhiteSpace(Name))
         {
-            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Tên role không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Role name is required." });
         }
         else if (Name.Trim().Length > 100)
         {
-            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Tên role tối đa 100 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Name", Detail = "Role name must be at most 100 characters." });
         }
 
         if (!string.IsNullOrEmpty(Description) && Description.Length > 500)
         {
-            response.ListErrors.Add(new Errors { Field = "Description", Detail = "Mô tả tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Description", Detail = "Description must be at most 500 characters." });
         }
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

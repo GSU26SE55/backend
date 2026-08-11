@@ -130,7 +130,7 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         if (_client is null || !_client.IsStarted)
         {
             _logger.LogWarning("Cannot publish cmd — MQTT bridge not started.");
-            throw new InvalidOperationException("MQTT bridge chưa khởi động (Mqtt:Enabled=false hoặc broker không reachable).");
+            throw new InvalidOperationException("MQTT bridge is not started (Mqtt:Enabled=false or broker not reachable).");
         }
         var msg = new MqttApplicationMessageBuilder()
             .WithTopic(MqttTopicMap.Command(deviceCode))
@@ -162,7 +162,7 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
                     await DispatchHeartbeatAsync(deviceCode, payload);
                     break;
                 case "status":
-                    await DispatchStatusAsync(deviceCode, payload);
+                    await DispatchStatusAsync(deviceCode, payload, e.ApplicationMessage.Retain);
                     break;
                 case "cmd_ack":
                     await DispatchCommandAckAsync(deviceCode, payload);
@@ -317,13 +317,21 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
     }
 
     /// <summary>
-    /// Sprint IoT-2 #IoT2-24 — LWT handler. Payload "offline" → mark device offline ngay,
-    /// publish <c>IotDeviceWentOfflineEvent</c> + tạo Alert(DeviceOffline) cho mỗi battery.
+    /// LWT/status handler. Both online and offline pass through the same availability policies as
+    /// HTTP heartbeat, telemetry ingest, and the polling fallback. Payload matching is exact to
+    /// avoid treating arbitrary strings containing "offline" as a state transition.
     /// </summary>
-    private async Task DispatchStatusAsync(string deviceCode, string payload)
+    private async Task DispatchStatusAsync(string deviceCode, string payload, bool isRetained)
     {
-        if (!payload.Contains("offline", StringComparison.OrdinalIgnoreCase))
+        var normalized = payload.Trim().ToLowerInvariant();
+        if (normalized is not ("online" or "offline"))
+        {
+            _logger.LogWarning(
+                "Ignore invalid MQTT status payload from {DeviceCode}: {Payload}",
+                deviceCode,
+                payload);
             return;
+        }
 
         using var scope = _scopeFactory.CreateScope();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
@@ -331,65 +339,54 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
                 unitOfWork.IotDevices.GetAllAsync().Include(d => d.Site), deviceCode)
             .FirstOrDefaultAsync();
         if (device is null)
-            return;
-
-        if (device.Status != IotDeviceStatusEnum.Active)
-            return;
-
-        var now = DateTime.UtcNow;
-        device.Status = IotDeviceStatusEnum.Offline;
-        device.LastOfflineAt = now;
-        unitOfWork.IotDevices.UpdateAsync(device);
-
-        // Tạo Alert(DeviceOffline) cho mỗi battery liên kết qua site.
-        var siteAssets = await unitOfWork.BatteryAssets.GetAllAsync()
-            .Where(a => !a.IsDeleted && a.SiteId == device.SiteId)
-            .ToListAsync();
-
-        foreach (var asset in siteAssets)
         {
-            await unitOfWork.Alerts.AddAsync(new Domain.Entities.Alert
-            {
-                // BaseEntity.Id KHÔNG có giá trị khởi tạo (`public Guid Id { get; set; }`), nên bỏ
-                // trống thì mọi Alert dựng trong vòng lặp đều mang Guid.Empty. EF gom chúng vào
-                // cùng một khoá trong identity map và ném ngay ở lần AddAsync thứ hai:
-                //   "The instance of entity type 'Alert' cannot be tracked because another
-                //    instance with the same key value for {'Id'} is already being tracked."
-                // Site chỉ có 1 asset thì không lộ; từ 2 asset trở lên là hỏng — đường LWT chưa
-                // bao giờ chạy được trên site thật. Bắt được khi test MQTT E2E 31/07/2026
-                // (site của GW-ESP32-MVP-001 có 5 asset).
-                // Cùng khuôn với IotDeviceOfflineDetectionService (đường phát hiện offline bằng
-                // polling) — chỗ đó set Id tường minh từ đầu.
-                Id = Guid.NewGuid(),
-                BatteryAssetId = asset.Id,
-                SiteId = asset.SiteId,
-                AnomalyType = AnomalyTypeEnum.DeviceOffline,
-                Severity = AlertSeverityEnum.Warning,
-                DetectedAt = now,
-                Status = AlertStatusEnum.Open,
-                DedupWindowEndUtc = now.AddHours(1)
-            });
+            _logger.LogWarning("MQTT status from unknown device {DeviceCode}", deviceCode);
+            return;
         }
 
-        // Publish outbox event — NotificationService consume riêng cho Staff/ops.
-        var outboxWriter = scope.ServiceProvider.GetService<SharedContracts.Interfaces.IIntegrationEventOutboxWriter>();
-        if (outboxWriter is not null)
+        if (normalized == "online")
         {
-            await outboxWriter.WriteAsync(new SharedContracts.Events.IotDeviceWentOfflineEvent(
-                IotDeviceId: device.Id,
-                DeviceCode: device.DeviceCode,
-                DisplayName: device.DisplayName,
-                SiteId: device.SiteId,
-                SiteName: device.Site?.Name,
-                LastSeenAt: device.LastSeenAt ?? now,
-                DetectedAt: now,
-                OfflineDurationSeconds: 0,
-                AffectedBatteryCount: siteAssets.Count,
-                AlertId: null));
+            if (device.Status is IotDeviceStatusEnum.Disabled or IotDeviceStatusEnum.Decommissioned)
+                return;
+
+            var availability = scope.ServiceProvider.GetRequiredService<IIotDeviceAvailabilityService>();
+            var recovery = await availability.RecordHealthySignalAsync(
+                device,
+                DateTime.UtcNow,
+                forceActivation: false);
+            unitOfWork.IotDevices.UpdateAsync(device);
+            await unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Accepted MQTT online signal for {DeviceCode} (retained={Retained}, recovered={Recovered})",
+                deviceCode,
+                isRetained,
+                recovery.BecameActive);
+            return;
         }
 
-        await unitOfWork.SaveChangesAsync();
-        _logger.LogWarning("Device {DeviceCode} marked offline via LWT — {AssetCount} assets alerted", deviceCode, siteAssets.Count);
+        var detector = scope.ServiceProvider.GetRequiredService<IIotDeviceOfflineDetectionService>();
+        var transition = await detector.TryMarkOfflineAsync(
+            device.Id,
+            DateTime.UtcNow,
+            Math.Max(15, _options.LwtOfflineGraceSeconds),
+            CancellationToken.None);
+
+        if (transition.MarkedOffline)
+        {
+            _logger.LogWarning(
+                "Device {DeviceCode} marked offline via MQTT LWT (retained={Retained}, eventQueued={EventQueued})",
+                deviceCode,
+                isRetained,
+                transition.EventQueued);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Ignored MQTT offline signal for {DeviceCode}: device is not Active or is still fresh (retained={Retained})",
+                deviceCode,
+                isRetained);
+        }
     }
 
     private async Task DispatchCommandAckAsync(string deviceCode, string payload)

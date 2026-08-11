@@ -38,7 +38,7 @@ public class NotificationTemplateActivateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 
@@ -49,7 +49,7 @@ public class NotificationTemplateActivateCommandHandler
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = $"Phiên bản {target.Version} vốn đã là bản đang dùng.",
+                Message = $"Version {target.Version} is already the active version.",
                 Data = target.Id,
             };
         }
@@ -84,7 +84,7 @@ public class NotificationTemplateActivateCommandHandler
                 target.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Quay lui phiên bản template",
+                reason: "Roll back template version",
                 metadata: new Dictionary<string, object?>
                 {
                     ["type"] = target.Type.ToString(),
@@ -105,7 +105,7 @@ public class NotificationTemplateActivateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không kích hoạt được phiên bản.",
+                Message = "Failed to activate the version.",
             };
         }
 
@@ -117,7 +117,7 @@ public class NotificationTemplateActivateCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã kích hoạt phiên bản {target.Version}.",
+            Message = $"Activated version {target.Version}.",
             Data = target.Id,
         };
     }

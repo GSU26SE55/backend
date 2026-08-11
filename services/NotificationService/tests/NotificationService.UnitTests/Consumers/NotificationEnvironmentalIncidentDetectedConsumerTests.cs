@@ -131,7 +131,7 @@ public class EnvironmentalIncidentDetectedConsumerTests
         var pushCmd = captured.First(c => c.Channel == NotificationChannelEnum.Push);
         pushCmd.Body.Should().Contain("Severity");
         pushCmd.Body.Should().Contain("14:30");
-        pushCmd.Body.Should().Contain("Xử lý ngay");
+        pushCmd.Body.Should().Contain("Immediate action required");
 
         var emailCmd = captured.First(c => c.Channel == NotificationChannelEnum.Email);
         emailCmd.Body.Should().Contain("<html");

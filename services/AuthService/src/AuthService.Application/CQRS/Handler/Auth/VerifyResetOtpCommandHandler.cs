@@ -33,16 +33,16 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại hoặc OTP không hợp lệ.");
+            return Fail(404, "Account does not exist or the OTP is invalid.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, "Account is locked. Please try again later.");
 
         if (account.OtpPurpose != OtpPurposeEnum.PasswordReset
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(401, "Invalid or expired OTP.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
@@ -53,7 +53,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             AppMetrics.AuthOtpUsageTotal.WithLabels("password_reset", "wrong").Inc(); // #AUTH-78
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, "Incorrect OTP.");
         }
 
         account.FailedLoginAttempts = 0;
@@ -67,7 +67,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "OTP hợp lệ. Sử dụng resetToken để đặt mật khẩu mới.",
+            Message = "OTP is valid. Use the resetToken to set a new password.",
             Data = new ResetTokenDto
             {
                 ResetToken = resetToken,

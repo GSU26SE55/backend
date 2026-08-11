@@ -57,7 +57,7 @@ public class NotificationTemplateReviseCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 
@@ -115,7 +115,7 @@ public class NotificationTemplateReviseCommandHandler
                 revision.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Sửa template — sinh phiên bản mới",
+                reason: "Edit template — create new version",
                 metadata: new Dictionary<string, object?>
                 {
                     ["type"] = revision.Type.ToString(),
@@ -136,7 +136,7 @@ public class NotificationTemplateReviseCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không sửa được template.",
+                Message = "Failed to update template.",
             };
         }
 
@@ -148,7 +148,7 @@ public class NotificationTemplateReviseCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã tạo phiên bản {revision.Version} và bật lên.",
+            Message = $"Created version {revision.Version} and activated it.",
             Data = revision.Id,
         };
     }

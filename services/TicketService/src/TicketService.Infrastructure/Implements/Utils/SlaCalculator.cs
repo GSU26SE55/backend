@@ -27,7 +27,7 @@ public class SlaCalculator : ISlaCalculator
             TicketPriorityEnum.P1Critical => 4,
             TicketPriorityEnum.P2High => 24,
             TicketPriorityEnum.P3Normal => 72,
-            _ => throw new ArgumentOutOfRangeException(nameof(priority), $"Giá trị Priority {priority} không được hỗ trợ để tính SLA.")
+            _ => throw new ArgumentOutOfRangeException(nameof(priority), $"Priority value {priority} is not supported for SLA calculation.")
         };
     }
 }

@@ -10,6 +10,8 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using AlertEntity = BatteryService.Domain.Entities.Alert;
 using IotDeviceEntity = BatteryService.Domain.Entities.IotDevice;
 using SensorReadingEntity = BatteryService.Domain.Entities.SensorReading;
@@ -52,6 +54,8 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     private readonly IIotCalibrationCache _calibrationCache;
     private readonly ITelemetryPublisher _telemetryPublisher;
     private readonly ITelemetryStatsService _telemetryStatsService;
+    private readonly IIotDeviceAvailabilityService _availability;
+    private readonly IIntegrationEventOutboxWriter _outbox;
     private readonly ILogger<BatchIngestSensorReadingsCommandHandler> _logger;
 
     public BatchIngestSensorReadingsCommandHandler(
@@ -60,13 +64,17 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         IIotCalibrationCache calibrationCache,
         ITelemetryPublisher telemetryPublisher,
         ITelemetryStatsService telemetryStatsService,
-        ILogger<BatchIngestSensorReadingsCommandHandler> logger)
+        ILogger<BatchIngestSensorReadingsCommandHandler> logger,
+        IIotDeviceAvailabilityService? availability = null,
+        IIntegrationEventOutboxWriter? outbox = null)
     {
         _unitOfWork = unitOfWork;
         _metrics = metrics;
         _calibrationCache = calibrationCache;
         _telemetryPublisher = telemetryPublisher;
         _telemetryStatsService = telemetryStatsService;
+        _outbox = outbox ?? new IntegrationEventOutboxWriter(unitOfWork);
+        _availability = availability ?? new IotDeviceAvailabilityService(unitOfWork, _outbox);
         _logger = logger;
     }
 
@@ -88,7 +96,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Message = dup.Message ?? "Idempotent replay — trả response cũ.",
+                    Message = dup.Message ?? "Idempotent replay — returning the previous response.",
                     Data = new SensorReadingBatchIngestResult
                     {
                         TotalReceived = dup.TotalReceived,
@@ -116,7 +124,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 skewErrors.Add(new Errors
                 {
                     Field = $"Items[{i}].DeviceTimestamp",
-                    Detail = $"Clock skew {skewMin:F1} phút > {ClockSkewMaxMinutes} phút. Đồng bộ NTP."
+                    Detail = $"Clock skew {skewMin:F1} min > {ClockSkewMaxMinutes} min. Sync NTP."
                 });
             }
         }
@@ -126,7 +134,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Clock skew vượt ngưỡng — đồng bộ NTP trước khi gửi.",
+                Message = "Clock skew exceeds the threshold — sync NTP before sending.",
                 Data = new SensorReadingBatchIngestResult { TotalReceived = request.Items.Count }
             };
             foreach (var e in skewErrors)
@@ -195,7 +203,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                     {
                         IsSuccess = false,
                         StatusCode = 403,
-                        Message = "Device không có quyền ingest cho battery thuộc site khác.",
+                        Message = "Device does not have permission to ingest for batteries belonging to another site.",
                         Data = new SensorReadingBatchIngestResult
                         {
                             TotalReceived = request.Items.Count,
@@ -376,9 +384,11 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
 
             if (inserted > 0)
             {
-                device.LastSeenAt = DateTime.UtcNow;
-                if (device.Status == IotDeviceStatusEnum.Offline || device.Status == IotDeviceStatusEnum.Pending)
-                    device.Status = IotDeviceStatusEnum.Active;
+                await _availability.RecordHealthySignalAsync(
+                    device,
+                    DateTime.UtcNow,
+                    forceActivation: false,
+                    cancellationToken);
             }
 
             // ─── Sprint IoT-2 #IoT2-17 — auto-disable outlier ───
@@ -408,16 +418,29 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                     var firstAsset = assets.Values.FirstOrDefault();
                     if (firstAsset is not null)
                     {
+                        var alertId = Guid.NewGuid();
                         await _unitOfWork.Alerts.AddAsync(new AlertEntity
                         {
+                            Id = alertId,
+                            IotDeviceId = device.Id,
                             BatteryAssetId = firstAsset.Id,
                             SiteId = firstAsset.SiteId,
-                            AnomalyType = AnomalyTypeEnum.DeviceOffline,
+                            AnomalyType = AnomalyTypeEnum.IotDataIntegrityViolation,
                             Severity = AlertSeverityEnum.Critical,
                             DetectedAt = now,
                             Status = AlertStatusEnum.Open,
                             DedupWindowEndUtc = now.AddHours(6)
                         });
+
+                        await _outbox.WriteAsync(new IotDeviceAutoDecommissionedEvent(
+                            IotDeviceId: device.Id,
+                            DeviceCode: device.DeviceCode,
+                            DisplayName: device.DisplayName,
+                            SiteId: device.SiteId,
+                            AlertId: alertId,
+                            RejectedReadingCount: device.OutlierIncidentCount,
+                            WindowStartedAt: device.OutlierWindowStartedAt ?? now,
+                            DecommissionedAt: now), cancellationToken);
                     }
                 }
             }
@@ -504,14 +527,14 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     private static string BuildMessage(int rejectedOutliers, int duplicates)
     {
         if (rejectedOutliers == 0 && duplicates == 0)
-            return "Ghi nhận sensor readings thành công.";
+            return "Sensor readings recorded successfully.";
 
         var parts = new List<string>(2);
         if (rejectedOutliers > 0)
-            parts.Add($"{rejectedOutliers} outlier bị loại");
+            parts.Add($"{rejectedOutliers} outliers rejected");
         if (duplicates > 0)
-            parts.Add($"{duplicates} số đo đã có từ trước");
-        return $"Ghi nhận readings — {string.Join(", ", parts)}.";
+            parts.Add($"{duplicates} readings already existed");
+        return $"Readings recorded — {string.Join(", ", parts)}.";
     }
 
     /// <summary>

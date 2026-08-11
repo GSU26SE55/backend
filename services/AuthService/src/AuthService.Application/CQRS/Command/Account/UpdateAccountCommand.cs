@@ -21,30 +21,30 @@ public class UpdateAccountCommand : IRequest<AccountActionResponse>, IValidatabl
         var response = new AccountActionResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid account Id." });
 
         if (string.IsNullOrWhiteSpace(FullName))
-            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Họ tên không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Full name is required." });
         else if (FullName.Trim().Length > 150)
-            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Họ tên tối đa 150 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Full name must not exceed 150 characters." });
 
         if (!string.IsNullOrWhiteSpace(PhoneNumber) && PhoneNumber.Trim().Length > 20)
-            response.ListErrors.Add(new Errors { Field = "PhoneNumber", Detail = "Số điện thoại tối đa 20 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "PhoneNumber", Detail = "Phone number must not exceed 20 characters." });
 
         if (!string.IsNullOrEmpty(AvatarUrl) && AvatarUrl.Length > 500)
-            response.ListErrors.Add(new Errors { Field = "AvatarUrl", Detail = "Avatar URL tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "AvatarUrl", Detail = "Avatar URL must not exceed 500 characters." });
 
         if (DateOfBirth.HasValue && DateOfBirth.Value > DateTime.UtcNow)
-            response.ListErrors.Add(new Errors { Field = "DateOfBirth", Detail = "Ngày sinh không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "DateOfBirth", Detail = "Invalid date of birth." });
 
         if (!string.IsNullOrEmpty(Address) && Address.Length > 500)
-            response.ListErrors.Add(new Errors { Field = "Address", Detail = "Địa chỉ tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Address", Detail = "Address must not exceed 500 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

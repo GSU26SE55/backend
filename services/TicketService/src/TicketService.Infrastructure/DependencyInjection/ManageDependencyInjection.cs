@@ -81,12 +81,12 @@ public static class ManageDependencyInjection
     {
         services.AddOptions<OutboxOptions>()
             .Bind(configuration.GetSection(OutboxOptions.SectionName))
-            .Validate(options => options.IntervalSeconds > 0, "Outbox:IntervalSeconds phải lớn hơn 0.")
-            .Validate(options => options.BatchSize > 0, "Outbox:BatchSize phải lớn hơn 0.")
-            .Validate(options => options.MaxRetryCount > 0, "Outbox:MaxRetryCount phải lớn hơn 0.")
-            .Validate(options => options.PublishTimeoutSeconds > 0, "Outbox:PublishTimeoutSeconds phải lớn hơn 0.")
+            .Validate(options => options.IntervalSeconds > 0, "Outbox:IntervalSeconds must be greater than 0.")
+            .Validate(options => options.BatchSize > 0, "Outbox:BatchSize must be greater than 0.")
+            .Validate(options => options.MaxRetryCount > 0, "Outbox:MaxRetryCount must be greater than 0.")
+            .Validate(options => options.PublishTimeoutSeconds > 0, "Outbox:PublishTimeoutSeconds must be greater than 0.")
             .Validate(options => options.LeaseDurationSeconds >= options.PublishTimeoutSeconds + 5,
-                "Outbox:LeaseDurationSeconds phải lớn hơn PublishTimeoutSeconds ít nhất 5 giây safety buffer.")
+                "Outbox:LeaseDurationSeconds must exceed PublishTimeoutSeconds by at least a 5-second safety buffer.")
             .ValidateOnStart();
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();

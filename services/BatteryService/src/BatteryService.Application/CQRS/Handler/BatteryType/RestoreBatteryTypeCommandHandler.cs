@@ -27,7 +27,7 @@ public class RestoreBatteryTypeCommandHandler : IRequestHandler<RestoreBatteryTy
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin đã xóa."
+                Message = "Deleted battery type not found."
             };
         }
 
@@ -44,7 +44,7 @@ public class RestoreBatteryTypeCommandHandler : IRequestHandler<RestoreBatteryTy
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể khôi phục vì tên loại pin đã được sử dụng."
+                Message = "Cannot restore because the battery type name is already in use."
             };
         }
 
@@ -57,7 +57,7 @@ public class RestoreBatteryTypeCommandHandler : IRequestHandler<RestoreBatteryTy
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Khôi phục loại pin thành công."
+            Message = "Battery type restored successfully."
         };
     }
 }

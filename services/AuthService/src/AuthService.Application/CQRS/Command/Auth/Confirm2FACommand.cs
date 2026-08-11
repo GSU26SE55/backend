@@ -30,23 +30,23 @@ public class Confirm2FACommand : IRequest<CommonResponse<TwoFactorConfirmDto>>, 
         {
             response.IsSuccess = false;
             response.StatusCode = 401;
-            response.Message = "Phiên đăng nhập không hợp lệ.";
+            response.Message = "Invalid session.";
             return Task.FromResult(response);
         }
 
         // Body field validation → ListErrors.
         if (string.IsNullOrWhiteSpace(PendingToken))
-            response.ListErrors.Add(new Errors { Field = "PendingToken", Detail = "PendingToken là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "PendingToken", Detail = "PendingToken is required." });
         if (string.IsNullOrWhiteSpace(Code))
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code is required." });
         else if (Code.Length != 6 || !Code.All(char.IsDigit))
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code phải gồm 6 chữ số." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code must be 6 digits." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

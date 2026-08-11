@@ -23,8 +23,8 @@ internal static class PushTransportDtoFactory
                 Value = PushTransportEnum.SignalR,
                 Name = nameof(PushTransportEnum.SignalR),
                 Description =
-                    "Chỉ đẩy qua hub SignalR của hệ thống. Không cần khoá EAS/FCM và không cần device token; "
-                    + "máy nhận phải đang kết nối hub hoặc sẽ đọc lại qua REST khi mở app.",
+                    "Delivers only through the system's SignalR hub. No EAS/FCM keys or device token required; "
+                    + "the receiving device must be connected to the hub, or it will re-fetch via REST when the app opens.",
                 RequiresDeviceToken = false,
             },
             new PushTransportOptionDto
@@ -32,8 +32,8 @@ internal static class PushTransportDtoFactory
                 Value = PushTransportEnum.Expo,
                 Name = nameof(PushTransportEnum.Expo),
                 Description =
-                    "Chỉ đẩy qua Expo Push API. Cần device token còn hoạt động; đổi lại có đối soát biên nhận "
-                    + "nên thông báo mới lên được trạng thái Delivered.",
+                    "Delivers only through the Expo Push API. Requires an active device token; in exchange, "
+                    + "delivery receipts are reconciled so notifications can reach the Delivered status.",
                 RequiresDeviceToken = true,
             },
             new PushTransportOptionDto
@@ -41,8 +41,9 @@ internal static class PushTransportDtoFactory
                 Value = PushTransportEnum.Both,
                 Name = nameof(PushTransportEnum.Both),
                 Description =
-                    "Đẩy cả hai đường cho cùng một thông báo, thành công khi ít nhất một đường thành công. "
-                    + "Máy đang mở app nhận tức thì qua SignalR, máy đã tắt app vẫn nhận qua Expo.",
+                    "Delivers through both channels for the same notification, succeeding when at least one "
+                    + "channel succeeds. Devices with the app open receive it instantly via SignalR; devices "
+                    + "with the app closed still receive it via Expo.",
                 RequiresDeviceToken = false,
             },
         ],

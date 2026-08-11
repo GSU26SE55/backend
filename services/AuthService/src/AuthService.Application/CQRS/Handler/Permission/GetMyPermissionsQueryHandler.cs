@@ -35,7 +35,7 @@ public class GetMyPermissionsQueryHandler : IRequestHandler<GetMyPermissionsQuer
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Token không chứa AccountId hợp lệ."
+                Message = "Token does not contain a valid AccountId."
             };
         }
 
@@ -59,7 +59,7 @@ public class GetMyPermissionsQueryHandler : IRequestHandler<GetMyPermissionsQuer
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Tài khoản không tồn tại hoặc đã bị xóa."
+                Message = "Account does not exist or has been deleted."
             };
         }
 
@@ -69,7 +69,7 @@ public class GetMyPermissionsQueryHandler : IRequestHandler<GetMyPermissionsQuer
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Tài khoản chưa được gán role."
+                Message = "Account has not been assigned a role."
             };
         }
 
@@ -79,7 +79,7 @@ public class GetMyPermissionsQueryHandler : IRequestHandler<GetMyPermissionsQuer
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Role hiện không hoạt động — không có permission nào được áp dụng.",
+                Message = "Role is currently inactive — no permissions apply.",
                 Data = new MyPermissionsDto
                 {
                     RoleId = accountInfo.Role.Id,

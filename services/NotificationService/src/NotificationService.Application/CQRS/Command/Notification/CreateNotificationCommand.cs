@@ -70,34 +70,34 @@ public class CreateNotificationCommand : IRequest<NotificationActionResponse>, I
             response.ListErrors.Add(new Errors
             {
                 Field = "UserId",
-                Detail = "UserId là bắt buộc — notification không có người nhận sẽ không bao giờ gửi được.",
+                Detail = "UserId is required — a notification without a recipient can never be sent.",
             });
         }
 
         if (!Enum.IsDefined(typeof(NotificationTypeEnum), Type))
-            response.ListErrors.Add(new Errors { Field = "Type", Detail = "Type không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Type", Detail = "Invalid Type." });
 
         if (!Enum.IsDefined(typeof(NotificationChannelEnum), Channel))
-            response.ListErrors.Add(new Errors { Field = "Channel", Detail = "Channel không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Channel", Detail = "Invalid Channel." });
 
         if (string.IsNullOrWhiteSpace(Title))
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title không được trống." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title is required." });
         else if (Title.Length > 200)
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title tối đa 200 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 200 characters." });
 
         if (string.IsNullOrWhiteSpace(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body không được trống." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body is required." });
         else if (Body.Length > 2000)
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body tối đa 2000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body must be at most 2000 characters." });
 
         if (!string.IsNullOrEmpty(EntityType) && EntityType.Length > 100)
-            response.ListErrors.Add(new Errors { Field = "EntityType", Detail = "EntityType tối đa 100 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "EntityType", Detail = "EntityType must be at most 100 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

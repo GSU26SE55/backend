@@ -37,10 +37,10 @@ public class Init2FACommandHandler : IRequestHandler<Init2FACommand, CommonRespo
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
-            return Fail(409, "2FA đã được bật. Hãy disable trước khi enroll lại.");
+            return Fail(409, "2FA is already enabled. Please disable it before enrolling again.");
 
         var secret = _totp.GenerateSecret();
         var pendingToken = Guid.NewGuid().ToString("N");
@@ -54,7 +54,7 @@ public class Init2FACommandHandler : IRequestHandler<Init2FACommand, CommonRespo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã sinh secret. Quét QR bằng Authenticator rồi gọi /2fa/confirm với mã 6 số để kích hoạt.",
+            Message = "Secret generated. Scan the QR code with an authenticator app, then call /2fa/confirm with the 6-digit code to activate.",
             Data = new TwoFactorSetupDto
             {
                 Secret = secret,

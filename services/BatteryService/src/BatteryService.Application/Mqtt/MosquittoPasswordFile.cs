@@ -26,7 +26,7 @@ public readonly record struct MosquittoCredential(string Username, string Passwo
 public static class MosquittoPasswordFile
 {
     /// <summary>Mốc mở vùng do BatteryService quản lý.</summary>
-    public const string BeginMarker = "# >>> BatteryService managed devices (GH-784) — KHÔNG sửa tay";
+    public const string BeginMarker = "# >>> BatteryService managed devices (GH-784) — DO NOT EDIT BY HAND";
 
     /// <summary>Mốc đóng vùng.</summary>
     public const string EndMarker = "# <<< BatteryService managed devices";

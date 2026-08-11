@@ -54,8 +54,8 @@ public class NotificationBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnoma
             var anomalyLabel = BatteryAnomalyLabels.AnomalyType(evt.AnomalyTypeName, evt.AnomalyType);
             var severityLabel = BatteryAnomalyLabels.Severity(evt.SeverityName, evt.Severity);
 
-            var title = $"⚠️ Bất thường pin {evt.AssetSerialNumber}";
-            var body = $"{anomalyLabel} (mức {severityLabel}) trên pin {evt.AssetSerialNumber} lúc {evt.DetectedAt:dd/MM HH:mm}.";
+            var title = $"⚠️ Battery anomaly {evt.AssetSerialNumber}";
+            var body = $"{anomalyLabel} (level {severityLabel}) on battery {evt.AssetSerialNumber} at {evt.DetectedAt:dd/MM HH:mm}.";
             var payload = JsonSerializer.Serialize(new
             {
                 alertId = evt.AlertId,

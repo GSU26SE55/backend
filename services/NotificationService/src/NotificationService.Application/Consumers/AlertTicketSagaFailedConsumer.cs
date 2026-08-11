@@ -65,10 +65,10 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
         // Người nhận là Admin/Manager nghiệp vụ, không phải người vận hành saga: "Saga", "stage",
         // và Guid alert trần không giúp họ quyết định gì. Nêu HẬU QUẢ (cảnh báo chưa thành ticket)
         // + việc cần làm; định danh kỹ thuật giữ trong PayloadJson bên dưới.
-        var title = $"Cảnh báo pin {evt.AssetSerialNumber} chưa tạo được ticket";
-        var plainBody = $"Hệ thống không tự tạo được ticket cho cảnh báo của pin {evt.AssetSerialNumber} " +
-                        $"lúc {evt.FailedAt:HH:mm dd/MM/yyyy}. Cảnh báo này đang không được theo dõi bằng ticket " +
-                        $"— cần kiểm tra và xử lý thủ công.";
+        var title = $"Battery alert {evt.AssetSerialNumber} failed to create a ticket";
+        var plainBody = $"The system failed to automatically create a ticket for the alert on battery {evt.AssetSerialNumber} " +
+                        $"at {evt.FailedAt:HH:mm dd/MM/yyyy}. This alert is not being tracked by a ticket " +
+                        $"— manual review and handling is required.";
 
         var htmlBody = _templateRenderer.Render("alert-ticket-saga-failed", new
         {

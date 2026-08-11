@@ -78,6 +78,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("environmental_incident_id");
 
+                    b.Property<Guid?>("IotDeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iot_device_id");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -129,6 +133,11 @@ namespace BatteryService.Infrastructure.Migrations
                     b.HasIndex("BatteryAssetId");
 
                     b.HasIndex("EnvironmentalIncidentId");
+
+                    b.HasIndex("IotDeviceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_alerts_open_device_offline_incident")
+                        .HasFilter("iot_device_id IS NOT NULL AND anomaly_type = 7 AND status IN (1, 2) AND is_deleted = false");
 
                     b.HasIndex("MergedIntoAlertId");
 
@@ -2177,6 +2186,11 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasForeignKey("EnvironmentalIncidentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("BatteryService.Domain.Entities.IotDevice", "IotDevice")
+                        .WithMany("Alerts")
+                        .HasForeignKey("IotDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("BatteryService.Domain.Entities.Alert", "MergedIntoAlert")
                         .WithMany("MergedAlerts")
                         .HasForeignKey("MergedIntoAlertId")
@@ -2190,6 +2204,8 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("BatteryAsset");
 
                     b.Navigation("EnvironmentalIncident");
+
+                    b.Navigation("IotDevice");
 
                     b.Navigation("MergedIntoAlert");
 
@@ -2414,6 +2430,8 @@ namespace BatteryService.Infrastructure.Migrations
 
             modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
                 {
+                    b.Navigation("Alerts");
+
                     b.Navigation("Calibrations");
 
                     b.Navigation("Commands");

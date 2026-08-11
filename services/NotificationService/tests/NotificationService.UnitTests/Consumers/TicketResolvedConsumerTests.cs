@@ -16,7 +16,7 @@ public class TicketResolvedConsumerTests
     {
         var (harness, written, _) = await ConsumerTestHarness.StartAsync<TicketResolvedConsumer>();
         var customerId = Guid.NewGuid();
-        var evt = new TicketResolvedEvent(Guid.NewGuid(), "TKT-003", Guid.NewGuid(), "Đã thay cell pin", customerId);
+        var evt = new TicketResolvedEvent(Guid.NewGuid(), "TKT-003", Guid.NewGuid(), "Battery cell replaced", customerId);
 
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<TicketResolvedEvent>()).Should().BeTrue();
@@ -25,7 +25,7 @@ public class TicketResolvedConsumerTests
         written.Should().AllSatisfy(n =>
         {
             n.Type.Should().Be(NotificationTypeEnum.TicketResolved);
-            n.Body.Should().Contain("Đã thay cell pin");
+            n.Body.Should().Contain("Battery cell replaced");
         });
 
         written.Where(n => n.UserId == ConsumerTestHarness.DefaultRecipient).Should().HaveCount(3);

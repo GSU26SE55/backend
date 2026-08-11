@@ -54,9 +54,9 @@ public class NotificationBatteryCascadeRiskHighConsumer : IConsumer<BatteryCasca
                 return;
             }
 
-            var title = "🔴 Nguy cơ lan truyền (cascade risk) cao";
-            var body = $"Pin {evt.AssetSerialNumber} có cascade risk {evt.CascadeRiskScore:P0} (≥ 70%). "
-                     + "Cần điều Staff kiểm tra/cô lập ngay để tránh lan sang pin lân cận.";
+            var title = "🔴 High cascade risk";
+            var body = $"Battery {evt.AssetSerialNumber} has a cascade risk of {evt.CascadeRiskScore:P0} (≥ 70%). "
+                     + "Staff must inspect/isolate it immediately to prevent spreading to nearby batteries.";
             var payload = JsonSerializer.Serialize(new
             {
                 batteryAssetId = evt.BatteryAssetId,

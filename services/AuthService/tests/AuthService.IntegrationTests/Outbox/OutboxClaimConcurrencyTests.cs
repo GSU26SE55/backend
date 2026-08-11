@@ -169,7 +169,7 @@ public class OutboxClaimConcurrencyTests
         var row = await SeedAsync();
         await AsReplicaAsync(c => c.TryClaimAsync(row.Id, "relay-a", Lease));
 
-        (await AsReplicaAsync(c => c.MarkFailedAsync(row.Id, "relay-b", "khong phai viec cua toi")))
+        (await AsReplicaAsync(c => c.MarkFailedAsync(row.Id, "relay-b", "not my job")))
             .Should().BeFalse();
         (await ReadAsync(row.Id))!.RetryCount.Should().Be(0);
     }

@@ -22,10 +22,10 @@ public class MarkAllNotificationsReadCommand : IRequest<NotificationCountRespons
 
         if (UserId == Guid.Empty)
         {
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Không xác định được user." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Unable to determine the current user." });
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

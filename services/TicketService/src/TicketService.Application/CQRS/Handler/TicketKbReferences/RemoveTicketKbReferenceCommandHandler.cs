@@ -21,11 +21,11 @@ public class RemoveTicketKbReferenceCommandHandler : IRequestHandler<RemoveTicke
             .FirstOrDefaultAsync(r => r.Id == command.ReferenceId && !r.IsDeleted, ct);
 
         if (reference == null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy tham chiếu." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Reference not found." };
 
         _uow.TicketKbReferences.DeleteAsync(reference);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã gỡ bài viết khỏi Ticket." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Article removed from Ticket." };
     }
 }

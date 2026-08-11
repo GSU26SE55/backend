@@ -35,12 +35,12 @@ public class RequestCrossDevice2FAConfirmCommand : IRequest<CommonResponse<Reque
     {
         var response = new CommonResponse<RequestCrossDevice2FAConfirmResponseDto>();
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

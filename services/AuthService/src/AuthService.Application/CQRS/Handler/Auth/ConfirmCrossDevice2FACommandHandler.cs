@@ -44,7 +44,7 @@ public class ConfirmCrossDevice2FACommandHandler : IRequestHandler<ConfirmCrossD
                 AuditActionEnum.TwoFactorSetupCrossDeviceExpired, request.AccountId, IsSuccess: false,
                 Reason: "Token expired or invalid"), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(404, "Link xác nhận đã hết hạn hoặc không hợp lệ. Vui lòng request lại từ thiết bị gốc.");
+            return Fail(404, "The confirmation link has expired or is invalid. Please request a new one from the original device.");
         }
 
         // Security: token chỉ confirm được bởi cùng account đã request (chống stolen link từ email).
@@ -53,27 +53,27 @@ public class ConfirmCrossDevice2FACommandHandler : IRequestHandler<ConfirmCrossD
         {
             await _publisher.Publish(new AuditTrailNotification(
                 AuditActionEnum.TwoFactorSetupCrossDeviceExpired, request.AccountId, IsSuccess: false,
-                Reason: "AccountId mismatch — token được issue cho account khác",
+                Reason: "AccountId mismatch — token was issued for a different account",
                 Metadata: new Dictionary<string, object?>
                 {
                     ["expectedAccountId"] = data.AccountId,
                     ["actualAccountId"] = request.AccountId
                 }), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(403, "Link xác nhận không thuộc về tài khoản của bạn.");
+            return Fail(403, "This confirmation link does not belong to your account.");
         }
 
         var account = await _unitOfWork.Accounts.GetAllAsync()
             .Where(a => !a.IsDeleted)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
         {
             // Race: user đã enable 2FA bằng flow khác → token vô nghĩa, remove luôn.
             await _store.RemoveAsync(request.ConfirmToken, cancellationToken);
-            return Fail(409, "2FA đã được bật trước khi confirm. Token đã được xoá.");
+            return Fail(409, "2FA was already enabled before this confirmation. The token has been removed.");
         }
 
         // Verify TOTP với secret từ Redis (plaintext, chưa protect).
@@ -84,7 +84,7 @@ public class ConfirmCrossDevice2FACommandHandler : IRequestHandler<ConfirmCrossD
                 AuditActionEnum.OtpVerifyFailed, account.Id, IsSuccess: false,
                 Reason: "Wrong TOTP in cross-device confirm"), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(422, "Mã TOTP không đúng. Vui lòng thử lại.");
+            return Fail(422, "Invalid TOTP code. Please try again.");
         }
 
         // Enable 2FA: protect secret + set EncryptedAt.
@@ -116,7 +116,7 @@ public class ConfirmCrossDevice2FACommandHandler : IRequestHandler<ConfirmCrossD
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã bật 2FA thành công. Thiết bị gốc sẽ tự refresh trạng thái.",
+            Message = "2FA enabled successfully. The original device will refresh its status automatically.",
             Data = account.Id.ToString()
         };
     }

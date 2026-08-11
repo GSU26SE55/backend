@@ -133,7 +133,7 @@ public class ChatDeleteCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(200);
-        result.Message.Should().Be("Đã ẩn bình luận.");
+        result.Message.Should().Be("Comment hidden.");
         chat.IsDeleted.Should().BeFalse();
     }
 
@@ -165,7 +165,7 @@ public class ChatDeleteCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(200);
-        result.Message.Should().Be("Đã ẩn bình luận.");
+        result.Message.Should().Be("Comment hidden.");
         chat.IsDeleted.Should().BeFalse();
     }
 
@@ -196,7 +196,7 @@ public class ChatDeleteCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(200);
-        result.Message.Should().Be("Đã ẩn bình luận.");
+        result.Message.Should().Be("Comment hidden.");
         chat.IsDeleted.Should().BeFalse();
     }
 

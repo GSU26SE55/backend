@@ -39,7 +39,7 @@ public class NotificationGroupAddMembersCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy nhóm.",
+                Message = "Group not found.",
             };
         }
 
@@ -49,7 +49,7 @@ public class NotificationGroupAddMembersCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Nhóm theo vai trò tự suy ra thành viên — không thêm tay được.",
+                Message = "Role-based group membership is inferred automatically — members cannot be added manually.",
             };
         }
 
@@ -116,7 +116,7 @@ public class NotificationGroupAddMembersCommandHandler
                     group.Id,
                     request.ActorUserId,
                     isSuccess: true,
-                    reason: "Thêm thành viên vào nhóm",
+                    reason: "Add members to group",
                     metadata: new Dictionary<string, object?>
                     {
                         ["groupName"] = group.Name,
@@ -137,7 +137,7 @@ public class NotificationGroupAddMembersCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không thêm được thành viên.",
+                Message = "Failed to add members.",
             };
         }
 
@@ -168,11 +168,11 @@ public class NotificationGroupAddMembersCommandHandler
     /// </summary>
     private static string BuildMessage(int added, int alreadyMembers, int unknown)
     {
-        var parts = new List<string> { $"Đã thêm {added} người" };
+        var parts = new List<string> { $"Added {added} member(s)" };
         if (alreadyMembers > 0)
-            parts.Add($"{alreadyMembers} người đã có sẵn trong nhóm");
+            parts.Add($"{alreadyMembers} already in the group");
         if (unknown > 0)
-            parts.Add($"{unknown} tài khoản không tồn tại");
+            parts.Add($"{unknown} account(s) not found");
         return string.Join(", ", parts) + ".";
     }
 }

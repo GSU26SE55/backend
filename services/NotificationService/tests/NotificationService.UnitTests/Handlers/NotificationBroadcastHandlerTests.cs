@@ -72,8 +72,8 @@ public class NotificationBroadcastHandlerTests
         {
             Type = NotificationTypeEnum.TicketCreated,
             Channels = (channels.Length > 0 ? channels : new[] { NotificationChannelEnum.InApp }).ToList(),
-            Title = "Bảo trì hệ thống",
-            Body = "Hệ thống bảo trì 22:00–23:00.",
+            Title = "System maintenance",
+            Body = "System maintenance 22:00-23:00.",
             GroupIds = groupIds?.ToList() ?? new List<Guid>(),
             UserIds = userIds?.ToList() ?? new List<Guid>(),
             ActorUserId = Actor,
@@ -159,7 +159,7 @@ public class NotificationBroadcastHandlerTests
         resp.IsSuccess.Should().BeTrue();
         resp.Data!.RecipientCount.Should().Be(1);
         resp.Data.SkippedUsers.Should().Be(1);
-        resp.Message.Should().Contain("Bỏ qua 1 người");
+        resp.Message.Should().Contain("Skipped 1 invalid or inactive recipient(s).");
         added.Should().ContainSingle().Which.UserId.Should().Be(active.Id);
     }
 
@@ -206,7 +206,7 @@ public class NotificationBroadcastHandlerTests
 
         resp.IsSuccess.Should().BeFalse();
         resp.StatusCode.Should().Be(400);
-        resp.Message.Should().Contain("Không có người nhận hợp lệ");
+        resp.Message.Should().Contain("No valid recipients");
 
         added.Should().BeEmpty();
         uow.Object.NotificationBatches.GetAllAsync().Should().BeEmpty("không được để lại lần gửi mồ côi");
@@ -222,7 +222,7 @@ public class NotificationBroadcastHandlerTests
             Command(groupIds: new[] { Guid.NewGuid() }), CancellationToken.None);
 
         resp.StatusCode.Should().Be(400);
-        resp.Message.Should().Contain("nhóm không tồn tại hoặc đã bị xoá",
+        resp.Message.Should().Contain("group(s) not found or deleted",
             "lỗi trống trơn thì admin không biết sửa gì");
     }
 

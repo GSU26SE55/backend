@@ -25,7 +25,7 @@ public class TicketUnreadCountQueryHandlerTests
         Ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" },
         AuthorUserId = authorId,
         AuthorRole = ActorRoleEnum.Staff,
-        Body = "Nội dung chat",
+        Body = "Chat content",
         IsInternal = isInternal
     };
 

@@ -68,8 +68,8 @@ public class ChatTranslateCommandHandlerTests
     {
         Id = id,
         Code = "TKT-001",
-        Title = "Pin bị lỗi",
-        Description = "Mô tả",
+        Title = "Battery fault",
+        Description = "Description",
         Status = TicketStatusEnum.Open,
     };
 
@@ -80,7 +80,7 @@ public class ChatTranslateCommandHandlerTests
         Ticket = BuildTicket(ticketId),
         Body = body,
         AuthorRole = ActorRoleEnum.Customer,
-        AuthorDisplayName = "Khách hàng",
+        AuthorDisplayName = "Customer",
         OriginalLanguage = "vi",
     };
 

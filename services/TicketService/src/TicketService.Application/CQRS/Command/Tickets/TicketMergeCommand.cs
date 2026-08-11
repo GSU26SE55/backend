@@ -29,19 +29,19 @@ public class TicketMergeCommand : IRequest<TicketActionResponse>, IValidatable<T
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (TargetTicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TargetTicketId", Detail = "TargetTicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TargetTicketId", Detail = "Invalid TargetTicketId." });
 
         if (TicketId != Guid.Empty && TicketId == TargetTicketId)
-            response.ListErrors.Add(new Errors { Field = "TargetTicketId", Detail = "Không thể gộp ticket vào chính nó." });
+            response.ListErrors.Add(new Errors { Field = "TargetTicketId", Detail = "Cannot merge a ticket into itself." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

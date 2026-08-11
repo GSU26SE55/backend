@@ -21,14 +21,14 @@ public class AcceptInviteCommand : IRequest<LoginResponse>, IValidatable<LoginRe
         var response = new LoginResponse();
 
         if (string.IsNullOrWhiteSpace(InvitationToken))
-            response.ListErrors.Add(new Errors { Field = "InvitationToken", Detail = "Token không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "InvitationToken", Detail = "Token is required." });
 
-        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Mật khẩu");
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Password");
 
         var hasCrossFieldError = false;
         if (Password != ConfirmPassword)
         {
-            response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Xác nhận mật khẩu không khớp." });
+            response.ListErrors.Add(new Errors { Field = "ConfirmPassword", Detail = "Confirm password does not match." });
             hasCrossFieldError = true;
         }
 
@@ -37,7 +37,7 @@ public class AcceptInviteCommand : IRequest<LoginResponse>, IValidatable<LoginRe
             response.IsSuccess = false;
             // 422 cho cross-field (password confirm không match), 400 cho field validation đơn
             response.StatusCode = hasCrossFieldError ? 422 : 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

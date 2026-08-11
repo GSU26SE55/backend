@@ -135,7 +135,7 @@ public class NotificationTemplateQueryHandlersTests
     public async Task Preview_DienDuBien_RenderRaNoiDungDay()
     {
         var t = TemplateHandlerHarness.Template(
-            title: "Ticket {{ticketCode}}", body: "Khách {{customerName}} vừa tạo.");
+            title: "Ticket {{ticketCode}}", body: "Customer {{customerName}} just created.");
         var h = new TemplateHandlerHarness(t);
 
         var result = await PreviewHandler(h).Handle(new NotificationTemplatePreviewQuery
@@ -146,7 +146,7 @@ public class NotificationTemplateQueryHandlersTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Title.Should().Be("Ticket TK-001");
-        result.Data.Body.Should().Be("Khách Nguyễn Văn An vừa tạo.");
+        result.Data.Body.Should().Be("Customer Nguyễn Văn An just created.");
     }
 
     /// <summary>Không truyền dữ liệu ⇒ placeholder ra rỗng — đó là cách phát hiện gọi sai tên biến.</summary>
@@ -192,7 +192,7 @@ public class NotificationTemplateQueryHandlersTests
     [Fact]
     public async Task Preview_TemplateHongCuPhap_Tra400ChuKhongNem500()
     {
-        var t = TemplateHandlerHarness.Template(title: "ok", body: "{{#if x}} thiếu đóng");
+        var t = TemplateHandlerHarness.Template(title: "ok", body: "{{#if x}} unclosed");
         var h = new TemplateHandlerHarness(t);
 
         var result = await PreviewHandler(h).Handle(

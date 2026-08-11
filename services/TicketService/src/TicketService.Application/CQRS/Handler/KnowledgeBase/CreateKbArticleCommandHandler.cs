@@ -25,7 +25,7 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(CreateKbArticleCommand command, CancellationToken ct)
     {
         if (command.IsTemplate && !command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-            return Fail(403, "Chỉ Admin mới có thể tạo template.");
+            return Fail(403, "Only Admin can create templates.");
 
         var code = await _codeGenerator.GenerateNextCodeAsync(ct);
 
@@ -39,14 +39,14 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
             initialStatus = KbArticleStatusEnum.Draft;
             reviewRequired = false;
             pendingReviewBy = null;
-            versionMessage = "Khởi tạo template";
+            versionMessage = "Created template";
         }
         else
         {
             initialStatus = KbArticleStatusEnum.PendingReview;
             reviewRequired = true;
             pendingReviewBy = command.CurrentUserId;
-            versionMessage = "Khởi tạo bài viết";
+            versionMessage = "Created article";
         }
 
         var article = new KnowledgeBaseArticle
@@ -86,8 +86,8 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
         await _uow.SaveChangesAsync(ct);
 
         var message = command.IsTemplate
-            ? "Template đã được khởi tạo ở trạng thái Nháp (Version 1.0)."
-            : "Bài viết đã được khởi tạo và đang chờ phê duyệt (Version 1.0).";
+            ? "Template has been created in Draft status (Version 1.0)."
+            : "Article has been created and is pending approval (Version 1.0).";
 
         return new CommonResponse<KbArticleActionDTO>
         {

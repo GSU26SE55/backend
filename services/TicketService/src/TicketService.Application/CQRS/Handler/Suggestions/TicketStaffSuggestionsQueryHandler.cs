@@ -58,7 +58,7 @@ public class TicketStaffSuggestionsQueryHandler
             .FirstOrDefaultAsync(ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         // Chỉ lấy nhân viên kỹ thuật: bảng staff_accounts chứa CẢ Manager/Admin
         // (AccountSyncConsumer tạo cho cả ba vai trò) nên bắt buộc lọc theo Role,
@@ -82,7 +82,7 @@ public class TicketStaffSuggestionsQueryHandler
         {
             return Ok(new StaffSuggestionListDto
             {
-                Note = "Không có nhân viên nào đang sẵn sàng nhận ticket."
+                Note = "No staff members are currently available to take on a ticket."
             });
         }
 
@@ -128,7 +128,7 @@ public class TicketStaffSuggestionsQueryHandler
             return Ok(new StaffSuggestionListDto
             {
                 AiAvailable = false,
-                Note = "Hiện chưa lấy được gợi ý từ AI. Bạn vẫn có thể phân công thủ công."
+                Note = "Unable to get suggestions from AI right now. You can still assign manually."
             });
         }
 

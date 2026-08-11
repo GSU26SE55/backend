@@ -20,8 +20,8 @@ public class ResendResetOtpCommand : IRequest<CommonResponse<string>>, IValidata
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Email không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Email không hợp lệ." });
+            response.Message = "Invalid email.";
+            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Invalid email." });
         }
         return Task.FromResult(response);
     }

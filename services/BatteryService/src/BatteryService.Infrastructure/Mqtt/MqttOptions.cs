@@ -26,6 +26,13 @@ public class MqttOptions
     public int ReconnectIntervalSeconds { get; set; } = 5;
 
     /// <summary>
+    /// Minimum period without an accepted heartbeat/telemetry signal before an MQTT LWT
+    /// "offline" message may transition a device to Offline. This filters retained/stale LWT
+    /// packets and short broker reconnects.
+    /// </summary>
+    public int LwtOfflineGraceSeconds { get; set; } = 90;
+
+    /// <summary>
     /// GH-784 — đường dẫn file <c>passwd</c> của Mosquitto mà service ghi credential thiết bị vào.
     /// </summary>
     /// <remarks>

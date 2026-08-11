@@ -37,17 +37,17 @@ public class CreateIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwa
     {
         var response = new CommonResponse<IotFirmwareReleaseDto>();
         if (string.IsNullOrWhiteSpace(Version))
-            AddError(response, nameof(Version), "Version là bắt buộc.");
+            AddError(response, nameof(Version), "Version is required.");
         else if (!System.Text.RegularExpressions.Regex.IsMatch(Version, @"^\d+\.\d+\.\d+$"))
-            AddError(response, nameof(Version), "Version phải theo SemVer X.Y.Z.");
+            AddError(response, nameof(Version), "Version must follow SemVer X.Y.Z.");
         if (string.IsNullOrWhiteSpace(HardwareRevision))
-            AddError(response, nameof(HardwareRevision), "HardwareRevision là bắt buộc.");
+            AddError(response, nameof(HardwareRevision), "HardwareRevision is required.");
         if (string.IsNullOrWhiteSpace(ArtifactUrl) || !Uri.IsWellFormedUriString(ArtifactUrl, UriKind.Absolute))
-            AddError(response, nameof(ArtifactUrl), "ArtifactUrl phải là URL hợp lệ.");
+            AddError(response, nameof(ArtifactUrl), "ArtifactUrl must be a valid URL.");
         if (string.IsNullOrWhiteSpace(Sha256Checksum) || Sha256Checksum.Length != 64)
-            AddError(response, nameof(Sha256Checksum), "Sha256Checksum phải dài 64 ký tự hex.");
+            AddError(response, nameof(Sha256Checksum), "Sha256Checksum must be 64 hex characters long.");
         if (ArtifactSizeBytes <= 0 || ArtifactSizeBytes > 50_000_000)
-            AddError(response, nameof(ArtifactSizeBytes), "ArtifactSizeBytes phải nằm trong (0, 50MB].");
+            AddError(response, nameof(ArtifactSizeBytes), "ArtifactSizeBytes must be within (0, 50MB].");
         return Task.FromResult(response);
     }
 
@@ -55,7 +55,7 @@ public class CreateIotFirmwareReleaseCommand : IRequest<CommonResponse<IotFirmwa
     {
         r.IsSuccess = false;
         r.StatusCode = 400;
-        r.Message = "Dữ liệu firmware không hợp lệ.";
+        r.Message = "Invalid firmware data.";
         r.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

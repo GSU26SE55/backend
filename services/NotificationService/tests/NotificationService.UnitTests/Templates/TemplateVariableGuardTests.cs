@@ -18,7 +18,7 @@ public class TemplateVariableGuardTests
     [Fact]
     public void BocBien_CumDonGian()
     {
-        TemplateVariableGuard.ExtractVariables("Ticket {{code}} — ưu tiên {{priority}}")
+        TemplateVariableGuard.ExtractVariables("Ticket {{code}} — priority {{priority}}")
             .Should().BeEquivalentTo(["code", "priority"]);
     }
 
@@ -76,8 +76,8 @@ public class TemplateVariableGuardTests
     {
         TemplateVariableGuard.FindUnknownVariables(
                 NotificationTypeEnum.TicketCreated,
-                "Ticket mới {{code}}",
-                "Mức ưu tiên {{priority}}.")
+                "New ticket {{code}}",
+                "Priority level {{priority}}.")
             .Should().BeNull();
     }
 
@@ -99,7 +99,7 @@ public class TemplateVariableGuardTests
     public void TicketCode_LaBienLa_ViConsumerGhiKhoaCode()
     {
         var error = TemplateVariableGuard.FindUnknownVariables(
-            NotificationTypeEnum.TicketCreated, "Ticket mới {{ticketCode}}", "Nội dung");
+            NotificationTypeEnum.TicketCreated, "New ticket {{ticketCode}}", "Content");
 
         error.Should().NotBeNull();
         error.Should().Contain("ticketCode");
@@ -111,7 +111,7 @@ public class TemplateVariableGuardTests
     public void SerialNumber_LaBienLa_ViConsumerGhiAssetSerialNumber()
     {
         var error = TemplateVariableGuard.FindUnknownVariables(
-            NotificationTypeEnum.BatteryAnomalyDetected, "Bất thường pin {{serialNumber}}", "x");
+            NotificationTypeEnum.BatteryAnomalyDetected, "Battery anomaly {{serialNumber}}", "x");
 
         error.Should().NotBeNull();
         error.Should().Contain("assetSerialNumber", "gợi ý phải chỉ đúng khoá thật");
@@ -121,7 +121,7 @@ public class TemplateVariableGuardTests
     public void Threshold_GoiY_ThresholdValue()
     {
         TemplateVariableGuard.FindUnknownVariables(
-                NotificationTypeEnum.BatteryAnomalyDetected, "x", "ngưỡng {{threshold}}")
+                NotificationTypeEnum.BatteryAnomalyDetected, "x", "threshold {{threshold}}")
             .Should().Contain("thresholdValue");
     }
 
@@ -130,7 +130,7 @@ public class TemplateVariableGuardTests
     {
         // Dạng người dùng gõ nhầm khi thử chức năng sửa template — từng lọt vào DB và đang active.
         TemplateVariableGuard.FindUnknownVariables(
-                NotificationTypeEnum.TicketCreated, "Ticket mới {{ticketCodeeeeeee}}", "x")
+                NotificationTypeEnum.TicketCreated, "New ticket {{ticketCodeeeeeee}}", "x")
             .Should().NotBeNull();
     }
 
@@ -138,7 +138,7 @@ public class TemplateVariableGuardTests
     public void BienLaTrongThan_CungBiBat_KhongChiTieuDe()
     {
         TemplateVariableGuard.FindUnknownVariables(
-                NotificationTypeEnum.TicketCreated, "Ticket {{code}}", "Khách {{customerName}}")
+                NotificationTypeEnum.TicketCreated, "Ticket {{code}}", "Customer {{customerName}}")
             .Should().NotBeNull("biến lạ nằm ở thân cũng render ra rỗng y như ở tiêu đề");
     }
 

@@ -25,18 +25,18 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         if (article.IsTemplate)
         {
             if (!command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-                return Fail(403, "Chỉ Admin mới có thể xuất bản template.");
+                return Fail(403, "Only Admin can publish templates.");
 
             return await HandleTemplatePublish(article, ct);
         }
 
         if (article.Status != KbArticleStatusEnum.Draft)
-            return Fail(409, "Chỉ có thể xuất bản bài viết ở trạng thái Nháp.");
+            return Fail(409, "Only articles in Draft status can be published.");
 
         article.Status = KbArticleStatusEnum.Published;
         article.ReviewRequired = false;
@@ -49,7 +49,7 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Bài viết đã được xuất bản thành công.",
+            Message = "Article published successfully.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),
@@ -63,7 +63,7 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
         KnowledgeBaseArticle article, CancellationToken ct)
     {
         if (article.Status != KbArticleStatusEnum.Draft)
-            return Fail(409, "Chỉ có thể xuất bản template ở trạng thái Nháp.");
+            return Fail(409, "Only templates in Draft status can be published.");
 
         await _uow.BeginTransactionAsync();
         try
@@ -97,7 +97,7 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Template đã được xuất bản thành công.",
+            Message = "Template published successfully.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

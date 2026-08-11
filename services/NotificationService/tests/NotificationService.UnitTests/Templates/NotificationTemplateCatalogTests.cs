@@ -18,7 +18,7 @@ public class NotificationTemplateCatalogTests
 
     /// <summary>Test bao: mỗi ô của ma trận type × kênh phải có template tiếng Việt.</summary>
     [Fact]
-    public void EveryTypeChannelPair_HasVietnameseTemplate()
+    public void EveryTypeChannelPair_HasTemplate()
     {
         var covered = Catalog
             .Select(e => (e.Type, e.Channel))
@@ -63,17 +63,20 @@ public class NotificationTemplateCatalogTests
             "mỗi ô type × kênh đúng một template tiếng Việt — không còn bản dịch");
     }
 
-    /// <summary>Không còn template tiếng Anh nào lọt lại trong danh mục.</summary>
+    /// <summary>
+    /// 10/08/2026 — hệ thống chuyển sang tiếng Anh only. Không còn template tiếng Việt nào lọt lại
+    /// trong danh mục (đảo ngược từ bản kiểm "no English leftovers" thời tiếng Việt only).
+    /// </summary>
     [Fact]
-    public void Catalog_HasNoEnglishLeftovers()
+    public void Catalog_HasNoVietnameseLeftovers()
     {
-        // Câu tiếng Việt của dự án luôn có ít nhất một ký tự có dấu; bản tiếng Anh cũ thì không.
+        // Câu tiếng Việt của dự án luôn có ít nhất một ký tự có dấu; bản tiếng Anh thì không.
         const string vietnameseChars =
             "ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ";
 
         // Template chuyển tiếp nguyên văn (chỉ gồm placeholder, không có chữ nào của mình) đương
-        // nhiên không có dấu — đó không phải sót tiếng Anh. Hiện chỉ `System` thuộc dạng này: nội
-        // dung của nó CHÍNH LÀ thông điệp admin gõ, không có gì để khuôn mẫu hoá.
+        // nhiên không có dấu — đó không phải sót tiếng Việt. Hiện chỉ `System`/`ChatCreated` thuộc
+        // dạng này: nội dung của nó CHÍNH LÀ thông điệp admin/consumer gõ, không có gì để khuôn mẫu hoá.
         static bool ChiGomPlaceholder(string text) =>
             System.Text.RegularExpressions.Regex
                 .Replace(text, @"\{\{\{?[^}]*\}?\}\}", string.Empty)
@@ -82,11 +85,11 @@ public class NotificationTemplateCatalogTests
 
         var suspects = Catalog
             .Where(e => !ChiGomPlaceholder(e.Title + " " + e.Body))
-            .Where(e => !(e.Title + e.Body).ToLowerInvariant().Any(vietnameseChars.Contains))
+            .Where(e => (e.Title + e.Body).ToLowerInvariant().Any(vietnameseChars.Contains))
             .Select(e => $"{e.Type}/{e.Channel}")
             .ToList();
 
-        suspects.Should().BeEmpty("mọi template phải là tiếng Việt");
+        suspects.Should().BeEmpty("mọi template phải là tiếng Anh");
     }
 
     /// <summary>Cặp (Type, Channel) là khoá unique trong DB — trùng là seeder sẽ nổ.</summary>

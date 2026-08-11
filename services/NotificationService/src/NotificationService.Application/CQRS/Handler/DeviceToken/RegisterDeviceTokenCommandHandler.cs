@@ -33,7 +33,7 @@ public class RegisterDeviceTokenCommandHandler : IRequestHandler<RegisterDeviceT
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Thiết bị đã được đăng ký.",
+                    Message = "Device is already registered.",
                     Data = existing.Id
                 };
             }
@@ -53,7 +53,7 @@ public class RegisterDeviceTokenCommandHandler : IRequestHandler<RegisterDeviceT
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Đăng ký lại thiết bị thành công.",
+                Message = "Device re-registered successfully.",
                 Data = existing.Id
             };
         }
@@ -76,7 +76,7 @@ public class RegisterDeviceTokenCommandHandler : IRequestHandler<RegisterDeviceT
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Đăng ký thiết bị thành công.",
+            Message = "Device registered successfully.",
             Data = entity.Id
         };
     }

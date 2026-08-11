@@ -28,16 +28,16 @@ public class TicketResolveCommand : IRequest<TicketActionResponse>, IValidatable
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (string.IsNullOrWhiteSpace(ResolutionSummary))
-            response.ListErrors.Add(new Errors { Field = "ResolutionSummary", Detail = "Tổng kết xử lý không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "ResolutionSummary", Detail = "Resolution summary must not be empty." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

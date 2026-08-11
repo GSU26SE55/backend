@@ -50,7 +50,7 @@ public class ChatMentionConsumerTests
         TicketId: Guid.NewGuid(),
         MentionedUserId: mentionedUserId,
         MentionedUserRole: 3,
-        MentionedDisplayName: "Nguyễn Văn A",
+        MentionedDisplayName: "John Doe",
         ActorUserId: Guid.NewGuid(),
         IsGroupMention: false);
 

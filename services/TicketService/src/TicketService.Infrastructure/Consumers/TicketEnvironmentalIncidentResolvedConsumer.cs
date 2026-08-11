@@ -63,7 +63,7 @@ public class TicketEnvironmentalIncidentResolvedConsumer : IConsumer<Environment
         var oldStatus = ticket.Status;
         ticket.Status = TicketStatusEnum.ClosedRejected;
         ticket.ClosedAt = evt.ResolvedAt;
-        ticket.Reason = "Sự cố môi trường được xác nhận là báo động giả (false alarm).";
+        ticket.Reason = "Environmental incident confirmed as a false alarm.";
 
         // Dừng SLA timer (không để background service breach ticket đã đóng).
         var timer = await _uow.SlaTimers.GetAllAsync()

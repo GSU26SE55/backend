@@ -56,7 +56,7 @@ public sealed class ChatVoiceTranscribeCommandHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(202, result.StatusCode);
-        chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c => c.Body == "Audio đang được xử lý…" && c.VoiceTranscriptionStatus == VoiceTranscriptionStatusEnum.Pending)), Times.Once);
+        chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c => c.Body == "Audio is being processed…" && c.VoiceTranscriptionStatus == VoiceTranscriptionStatusEnum.Pending)), Times.Once);
         attachments.Verify(x => x.AddAsync(It.Is<TicketAttachment>(a => a.FileId != Guid.Empty && a.Url == "https://storage.example/voice.webm")), Times.Once);
         outbox.Verify(x => x.WriteAsync(It.IsAny<VoiceTranscriptionRequestedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.CommitTransactionAsync(), Times.Once);

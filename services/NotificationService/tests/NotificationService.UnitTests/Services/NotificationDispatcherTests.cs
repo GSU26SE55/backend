@@ -401,8 +401,8 @@ public class NotificationDispatcherTests
         {
             Type = NotificationTypeEnum.EnvironmentalIncidentDetected,   // MQ-2 rò gas / khói
             Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
-            Title = "Rò khí gas tại site",
-            Body = "MQ-2 vượt ngưỡng",
+            Title = "Gas leak detected at site",
+            Body = "MQ-2 threshold exceeded",
         });
 
         push.Verify(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()), Times.Once,
@@ -442,7 +442,7 @@ public class NotificationDispatcherTests
         {
             Type = NotificationTypeEnum.EnvironmentalIncidentResolved,
             Recipients = [new RecipientInfo { UserId = managerId, Email = "mgr@x.com", PhoneNumber = "+84900" }],
-            Title = "Sự cố đã xử lý",
+            Title = "Incident resolved",
             Body = "Clear",
         });
 

@@ -29,9 +29,6 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.TicketMerged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketReopened] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketRatingRequested] = NotificationCategoryEnum.Ticket,
-            // GH-83: trước đây không khai báo được vì TicketMerged trùng giá trị 27 với
-            // ChatEscalatedToAdmin ⇒ cùng một khoá dictionary. Sau khi đổi sang 34 mới thêm được.
-            [NotificationTypeEnum.TicketMerged] = NotificationCategoryEnum.Ticket,
 
             // ── SLA & leo thang ─────────────────────────────────────────────
             // TicketEscalated nằm ở nhóm SLA (không phải Ticket): leo thang luôn là hệ quả của
@@ -51,6 +48,8 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.BatteryAlertEscalationPending] = NotificationCategoryEnum.Battery,
             [NotificationTypeEnum.CascadeRiskHigh] = NotificationCategoryEnum.Battery,
             [NotificationTypeEnum.IotDeviceWentOffline] = NotificationCategoryEnum.Battery,
+            [NotificationTypeEnum.IotDeviceRecovered] = NotificationCategoryEnum.Battery,
+            [NotificationTypeEnum.IotDeviceAutoDecommissioned] = NotificationCategoryEnum.Battery,
 
             // ── Sự cố môi trường ────────────────────────────────────────────
             [NotificationTypeEnum.EnvironmentalIncidentDetected] = NotificationCategoryEnum.Environmental,

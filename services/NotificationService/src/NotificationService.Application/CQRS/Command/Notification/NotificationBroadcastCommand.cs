@@ -80,33 +80,33 @@ public class NotificationBroadcastCommand
         var errors = response.ListErrors;
 
         if (!Enum.IsDefined(typeof(NotificationTypeEnum), Type))
-            errors.Add(new Errors { Field = "Type", Detail = "Loại thông báo không hợp lệ." });
+            errors.Add(new Errors { Field = "Type", Detail = "Invalid notification type." });
 
         if (Channels.Count == 0)
         {
-            errors.Add(new Errors { Field = "Channels", Detail = "Phải chọn ít nhất một kênh gửi." });
+            errors.Add(new Errors { Field = "Channels", Detail = "At least one channel must be selected." });
         }
         else if (Channels.Any(c => !Enum.IsDefined(typeof(NotificationChannelEnum), c)))
         {
-            errors.Add(new Errors { Field = "Channels", Detail = "Danh sách kênh chứa giá trị không hợp lệ." });
+            errors.Add(new Errors { Field = "Channels", Detail = "The channel list contains an invalid value." });
         }
 
         if (string.IsNullOrWhiteSpace(Title))
-            errors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được trống." });
+            errors.Add(new Errors { Field = "Title", Detail = "Title is required." });
         else if (Title.Trim().Length > MaxTitleLength)
-            errors.Add(new Errors { Field = "Title", Detail = $"Tiêu đề tối đa {MaxTitleLength} ký tự." });
+            errors.Add(new Errors { Field = "Title", Detail = $"Title must be at most {MaxTitleLength} characters." });
 
         if (string.IsNullOrWhiteSpace(Body))
-            errors.Add(new Errors { Field = "Body", Detail = "Nội dung không được trống." });
+            errors.Add(new Errors { Field = "Body", Detail = "Body is required." });
         else if (Body.Trim().Length > MaxBodyLength)
-            errors.Add(new Errors { Field = "Body", Detail = $"Nội dung tối đa {MaxBodyLength} ký tự." });
+            errors.Add(new Errors { Field = "Body", Detail = $"Body must be at most {MaxBodyLength} characters." });
 
         if (GroupIds.Count == 0 && UserIds.Count == 0)
         {
             errors.Add(new Errors
             {
                 Field = "GroupIds",
-                Detail = "Phải chọn ít nhất một nhóm hoặc một người nhận.",
+                Detail = "At least one group or recipient must be selected.",
             });
         }
         else if (GroupIds.Count + UserIds.Count > MaxTargets)
@@ -114,12 +114,12 @@ public class NotificationBroadcastCommand
             errors.Add(new Errors
             {
                 Field = "GroupIds",
-                Detail = $"Tối đa {MaxTargets} nhóm và cá nhân mỗi lần gửi.",
+                Detail = $"A maximum of {MaxTargets} groups and individuals per send.",
             });
         }
 
         if (GroupIds.Any(id => id == Guid.Empty) || UserIds.Any(id => id == Guid.Empty))
-            errors.Add(new Errors { Field = "GroupIds", Detail = "Danh sách chứa id rỗng." });
+            errors.Add(new Errors { Field = "GroupIds", Detail = "The list contains an empty id." });
 
         // Cột payload_json là jsonb — chuỗi không phải JSON hợp lệ sẽ làm vỡ INSERT ở tận tầng DB,
         // lúc đó lỗi trả về là 500 khó hiểu thay vì 400 chỉ đúng ô nhập.
@@ -133,13 +133,13 @@ public class NotificationBroadcastCommand
                     errors.Add(new Errors
                     {
                         Field = "PayloadJson",
-                        Detail = "Payload phải là một JSON object.",
+                        Detail = "Payload must be a JSON object.",
                     });
                 }
             }
             catch (JsonException)
             {
-                errors.Add(new Errors { Field = "PayloadJson", Detail = "Payload không phải JSON hợp lệ." });
+                errors.Add(new Errors { Field = "PayloadJson", Detail = "Payload is not valid JSON." });
             }
         }
 
@@ -163,8 +163,8 @@ public class NotificationBroadcastCommand
                         errors.Add(new Errors
                         {
                             Field = "PayloadJson",
-                            Detail = $"Biến không dùng được cho loại thông báo này: {string.Join(", ", unknown)}. "
-                                   + $"Biến hợp lệ: {string.Join(", ", allowed.OrderBy(a => a, StringComparer.OrdinalIgnoreCase))}.",
+                            Detail = $"These variables are not usable for this notification type: {string.Join(", ", unknown)}. "
+                                   + $"Allowed variables: {string.Join(", ", allowed.OrderBy(a => a, StringComparer.OrdinalIgnoreCase))}.",
                         });
                     }
                 }
@@ -180,7 +180,7 @@ public class NotificationBroadcastCommand
             errors.Add(new Errors
             {
                 Field = "ActorUserId",
-                Detail = "Không xác định được người thực hiện từ token.",
+                Detail = "Unable to determine the actor from the token.",
             });
         }
 
@@ -188,7 +188,7 @@ public class NotificationBroadcastCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

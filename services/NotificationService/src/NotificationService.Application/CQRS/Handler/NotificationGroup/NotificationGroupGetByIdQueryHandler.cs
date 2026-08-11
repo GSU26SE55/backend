@@ -29,7 +29,7 @@ public class NotificationGroupGetByIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy nhóm.",
+                Message = "Group not found.",
             };
         }
 

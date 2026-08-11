@@ -21,7 +21,7 @@ public class GetBlogTemplateByIdQueryHandler : IRequestHandler<GetBlogTemplateBy
             .FirstOrDefaultAsync(ct);
 
         if (entity == null)
-            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template không tìm thấy." };
+            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template not found." };
 
         return new CommonResponse<BlogTemplateDTO>
         {

@@ -85,7 +85,7 @@ public class Sprint62PublisherTests
             TicketId = ticket.Id,
             StaffId = staffId,
             StaffName = "S",
-            ResolutionSummary = "Đã thay cell"
+            ResolutionSummary = "Battery cell replaced"
         }, CancellationToken.None);
 
         _outboxWriter.Verify(p => p.WriteAsync(
@@ -136,12 +136,12 @@ public class Sprint62PublisherTests
             TicketId = ticket.Id,
             ManagerId = Guid.NewGuid(),
             ManagerName = "M",
-            Reason = "Chưa đạt"
+            Reason = "Not satisfactory"
         }, CancellationToken.None);
 
         _outboxWriter.Verify(p => p.WriteAsync(
             It.Is<TicketRejectedEvent>(e =>
-                !e.IsClosedRejected && e.StaffId == staffId && e.Reason == "Chưa đạt"),
+                !e.IsClosedRejected && e.StaffId == staffId && e.Reason == "Not satisfactory"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -160,7 +160,7 @@ public class Sprint62PublisherTests
             TicketId = ticket.Id,
             ManagerId = Guid.NewGuid(),
             ManagerName = "M",
-            Reason = "Ngoài scope"
+            Reason = "Out of scope"
         }, CancellationToken.None);
 
         _outboxWriter.Verify(p => p.WriteAsync(
@@ -184,7 +184,7 @@ public class Sprint62PublisherTests
             CustomerId = customerId,
             CustomerName = "C",
             Rating = 5,
-            RatingComment = "Tốt"
+            RatingComment = "Good"
         }, CancellationToken.None);
 
         _outboxWriter.Verify(p => p.WriteAsync(
@@ -208,7 +208,7 @@ public class Sprint62PublisherTests
             TicketId = ticket.Id,
             CustomerId = customerId,
             CustomerName = "C",
-            ReopenReason = "Vẫn lỗi"
+            ReopenReason = "Still broken"
         }, CancellationToken.None);
 
         _outboxWriter.Verify(p => p.WriteAsync(

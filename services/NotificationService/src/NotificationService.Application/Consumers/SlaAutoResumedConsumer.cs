@@ -42,11 +42,11 @@ public class SlaAutoResumedConsumer : IConsumer<SlaAutoResumedEvent>
             if (recipients.Count == 0)
                 return;
 
-            var audience = evt.PauseReason == 1 ? "Khách hàng" : "Quản lý";
+            var audience = evt.PauseReason == 1 ? "Customer" : "Manager";
             var code = string.IsNullOrWhiteSpace(evt.Code) ? string.Empty : $" {evt.Code}";
             await NotificationWriter.WriteAsync(_unitOfWork, recipients, NotificationTypeEnum.SlaAutoResumed,
-                NotificationWriter.InAppPush, $"SLA đã tự tiếp tục{code}",
-                $"Ticket{code} đã tự tiếp tục SLA và cần được {audience} xử lý.",
+                NotificationWriter.InAppPush, $"SLA auto-resumed{code}",
+                $"Ticket{code} SLA has auto-resumed and requires {audience} action.",
                 JsonSerializer.Serialize(new { ticketId = evt.TicketId, code = evt.Code, resumedAt = evt.ResumedAt }),
                 "Ticket", evt.TicketId, context.CancellationToken);
         });

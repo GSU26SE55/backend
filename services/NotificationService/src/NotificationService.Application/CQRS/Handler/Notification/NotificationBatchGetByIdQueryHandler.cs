@@ -36,7 +36,7 @@ public class NotificationBatchGetByIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy lần gửi.",
+                Message = "Batch not found.",
             };
         }
 

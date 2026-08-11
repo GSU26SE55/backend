@@ -36,23 +36,23 @@ public class UpdateIotDeviceCommand : IRequest<CommonResponse<IotDeviceDto>>, IV
         var response = new CommonResponse<IotDeviceDto>();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id là bắt buộc.");
+            AddError(response, nameof(Id), "Id is required.");
         if (string.IsNullOrWhiteSpace(DisplayName))
-            AddError(response, nameof(DisplayName), "Tên hiển thị là bắt buộc.");
+            AddError(response, nameof(DisplayName), "Display name is required.");
         else if (DisplayName.Length > 200)
-            AddError(response, nameof(DisplayName), "Tên hiển thị tối đa 200 ký tự.");
+            AddError(response, nameof(DisplayName), "Display name must not exceed 200 characters.");
         if (SiteId == Guid.Empty)
-            AddError(response, nameof(SiteId), "SiteId là bắt buộc.");
+            AddError(response, nameof(SiteId), "SiteId is required.");
         if (HeartbeatIntervalSeconds is < 10 or > 3600)
-            AddError(response, nameof(HeartbeatIntervalSeconds), "Heartbeat interval phải nằm trong [10, 3600] giây.");
+            AddError(response, nameof(HeartbeatIntervalSeconds), "Heartbeat interval must be within [10, 3600] seconds.");
         if (ApiKeyScopes == IotApiKeyScopeEnum.None)
-            AddError(response, nameof(ApiKeyScopes), "Phải cấp ít nhất 1 scope cho API key.");
+            AddError(response, nameof(ApiKeyScopes), "At least 1 scope must be granted for the API key.");
         if (!Enum.IsDefined(typeof(IotDeviceStatusEnum), Status))
-            AddError(response, nameof(Status), "Status không hợp lệ.");
+            AddError(response, nameof(Status), "Invalid Status.");
         if (HardwareRevision?.Length > 64)
-            AddError(response, nameof(HardwareRevision), "HardwareRevision tối đa 64 ký tự.");
+            AddError(response, nameof(HardwareRevision), "HardwareRevision must not exceed 64 characters.");
         if (Notes?.Length > 1000)
-            AddError(response, nameof(Notes), "Notes tối đa 1000 ký tự.");
+            AddError(response, nameof(Notes), "Notes must not exceed 1000 characters.");
 
         return Task.FromResult(response);
     }
@@ -61,7 +61,7 @@ public class UpdateIotDeviceCommand : IRequest<CommonResponse<IotDeviceDto>>, IV
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu IoT device không hợp lệ.";
+        response.Message = "Invalid IoT device data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

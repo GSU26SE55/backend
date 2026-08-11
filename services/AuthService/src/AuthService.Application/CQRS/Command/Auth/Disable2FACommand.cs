@@ -30,23 +30,23 @@ public class Disable2FACommand : IRequest<CommonResponse<string>>, IValidatable<
         {
             response.IsSuccess = false;
             response.StatusCode = 401;
-            response.Message = "Phiên đăng nhập không hợp lệ.";
+            response.Message = "Invalid session.";
             return Task.FromResult(response);
         }
 
         // Body field validation → ListErrors.
         if (string.IsNullOrWhiteSpace(Password))
-            response.ListErrors.Add(new Errors { Field = "Password", Detail = "Password là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "Password", Detail = "Password is required." });
         if (string.IsNullOrWhiteSpace(TotpCode))
-            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode is required." });
         else if (TotpCode.Length != 6 || !TotpCode.All(char.IsDigit))
-            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode phải gồm 6 chữ số." });
+            response.ListErrors.Add(new Errors { Field = "TotpCode", Detail = "TotpCode must be 6 digits." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

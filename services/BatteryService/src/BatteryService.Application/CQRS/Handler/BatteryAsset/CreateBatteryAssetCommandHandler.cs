@@ -39,7 +39,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Serial pin đã tồn tại.",
+                Message = "Battery serial number already exists.",
             };
         }
 
@@ -53,7 +53,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin."
+                Message = "Battery type not found."
             };
         }
 
@@ -69,7 +69,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 
@@ -90,7 +90,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy khách hàng đang hoạt động trong BatteryService. Hãy đồng bộ lại tài khoản từ AuthService.",
+                Message = "Active customer not found in BatteryService. Resynchronize the account from AuthService.",
             };
         }
 
@@ -136,7 +136,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo tài sản pin thành công.",
+            Message = "Battery asset created successfully.",
             Data = BatteryMapper.ToDto(entity, customer.FullName)
         };
     }
@@ -149,7 +149,7 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Site không thuộc khách hàng của tài sản pin."
+                Message = "Site does not belong to the battery asset's customer."
             };
         }
 

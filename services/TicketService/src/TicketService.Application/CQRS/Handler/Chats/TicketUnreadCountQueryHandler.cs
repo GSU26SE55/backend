@@ -26,7 +26,7 @@ public class TicketUnreadCountQueryHandler : IRequestHandler<TicketUnreadCountQu
             .FirstOrDefaultAsync(ct);
 
         if (ticket == null)
-            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy ticket." };
+            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
         var activeParticipants = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -35,7 +35,7 @@ public class TicketUnreadCountQueryHandler : IRequestHandler<TicketUnreadCountQu
             .ToListAsync(ct);
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
-            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền truy cập ticket." };
+            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);

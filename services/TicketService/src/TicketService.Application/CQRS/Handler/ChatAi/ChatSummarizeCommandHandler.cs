@@ -65,7 +65,7 @@ public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand,
         catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
         {
             _logger.LogWarning("[ChatSummarize] AI rate limit hit for ticket {TicketId}", request.TicketId);
-            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 429, Message = "AI service đang bận, vui lòng thử lại sau ít giây." };
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 429, Message = "AI service is busy, please try again in a few seconds." };
         }
         catch (Exception ex)
         {

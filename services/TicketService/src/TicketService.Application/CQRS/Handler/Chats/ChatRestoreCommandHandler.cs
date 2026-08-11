@@ -27,17 +27,17 @@ public class ChatRestoreCommandHandler : IRequestHandler<ChatRestoreCommand, Tic
     {
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (!chat.IsDeleted)
-            return Fail(400, "Bình luận chưa bị xóa.");
+            return Fail(400, "Comment has not been deleted.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         chat.IsDeleted = false;
         chat.DeletedAt = null;
@@ -58,7 +58,7 @@ public class ChatRestoreCommandHandler : IRequestHandler<ChatRestoreCommand, Tic
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Khôi phục bình luận thành công.",
+            Message = "Comment restored successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

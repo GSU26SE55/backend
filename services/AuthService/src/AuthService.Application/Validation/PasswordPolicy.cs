@@ -21,19 +21,19 @@ public static class PasswordPolicy
     {
         if (string.IsNullOrWhiteSpace(password))
         {
-            errors.Add(new Errors { Field = field, Detail = $"{label} không được để trống." });
+            errors.Add(new Errors { Field = field, Detail = $"{label} must not be empty." });
             return;
         }
 
         if (password.Length < _options.MinLength)
         {
-            errors.Add(new Errors { Field = field, Detail = $"{label} tối thiểu {_options.MinLength} ký tự." });
+            errors.Add(new Errors { Field = field, Detail = $"{label} must be at least {_options.MinLength} characters." });
             return;
         }
 
         if (password.Length > _options.MaxLength)
         {
-            errors.Add(new Errors { Field = field, Detail = $"{label} tối đa {_options.MaxLength} ký tự." });
+            errors.Add(new Errors { Field = field, Detail = $"{label} must not exceed {_options.MaxLength} characters." });
             return;
         }
 
@@ -43,7 +43,7 @@ public static class PasswordPolicy
             errors.Add(new Errors
             {
                 Field = field,
-                Detail = $"{label} phải có {string.Join(", ", missing)}."
+                Detail = $"{label} must contain {string.Join(", ", missing)}."
             });
         }
     }
@@ -52,13 +52,13 @@ public static class PasswordPolicy
     {
         var missing = new List<string>(4);
         if (_options.RequireUppercase && !password.Any(char.IsUpper))
-            missing.Add("chữ hoa");
+            missing.Add("at least one uppercase letter");
         if (_options.RequireLowercase && !password.Any(char.IsLower))
-            missing.Add("chữ thường");
+            missing.Add("at least one lowercase letter");
         if (_options.RequireDigit && !password.Any(char.IsDigit))
-            missing.Add("chữ số");
+            missing.Add("at least one digit");
         if (_options.RequireSpecialChar && !password.Any(IsSpecialChar))
-            missing.Add("ký tự đặc biệt");
+            missing.Add("at least one special character");
         return missing;
     }
 

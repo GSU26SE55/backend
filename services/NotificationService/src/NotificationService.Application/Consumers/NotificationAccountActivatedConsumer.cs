@@ -39,8 +39,8 @@ public class NotificationAccountActivatedConsumer : IConsumer<AccountActivatedEv
 
             var recipientIds = new[] { evt.AccountId };
 
-            var title = "Chào mừng bạn đến với hệ thống";
-            var body = $"Tài khoản của {evt.FullName} đã được kích hoạt thành công.";
+            var title = "Welcome to the system";
+            var body = $"The account for {evt.FullName} has been activated successfully.";
             var payload = JsonSerializer.Serialize(new
             {
                 accountId = evt.AccountId,

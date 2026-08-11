@@ -47,7 +47,7 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -86,7 +86,7 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã phát {accounts.Count} snapshot đồng bộ tài khoản.",
+            Message = $"Published {accounts.Count} account sync snapshot(s).",
             Data = new AccountResyncDto
             {
                 TotalAccounts = accounts.Count,

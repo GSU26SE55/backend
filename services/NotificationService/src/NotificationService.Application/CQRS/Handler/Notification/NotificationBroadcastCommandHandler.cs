@@ -160,7 +160,7 @@ public class NotificationBroadcastCommandHandler
                 batch.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Gửi thông báo hàng loạt",
+                reason: "Send bulk notification",
                 metadata: new Dictionary<string, object?>
                 {
                     ["type"] = batch.Type.ToString(),
@@ -185,7 +185,7 @@ public class NotificationBroadcastCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không gửi được thông báo.",
+                Message = "Failed to send the notification.",
             };
         }
 
@@ -211,9 +211,9 @@ public class NotificationBroadcastCommandHandler
 
     private static string BuildSuccessMessage(int recipients, int channels, int skipped)
     {
-        var message = $"Đã gửi cho {recipients} người qua {channels} kênh.";
+        var message = $"Sent to {recipients} recipient(s) across {channels} channel(s).";
         if (skipped > 0)
-            message += $" Bỏ qua {skipped} người không hợp lệ hoặc đang ngừng hoạt động.";
+            message += $" Skipped {skipped} invalid or inactive recipient(s).";
         return message;
     }
 }
@@ -247,13 +247,13 @@ internal sealed class BroadcastPlan
     {
         var reasons = new List<string>();
         if (MissingGroups > 0)
-            reasons.Add($"{MissingGroups} nhóm không tồn tại hoặc đã bị xoá");
+            reasons.Add($"{MissingGroups} group(s) not found or deleted");
         if (SkippedUsers > 0)
-            reasons.Add($"{SkippedUsers} người được chọn đang ngừng hoạt động hoặc không tồn tại");
+            reasons.Add($"{SkippedUsers} selected user(s) are inactive or do not exist");
         if (reasons.Count == 0)
-            reasons.Add("các nhóm được chọn không có thành viên nào đang hoạt động");
+            reasons.Add("the selected groups have no active members");
 
-        return "Không có người nhận hợp lệ: " + string.Join("; ", reasons) + ".";
+        return "No valid recipients: " + string.Join("; ", reasons) + ".";
     }
 }
 

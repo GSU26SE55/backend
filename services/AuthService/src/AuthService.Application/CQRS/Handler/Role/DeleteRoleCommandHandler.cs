@@ -30,7 +30,7 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy role."
+                Message = "Role not found."
             };
         }
 
@@ -40,7 +40,7 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không thể xóa role hệ thống."
+                Message = "Cannot delete a system role."
             };
         }
 
@@ -54,7 +54,7 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Role đang được gán cho ít nhất 1 tài khoản, không thể xóa."
+                Message = "Role is assigned to at least one account and cannot be deleted."
             };
         }
 
@@ -71,7 +71,7 @@ public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, RoleA
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa role thành công.",
+            Message = "Role deleted successfully.",
             Data = role.Id
         };
     }

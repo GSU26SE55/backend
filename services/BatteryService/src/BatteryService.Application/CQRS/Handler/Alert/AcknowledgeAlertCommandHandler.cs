@@ -30,7 +30,7 @@ public class AcknowledgeAlertCommandHandler : IRequestHandler<AcknowledgeAlertCo
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Unable to determine the current user."
             };
         }
 
@@ -57,7 +57,7 @@ public class AcknowledgeAlertCommandHandler : IRequestHandler<AcknowledgeAlertCo
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Cảnh báo không còn ở trạng thái có thể xác nhận."
+                Message = "Alert is no longer in a state that can be acknowledged."
             };
         }
 
@@ -73,7 +73,7 @@ public class AcknowledgeAlertCommandHandler : IRequestHandler<AcknowledgeAlertCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xác nhận cảnh báo thành công."
+            Message = "Alert acknowledged successfully."
         };
     }
 
@@ -83,7 +83,7 @@ public class AcknowledgeAlertCommandHandler : IRequestHandler<AcknowledgeAlertCo
         {
             IsSuccess = false,
             StatusCode = 404,
-            Message = "Không tìm thấy cảnh báo."
+            Message = "Alert not found."
         };
     }
 }

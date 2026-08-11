@@ -66,13 +66,13 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
         // "ack" cũng là từ nội bộ. ActualValue/Unit nullable (alert theo sự cố không có số đo) nên
         // chỉ ghép mệnh đề giá trị khi thực sự có, tránh in ra "Giá trị đo:  ." cụt lủn.
         var measured = evt.ActualValue.HasValue
-            ? $" Giá trị đo được: {evt.ActualValue}{(string.IsNullOrWhiteSpace(evt.Unit) ? "" : $" {evt.Unit}")}."
+            ? $" Measured value: {evt.ActualValue}{(string.IsNullOrWhiteSpace(evt.Unit) ? "" : $" {evt.Unit}")}."
             : string.Empty;
 
-        var title = $"Cảnh báo pin {evt.AssetSerialNumber} chưa được xử lý";
-        var plainBody = $"Cảnh báo nghiêm trọng trên pin {evt.AssetSerialNumber} phát hiện lúc " +
-                        $"{evt.DetectedAt:HH:mm dd/MM/yyyy}, đã {evt.MinutesSinceDetection} phút chưa có ai tiếp nhận." +
-                        $"{measured} Cần kiểm tra ngay.";
+        var title = $"Battery alert {evt.AssetSerialNumber} has not been handled";
+        var plainBody = $"Critical alert on battery {evt.AssetSerialNumber} detected at " +
+                        $"{evt.DetectedAt:HH:mm dd/MM/yyyy}, unacknowledged for {evt.MinutesSinceDetection} minutes." +
+                        $"{measured} Immediate review required.";
 
         var htmlBody = _templateRenderer.Render("battery-alert-escalation-pending", new
         {

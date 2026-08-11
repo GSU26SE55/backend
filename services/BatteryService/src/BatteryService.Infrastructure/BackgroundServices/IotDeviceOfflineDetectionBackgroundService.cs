@@ -29,15 +29,15 @@ public class IotDeviceOfflineDetectionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalSeconds = _configuration.GetValue("Iot:OfflineCheckIntervalSeconds", 60);
-        var offlineAfterSeconds = _configuration.GetValue("Iot:OfflineAfterSeconds", 300);
-        var batchSize = _configuration.GetValue("Iot:OfflineBatchSize", 100);
+        var intervalSeconds = Math.Max(15, _configuration.GetValue("Iot:OfflineCheckIntervalSeconds", 120));
+        var offlineAfterSeconds = Math.Max(15, _configuration.GetValue("Iot:OfflineAfterSeconds", 300));
+        var batchSize = Math.Clamp(_configuration.GetValue("Iot:OfflineBatchSize", 100), 1, 1000);
 
         _logger.LogInformation(
             "IotDeviceOfflineDetectionBackgroundService started (interval={Interval}s, offlineAfter={Threshold}s)",
             intervalSeconds, offlineAfterSeconds);
 
-        var delay = TimeSpan.FromSeconds(Math.Max(15, intervalSeconds));
+        var delay = TimeSpan.FromSeconds(intervalSeconds);
         while (!stoppingToken.IsCancellationRequested)
         {
             try

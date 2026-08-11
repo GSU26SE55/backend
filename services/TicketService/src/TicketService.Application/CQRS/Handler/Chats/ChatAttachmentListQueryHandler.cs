@@ -40,7 +40,7 @@ public class ChatAttachmentListQueryHandler : IRequestHandler<ChatAttachmentList
             .FirstOrDefaultAsync(cancellationToken);
 
         if (chat is null || (chat.IsInternal && !canViewInternalChats))
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var attachments = await _unitOfWork.TicketAttachments.GetAllAsync()
             .AsNoTracking()

@@ -33,13 +33,13 @@ public class ChatConvertToKbDraftCommand : IRequest<CommonResponse<KbArticleActi
         var response = new CommonResponse<KbArticleActionDTO>();
 
         if (Title != null && Title.Length > 200)
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được vượt quá 200 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must not exceed 200 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

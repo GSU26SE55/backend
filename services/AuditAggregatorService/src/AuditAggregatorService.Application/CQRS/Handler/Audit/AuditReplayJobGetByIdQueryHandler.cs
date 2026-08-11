@@ -34,7 +34,7 @@ public class AuditReplayJobGetByIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy job replay."
+                Message = "Replay job not found."
             };
         }
 

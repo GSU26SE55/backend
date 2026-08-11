@@ -34,7 +34,7 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var activeParticipants = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -45,10 +45,10 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
         var isPrimaryAssignee = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee);
 
         if (!isManagerOrAdmin && !isPrimaryAssignee)
-            return Fail(403, "Không có quyền thêm participant vào ticket này.");
+            return Fail(403, "You do not have permission to add a participant to this ticket.");
 
         if (activeParticipants.Any(p => p.UserId == request.UserId))
-            return Fail(400, "Người dùng này đã là participant active của ticket.");
+            return Fail(400, "This user is already an active participant of the ticket.");
 
         var participant = new TicketParticipant
         {
@@ -85,7 +85,7 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm participant thành công.",
+            Message = "Participant added successfully.",
             Data = ToDto(participant)
         };
     }

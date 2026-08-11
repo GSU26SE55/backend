@@ -27,13 +27,13 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
         var response = new CommonResponse<List<SensorReadingAggregateDto>>();
 
         if (BatteryAssetId == Guid.Empty)
-            AddError(response, nameof(BatteryAssetId), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(BatteryAssetId), "Battery asset Id is required.");
 
         if (!ValidIntervals.Contains(Interval))
-            AddError(response, nameof(Interval), $"Interval không hợp lệ. Chấp nhận: {string.Join(", ", ValidIntervals)}.");
+            AddError(response, nameof(Interval), $"Invalid interval. Accepted: {string.Join(", ", ValidIntervals)}.");
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
-            AddCrossFieldError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
+            AddCrossFieldError(response, nameof(To), "The end time must be greater than or equal to the start time.");
 
         return Task.FromResult(response);
     }
@@ -42,7 +42,7 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 
@@ -53,7 +53,7 @@ public class GetSensorReadingAggregateQuery : IRequest<CommonResponse<List<Senso
         // Do not overwrite 400 (field-level format errors take precedence).
         if (response.StatusCode != 400)
             response.StatusCode = 422;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 

@@ -34,7 +34,7 @@ public class MarkAllNotificationsReadCommandHandler : IRequestHandler<MarkAllNot
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Không có notification chưa đọc.",
+                Message = "There are no unread notifications.",
                 Data = 0
             };
         }
@@ -53,7 +53,7 @@ public class MarkAllNotificationsReadCommandHandler : IRequestHandler<MarkAllNot
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh dấu tất cả đã đọc thành công.",
+            Message = "All notifications marked as read successfully.",
             Data = unread.Count
         };
     }

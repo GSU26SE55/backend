@@ -28,7 +28,7 @@ public class GetSmsByIdQueryHandler : IRequestHandler<GetSmsByIdQuery, CommonRes
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "SMS không tồn tại.",
+                Message = "SMS not found.",
                 Data = null
             };
 

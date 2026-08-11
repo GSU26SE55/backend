@@ -33,8 +33,8 @@ public class NotificationBatchQueryTests
     {
         Id = Guid.NewGuid(),
         Type = NotificationTypeEnum.System,
-        Title = "Bảo trì hệ thống",
-        Body = "Nội dung",
+        Title = "System maintenance",
+        Body = "Content",
         Channels = new[] { NotificationChannelEnum.InApp },
         Source = NotificationBatchSourceEnum.Manual,
         Status = NotificationBatchStatusEnum.FannedOut,

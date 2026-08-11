@@ -55,7 +55,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 
@@ -65,7 +65,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Chỉ gửi thử được template kênh Email.",
+                Message = "Test send is only supported for Email channel templates.",
             };
         }
 
@@ -100,7 +100,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Không xác định được email của admin đang đăng nhập (thiếu cả read-model lẫn claim email).",
+                Message = "Unable to determine the logged-in admin's email (missing both read-model and claim email).",
             };
         }
 
@@ -116,7 +116,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 429,
-                Message = $"Đã dùng hết {PerHourLimit} lượt gửi thử trong giờ này.",
+                Message = $"Used up all {PerHourLimit} test-send attempts for this hour.",
             };
         }
 
@@ -136,7 +136,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = $"Template hỏng cú pháp: {ex.Message}",
+                Message = $"Template has invalid syntax: {ex.Message}",
             };
         }
 
@@ -154,7 +154,7 @@ public class NotificationTemplateTestSendCommandHandler
             notificationId,
             request.ActorUserId,
             isSuccess: true,
-            reason: "Gửi thử template",
+            reason: "Send test template",
             metadata: new Dictionary<string, object?>
             {
                 ["templateId"] = template.Id,
@@ -173,7 +173,7 @@ public class NotificationTemplateTestSendCommandHandler
                 new SendNotificationEmailEvent(
                     NotificationId: notificationId,
                     ToEmail: recipient,
-                    Subject: $"[GỬI THỬ] {subject}",
+                    Subject: $"[TEST SEND] {subject}",
                     Body: body,
                     SourceService: "notification-template-test",
                     // Email gửi thử KHÔNG có link hủy: nó không phải thư gửi hàng loạt, và link hủy
@@ -199,7 +199,7 @@ public class NotificationTemplateTestSendCommandHandler
                 notificationId,
                 request.ActorUserId,
                 isSuccess: false,
-                reason: $"Publish thất bại: {ex.Message}",
+                reason: $"Publish failed: {ex.Message}",
                 metadata: new Dictionary<string, object?> { ["templateId"] = template.Id },
                 ct: cancellationToken);
 
@@ -209,7 +209,7 @@ public class NotificationTemplateTestSendCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 502,
-                Message = "Không gửi được thư thử: hệ thống hàng đợi không nhận được yêu cầu.",
+                Message = "Failed to send the test email: the queue system did not accept the request.",
             };
         }
 
@@ -221,7 +221,7 @@ public class NotificationTemplateTestSendCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã gửi thử tới {recipient}.",
+            Message = $"Test email sent to {recipient}.",
             Data = new NotificationTemplateTestSendDto
             {
                 // IncrementAsync trả long (Redis INCR); còn lại luôn nằm trong [0, PerHourLimit]

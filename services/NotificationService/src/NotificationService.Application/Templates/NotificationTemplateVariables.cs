@@ -84,6 +84,8 @@ public static class NotificationTemplateVariables
                 ["ticketId", "code", "staffId", "percentage", "warningAt", "screen"],
             [NotificationTypeEnum.SlaBreached] =
                 ["ticketId", "code", "priority", "priorityTier", "breachedAt", "screen"],
+            [NotificationTypeEnum.SlaAutoResumed] =
+                ["ticketId", "code", "resumedAt"],
 
             // ── Pin / cảnh báo ────────────────────────────────────────────────────────────────
             // Ba type dùng CHUNG payload vì cùng do consumer họ BatteryAnomaly sinh ra, chỉ khác
@@ -109,6 +111,11 @@ public static class NotificationTemplateVariables
             [NotificationTypeEnum.IotDeviceWentOffline] =
                 ["iotDeviceId", "deviceCode", "siteId", "alertId",
                  "lastSeenAt", "offlineDurationSeconds", "affectedBatteryCount"],
+            [NotificationTypeEnum.IotDeviceRecovered] =
+                ["iotDeviceId", "deviceCode", "siteId", "alertId", "recoveredAt", "lastOfflineAt"],
+            [NotificationTypeEnum.IotDeviceAutoDecommissioned] =
+                ["iotDeviceId", "deviceCode", "siteId", "alertId", "rejectedReadingCount",
+                 "windowStartedAt", "decommissionedAt"],
 
             // ── Trao đổi (chat) ───────────────────────────────────────────────────────────────
             [NotificationTypeEnum.ChatCreated] = ["chatId", "ticketId", "senderName", "isInternal"],

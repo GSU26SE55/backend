@@ -54,8 +54,8 @@ public class DispatchPendingTests
             Type = type,
             Channel = channel,
             Status = NotificationStatusEnum.Pending,
-            Title = "Tiêu đề gốc",
-            Body = "Nội dung gốc",
+            Title = "Original title",
+            Body = "Original body",
             EntityType = entityType,
             PayloadJson = payloadJson,
             DispatchAttemptCount = attempts,
@@ -182,7 +182,7 @@ public class DispatchPendingTests
 
         outcome.Should().Be(DispatchOutcome.Failed);
         n.Status.Should().Be(NotificationStatusEnum.Failed);
-        n.FailureReason.Should().Contain("tắt kênh");
+        n.FailureReason.Should().Contain("disabled");
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class DispatchPendingTests
         var outcome = await sut.DispatchPendingAsync(n);
 
         outcome.Should().Be(DispatchOutcome.Failed);
-        n.FailureReason.Should().Contain("số điện thoại");
+        n.FailureReason.Should().Contain("phone number");
     }
 
     [Fact]
@@ -501,8 +501,8 @@ public class DispatchPendingTests
             Id = Guid.NewGuid(),
             Type = NotificationTypeEnum.TicketCreated,
             Channel = NotificationChannelEnum.InApp,
-            TitleTemplate = "Ticket mới {{code}}",
-            BodyTemplate = "Ticket {{code}} vừa được tạo.",
+            TitleTemplate = "New ticket {{code}}",
+            BodyTemplate = "Ticket {{code}} was just created.",
             IsActive = true,
         };
 
@@ -511,18 +511,18 @@ public class DispatchPendingTests
             Id = Guid.NewGuid(),
             Type = NotificationTypeEnum.TicketCreated,
             Source = NotificationBatchSourceEnum.Manual,
-            Title = "Tiêu đề admin tự gõ",
-            Body = "Nội dung admin tự gõ",
+            Title = "Title typed by admin",
+            Body = "Content typed by admin",
         };
 
         // Renderer thật sẽ trả về chuỗi có chỗ trống; ở đây dựng sẵn để nếu guard hỏng thì thấy rõ.
         var renderer = new Mock<ITemplateRenderer>();
-        renderer.Setup(r => r.RenderInline(It.IsAny<string>(), It.IsAny<object>())).Returns("Ticket mới ");
+        renderer.Setup(r => r.RenderInline(It.IsAny<string>(), It.IsAny<object>())).Returns("New ticket ");
 
         var n = Pending(NotificationChannelEnum.InApp);
         n.BatchId = batch.Id;
-        n.Title = "Tiêu đề admin tự gõ";
-        n.Body = "Nội dung admin tự gõ";
+        n.Title = "Title typed by admin";
+        n.Body = "Content typed by admin";
 
         var channel = Channel(NotificationChannelEnum.InApp);
         var (sut, _, _) = Build(n, channel.Object, account: Account(),
@@ -531,7 +531,7 @@ public class DispatchPendingTests
         await sut.DispatchPendingAsync(n);
 
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.Title == "Tiêu đề admin tự gõ" && r.Body == "Nội dung admin tự gõ"),
+            It.Is<SendRequest>(r => r.Title == "Title typed by admin" && r.Body == "Content typed by admin"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -597,8 +597,8 @@ public class DispatchPendingTests
 
         var n = Pending(NotificationChannelEnum.InApp);
         n.BatchId = batch.Id;
-        n.Title = "Chữ dự phòng";
-        n.Body = "Thân dự phòng";
+        n.Title = "Fallback title";
+        n.Body = "Fallback body";
 
         var channel = Channel(NotificationChannelEnum.InApp);
         // templates rỗng — không cặp nào khớp
@@ -607,7 +607,7 @@ public class DispatchPendingTests
         await sut.DispatchPendingAsync(n);
 
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.Title == "Chữ dự phòng" && r.Body == "Thân dự phòng"),
+            It.Is<SendRequest>(r => r.Title == "Fallback title" && r.Body == "Fallback body"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -663,7 +663,7 @@ public class DispatchPendingTests
         await sut.DispatchPendingAsync(n);
 
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.Title == "Tiêu đề gốc" && r.Body == "Nội dung gốc"),
+            It.Is<SendRequest>(r => r.Title == "Original title" && r.Body == "Original body"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -683,7 +683,7 @@ public class DispatchPendingTests
 
         var renderer = new Mock<ITemplateRenderer>();
         renderer.Setup(r => r.RenderInline(It.IsAny<string>(), It.IsAny<object>()))
-                .Throws(new InvalidOperationException("template hỏng"));
+                .Throws(new InvalidOperationException("broken template"));
 
         var n = Pending(NotificationChannelEnum.InApp);
         var channel = Channel(NotificationChannelEnum.InApp);
@@ -693,7 +693,7 @@ public class DispatchPendingTests
 
         outcome.Should().Be(DispatchOutcome.Sent, "template hỏng không được chặn việc gửi");
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.Title == "Tiêu đề gốc"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<SendRequest>(r => r.Title == "Original title"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -720,7 +720,7 @@ public class DispatchPendingTests
 
         renderer.Verify(r => r.RenderInline(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
         channel.Verify(c => c.SendAsync(
-            It.Is<SendRequest>(r => r.Title == "Tiêu đề gốc"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<SendRequest>(r => r.Title == "Original title"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── options (NOTI-14) ────────────────────────────────────────────────────

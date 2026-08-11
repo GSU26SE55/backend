@@ -22,16 +22,16 @@ public class ChangeAccountRoleCommand : IRequest<AccountActionResponse>, IValida
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (RoleId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "RoleId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "Invalid RoleId." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

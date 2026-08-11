@@ -50,7 +50,7 @@ public class DeleteFileCommandHandler : IRequestHandler<DeleteFileCommand, Commo
         {
             IsSuccess = true,
             StatusCode = 204,
-            Message = "Xóa file thành công.",
+            Message = "File deleted successfully.",
             Data = objectKey
         };
     }
@@ -64,13 +64,13 @@ public class DeleteFileCommandHandler : IRequestHandler<DeleteFileCommand, Commo
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<string> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền xóa file này."
+        Message = "You do not have permission to delete this file."
     };
 }

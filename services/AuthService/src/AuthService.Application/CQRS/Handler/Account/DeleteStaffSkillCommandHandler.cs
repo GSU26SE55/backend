@@ -30,7 +30,7 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
             .FirstOrDefaultAsync(s => s.StaffAccountId == request.StaffAccountId && s.SkillCode == skillCode && !s.IsDeleted, cancellationToken);
 
         if (skill is null)
-            return Fail(404, "Không tìm thấy staff skill.");
+            return Fail(404, "Staff skill not found.");
 
         _unitOfWork.StaffSkills.DeleteAsync(skill);
 
@@ -51,7 +51,7 @@ public class DeleteStaffSkillCommandHandler : IRequestHandler<DeleteStaffSkillCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa staff skill thành công.",
+            Message = "Staff skill deleted successfully.",
             Data = request.StaffAccountId
         };
     }

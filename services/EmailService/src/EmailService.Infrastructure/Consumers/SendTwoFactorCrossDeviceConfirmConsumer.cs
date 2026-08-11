@@ -66,7 +66,7 @@ public class SendTwoFactorCrossDeviceConfirmConsumer : IConsumer<SendTwoFactorCr
                     values,
                     context.CancellationToken);
 
-                var subject = $"Xác nhận bật xác thực hai lớp — {appName}";
+                var subject = $"Confirm Two-Factor Authentication — {appName}";
                 await _emailSender.SendAsync(msg.ToEmail, subject, htmlBody, context.CancellationToken);
 
                 // KHÔNG log ConfirmUrl: nó chứa token dùng được để bật 2FA. Log ra là biến file log

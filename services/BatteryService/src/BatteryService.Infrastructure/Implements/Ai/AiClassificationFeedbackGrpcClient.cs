@@ -80,7 +80,7 @@ public class AiClassificationFeedbackGrpcClient : IAiClassificationFeedbackClien
         AnomalyClassificationEnum.Normal => "Normal",
         AnomalyClassificationEnum.Degrading => "Degrading",
         AnomalyClassificationEnum.Failed => "Failed",
-        _ => throw new ArgumentOutOfRangeException(nameof(c), c, "Nhãn phân loại lạ."),
+        _ => throw new ArgumentOutOfRangeException(nameof(c), c, "Unknown classification label."),
     };
 
     private static string ToAiVerdict(StaffFeedbackEnum f) => f switch
@@ -88,6 +88,6 @@ public class AiClassificationFeedbackGrpcClient : IAiClassificationFeedbackClien
         StaffFeedbackEnum.Correct => "correct",
         StaffFeedbackEnum.FalsePositive => "false_positive",
         StaffFeedbackEnum.FalseNegative => "false_negative",
-        _ => throw new ArgumentOutOfRangeException(nameof(f), f, "Giá trị feedback lạ."),
+        _ => throw new ArgumentOutOfRangeException(nameof(f), f, "Unknown feedback value."),
     };
 }

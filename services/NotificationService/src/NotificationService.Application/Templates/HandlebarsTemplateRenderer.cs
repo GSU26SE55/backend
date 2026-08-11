@@ -62,8 +62,8 @@ public class HandlebarsTemplateRenderer : ITemplateRenderer
 
         using var stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException(
-                $"Email template '{templateName}.html' không tìm thấy. " +
-                $"Kiểm tra EmbeddedResource trong csproj và tên file có đúng không. " +
+                $"Email template '{templateName}.html' not found. " +
+                $"Check the EmbeddedResource entry in the csproj and verify the file name. " +
                 $"Resource name expected: '{resourceName}'");
 
         using var reader = new StreamReader(stream);

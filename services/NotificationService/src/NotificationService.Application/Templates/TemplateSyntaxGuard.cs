@@ -38,7 +38,7 @@ public static class TemplateSyntaxGuard
             }
             catch (Exception ex)
             {
-                return $"{field} hỏng cú pháp Handlebars: {ex.Message}";
+                return $"{field} has invalid Handlebars syntax: {ex.Message}";
             }
         }
 

@@ -83,7 +83,7 @@ public class TicketTriageRejectCommandHandlerTests
         var command = new TicketTriageRejectCommand
         {
             TicketId = ticketId,
-            Reason = "Ngoài scope dịch vụ",
+            Reason = "Out of service scope",
             ManagerId = managerId,
             ManagerName = "Manager Test"
         };

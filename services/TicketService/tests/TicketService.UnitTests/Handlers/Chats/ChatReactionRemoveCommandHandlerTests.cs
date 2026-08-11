@@ -26,7 +26,7 @@ public class ChatReactionRemoveCommandHandlerTests
         Ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" },
         AuthorUserId = authorId,
         AuthorRole = ActorRoleEnum.Customer,
-        Body = "Pin sạc rất chậm"
+        Body = "Battery charges very slowly"
     };
 
     private static (Mock<ITicketUnitOfWork> uow, Mock<IGenericRepository<TicketChatReaction>> reactionsRepo) BuildUow(

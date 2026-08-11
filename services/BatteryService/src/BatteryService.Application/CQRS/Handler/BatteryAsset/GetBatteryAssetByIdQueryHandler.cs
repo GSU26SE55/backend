@@ -30,7 +30,7 @@ public class GetBatteryAssetByIdQueryHandler : IRequestHandler<GetBatteryAssetBy
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Unable to determine the current user."
             };
         }
 
@@ -55,7 +55,7 @@ public class GetBatteryAssetByIdQueryHandler : IRequestHandler<GetBatteryAssetBy
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài sản pin."
+                Message = "Battery asset not found."
             };
         }
 

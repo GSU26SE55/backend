@@ -30,7 +30,7 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
             .AnyAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         var staffProfile = await _unitOfWork.StaffProfiles
             .GetAllAsync()
@@ -104,7 +104,7 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật staff skill thành công.",
+            Message = "Staff skill updated successfully.",
             Data = request.StaffAccountId
         };
     }

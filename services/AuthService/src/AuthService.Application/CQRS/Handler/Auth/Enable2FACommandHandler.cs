@@ -17,7 +17,7 @@ public class Enable2FACommandHandler : IRequestHandler<Enable2FACommand, CommonR
         {
             IsSuccess = false,
             StatusCode = 410,
-            Message = "Endpoint này đã bị thay thế. Dùng POST /api/accounts/me/2fa/init rồi POST /api/accounts/me/2fa/confirm.",
+            Message = "This endpoint has been replaced. Use POST /api/accounts/me/2fa/init followed by POST /api/accounts/me/2fa/confirm.",
         });
     }
 }

@@ -69,27 +69,27 @@ public static class AddJwtAuthenticationAuthorization
 
                         if (context.AuthenticateFailure is SecurityTokenExpiredException)
                         {
-                            errorMessage = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại hoặc làm mới token.";
+                            errorMessage = "Your session has expired. Please log in again or refresh your token.";
                             errorCode = "TOKEN_EXPIRED";
                         }
                         else if (context.AuthenticateFailure is SecurityTokenInvalidSignatureException)
                         {
-                            errorMessage = "Token không hợp lệ (chữ ký không đúng).";
+                            errorMessage = "Invalid token (signature mismatch).";
                             errorCode = "INVALID_SIGNATURE";
                         }
                         else if (context.AuthenticateFailure != null)
                         {
-                            errorMessage = "Token không hợp lệ. Vui lòng đăng nhập lại.";
+                            errorMessage = "Invalid token. Please log in again.";
                             errorCode = "INVALID_TOKEN";
                         }
                         else if (!context.Request.Headers.ContainsKey("Authorization"))
                         {
-                            errorMessage = "Không tìm thấy thông tin xác thực (thiếu Authorization header).";
+                            errorMessage = "Authentication information not found (missing Authorization header).";
                             errorCode = "MISSING_TOKEN";
                         }
                         else
                         {
-                            errorMessage = "Bạn chưa đăng nhập. Vui lòng cung cấp token hợp lệ.";
+                            errorMessage = "You are not logged in. Please provide a valid token.";
                             errorCode = "UNAUTHORIZED";
                         }
 
@@ -107,7 +107,7 @@ public static class AddJwtAuthenticationAuthorization
                         await CommonResponseWriter.WriteAsync(
                             context.Response,
                             StatusCodes.Status403Forbidden,
-                            "Bạn không có quyền truy cập tài nguyên này.",
+                            "You do not have permission to access this resource.",
                             errors: null,
                             data: new { errorCode = "FORBIDDEN" });
                     }

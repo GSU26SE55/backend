@@ -34,19 +34,19 @@ public class Verify2FALoginCommand : IRequest<LoginResponse>, IValidatable<Login
     {
         var response = new LoginResponse();
         if (string.IsNullOrWhiteSpace(ChallengeToken))
-            response.ListErrors.Add(new Errors { Field = "ChallengeToken", Detail = "ChallengeToken là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "ChallengeToken", Detail = "ChallengeToken is required." });
         if (IsBackupCode && IsSmsCode)
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Chỉ chọn 1 loại code (TOTP/Backup/SMS)." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Only one code type may be selected (TOTP/Backup/SMS)." });
         if (string.IsNullOrWhiteSpace(Code))
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Code is required." });
         else if (!IsBackupCode && (Code.Length != 6 || !Code.All(char.IsDigit)))
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "TOTP/SMS code phải gồm 6 chữ số." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "TOTP/SMS code must be 6 digits." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

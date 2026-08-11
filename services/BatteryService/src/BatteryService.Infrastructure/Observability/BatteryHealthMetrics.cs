@@ -10,17 +10,17 @@ public static class BatteryHealthMetrics
 {
     public static readonly Gauge AvgSohPercent = Metrics.CreateGauge(
         "battery_soh_avg_percent",
-        "SOH trung bình toàn hệ (%) — latest reading mỗi asset.");
+        "Fleet-wide average SOH (%) — latest reading per asset.");
 
     public static readonly Gauge BelowSohThresholdCount = Metrics.CreateGauge(
         "batteries_below_soh_threshold_count",
-        "Số pin có SOH dưới ngưỡng cảnh báo (mặc định 80%).");
+        "Number of batteries with SOH below the warning threshold (default 80%).");
 
     public static readonly Gauge AvgDcirMilliohm = Metrics.CreateGauge(
         "battery_dcir_avg_milliohm",
-        "Điện trở trong (DCIR) trung bình toàn hệ (mΩ).");
+        "Fleet-wide average internal resistance (DCIR) in mΩ.");
 
     public static readonly Gauge MaxCellImbalanceMv = Metrics.CreateGauge(
         "battery_cell_imbalance_max_mv",
-        "Chênh lệch điện áp cell lớn nhất toàn hệ (mV).");
+        "Largest fleet-wide cell voltage imbalance (mV).");
 }

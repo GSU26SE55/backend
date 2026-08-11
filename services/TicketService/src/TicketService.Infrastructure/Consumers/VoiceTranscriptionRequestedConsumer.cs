@@ -16,7 +16,7 @@ namespace TicketService.Infrastructure.Consumers;
 
 public sealed class VoiceTranscriptionRequestedConsumer : IConsumer<VoiceTranscriptionRequestedEvent>
 {
-    private const string PendingBody = "Audio đang được xử lý…";
+    private const string PendingBody = "Audio is being processed…";
     private readonly ITicketUnitOfWork _uow;
     private readonly IInboxStore _inbox;
     private readonly FileInternal.FileInternalClient _files;

@@ -87,6 +87,6 @@ public class TicketApiTests : IClassFixture<TicketApiFactory>
 
         var result = await response.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions);
         result!.IsSuccess.Should().BeFalse();
-        result.Message.Should().Contain("Dữ liệu đầu vào không hợp lệ");
+        result.Message.Should().Contain("Invalid input data");
     }
 }

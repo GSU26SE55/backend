@@ -19,13 +19,13 @@ public class RemoveTicketKbReferenceCommand : IRequest<CommonResponse<object>>, 
         var response = new CommonResponse<object>();
 
         if (ReferenceId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ReferenceId", Detail = "ID tham chiếu không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ReferenceId", Detail = "Invalid reference ID." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

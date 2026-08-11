@@ -396,7 +396,7 @@ public class AuthController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId is null)
-            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
@@ -461,7 +461,7 @@ public class AuthController : ControllerBase
     {
         var callerId = GetCurrentUserId();
         if (callerId == null)
-            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
         command.CallerAccountId = callerId.Value;
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -685,7 +685,7 @@ public class AuthController : ControllerBase
     {
         var redirectUri = ResolveJsonRedirectUri();
         if (string.IsNullOrWhiteSpace(redirectUri))
-            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri chưa được cấu hình." });
+            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri is not configured." });
         return BuildLoginRedirect(redirectUri);
     }
 
@@ -736,7 +736,7 @@ public class AuthController : ControllerBase
     {
         var redirectUri = ResolveJsonRedirectUri();
         if (string.IsNullOrWhiteSpace(redirectUri))
-            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri chưa được cấu hình." });
+            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri is not configured." });
 
         var (response, statusCode) = await ProcessCallbackAsync(code, state, error, redirectUri, cancellationToken);
         return StatusCode(statusCode, response);

@@ -29,21 +29,21 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
     public async Task<TicketActionResponse> Handle(ChatUnpinCommand request, CancellationToken ct)
     {
         if (!_chatAuthorizationService.CanPinChat(request.UserPermissions))
-            return Fail(403, "Không có quyền unpin bình luận.");
+            return Fail(403, "You do not have permission to unpin comments.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (!chat.IsPinned)
-            return Fail(400, "Bình luận chưa được pin.");
+            return Fail(400, "Comment is not pinned.");
 
         chat.IsPinned = false;
         chat.PinnedAt = null;
@@ -71,7 +71,7 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Unpin bình luận thành công.",
+            Message = "Comment unpinned successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

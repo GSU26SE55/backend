@@ -38,7 +38,7 @@ public class NotificationGroupDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy nhóm.",
+                Message = "Group not found.",
             };
         }
 
@@ -48,7 +48,7 @@ public class NotificationGroupDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Nhóm hệ thống không xoá được.",
+                Message = "System groups cannot be deleted.",
             };
         }
 
@@ -72,7 +72,7 @@ public class NotificationGroupDeleteCommandHandler
                 group.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Xoá nhóm người nhận",
+                reason: "Delete recipient group",
                 metadata: new Dictionary<string, object?>
                 {
                     ["name"] = group.Name,
@@ -91,7 +91,7 @@ public class NotificationGroupDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không xoá được nhóm.",
+                Message = "Failed to delete the group.",
             };
         }
 
@@ -102,7 +102,7 @@ public class NotificationGroupDeleteCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã xoá nhóm và {members.Count} thành viên.",
+            Message = $"Deleted the group and {members.Count} member(s).",
             Data = group.Id,
         };
     }

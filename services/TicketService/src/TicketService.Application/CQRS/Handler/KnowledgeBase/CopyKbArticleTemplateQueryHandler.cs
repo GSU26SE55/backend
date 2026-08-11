@@ -24,7 +24,7 @@ public class CopyKbArticleTemplateQueryHandler : IRequestHandler<CopyKbArticleTe
             .FirstOrDefaultAsync(a => a.Id == query.ArticleId, ct);
 
         if (article == null || article.IsDeleted)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         // if (!article.IsTemplate)
         //     return Fail(400, "Bài viết này không phải là bản mẫu.");

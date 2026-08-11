@@ -56,7 +56,7 @@ public class GlobalExceptionMiddlewareTests
         doc.RootElement.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
         // #AUTH-76: Vietnamese localized message + hint correlationId cho support correlate.
         doc.RootElement.GetProperty("message").GetString()
-            .Should().Be("Đã xảy ra lỗi hệ thống. Vui lòng liên hệ support kèm correlationId.");
+            .Should().Be("A system error occurred. Please contact support with the correlationId.");
         // #AUTH-76: data payload có correlationId thay vì null (dev env có thêm exceptionType/exceptionMessage).
         // Test env default (không IsProduction) → dev shape; chỉ assert correlationId tồn tại.
         var dataElement = doc.RootElement.GetProperty("data");

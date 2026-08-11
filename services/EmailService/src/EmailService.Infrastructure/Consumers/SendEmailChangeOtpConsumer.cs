@@ -44,7 +44,7 @@ public class SendEmailChangeOtpConsumer : IConsumer<SendEmailChangeOtpEvent>
                 var values = new Dictionary<string, string?>
                 {
                     ["AppName"] = appName,
-                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToNewEmail) ? "bạn" : msg.ToNewEmail,
+                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToNewEmail) ? "there" : msg.ToNewEmail,
                     ["Otp"] = msg.Otp,
                     ["ExpireMinutes"] = OtpExpireMinutes.ToString(),
                     // Sprint 6.2 NOTI-09 (#680) — template OtpEmailChange.html mới hiển thị địa chỉ

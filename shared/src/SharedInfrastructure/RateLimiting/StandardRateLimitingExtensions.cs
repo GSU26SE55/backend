@@ -75,7 +75,7 @@ public static class StandardRateLimitingExtensions
                 await CommonResponseWriter.WriteAsync(
                     httpContext.Response,
                     StatusCodes.Status429TooManyRequests,
-                    "Quá nhiều yêu cầu. Vui lòng thử lại sau.",
+                    "Too many requests. Please try again later.",
                     errors: null,
                     data: new { errorCode = "RATE_LIMITED", retryAfterSeconds });
             };

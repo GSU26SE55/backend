@@ -17,8 +17,8 @@ public class DeleteFileByIdCommand : IRequest<CommonResponse<string>>, IValidata
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "FileId không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "FileId không hợp lệ." });
+            response.Message = "Invalid FileId.";
+            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Invalid FileId." });
         }
 
         return Task.FromResult(response);

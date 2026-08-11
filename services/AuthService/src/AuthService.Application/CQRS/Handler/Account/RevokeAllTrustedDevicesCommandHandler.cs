@@ -44,7 +44,7 @@ public class RevokeAllTrustedDevicesCommandHandler : IRequestHandler<RevokeAllTr
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Không có thiết bị tin cậy nào đang hoạt động."
+                Message = "No active trusted devices."
             };
         }
 
@@ -66,7 +66,7 @@ public class RevokeAllTrustedDevicesCommandHandler : IRequestHandler<RevokeAllTr
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã thu hồi {activeDevices.Count} thiết bị tin cậy."
+            Message = $"Revoked {activeDevices.Count} trusted device(s)."
         };
     }
 }

@@ -44,7 +44,7 @@ public class NotificationGroupCreateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Đã có nhóm trùng tên. Đặt tên khác hoặc sửa nhóm đang có.",
+                Message = "A group with this name already exists. Choose a different name or edit the existing group.",
             };
         }
 
@@ -70,7 +70,7 @@ public class NotificationGroupCreateCommandHandler
                 entity.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Tạo nhóm người nhận",
+                reason: "Create recipient group",
                 metadata: new Dictionary<string, object?>
                 {
                     ["name"] = entity.Name,
@@ -89,7 +89,7 @@ public class NotificationGroupCreateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Đã có nhóm trùng tên. Đặt tên khác hoặc sửa nhóm đang có.",
+                Message = "A group with this name already exists. Choose a different name or edit the existing group.",
             };
         }
         catch (Exception ex)
@@ -101,7 +101,7 @@ public class NotificationGroupCreateCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không tạo được nhóm.",
+                Message = "Failed to create the group.",
             };
         }
 
@@ -111,7 +111,7 @@ public class NotificationGroupCreateCommandHandler
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Đã tạo nhóm.",
+            Message = "Group created.",
             Data = entity.Id,
         };
     }

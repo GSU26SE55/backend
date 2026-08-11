@@ -53,7 +53,7 @@ public class ChatCreatedConsumer : IConsumer<ChatCreatedEvent>
                 return;
             }
 
-            var title = evt.IsInternal ? "Ghi chú nội bộ mới trên ticket" : "Tin nhắn mới trên ticket";
+            var title = evt.IsInternal ? "New internal note on ticket" : "New message on ticket";
             var payloadJson = JsonSerializer.Serialize(new
             {
                 chatId = evt.ChatId,

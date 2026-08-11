@@ -150,7 +150,7 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<CommonResponse<string>>();
         body!.IsSuccess.Should().BeTrue();
-        body.Message.Should().Contain("kích hoạt");
+        body.Message.Should().Contain("active");
 
         // 1-N refactor: account.Role là single — verify trực tiếp Role.Name.
         using var db = _factory.CreateDbContext();

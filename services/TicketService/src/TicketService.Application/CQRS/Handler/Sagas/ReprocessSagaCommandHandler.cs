@@ -59,7 +59,7 @@ public class ReprocessSagaCommandHandler : IRequestHandler<ReprocessSagaCommand,
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = $"Saga cho AlertId {request.AlertId} không tồn tại hoặc không ở state Failed."
+                Message = $"Saga for AlertId {request.AlertId} does not exist or is not in Failed state."
             };
         }
 
@@ -73,7 +73,7 @@ public class ReprocessSagaCommandHandler : IRequestHandler<ReprocessSagaCommand,
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Saga state reset to Initial. Republish anomaly event để tiếp tục.",
+            Message = "Saga state reset to Initial. Republish the anomaly event to continue.",
             Data = new { alertId = request.AlertId, performedBy = request.PerformedBy }
         };
     }

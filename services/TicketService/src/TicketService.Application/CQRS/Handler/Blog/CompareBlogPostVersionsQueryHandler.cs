@@ -17,7 +17,7 @@ public class CompareBlogPostVersionsQueryHandler : IRequestHandler<CompareBlogPo
     public async Task<CommonResponse<BlogDiffDTO>> Handle(CompareBlogPostVersionsQuery request, CancellationToken ct)
     {
         if (request.OldVersionNumber <= 0 || request.NewVersionNumber <= 0 || request.OldVersionNumber == request.NewVersionNumber)
-            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 400, Message = "Số version không hợp lệ." };
+            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 400, Message = "Invalid version number." };
 
         var versions = await _uow.BlogPostVersions.GetAllAsync()
             .Where(x => x.BlogPostId == request.BlogPostId && !x.IsDeleted
@@ -28,9 +28,9 @@ public class CompareBlogPostVersionsQueryHandler : IRequestHandler<CompareBlogPo
         var newVersion = versions.FirstOrDefault(x => x.VersionNumber == request.NewVersionNumber);
 
         if (oldVersion == null)
-            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 404, Message = $"Không tìm thấy version {request.OldVersionNumber}." };
+            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 404, Message = $"Version {request.OldVersionNumber} not found." };
         if (newVersion == null)
-            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 404, Message = $"Không tìm thấy version {request.NewVersionNumber}." };
+            return new CommonResponse<BlogDiffDTO> { IsSuccess = false, StatusCode = 404, Message = $"Version {request.NewVersionNumber} not found." };
 
         return new CommonResponse<BlogDiffDTO>
         {

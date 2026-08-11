@@ -110,7 +110,7 @@ public class TicketEscalateForceCommandHandler : IRequestHandler<TicketEscalateF
             ActivityActionEnum.StaffReassigned,
             oldValue: primaryAssignment.StaffId.ToString(),
             newValue: null,
-            reason: $"Auto-downgraded: tier không đủ cho priority {ticket.Priority} sau khi escalate.");
+            reason: $"Auto-downgraded: tier insufficient for priority {ticket.Priority} after escalation.");
     }
 
     private static TicketActionResponse Fail(int statusCode, string message)

@@ -42,23 +42,23 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             .FirstOrDefaultAsync(a => a.Email.ToLower() == normalizedEmail && !a.IsDeleted, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại.");
+            return Fail(404, "Account does not exist.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(409, "Tài khoản đã được xác thực hoặc không ở trạng thái chờ verify.");
+            return Fail(409, "Account is already verified or is not in a pending-verification state.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
         {
             var minutesLeft = (int)Math.Ceiling((account.LockoutEndAt.Value - DateTime.UtcNow).TotalMinutes);
-            return Fail(423, $"Tài khoản đang bị khóa. Vui lòng thử lại sau {minutesLeft} phút.");
+            return Fail(423, $"Account is locked. Please try again in {minutesLeft} minute(s).");
         }
 
         // #AUTH-27: dùng <= để chặn edge case on-exact-expiry.
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
+            return Fail(401, "OTP has expired. Please request a new one.");
 
         if (account.OtpPurpose != OtpPurposeEnum.Register)
-            return Fail(422, "OTP không phải dành cho đăng ký.");
+            return Fail(422, "This OTP is not for registration.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
@@ -72,10 +72,10 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
             AppMetrics.AuthOtpUsageTotal.WithLabels("register", "wrong").Inc(); // #AUTH-78
 
             if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-                return Fail(423, $"Sai OTP quá {MaxFailedAttempts} lần. Tài khoản bị khóa {LockoutDurationMinutes} phút.");
+                return Fail(423, $"Incorrect OTP entered {MaxFailedAttempts} times. Account locked for {LockoutDurationMinutes} minutes.");
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
-            return Fail(401, $"OTP không chính xác. Còn {remaining} lần thử.");
+            return Fail(401, $"Incorrect OTP. {remaining} attempt(s) remaining.");
         }
 
         AppMetrics.AuthOtpUsageTotal.WithLabels("register", "verified").Inc(); // #AUTH-78
@@ -96,7 +96,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         {
             assignedCustomerRoleId = await SystemRoleResolver.ResolveCustomerRoleIdAsync(_unitOfWork, cancellationToken);
             if (assignedCustomerRoleId is null)
-                return Fail(500, "Xác thực thất bại do lỗi hệ thống. Vui lòng thử lại.");
+                return Fail(500, "Verification failed due to a system error. Please try again.");
 
             account.RoleId = assignedCustomerRoleId.Value;
             account.RoleAssignedAt = DateTime.UtcNow;
@@ -125,7 +125,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xác thực OTP thành công. Tài khoản đã kích hoạt. Vui lòng đăng nhập."
+            Message = "OTP verified successfully. Your account is now active. Please log in."
         };
     }
 

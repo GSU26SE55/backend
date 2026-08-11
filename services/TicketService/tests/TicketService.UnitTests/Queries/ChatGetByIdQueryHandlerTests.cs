@@ -134,7 +134,7 @@ public class ChatGetByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.StatusCode.Should().Be(200);
         result.Data!.IsDeleted.Should().BeTrue();
-        result.Data!.Body.Should().Be("Tin nhắn này đã bị xóa.");
+        result.Data!.Body.Should().Be("This message has been deleted.");
         result.Data!.BodyHtml.Should().BeNull();
         result.Data!.AttachmentFileIds.Should().BeEmpty();
         result.Data!.Attachments.Should().BeEmpty();

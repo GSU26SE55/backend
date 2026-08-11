@@ -149,7 +149,7 @@ public class AdminIotDevicesController : ControllerBase
     ///   <item><description><c>DisplayName</c>: bắt buộc, ≤ 200 ký tự.</description></item>
     ///   <item><description><c>SiteId</c>: bắt buộc, phải tồn tại + chưa xóa.</description></item>
     ///   <item><description><c>HardwareRevision</c>: tùy chọn, ≤ 64 ký tự (vd <c>"v1.0-S3-MAX485"</c>) — dùng để OTA pipeline khớp firmware.</description></item>
-    ///   <item><description><c>ApiKeyScopes</c>: bitmask <see cref="BatteryService.Domain.Enums.IotApiKeyScopeEnum"/>. Default <c>EdgeDeviceDefault = SensorIngest | DeviceHeartbeat | FirmwareCheck = 11</c>.</description></item>
+    ///   <item><description><c>ApiKeyScopes</c>: bitmask <see cref="BatteryService.Domain.Enums.IotApiKeyScopeEnum"/>. Default <c>EdgeDeviceDefault = SensorIngest | DeviceHeartbeat | EnvironmentalIngest | FirmwareCheck = 15</c>.</description></item>
     ///   <item><description><c>HeartbeatIntervalSeconds</c>: [10, 3600]. Default 60.</description></item>
     ///   <item><description><c>Notes</c>: tùy chọn, ≤ 1000 ký tự.</description></item>
     /// </list>
@@ -432,8 +432,8 @@ public class AdminIotDevicesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Body command không hợp lệ.",
-                ListErrors = new() { new() { Field = nameof(body.Type), Detail = "Type là bắt buộc." } }
+                Message = "Invalid command body.",
+                ListErrors = new() { new() { Field = nameof(body.Type), Detail = "Type is required." } }
             });
         }
 
@@ -445,7 +445,7 @@ public class AdminIotDevicesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy device."
+                Message = "Device not found."
             });
         }
 
@@ -503,7 +503,7 @@ public class AdminIotDevicesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 503,
-                Message = $"MQTT bridge không khả dụng: {ex.Message}"
+                Message = $"MQTT bridge is unavailable: {ex.Message}"
             });
         }
 
@@ -511,7 +511,7 @@ public class AdminIotDevicesController : ControllerBase
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Command đã enqueue xuống MQTT.",
+            Message = "Command has been enqueued to MQTT.",
             Data = new IotDeviceCommandAcceptedDto
             {
                 CmdId = cmdId,

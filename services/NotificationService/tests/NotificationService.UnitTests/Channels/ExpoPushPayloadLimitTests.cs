@@ -66,12 +66,12 @@ public class ExpoPushPayloadLimitTests
         var (uow, _, _) = MockNotificationUnitOfWork.Build();
         var (channel, handler) = Build(uow, Ok("t1"));
 
-        await channel.SendAsync(Request("Cảnh báo pin", "Nhiệt độ vượt ngưỡng 45°C"));
+        await channel.SendAsync(Request("Battery warning", "Temperature exceeded threshold 45°C"));
 
         using var doc = JsonDocument.Parse(handler.Body!);
         var msg = doc.RootElement[0];
-        msg.GetProperty("title").GetString().Should().Be("Cảnh báo pin");
-        msg.GetProperty("body").GetString().Should().Be("Nhiệt độ vượt ngưỡng 45°C");
+        msg.GetProperty("title").GetString().Should().Be("Battery warning");
+        msg.GetProperty("body").GetString().Should().Be("Temperature exceeded threshold 45°C");
     }
 
     /// <summary>
@@ -88,14 +88,14 @@ public class ExpoPushPayloadLimitTests
         var (channel, handler) = Build(uow, Ok("t1"));
 
         var hugePayload = JsonSerializer.Serialize(new { blob = new string('x', 8000) });
-        var request = Request("Cảnh báo", "Pin lỗi", hugePayload);
+        var request = Request("Warning", "Battery fault", hugePayload);
         await channel.SendAsync(request);
 
         using var doc = JsonDocument.Parse(handler.Body!);
         var msg = doc.RootElement[0];
 
-        msg.GetProperty("title").GetString().Should().Be("Cảnh báo");
-        msg.GetProperty("body").GetString().Should().Be("Pin lỗi");
+        msg.GetProperty("title").GetString().Should().Be("Warning");
+        msg.GetProperty("body").GetString().Should().Be("Battery fault");
 
         var data = msg.GetProperty("data");
         data.ValueKind.Should().Be(JsonValueKind.Object);
@@ -118,7 +118,7 @@ public class ExpoPushPayloadLimitTests
 
         var ticketId = Guid.NewGuid();
         var payload = JsonSerializer.Serialize(new { ticketId, chatId = "c-1" });
-        var request = Request("Tin nhắn mới", "Bạn có bình luận mới", payload);
+        var request = Request("New message", "You have a new comment", payload);
         await channel.SendAsync(request);
 
         using var doc = JsonDocument.Parse(handler.Body!);
@@ -136,7 +136,7 @@ public class ExpoPushPayloadLimitTests
         var (channel, handler) = Build(uow, Ok("t1"));
         var entityId = Guid.NewGuid();
         var createdAt = new DateTime(2026, 8, 4, 12, 30, 0, DateTimeKind.Utc);
-        var request = Request("Tin nhắn mới", "Nội dung");
+        var request = Request("New message", "Content");
         request.Type = NotificationService.Domain.Enums.NotificationTypeEnum.ChatCreated;
         request.EntityType = "Chat";
         request.EntityId = entityId;
@@ -166,7 +166,7 @@ public class ExpoPushPayloadLimitTests
         var (uow, _, _) = MockNotificationUnitOfWork.Build();
         var (channel, handler) = Build(uow, Ok("t1"));
 
-        var request = Request("Tiêu đề", "Nội dung", payloadJson);
+        var request = Request("Title", "Content", payloadJson);
         await channel.SendAsync(request);
 
         using var doc = JsonDocument.Parse(handler.Body!);
@@ -184,7 +184,7 @@ public class ExpoPushPayloadLimitTests
 
         // Chuỗi tiếng Việt có dấu: mỗi ký tự 3 byte UTF-8 ⇒ cắt theo index ký tự sẽ sai trần.
         var longBody = string.Concat(Enumerable.Repeat("đêm", 3000));
-        await channel.SendAsync(Request("Cảnh báo", longBody));
+        await channel.SendAsync(Request("Warning", longBody));
 
         using var doc = JsonDocument.Parse(handler.Body!);
         var sent = doc.RootElement[0].GetProperty("body").GetString()!;

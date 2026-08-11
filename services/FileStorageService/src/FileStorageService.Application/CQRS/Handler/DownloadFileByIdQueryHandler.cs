@@ -47,7 +47,7 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "File đang bị cách ly và không thể tải."
+                Message = "File is quarantined and cannot be downloaded."
             };
         }
 
@@ -57,7 +57,7 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "File đang được xử lý, vui lòng thử lại sau."
+                Message = "File is being processed, please try again later."
             };
         }
 
@@ -67,7 +67,7 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Download file thành công.",
+            Message = "File downloaded successfully.",
             Data = result
         };
     }
@@ -76,13 +76,13 @@ public class DownloadFileByIdQueryHandler : IRequestHandler<DownloadFileByIdQuer
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<FileDownloadResponse> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền tải file này."
+        Message = "You do not have permission to download this file."
     };
 }

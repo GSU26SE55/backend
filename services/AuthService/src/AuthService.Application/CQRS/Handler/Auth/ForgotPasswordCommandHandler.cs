@@ -80,7 +80,7 @@ public class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswordComman
     {
         IsSuccess = true,
         StatusCode = 200,
-        Message = "Nếu email tồn tại trong hệ thống, OTP đặt lại mật khẩu đã được gửi.",
+        Message = "If the email exists in the system, a password reset OTP has been sent.",
         Data = normalizedEmail
     };
 

@@ -35,8 +35,8 @@ public class GetSensorReadingHourlyAggregateQuery
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(BatteryAssetId), Detail = "Id tài sản pin là bắt buộc." });
+            response.Message = "Invalid data.";
+            response.ListErrors.Add(new Errors { Field = nameof(BatteryAssetId), Detail = "Battery asset ID is required." });
         }
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
@@ -44,8 +44,8 @@ public class GetSensorReadingHourlyAggregateQuery
             response.IsSuccess = false;
             if (response.StatusCode != 400)
                 response.StatusCode = 422;
-            response.Message = "Dữ liệu không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(To), Detail = "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu." });
+            response.Message = "Invalid data.";
+            response.ListErrors.Add(new Errors { Field = nameof(To), Detail = "The end time must be greater than or equal to the start time." });
         }
 
         return Task.FromResult(response);

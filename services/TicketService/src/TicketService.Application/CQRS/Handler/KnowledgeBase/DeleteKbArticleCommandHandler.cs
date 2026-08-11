@@ -22,14 +22,14 @@ public class DeleteKbArticleCommandHandler : IRequestHandler<DeleteKbArticleComm
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         article.IsDeleted = true;
         article.DeletedAt = DateTime.UtcNow;
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<KbArticleActionDTO> { IsSuccess = true, StatusCode = 200, Message = "Bài viết đã được xóa." };
+        return new CommonResponse<KbArticleActionDTO> { IsSuccess = true, StatusCode = 200, Message = "Article has been deleted." };
     }
 
     private static CommonResponse<KbArticleActionDTO> Fail(int statusCode, string message)

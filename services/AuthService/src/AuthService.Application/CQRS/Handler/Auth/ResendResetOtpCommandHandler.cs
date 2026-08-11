@@ -53,7 +53,7 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
                     {
                         IsSuccess = false,
                         StatusCode = 429,
-                        Message = $"Vui lòng đợi {waitSeconds} giây trước khi yêu cầu gửi lại.",
+                        Message = $"Please wait {waitSeconds} seconds before requesting a resend.",
                     };
                 }
             }
@@ -76,7 +76,7 @@ public class ResendResetOtpCommandHandler : IRequestHandler<ResendResetOtpComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Nếu email tồn tại và đang trong luồng đặt lại mật khẩu, OTP đã được gửi lại.",
+            Message = "If the email exists and is in the password reset flow, the OTP has been resent.",
             Data = normalizedEmail
         };
     }

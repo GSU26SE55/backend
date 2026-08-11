@@ -18,16 +18,16 @@ public class SetMyAvatarCommand : IRequest<AccountResponse>, IValidatable<Accoun
         var response = new AccountResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "Invalid AccountId." });
 
         if (AvatarFileId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(AvatarFileId), Detail = "AvatarFileId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(AvatarFileId), Detail = "Invalid AvatarFileId." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

@@ -6,6 +6,12 @@ namespace BatteryService.Domain.Entities;
 public class Alert : AuditableEntity
 {
     /// <summary>
+    /// IoT device that owns a device-level availability incident. Null for ordinary battery,
+    /// environmental, and legacy alerts created before the offline-incident model was introduced.
+    /// </summary>
+    public Guid? IotDeviceId { get; set; }
+
+    /// <summary>
     /// Sprint 5B #100 — nullable: site-level alert (EnvironmentalIncident) không có asset.
     /// </summary>
     public Guid? BatteryAssetId { get; set; }
@@ -63,6 +69,8 @@ public class Alert : AuditableEntity
     public string? AiPrescriptionId { get; set; }
 
     public BatteryAsset? BatteryAsset { get; set; }
+
+    public IotDevice? IotDevice { get; set; }
 
     public Site? Site { get; set; }
 

@@ -31,7 +31,7 @@ public class UpdatePushTransportCommandHandler : IRequestHandler<UpdatePushTrans
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = $"Đường vận chuyển push đang là {request.Transport} — không có gì thay đổi.",
+                Message = $"Push transport is already {request.Transport} — nothing changed.",
                 Data = PushTransportDtoFactory.Build(previous),
             };
         }
@@ -48,7 +48,7 @@ public class UpdatePushTransportCommandHandler : IRequestHandler<UpdatePushTrans
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã đổi đường vận chuyển push từ {previous} sang {request.Transport}.",
+            Message = $"Changed push transport from {previous} to {request.Transport}.",
             Data = PushTransportDtoFactory.Build(request.Transport),
         };
     }

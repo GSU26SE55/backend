@@ -43,7 +43,7 @@ public class GetFileMetadataQueryHandler : IRequestHandler<GetFileMetadataQuery,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Lấy metadata file thành công.",
+            Message = "File metadata retrieved successfully.",
             Data = FileMetadataMapper.ToResponse(file)
         };
     }
@@ -52,13 +52,13 @@ public class GetFileMetadataQueryHandler : IRequestHandler<GetFileMetadataQuery,
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<FileMetadataResponse> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền truy cập metadata file này."
+        Message = "You do not have permission to access this file's metadata."
     };
 }

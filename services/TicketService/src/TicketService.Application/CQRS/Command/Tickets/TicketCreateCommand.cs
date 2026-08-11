@@ -36,46 +36,46 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
         var response = new TicketActionResponse();
 
         if (string.IsNullOrWhiteSpace(Title))
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must not be empty." });
 
         if (string.IsNullOrWhiteSpace(Description))
-            response.ListErrors.Add(new Errors { Field = "Description", Detail = "Mô tả không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Description", Detail = "Description must not be empty." });
 
         if (CustomerId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "CustomerId", Detail = "CustomerId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "CustomerId", Detail = "Invalid CustomerId." });
 
         if (BatteryAssetIds.Count != 1)
-            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Phải chọn chính xác một pin." });
+            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Exactly one battery must be selected." });
         else if (BatteryAssetIds.Any(id => id == Guid.Empty))
-            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Danh sách pin không được chứa ID rỗng." });
+            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Battery list must not contain empty IDs." });
         else if (BatteryAssetIds.Distinct().Count() != BatteryAssetIds.Count)
-            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Danh sách pin không được trùng lặp." });
+            response.ListErrors.Add(new Errors { Field = "BatteryAssetIds", Detail = "Battery list must not contain duplicates." });
 
         if (!IncidentDetectedAt.HasValue)
-            response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Thời điểm phát hiện sự cố không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Incident detection time must not be empty." });
 
         if (IncidentDetectedAt.HasValue && IncidentDetectedAt.Value > DateTime.UtcNow)
-            response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Thời điểm phát hiện sự cố không được trong tương lai." });
+            response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Incident detection time must not be in the future." });
 
         foreach (var attachment in Attachments)
         {
             if (attachment.FileId == Guid.Empty)
-                response.ListErrors.Add(new Errors { Field = "Attachments.FileId", Detail = "FileId không hợp lệ." });
+                response.ListErrors.Add(new Errors { Field = "Attachments.FileId", Detail = "Invalid FileId." });
             if (string.IsNullOrWhiteSpace(attachment.FileName) || attachment.FileName.Length > 256)
-                response.ListErrors.Add(new Errors { Field = "Attachments.FileName", Detail = "FileName là bắt buộc và tối đa 256 ký tự." });
+                response.ListErrors.Add(new Errors { Field = "Attachments.FileName", Detail = "FileName is required and must be at most 256 characters." });
             if (string.IsNullOrWhiteSpace(attachment.ContentType) || attachment.ContentType.Length > 100)
-                response.ListErrors.Add(new Errors { Field = "Attachments.ContentType", Detail = "ContentType là bắt buộc và tối đa 100 ký tự." });
+                response.ListErrors.Add(new Errors { Field = "Attachments.ContentType", Detail = "ContentType is required and must be at most 100 characters." });
             if (attachment.SizeBytes < 0)
-                response.ListErrors.Add(new Errors { Field = "Attachments.SizeBytes", Detail = "SizeBytes không được âm." });
+                response.ListErrors.Add(new Errors { Field = "Attachments.SizeBytes", Detail = "SizeBytes must not be negative." });
             if (string.IsNullOrWhiteSpace(attachment.Url) || attachment.Url.Length > 2000)
-                response.ListErrors.Add(new Errors { Field = "Attachments.Url", Detail = "Url là bắt buộc và tối đa 2000 ký tự." });
+                response.ListErrors.Add(new Errors { Field = "Attachments.Url", Detail = "Url is required and must be at most 2000 characters." });
         }
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

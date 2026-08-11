@@ -158,7 +158,7 @@ public class EmailSenderService : IEmailProvider
                     ? errors.GetRawText()
                     : message.GetRawText();
 
-                failures.Add($"Status={status ?? "(thiếu)"} {detail}");
+                failures.Add($"Status={status ?? "(missing)"} {detail}");
             }
         }
         catch (JsonException ex)
@@ -173,7 +173,7 @@ public class EmailSenderService : IEmailProvider
             return;
 
         throw new HttpRequestException(
-            $"MailJet nhận request (HTTP 200) nhưng từ chối gửi tới {to}: {string.Join(" | ", failures)}");
+            $"MailJet accepted the request (HTTP 200) but rejected delivery to {to}: {string.Join(" | ", failures)}");
     }
 
     private static string Truncate(string text, int max = 500)

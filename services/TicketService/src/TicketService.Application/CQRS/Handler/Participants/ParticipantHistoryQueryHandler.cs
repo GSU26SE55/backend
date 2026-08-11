@@ -23,10 +23,10 @@ public class ParticipantHistoryQueryHandler : IRequestHandler<ParticipantHistory
             .AnyAsync(t => t.Id == request.TicketId && !t.IsDeleted, cancellationToken);
 
         if (!ticketExists)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (!TicketQueryHelper.CanViewInternalChats(request.ActorRoles))
-            return Fail(403, "Chỉ Staff/Manager/Admin mới có quyền xem lịch sử participant.");
+            return Fail(403, "Only Staff/Manager/Admin has permission to view participant history.");
 
         var history = await _unitOfWork.TicketParticipants.GetAllAsync()
             .AsNoTracking()

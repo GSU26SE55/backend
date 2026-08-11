@@ -98,7 +98,7 @@ public class IotDevicesController : ControllerBase
     public async Task<IActionResult> Provision([FromBody] ProvisionIotDeviceCommand body, CancellationToken ct)
     {
         if (!TryGetDeviceContext(out var deviceId, out var deviceCode))
-            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Yêu cầu xác thực bằng API key per-device." });
+            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Authentication with a per-device API key is required." });
 
         body.DeviceId = deviceId;
         body.DeviceCode = deviceCode;
@@ -126,7 +126,7 @@ public class IotDevicesController : ControllerBase
     /// <list type="bullet">
     ///   <item><description>Insert row vào hypertable <c>iot_device_heartbeats</c> (TimescaleDB, retention 30 ngày).</description></item>
     ///   <item><description>Update <c>IotDevice.LastSeenAt = UtcNow</c>, <c>LastClockSkewSeconds = skew</c>.</description></item>
-    ///   <item><description>Nếu <c>Status = Offline / Pending</c> → flip về <c>Active</c> (re-connect tự động).</description></item>
+    ///   <item><description><c>Pending</c> được kích hoạt ngay; <c>Offline</c> cần hai tín hiệu khỏe liên tiếp trong cadence kỳ vọng trước khi về <c>Active</c>, rồi tự resolve incident offline.</description></item>
     ///   <item><description>Trả <see cref="IotHeartbeatAckDto"/>: <c>ServerTime</c>, <c>ClockSkewSeconds</c>, <c>ClockSkewWarning</c> (nếu &gt; 300s), <c>NextHeartbeatInSeconds</c>, <c>FirmwareUpdateAvailable</c>.</description></item>
     /// </list>
     ///
@@ -134,7 +134,8 @@ public class IotDevicesController : ControllerBase
     /// <list type="bullet">
     ///   <item><description><b>Không reject heartbeat khi skew quá ngưỡng</b> — chỉ raise <c>ClockSkewWarning</c>. Firmware nên auto-NTP-sync khi nhận warning.</description></item>
     ///   <item><description>Khoảng cách heartbeat khuyến nghị: 60s. Cấu hình ở <c>IotDevice.HeartbeatIntervalSeconds</c> (admin set [10, 3600]). Device nên dùng giá trị từ ack chứ không hard-code.</description></item>
-    ///   <item><description>Offline detection (background service) chạy 60s/lần, threshold default 300s. Tăng <c>HeartbeatIntervalSeconds</c> lên gần threshold sẽ gây false-positive offline.</description></item>
+    ///   <item><description>Polling fallback mặc định chạy 120s/lần. Ngưỡng thực tế của từng device là max(<c>Iot:OfflineAfterSeconds</c> mặc định 300s, <c>HeartbeatIntervalSeconds + 30s</c>), nên cadence dài không bị đánh offline giả.</description></item>
+    ///   <item><description>MQTT LWT dùng cùng transition service và yêu cầu im lặng ít nhất <c>Mqtt:LwtOfflineGraceSeconds</c> (mặc định 90s); retained/stale LWT không thể bypass freshness check.</description></item>
     ///   <item><description><c>FirmwareUpdateAvailable = true</c> chỉ là hint — firmware vẫn phải gọi <c>/firmware-check</c> để lấy artifact URL + checksum.</description></item>
     /// </list>
     /// </remarks>
@@ -154,7 +155,7 @@ public class IotDevicesController : ControllerBase
     public async Task<IActionResult> Heartbeat([FromBody] IotDeviceHeartbeatCommand body, CancellationToken ct)
     {
         if (!TryGetDeviceContext(out var deviceId, out var deviceCode))
-            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Yêu cầu xác thực bằng API key per-device." });
+            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Authentication with a per-device API key is required." });
 
         body.DeviceId = deviceId;
         body.DeviceCode = deviceCode;
@@ -201,7 +202,7 @@ public class IotDevicesController : ControllerBase
     public async Task<IActionResult> FirmwareCheck([FromQuery] string currentVersion, CancellationToken ct)
     {
         if (!TryGetDeviceContext(out var deviceId, out _))
-            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Yêu cầu xác thực bằng API key per-device." });
+            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Authentication with a per-device API key is required." });
 
         var result = await _mediator.Send(new CheckIotFirmwareUpdateQuery
         {
@@ -255,7 +256,7 @@ public class IotDevicesController : ControllerBase
     public async Task<IActionResult> UpdateFirmwareLog(Guid id, [FromBody] UpdateIotFirmwareUpdateLogCommand body, CancellationToken ct)
     {
         if (!TryGetDeviceContext(out var deviceId, out _))
-            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Yêu cầu xác thực bằng API key per-device." });
+            return StatusCode(401, new CommonResponse<object> { IsSuccess = false, StatusCode = 401, Message = "Authentication with a per-device API key is required." });
 
         body.LogId = id;
         body.DeviceId = deviceId;

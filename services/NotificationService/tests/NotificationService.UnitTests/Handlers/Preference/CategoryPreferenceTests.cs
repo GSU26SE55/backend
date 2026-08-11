@@ -279,7 +279,7 @@ public class CategoryPreferenceHandlerTests
 
         response.IsSuccess.Should().BeFalse();
         response.StatusCode.Should().Be(400);
-        response.ListErrors.Should().Contain(e => e.Detail!.Contains("nhiều lần"));
+        response.ListErrors.Should().Contain(e => e.Detail!.Contains("appears more than once"));
     }
 
     [Fact]
