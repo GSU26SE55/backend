@@ -142,7 +142,8 @@ public class RotateIotDeviceApiKeyCommandHandler : IRequestHandler<RotateIotDevi
         _unitOfWork.IotDevices.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        try { await _passwordFileSync.SyncOnceAsync(ct); }
+        try
+        { await _passwordFileSync.SyncOnceAsync(ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch { /* vòng quét nền sẽ bù */ }
 
@@ -198,7 +199,8 @@ public class RotateIotDeviceMqttCredentialCommandHandler
         _unitOfWork.IotDevices.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        try { await _passwordFileSync.SyncOnceAsync(ct); }
+        try
+        { await _passwordFileSync.SyncOnceAsync(ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch { /* vòng quét nền sẽ bù */ }
 

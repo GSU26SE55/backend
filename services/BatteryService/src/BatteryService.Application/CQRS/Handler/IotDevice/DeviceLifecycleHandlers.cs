@@ -109,7 +109,8 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
         // dùng được đường HTTPS, và vòng quét nền sẽ thử lại.
         if (mqttCredentialRegenerated)
         {
-            try { await _passwordFileSync.SyncOnceAsync(ct); }
+            try
+            { await _passwordFileSync.SyncOnceAsync(ct); }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch { /* vòng quét nền sẽ bù */ }
         }

@@ -76,11 +76,11 @@ public static class IotDeviceMapper
                 : BuildProvisioningQrCode(e.DeviceCode, e.ApiKeyPlaintext),
 
             // Cùng quy tắc hai nhóm như `ToCreatedDto` — xem ghi chú ở đó.
-            MqttUsername    = e.MqttUsername,
-            MqttPassword    = e.MqttPasswordPlaintext,
-            MqttBrokerHost  = broker?.Host,
-            MqttBrokerPort  = hasBroker ? broker!.Value.Port : null,
-            MqttUseTls      = hasBroker ? broker!.Value.UseTls : null,
+            MqttUsername = e.MqttUsername,
+            MqttPassword = e.MqttPasswordPlaintext,
+            MqttBrokerHost = broker?.Host,
+            MqttBrokerPort = hasBroker ? broker!.Value.Port : null,
+            MqttUseTls = hasBroker ? broker!.Value.UseTls : null,
             MqttTopicPrefix = hasBroker ? broker!.Value.TopicPrefix : null
         };
     }
@@ -160,11 +160,11 @@ public static class IotDeviceMapper
             //
             // ⚠️ Khác hẳn IotDeviceProvisionResultDto (DTO cho THIẾT BỊ): ở đó cả sáu phải cùng
             //    null, vì thiết bị nhận nửa vời sẽ thử nối rồi thất bại trong vòng lặp.
-            MqttUsername    = e.MqttUsername,
-            MqttPassword    = rawMqttPassword ?? e.MqttPasswordPlaintext,
-            MqttBrokerHost  = broker?.Host,
-            MqttBrokerPort  = hasBroker ? broker!.Value.Port : null,
-            MqttUseTls      = hasBroker ? broker!.Value.UseTls : null,
+            MqttUsername = e.MqttUsername,
+            MqttPassword = rawMqttPassword ?? e.MqttPasswordPlaintext,
+            MqttBrokerHost = broker?.Host,
+            MqttBrokerPort = hasBroker ? broker!.Value.Port : null,
+            MqttUseTls = hasBroker ? broker!.Value.UseTls : null,
             MqttTopicPrefix = hasBroker ? broker!.Value.TopicPrefix : null
         };
     }

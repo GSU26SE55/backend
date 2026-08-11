@@ -223,7 +223,8 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
     /// </remarks>
     private static string Truncate(string? payload, int max = 512)
     {
-        if (string.IsNullOrEmpty(payload)) return string.Empty;
+        if (string.IsNullOrEmpty(payload))
+            return string.Empty;
         return payload.Length <= max ? payload : payload[..max] + "…(cắt bớt)";
     }
 

@@ -56,6 +56,16 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
 
         ticket.EscalationReason = request.Reason;
         ticket.EscalatedAt = DateTime.UtcNow;
+        var priorityBeforeEscalation = ticket.Priority;
+        ticket.Priority = ticket.Priority switch
+        {
+            TicketPriorityEnum.P3Normal => TicketPriorityEnum.P2High,
+            TicketPriorityEnum.P2High => TicketPriorityEnum.P1Critical,
+            _ => ticket.Priority
+        };
+        var incidentDeclared = priorityBeforeEscalation == TicketPriorityEnum.P1Critical && !ticket.IsIncident;
+        if (incidentDeclared)
+            ticket.IsIncident = true;
 
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
         {
@@ -72,6 +82,8 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
 
         // Outbox: Ticket Escalated
         await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName), ct);
+        if (incidentDeclared)
+            await _outboxWriter.WriteAsync(new SharedContracts.Events.IncidentDeclaredEvent(ticket.Id, ticket.Code, request.StaffId), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

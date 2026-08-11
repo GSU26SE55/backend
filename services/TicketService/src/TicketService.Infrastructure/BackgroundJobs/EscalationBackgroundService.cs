@@ -48,7 +48,22 @@ public sealed class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
                     _ => (TicketPriorityEnum?)null
                 };
                 if (nextPriority is null)
+                {
+                    // A P1 ticket cannot be raised further. Keep its operational
+                    // status unchanged, but declare an incident once.
+                    if (ticket.Priority != TicketPriorityEnum.P1Critical || ticket.IsIncident)
+                        return;
+
+                    ticket.IsIncident = true;
+                    ticket.EscalationReason = EscalationReasonEnum.SlaBreach;
+                    ticket.EscalatedAt = DateTime.UtcNow;
+                    _uow.Tickets.UpdateAsync(ticket);
+                    await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System",
+                        ActivityActionEnum.IncidentDeclared, reason: "SLA breached while ticket is P1");
+                    await _outboxWriter.WriteAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, Guid.Empty), ct);
+                    await _uow.SaveChangesAsync(ct);
                     return;
+                }
 
                 var oldPriority = ticket.Priority;
                 ticket.Priority = nextPriority.Value;

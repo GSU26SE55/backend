@@ -65,6 +65,7 @@ public class AccountSyncConsumerTests
 
         // Assert
         _staffRepoMock.Verify(r => r.AddAsync(It.Is<StaffAccount>(s =>
+            s.Id == message.AccountId &&
             s.AccountId == message.AccountId &&
             s.Email == message.Email &&
             s.FullName == message.FullName &&
@@ -114,6 +115,7 @@ public class AccountSyncConsumerTests
 
         // Assert
         _customerRepoMock.Verify(r => r.AddAsync(It.Is<CustomerAccount>(c =>
+            c.Id == message.AccountId &&
             c.AccountId == message.AccountId &&
             c.Email == message.Email &&
             c.FullName == message.FullName &&
