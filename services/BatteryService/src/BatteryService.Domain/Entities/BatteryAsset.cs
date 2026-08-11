@@ -47,4 +47,6 @@ public class BatteryAsset : AuditableEntity
     public ICollection<SensorReading> SensorReadings { get; set; } = new List<SensorReading>();
 
     public ICollection<Alert> Alerts { get; set; } = new List<Alert>();
+
+    public ICollection<IotDeviceCommand> IotDeviceCommands { get; set; } = new List<IotDeviceCommand>();
 }

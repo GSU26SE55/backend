@@ -33,6 +33,7 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IGenericRepository<IotDevice>> IotDevices { get; } = new();
     public Mock<IGenericRepository<IotDeviceHeartbeat>> IotDeviceHeartbeats { get; } = new();
     public Mock<IGenericRepository<IotDeviceCalibration>> IotDeviceCalibrations { get; } = new();
+    public Mock<IGenericRepository<IotDeviceCommand>> IotDeviceCommands { get; } = new();
     public Mock<IGenericRepository<IotFirmwareRelease>> IotFirmwareReleases { get; } = new();
     public Mock<IGenericRepository<IotFirmwareUpdateLog>> IotFirmwareUpdateLogs { get; } = new();
 
@@ -59,6 +60,7 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.IotDevices).Returns(IotDevices.Object);
         UnitOfWork.SetupGet(x => x.IotDeviceHeartbeats).Returns(IotDeviceHeartbeats.Object);
         UnitOfWork.SetupGet(x => x.IotDeviceCalibrations).Returns(IotDeviceCalibrations.Object);
+        UnitOfWork.SetupGet(x => x.IotDeviceCommands).Returns(IotDeviceCommands.Object);
         UnitOfWork.SetupGet(x => x.IotFirmwareReleases).Returns(IotFirmwareReleases.Object);
         UnitOfWork.SetupGet(x => x.IotFirmwareUpdateLogs).Returns(IotFirmwareUpdateLogs.Object);
         UnitOfWork.SetupGet(x => x.SensorIngestIdempotencyRecords).Returns(SensorIngestIdempotencyRecords.Object);
@@ -85,6 +87,7 @@ public sealed class MockUnitOfWorkBuilder
         Seed(IotDevices, Array.Empty<IotDevice>());
         Seed(IotDeviceHeartbeats, Array.Empty<IotDeviceHeartbeat>());
         Seed(IotDeviceCalibrations, Array.Empty<IotDeviceCalibration>());
+        Seed(IotDeviceCommands, Array.Empty<IotDeviceCommand>());
         Seed(IotFirmwareReleases, Array.Empty<IotFirmwareRelease>());
         Seed(IotFirmwareUpdateLogs, Array.Empty<IotFirmwareUpdateLog>());
         Seed(SensorIngestIdempotencyRecords, Array.Empty<SensorIngestIdempotencyRecord>());
@@ -93,6 +96,7 @@ public sealed class MockUnitOfWorkBuilder
     public MockUnitOfWorkBuilder WithIotDevices(params IotDevice[] data) { Seed(IotDevices, data); return this; }
     public MockUnitOfWorkBuilder WithIotFirmwareReleases(params IotFirmwareRelease[] data) { Seed(IotFirmwareReleases, data); return this; }
     public MockUnitOfWorkBuilder WithIotDeviceCalibrations(params IotDeviceCalibration[] data) { Seed(IotDeviceCalibrations, data); return this; }
+    public MockUnitOfWorkBuilder WithIotDeviceCommands(params IotDeviceCommand[] data) { Seed(IotDeviceCommands, data); return this; }
     public MockUnitOfWorkBuilder WithIotFirmwareUpdateLogs(params IotFirmwareUpdateLog[] data) { Seed(IotFirmwareUpdateLogs, data); return this; }
 
     public MockUnitOfWorkBuilder WithBatteryTypes(params BatteryType[] data) { Seed(BatteryTypes, data); return this; }

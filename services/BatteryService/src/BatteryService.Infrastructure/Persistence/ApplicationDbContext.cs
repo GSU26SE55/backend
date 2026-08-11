@@ -55,6 +55,7 @@ public class ApplicationDbContext : DbContext
     public virtual DbSet<IotDevice> IotDevices { get; set; }
     public virtual DbSet<IotDeviceHeartbeat> IotDeviceHeartbeats { get; set; }
     public virtual DbSet<IotDeviceCalibration> IotDeviceCalibrations { get; set; }
+    public virtual DbSet<IotDeviceCommand> IotDeviceCommands { get; set; }
     public virtual DbSet<IotFirmwareRelease> IotFirmwareReleases { get; set; }
     public virtual DbSet<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; set; }
 

@@ -86,4 +86,31 @@ public class IotOfflineDetectionTests
         outbox.Events.Should().BeEmpty();
         freshDevice.Status.Should().Be(IotDeviceStatusEnum.Active);
     }
+
+    [Fact]
+    public async Task Detect_MarksPendingCommandsOlderThanSixtySecondsTimedOut()
+    {
+        var command = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = Guid.NewGuid(),
+            CmdId = "stale-command",
+            Type = "set_bms_switch",
+            ParamsJson = "{}",
+            Status = IotDeviceCommandStatusEnum.Pending,
+            CreatedAt = DateTime.UtcNow.AddSeconds(-61)
+        };
+        var uow = new MockUnitOfWorkBuilder().WithIotDeviceCommands(command);
+        var service = new IotDeviceOfflineDetectionService(
+            uow.Build(),
+            new CapturingOutbox(),
+            new NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
+
+        await service.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
+
+        command.Status.Should().Be(IotDeviceCommandStatusEnum.TimedOut);
+        command.AckError.Should().Contain("60");
+        command.AckedAt.Should().NotBeNull();
+    }
 }

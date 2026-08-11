@@ -32,6 +32,30 @@ public class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectionServic
         var now = DateTime.UtcNow;
         var threshold = now.AddSeconds(-offlineAfterSeconds);
 
+        // Reuse this periodic sweep for command acknowledgements as well: a
+        // Pending command older than 60 seconds is terminal and must not keep
+        // both mobile switches locked forever.
+        var commandThreshold = now.AddSeconds(-60);
+        var timedOutCommands = await _unitOfWork.IotDeviceCommands.GetAllAsync()
+            .Where(command => !command.IsDeleted
+                              && command.Status == IotDeviceCommandStatusEnum.Pending
+                              && command.CreatedAt < commandThreshold)
+            .Take(batchSize)
+            .ToListAsync(ct);
+        if (timedOutCommands.Count > 0)
+        {
+            foreach (var command in timedOutCommands)
+            {
+                command.Status = IotDeviceCommandStatusEnum.TimedOut;
+                command.AckError = "Thiết bị không phản hồi lệnh trong 60 giây.";
+                command.AckedAt = now;
+                _unitOfWork.IotDeviceCommands.UpdateAsync(command);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogWarning("Marked {Count} IoT command(s) timed out", timedOutCommands.Count);
+        }
+
         var candidates = await _unitOfWork.IotDevices.GetAllAsync()
             .Include(d => d.Site)
             .Where(d => !d.IsDeleted
